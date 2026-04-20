@@ -1,0 +1,151 @@
+pragma language_version 0.22;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Schnorr Wallet — RedJubJub signature verification experiment
+//
+// Demonstrates a contract-held wallet gated by JubJub Schnorr signatures:
+//   - A JubJub key pair (sk, pk = sk·G) is generated off-chain.
+//   - At registration the circuit computes pk = sk·G in-circuit (ecMulGenerator)
+//     and stores it on-chain.
+//   - Deposits are permissionless (anyone can send unshielded tokens in).
+//   - Withdrawals require a Schnorr signature verified in-circuit:
+//       s·G == R + c·owner_pk
+//     where c = persistentHash(R ‖ owner_pk ‖ color ‖ amount ‖ recipient ‖ tx_count ‖ nonce)
+//   - tx_count is monotonically increasing, bound into every challenge for
+//     replay protection.
+//   - Two exported pure circuits allow TypeScript to produce correct signatures
+//     using the contract's own curve parameters and persistentHash — no external
+//     JubJub library required.
+//
+// This contract proves that:
+//   1. A Compact contract can hold and release unshielded tokens
+//   2. JubJub Schnorr verification works in-circuit
+//   3. The pattern is compatible with threshold signing (FROST)
+// ---------------------------------------------------------------------------
+
+// ── Public ledger state (on-chain) ──────────────────────────────────────────
+
+export ledger owner_pk: JubjubPoint;
+// JubJub point — the owner's public key: pk = sk · G
+
+export ledger registered: Boolean;
+// Whether an owner key has been registered
+
+export ledger tx_count: Uint<64>;
+// Monotonically increasing; bound into every Schnorr challenge for replay
+// protection. Incremented on each successful withdrawal.
+
+// ── Constructor ─────────────────────────────────────────────────────────────
+
+constructor() {
+  registered = false as Boolean;
+  tx_count   = 0 as Uint<64>;
+}
+
+// ── Register owner key ──────────────────────────────────────────────────────
+//
+// Called once to set the owner's JubJub public key.
+// sk is supplied as a private witness — it never appears in any public output.
+// The circuit derives pk = sk · G, then stores pk on-chain.
+
+export circuit register_owner(sk: Field): [] {
+  assert(registered == false, "owner already registered");
+  const pk: JubjubPoint = ecMulGenerator(sk);
+  owner_pk   = disclose(pk);
+  registered = disclose(true as Boolean);
+}
+
+// ── Deposit (permissionless) ────────────────────────────────────────────────
+//
+// Anyone can deposit unshielded tokens into this contract.
+// The contract address is the recipient — tokens are held by the contract.
+
+export circuit deposit(color: Bytes<32>, amount: Uint<128>): [] {
+  receiveUnshielded(disclose(color), disclose(amount));
+}
+
+// ── Withdraw (Schnorr-authorised) ───────────────────────────────────────────
+//
+// Only the owner (holder of sk such that sk·G == owner_pk) can withdraw.
+//
+// The caller provides a Schnorr signature (R, s) over the withdrawal
+// parameters. The circuit verifies:
+//   c = persistentHash(R ‖ owner_pk ‖ color ‖ amount ‖ recipient ‖ tx_count ‖ nonce)
+//   s·G == R + c·owner_pk
+//
+// The nonce parameter exists for the hash-to-scalar retry: TypeScript
+// iterates nonce = 0, 1, 2, … until the hash (little-endian bigint) is
+// < JUBJUB_R (~5.7% probability per try, ~17 expected iterations).
+// The circuit recomputes the identical hash, so the cast always succeeds.
+
+export circuit withdraw(
+  sig_r:     JubjubPoint,  // Schnorr nonce point R = r·G
+  sig_s:     Field,        // Schnorr response s = r + c·sk (mod JUBJUB_R)
+  color:     Bytes<32>,    // Token color to withdraw
+  amount:    Uint<128>,    // Amount to withdraw
+  recipient: UserAddress,  // Destination address
+  nonce:     Uint<64>,     // Retry nonce for hash < JUBJUB_R
+): [] {
+  assert(registered, "no owner registered");
+
+  // Schnorr challenge: bind to all withdrawal parameters and tx_count.
+  // tx_count prevents replay: each successful call increments it, so an
+  // old (R, s) pair is invalid for the next call.
+  const h: Bytes<32> = persistentHash<[JubjubPoint, JubjubPoint, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>(
+    [sig_r, owner_pk, color, amount, recipient, tx_count, nonce]
+  );
+  const c: Field = h as Field;
+  // h as Field is range-checked against FIELD_MODULUS. TypeScript ensures
+  // h < JUBJUB_R (< FIELD_MODULUS) before calling, so the cast always succeeds.
+
+  // Schnorr verification: s·G == R + c·owner_pk
+  assert(
+    ecMulGenerator(sig_s) == ecAdd(sig_r, ecMul(owner_pk, c)),
+    "invalid signature"
+  );
+
+  // Transfer tokens out of the contract
+  sendUnshielded(disclose(color), disclose(amount), right<ContractAddress, UserAddress>(disclose(recipient)));
+
+  // Increment tx_count for replay protection
+  tx_count = disclose((tx_count + (1 as Uint<64>)) as Uint<64>);
+}
+
+// ── Query balance ───────────────────────────────────────────────────────────
+
+export circuit query_balance(color: Bytes<32>): Uint<128> {
+  return unshieldedBalance(disclose(color));
+}
+
+// ── Pure helper circuits ────────────────────────────────────────────────────
+//
+// Exported pure circuits are callable from TypeScript without generating a
+// ZK proof (contractMod.pureCircuits.compute_nonce_point(...)).
+// They let the signer (stub TEE or FROST network) compute the Schnorr nonce
+// point and challenge using the same curve parameters and persistentHash as
+// the withdraw circuit, without requiring an external JubJub library.
+
+// Compute R = r·G for a given nonce scalar r.
+export pure circuit compute_nonce_point(r: Field): JubjubPoint {
+  return ecMulGenerator(r);
+}
+
+// Compute the raw Schnorr challenge hash for a withdrawal.
+// Returns Bytes<32> so TypeScript can inspect the value and retry with a
+// different nonce if the little-endian integer representation >= JUBJUB_R.
+// Must mirror the hash expression in withdraw() exactly.
+export pure circuit compute_withdraw_challenge(
+  sig_r:              JubjubPoint,
+  pk:                 JubjubPoint,
+  color:              Bytes<32>,
+  amount:             Uint<128>,
+  recipient:          UserAddress,
+  current_tx_count:   Uint<64>,
+  nonce:              Uint<64>,
+): Bytes<32> {
+  return persistentHash<[JubjubPoint, JubjubPoint, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>(
+    [sig_r, pk, color, amount, recipient, current_tx_count, nonce]
+  );
+}

@@ -1,0 +1,37 @@
+# Internal-only (never committed)
+.planning/
+.serena/
+
+# Build artefacts
+/target/
+**/target/
+*.rlib
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+.npm/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment / secrets
+.env
+.env.local
+*.key
+*.pem
+
+# Coverage / test output
+coverage/
+*.lcov
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

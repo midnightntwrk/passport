@@ -1,0 +1,4 @@
+target/
+deployment.json
+wallet-key.json
+infra/.env

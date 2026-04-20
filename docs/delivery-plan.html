@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Midnight Passport — Delivery Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --iog-infared: #E52321;
+    --iog-dawn: #EC641D;
+    --iog-acid-green: #06FF89;
+    --iog-cobalt-pulse: #2C4FFA;
+
+    --bg: #FFFFFF;
+    --bg-soft: #FAFAFA;
+    --bg-alt: #F4F4F2;
+    --bg-code: #F4F4F2;
+    --line: rgba(0,0,0,0.10);
+    --line-strong: rgba(0,0,0,0.22);
+    --text: #0A0A0A;
+    --text-mute: #4A4A4A;
+    --text-faint: #888888;
+
+    --good: #00994A;
+    --good-soft: #E2F5EB;
+    --bad: #E52321;
+    --bad-soft: #FCEAE9;
+    --warn: #A88200;
+    --warn-soft: #FBF1CC;
+    --info: #2C4FFA;
+    --info-soft: #E7EBFE;
+    --accent: #E52321;
+
+    --font-display: 'Barlow', system-ui, sans-serif;
+    --font-body: 'Barlow', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0A0A0A;
+      --bg-soft: #121212;
+      --bg-alt: #181818;
+      --bg-code: #1A1A1A;
+      --line: rgba(255,255,255,0.10);
+      --line-strong: rgba(255,255,255,0.22);
+      --text: #F4F4F2;
+      --text-mute: #B5B5B5;
+      --text-faint: #7A7A7A;
+
+      --good: #06FF89;
+      --good-soft: #0C2A1C;
+      --bad: #FF5653;
+      --bad-soft: #2A0C0B;
+      --warn: #F2FF58;
+      --warn-soft: #2B2A0B;
+      --info: #8FA3FF;
+      --info-soft: #0E1638;
+    }
+  }
+  html[data-theme="dark"] {
+    --bg: #0A0A0A; --bg-soft: #121212; --bg-alt: #181818; --bg-code: #1A1A1A;
+    --line: rgba(255,255,255,0.10); --line-strong: rgba(255,255,255,0.22);
+    --text: #F4F4F2; --text-mute: #B5B5B5; --text-faint: #7A7A7A;
+    --good: #06FF89; --good-soft: #0C2A1C;
+    --bad: #FF5653; --bad-soft: #2A0C0B;
+    --warn: #F2FF58; --warn-soft: #2B2A0B;
+    --info: #8FA3FF; --info-soft: #0E1638;
+  }
+  html[data-theme="light"] {
+    --bg: #FFFFFF; --bg-soft: #FAFAFA; --bg-alt: #F4F4F2; --bg-code: #F4F4F2;
+    --line: rgba(0,0,0,0.10); --line-strong: rgba(0,0,0,0.22);
+    --text: #0A0A0A; --text-mute: #4A4A4A; --text-faint: #888888;
+    --good: #00994A; --good-soft: #E2F5EB;
+    --bad: #E52321; --bad-soft: #FCEAE9;
+    --warn: #A88200; --warn-soft: #FBF1CC;
+    --info: #2C4FFA; --info-soft: #E7EBFE;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    transition: background .2s ease, color .2s ease;
+  }
+
+  main.doc {
+    max-width: clamp(820px, 72vw, 1220px);
+    margin: 0 auto;
+    padding: 72px clamp(24px, 5vw, 80px) 120px;
+  }
+  @media (max-width: 860px) {
+    main.doc { max-width: 100%; }
+  }
+
+  .doc-logo, .doc-logo-dark {
+    height: clamp(48px, 5vw, 88px);
+    width: auto;
+    display: block;
+    margin-bottom: 32px;
+  }
+  .doc-logo-dark { display: none; }
+  html[data-theme="dark"] .doc-logo { display: none; }
+  html[data-theme="dark"] .doc-logo-dark { display: block; }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) .doc-logo { display: none; }
+    html:not([data-theme="light"]) .doc-logo-dark { display: block; }
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    color: var(--text);
+    line-height: 1.15;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+  }
+  h1 {
+    font-size: clamp(2.4rem, 4.2vw, 3.4rem);
+    letter-spacing: -0.03em;
+    line-height: 1.06;
+    margin-bottom: 12px;
+  }
+  h2 {
+    font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+    margin-top: 72px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  h3 {
+    font-size: clamp(1.2rem, 1.7vw, 1.45rem);
+    margin-top: 44px;
+    margin-bottom: 14px;
+    font-weight: 600;
+  }
+  h4 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-top: 28px;
+    margin-bottom: 8px;
+  }
+  h2 .sec-num, h3 .sec-num {
+    font-family: var(--font-mono);
+    color: var(--text-faint);
+    font-weight: 400;
+    font-size: 0.78em;
+    margin-right: 14px;
+    letter-spacing: 0;
+  }
+
+  p { margin-bottom: 18px; color: var(--text); }
+  p.lede {
+    font-size: 1.18rem;
+    color: var(--text-mute);
+    margin-bottom: 26px;
+    line-height: 1.55;
+    font-weight: 300;
+  }
+
+  a {
+    color: var(--iog-infared);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color .12s ease;
+  }
+  a:hover { border-bottom-color: var(--iog-infared); }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--bg-code);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--text);
+  }
+
+  ul, ol { margin: 0 0 18px 26px; color: var(--text); }
+  ul li, ol li { margin-bottom: 8px; line-height: 1.6; }
+
+  strong { font-weight: 600; color: var(--text); }
+  em { font-style: italic; }
+
+  /* Front matter */
+  header.frontmatter {
+    border-bottom: 1px solid var(--line-strong);
+    padding-bottom: 28px;
+    margin-bottom: 36px;
+  }
+  header.frontmatter .kind {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--iog-infared);
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+  header.frontmatter .subtitle {
+    font-size: 1.15rem;
+    color: var(--text-mute);
+    margin-top: 14px;
+    font-weight: 300;
+    line-height: 1.5;
+  }
+  .meta {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 22px;
+    margin-top: 24px;
+    font-size: 0.88rem;
+    font-family: var(--font-mono);
+  }
+  .meta dt { color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; }
+  .meta dd { color: var(--text); }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 18px 0 26px;
+    font-size: 0.94rem;
+  }
+  table th, table td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  table thead th {
+    background: var(--bg-alt);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-mute);
+    border-bottom: 1px solid var(--line-strong);
+  }
+  table td code { font-size: 0.84em; }
+
+  /* Status pills */
+  .pill {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+  .pill.done { background: var(--good-soft); color: var(--good); }
+  .pill.partial { background: var(--warn-soft); color: var(--warn); }
+  .pill.scheduled { background: var(--info-soft); color: var(--info); }
+  .pill.committed { background: var(--bad-soft); color: var(--bad); }
+  .pill.exploring { background: var(--bg-alt); color: var(--text-mute); }
+  .pill.blocker { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); }
+
+  /* Callouts */
+  .callout {
+    border-left: 3px solid var(--iog-infared);
+    padding: 14px 20px;
+    margin: 20px 0;
+    background: var(--bg-soft);
+    font-size: 0.96rem;
+  }
+  .callout.evidence { border-left-color: var(--good); }
+  .callout.warning { border-left-color: var(--warn); }
+  .callout.note { border-left-color: var(--info); }
+  .callout .label {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--iog-infared);
+  }
+  .callout.evidence .label { color: var(--good); }
+  .callout.warning .label { color: var(--warn); }
+  .callout.note .label { color: var(--info); }
+  .callout p { margin-bottom: 8px; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  /* Step cards (section 2) */
+  .step {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 22px 26px;
+    margin-bottom: 16px;
+    background: var(--bg);
+    transition: border-color .12s ease;
+  }
+  .step:hover { border-color: var(--line-strong); }
+  .step-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .step-id {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.86rem;
+    color: var(--iog-infared);
+    letter-spacing: 0.04em;
+  }
+  .step-window {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--text-faint);
+  }
+  .step-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.18rem;
+    margin-top: 2px;
+    margin-bottom: 10px;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .step p { font-size: 0.96rem; }
+
+  /* Week card */
+  .week {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--iog-infared);
+    border-radius: 6px;
+    padding: 22px 26px;
+    margin-bottom: 16px;
+    background: var(--bg);
+    transition: border-color .12s ease;
+  }
+  .week.milestone { border-left-color: var(--info); background: var(--info-soft); }
+  .week.demo { border-left-color: var(--warn); background: var(--warn-soft); }
+  .week.mvp { border-left-color: var(--bad); background: var(--bad-soft); }
+  .week-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .week-id {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--iog-infared);
+    letter-spacing: 0.04em;
+  }
+  .week.milestone .week-id { color: var(--info); }
+  .week.demo .week-id { color: var(--warn); }
+  .week.mvp .week-id { color: var(--bad); }
+  .week-dates {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--text-faint);
+  }
+  .week-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.15rem;
+    margin-top: 2px;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+  .week dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 8px 22px;
+    font-size: 0.92rem;
+    margin-top: 8px;
+  }
+  .week dl dt {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    padding-top: 4px;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .week dl dd { color: var(--text); line-height: 1.55; }
+
+  /* Theme toggle */
+  .theme-toggle {
+    position: fixed;
+    top: 20px; right: 20px;
+    z-index: 50;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .15s ease, color .15s ease;
+  }
+  .theme-toggle:hover { border-color: var(--iog-infared); color: var(--iog-infared); }
+  .theme-toggle svg { width: 16px; height: 16px; display: block; }
+  .theme-toggle .icon-sun { display: none; }
+  .theme-toggle .icon-moon { display: block; }
+  html[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+  html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) .theme-toggle .icon-sun { display: block; }
+    html:not([data-theme="light"]) .theme-toggle .icon-moon { display: none; }
+  }
+
+  footer.doc-footer {
+    border-top: 1px solid var(--line);
+    padding-top: 32px;
+    margin-top: 80px;
+    font-size: 0.82rem;
+    color: var(--text-faint);
+  }
+  footer.doc-footer p { color: var(--text-faint); margin-bottom: 6px; }
+
+  section[id] { scroll-margin-top: 24px; }
+
+  blockquote {
+    border-left: 3px solid var(--line-strong);
+    padding-left: 20px;
+    margin: 18px 0 24px;
+    color: var(--text-mute);
+    font-style: italic;
+    font-size: 1rem;
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle colour scheme" title="Auto · Light · Dark">
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+  </svg>
+</button>
+
+<main class="doc">
+
+<header class="frontmatter">
+  <img class="doc-logo" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red POS.png" alt="Input Output">
+  <img class="doc-logo-dark" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red NEG.png" alt="Input Output">
+  <div class="kind">Delivery Plan · v1.0 · Draft</div>
+  <h1>Midnight Passport</h1>
+  <p class="subtitle">What we are building, why it is phased, and what lands each week on the way to a Midnight-wide, user-friendly, privacy-preserving onboarding standard.</p>
+
+  <dl class="meta">
+    <dt>Issued</dt><dd>2026/04/20</dd>
+    <dt>Status</dt><dd>Draft — ratification target <code>2026/05/04</code></dd>
+    <dt>Editor</dt><dd>Nicolas Di Prima · IOG ARC</dd>
+    <dt>Audience</dt><dd>IOG ARC, Midnight Foundation, partner wallets, MIP reviewers, vision author</dd>
+  </dl>
+</header>
+
+<!-- ──────────────────────────  1  ────────────────────────── -->
+<section id="sec-1">
+  <h2><span class="sec-num">1</span>What we are doing</h2>
+
+  <p class="lede">Midnight Passport gives a user a named, self-sovereign, privacy-preserving identity on the Midnight network — without ever seeing a seed phrase, a raw address, or a gas-token purchase screen. The project's north star is the <em>secure-onboarding-design</em> authored by Charles Hoskinson, which sets out six design principles for how identity, custody, and signing should behave in the ecosystem.</p>
+
+  <p>The six principles, quoted briefly from the source:</p>
+  <ol>
+    <li><strong>Keys never leave TEEs; authorisation via ZK witnesses.</strong></li>
+    <li><strong>Single seed, three wallets</strong> (Shielded, Night, Dust).</li>
+    <li><strong>Chain abstraction via intent model.</strong></li>
+    <li><strong>One key per device.</strong></li>
+    <li><strong>Privacy-by-design identity.</strong></li>
+    <li><strong>Seedless UX.</strong></li>
+  </ol>
+
+  <p>Delivering all six principles in their final form in one go is not realistic; several are open research areas in their own right. The design also has implications well beyond the ARC boundary. We have therefore been engaging with the wider ecosystem from the start.</p>
+
+  <h4>Who we have been talking with</h4>
+  <ul>
+    <li><strong>Midnight Foundation</strong> — aligning on the platform surface (curves, proof pipeline, APIs, CAIP namespace), the Midnight Improvement Proposal (MIP) process, and ensuring the architecture we build is one the Foundation recognises as the Midnight-native direction.</li>
+    <li><strong>Lace</strong> — the team building <strong>Lace ID</strong>. Their existing key-derivation and address implementation directly informs the first two standards we plan to publish: the <strong>key-derivation MIP</strong> and the <strong>Bech32 address-format MIP</strong>. Their ID product is also a natural consumer of the credential layer we will add later.</li>
+    <li><strong>Cryptographic reviewer</strong> (Jesus Diaz Vico) and <strong>formal methods</strong> (James Chapman's team) — per-phase review and long-running rigour, respectively.</li>
+  </ul>
+
+  <h4>How we plan to get there</h4>
+  <p>We cannot build everything at once. The plan is:</p>
+  <ol>
+    <li>Pick a subset of the principles to deliver fully in a first MVP.</li>
+    <li>Accept honest, explicit compromises on the rest — not drop them, defer them to a named later step.</li>
+    <li>Start building immediately, with a weekly demo as the unit of progress. Every Friday, one artefact that has moved. Over a few months, enough artefacts accumulate that they compose into the MVP.</li>
+    <li>Use each weekly update both for credibility and for concrete evidence — we show a working thing, we say what did not work, we commit to next week's artefact.</li>
+  </ol>
+
+  <p>Parts of the plan are already de-risked. Internal experiments have validated that Schnorr signatures verify inside a Compact circuit on a local Midnight devnet, and that Rust and TypeScript signing sides produce identical outputs across the language boundary. We have also located an audited, MIT-licensed FROST-on-JubJub implementation that already exists as an open-source Rust crate — the <code>threshold-signatures</code> crate published by the NEAR-MPC project. We consume that crate as a library dependency; <strong>this is not an integration with the NEAR blockchain or protocol</strong>. Other decisions (crate-consumption strategy, recovery mechanism, wallet partner) remain open but have a default direction and a decide-by date.</p>
+
+  <h4>Why this matters beyond Passport</h4>
+  <p>The ultimate goal is not an isolated wallet. It is a set of <strong>protocols and standards</strong> — published as MIPs — that the rest of the Midnight ecosystem can build on. With these in place, any wallet, any dApp, any credential issuer can plug into the same names, addresses, signatures, connection protocol, and credential system, without inventing its own. That interoperability is what turns Midnight Passport from an IOG product into a piece of ecosystem infrastructure — and what turns a user's privacy-preserving, self-custodial, multi-device experience from a bespoke app feature into a property of the network itself. <strong>User-friendly by default.</strong></p>
+
+  <div class="callout">
+    <div class="label">The north star, in one sentence</div>
+    <p>Define the identity, custody, and connection primitives of Midnight so that a user scans a QR code, lands on a named account, and moves across the network and its dApps in a way that is privacy-preserving, self-custodial, interoperable — and effortless.</p>
+  </div>
+</section>
+
+<!-- ──────────────────────────  2  ────────────────────────── -->
+<section id="sec-2">
+  <h2><span class="sec-num">2</span>Delivery horizon</h2>
+
+  <p class="lede">Getting from today to the end-state takes roughly a year and change. The scope of that end-state is set by the design; the sequence is set by one rule: deliver user-facing value in the first MVP, then strengthen the architecture underneath without changing the user experience.</p>
+
+  <p>Each step below is an independently demoable product. The user experience is stable across steps — what improves is the trust model underneath. We target roughly a 90-day beat between major steps after the MVP.</p>
+
+  <div class="callout note">
+    <div class="label">Why UX first</div>
+    <p>A plan that holds the user experience constant across every step is the plan that can keep stakeholders aligned for a year. At each step, the user sees the same product getting better at what it already does — while we progressively remove scaffolding (centralised signing, account-provider-held device mapping) and replace it with the decentralised machinery the design principles require. No step forces a re-onboarding. No step feels like a reset.</p>
+  </div>
+
+  <section id="sec-2-1">
+    <h3><span class="sec-num">2.1</span>MVP 1 — end of June 2026</h3>
+    <div class="step">
+      <div class="step-head">
+        <span class="step-id">MVP 1</span>
+        <span class="step-window">Apr → end of June 2026 · 10 weeks to demo, Friday 26 June</span>
+      </div>
+      <div class="step-title">The smallest product that delivers on the spirit of the design</div>
+
+      <h4>Principles we deliver</h4>
+      <ul>
+        <li><strong>Principle 6 · Seedless UX</strong> — <span class="pill done">DELIVERED</span>. Passkey (WebAuthn) authentication from day one. The user never sees a seed, a mnemonic, or a raw address.</li>
+        <li><strong>Principle 1 · Authorisation via ZK witnesses</strong> — <span class="pill partial">PARTIAL</span>. The ZK-witness authorisation model is fully in place. Custody of the key sits in a single managed signing service rather than on the device — we choose the correct <em>pattern</em> now and move custody later.</li>
+        <li><strong>Principle 2 · Single seed, three wallets</strong> — <span class="pill partial">PARTIAL</span>. Three wallets derived from one seed via CIP-1852 hierarchical derivation. The seed lives in the signing service; it moves onto the device in v2.0 Stream B.</li>
+        <li><strong>Principle 3 · Chain abstraction</strong> — <span class="pill partial">ACHIEVABLE</span>. The adopted <code>threshold-signatures</code> crate already supports ECDSA, EdDSA, and FROST, so chain abstraction becomes an API layer on top, not a new crypto build. We do not expose cross-chain flows in MVP 1 but the substrate for them exists.</li>
+      </ul>
+
+      <h4>Principles we defer</h4>
+      <ul>
+        <li><strong>Principle 4 · One key per device</strong> — deferred to MVP 1.1. The MVP has one key in the signing service and multiple devices authenticating via passkey. Same UX (multi-device), different mechanism.</li>
+        <li><strong>Principle 5 · Privacy-by-design identity (credentials)</strong> — deferred to v3.0. Not blocked by the MVP — it is independent of the custody model, so it can land later without architectural rework.</li>
+      </ul>
+
+      <h4>Compromises we accept (and name)</h4>
+      <ul>
+        <li>Single signing node rather than the federated n-of-t network. Acknowledged trust model for the MVP; federation lands in MVP 1.1.</li>
+        <li>No on-chain name registry — <code>alice.midnight</code> names are held off-chain in the account provider for the MVP. Registry lands in MVP 1.1.</li>
+        <li>No QR onboarding — web-passkey only. QR returns in MVP 1.1 with mitigations for channel-binding and swap attacks.</li>
+      </ul>
+
+      <h4>What ships at the June demo</h4>
+      <p>Passkey login → named account → wallet connects (Lace or stub) → capability grant approved in the management console → transaction signed → submitted to Midnight devnet. Plus a recovery sad-path. Plus a "what's next" slide pointing to MVP 1.1.</p>
+    </div>
+  </section>
+
+  <section id="sec-2-2">
+    <h3><span class="sec-num">2.2</span>MVP 1.1 — multi-device accounts</h3>
+    <div class="step">
+      <div class="step-head">
+        <span class="step-id">MVP 1.1</span>
+        <span class="step-window">~90-day effort cycle · begins after MVP 1 ships</span>
+      </div>
+      <div class="step-title">Names, federation, and the connection protocol as a MIP</div>
+
+      <p>MVP 1.1 is the first post-MVP beat. It adds the features we cut from MVP 1 and hardens the MVP scaffolding. Concretely:</p>
+      <ul>
+        <li><strong>Multi-device accounts (from the user's perspective)</strong> — a single account (<code>alice.midnight</code>) authenticated by multiple passkeys, including adding a new device. The device-to-account mapping is still held by the account provider at this step; it moves on-chain in v2.0 Stream A.</li>
+        <li><strong>Federated signing</strong> — replaces the single MVP signing node with an <em>n</em>-of-<em>t</em> federation (default n=5, t=4), using the same adopted Rust crate.</li>
+        <li><strong>Name registry</strong> — <code>alice.midnight</code> names become on-chain, with commit-reveal registration, multi-address resolution, and anti-squat mitigations.</li>
+        <li><strong>QR onboarding returns</strong> with the channel-binding, timestamp, and visual-confirmation mitigations we've already specified.</li>
+        <li><strong>The dApp-wallet connection protocol</strong> — our top-priority ecosystem MIP — becomes a full MIP with named external co-authors. This is the formal interface every wallet and dApp in the Midnight ecosystem will build against.</li>
+      </ul>
+      <p>Principles landed at MVP 1.1: none new (principles are fully landed in later steps) but principle 1 strengthens from "single trusted operator" to "federation" and the user-facing feature set gains multi-device and named accounts.</p>
+    </div>
+  </section>
+
+  <section id="sec-2-3">
+    <h3><span class="sec-num">2.3</span>v2.0 Stream A — multi-key account contract</h3>
+    <div class="step">
+      <div class="step-head">
+        <span class="step-id">v2.0 · Stream A</span>
+        <span class="step-window">~90-day effort cycle · runs in parallel with Stream B</span>
+      </div>
+      <div class="step-title">Move the device-to-account mapping onto the chain</div>
+
+      <p>Stream A delivers <strong>principle 4 (one key per device)</strong> in its full form. The account becomes a smart-contract object on Midnight that represents a <em>set of authorised device keys</em>. Any registered device key can authorise transactions via a ZK witness. The account provider no longer holds the device-to-account mapping — the contract does.</p>
+      <p>The stream also introduces <strong>scoped function-call keys</strong> for dApp authorisation with bounded permissions (expiry, value cap, allowed contracts), which is what turns the dApp connection protocol from a session grant into a typed capability.</p>
+      <p>Stream A is independent of Stream B. It can ship while the signing network is still operating. MIP-4 lands alongside the implementation.</p>
+    </div>
+  </section>
+
+  <section id="sec-2-4">
+    <h3><span class="sec-num">2.4</span>v2.0 Stream B — on-device cryptography</h3>
+    <div class="step">
+      <div class="step-head">
+        <span class="step-id">v2.0 · Stream B</span>
+        <span class="step-window">~90-day effort cycle · runs in parallel with Stream A</span>
+      </div>
+      <div class="step-title">Keys and proofs on the user's phone</div>
+
+      <p>Stream B delivers <strong>principles 1 and 2</strong> in full. The user's key moves into the device's trusted execution environment (TEE) — Secure Enclave on iOS, StrongBox / TEE on Android — with AES-256-GCM wrapping. Zero-knowledge proof generation runs on-device. A decentralised recovery protocol (DeRec or equivalent) replaces the signing network's implicit recovery model.</p>
+      <p>With Stream B complete, the signing network retires. The user now has full self-custody: keys on their own hardware, proofs generated locally, recovery decentralised. The user experience is unchanged.</p>
+      <p>Stream B is independent of Stream A. It can ship with a single-device model if Stream A has not landed; conversely, Stream A can run while Stream B is still in progress. Both must complete before v3.0.</p>
+    </div>
+  </section>
+
+  <section id="sec-2-5">
+    <h3><span class="sec-num">2.5</span>v3.0 and beyond — credentials, KYC, chain abstraction</h3>
+    <div class="step">
+      <div class="step-head">
+        <span class="step-id">v3.0+</span>
+        <span class="step-window">successive 90-day effort cycles · after v2.0 completes · sub-tracks may parallelise</span>
+      </div>
+      <div class="step-title">The additive layer built on a decentralised foundation</div>
+
+      <p>With self-custody delivered (v2.0 Stream B) and multi-device on-chain (v2.0 Stream A), v3.0 adds the features that need that foundation:</p>
+      <ul>
+        <li><strong>Privacy-preserving credentials MIP</strong> — principle 5 delivered. Selective disclosure of identity attributes via zero-knowledge. Built on Midnight's attestation-tree primitive. Multi-issuer from day one (zkMe and alternatives).</li>
+        <li><strong>KYC and compliance</strong> — verifiable credentials issued by trusted third parties, reusable across dApps without re-verification.</li>
+        <li><strong>Cross-chain intent engine</strong> — principle 3 delivered in full. Intent-based transactions that settle on Midnight, other chains, or both, from the same account.</li>
+        <li><strong>Social account linking</strong> — a CEO-personal feature from the design, carried here because it naturally attaches to the credential layer.</li>
+        <li><strong>DeRec social recovery</strong> — if not already delivered in Stream B, finalised here.</li>
+      </ul>
+      <p>v3.0 is additive — it does not require changes to the custody architecture. It continues the 90-day cadence.</p>
+    </div>
+  </section>
+
+  <div class="callout note">
+    <div class="label">Principle-to-date summary</div>
+    <p>Principle 6 (seedless) lands at MVP 1. Principle 4 (one key per device) at v2.0 Stream A. Principles 1 and 2 (TEE keys; single seed) at v2.0 Stream B. Principles 3 and 5 (chain abstraction; privacy-preserving identity) at v3.0. <strong>Every principle has a date.</strong></p>
+  </div>
+</section>
+
+<!-- ──────────────────────────  3  ────────────────────────── -->
+<section id="sec-3">
+  <h2><span class="sec-num">3</span>The road to the MVP</h2>
+
+  <p class="lede">Ten weeks from scope-lock to the MVP demo on Friday 26 June 2026, plus an effort-based post-MVP handover block that rolls straight into MVP 1.1. One Friday demo per week. Each week below states what we expect to see, what "success" means that week, and how slippage or success affects the weeks that follow.</p>
+
+  <h4>How to read each week</h4>
+  <ul>
+    <li><strong>Expect</strong> — the concrete thing we plan to show Friday. Not a status; a demo.</li>
+    <li><strong>Success means</strong> — the specific criterion by which we will know the week worked.</li>
+    <li><strong>Affects</strong> — how this week's outcome changes the downstream plan. Slipping Week <em>n</em> does not slip Week <em>n+1</em> automatically; this line states what it actually affects.</li>
+    <li><strong>Driving</strong> — the named person or pair leading the work.</li>
+  </ul>
+
+  <p><em>Week-start dates are Mondays. The MVP demo target is Friday 26 June 2026 — Week 10. Weeks 11–12 of the classical 12-week window fall into July and are described as a single effort-based post-MVP block rather than calendar weeks.</em></p>
+
+  <!-- Week 1 -->
+  <div class="week" id="w1">
+    <div class="week-head"><span class="week-id">Week 1</span><span class="week-dates"><code>2026/04/20 → 2026/04/24</code></span></div>
+    <div class="week-title">Scope lock, delegation, and the weekly-demo contract</div>
+    <dl>
+      <dt>Goal</dt><dd>Establish the ground rules: what is in MVP scope, who does what, and how the weekly-demo cadence operates for the ten-week run-up to the MVP demo.</dd>
+      <dt>Expect</dt><dd>Three contractual documents ratified on Friday: a <strong>scope document</strong> that classifies every section of the secure-onboarding design as MVP 1 / MVP 1.1 / v2.0 / v3.0 / parked; a <strong>delegation document</strong> giving a clear role × deliverable × cadence matrix; and a <strong>weekly-demo contract</strong> that states the rhythm we commit to and what each party expects to see on a Friday. The prototype-repo working agreement is drafted alongside them, and the evidence log is opened.</dd>
+      <dt>Success means</dt><dd>Line manager (Vincent) and ARC director (Nicolas Biri) have signed off on scope and delegation. The rest of the team can point to the classification for any design-doc item without asking.</dd>
+      <dt>Affects</dt><dd>Every subsequent week depends on scope-lock. If scope is not ratified, Weeks 2 and 3 shift towards resolving scope disagreements rather than technical work. The MVP demo date (Friday 26 June) is not moved, but the post-MVP effort block absorbs any buffer that gets consumed.</dd>
+      <dt>Driving</dt><dd>Project lead + PM</dd>
+    </dl>
+  </div>
+
+  <!-- Week 2 -->
+  <div class="week" id="w2">
+    <div class="week-head"><span class="week-id">Week 2</span><span class="week-dates"><code>2026/04/27 → 2026/05/01</code></span></div>
+    <div class="week-title">Cross-cutting prerequisites and the migration narrative</div>
+    <dl>
+      <dt>Goal</dt><dd>Land the two cross-cutting artefacts that the rest of the plan depends on: the domain-separator registry that every cryptographic hash will use, and the migration narrative that maps every design principle onto its step.</dd>
+      <dt>Expect</dt><dd>A first draft of the <strong>domain-separator registry</strong> — the cross-cutting catalogue that every cryptographic hash on Midnight will use for domain separation — ready for the cryptographer's review. A <code>v0.1</code> of the <strong>migration narrative</strong> covering all six principles and their target steps. An <strong>external co-author policy for MIPs</strong> naming the expected co-author for every MIP we plan to draft.</dd>
+      <dt>Success means</dt><dd>Cryptographer agrees the domain-separator registry is on a reviewable path. Migration narrative is a document the PM can take into conversations with any stakeholder.</dd>
+      <dt>Affects</dt><dd>The domain-separator registry gates the correctness of every signature, nullifier, and commitment downstream — it must be signed off before Phase-4 work in Week 5–8 consumes it. The migration narrative unblocks stakeholder communication; the project proceeds regardless but without it, alignment conversations stall.</dd>
+      <dt>Driving</dt><dd>Project lead · cryptographer reviews the domain-separator registry asynchronously</dd>
+    </dl>
+  </div>
+
+  <!-- Week 3 -->
+  <div class="week milestone" id="w3">
+    <div class="week-head"><span class="week-id">Week 3</span><span class="week-dates"><code>2026/05/04 → 2026/05/08</code></span></div>
+    <div class="week-title">Crate adoption decision and first Poseidon ciphersuite sketch</div>
+    <dl>
+      <dt>Goal</dt><dd>Decide how we consume the <code>threshold-signatures</code> crate (depend on published vs. fork into IOG namespace vs. vendor as git-subtree), and begin the JubjubPoseidon ciphersuite — our single cryptographic delta on top of the upstream crate.</dd>
+      <dt>Expect</dt><dd>A decision log entry recording the crate-consumption strategy with rationale. A first sketch of the JubjubPoseidon ciphersuite compiling in Rust and exercising a smoke test against the upstream Blake2b ciphersuite for parity.</dd>
+      <dt>Success means</dt><dd>Adoption strategy is chosen, the team is not blocked waiting on a further decision, and the ciphersuite sketch demonstrates the Poseidon adapter pattern works against the upstream <code>Ciphersuite</code> trait.</dd>
+      <dt>Affects</dt><dd>This is the entry into Phase 3 of the critical path. Without a decision this week, Week 4 cannot produce a green reference implementation. The crate-consumption strategy also affects how we contribute the ciphersuite back upstream (if at all) — that's a Step-1.1 concern but it is seeded here.</dd>
+      <dt>Driving</dt><dd>Developer (Lucas) · cryptographer reviews in parallel</dd>
+    </dl>
+  </div>
+
+  <!-- Week 4 -->
+  <div class="week milestone" id="w4">
+    <div class="week-head"><span class="week-id">Week 4</span><span class="week-dates"><code>2026/05/11 → 2026/05/15</code></span></div>
+    <div class="week-title">Reference implementation green · cryptographer sign-off</div>
+    <dl>
+      <dt>Goal</dt><dd>Close out Phase 3: the <code>threshold-signatures</code> crate is consumed as a library dependency, the JubjubPoseidon ciphersuite passes its tests alongside the upstream Blake2b ciphersuite, and the cryptographer has signed off on the spec.</dd>
+      <dt>Expect</dt><dd>Reference implementation produces valid signatures under both ciphersuites. Differential tests exist: same message → same signature regardless of which ciphersuite selection is used for the off-chain path. Cryptographer's written sign-off is in the evidence log. The domain-separator registry closes its review loop this week as well.</dd>
+      <dt>Success means</dt><dd>Phase 3 is closed. Crate adoption is done. The path into Phase 4 (in-circuit verification — the long pole) is unblocked.</dd>
+      <dt>Affects</dt><dd>If this week slips, Phase 4 is delayed by the same amount — and Phase 4 is the longest phase of the MVP. The June demo date becomes at risk. The pre-planned response is to compress Phase 4 scope (demonstrate the minimum end-to-end flow and defer the differential-test suite into the post-MVP effort block) rather than slip the demo.</dd>
+      <dt>Driving</dt><dd>Developer · cryptographer</dd>
+    </dl>
+  </div>
+
+  <!-- Week 5 -->
+  <div class="week" id="w5">
+    <div class="week-head"><span class="week-id">Week 5</span><span class="week-dates"><code>2026/05/18 → 2026/05/22</code></span></div>
+    <div class="week-title">Circuit spec v0.1 · management console shell</div>
+    <dl>
+      <dt>Goal</dt><dd>Start Phase 4 (long pole) and the UI lane at the same time. Get the in-circuit verification spec into a reviewable state, and put the management console in front of people as a visible artefact.</dd>
+      <dt>Expect</dt><dd>A circuit specification draft for in-circuit threshold-signature verification, including the "what goes into the challenge hash" table that guards against the Frozen-Heart class of bugs. Alongside that, the first web-based management console shell — passkey login stub, placeholder dashboard — running against a stub backend.</dd>
+      <dt>Success means</dt><dd>Circuit spec is specific enough that the Phase-4 implementation can begin from it without waiting. The console shell is a thing the team can show, click through, and point to as "this is the week-by-week evolving artefact".</dd>
+      <dt>Affects</dt><dd>The console shell is the visible demo through-line from this week to the Week-10 demo. If the shell does not exist, the weekly demo still happens but it runs on engine-lane artefacts only — less stakeholder-friendly. The circuit spec quality directly sets the risk on Week 8's end-to-end.</dd>
+      <dt>Driving</dt><dd>Developer (circuit spec · console shell in parallel)</dd>
+    </dl>
+  </div>
+
+  <!-- Week 6 -->
+  <div class="week" id="w6">
+    <div class="week-head"><span class="week-id">Week 6</span><span class="week-dates"><code>2026/05/25 → 2026/05/29</code></span></div>
+    <div class="week-title">In-circuit verifier first pass · key-derivation MIP draft opens · console dashboard</div>
+    <dl>
+      <dt>Goal</dt><dd>Produce the first version of the in-circuit verifier that compiles and proves, even if only on a toy input. Open the first MIP — the <strong>key-derivation MIP</strong> — as a public PR. Put an account dashboard into the management console so it shows something other than a blank page.</dd>
+      <dt>Expect</dt><dd>A Compact circuit that verifies a FROST aggregate signature against a known-good test vector, on devnet, with proof submitted. It does not need to handle all edge cases yet — the point is an end-to-end thread. The key-derivation MIP draft PR is open in the Midnight Improvement Proposals repository with a named external co-author (Lace or Midnight Foundation).</dd>
+      <dt>Success means</dt><dd>A signed transaction makes it on-chain via the new verifier (even if artificially). The MIP process has its first PR — a measurable artefact of the standards-track work. The console has an identity/dashboard surface.</dd>
+      <dt>Affects</dt><dd>If the in-circuit verifier does not compile this week, Week 7 is spent debugging rather than working on the account provider — which has its own Week-7 deliverable. The key-derivation MIP slipping by a week does not affect the MVP demo, only the MIP submission schedule.</dd>
+      <dt>Driving</dt><dd>Developer (verifier) · project lead (MIP · console oversight)</dd>
+    </dl>
+  </div>
+
+  <!-- Week 7 -->
+  <div class="week" id="w7">
+    <div class="week-head"><span class="week-id">Week 7</span><span class="week-dates"><code>2026/06/01 → 2026/06/05</code></span></div>
+    <div class="week-title">Account provider live · connection protocol draft · backend wiring</div>
+    <dl>
+      <dt>Goal</dt><dd>Bring up the OAuth-like account provider so it can authenticate passkeys, issue JWTs with request-binding claims, and issue capability tokens. Publish a working draft of the dApp-wallet connection protocol. Wire the management console to talk to the real backend.</dd>
+      <dt>Expect</dt><dd>The console authenticates against the provider with a passkey end-to-end. Capability tokens are issued and visible in the console. The connection-protocol draft is a document external wallet teams (including Lace) can read.</dd>
+      <dt>Success means</dt><dd>The user-facing left half of the system is standing up. A passkey login from a real browser flows through the real provider and produces a real JWT.</dd>
+      <dt>Affects</dt><dd>Phase 5 is the user-facing cornerstone of the MVP. If it slips here, Week 9's Lace integration cannot kick off — the integration needs the provider standing. The connection-protocol draft also feeds Week 8's Lace conversations; a late draft delays the Lace commit-or-fallback decision.</dd>
+      <dt>Driving</dt><dd>Developer (backend) · project lead (connection-protocol design)</dd>
+    </dl>
+  </div>
+
+  <!-- Week 8 -->
+  <div class="week milestone" id="w8">
+    <div class="week-head"><span class="week-id">Week 8</span><span class="week-dates"><code>2026/06/08 → 2026/06/12</code></span></div>
+    <div class="week-title">End-to-end on devnet · Bech32 address-format MIP draft opens</div>
+    <dl>
+      <dt>Goal</dt><dd>Close Phase 4. A full end-to-end run: a client signs with an in-process n=5 signing committee → the in-circuit verifier proves → the transaction lands on Midnight devnet. Open the second MIP — the <strong>Bech32 address-format MIP</strong>.</dd>
+      <dt>Expect</dt><dd>A demo-ready video of the full signing → verification → devnet inclusion flow. Differential tests demonstrate that altering any public input (recipient, amount, token, nonce) causes verification to fail. The address-format MIP draft PR opens.</dd>
+      <dt>Success means</dt><dd>The long pole of the MVP is down. The project is now in integration mode for the final three weeks. <span class="pill scheduled">Critical path</span></dd>
+      <dt>Affects</dt><dd>If this week slips, the MVP is at risk. The pre-planned response is to use the Week-10 dress-rehearsal time to close residual integration bugs rather than refining the demo — the demo still happens on time, just with a less polished dress-rehearsal cycle. If the end-to-end does not run by end of Week 9, we convene an escalation with the line manager and PM.</dd>
+      <dt>Driving</dt><dd>Developer · project lead · cryptographer final sign-off</dd>
+    </dl>
+  </div>
+
+  <!-- Week 9 -->
+  <div class="week" id="w9">
+    <div class="week-head"><span class="week-id">Week 9</span><span class="week-dates"><code>2026/06/15 → 2026/06/19</code></span></div>
+    <div class="week-title">Console wired to the real verifier · pseudo third-party app</div>
+    <dl>
+      <dt>Goal</dt><dd>Integrate the verified-transaction flow into the management console end-to-end. Build a small <strong>pseudo third-party application</strong> that exercises the connection protocol as an external dApp would — an OAuth2-style "Sign in with Midnight Passport" flow that requests a capability grant from Passport and receives a signed transaction back.</dd>
+      <dt>Expect</dt><dd>In the management console: a user logs in with their passkey, initiates a transaction, approves the capability grant, and watches the transaction confirmation appear. Alongside it, the pseudo app runs against the same Passport backend: the user clicks "Sign in with Midnight Passport" in the pseudo app, is redirected through the Passport consent flow, and the pseudo app receives the capability token and a signed transaction. Both flows share the same account provider and the same signing path.</dd>
+      <dt>Success means</dt><dd>The happy path is demoable end-to-end from the browser without showing any intermediate dev tooling. The pseudo third-party app proves the connection protocol works against a consumer other than our own console — which is what matters for the MVP story of "a standard the ecosystem can adopt".</dd>
+      <dt>Affects</dt><dd>If the pseudo app is not ready, the MVP demo narrows to the console alone. The demo still happens, but the "other dApps can plug in" claim becomes narration rather than demonstration. The console integration is on the MVP critical path for demo quality.</dd>
+      <dt>Driving</dt><dd>Developer (console integration · pseudo-app scaffold) · project lead (connection-protocol review)</dd>
+    </dl>
+  </div>
+
+  <!-- Week 10 · MVP demo -->
+  <div class="week mvp" id="w10">
+    <div class="week-head"><span class="week-id">Week 10 · MVP DEMO</span><span class="week-dates"><code>2026/06/22 → 2026/06/26</code></span></div>
+    <div class="week-title">Final dress rehearsal and the MVP demo on Friday 26 June</div>
+    <dl>
+      <dt>Goal</dt><dd>Finish the integration dry-runs early in the week and deliver the MVP demo live on Friday 26 June — the end-of-June target. Do so grounded in the migration narrative the stakeholders have already read.</dd>
+      <dt>Expect</dt><dd><strong>Mon–Wed</strong>: final dress rehearsal, seam fixes, sad-path rehearsed on stage, "what doesn't work yet" slide locked. The migration narrative is in its final form, sent to the vision author in advance. <strong>Thu</strong>: no-new-changes freeze, full end-to-end smoke test. <strong>Fri 26 June</strong>: MVP demo to the wider stakeholder audience — happy path, recovery sad-path, and a "what's next" slide pointing to MVP 1.1.</dd>
+      <dt>Success means</dt><dd>The demo runs live. The happy path lands. The sad-path is honest. The vision author reads the MVP as step 1 of three, not as a reduced substitute. The ARC director sees the MIP pipeline visibly in flight.</dd>
+      <dt>Affects</dt><dd>The MVP demo outcome shapes MVP 1.1 scope: if the demo surfaces issues in the managed-signing story, MVP 1.1 may reprioritise federation earlier. If the demo lands cleanly, MVP 1.1 leads with the name registry and the dApp-wallet connection protocol MIP.</dd>
+      <dt>Driving</dt><dd>Developer + project lead (implementation) · PM fronts the demo · project lead supports Q&amp;A</dd>
+    </dl>
+  </div>
+
+  <!-- Post-MVP handover (effort-based, no calendar dates) -->
+  <div class="week" id="post-mvp" style="border-left-color: var(--good);">
+    <div class="week-head"><span class="week-id" style="color: var(--good);">Post-MVP · effort block</span><span class="week-dates">effort-based · handover into MVP 1.1</span></div>
+    <div class="week-title">Retrospective and MVP 1.1 kick-off</div>
+    <dl>
+      <dt>Goal</dt><dd>Close out the MVP cleanly and open MVP 1.1 on the same weekly-demo rhythm — without leaving a gap week for stakeholders. Effort rather than calendar: this is the seam between the 12-week MVP sprint and the first 90-day post-MVP cycle.</dd>
+      <dt>Expect</dt><dd>A written retrospective covering what worked, what slipped, and what changes for the next beat. A scope-lock draft for MVP 1.1 (federation, name registry, dApp-wallet connection protocol MIP). Evidence log reorganised for MVP 1.1 consumption. Any residual demo issues cleared.</dd>
+      <dt>Success means</dt><dd>MVP 1.1 starts with the first weekly-demo artefact identified and scoped. External stakeholders see no pause in progress.</dd>
+      <dt>Affects</dt><dd>Where the demo outcome surfaced issues (e.g. a signing-network concern the stakeholders raised), those reshape MVP 1.1 priorities at this step. This is the only time in the MVP cycle the plan re-plans.</dd>
+      <dt>Driving</dt><dd>Project lead + PM</dd>
+    </dl>
+  </div>
+
+  <div class="callout warning">
+    <div class="label">Slippage protocol (applies to every week)</div>
+    <p>If the week's planned demo is not on track by Wednesday, the team <strong>must</strong> pick an adjacent deliverable (a smaller component, a predecessor step, or a parallel artefact from another lane) and show that Friday instead. Showing a working adjacent thing preserves the weekly rhythm; apologising for a missed week destroys it. Two consecutive slippages on the same critical-path item trigger an escalation at the next phase-boundary review.</p>
+  </div>
+</section>
+
+<footer class="doc-footer">
+  <p>ARC · Input Output Global · <code>DELIVERY-PLAN v1.0</code> · Issued <code>2026/04/20</code></p>
+  <p>Source of principles: the <em>secure-onboarding-design</em> authored by Charles Hoskinson.</p>
+</footer>
+
+</main>
+
+<script>
+  (function theme() {
+    const root = document.documentElement;
+    const btn = document.getElementById('themeToggle');
+    const saved = localStorage.getItem('passport-spec-theme');
+    if (saved === 'light' || saved === 'dark') root.setAttribute('data-theme', saved);
+    btn.addEventListener('click', () => {
+      const cur = root.getAttribute('data-theme');
+      let next;
+      if (!cur) next = 'light';
+      else if (cur === 'light') next = 'dark';
+      else next = null;
+      if (next) {
+        root.setAttribute('data-theme', next);
+        localStorage.setItem('passport-spec-theme', next);
+      } else {
+        root.removeAttribute('data-theme');
+        localStorage.removeItem('passport-spec-theme');
+      }
+    });
+  })();
+</script>
+</body>
+</html>

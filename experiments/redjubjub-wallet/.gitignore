@@ -1,0 +1,9 @@
+node_modules/
+contracts/managed/
+dist/
+midnight-level-db/
+deployment.json
+wallet-key.json
+*.midnight.json
+infra/.env
+signer/target/

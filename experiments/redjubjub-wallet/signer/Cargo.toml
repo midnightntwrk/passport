@@ -1,0 +1,13 @@
+[package]
+name = "schnorr-signer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+jubjub = "0.10"
+ff = "0.13"
+group = "0.13"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+rand = "0.8"

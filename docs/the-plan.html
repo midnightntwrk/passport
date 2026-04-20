@@ -1,0 +1,2212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Midnight Passport — The Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Brand — identical in both themes */
+    --iog-infared: #E52321;
+    --iog-dawn: #EC641D;
+    --iog-acid-green: #06FF89;
+    --iog-electric-blue: #16E9D8;
+    --iog-volt-yellow: #F2FF58;
+    --iog-ember-orange: #FF532C;
+    --iog-cobalt-pulse: #2C4FFA;
+    --iog-ultraviolet: #A700FF;
+    --iog-hyper-pink: #FF79FC;
+
+    /* Light theme (default) */
+    --bg: #FFFFFF;
+    --bg-soft: #FAFAFA;
+    --bg-alt: #F4F4F2;
+    --line: rgba(0,0,0,0.08);
+    --line-strong: rgba(0,0,0,0.18);
+    --text: #050505;
+    --text-mute: #555555;
+    --text-faint: #999999;
+
+    /* Card surfaces used inside SVGs */
+    --card-fill: #FFFFFF;
+    --card-soft-fill: #FAFAFA;
+    --card-stroke: #050505;
+    --card-stroke-soft: #999999;
+    --card-stroke-faint: #E0E0E0;
+    --svg-text: #050505;
+    --svg-text-mute: #555555;
+    --svg-text-faint: #999999;
+
+    /* Semantic (tuned for white bg) */
+    --good: #00B458;
+    --good-soft: #E8FAF1;
+    --bad: #E52321;
+    --bad-soft: #FFEFEF;
+    --warn: #C9A700;
+    --warn-soft: #FFF4D6;
+    --info: #2C4FFA;
+    --info-soft: #E6EAFD;
+    --accent: #E52321;
+
+    --font-display: 'Barlow', system-ui, sans-serif;
+    --font-body: 'Barlow', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #050505;
+      --bg-soft: #0E0E0E;
+      --bg-alt: #141414;
+      --line: rgba(255,255,255,0.08);
+      --line-strong: rgba(255,255,255,0.20);
+      --text: #F4F4F2;
+      --text-mute: #B5B5B5;
+      --text-faint: #7A7A7A;
+
+      --card-fill: #141414;
+      --card-soft-fill: #0E0E0E;
+      --card-stroke: #F4F4F2;
+      --card-stroke-soft: #7A7A7A;
+      --card-stroke-faint: #2A2A2A;
+      --svg-text: #F4F4F2;
+      --svg-text-mute: #B5B5B5;
+      --svg-text-faint: #7A7A7A;
+
+      --good: #06FF89;
+      --good-soft: #0C2A1C;
+      --bad: #FF5653;
+      --bad-soft: #2A0C0B;
+      --warn: #F2FF58;
+      --warn-soft: #2B2A0B;
+      --info: #6E89FF;
+      --info-soft: #0E1638;
+    }
+  }
+
+  html[data-theme="dark"] {
+    --bg: #050505;
+    --bg-soft: #0E0E0E;
+    --bg-alt: #141414;
+    --line: rgba(255,255,255,0.08);
+    --line-strong: rgba(255,255,255,0.20);
+    --text: #F4F4F2;
+    --text-mute: #B5B5B5;
+    --text-faint: #7A7A7A;
+    --card-fill: #141414;
+    --card-soft-fill: #0E0E0E;
+    --card-stroke: #F4F4F2;
+    --card-stroke-soft: #7A7A7A;
+    --card-stroke-faint: #2A2A2A;
+    --svg-text: #F4F4F2;
+    --svg-text-mute: #B5B5B5;
+    --svg-text-faint: #7A7A7A;
+    --good: #06FF89;
+    --good-soft: #0C2A1C;
+    --bad: #FF5653;
+    --bad-soft: #2A0C0B;
+    --warn: #F2FF58;
+    --warn-soft: #2B2A0B;
+    --info: #6E89FF;
+    --info-soft: #0E1638;
+  }
+
+  html[data-theme="light"] {
+    --bg: #FFFFFF;
+    --bg-soft: #FAFAFA;
+    --bg-alt: #F4F4F2;
+    --line: rgba(0,0,0,0.08);
+    --line-strong: rgba(0,0,0,0.18);
+    --text: #050505;
+    --text-mute: #555555;
+    --text-faint: #999999;
+    --card-fill: #FFFFFF;
+    --card-soft-fill: #FAFAFA;
+    --card-stroke: #050505;
+    --card-stroke-soft: #999999;
+    --card-stroke-faint: #E0E0E0;
+    --svg-text: #050505;
+    --svg-text-mute: #555555;
+    --svg-text-faint: #999999;
+    --good: #00B458;
+    --good-soft: #E8FAF1;
+    --bad: #E52321;
+    --bad-soft: #FFEFEF;
+    --warn: #C9A700;
+    --warn-soft: #FFF4D6;
+    --info: #2C4FFA;
+    --info-soft: #E6EAFD;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    transition: background .2s ease, color .2s ease;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    color: var(--text);
+    background: var(--bg-alt);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    color: var(--text);
+  }
+  h1 { font-size: clamp(3rem, 9.5vw, 8rem); }
+  h2 { font-size: clamp(2.4rem, 7vw, 6rem); }
+  h3 { font-size: clamp(1.4rem, 2.2vw, 2rem); }
+
+  .ed-furniture {
+    font-family: var(--font-body);
+    font-weight: 300;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 0.78rem;
+    color: var(--text-mute);
+  }
+
+  section.scene {
+    min-height: 100vh;
+    padding: 64px 64px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+    border-bottom: 1px solid var(--line);
+  }
+  @media (max-width: 768px) { section.scene { padding: 40px 28px; } }
+
+  .scene-num {
+    position: absolute;
+    top: 32px;
+    left: 64px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.78rem;
+    color: var(--text-mute);
+    letter-spacing: 0.18em;
+  }
+  @media (max-width: 768px) { .scene-num { left: 28px; } }
+
+  .scene-counter {
+    position: absolute;
+    top: 32px;
+    right: 120px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-faint);
+  }
+  @media (max-width: 768px) { .scene-counter { right: 28px; top: 64px; } }
+
+  .scene-content { width: 100%; max-width: 1280px; margin: 0 auto; }
+  .scene-content.center { text-align: center; }
+
+  .lede {
+    font-weight: 300;
+    font-size: clamp(1.3rem, 1.55vw, 1.75rem);
+    color: var(--text-mute);
+    max-width: clamp(760px, 60vw, 960px);
+    margin-top: 24px;
+    line-height: 1.4;
+  }
+  .lede.center { margin-left: auto; margin-right: auto; }
+
+  .one-liner {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(1.3rem, 1.65vw, 1.8rem);
+    color: var(--text);
+    margin-top: 28px;
+    max-width: clamp(900px, 70vw, 1100px);
+  }
+  .one-liner.center { margin-left: auto; margin-right: auto; text-align: center; }
+
+  .footnote {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    margin-top: 24px;
+    letter-spacing: 0.02em;
+  }
+  .footnote.center { text-align: center; }
+
+  .hero-svg, .scene-svg { width: 100%; height: auto; max-height: 65vh; display: block; }
+
+  .hero {
+    background: var(--bg);
+    height: 100vh;
+    min-height: 100vh;
+    max-height: 100vh;
+    padding-top: clamp(20px, 3.5vh, 48px);
+    padding-bottom: clamp(20px, 3.5vh, 48px);
+    overflow: hidden;
+  }
+  .hero img.logo,
+  .hero img.logo-dark {
+    height: clamp(56px, 8vh, 96px);
+    width: auto;
+    opacity: 1;
+    filter: none;
+    margin-bottom: clamp(16px, 3vh, 40px) !important;
+  }
+  .hero img.logo { display: block; }
+  .hero img.logo-dark { display: none; }
+  html[data-theme="dark"] .hero img.logo { display: none; }
+  html[data-theme="dark"] .hero img.logo-dark { display: block; }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) .hero img.logo { display: none; }
+    html:not([data-theme="light"]) .hero img.logo-dark { display: block; }
+  }
+  @media (max-width: 900px) { .hero img.logo, .hero img.logo-dark { height: 56px; } }
+
+  .hero .hero-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(28px, 4vw, 72px);
+    align-items: center;
+  }
+  @media (max-width: 1100px) { .hero .hero-grid { grid-template-columns: 1fr; gap: 24px; } }
+
+  .hero h1 {
+    letter-spacing: -0.04em;
+    font-size: clamp(2rem, 5.2vw, 4.8rem);
+    line-height: 1.02;
+  }
+  .hero .lede {
+    font-size: clamp(0.98rem, 1.1vw, 1.25rem);
+    margin-top: 16px;
+    max-width: 640px;
+  }
+  .hero .hero-svg { max-height: min(56vh, 440px); }
+  .hero .accent { color: var(--iog-infared); }
+
+  /* Side rail */
+  .rail {
+    position: fixed; right: 28px; top: 50%;
+    transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 10px;
+    z-index: 10;
+  }
+  .rail a {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--line-strong);
+    transition: all .15s ease;
+    cursor: pointer;
+  }
+  .rail a:hover, .rail a.active { background: var(--iog-infared); transform: scale(1.4); }
+  @media (max-width: 768px) { .rail { display: none; } }
+
+  /* Theme toggle */
+  .theme-toggle {
+    position: fixed;
+    top: 24px; right: 24px;
+    z-index: 50;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s ease, border .15s ease;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+  }
+  .theme-toggle:hover { border-color: var(--iog-infared); color: var(--iog-infared); }
+  .theme-toggle svg { width: 18px; height: 18px; display: block; }
+  .theme-toggle .icon-sun { display: none; }
+  .theme-toggle .icon-moon { display: block; }
+  html[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+  html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) .theme-toggle .icon-sun { display: block; }
+    html:not([data-theme="light"]) .theme-toggle .icon-moon { display: none; }
+  }
+
+  footer {
+    background: var(--bg-alt);
+    padding: 80px 64px;
+    text-align: center;
+    border-top: 1px solid var(--line);
+  }
+  footer img { height: 22px; opacity: 0.7; margin-top: 32px; }
+  html[data-theme="dark"] footer img.word-light,
+  footer img.word-dark { display: none; }
+  html[data-theme="dark"] footer img.word-dark { display: inline; }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) footer img.word-light { display: none; }
+    html:not([data-theme="light"]) footer img.word-dark { display: inline; }
+  }
+  footer .ed-furniture { color: var(--text-faint); }
+
+  .h-good { color: var(--good); font-weight: 500; }
+  .h-bad { color: var(--bad); font-weight: 500; }
+  .h-info { color: var(--info); font-weight: 500; }
+  .h-warn { color: var(--warn); font-weight: 500; }
+  .h-accent { color: var(--iog-infared); font-weight: 500; }
+
+  svg text { font-family: var(--font-display); }
+  svg .svg-text { fill: var(--svg-text); }
+  svg .svg-text-mute { fill: var(--svg-text-mute); }
+  svg .svg-text-faint { fill: var(--svg-text-faint); }
+  svg .svg-card-fill { fill: var(--card-fill); }
+  svg .svg-card-soft-fill { fill: var(--card-soft-fill); }
+  svg .svg-card-stroke { stroke: var(--card-stroke); }
+  svg .svg-card-stroke-soft { stroke: var(--card-stroke-soft); }
+  svg .svg-card-stroke-faint { stroke: var(--card-stroke-faint); }
+  svg .svg-good-fill { fill: var(--good-soft); }
+  svg .svg-good-stroke { stroke: var(--good); }
+  svg .svg-good-text { fill: var(--good); }
+  svg .svg-bad-fill { fill: var(--bad-soft); }
+  svg .svg-bad-stroke { stroke: var(--bad); }
+  svg .svg-bad-text { fill: var(--bad); }
+  svg .svg-warn-fill { fill: var(--warn-soft); }
+  svg .svg-warn-stroke { stroke: var(--warn); }
+  svg .svg-warn-text { fill: var(--warn); }
+  svg .svg-info-fill { fill: var(--info-soft); }
+  svg .svg-info-stroke { stroke: var(--info); }
+  svg .svg-info-text { fill: var(--info); }
+
+  .schematic {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(var(--line-strong) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-strong) 1px, transparent 1px);
+    background-size: 64px 64px;
+    pointer-events: none;
+    mask-image: radial-gradient(ellipse at center, rgba(0,0,0,0.7), transparent 80%);
+    -webkit-mask-image: radial-gradient(ellipse at center, rgba(0,0,0,0.7), transparent 80%);
+    opacity: 0.3;
+  }
+
+  /* Principle grid (scene 2) */
+  .principles {
+    display: grid;
+    grid-template-columns: 1.2fr repeat(4, 1fr);
+    gap: 0;
+    margin-top: 48px;
+    border-top: 1px solid var(--line);
+  }
+  .principles > div {
+    padding: 20px 18px;
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+  .principles > div:last-child,
+  .principles > div:nth-child(5n) { border-right: none; }
+  .principles > .ph {
+    background: var(--bg-soft);
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-mute);
+  }
+  .principles > .principle {
+    font-weight: 500;
+    color: var(--text);
+    background: var(--bg-alt);
+  }
+  .principles .badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin-bottom: 6px;
+  }
+  .badge.done { background: var(--good-soft); color: var(--good); }
+  .badge.partial { background: var(--warn-soft); color: var(--warn); }
+  .badge.scheduled { background: var(--info-soft); color: var(--info); }
+  .badge.additive { background: var(--bg-alt); color: var(--text-mute); }
+  @media (max-width: 900px) {
+    .principles { grid-template-columns: 1fr; }
+    .principles > div { border-right: none; }
+  }
+
+  /* Assignments table */
+  .assignments {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-top: 48px;
+  }
+  .assignment-card {
+    background: var(--bg-alt);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 22px 22px 18px;
+    transition: border-color .15s ease;
+  }
+  .assignment-card:hover { border-color: var(--iog-infared); }
+  .assignment-card .role {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--iog-infared);
+    margin-bottom: 8px;
+  }
+  .assignment-card .name {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 10px;
+    letter-spacing: -0.02em;
+  }
+  .assignment-card .cad {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+  .assignment-card ul { list-style: none; padding: 0; margin: 0; font-size: 0.88rem; line-height: 1.5; color: var(--text-mute); }
+  .assignment-card ul li { padding-left: 14px; position: relative; margin-bottom: 4px; }
+  .assignment-card ul li::before { content: '—'; position: absolute; left: 0; color: var(--text-faint); }
+
+  /* Modal */
+  .modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 32px; }
+  .modal[hidden] { display: none; }
+  .modal-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+  }
+  html[data-theme="dark"] .modal-backdrop { background: rgba(0,0,0,0.75); }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) .modal-backdrop { background: rgba(0,0,0,0.75); }
+  }
+  .modal-card {
+    position: relative; background: var(--bg); max-width: 720px; width: 100%; max-height: 88vh; overflow-y: auto;
+    padding: 44px 48px; border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.30), 0 0 0 1px var(--line-strong);
+    animation: modalIn .18s ease;
+    color: var(--text);
+  }
+  @keyframes modalIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .modal-close {
+    position: absolute; top: 14px; right: 18px;
+    background: none; border: none; font-size: 1.8rem; line-height: 1;
+    color: var(--text-faint); cursor: pointer; padding: 4px 10px; border-radius: 4px;
+    transition: color .12s ease, background .12s ease;
+  }
+  .modal-close:hover { color: var(--iog-infared); background: var(--bg-alt); }
+  .modal-id-row { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
+  .modal-id { font-family: var(--font-mono); font-weight: 600; color: var(--iog-infared); font-size: 1rem; letter-spacing: 0.04em; }
+  .modal-status {
+    font-family: var(--font-display);
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600;
+    padding: 4px 10px; border-radius: 3px;
+  }
+  .modal-status.mitigated, .modal-status.adopted { background: var(--good-soft); color: var(--good); }
+  .modal-status.tracked, .modal-status.tobuild { background: var(--info-soft); color: var(--info); }
+  .modal-status.open, .modal-status.target { background: var(--warn-soft); color: var(--warn); }
+  .modal-status.phase, .modal-status.builds { background: var(--bad-soft); color: var(--bad); }
+  .modal-title {
+    font-family: var(--font-display);
+    font-weight: 500; font-size: 1.7rem; line-height: 1.18; letter-spacing: -0.02em;
+    color: var(--text); margin-bottom: 6px;
+  }
+  .modal-type { color: var(--text-mute); font-size: 0.92rem; margin-bottom: 24px; }
+  .modal-card h4 {
+    font-family: var(--font-display);
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 600;
+    color: var(--text-faint); margin-top: 22px; margin-bottom: 8px;
+  }
+  .modal-card p { color: var(--text); font-size: 0.96rem; line-height: 1.6; }
+  .modal-card p code { font-size: 0.85em; }
+  .modal-meta {
+    margin-top: 26px; padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 0.86rem; color: var(--text-mute);
+    display: grid; grid-template-columns: 1fr; gap: 8px;
+  }
+  .modal-meta div strong { color: var(--text); font-weight: 600; margin-right: 6px; }
+  .modal-hint {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    font-size: 0.74rem; color: var(--text-faint);
+    letter-spacing: 0.06em; text-transform: uppercase; pointer-events: none;
+  }
+
+  [data-modal-id] { cursor: pointer; transition: filter .12s ease; }
+  [data-modal-id]:hover rect,
+  [data-modal-id]:hover circle:first-of-type {
+    filter: brightness(1.1) saturate(1.15);
+  }
+  html[data-theme="light"] [data-modal-id]:hover rect,
+  html[data-theme="light"] [data-modal-id]:hover circle:first-of-type {
+    filter: brightness(0.95) saturate(1.15);
+  }
+  @media (prefers-color-scheme: light) {
+    html:not([data-theme="dark"]) [data-modal-id]:hover rect,
+    html:not([data-theme="dark"]) [data-modal-id]:hover circle:first-of-type {
+      filter: brightness(0.95) saturate(1.15);
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- ──────────────  THEME TOGGLE  ────────────── -->
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle colour scheme" title="Auto · Light · Dark">
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+  </svg>
+</button>
+
+<!-- ──────────────  SIDE RAIL  ────────────── -->
+<nav class="rail" id="rail">
+  <a href="#s1" data-scene="s1" title="The plan"></a>
+  <a href="#s2" data-scene="s2" title="Vision preserved"></a>
+  <a href="#s3" data-scene="s3" title="What gets built"></a>
+  <a href="#s4" data-scene="s4" title="12-week path"></a>
+  <a href="#s5" data-scene="s5" title="Assignments"></a>
+  <a href="#s6" data-scene="s6" title="Standards track"></a>
+  <a href="#s7" data-scene="s7" title="Evidence & risks"></a>
+  <a href="#s8" data-scene="s8" title="Delivery contract"></a>
+</nav>
+
+<!-- ──────────────  SCENE 1 · HERO  ────────────── -->
+<section class="scene hero" id="s1">
+  <div class="schematic"></div>
+  <div class="scene-num">Midnight Passport · 2026/04/20</div>
+  <div class="scene-counter">01 / 08</div>
+
+  <div class="scene-content" style="position: relative;">
+    <img class="logo" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red POS.png" alt="Input Output" style="margin-bottom: 56px;">
+    <img class="logo-dark" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red NEG.png" alt="Input Output" style="margin-bottom: 56px;">
+
+    <div class="hero-grid">
+      <div>
+        <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 18px;">The plan · pre-read for stakeholders</div>
+        <h1>A 12-week<br>path to MVP.<br><span class="accent">Charles's vision,<br>sequenced.</span></h1>
+        <p class="lede">Twelve weeks to a working MVP by end of June. 90-day cadence for major milestones thereafter. Demonstrable progress every week. Every feature from the secure-onboarding design is on the schedule — the MVP is step 1 of three, not a reduced substitute.</p>
+        <p style="margin-top: 18px; font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-faint); letter-spacing: 0.06em; text-transform: uppercase;">↻ Click any phase or role block for detail · toggle colour scheme top-right</p>
+      </div>
+
+      <!-- Hero SVG: three-step roadmap -->
+      <div>
+        <svg class="hero-svg" viewBox="0 0 600 480" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrowHero" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--svg-text)"/>
+            </marker>
+            <radialGradient id="heroAura" cx="50%" cy="50%" r="50%">
+              <stop offset="0%"  stop-color="#E52321" stop-opacity="0.22"/>
+              <stop offset="40%" stop-color="#EC641D" stop-opacity="0.10"/>
+              <stop offset="100%" stop-color="#E52321" stop-opacity="0"/>
+            </radialGradient>
+            <filter id="heroSoften" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="14"/>
+            </filter>
+          </defs>
+
+          <circle cx="300" cy="240" r="240" fill="url(#heroAura)" filter="url(#heroSoften)"/>
+
+          <!-- Step 1 -->
+          <g transform="translate(40, 40)" data-modal-id="HERO-STEP1">
+            <rect x="0" y="0" width="520" height="86" rx="8" class="svg-card-fill" stroke="#E52321" stroke-width="3"/>
+            <text x="22" y="30" font-size="12" font-weight="600" fill="#E52321" letter-spacing="2">STEP 1 · MVP · END OF JUNE 2026</text>
+            <text x="22" y="56" font-size="20" font-weight="500" class="svg-text">Managed signing</text>
+            <text x="22" y="74" font-size="12" class="svg-text-mute">Passkey · threshold-signing network · account provider · on-chain registry</text>
+          </g>
+
+          <!-- Arrow -->
+          <line x1="300" y1="136" x2="300" y2="166" stroke-width="2" class="svg-card-stroke" marker-end="url(#arrowHero)"/>
+
+          <!-- Step 2 — two streams -->
+          <g transform="translate(40, 176)" data-modal-id="HERO-STEP2">
+            <rect x="0" y="0" width="250" height="106" rx="8" class="svg-card-fill" stroke="#2C4FFA" stroke-width="2.5"/>
+            <text x="22" y="28" font-size="11" font-weight="600" fill="#2C4FFA" letter-spacing="2">STEP 2 · STREAM A</text>
+            <text x="22" y="54" font-size="17" font-weight="500" class="svg-text">Multi-device account</text>
+            <text x="22" y="72" font-size="11" class="svg-text-mute">Key-set Merkle root in Compact</text>
+            <text x="22" y="90" font-size="11" class="svg-text-mute">circuits · 1 account, N devices</text>
+          </g>
+          <g transform="translate(310, 176)" data-modal-id="HERO-STEP2B">
+            <rect x="0" y="0" width="250" height="106" rx="8" class="svg-card-fill" stroke="#2C4FFA" stroke-width="2.5"/>
+            <text x="22" y="28" font-size="11" font-weight="600" fill="#2C4FFA" letter-spacing="2">STEP 2 · STREAM B</text>
+            <text x="22" y="54" font-size="17" font-weight="500" class="svg-text">On-device cryptography</text>
+            <text x="22" y="72" font-size="11" class="svg-text-mute">Keys in TEE · local proofs</text>
+            <text x="22" y="90" font-size="11" class="svg-text-mute">DeRec recovery</text>
+          </g>
+
+          <!-- Converging arrows -->
+          <line x1="165" y1="292" x2="260" y2="332" stroke-width="1.5" class="svg-card-stroke" marker-end="url(#arrowHero)"/>
+          <line x1="435" y1="292" x2="340" y2="332" stroke-width="1.5" class="svg-card-stroke" marker-end="url(#arrowHero)"/>
+
+          <!-- Step 3 -->
+          <g transform="translate(40, 342)" data-modal-id="HERO-STEP3">
+            <rect x="0" y="0" width="520" height="100" rx="8" class="svg-card-fill" stroke="#00B458" stroke-width="3"/>
+            <text x="22" y="30" font-size="12" font-weight="600" fill="#00B458" letter-spacing="2">STEP 3 · FULL SELF-CUSTODY</text>
+            <text x="22" y="58" font-size="20" font-weight="500" class="svg-text">Privacy-preserving credentials · KYC · cross-chain</text>
+            <text x="22" y="78" font-size="12" class="svg-text-mute">Additive features on top of decentralised account model</text>
+            <text x="22" y="94" font-size="11" class="svg-text-faint">Six design principles fully realised</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ──────────────  SCENE 2 · VISION PRESERVED  ────────────── -->
+<section class="scene" id="s2" style="background: var(--bg-soft);">
+  <div class="scene-num">Vision preserved</div>
+  <div class="scene-counter">02 / 08</div>
+
+  <div class="scene-content">
+    <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 18px;">Six design principles · sequenced, not cut</div>
+    <h2>Every principle<br>lands on a date.</h2>
+    <p class="lede">The <code>secure-onboarding-design</code> spec defines six design principles. The MVP honours some fully, some partially, and schedules the rest across Steps 2 and 3. Nothing in Charles's wishlist is dropped — each item has a step, an owner, and a sequence.</p>
+
+    <div class="principles">
+      <div class="ph">Principle</div>
+      <div class="ph">MVP · June 2026</div>
+      <div class="ph">Step 2 · Stream A</div>
+      <div class="ph">Step 2 · Stream B</div>
+      <div class="ph">Step 3 · additive</div>
+
+      <div class="principle">1. Keys never leave TEEs; authorisation via ZK witnesses</div>
+      <div><span class="badge partial">PARTIAL</span>FROST witness verified inside the Compact circuit; proof reveals nothing about the signature or key. Custody sits in the signing network, not yet the device TEE.</div>
+      <div><span class="badge additive">—</span></div>
+      <div><span class="badge scheduled">SCHEDULED</span>JubJub key moves into device TEE (AES-256-GCM wrap). Signing network retires.</div>
+      <div><span class="badge done">FULLY MET</span></div>
+
+      <div class="principle">2. Single seed, three wallets (Shielded · Night · Dust)</div>
+      <div><span class="badge partial">PARTIAL</span>One seed per user, three wallets derived via CIP-1852. Seed lives in the signing network.</div>
+      <div><span class="badge additive">—</span></div>
+      <div><span class="badge scheduled">SCHEDULED</span>BIP39 seed generated and held on device; all three wallets derived locally.</div>
+      <div><span class="badge done">FULLY MET</span></div>
+
+      <div class="principle">3. Chain abstraction via intent model</div>
+      <div><span class="badge partial">ACHIEVABLE</span>The adopted <code>threshold-signatures</code> crate already supports ECDSA/EdDSA/FROST — chain abstraction becomes an API layer on top of the signing network, not a new crypto build.</div>
+      <div><span class="badge additive">—</span></div>
+      <div><span class="badge additive">—</span></div>
+      <div><span class="badge done">FULLY MET</span>Intent engine lands with credentials and cross-chain.</div>
+
+      <div class="principle">4. One key per device</div>
+      <div><span class="badge partial">INVERTED</span>One key in the signing network; many devices authenticate to it via passkey. Same UX, centralised mechanism.</div>
+      <div><span class="badge scheduled">SCHEDULED</span>Key-set Merkle root on-chain. Each device holds its own key and registers on-chain.</div>
+      <div><span class="badge additive">—</span></div>
+      <div><span class="badge done">FULLY MET</span></div>
+
+      <div class="principle">5. Privacy-by-design identity (credentials, selective disclosure)</div>
+      <div><span class="badge additive">OUT OF MVP</span>Not in scope for June but not blocked by the MVP — independent of key-custody model.</div>
+      <div><span class="badge additive">—</span></div>
+      <div><span class="badge additive">—</span></div>
+      <div><span class="badge scheduled">ECO-02</span>Credential standard with multi-issuer support, nullifier-based revocation.</div>
+
+      <div class="principle">6. Seedless UX</div>
+      <div><span class="badge done">FULLY MET</span>User never sees a seed phrase, mnemonic, or raw address. Passkey-only authentication from day one.</div>
+      <div><span class="badge additive">—</span></div>
+      <div><span class="badge additive">—</span></div>
+      <div><span class="badge done">FULLY MET</span></div>
+    </div>
+
+    <p class="one-liner" style="margin-top: 40px;">The <span class="h-accent">migration narrative</span> — document <code>MVP-10</code> — carries the full principle-by-principle mapping with explicit dates and owners. <span class="h-info">It is the document that proves the vision is intact.</span></p>
+    <p class="footnote">Also personally preserved from the wishlist: <strong>DeRec social recovery</strong> (Stream B) and <strong>social account linking</strong> (Step 3 ECO-02 credential layer).</p>
+  </div>
+</section>
+
+<!-- ──────────────  SCENE 3 · WHAT GETS BUILT  ────────────── -->
+<section class="scene" id="s3">
+  <div class="scene-num">The MVP architecture</div>
+  <div class="scene-counter">03 / 08</div>
+
+  <div class="scene-content center">
+    <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 18px;">Seven building blocks</div>
+    <h2>What ships<br>by end of June.</h2>
+    <p class="lede center">Four are cornerstones; three are scaffolding we can retire later. Each has a named owner and a target phase.</p>
+
+    <svg class="scene-svg" viewBox="0 0 1200 620" xmlns="http://www.w3.org/2000/svg" style="max-height: 68vh; margin-top: 48px;">
+      <defs>
+        <marker id="arrComp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--svg-text)"/>
+        </marker>
+      </defs>
+
+      <!-- User Device -->
+      <g transform="translate(40, 60)" data-modal-id="C-DEVICE">
+        <rect x="0" y="0" width="240" height="160" rx="8" class="svg-card-fill" stroke="#E52321" stroke-width="2.5"/>
+        <text x="20" y="30" font-size="11" font-weight="600" fill="#E52321" letter-spacing="2">USER DEVICE</text>
+        <text x="20" y="58" font-size="14" font-weight="500" class="svg-text">Passkey (WebAuthn)</text>
+        <text x="20" y="82" font-size="11" class="svg-text-mute">Transaction construction</text>
+        <text x="20" y="100" font-size="11" class="svg-text-mute">Device signature on digest</text>
+        <text x="20" y="118" font-size="11" class="svg-text-mute">ZK proof generation</text>
+        <text x="20" y="142" font-size="10" class="svg-text-faint">No Midnight key material</text>
+      </g>
+
+      <!-- Account Provider -->
+      <g transform="translate(320, 60)" data-modal-id="C-OAUTH">
+        <rect x="0" y="0" width="260" height="160" rx="8" class="svg-card-fill" stroke="#EC641D" stroke-width="2.5"/>
+        <text x="20" y="30" font-size="11" font-weight="600" fill="#EC641D" letter-spacing="2">ACCOUNT PROVIDER · MVP-03</text>
+        <text x="20" y="58" font-size="14" font-weight="500" class="svg-text">OAuth-like service</text>
+        <text x="20" y="82" font-size="11" class="svg-text-mute">Passkey verification</text>
+        <text x="20" y="100" font-size="11" class="svg-text-mute">Device registry · JWT issuance</text>
+        <text x="20" y="118" font-size="11" class="svg-text-mute">Capability tokens · sessions</text>
+        <text x="20" y="142" font-size="10" class="svg-text-faint">Phase 5 · Lucas (backend)</text>
+      </g>
+
+      <!-- Threshold signing -->
+      <g transform="translate(620, 60)" data-modal-id="C-FROST">
+        <rect x="0" y="0" width="260" height="160" rx="8" class="svg-card-fill" stroke="#2C4FFA" stroke-width="2.5"/>
+        <text x="20" y="30" font-size="11" font-weight="600" fill="#2C4FFA" letter-spacing="2">THRESHOLD SIGNING · MVP-01</text>
+        <text x="20" y="58" font-size="14" font-weight="500" class="svg-text">FROST on JubJub</text>
+        <text x="20" y="82" font-size="11" class="svg-text-mute">threshold-signatures crate (MIT · audited)</text>
+        <text x="20" y="100" font-size="11" class="svg-text-mute">+ JubjubPoseidon ciphersuite</text>
+        <text x="20" y="118" font-size="11" class="svg-text-mute">MVP = single node; Step 1.1 = n=5,t=4</text>
+        <text x="20" y="142" font-size="10" class="svg-text-faint">Phase 3 · Lucas · Jesus reviews</text>
+      </g>
+
+      <!-- Midnight network / Registry -->
+      <g transform="translate(920, 60)" data-modal-id="C-CHAIN">
+        <rect x="0" y="0" width="240" height="160" rx="8" class="svg-card-fill" stroke="#050505" stroke-width="2.5"/>
+        <text x="20" y="30" font-size="11" font-weight="600" class="svg-text" letter-spacing="2">MIDNIGHT NETWORK</text>
+        <text x="20" y="58" font-size="14" font-weight="500" class="svg-text">In-circuit verifier</text>
+        <text x="20" y="82" font-size="11" class="svg-text-mute">Compact contract · Phase 4</text>
+        <text x="20" y="100" font-size="11" class="svg-text-mute">Verifies s·G == R + c·pk</text>
+        <text x="20" y="118" font-size="11" class="svg-text-mute">FROST signature never on-chain</text>
+        <text x="20" y="142" font-size="10" class="svg-text-faint">Long pole · weeks 5–8</text>
+      </g>
+
+      <!-- Arrows top row -->
+      <line x1="280" y1="140" x2="320" y2="140" stroke-width="2" class="svg-card-stroke" marker-end="url(#arrComp)"/>
+      <line x1="580" y1="140" x2="620" y2="140" stroke-width="2" class="svg-card-stroke" marker-end="url(#arrComp)"/>
+      <line x1="880" y1="140" x2="920" y2="140" stroke-width="2" class="svg-card-stroke" marker-end="url(#arrComp)"/>
+
+      <!-- Row 2: Standards + UI -->
+      <g transform="translate(40, 280)" data-modal-id="C-NAMES">
+        <rect x="0" y="0" width="240" height="130" rx="8" class="svg-card-fill" stroke="#00B458" stroke-width="2"/>
+        <text x="20" y="28" font-size="11" font-weight="600" class="svg-good-text" letter-spacing="2">NAME REGISTRY · STEP 1.1</text>
+        <text x="20" y="54" font-size="14" font-weight="500" class="svg-text">alice.midnight</text>
+        <text x="20" y="76" font-size="11" class="svg-text-mute">On-chain name → public key</text>
+        <text x="20" y="94" font-size="11" class="svg-text-mute">Commit-reveal · anti-squat</text>
+        <text x="20" y="116" font-size="10" class="svg-text-faint">Moved post-MVP — see risks C13</text>
+      </g>
+
+      <g transform="translate(320, 280)" data-modal-id="C-MULTIKEY">
+        <rect x="0" y="0" width="260" height="130" rx="8" class="svg-card-fill" stroke="#2C4FFA" stroke-width="2" stroke-dasharray="4 4"/>
+        <text x="20" y="28" font-size="11" font-weight="600" fill="#2C4FFA" letter-spacing="2">MULTI-KEY ACCOUNT · STEP 2A</text>
+        <text x="20" y="54" font-size="14" font-weight="500" class="svg-text">Key-set Merkle root</text>
+        <text x="20" y="76" font-size="11" class="svg-text-mute">One account, N device keys</text>
+        <text x="20" y="94" font-size="11" class="svg-text-mute">Scoped function-call keys</text>
+        <text x="20" y="116" font-size="10" class="svg-text-faint">Compact circuit work · Step 2</text>
+      </g>
+
+      <g transform="translate(620, 280)" data-modal-id="C-CONN">
+        <rect x="0" y="0" width="260" height="130" rx="8" class="svg-card-fill" stroke="#E52321" stroke-width="2"/>
+        <text x="20" y="28" font-size="11" font-weight="600" fill="#E52321" letter-spacing="2">CONNECTION PROTOCOL · MVP DRAFT</text>
+        <text x="20" y="54" font-size="14" font-weight="500" class="svg-text">dApp ↔ wallet interface</text>
+        <text x="20" y="76" font-size="11" class="svg-text-mute">"Sign in with Midnight"</text>
+        <text x="20" y="94" font-size="11" class="svg-text-mute">Capability negotiation</text>
+        <text x="20" y="116" font-size="10" class="svg-text-faint">Phase 7B · ECO-01 finalises Step 2</text>
+      </g>
+
+      <g transform="translate(920, 280)" data-modal-id="C-CRED">
+        <rect x="0" y="0" width="240" height="130" rx="8" class="svg-card-fill" stroke="#A700FF" stroke-width="2" stroke-dasharray="4 4"/>
+        <text x="20" y="28" font-size="11" font-weight="600" fill="#A700FF" letter-spacing="2">CREDENTIALS · STEP 3</text>
+        <text x="20" y="54" font-size="14" font-weight="500" class="svg-text">ZK selective disclosure</text>
+        <text x="20" y="76" font-size="11" class="svg-text-mute">Attestation tree · nullifiers</text>
+        <text x="20" y="94" font-size="11" class="svg-text-mute">Multi-issuer by design</text>
+        <text x="20" y="116" font-size="10" class="svg-text-faint">ECO-02 · independent of custody</text>
+      </g>
+
+      <!-- Row 3: UI + SDK -->
+      <g transform="translate(40, 440)" data-modal-id="C-CONSOLE">
+        <rect x="0" y="0" width="540" height="130" rx="8" class="svg-card-fill" stroke="#16E9D8" stroke-width="2"/>
+        <text x="20" y="28" font-size="11" font-weight="600" fill="#00b3a4" letter-spacing="2">MANAGEMENT CONSOLE · PHASE 7A</text>
+        <text x="20" y="54" font-size="14" font-weight="500" class="svg-text">Web console · account dashboard · authorised wallets · capability grants</text>
+        <text x="20" y="80" font-size="11" class="svg-text-mute">Passkey login · visible artefact of the weekly demos · "show things" early</text>
+        <text x="20" y="102" font-size="11" class="svg-text-mute">Stub backend first · wired to MVP-03 as Phase 5 lands</text>
+        <text x="20" y="120" font-size="10" class="svg-text-faint">Phase 7A · Lucas · designer TBD</text>
+      </g>
+
+      <g transform="translate(620, 440)" data-modal-id="C-LACE">
+        <rect x="0" y="0" width="540" height="130" rx="8" class="svg-card-fill" stroke="#A8EFE0" stroke-width="2"/>
+        <text x="20" y="28" font-size="11" font-weight="600" fill="#00b3a4" letter-spacing="2">LACE INTEGRATION · PHASE 7C</text>
+        <text x="20" y="54" font-size="14" font-weight="500" class="svg-text">Wallet ↔ Passport end-to-end: grant request → approval → signed tx</text>
+        <text x="20" y="80" font-size="11" class="svg-text-mute">Lace is the target; in-house stub wallet is the fallback if Lace doesn't commit</text>
+        <text x="20" y="102" font-size="11" class="svg-text-mute">Onboarding SDK wrapper collapses the flow into one API call</text>
+        <text x="20" y="120" font-size="10" class="svg-text-faint">Phase 7C · Lucas · Lace contact (co-design)</text>
+      </g>
+    </svg>
+
+    <p class="one-liner center" style="margin-top: 40px;"><span class="h-accent">Four cornerstones</span> — threshold signing, in-circuit verifier, account provider, management console — stitch into the June demo. <span class="h-good">Three scaffolds</span> — names, multi-key, credentials — are on the schedule, post-MVP.</p>
+    <p class="footnote center">↻ Click any block for scope · owner · phase · dependencies</p>
+  </div>
+</section>
+
+<!-- ──────────────  SCENE 4 · 12-WEEK PATH  ────────────── -->
+<section class="scene" id="s4" style="background: var(--bg-soft);">
+  <div class="scene-num">The 12-week path</div>
+  <div class="scene-counter">04 / 08</div>
+
+  <div class="scene-content center">
+    <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 18px;">Engine · Backend · MIPs · UI</div>
+    <h2>Four lanes,<br>one demo.</h2>
+    <p class="lede center">Four parallel lanes converge in Phase 8 integration. Critical path runs through the Engine lane: P1 → P3 → P4 → P8. UI lane ships a visible console early so every weekly demo has something moving.</p>
+
+    <svg class="scene-svg" viewBox="0 0 1200 500" xmlns="http://www.w3.org/2000/svg" style="max-height: 55vh; margin-top: 48px;">
+      <defs>
+        <marker id="arrLane" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--svg-text)"/>
+        </marker>
+      </defs>
+
+      <text x="60" y="30" font-size="11" font-weight="500" class="svg-text-mute" letter-spacing="1.5">W1</text>
+      <text x="240" y="30" font-size="11" font-weight="500" class="svg-text-mute" letter-spacing="1.5">W3</text>
+      <text x="420" y="30" font-size="11" font-weight="500" class="svg-text-mute" letter-spacing="1.5">W5</text>
+      <text x="600" y="30" font-size="11" font-weight="500" class="svg-text-mute" letter-spacing="1.5">W7</text>
+      <text x="780" y="30" font-size="11" font-weight="500" class="svg-text-mute" letter-spacing="1.5">W9</text>
+      <text x="960" y="30" font-size="11" font-weight="500" class="svg-text-mute" letter-spacing="1.5">W11</text>
+      <text x="1100" y="30" font-size="11" font-weight="600" fill="#E52321" letter-spacing="1.5">DEMO</text>
+
+      <line x1="60" y1="42" x2="1140" y2="42" class="svg-card-stroke-soft" stroke-width="1"/>
+
+      <text x="50" y="100" font-size="13" font-weight="600" class="svg-text" text-anchor="end">Engine</text>
+      <text x="50" y="180" font-size="13" font-weight="600" class="svg-text" text-anchor="end">Backend</text>
+      <text x="50" y="260" font-size="13" font-weight="600" class="svg-text" text-anchor="end">MIPs</text>
+      <text x="50" y="340" font-size="13" font-weight="600" class="svg-text" text-anchor="end">UI</text>
+
+      <line x1="60" y1="125" x2="1100" y2="125" class="svg-card-stroke-faint" stroke-width="1"/>
+      <line x1="60" y1="205" x2="1100" y2="205" class="svg-card-stroke-faint" stroke-width="1"/>
+      <line x1="60" y1="285" x2="1100" y2="285" class="svg-card-stroke-faint" stroke-width="1"/>
+
+      <!-- Engine lane -->
+      <g data-modal-id="P1"><rect x="60" y="76" width="180" height="40" rx="4" fill="#E52321"/><text x="70" y="100" font-size="11" font-weight="500" fill="#FFFFFF">P1 Foundation · scope lock</text></g>
+      <g data-modal-id="P3"><rect x="240" y="76" width="180" height="40" rx="4" fill="#E52321"/><text x="250" y="100" font-size="11" font-weight="500" fill="#FFFFFF">P3 Adopt FROST crate + Poseidon</text></g>
+      <g data-modal-id="P4"><rect x="420" y="76" width="360" height="40" rx="4" fill="#E52321"/><text x="430" y="100" font-size="11" font-weight="500" fill="#FFFFFF">P4 In-circuit verification (long pole)</text></g>
+
+      <!-- Backend lane -->
+      <g data-modal-id="P2"><rect x="150" y="156" width="270" height="40" rx="4" fill="#16E9D8" stroke="#00b3a4" stroke-width="1"/><text x="160" y="180" font-size="11" font-weight="500" fill="#050505">P2 STD-03 prefixes · migration narrative</text></g>
+      <g data-modal-id="P5"><rect x="420" y="156" width="270" height="40" rx="4" fill="#EC641D"/><text x="430" y="180" font-size="11" font-weight="500" fill="#FFFFFF">P5 Account / credential provider</text></g>
+
+      <!-- MIPs lane -->
+      <g data-modal-id="P6A"><rect x="240" y="236" width="270" height="40" rx="4" fill="#b8c244"/><text x="250" y="260" font-size="11" font-weight="500" fill="#050505">STD-01 Key derivation MIP</text></g>
+      <g data-modal-id="P6B"><rect x="600" y="236" width="270" height="40" rx="4" fill="#b8c244"/><text x="610" y="260" font-size="11" font-weight="500" fill="#050505">STD-02 Address format MIP</text></g>
+
+      <!-- UI lane -->
+      <g data-modal-id="P7A"><rect x="420" y="316" width="174" height="40" rx="4" fill="#16E9D8" stroke="#00b3a4" stroke-width="1"/><text x="430" y="340" font-size="11" font-weight="500" fill="#050505">1. Console (UI shell)</text></g>
+      <g data-modal-id="P7B"><rect x="600" y="316" width="174" height="40" rx="4" fill="#7BE0CC" stroke="#00b3a4" stroke-width="1"/><text x="610" y="340" font-size="11" font-weight="500" fill="#050505">2. Conn. protocol draft</text></g>
+      <g data-modal-id="P7C"><rect x="780" y="316" width="174" height="40" rx="4" fill="#A8EFE0" stroke="#00b3a4" stroke-width="1"/><text x="790" y="340" font-size="11" font-weight="500" fill="#050505">3. Lace integration</text></g>
+      <line x1="594" y1="336" x2="600" y2="336" class="svg-card-stroke" stroke-width="1.5" opacity="0.5"/>
+      <line x1="774" y1="336" x2="780" y2="336" class="svg-card-stroke" stroke-width="1.5" opacity="0.5"/>
+
+      <!-- P8 integration (full-height) -->
+      <g data-modal-id="P8"><rect x="960" y="76" width="160" height="280" rx="4" class="svg-card-fill svg-card-stroke" stroke-width="2"/><text x="1040" y="200" font-size="13" font-weight="600" class="svg-text" text-anchor="middle">P8</text><text x="1040" y="220" font-size="11" class="svg-text-mute" text-anchor="middle">Integration</text><text x="1040" y="234" font-size="11" class="svg-text-mute" text-anchor="middle">+ dress rehearsal</text></g>
+
+      <!-- Convergence arrows -->
+      <line x1="780" y1="96" x2="960" y2="170" class="svg-card-stroke" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>
+      <line x1="690" y1="176" x2="960" y2="200" class="svg-card-stroke" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>
+      <line x1="960" y1="336" x2="960" y2="280" class="svg-card-stroke" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>
+
+      <!-- Demo target -->
+      <g transform="translate(1130, 200)">
+        <circle r="22" fill="#F2FF58" class="svg-card-stroke" stroke-width="2"/>
+        <text y="6" font-size="20" text-anchor="middle" fill="#050505">★</text>
+      </g>
+      <line x1="1120" y1="216" x2="1108" y2="200" class="svg-card-stroke" stroke-width="2" marker-end="url(#arrLane)"/>
+    </svg>
+
+    <p class="one-liner center"><span class="h-accent">Engine</span> owns the crypto critical path. <span class="h-info">Backend</span> stitches the service surface. <span class="h-good">MIPs</span> run parallel — no crypto dependency. <span class="h-warn">UI</span> starts week 5 and ships a visible console before the connection protocol lands.</p>
+    <p class="footnote center">↻ Click any phase block for scope · duration · owner · deliverables</p>
+  </div>
+</section>
+
+<!-- ──────────────  SCENE 5 · ASSIGNMENTS  ────────────── -->
+<section class="scene" id="s5">
+  <div class="scene-num">Assignments</div>
+  <div class="scene-counter">05 / 08</div>
+
+  <div class="scene-content">
+    <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 18px;">Who does what · cadence · hand-offs</div>
+    <h2>Everyone<br>on the right thing.</h2>
+    <p class="lede">Each role is bounded, cadenced, and named. Specialists are used for what they're specialist at — cryptographic review, formal methods, platform alignment — not for general oversight. Formal methods never sits on the critical path.</p>
+
+    <div class="assignments">
+      <div class="assignment-card" data-modal-id="T-LEAD">
+        <div class="role">Project lead</div>
+        <div class="name">Nicolas Di Prima</div>
+        <div class="cad">Constant · daily</div>
+        <ul>
+          <li>Protocol design (FROST adaptation, connection protocol, credential standard scaffolding)</li>
+          <li>MIP authorship (STD-01 · STD-02 · STD-03 · ECO-01)</li>
+          <li>Coordination across lanes and stakeholders</li>
+          <li>Migration-narrative document (MVP-10)</li>
+        </ul>
+      </div>
+
+      <div class="assignment-card" data-modal-id="T-DEV">
+        <div class="role">Developer · dedicated</div>
+        <div class="name">Lucas Rosa</div>
+        <div class="cad">Constant · prototype repo</div>
+        <ul>
+          <li>NEAR FROST adoption + JubjubPoseidon ciphersuite (Phase 3)</li>
+          <li>In-circuit verifier (Phase 4 · long pole)</li>
+          <li>Account / credential provider backend (Phase 5)</li>
+          <li>Management console + Lace integration (Phase 7)</li>
+        </ul>
+      </div>
+
+      <div class="assignment-card" data-modal-id="T-PM">
+        <div class="role">Project manager</div>
+        <div class="name">Karmel</div>
+        <div class="cad">Constant · weekly cadence</div>
+        <ul>
+          <li>Weekly demo contract and enforcement</li>
+          <li>Escalation paths across ARC ↔ Midnight Foundation</li>
+          <li>Stakeholder reporting cadence</li>
+          <li>UI-first push (her priority · aligned with weekly-demo contract)</li>
+        </ul>
+      </div>
+
+      <div class="assignment-card" data-modal-id="T-CRYPTO">
+        <div class="role">Cryptographer · consultative</div>
+        <div class="name">Jesus Diaz Vico</div>
+        <div class="cad">Phase-boundary review · part-time</div>
+        <ul>
+          <li>MVP-01 spec review (crate adoption + Poseidon ciphersuite)</li>
+          <li>STD-03 domain-prefix registry sign-off</li>
+          <li>Phase 4 in-circuit verification review</li>
+          <li>Later: ECO-02 credential-system design</li>
+        </ul>
+      </div>
+
+      <div class="assignment-card" data-modal-id="T-FM">
+        <div class="role">Formal methods · head</div>
+        <div class="name">James Chapman</div>
+        <div class="cad">Milestone · assignment</div>
+        <ul>
+          <li>Assigns a formal-methods scientist to Passport</li>
+          <li>Accepts stable spec hand-offs only (never on critical path)</li>
+          <li>First hand-off: Phase 4 in-circuit verification spec</li>
+        </ul>
+      </div>
+
+      <div class="assignment-card" data-modal-id="T-FMS">
+        <div class="role">Formal methods · scientist</div>
+        <div class="name">TBD · allocated by James</div>
+        <div class="cad">Phase-4 onwards · ~10× slower</div>
+        <ul>
+          <li>Formal treatment of in-circuit verification semantics</li>
+          <li>Subsequent items per META-06 priority queue</li>
+          <li>Stable hand-offs only — off the critical path</li>
+        </ul>
+      </div>
+
+      <div class="assignment-card" data-modal-id="T-LINE">
+        <div class="role">Line manager · ARC</div>
+        <div class="name">Vincent Hanquez</div>
+        <div class="cad">Weekly 1:1 · phase-boundary review</div>
+        <ul>
+          <li>Technical backing within ARC</li>
+          <li>Sign-off that the technical track is on rails</li>
+          <li>Protection from competing demands on lead time</li>
+        </ul>
+      </div>
+
+      <div class="assignment-card" data-modal-id="T-ARC">
+        <div class="role">ARC Director</div>
+        <div class="name">Nicolas Biri</div>
+        <div class="cad">Monthly · MIP milestones</div>
+        <ul>
+          <li>Strategic backing for the MIP pipeline</li>
+          <li>Process artefact review (GSD workspace, adoption narrative)</li>
+          <li>Sign-off at MIP submission moments</li>
+        </ul>
+      </div>
+
+      <div class="assignment-card" data-modal-id="T-MF">
+        <div class="role">Midnight Foundation CTO</div>
+        <div class="name">Sebastien Guillemot</div>
+        <div class="cad">Quarterly · ad hoc</div>
+        <ul>
+          <li>Platform alignment (curves, proof pipeline, APIs)</li>
+          <li>CAIP namespace assignment / MIP-repo gatekeeping</li>
+          <li>Milestone architecture blessing</li>
+        </ul>
+      </div>
+
+      <div class="assignment-card" data-modal-id="T-VISION">
+        <div class="role">Vision author · sponsor</div>
+        <div class="name">Charles Hoskinson</div>
+        <div class="cad">Milestone · via Karmel + Sebastien</div>
+        <ul>
+          <li>Author of the secure-onboarding design</li>
+          <li>Receives migration narrative (MVP-10) before MVP demo</li>
+          <li>MVP demo is the first deep look</li>
+        </ul>
+      </div>
+
+      <div class="assignment-card" data-modal-id="T-LACE">
+        <div class="role">External · wallet</div>
+        <div class="name">Lace wallet contact</div>
+        <div class="cad">Cold → weekly once engaged</div>
+        <ul>
+          <li>Connection-protocol co-design review</li>
+          <li>Extract derivation/address work for STD-01 / STD-02</li>
+          <li>Integration target for Phase 7C</li>
+        </ul>
+      </div>
+
+      <div class="assignment-card" data-modal-id="T-NEAR">
+        <div class="role">External · upstream crate authors</div>
+        <div class="name">NEAR-MPC project</div>
+        <div class="cad">Cold · Phase 3 onwards</div>
+        <ul>
+          <li>Authors of the open-source <code>threshold-signatures</code> Rust crate we consume as a library (MIT, audited)</li>
+          <li>Potential upstream for the JubjubPoseidon ciphersuite contribution</li>
+          <li>No NEAR chain or protocol integration — pure Rust crate dependency</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="one-liner" style="margin-top: 48px;"><span class="h-accent">Lucas builds.</span> <span class="h-info">Jesus reviews</span> on a written brief, per phase. <span class="h-good">James's team</span> gets stable specs, never on the critical path. <span class="h-warn">Karmel</span> runs cadence. <span class="h-accent">Nicolas DP</span> leads protocol and standards. Stakeholder reporting flows through named channels, not through the critical path.</p>
+  </div>
+</section>
+
+<!-- ──────────────  SCENE 6 · STANDARDS TRACK  ────────────── -->
+<section class="scene" id="s6" style="background: var(--bg-soft);">
+  <div class="scene-num">Standards track</div>
+  <div class="scene-counter">06 / 08</div>
+
+  <div class="scene-content center">
+    <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 18px;">MIPs pipeline · parallel to build</div>
+    <h2>Eight standards.<br>Co-authored, not shelved.</h2>
+    <p class="lede center">Midnight has no formal improvement-proposal process yet; the Passport MIPs are both the vehicle for interoperability and the forcing function that creates that process. Every MIP ships with a named external co-author — unilateral drafts become shelfware.</p>
+
+    <svg class="scene-svg" viewBox="0 0 1200 520" xmlns="http://www.w3.org/2000/svg" style="max-height: 60vh; margin-top: 48px;">
+
+      <!-- Prerequisites row -->
+      <text x="60" y="40" font-size="11" font-weight="600" fill="#E52321" letter-spacing="2">PREREQUISITES · MECHANICAL</text>
+      <g transform="translate(60, 60)" data-modal-id="STD-01">
+        <rect x="0" y="0" width="240" height="90" rx="6" class="svg-card-fill" stroke="#E52321" stroke-width="2"/>
+        <text x="20" y="28" font-size="13" font-weight="600" fill="#E52321">MIP-1 · STD-01</text>
+        <text x="20" y="52" font-size="14" font-weight="500" class="svg-text">Key derivation paths</text>
+        <text x="20" y="72" font-size="11" class="svg-text-mute">CIP-1852-aligned · coin 2400</text>
+      </g>
+      <g transform="translate(320, 60)" data-modal-id="STD-02">
+        <rect x="0" y="0" width="240" height="90" rx="6" class="svg-card-fill" stroke="#E52321" stroke-width="2"/>
+        <text x="20" y="28" font-size="13" font-weight="600" fill="#E52321">MIP-2 · STD-02</text>
+        <text x="20" y="52" font-size="14" font-weight="500" class="svg-text">Address format</text>
+        <text x="20" y="72" font-size="11" class="svg-text-mute">Bech32m · mn_ prefix</text>
+      </g>
+      <g transform="translate(580, 60)" data-modal-id="STD-03">
+        <rect x="0" y="0" width="240" height="90" rx="6" class="svg-card-fill" stroke="#E52321" stroke-width="2"/>
+        <text x="20" y="28" font-size="13" font-weight="600" fill="#E52321">STD-03 (cross-cutting)</text>
+        <text x="20" y="52" font-size="14" font-weight="500" class="svg-text">Domain-separator registry</text>
+        <text x="20" y="72" font-size="11" class="svg-text-mute">Every persistentHash gets a prefix</text>
+      </g>
+      <g transform="translate(840, 60)" data-modal-id="STD-07">
+        <rect x="0" y="0" width="300" height="90" rx="6" class="svg-card-fill" stroke="#E52321" stroke-width="2"/>
+        <text x="20" y="28" font-size="13" font-weight="600" fill="#E52321">MIP-7 · MVP-01</text>
+        <text x="20" y="52" font-size="14" font-weight="500" class="svg-text">FROST threshold signing on JubJub</text>
+        <text x="20" y="72" font-size="11" class="svg-text-mute">JubjubPoseidon ciphersuite · in-circuit verify</text>
+      </g>
+
+      <!-- Ecosystem row -->
+      <text x="60" y="200" font-size="11" font-weight="600" fill="#2C4FFA" letter-spacing="2">ECOSYSTEM · HIGHEST PRIORITY</text>
+      <g transform="translate(60, 220)" data-modal-id="ECO-01">
+        <rect x="0" y="0" width="370" height="120" rx="6" class="svg-card-fill" stroke="#2C4FFA" stroke-width="2.5"/>
+        <text x="20" y="30" font-size="13" font-weight="600" fill="#2C4FFA">MIP-5 · ECO-01</text>
+        <text x="20" y="54" font-size="16" font-weight="500" class="svg-text">dApp-Wallet Connection Protocol</text>
+        <text x="20" y="78" font-size="11" class="svg-text-mute">Privacy scoping · async proof lifecycle</text>
+        <text x="20" y="94" font-size="11" class="svg-text-mute">Capability tokens · credential disclosure</text>
+        <text x="20" y="110" font-size="10" class="svg-text-faint">The CIP-30 equivalent · what the ecosystem builds against</text>
+      </g>
+      <g transform="translate(450, 220)" data-modal-id="ECO-02">
+        <rect x="0" y="0" width="370" height="120" rx="6" class="svg-card-fill" stroke="#A700FF" stroke-width="2.5"/>
+        <text x="20" y="30" font-size="13" font-weight="600" fill="#A700FF">MIP-6 · ECO-02</text>
+        <text x="20" y="54" font-size="16" font-weight="500" class="svg-text">Privacy-preserving credentials</text>
+        <text x="20" y="78" font-size="11" class="svg-text-mute">Attestation-tree domain separators</text>
+        <text x="20" y="94" font-size="11" class="svg-text-mute">Nullifier construction · multi-issuer</text>
+        <text x="20" y="110" font-size="10" class="svg-text-faint">What makes Passport distinctive</text>
+      </g>
+      <g transform="translate(840, 220)" data-modal-id="STD-04">
+        <rect x="0" y="0" width="300" height="120" rx="6" class="svg-card-fill" stroke="#00B458" stroke-width="2"/>
+        <text x="20" y="30" font-size="13" font-weight="600" class="svg-good-text">MIP-3 · naming (Step 1.1)</text>
+        <text x="20" y="54" font-size="14" font-weight="500" class="svg-text">alice.midnight registry</text>
+        <text x="20" y="74" font-size="11" class="svg-text-mute">Commit-reveal · ENSIP-15 normalisation</text>
+        <text x="20" y="90" font-size="11" class="svg-text-mute">Multi-address resolution</text>
+        <text x="20" y="106" font-size="10" class="svg-text-faint">Post-MVP · see risk C13</text>
+      </g>
+
+      <!-- Later row -->
+      <text x="60" y="390" font-size="11" font-weight="600" class="svg-text-faint" letter-spacing="2">LATER · STEP 2 / 3</text>
+      <g transform="translate(60, 410)" data-modal-id="STD-05">
+        <rect x="0" y="0" width="250" height="80" rx="6" class="svg-card-fill" stroke="#16E9D8" stroke-width="2"/>
+        <text x="20" y="28" font-size="12" font-weight="600" fill="#00b3a4">MIP-4 · multi-key account</text>
+        <text x="20" y="52" font-size="13" font-weight="500" class="svg-text">Key-set Merkle root</text>
+        <text x="20" y="70" font-size="10" class="svg-text-mute">Step 2 · Stream A</text>
+      </g>
+      <g transform="translate(330, 410)" data-modal-id="STD-06">
+        <rect x="0" y="0" width="250" height="80" rx="6" class="svg-card-fill" stroke="#16E9D8" stroke-width="2"/>
+        <text x="20" y="28" font-size="12" font-weight="600" fill="#00b3a4">MIP-8 · Onboarding SDK</text>
+        <text x="20" y="52" font-size="13" font-weight="500" class="svg-text">Collapse onboarding to one API</text>
+        <text x="20" y="70" font-size="10" class="svg-text-mute">Step 2 · parallel with ECO-01 finalisation</text>
+      </g>
+      <g transform="translate(600, 410)" data-modal-id="STD-08">
+        <rect x="0" y="0" width="280" height="80" rx="6" class="svg-card-fill" stroke="#EC641D" stroke-width="2"/>
+        <text x="20" y="28" font-size="12" font-weight="600" fill="#EC641D">META-04 · co-author policy</text>
+        <text x="20" y="52" font-size="13" font-weight="500" class="svg-text">Named external co-author per MIP</text>
+        <text x="20" y="70" font-size="10" class="svg-text-mute">Adoption guarantee · Phase 2</text>
+      </g>
+    </svg>
+
+    <p class="one-liner center"><span class="h-accent">STD-01 and STD-02</span> ship during the MVP window. <span class="h-info">ECO-01 (connection)</span> and <span class="h-info">ECO-02 (credentials)</span> are the highest-priority standards — they define how the ecosystem plugs together. <span class="h-good">MIP-3 (naming)</span> ships in Step 1.1 post-MVP.</p>
+    <p class="footnote center">↻ Click any MIP block for scope · co-author · submission window · dependencies</p>
+  </div>
+</section>
+
+<!-- ──────────────  SCENE 7 · EVIDENCE & RISKS  ────────────── -->
+<section class="scene" id="s7">
+  <div class="scene-num">Evidence · risks</div>
+  <div class="scene-counter">07 / 08</div>
+
+  <div class="scene-content center">
+    <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 18px;">What's validated · what's ahead</div>
+    <h2>Validated in code.<br>Risks catalogued.</h2>
+    <p class="lede center">The cryptographic plan is not speculative. Three core assumptions are already validated end-to-end on a local devnet. Twenty-four risks — cryptographic, operational, regulatory, UX — are documented with sources and mitigations.</p>
+
+    <!-- Evidence strip -->
+    <svg class="scene-svg" viewBox="0 0 1200 220" xmlns="http://www.w3.org/2000/svg" style="max-height: 24vh; margin-top: 48px;">
+      <g transform="translate(40, 20)" data-modal-id="E1">
+        <rect x="0" y="0" width="360" height="170" rx="6" class="svg-card-fill" stroke="#00B458" stroke-width="2"/>
+        <text x="20" y="30" font-size="11" font-weight="600" class="svg-good-text" letter-spacing="2">EVIDENCE · E1</text>
+        <text x="20" y="56" font-size="15" font-weight="500" class="svg-text">Schnorr verification in Compact</text>
+        <text x="20" y="82" font-size="12" class="svg-text-mute">s·G == R + c·PK verified in circuit on</text>
+        <text x="20" y="100" font-size="12" class="svg-text-mute">Midnight devnet · Poseidon challenge</text>
+        <text x="20" y="128" font-size="11" class="svg-text-faint">k=14 · 11,436 rows · withdraw circuit</text>
+        <text x="20" y="150" font-size="10" class="svg-text-faint">experiments/redjubjub-wallet/</text>
+      </g>
+      <g transform="translate(420, 20)" data-modal-id="E2">
+        <rect x="0" y="0" width="360" height="170" rx="6" class="svg-card-fill" stroke="#00B458" stroke-width="2"/>
+        <text x="20" y="30" font-size="11" font-weight="600" class="svg-good-text" letter-spacing="2">EVIDENCE · E2</text>
+        <text x="20" y="56" font-size="15" font-weight="500" class="svg-text">Signature-gated token release</text>
+        <text x="20" y="82" font-size="12" class="svg-text-mute">Unshielded tokens held by contract,</text>
+        <text x="20" y="100" font-size="12" class="svg-text-mute">released only on valid Schnorr sig</text>
+        <text x="20" y="128" font-size="11" class="svg-text-faint">Monotonic tx_count · replay-proof</text>
+        <text x="20" y="150" font-size="10" class="svg-text-faint">Demonstrated end-to-end on devnet</text>
+      </g>
+      <g transform="translate(800, 20)" data-modal-id="E3">
+        <rect x="0" y="0" width="360" height="170" rx="6" class="svg-card-fill" stroke="#00B458" stroke-width="2"/>
+        <text x="20" y="30" font-size="11" font-weight="600" class="svg-good-text" letter-spacing="2">EVIDENCE · E3</text>
+        <text x="20" y="56" font-size="15" font-weight="500" class="svg-text">Rust ↔ TS interoperability</text>
+        <text x="20" y="82" font-size="12" class="svg-text-mute">jubjub crate and TS bigint produce</text>
+        <text x="20" y="100" font-size="12" class="svg-text-mute">identical signatures for the same inputs</text>
+        <text x="20" y="128" font-size="11" class="svg-text-faint">Clean signing boundary · client agnostic</text>
+        <text x="20" y="150" font-size="10" class="svg-text-faint">experiments/redjubjub-wallet-rs/</text>
+      </g>
+    </svg>
+
+    <p class="one-liner center" style="margin-top: 48px;"><span class="h-good">The MVP crypto plan rests on code that already runs.</span> The remaining work is adoption, integration, and standards — not novel cryptography.</p>
+
+    <!-- Threat grid header -->
+    <div style="margin-top: 72px;">
+      <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 12px;">24 documented risks · all with mitigations</div>
+      <h3 style="font-size: 2rem; margin-bottom: 12px;">Catalogued threats.</h3>
+      <p class="lede center" style="margin-top: 12px;">Sourced to RFC 9591 · Trail of Bits · Frozen Heart papers · Fireblocks BitForge · internal experiments. Mitigation strategy recorded against each phase.</p>
+    </div>
+
+    <svg class="scene-svg" viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg" style="max-height: 56vh; margin-top: 32px;">
+      <g id="threatGrid"></g>
+    </svg>
+
+    <p class="footnote center" style="margin-top: 12px;">↻ Click any cell for the full threat detail · source · mitigation · phase mapping</p>
+  </div>
+</section>
+
+<!-- ──────────────  SCENE 8 · DELIVERY CONTRACT  ────────────── -->
+<section class="scene" id="s8" style="background: var(--bg-soft);">
+  <div class="scene-num">Delivery contract</div>
+  <div class="scene-counter">08 / 08</div>
+
+  <div class="scene-content center">
+    <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 18px;">Weekly cadence · June MVP · 90-day beats</div>
+    <h2>The weekly commit<br>is the contract.</h2>
+    <p class="lede center">If a week's intended deliverable slips, the rule is: show the next thing that works rather than a broken thing. The June MVP is the aspiration; demonstrable progress every week is the contract.</p>
+
+    <svg class="scene-svg" viewBox="0 0 1200 300" xmlns="http://www.w3.org/2000/svg" style="max-height: 36vh; margin-top: 48px;">
+      <defs>
+        <marker id="arrCad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--svg-text)"/>
+        </marker>
+      </defs>
+
+      <!-- Timeline -->
+      <line x1="60" y1="150" x2="1140" y2="150" class="svg-card-stroke" stroke-width="2" marker-end="url(#arrCad)"/>
+
+      <!-- Week ticks -->
+      <g font-size="10" class="svg-text-faint" text-anchor="middle">
+        <line x1="100" y1="145" x2="100" y2="155" class="svg-card-stroke" stroke-width="1"/>
+        <text x="100" y="175">W1</text>
+        <line x1="280" y1="145" x2="280" y2="155" class="svg-card-stroke" stroke-width="1"/>
+        <text x="280" y="175">W4</text>
+        <line x1="540" y1="145" x2="540" y2="155" class="svg-card-stroke" stroke-width="1"/>
+        <text x="540" y="175">W8</text>
+        <line x1="800" y1="145" x2="800" y2="155" class="svg-card-stroke" stroke-width="1"/>
+        <text x="800" y="175">W12</text>
+        <line x1="1040" y1="145" x2="1040" y2="155" class="svg-card-stroke" stroke-width="1"/>
+        <text x="1040" y="175">+90d</text>
+      </g>
+
+      <!-- Milestones -->
+      <g transform="translate(100, 80)" data-modal-id="MS1">
+        <circle r="14" fill="#16E9D8" stroke="#00b3a4" stroke-width="2"/>
+        <text y="-24" font-size="11" font-weight="600" class="svg-text" text-anchor="middle">Scope lock</text>
+        <text y="42" font-size="10" class="svg-text-faint" text-anchor="middle">P1 complete</text>
+      </g>
+
+      <g transform="translate(280, 80)" data-modal-id="MS2">
+        <circle r="14" fill="#E52321"/>
+        <text y="-24" font-size="11" font-weight="600" class="svg-text" text-anchor="middle">Crate adopted</text>
+        <text y="42" font-size="10" class="svg-text-faint" text-anchor="middle">P3 complete</text>
+      </g>
+
+      <g transform="translate(540, 80)" data-modal-id="MS3">
+        <circle r="14" fill="#E52321"/>
+        <text y="-24" font-size="11" font-weight="600" class="svg-text" text-anchor="middle">Circuit verifier</text>
+        <text y="42" font-size="10" class="svg-text-faint" text-anchor="middle">P4 complete</text>
+      </g>
+
+      <g transform="translate(800, 80)" data-modal-id="MS4">
+        <circle r="18" fill="#F2FF58" class="svg-card-stroke" stroke-width="2.5"/>
+        <text y="5" font-size="18" text-anchor="middle" fill="#050505">★</text>
+        <text y="-28" font-size="13" font-weight="600" fill="#E52321" text-anchor="middle">MVP DEMO</text>
+        <text y="46" font-size="10" class="svg-text-faint" text-anchor="middle">End of June 2026</text>
+      </g>
+
+      <g transform="translate(1040, 80)" data-modal-id="MS5">
+        <circle r="14" fill="#00B458"/>
+        <text y="-24" font-size="11" font-weight="600" class="svg-text" text-anchor="middle">Step 1.1</text>
+        <text y="42" font-size="10" class="svg-text-faint" text-anchor="middle">federation + names</text>
+      </g>
+
+      <!-- Weekly tick markers below the main line, rhythm -->
+      <g transform="translate(0, 220)">
+        <text x="600" y="10" font-size="12" class="svg-text-mute" text-anchor="middle" letter-spacing="1.5" font-weight="500">12 WEEKLY DEMOS · ONE THING THAT WORKS · EVERY FRIDAY</text>
+      </g>
+    </svg>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 72px; text-align: left;">
+      <div>
+        <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 12px;">Weekly</div>
+        <h3>One demoable thing</h3>
+        <p style="margin-top: 12px; color: var(--text-mute); line-height: 1.6; font-size: 0.96rem;">Every Friday Karmel runs a demo with whichever artefact moved. The console is the visible through-line; behind it the engine lane progresses weekly. "What doesn't work yet" is on the slide — always.</p>
+      </div>
+      <div>
+        <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 12px;">End of June</div>
+        <h3>End-to-end MVP demo</h3>
+        <p style="margin-top: 12px; color: var(--text-mute); line-height: 1.6; font-size: 0.96rem;">Passkey login → account dashboard → wallet connects (Lace or stub) → capability grant approved → transaction signed → submitted to devnet. Plus a recovery sad-path. Plus "what's next" pointing to Step 1.1.</p>
+      </div>
+      <div>
+        <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 12px;">90-day cadence</div>
+        <h3>Step 1.1 → 2 → 3</h3>
+        <p style="margin-top: 12px; color: var(--text-mute); line-height: 1.6; font-size: 0.96rem;">After June, each 90-day cycle adds federation, name registry, multi-device on-chain, on-device cryptography, or credentials — in the order that clears the next principle in the migration narrative.</p>
+      </div>
+    </div>
+
+    <p class="one-liner center" style="margin-top: 72px;">The plan is accountable at three time scales: <span class="h-accent">weekly</span>, <span class="h-info">12-week MVP</span>, and <span class="h-good">90-day beats</span> thereafter.</p>
+  </div>
+</section>
+
+<!-- ──────────────  CLOSER  ────────────── -->
+<footer>
+  <div class="ed-furniture">Sources under <code>.planning/</code> · Technical detail in <code>docs/mvp-architecture.md</code> and <code>docs/passport-plan.md</code> · ARC · Input Output Global · 2026/04/20</div>
+  <img class="word-light" src="../assets/logos/Word Marque/Input Output_Word Marque_RGB_Black.png" alt="Input Output Group">
+  <img class="word-dark" src="../assets/logos/Word Marque/Input Output_Word Marque_RGB_White.png" alt="Input Output Group">
+</footer>
+
+<!-- ──────────────  MODAL  ────────────── -->
+<div class="modal" id="detailModal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <button class="modal-close" data-close aria-label="Close">×</button>
+    <div class="modal-id-row">
+      <span class="modal-id" id="modalId"></span>
+      <span class="modal-status" id="modalStatus"></span>
+    </div>
+    <h3 class="modal-title" id="modalTitle"></h3>
+    <div class="modal-type" id="modalType"></div>
+    <div id="modalSections"></div>
+    <div class="modal-meta" id="modalMeta"></div>
+  </div>
+</div>
+
+<script>
+  // ─── Theme toggle (Auto → Light → Dark → Auto) ──────────────────
+  (function theme() {
+    const root = document.documentElement;
+    const btn = document.getElementById('themeToggle');
+    const saved = localStorage.getItem('passport-theme');
+    if (saved === 'light' || saved === 'dark') root.setAttribute('data-theme', saved);
+    btn.addEventListener('click', () => {
+      const cur = root.getAttribute('data-theme');
+      let next;
+      if (!cur) next = 'light';
+      else if (cur === 'light') next = 'dark';
+      else next = null;
+      if (next) {
+        root.setAttribute('data-theme', next);
+        localStorage.setItem('passport-theme', next);
+      } else {
+        root.removeAttribute('data-theme');
+        localStorage.removeItem('passport-theme');
+      }
+    });
+  })();
+
+  // ─── Side-rail active-on-scroll ─────────────────────────────────
+  (function rail() {
+    const links = Array.from(document.querySelectorAll('#rail a'));
+    const sections = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+    function onScroll() {
+      let active = null;
+      for (let i = 0; i < sections.length; i++) {
+        const r = sections[i].getBoundingClientRect();
+        if (r.top <= window.innerHeight * 0.5) active = i;
+      }
+      links.forEach((a, i) => a.classList.toggle('active', i === active));
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  })();
+
+  // ─── Threat catalogue ───────────────────────────────────────────
+  const THREATS = [
+    { id: 'C1', l1: 'FROST', l2: 'equiv.', status: 'mitigated', type: 'Cryptographic · Critical',
+      title: 'FROST signing-set equivocation',
+      what: 'FROST1 had a key-recovery attack where a malicious participant could equivocate on the signing set during signing — that is why FROST1 was withdrawn.',
+      how: 'MVP-01 spec mandates RFC 9591 FROST3 with identifiable abort. NEAR\'s adopted crate already implements FROST3.',
+      where: 'Phase 3 (MVP-01 spec) · crate adoption',
+      source: 'RFC 9591 (2024) · CertiK — Threshold Cryptography II (2023)' },
+    { id: 'C2', l1: 'DKG', l2: 'checks', status: 'mitigated', type: 'Cryptographic · High',
+      title: 'Pedersen-DKG bad-actor / missing length checks',
+      what: 'Without explicit length checks during distributed key generation, a malicious participant can force aborts undetectably or supply malformed shares.',
+      how: 'Length checks explicit in MVP-01 spec; verified to be present in NEAR\'s existing Pedersen-VSS DKG implementation.',
+      where: 'Phase 3 (MVP-01 spec)',
+      source: 'Trail of Bits — Breaking the shared key in threshold signature schemes (2024); Zcash Foundation Pedersen-DKG remediation' },
+    { id: 'C3', l1: 'nonce', l2: 'bias', status: 'mitigated', type: 'Cryptographic · Critical',
+      title: 'Nonce bias / reuse in our custom Schnorr',
+      what: 'Our existing experiments/redjubjub-wallet-rs/src/schnorr.rs uses OsRng and exposes sign_with_nonce in the public API. Nonce reuse on Schnorr leaks the private key.',
+      how: 'Phase 3 retires the custom Schnorr in favour of NEAR\'s deterministic-nonce path (FROST3 nonce-pair). The sign_with_nonce public API is removed; if any custom code remains it moves behind #[cfg(test)].',
+      where: 'Phase 3 (MVP-01 implementation)',
+      source: 'Internal: experiments/redjubjub-wallet-rs/src/schnorr.rs · Biased Nonce Sense (eprint 2019/023) · LadderLeak (eprint 2020/615)' },
+    { id: 'C5', l1: 'domain', l2: 'sep.', status: 'mitigated', type: 'Cryptographic · Medium',
+      title: 'Domain-separator collision across protocols',
+      what: 'Re-using the same hash function without distinct domain separators across protocols (signatures, nullifiers, commitments) creates cross-protocol attacks.',
+      how: 'STD-03 cross-cutting registry — every persistentHash use site gets a 6+ byte domain prefix. Signed off by Jesus in Phase 2.',
+      where: 'Phase 2 (STD-03)',
+      source: 'Trail of Bits — Domain separation review patterns; RFC 9591 §3.4' },
+    { id: 'C6', l1: 'Frozen', l2: 'Heart', status: 'mitigated', type: 'Cryptographic · High',
+      title: 'Fiat-Shamir Frozen Heart',
+      what: 'Incomplete challenge construction in non-interactive zero-knowledge proofs (the "Frozen Heart" class) lets attackers forge proofs by manipulating excluded inputs.',
+      how: 'Phase 4 spec carries a "what\'s in the challenge" table covering every public input the verifier expects. Differential test mandate: altering any one public input must cause proof verification to fail.',
+      where: 'Phase 4 (in-circuit verification spec)',
+      source: 'Trail of Bits — Frozen Heart vulnerability series (2022); Girault-Bulletproofs-Plonk disclosures' },
+    { id: 'C7', l1: 'nullifier', l2: 'collision', status: 'mitigated', type: 'Cryptographic · Medium',
+      title: 'Nullifier collision in credential reuse-prevention',
+      what: 'Privacy-preserving credentials use nullifiers to prevent reuse. Naive nullifier construction (e.g. hash without context) can collide across credentials, breaking unlinkability or enabling double-spend.',
+      how: 'STD-03 prefixes applied to nullifier construction. Multi-issuer credential standard (ECO-02, Step 3) builds on this.',
+      where: 'Phase 2 (STD-03 prefixes) · ECO-02 (Step 3) for full credential standard',
+      source: 'Hyperledger AnonCreds — Formal Security Analysis (eprint 2025/694)' },
+    { id: 'C8', l1: 'DKG', l2: 'DoS', status: 'mitigated', type: 'Cryptographic · Medium',
+      title: 'DKG denial-of-service via abort',
+      what: 'A malicious participant in DKG can refuse to send round-2 messages, forcing the ceremony to abort without identifying the bad actor — a DoS vector if repeated.',
+      how: 'FROST3 identifiable-abort property + Pedersen-VSS verifications mean the bad participant is identified and can be excluded on retry.',
+      where: 'Phase 3 (MVP-01 spec) · crate adoption',
+      source: 'RFC 9591 §3.7 · CertiK — Unidentifiability in decentralized FROST (2023)' },
+    { id: 'C9', l1: 're-share', l2: 'window', status: 'mitigated', type: 'Cryptographic · Medium',
+      title: 'Re-sharing exposure window',
+      what: 'Between re-share rounds, attacker-controlled nodes hold stale shares. The longer the cadence, the larger the exposure window if multiple nodes are compromised.',
+      how: 'MVP-01 spec states cadence explicitly (default monthly, per NEAR/Lit/Web3Auth prior art). Tighter cadence (weekly) available if needed. Documented, not "TBD".',
+      where: 'Phase 3 (MVP-01 spec) — relevant from federation (Step 1.1+)',
+      source: 'Practical Asynchronous Proactive Secret Sharing (eprint 2022/1586); Silence Labs — Offline Proactive Refresh' },
+    { id: 'C10', l1: 'passkey', l2: 'framing', status: 'mitigated', type: 'UX · Low',
+      title: 'Passkey framing — users misunderstand what passkeys are',
+      what: 'Users see "passkey" and assume it IS their Midnight key. In reality, passkeys are device-authentication credentials that authorise the OAuth provider to talk to the signing service.',
+      how: 'MVP-06 UX spec frames passkeys explicitly as device authentication credentials, not Midnight keys. Onboarding copy mandated.',
+      where: 'Phase 7 (MVP-06 UX spec)',
+      source: 'Hacker News — Synced passkey bypass (2025); SlashID — Apple Passkeys deepdive' },
+    { id: 'C11', l1: 'custodian', l2: 'legal', status: 'mitigated', type: 'Regulatory · High',
+      title: 'Account-provider classified as custodian (MiCA / NY BitLicense)',
+      what: 'A managed signing service can be classified as a custodian under MiCA or NY BitLicense, triggering significant regulatory liability.',
+      how: 'Protocol-level invariant: signing nodes only contribute when given a user-device-signed digest. The account provider cannot fabricate signatures even if compromised — only refuse them. Legal review at Phase 5/7 boundary.',
+      where: 'Phase 5 (MVP-03 API contract) · Phase 7 (legal review)',
+      source: 'CMS Law — MiCA crypto-asset custody guidance; Dfns — Custodial vs non-custodial under MiCAR' },
+    { id: 'C12', l1: 'QR', l2: 'attacks', status: 'mitigated', type: 'Protocol · Medium',
+      title: 'QR onboarding attacks (channel binding, ECDH downgrade, swap)',
+      what: 'QR-based onboarding is vulnerable to channel-binding weaknesses, ECDH downgrade, and QR-swap attacks where an attacker substitutes their QR for the legitimate one.',
+      how: 'For MVP we use web-passkey only (QR cut). When QR returns post-MVP: 60-second QR-timestamp window, ECDH curve pinning, and a 4-digit visual confirmation code presented after ECDH and before commit.',
+      where: 'Cut for MVP (web only). Returns in Step 1.1+ with mitigations.',
+      source: 'Proofpoint — Passkey downgrade (2025); WebAuthn channel-binding literature' },
+    { id: 'C13', l1: 'name', l2: 'squatting', status: 'mitigated', type: 'Protocol · Medium',
+      title: 'Name squatting and homoglyph attacks (ENS-class)',
+      what: 'Without rate limiting and unicode normalisation, attackers register names en masse (squatting) or visually similar names (homoglyphs) to phish users.',
+      how: 'Per-device-key 3 commits / 24h rate limit; ENSIP-15 normalisation enforced in the circuit (not only client-side); homoglyph rejection test vectors. Names moved to Step 1.1 — post-MVP.',
+      where: 'Step 1.1 (post-MVP name registry contract)',
+      source: 'MetaMask GitHub #9129 (ENS homoglyph warning); ENSIP-15 normalisation spec' },
+    { id: 'C14', l1: 'cred.', l2: 'unlink.', status: 'mitigated', type: 'Privacy · Medium',
+      title: 'Credential unlinkability — naive revocation lists',
+      what: 'Naive credential-revocation mechanisms (e.g. published revocation lists keyed by credential ID) de-anonymise credentials by linking presentations to issuance.',
+      how: 'ECO-02 credential standard (Step 3) uses nullifier-based revocation with privacy guarantees. STD-03 prefixes applied to nullifier construction.',
+      where: 'ECO-02 (Step 3 credential standard)',
+      source: 'Hyperledger AnonCreds — Formal Security Analysis (eprint 2025/694); Worldcoin/World ID Protocol v4 spec' },
+    { id: 'C15', l1: 'GDPR', l2: 'vs chain', status: 'mitigated', type: 'Regulatory · Medium',
+      title: 'GDPR right-to-erasure vs on-chain immutability',
+      what: 'On-chain personal data triggers GDPR exposure that cannot be remediated via right-to-erasure (chain is immutable). Documented failures at ENS.',
+      how: 'On-chain state limited to names → public keys only. No profile records on-chain. Recovery email handling complies with right-to-erasure (off-chain only). Documented in MVP-03 spec.',
+      where: 'Phase 5 (MVP-03 account provider)',
+      source: 'European Parliament STOA — Blockchain and the GDPR (2019)' },
+    { id: 'C16', l1: 'node', l2: 'avail.', status: 'mitigated', type: 'Operational · Medium',
+      title: 'Signer node availability (t+1 offline = signing failure)',
+      what: 'In a t-of-n threshold scheme, if t+1 or more nodes go offline, signing fails (this is a signing-failure, not a security-failure — the key remains safe).',
+      how: 'For MVP: single node with monitoring + 99.x SLO. For Step 1.1+ federated: t-of-n cushion with monitoring + automated failover; ECO-05 ops design covers this.',
+      where: 'MVP-07 (single-node ops) · ECO-05 (federation ops)',
+      source: 'NEAR MPC node availability incident reviews; Fireblocks SLO patterns' },
+    { id: 'C17', l1: 'monitor', l2: 'gap', status: 'mitigated', type: 'Operational · Medium',
+      title: 'Monitoring gap — detecting Byzantine without false positives',
+      what: 'Byzantine node behaviour (selectively signing, equivocating, leaking) is hard to distinguish from honest-but-faulty behaviour. Naive monitoring spams false positives.',
+      how: 'ECO-05 federation design includes monitoring criteria + alerting thresholds. For MVP single-node, this risk is moot (single trusted operator).',
+      where: 'ECO-05 (Step 1.1+/2 federation)',
+      source: 'Lit Protocol V0→V1 cutover post-mortem; ZenGo monitoring patterns' },
+    { id: 'C18', l1: 'recovery', l2: 'sad path', status: 'mitigated', type: 'UX · Medium',
+      title: 'Recovery happy-path works, sad-path doesn\'t',
+      what: 'Common failure mode: recovery flow is tested only with the user knowing all credentials. Real recovery (lost device, lost email, sync conflict) is rarely tested and breaks at the worst moment.',
+      how: 'MVP-06 mandates ≥3 recovery scenarios specified: synced-passkey happy path, fresh-device-fresh-sync path, lost-email path. Phase 8 dress rehearsal includes a sad-path on stage.',
+      where: 'Phase 7 (MVP-06 UX spec) · Phase 8 (dress rehearsal)',
+      source: 'NEAR FastAuth recovery UX retrospectives; Argent social-recovery patterns' },
+    { id: 'C19', l1: 'device', l2: 'add UX', status: 'mitigated', type: 'UX · Medium',
+      title: 'Device-add UX confusion — accidental approval of attacker device',
+      what: 'Device-add ceremonies via QR can confuse users into approving attacker devices that race the legitimate flow.',
+      how: '4-digit visual confirmation code presented on the existing device after QR scan, must match what\'s shown on the new device. Both devices show countdown timer.',
+      where: 'Step 1.1 (multi-device support post-MVP)',
+      source: 'WebAuthn cross-device attestation patterns; secure-onboarding-design.md §6.4' },
+    { id: 'C20', l1: 'demo', l2: 'drive', status: 'mitigated', type: 'Process · Medium',
+      title: 'Demo-drive development blindspot',
+      what: 'In a weekly-demo cadence with a single-signer prototype, the demo always works because Byzantine paths are never exercised. The team and stakeholders form a false confidence.',
+      how: 'Phase 8 dress-rehearsal deck includes a "what doesn\'t work yet" slide as a hard requirement. Sad-path scenarios shown alongside happy paths.',
+      where: 'Phase 8 (dress rehearsal) · ongoing weekly demos',
+      source: 'Internal: META-03 weekly-demo contract' },
+    { id: 'M1', l1: 'unilat.', l2: 'MIPs', status: 'mitigated', type: 'Standards · Medium',
+      title: 'Unilateral MIP drafting → shelfware',
+      what: 'MIPs drafted without external co-author input ship as documents nobody adopts. Standards only matter if others build to them.',
+      how: 'Every MIP draft must have a named external co-author (Lace or Midnight Foundation) per META-04 narrative. Missing co-author = MIP doesn\'t ship.',
+      where: 'Phase 2 (META-04) · Phase 6 (STD MIPs)',
+      source: 'Internal: lessons from CIP / EIP / RFC adoption patterns' },
+    { id: 'M2', l1: 'CAIP', l2: 'drift', status: 'mitigated', type: 'Standards · Low',
+      title: 'CAIP namespace drift',
+      what: 'Defining chain identifiers before the Midnight CAIP namespace is officially assigned creates drift between our specs and the eventual official identifier.',
+      how: 'Align with Midnight Foundation contact (Sebastien or designate) before drafting any CAIP-dependent identifier. Use placeholders until the namespace is registered.',
+      where: 'Phase 2 (META-04) — flagged as alignment item',
+      source: 'CAIP-2 — Blockchain ID specification' },
+    { id: 'M3', l1: 'spec vs', l2: 'post-hoc', status: 'mitigated', type: 'Standards · Low',
+      title: 'Spec-as-post-hoc-documentation rather than constraint',
+      what: 'When specs are written after the implementation, they document what the code happens to do rather than constraining what the protocol should be. The spec then constrains nothing.',
+      how: 'Each MIP draft contains a "Protocol Invariants" section stating properties (not code). The implementation must satisfy the invariants, not the other way round.',
+      where: 'Phase 6 (STD-01, STD-02 drafts)',
+      source: 'Internal: standards-drafting principles' },
+    { id: 'O1', l1: 'ledger', l2: 'v8 deser.', status: 'tracked', type: 'Operational · Critical (tracked)',
+      title: 'midnight-ledger v8.0.2 / v8.1.0-rc.1 deserialisation mismatch',
+      what: 'The Rust SDK at midnight-ledger v8.1.0-rc.1 cannot serialise transactions that the proof-server (v8.0.2) and devnet node (v8.0.2) accept. Phase 4 cannot demo end-to-end until cleared.',
+      how: 'Tracked in Phase 1 prototype-repo contract with explicit owner + target resolution week. Two paths: (a) pin ledger and proof-server to compatible versions; (b) get upstream commitment on a fix. Resolution recorded in evidence log.',
+      where: 'Phase 1 (prototype-repo contract) → Phase 4 (must clear before demo)',
+      source: 'Internal: experiments/redjubjub-wallet-rs/.claude/findings.md · midnight-ledger CHANGELOG diff' },
+    { id: 'O2', l1: 'ops', l2: 'burden', status: 'mitigated', type: 'Operational · Medium',
+      title: 'Re-sharing operational burden — perpetual ceremony',
+      what: 'Some MPC networks fall into a "forever key-ceremony" pattern where re-sharing dominates ops. The team spends more time on key-rotation than on shipping.',
+      how: 'ECO-05 federation design includes automated re-sharing scheduling (monthly default) + ops automation. For MVP single-node, no re-sharing burden.',
+      where: 'ECO-05 (Step 1.1+/2 federation ops)',
+      source: 'Lit Protocol re-share automation patterns; Silence Labs offline-proactive-refresh design' }
+  ];
+
+  // ── Render threat grid ──────────────────────────────────────────
+  (function renderThreats() {
+    const container = document.getElementById('threatGrid');
+    if (!container) return;
+    const COLS = 6;
+    const CELL_W = 92, CELL_H = 92;
+    const GRID_W = COLS * (CELL_W - 12) + (COLS - 1) * 12 + 80 * 1;
+    const COL_X_START = 230;
+    const ROW_Y_START = 20;
+    const cells = THREATS.map((t, i) => {
+      const row = Math.floor(i / COLS);
+      const col = i % COLS;
+      const x = COL_X_START + col * CELL_W;
+      const y = ROW_Y_START + row * CELL_H;
+      const isTracked = t.status === 'tracked';
+      const fillClass = isTracked ? 'svg-warn-fill' : 'svg-good-fill';
+      const strokeClass = isTracked ? 'svg-warn-stroke' : 'svg-good-stroke';
+      const labelClass = isTracked ? 'svg-warn-text' : 'svg-good-text';
+      const sw = isTracked ? 2.5 : 1.5;
+      return `<g data-modal-id="${t.id}" transform="translate(${x}, ${y})">
+        <rect x="0" y="0" width="80" height="80" rx="4" class="${fillClass} ${strokeClass}" stroke-width="${sw}"/>
+        <text x="40" y="32" font-size="13" font-weight="600" class="${labelClass}" text-anchor="middle">${t.id}</text>
+        <text x="40" y="50" font-size="9" class="svg-text-mute" text-anchor="middle">${t.l1}</text>
+        <text x="40" y="62" font-size="9" class="svg-text-mute" text-anchor="middle">${t.l2}</text>
+        <circle cx="65" cy="68" r="6" class="${labelClass}"/>
+      </g>`;
+    }).join('');
+    container.innerHTML = cells;
+  })();
+
+  // ── Modal content (components, phases, team, hero, milestones) ──
+  const COMPONENTS = [
+    // Hero step cards
+    { id: 'HERO-STEP1', status: 'phase', statusLabel: 'MVP · END OF JUNE 2026',
+      title: 'Step 1 — Managed signing MVP',
+      type: 'The 12-week outcome',
+      sections: [
+        { label: 'What ships', content: 'Passkey (WebAuthn) authentication. A federated threshold-signing network (single node for MVP, n=5/t=4 in Step 1.1) that holds the user\'s JubJub key via Distributed Key Generation. An OAuth-like account provider for registration, JWT issuance, and session management. A management console (visible demo artefact) and a draft dApp-wallet connection protocol.' },
+        { label: 'What this delivers for the user', content: 'Passkey login → named account → wallet connects → capability grant approved → signed transaction on Midnight devnet. No seed phrases, no address management, no gas-token purchase. Identical user experience to the target end-state.' },
+        { label: 'What it scaffolds', content: 'Every component here is either (a) the final architecture, or (b) scaffolding we retire in Step 2. Nothing is a dead-end investment.' }
+      ],
+      meta: [
+        { label: 'Trust model', content: 'Custodial — users trust the federation not to collude' },
+        { label: 'Not yet', content: 'Self-custody (Step 2 Stream B), multi-device on-chain (Step 2 Stream A), credentials (Step 3)' }
+      ]
+    },
+    { id: 'HERO-STEP2', status: 'tobuild', statusLabel: 'STEP 2 · STREAM A',
+      title: 'Stream A — Multi-device accounts on Midnight',
+      type: 'Post-MVP · 90-day cycle',
+      sections: [
+        { label: 'What it solves', content: 'In the MVP, the signing network holds a single key per user and devices authenticate to it. Stream A moves device management on-chain: the account is represented as a set of authorised keys (Merkle root in a Compact circuit), and any registered device key can authorise transactions via ZK witness.' },
+        { label: 'Why it matters', content: 'Reduces the role of the account provider. Device-to-account mapping is enforced by the smart contract, not by a centralised service. This is the on-chain half of self-custody.' }
+      ],
+      meta: [
+        { label: 'Independence', content: 'Ships while the signing network is still active. Does not depend on Stream B.' }
+      ]
+    },
+    { id: 'HERO-STEP2B', status: 'tobuild', statusLabel: 'STEP 2 · STREAM B',
+      title: 'Stream B — On-device cryptography',
+      type: 'Post-MVP · 90-day cycle',
+      sections: [
+        { label: 'What it solves', content: 'Moves key material and proof generation onto the user\'s device. The device\'s TEE holds the private key (AES-256-GCM wrapping). ZK proof generation runs locally. A decentralised recovery protocol (DeRec or equivalent) replaces the signing network\'s implicit recovery model.' },
+        { label: 'Why it matters', content: 'This retires the signing network. The device signs and proves directly. Self-custody achieved.' }
+      ],
+      meta: [
+        { label: 'Independence', content: 'Ships with a single-device model if Stream A is still in progress. Both streams must complete before Step 3.' }
+      ]
+    },
+    { id: 'HERO-STEP3', status: 'target', statusLabel: 'STEP 3 · ADDITIVE',
+      title: 'Step 3 — Full self-custody + new capabilities',
+      type: 'Beyond the decentralisation migration',
+      sections: [
+        { label: 'What\'s in scope', content: 'Privacy-preserving credentials (ECO-02) — selective disclosure of identity attributes via zero-knowledge proofs, multi-issuer from the start. KYC and compliance — verifiable credentials issued by trusted third parties, reusable across dApps. Cross-chain operations — intent-based transactions spanning multiple networks from a single account.' },
+        { label: 'What it needs', content: 'All of Step 3 builds on the decentralised account model delivered by Steps 1.1 and 2. None of it requires further changes to the custody architecture.' }
+      ],
+      meta: [
+        { label: 'Independence', content: 'Credentials (ECO-02) could technically ship earlier since they\'re independent of custody. Scheduled for Step 3 to land after the architecture is stable.' }
+      ]
+    },
+
+    // Components
+    { id: 'C-DEVICE', status: 'phase', statusLabel: 'USER DEVICE',
+      title: 'User device — passkey + proof client',
+      type: 'Client · constant across MVP → Step 3',
+      sections: [
+        { label: 'What runs here', content: 'A WebAuthn passkey authenticates the user against the account provider. The client constructs transaction parameters (recipient, amount, token), signs a transaction digest with the device key, sends the signed digest to the signing network, and then generates the ZK proof locally using the returned FROST signature as a private witness.' },
+        { label: 'What does NOT live here (in MVP)', content: 'The Midnight signing key lives in the signing network, not on the device. In Step 2 Stream B, the key moves into the device TEE and the signing network retires.' }
+      ],
+      meta: [
+        { label: 'Authority-boundary invariant', content: 'Signing nodes only contribute when given a user-device-signed digest. A compromised provider can refuse but cannot fabricate.' }
+      ]
+    },
+    { id: 'C-OAUTH', status: 'phase', statusLabel: 'PHASE 5',
+      title: 'Account provider (MVP-03)',
+      type: 'OAuth-like backend · Phase 5 · ~3 weeks',
+      sections: [
+        { label: 'What gets built', content: 'WebAuthn passkey registration and verification. JWT issuance with a <code>cnf</code> claim binding the signing-request body. Capability-token issuance and revocation. Consent-flow API. Recovery hand-off endpoint. Device registry.' },
+        { label: 'Authority boundary documented in API spec', content: 'The provider authenticates users and issues capability tokens. It does NOT request signatures on the user\'s behalf — every signing request carries a device-signed digest that the FROST nodes verify independently. Legal review scheduled at the Phase 5/7 boundary.' }
+      ],
+      meta: [
+        { label: 'Owner', content: 'Lucas (backend)' },
+        { label: 'Step 2 trajectory', content: 'Simplifies once Stream A puts device-to-account mapping on-chain' }
+      ]
+    },
+    { id: 'C-FROST', status: 'adopted', statusLabel: 'PHASE 3 · CRATE ADOPTED',
+      title: 'Threshold signing (MVP-01)',
+      type: 'FROST on JubJub · adopted as a Rust crate + Poseidon ciphersuite',
+      sections: [
+        { label: 'Scope clarification', content: 'Passport is <strong>not</strong> integrating with the NEAR blockchain, protocol, or any NEAR service. We consume the <code>threshold-signatures</code> crate from the NEAR-MPC repo as a <strong>Rust library dependency</strong> — code-level adoption only.' },
+        { label: 'What the crate gives us', content: 'FROST3 (RFC 9591) signing protocol over RedDSA on JubJub via <code>reddsa::frost::redjubjub::JubjubBlake2b512</code>. Pedersen-VSS distributed key generation. Two-round signing with identifiable abort. Key resharing primitives. Node-to-node communication. Participant management. Test vectors. MIT-licensed, professionally audited pre-PR#15.' },
+        { label: 'What we add', content: 'A sibling ciphersuite — <code>JubjubPoseidon</code> — that implements the same <code>Ciphersuite</code> trait but uses Poseidon for the challenge hash H2. Off-chain signing can use either (Blake2b for upstream parity, Poseidon for our in-circuit verifier). Same FROST3 protocol, two hash adapters. Spec covers H1–H4 and STD-03 domain prefixes.' }
+      ],
+      meta: [
+        { label: 'MVP → Step 1.1', content: 'MVP ships single-node (acknowledged trust). Step 1.1 moves to federated n=5 / t=4 with ROAST.' },
+        { label: 'Owner', content: 'Lucas (impl) · Jesus (review) · Formal Methods (P1 hand-off after stable)' }
+      ]
+    },
+    { id: 'C-CHAIN', status: 'phase', statusLabel: 'PHASE 4 · LONG POLE',
+      title: 'In-circuit verifier (MVP-02)',
+      type: 'Compact circuit on Midnight · the critical-path work',
+      sections: [
+        { label: 'What gets built', content: 'A Compact smart contract exposes a circuit that takes the FROST aggregate signature as a <strong>private witness</strong>, the public key and transaction parameters as <strong>public inputs</strong>, and verifies <code>s·G == R + c·pk</code> on JubJub where <code>c = H2(R || pk || tx_digest)</code> using the JubjubPoseidon ciphersuite. The proof goes on-chain; the signature never does.' },
+        { label: 'Why this is the long pole', content: 'Most of the cryptographic rigour lives here. The "what\'s in the challenge" table (C6 Frozen-Heart prevention) and the differential-test mandate are both specified in this phase. Formal methods hand-off happens once the spec stabilises.' }
+      ],
+      meta: [
+        { label: 'Gating blocker', content: 'O1 (ledger v8.0.2 / v8.1.0-rc.1 deserialisation) must clear first' },
+        { label: 'Owner', content: 'Lucas (impl) · Jesus (review) · FM (P1 hand-off when stable)' }
+      ]
+    },
+    { id: 'C-NAMES', status: 'phase', statusLabel: 'STEP 1.1 · POST-MVP',
+      title: 'Name registry · alice.midnight',
+      type: 'On-chain smart contract · moved post-MVP',
+      sections: [
+        { label: 'What gets built', content: 'On-chain contract mapping <code>alice.midnight</code> → public key. Commit-reveal registration (anti-frontrun). Multi-address resolution (shielded / unshielded / DUST). Per-device-key rate limiting. ENSIP-15 Unicode normalisation enforced in-circuit.' },
+        { label: 'Why moved to Step 1.1', content: 'Cut from MVP scope because the critical path in weeks 5–8 is in-circuit verification. Names are a convenience feature that can ship immediately after MVP without blocking anything. Mitigations for squatting + homoglyph attacks (C13) are specified already.' }
+      ],
+      meta: [
+        { label: 'Owner', content: 'You · Midnight Foundation co-author' }
+      ]
+    },
+    { id: 'C-MULTIKEY', status: 'tobuild', statusLabel: 'STEP 2 · STREAM A',
+      title: 'Multi-key account contract',
+      type: 'Compact circuit · Step 2 Stream A',
+      sections: [
+        { label: 'What gets built', content: 'Compact circuits that maintain a key-set Merkle root, where any registered device key can authorise transactions via ZK witness. Scoped "function-call" keys for dApp authorisation with limited permissions.' },
+        { label: 'Why it matters for self-custody', content: 'Reduces the account provider to a thin coordinator. Device-to-account mapping becomes smart-contract state rather than a service-held registry.' }
+      ],
+      meta: []
+    },
+    { id: 'C-CONN', status: 'phase', statusLabel: 'PHASE 7B · MVP DRAFT',
+      title: 'Connection protocol',
+      type: 'dApp ↔ wallet interface · ECO-01 finalises in Step 2',
+      sections: [
+        { label: 'What ships in MVP', content: 'Working draft of the dApp-wallet connection protocol. CAIP-25 namespace. "Sign in with Midnight" message format. Capability-token negotiation between wallets and Passport. Consent UX in the management console.' },
+        { label: 'Why draft, not final MIP', content: 'ECO-01 is the highest-priority ecosystem MIP. The MVP demo needs a working draft to wire Lace against; the final MIP lands in Step 2 once external co-authors review.' }
+      ],
+      meta: [
+        { label: 'Owner', content: 'You (protocol design) · Lucas (impl)' }
+      ]
+    },
+    { id: 'C-CRED', status: 'tobuild', statusLabel: 'STEP 3 · ECO-02',
+      title: 'Privacy-preserving credentials',
+      type: 'Multi-issuer standard · Step 3',
+      sections: [
+        { label: 'What gets built', content: 'Interoperable format for privacy-preserving credentials built on Midnight\'s attestation tree primitive. Domain separators (built on STD-03). Nullifier construction for reuse prevention. Credential lifecycle (issuance, expiration, revocation). Multi-issuer from day one.' },
+        { label: 'Independence from custody model', content: 'Credentials do not depend on Steps 1 or 2 — they could technically land earlier. Scheduled for Step 3 so the architecture is stable and issuer partnerships (e.g. zkMe) have time to form.' }
+      ],
+      meta: []
+    },
+    { id: 'C-CONSOLE', status: 'phase', statusLabel: 'PHASE 7A',
+      title: 'Management console',
+      type: 'Web UI · the visible weekly artefact',
+      sections: [
+        { label: 'What gets built', content: 'Passkey login. Account dashboard showing authorised wallets/services. Capability-grant view. Revoke/refine controls. Recovery UX (happy + sad paths). Built against a stub backend initially; wired to MVP-03 as Phase 5 lands.' },
+        { label: 'Why UI ships first in Phase 7', content: '"Show things" early. The console is the visible artefact each weekly demo can show evolving. Engineers see their engine-lane work reflected back; stakeholders see progress they can explain.' }
+      ],
+      meta: [
+        { label: 'Owner', content: 'Lucas (impl) · designer TBD' }
+      ]
+    },
+    { id: 'C-LACE', status: 'phase', statusLabel: 'PHASE 7C',
+      title: 'Lace integration (or stub fallback)',
+      type: 'End-to-end wallet flow',
+      sections: [
+        { label: 'What gets built', content: 'Prototype integration of the connection protocol with Lace as the target wallet. End-to-end: Lace requests spend authority via SIWM → user approves in management console → Lace receives a signed transaction.' },
+        { label: 'Fallback', content: 'If Lace does not commit to the MVP window, an in-house stub wallet plays the same role in the demo. Lace is the preferred partner because they own an existing derivation implementation that informs STD-01.' }
+      ],
+      meta: [
+        { label: 'Owner', content: 'Lucas · Lace contact (co-design)' }
+      ]
+    },
+
+    // Phases (same structure as for-vincent.html — updated for broad audience)
+    { id: 'P1', status: 'phase', statusLabel: 'PHASE 1',
+      title: 'Foundation — scope, delegation, cadence',
+      type: '~2 weeks · W1-W2 · Owner: Lead + Karmel',
+      sections: [
+        { label: 'What gets built', content: 'Scope-lock document (classifies every section of the secure-onboarding-design spec as MVP / Step 1.1 / Step 2 / Step 3 / parked). Delegation matrix (role × deliverable × cadence). Weekly-demo contract (rolling 4-week forecast). Prototype-repo contract (interface + reporting). Evidence log.' },
+        { label: 'Why first', content: 'Everything else depends on knowing who does what when. Karmel needs the cadence contract; the prototype repo needs an interface to consume; stakeholders need a scope they can refer back to.' }
+      ],
+      meta: [
+        { label: 'Deliverables', content: '<code>SCOPE_LOCK.md · DELEGATION.md · WEEKLY_DEMO_CONTRACT.md · PROTOTYPE_REPO_CONTRACT.md · evidence/</code>' }
+      ]
+    },
+    { id: 'P2', status: 'phase', statusLabel: 'PHASE 2',
+      title: 'Cross-cutting prerequisites + migration narrative',
+      type: '~2 weeks · W2-W4 · Owner: Lead · Jesus reviews STD-03',
+      sections: [
+        { label: 'What gets built', content: '<strong>STD-03 domain-separation registry</strong> — every <code>persistentHash</code> site gets a 6+ byte prefix.<br><strong>META-04 stakeholder onboarding narrative</strong> — per-MIP table of named co-author and evidence requirements.<br><strong>META-06 formal-methods engagement plan</strong> — priority queue and hand-off criteria for James\'s team.<br><strong>MVP-10 migration narrative</strong> — Step 1.0 → 1.1 → 2 → 3 documented.' },
+        { label: 'Why second', content: 'STD-03 prefixes gate every cryptographic challenge. The migration narrative is the most politically important document — it\'s what proves to the vision author his wishlist is intact.' }
+      ],
+      meta: [
+        { label: 'Critical artefact', content: 'MVP-10 migration narrative delivered before the June MVP demo' }
+      ]
+    },
+    { id: 'P3', status: 'adopted', statusLabel: 'PHASE 3 · CORNERSTONE',
+      title: 'Threshold signing engine — adopt threshold-signatures crate + Poseidon',
+      type: '~2 weeks · W3-W4 · Owner: Lucas (impl) · Jesus (review)',
+      sections: [
+        { label: 'What gets built', content: 'Adoption decision (fork vs depend, recorded in evidence log). <code>JubjubPoseidon</code> ciphersuite (sibling of upstream <code>JubjubBlake2b512</code>). Reference impl wiring with both ciphersuites passing in-process tests. Inherited <code>frost-core</code> version pin documented.' },
+        { label: 'Why ~2 weeks, not 4', content: 'The upstream <code>threshold-signatures</code> crate ships the audited FROST machinery. We do not rebuild DKG, signing, presign, re-sharing, comms, or participants. We add only the Poseidon-ciphersuite delta needed for in-circuit verification. <strong>This is code-level crate adoption, not NEAR chain/protocol integration.</strong>' }
+      ],
+      meta: [
+        { label: 'Reviews', content: 'Jesus sign-off in week 1; reference impl green by end of phase' }
+      ]
+    },
+    { id: 'P4', status: 'phase', statusLabel: 'PHASE 4 · LONG POLE',
+      title: 'In-circuit threshold-signature verification',
+      type: '~3–4 weeks · W5-W8 · Owner: Lucas · Jesus (review) · FM (hand-off when stable)',
+      sections: [
+        { label: 'What gets built', content: 'Compact circuit specification with "what\'s in the challenge" table (C6 Frozen-Heart prevention) + differential-test mandate. Reference Compact circuit consuming a FROST aggregate signature as private witness. End-to-end run: Rust client signs with n=5 in-process committee → Compact circuit verifies → proof submitted to devnet → tx included.' },
+        { label: 'Pre-MVP blocker', content: 'O1 (midnight-ledger v8.0.2 / v8.1.0-rc.1 deserialisation) must clear before this phase can demo end-to-end. Tracked in Phase 1 prototype-repo contract.' }
+      ],
+      meta: [
+        { label: 'Critical path', content: 'Yes — the long pole of the MVP' }
+      ]
+    },
+    { id: 'P5', status: 'phase', statusLabel: 'PHASE 5',
+      title: 'Account / credential provider',
+      type: '~3 weeks · W5-W7 · Owner: Lucas (backend)',
+      sections: [
+        { label: 'What gets built', content: 'OAuth-like backend: WebAuthn passkey registration and verification, JWT issuance with <code>cnf</code> claim binding the signing-request body, capability-token issuance and revocation, consent-flow API. Recovery hand-off endpoint. Authority-boundary invariant documented in API spec.' },
+        { label: 'Why this shape', content: 'This is the user-facing surface. The management console (Phase 7) talks to it; the connection protocol (Phase 7) is built on top. Names registry was originally here but moved to Step 1.1.' }
+      ],
+      meta: [
+        { label: 'Reviews', content: 'Legal review of authority-boundary invariant scheduled before any public demo (Phase 7/8 boundary)' }
+      ]
+    },
+    { id: 'P6A', status: 'phase', statusLabel: 'PHASE 6 · MIP',
+      title: 'STD-01 — Key derivation MIP',
+      type: '~3 weeks · W3-W6 · parallel with Phase 3',
+      sections: [
+        { label: 'What gets drafted', content: 'CIP-1852-aligned key derivation paths for Midnight. Three derivation branches for shielded / unshielded / DUST address types. Submitted as PR against <code>midnightntwrk/midnight-improvement-proposals</code>.' },
+        { label: 'Why parallel', content: 'STD-01 has no dependency on the FROST work. Different cognitive load, different owner. Runs alongside Phase 3 without blocking it.' }
+      ],
+      meta: [
+        { label: 'Owner', content: 'Lead · co-author from Lace or Midnight Foundation' }
+      ]
+    },
+    { id: 'P6B', status: 'phase', statusLabel: 'PHASE 6 · MIP',
+      title: 'STD-02 — Address format MIP',
+      type: '~3 weeks · W7-W10 · parallel with Phase 5',
+      sections: [
+        { label: 'What gets drafted', content: 'Bech32m <code>mn_</code> address format covering shielded, unshielded, and DUST address types. STD-03 domain prefixes baked into address derivation. Submitted as PR to MIP repo.' },
+        { label: 'Why now', content: 'Builds on STD-03 prefixes (Phase 2). Runs parallel with Phase 5 — the account provider doesn\'t depend on the address format being a MIP yet.' }
+      ],
+      meta: [
+        { label: 'Owner', content: 'Lead · co-author' }
+      ]
+    },
+    { id: 'P7A', status: 'phase', statusLabel: 'PHASE 7 · UI BLOCK 1',
+      title: 'Console (UI shell)',
+      type: 'Phase 7 · W5-W6 · ASAP · Owner: Lucas · designer TBD',
+      sections: [
+        { label: 'What gets built', content: 'Web-based management console — passkey login, account dashboard, authorised wallets/services, capability-grant view, revoke/refine controls. Built against a stub backend; wired to MVP-03 as Phase 5 lands.' },
+        { label: 'Why first in the UI lane', content: 'We want to "show things" early. The console is the visible artefact each weekly demo can show evolving.' }
+      ],
+      meta: [
+        { label: 'Hand-off to', content: 'Block 2 (Connection protocol)' }
+      ]
+    },
+    { id: 'P7B', status: 'phase', statusLabel: 'PHASE 7 · UI BLOCK 2',
+      title: 'Connection protocol (dApp ↔ wallet)',
+      type: 'Phase 7 · W7-W8 · Owner: Lucas (impl) · Lead (protocol)',
+      sections: [
+        { label: 'What gets built', content: 'Working draft of the dApp-wallet connection protocol. CAIP-25 namespace, "Sign in with Midnight" message format, capability-token negotiation between wallets and Passport, consent UX in the management console. <strong>Not</strong> yet a final MIP — that\'s ECO-01 in Step 2.' },
+        { label: 'Why second', content: 'Defines how wallets ask Passport for spend authority. The MVP demo needs at least a working draft to wire Lace against.' }
+      ],
+      meta: [
+        { label: 'Hand-off to', content: 'Block 3 (Lace integration)' }
+      ]
+    },
+    { id: 'P7C', status: 'phase', statusLabel: 'PHASE 7 · UI BLOCK 3',
+      title: 'Lace integration (or stub fallback)',
+      type: 'Phase 7 · W9-W10 · Owner: Lucas · Lace contact',
+      sections: [
+        { label: 'What gets built', content: 'Prototype integration of the connection protocol with Lace. End-to-end: Lace requests spend authority via SIWM → user approves in the management console → Lace receives a signed transaction.' },
+        { label: 'Why last', content: 'External dependency. Connection protocol needs to exist first. If Lace doesn\'t commit in time, we fall back to an in-house stub wallet so the demo still happens.' }
+      ],
+      meta: [
+        { label: 'Risk', content: 'Lace is non-committed · stub-wallet fallback is the protection' }
+      ]
+    },
+    { id: 'P8', status: 'phase', statusLabel: 'PHASE 8 · MVP',
+      title: 'MVP integration + dress rehearsal',
+      type: '~2 weeks · W11-W12 · Owner: Lucas + Lead · Karmel runs cadence',
+      sections: [
+        { label: 'What gets built', content: 'Stitching of all components into the end-to-end demo flow. Dress rehearsal weekly leading up to the June demo. "What doesn\'t work yet" slide preparation. Full happy-path: passkey login → account address → wallet connects → grant approved → tx signed → submitted to devnet. Plus recovery sad-path.' },
+        { label: 'Why last', content: 'Consumes Phase 4 (in-circuit verification) + Phase 5 (account provider) + Phase 7 (UI + connection + wallet). The integration phase exists to find the bugs that only show up when everything talks to everything.' }
+      ],
+      meta: [
+        { label: 'Outcome', content: 'End-of-June MVP demo' }
+      ]
+    },
+
+    // Team
+    { id: 'T-LEAD', status: 'phase', statusLabel: 'CONSTANT',
+      title: 'Nicolas Di Prima — project lead',
+      type: 'Protocol design · standards · coordination',
+      sections: [
+        { label: 'Scope', content: 'Protocol design across FROST adaptation, the connection protocol, and the credential standard scaffolding. MIP authorship — STD-01, STD-02, STD-03, ECO-01. Coordination across the four lanes. The migration-narrative document (MVP-10) that maps every principle from the vision spec onto its step.' },
+        { label: 'Cadence', content: 'Daily working contact with Lucas and Karmel. Weekly 1:1 with Vincent. Phase-boundary briefings to the wider stakeholders.' }
+      ],
+      meta: []
+    },
+    { id: 'T-DEV', status: 'phase', statusLabel: 'CONSTANT',
+      title: 'Lucas Rosa — dedicated developer',
+      type: 'Implementation across crypto, backend, and UI',
+      sections: [
+        { label: 'Scope', content: 'The prototype repo. The <code>threshold-signatures</code> crate adoption + JubjubPoseidon ciphersuite (Phase 3). The in-circuit verifier (Phase 4 · long pole). The account / credential provider backend (Phase 5). The management console and Lace integration (Phase 7).' },
+        { label: 'Critical-path ownership', content: 'P1 → P3 → P4 → P8. The MVP demo depends on Phase 4 clearing on time.' }
+      ],
+      meta: [
+        { label: 'Cadence', content: 'Daily technical contact with lead · weekly demoable artefact' }
+      ]
+    },
+    { id: 'T-PM', status: 'phase', statusLabel: 'CONSTANT',
+      title: 'Karmel — project manager',
+      type: 'Cadence · demos · stakeholder reporting',
+      sections: [
+        { label: 'Scope', content: 'Owns the weekly-demo contract and enforcement. Runs the escalation paths between ARC and the Midnight Foundation. Manages the stakeholder reporting cadence. Champions the UI-first push and the visible weekly artefact.' },
+        { label: 'Why this role matters', content: 'The weekly demo is the project\'s contract. The PM owns its enforcement and the cross-organisation reporting cadence that keeps ARC and the Midnight Foundation aligned.' }
+      ],
+      meta: []
+    },
+    { id: 'T-CRYPTO', status: 'tracked', statusLabel: 'PHASE-BOUNDARY',
+      title: 'Jesus Diaz Vico — cryptographer (consultative)',
+      type: 'Per-phase review · part-time',
+      sections: [
+        { label: 'Scope', content: 'Review of MVP-01 spec (crate adoption + Poseidon ciphersuite design). Sign-off on STD-03 domain prefixes. Phase 4 in-circuit verification review. Later, ECO-02 credential-system design.' },
+        { label: 'Engagement model', content: 'Written brief per phase. Specific, well-framed cryptographic questions with time-bounded asks. Feedback absorbed and credited.' }
+      ],
+      meta: [
+        { label: 'Cadence', content: 'Ad hoc per phase (Phase 3 review is the first major one)' }
+      ]
+    },
+    { id: 'T-FM', status: 'phase', statusLabel: 'MILESTONE',
+      title: 'James Chapman — formal-methods head',
+      type: 'Assigns scientist · gatekeeps hand-off criteria',
+      sections: [
+        { label: 'Scope', content: 'Assigns a formal-methods scientist to Passport. Accepts stable spec hand-offs only — never on the critical path. First hand-off: Phase 4 in-circuit verification spec, once stabilised.' },
+        { label: 'Why off the critical path', content: 'Formal methods is ~10× slower than normal development. Any deliverable depending on formal-methods output would slip the MVP. META-06 priority queue isolates formal work from the weekly-demo contract.' }
+      ],
+      meta: []
+    },
+    { id: 'T-FMS', status: 'open', statusLabel: 'TBD',
+      title: 'Formal-methods scientist (TBD)',
+      type: 'Assigned by James · Phase 4 onwards',
+      sections: [
+        { label: 'Scope', content: 'Formal treatment of in-circuit verification semantics. Subsequent items per META-06 priority queue.' },
+        { label: 'Hand-off discipline', content: 'Only receives stable specifications. The MVP does not block on formal-methods output; their work enriches rigour over time.' }
+      ],
+      meta: []
+    },
+    { id: 'T-LINE', status: 'phase', statusLabel: 'WEEKLY',
+      title: 'Vincent Hanquez — line manager (ARC)',
+      type: 'Technical backing · phase-boundary review',
+      sections: [
+        { label: 'Scope', content: 'Technical backing within ARC. Sign-off that the technical track is on rails. Protection from competing demands on lead time. Weekly 1:1 and a deep technical review at each phase boundary.' },
+        { label: 'What he reviews', content: 'The technical artefacts directly — the crate-adoption decision (fork vs depend), the Phase 3 reference impl, the Phase 4 in-circuit verification spec, the Phase 8 dress-rehearsal.' }
+      ],
+      meta: []
+    },
+    { id: 'T-ARC', status: 'phase', statusLabel: 'MONTHLY',
+      title: 'Nicolas Biri — ARC director',
+      type: 'Strategic backing · MIP milestones',
+      sections: [
+        { label: 'Scope', content: 'Strategic backing for the MIP pipeline. Review of process artefacts — the GSD workspace, the adoption narrative (META-04). Sign-off at MIP submission moments (STD-01, STD-02, then ECO-01 in Step 2).' },
+        { label: 'Why this separation', content: 'The standards-track angle is a distinct audience. MIP PRs land and get reviewed on their own timeline, separate from weekly UI demos.' }
+      ],
+      meta: []
+    },
+    { id: 'T-MF', status: 'tracked', statusLabel: 'QUARTERLY',
+      title: 'Sebastien Guillemot — Midnight Foundation CTO',
+      type: 'Platform alignment · milestone blessing',
+      sections: [
+        { label: 'Scope', content: 'Platform-level decisions — CAIP namespace, MIP-repo process, architecture blessing at milestone boundaries. Terse quarterly written briefing otherwise.' },
+        { label: 'Operating principle', content: 'Day-to-day coordination runs through the PM. Architecture sign-off happens at milestones; quarterly written briefings cover the intervening period.' }
+      ],
+      meta: []
+    },
+    { id: 'T-VISION', status: 'phase', statusLabel: 'MILESTONE · INDIRECT',
+      title: 'Charles Hoskinson — vision author & sponsor',
+      type: 'Design author of secure-onboarding-design',
+      sections: [
+        { label: 'Scope', content: 'Authored the secure-onboarding-design specification that defines what Passport should be. Six design principles drive the architecture. Receives the migration-narrative (MVP-10) document before the June MVP demo.' },
+        { label: 'What the team commits to', content: 'Every principle in the wishlist is on the schedule — MVP, Step 1.1, Step 2, or Step 3. The social recovery (DeRec) and social account linking features are explicitly preserved. The June demo is the first deep look.' }
+      ],
+      meta: [
+        { label: 'Channel', content: 'Demo presentations are delivered through the PM and the Midnight Foundation CTO; the engineering team supplies the artefacts and technical briefings.' }
+      ]
+    },
+    { id: 'T-LACE', status: 'open', statusLabel: 'COLD → WEEKLY',
+      title: 'Lace wallet contact (external)',
+      type: 'First wallet-integration target',
+      sections: [
+        { label: 'Scope', content: 'Co-design review on the connection protocol. Existing derivation/address work extracted into STD-01 and STD-02. Integration target for Phase 7C (Lace ↔ Passport end-to-end).' },
+        { label: 'Fallback', content: 'If Lace doesn\'t commit to the MVP window, in-house stub wallet plays the role in the demo. Integration continues in Step 1.1.' }
+      ],
+      meta: []
+    },
+    { id: 'T-NEAR', status: 'open', statusLabel: 'COLD · PHASE 3',
+      title: 'NEAR-MPC project — upstream crate authors',
+      type: 'Source of the adopted Rust crate (not a chain integration)',
+      sections: [
+        { label: 'What this relationship is', content: 'The NEAR-MPC project publishes the open-source <code>threshold-signatures</code> Rust crate we adopt as a library dependency. That is the full extent of the relationship — code-level adoption only.' },
+        { label: 'What it is not', content: 'Passport is <strong>not</strong> integrating with the NEAR blockchain, the NEAR protocol, NEAR accounts, or any NEAR service. No chain-level interaction is planned.' },
+        { label: 'Possible upstream collaboration', content: 'The JubjubPoseidon ciphersuite may be contributable back to the crate as a sibling of JubjubBlake2b512. Engagement opens after the fork-vs-depend decision is made (Phase 3).' }
+      ],
+      meta: []
+    },
+
+    // MIPs — brief stubs (most content in scene narrative)
+    { id: 'STD-01', status: 'phase', statusLabel: 'PHASE 6 · MIP',
+      title: 'STD-01 — Key derivation paths',
+      type: 'Mechanical prerequisite · MIP-1',
+      sections: [
+        { label: 'Scope', content: 'CIP-1852-aligned derivation for Midnight coin type <code>2400</code>. Three derivation branches (shielded / unshielded / DUST). Extracted from Lace\'s existing implementation where possible.' },
+        { label: 'Why first', content: 'Every other MIP depends on this. Third-party wallets cannot derive compatible keys without it.' }
+      ],
+      meta: [{ label: 'Co-author', content: 'Lace or Midnight Foundation' }]
+    },
+    { id: 'STD-02', status: 'phase', statusLabel: 'PHASE 6 · MIP',
+      title: 'STD-02 — Address format',
+      type: 'Mechanical prerequisite · MIP-2',
+      sections: [
+        { label: 'Scope', content: 'Bech32m <code>mn_</code> encoding for Midnight\'s three address types (shielded / unshielded / DUST). STD-03 domain prefixes baked in.' },
+        { label: 'Dependency', content: 'Depends on STD-01 (key derivation) and STD-03 (domain prefixes).' }
+      ],
+      meta: [{ label: 'Co-author', content: 'Lace or Midnight Foundation' }]
+    },
+    { id: 'STD-03', status: 'phase', statusLabel: 'PHASE 2 · CROSS-CUTTING',
+      title: 'STD-03 — Domain-separator registry',
+      type: 'Cross-cutting · not a MIP yet',
+      sections: [
+        { label: 'Scope', content: 'Every <code>persistentHash</code> use site gets a 6+ byte domain prefix. Single registry preventing cross-protocol hash collisions (signatures, nullifiers, commitments).' },
+        { label: 'Review', content: 'Jesus sign-off in Phase 2. Underpins everything downstream — signatures, nullifiers, address derivation.' }
+      ],
+      meta: []
+    },
+    { id: 'STD-04', status: 'tobuild', statusLabel: 'STEP 1.1',
+      title: 'MIP-3 — Naming system',
+      type: 'Post-MVP · Step 1.1',
+      sections: [
+        { label: 'Scope', content: 'On-chain registry for <code>alice.midnight</code>. Commit-reveal registration, multi-address resolution, ENSIP-15 Unicode normalisation, anti-squat rate limits.' },
+        { label: 'Why post-MVP', content: 'Cut from MVP to keep the critical path on in-circuit verification. Resumes immediately after June.' }
+      ],
+      meta: []
+    },
+    { id: 'STD-05', status: 'tobuild', statusLabel: 'STEP 2 · STREAM A',
+      title: 'MIP-4 — Multi-key account model',
+      type: 'Step 2 Stream A',
+      sections: [
+        { label: 'Scope', content: 'Key-set Merkle root pattern for multi-device accounts. Scoped function-call keys for bounded dApp authorisation.' }
+      ],
+      meta: []
+    },
+    { id: 'STD-06', status: 'tobuild', statusLabel: 'STEP 2',
+      title: 'MIP-8 — Onboarding SDK',
+      type: 'Step 2 · parallel with ECO-01 finalisation',
+      sections: [
+        { label: 'Scope', content: 'Developer-facing SDK that collapses the entire onboarding flow (QR channel, key generation, wallet derivation, name registration, fee subsidisation, credential issuance) into a single API call.' },
+        { label: 'Why not in MVP', content: 'Requires the connection protocol (ECO-01) and credential standard (ECO-02) to be stable. Ships once those are final MIPs.' }
+      ],
+      meta: []
+    },
+    { id: 'STD-07', status: 'adopted', statusLabel: 'MVP-01',
+      title: 'MIP-7 — FROST threshold signing on JubJub',
+      type: 'Core protocol · MVP-01',
+      sections: [
+        { label: 'Scope', content: 'Specification of threshold Schnorr signing on Midnight\'s embedded curve (JubJub). FROST3 (RFC 9591) with identifiable abort. JubjubPoseidon ciphersuite for in-circuit verification.' },
+        { label: 'Adoption', content: 'Implementation inherited from the <code>threshold-signatures</code> Rust crate published by the NEAR-MPC project (MIT-licensed, audited). Code-level dependency — no NEAR chain or protocol integration. Spec documents the adoption decision, the ciphersuite delta, and the in-circuit verifier contract.' }
+      ],
+      meta: []
+    },
+    { id: 'STD-08', status: 'phase', statusLabel: 'PHASE 2',
+      title: 'META-04 — External co-author policy',
+      type: 'Cross-cutting · process · Phase 2',
+      sections: [
+        { label: 'Scope', content: 'Per-MIP table of named external co-author + evidence requirements. Missing co-author = MIP doesn\'t ship.' },
+        { label: 'Why it exists', content: 'Unilaterally drafted MIPs become shelfware. Co-authorship is a forcing function for ecosystem review and eventual adoption.' }
+      ],
+      meta: []
+    },
+    { id: 'ECO-01', status: 'tobuild', statusLabel: 'MIP-5 · STEP 2',
+      title: 'ECO-01 — dApp-Wallet Connection Protocol',
+      type: 'Highest-priority ecosystem MIP',
+      sections: [
+        { label: 'Scope', content: 'The formal interface between dApps and wallets — wallet discovery, session authorisation with privacy scopes, asynchronous proof coordination, credential disclosure, sign-in. The Midnight equivalent of Cardano\'s CIP-30.' },
+        { label: 'MVP draft', content: 'The MVP demo needs a working draft (Phase 7B) to wire Lace against. The final MIP lands in Step 2 once external co-authors review.' }
+      ],
+      meta: [{ label: 'Co-author', content: 'Lace + Midnight Foundation' }]
+    },
+    { id: 'ECO-02', status: 'tobuild', statusLabel: 'MIP-6 · STEP 3',
+      title: 'ECO-02 — Privacy-preserving credentials',
+      type: 'Highest-priority ecosystem MIP · Step 3',
+      sections: [
+        { label: 'Scope', content: 'Standard for issuing and verifying identity credentials via Midnight\'s attestation tree. Selective disclosure via zero-knowledge proofs. Nullifier-based revocation. Multi-issuer interoperability from the start.' },
+        { label: 'Why this is distinctive', content: 'Portable, privacy-preserving credentials are what make Passport distinct from a wallet-as-a-service. Any issuer + any verifier can interoperate.' }
+      ],
+      meta: [{ label: 'Co-authors', content: 'Multi-issuer (zkMe and alternatives)' }]
+    },
+
+    // Evidence cards
+    { id: 'E1', status: 'adopted', statusLabel: 'VALIDATED',
+      title: 'Schnorr verification in a Compact circuit',
+      type: 'Validated end-to-end on Midnight devnet',
+      sections: [
+        { label: 'What we proved', content: 'A full Schnorr verification (<code>s·G == R + c·PK</code>) executes successfully inside a Compact circuit using <code>ecMulGenerator</code>, <code>ecMul</code>, and <code>ecAdd</code> on JubJub. The challenge hash uses Midnight\'s native <code>persistentHash</code> (Poseidon) with a nonce-retry loop to ensure <code>hash &lt; JUBJUB_R</code>.' },
+        { label: 'How it was demonstrated', content: 'The <code>withdraw</code> circuit (k=14, 11,436 rows) compiles and verifies on-chain on a local Midnight devnet. Contract deployed, registered a JubJub public key, held unshielded tokens, and released them only on valid Schnorr signature verification.' }
+      ],
+      meta: [{ label: 'Source', content: '<code>experiments/redjubjub-wallet/</code>' }]
+    },
+    { id: 'E2', status: 'adopted', statusLabel: 'VALIDATED',
+      title: 'Contract-held tokens with signature-gated withdrawal',
+      type: 'Validated · replay-proof · end-to-end',
+      sections: [
+        { label: 'What we proved', content: 'A Compact contract can receive unshielded tokens via <code>receiveUnshielded</code> and release them via <code>sendUnshielded</code>, gated by Schnorr-signature authorisation. A monotonic <code>tx_count</code> is bound into the challenge hash, preventing replay.' },
+        { label: 'Why it matters', content: 'This is the shape of how Passport transactions clear the on-chain verifier in Phase 4. The replay-prevention approach is the same one MVP-01 uses.' }
+      ],
+      meta: []
+    },
+    { id: 'E3', status: 'adopted', statusLabel: 'VALIDATED',
+      title: 'Rust ↔ TypeScript signing interoperability',
+      type: 'Clean signing boundary · client agnostic',
+      sections: [
+        { label: 'What we proved', content: 'The <code>jubjub</code> Rust crate and TypeScript bigint arithmetic produce identical Schnorr signatures for the same inputs. Rust handles scalar arithmetic (<code>s = r + c·sk mod JUBJUB_R</code>); TypeScript handles the Midnight-specific Poseidon challenge hash via the contract\'s <code>pureCircuits</code>.' },
+        { label: 'Why it matters', content: 'The signing boundary is clean — any client can produce signatures that the circuit accepts. The <code>threshold-signatures</code> crate drops in as a library dependency without changing the signing boundary shape.' }
+      ],
+      meta: [{ label: 'Source', content: '<code>experiments/redjubjub-wallet-rs/</code>' }]
+    },
+
+    // Milestones
+    { id: 'MS1', status: 'phase', statusLabel: 'W2',
+      title: 'Scope lock',
+      type: 'Phase 1 complete · W2',
+      sections: [{ label: 'What\'s delivered', content: 'SCOPE_LOCK.md, DELEGATION.md, WEEKLY_DEMO_CONTRACT.md, PROTOTYPE_REPO_CONTRACT.md. Every section of the secure-onboarding-design spec classified MVP / Step 1.1 / Step 2 / Step 3 / parked.' }],
+      meta: []
+    },
+    { id: 'MS2', status: 'adopted', statusLabel: 'W4',
+      title: 'FROST crate adopted',
+      type: 'Phase 3 complete · W4',
+      sections: [{ label: 'What\'s delivered', content: 'Fork-vs-depend decision recorded. <code>threshold-signatures</code> crate pulled in as a Rust library dependency. JubjubPoseidon ciphersuite implementation passing tests alongside JubjubBlake2b512. Reference impl green. Jesus cryptographer sign-off. <strong>No NEAR chain or protocol integration.</strong>' }],
+      meta: []
+    },
+    { id: 'MS3', status: 'phase', statusLabel: 'W8',
+      title: 'In-circuit verifier',
+      type: 'Phase 4 complete · W8',
+      sections: [{ label: 'What\'s delivered', content: 'End-to-end: Rust client signs with an in-process n=5 committee → Compact circuit verifies → proof submitted to devnet → tx included. O1 ledger blocker cleared.' }],
+      meta: []
+    },
+    { id: 'MS4', status: 'target', statusLabel: 'END OF JUNE',
+      title: 'MVP demo',
+      type: 'The contract',
+      sections: [
+        { label: 'What the demo shows', content: 'Passkey login → account dashboard → Lace (or stub wallet) connects → capability grant approved in the console → transaction signed → submitted to Midnight devnet. Plus a recovery sad-path. Plus "what\'s next" pointing to Step 1.1.' },
+        { label: 'What the demo proves', content: 'The architecture works end-to-end. The migration narrative (MVP-10) document lands beforehand, so the demo is read in the context of the full journey, not as a reduction.' }
+      ],
+      meta: []
+    },
+    { id: 'MS5', status: 'tobuild', statusLabel: '+90 DAYS',
+      title: 'Step 1.1 — federation + names',
+      type: 'First 90-day beat post-MVP',
+      sections: [
+        { label: 'What ships', content: 'Federated signing network (n=5 / t=4 with ROAST). Name registry (<code>alice.midnight</code>) on-chain. QR onboarding returns with the mitigations specified in C12. ECO-01 connection protocol finalised as a MIP.' },
+        { label: 'Cadence', content: 'Weekly demos continue. 90-day cycles replace the 12-week sprint from here forward.' }
+      ],
+      meta: []
+    }
+  ];
+
+  // Join threats into the unified modal store
+  const MODAL_DATA = {};
+  COMPONENTS.forEach(c => { MODAL_DATA[c.id] = c; });
+  THREATS.forEach(t => {
+    MODAL_DATA[t.id] = {
+      id: t.id,
+      status: t.status,
+      statusLabel: ({ mitigated: 'MITIGATED', tracked: 'TRACKED', open: 'OPEN — NEEDS DECISION' })[t.status] || t.status.toUpperCase(),
+      title: t.title,
+      type: t.type,
+      sections: [
+        { label: 'What it is', content: t.what },
+        { label: 'How we mitigate', content: t.how }
+      ],
+      meta: [
+        { label: 'Where', content: t.where },
+        { label: 'Source', content: t.source }
+      ]
+    };
+  });
+
+  // ── Modal open/close ───────────────────────────────────────────
+  const modal = document.getElementById('detailModal');
+
+  function openModal(id) {
+    const d = MODAL_DATA[id];
+    if (!d) return;
+    document.getElementById('modalId').textContent = d.id;
+    document.getElementById('modalTitle').textContent = d.title;
+    document.getElementById('modalType').textContent = d.type || '';
+    const status = document.getElementById('modalStatus');
+    status.textContent = d.statusLabel || (d.status || '').toUpperCase();
+    status.className = 'modal-status ' + (d.status || '');
+    const sectionsEl = document.getElementById('modalSections');
+    sectionsEl.innerHTML = (d.sections || []).map(s =>
+      `<h4>${s.label}</h4><p>${s.content}</p>`
+    ).join('');
+    const metaEl = document.getElementById('modalMeta');
+    if (d.meta && d.meta.length) {
+      metaEl.style.display = '';
+      metaEl.innerHTML = d.meta.map(m => `<div><strong>${m.label}:</strong> ${m.content}</div>`).join('');
+    } else {
+      metaEl.style.display = 'none';
+      metaEl.innerHTML = '';
+    }
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+    const card = modal.querySelector('.modal-card');
+    if (card) card.scrollTop = 0;
+  }
+
+  function closeModal() {
+    modal.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  document.addEventListener('click', (e) => {
+    const target = e.target.closest('[data-modal-id]');
+    if (!target) return;
+    const id = target.getAttribute('data-modal-id');
+    if (id) openModal(id);
+  });
+
+  document.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
+</script>
+</body>
+</html>

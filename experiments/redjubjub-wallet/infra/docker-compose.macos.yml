@@ -1,0 +1,35 @@
+# macOS override — bridge networking with port mappings.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.macos.yml up -d
+
+services:
+  node:
+    network_mode: ""
+    networks: [midnight]
+    ports:
+      - "9944:9944"
+      - "30333:30333"
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9944/health']
+
+  indexer:
+    network_mode: ""
+    networks: [midnight]
+    ports:
+      - "8088:8088"
+    environment:
+      APP__INFRA__NODE__URL: 'ws://node:9944'
+    depends_on:
+      node:
+        condition: service_healthy
+
+  proof-server:
+    network_mode: ""
+    networks: [midnight]
+    ports:
+      - "6300:6300"
+
+networks:
+  midnight:
+    driver: bridge
