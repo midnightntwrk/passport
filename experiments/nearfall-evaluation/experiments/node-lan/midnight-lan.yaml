@@ -1,0 +1,555 @@
+# Podman Kubernetes YAML — Midnight node LAN (7-node dev network)
+# Usage:
+#   podman kube play midnight-node-lan.yaml
+#   podman kube down midnight-node-lan.yaml   # to stop
+#
+# Prerequisites:
+#   mkdir -p data/node-{1..7} data/index
+#
+# Node 1 peer ID (from chain-spec.json; verify with `cat node-1/identity`):
+#   12D3KooWB7c5RRVAtn98WkQTCPHjasNuVNnjNaFpEaQLsmTUaeuc
+#
+# Note: CFG_PRESET=dev enables use_main_chain_follower_mock. If the dev.toml
+# args (including --dev) conflict with --chain, set CFG_PRESET to a different
+# value or adjust the entrypoint configuration accordingly.
+#
+# The indexer APP__INFRA__SECRET should match node-1's NODE_KEY (hex content
+# of node-1/key).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: midnight-lan
+spec:
+  restartPolicy: Never
+  containers:
+
+    # --- Node 1 (bootnode) ---
+    - name: node-1
+      image: docker.io/bwbush/midnight-node:0.22.2-patched
+      args:
+        - --chain
+        - /chain-spec-raw.json
+        - --state-pruning
+        - archive
+        - --blocks-pruning
+        - archive
+        - --port
+        - "30334"
+        - --rpc-port
+        - "9945"
+        - --rpc-methods=Unsafe
+        - --rpc-external
+        - --rpc-cors
+        - all
+        - --log
+        - aura=trace,grandpa=trace,beefy=trace,afg=trace,babe=trace
+      env:
+        - name: CFG_PRESET
+          value: dev
+        - name: BASE_PATH
+          value: /data
+        - name: VALIDATOR
+          value: "true"
+        - name: NODE_KEY_FILE
+          value: /keys/key
+        - name: AURA_SEED_FILE
+          value: /keys/aura.seed
+        - name: GRANDPA_SEED_FILE
+          value: /keys/grandpa.seed
+        - name: BEEFY_SEED_FILE
+          value: /keys/beefy.seed
+        - name: CROSS_CHAIN_SEED_FILE
+          value: /keys/beefy.seed
+      ports:
+        - containerPort: 9945
+          hostPort: 9945
+        - containerPort: 30334
+          hostPort: 30334
+      volumeMounts:
+        - mountPath: /data
+          name: data-node-1
+        - mountPath: /keys
+          name: keys-node-1
+          readOnly: true
+        - mountPath: /chain-spec-raw.json
+          name: chain-spec
+          readOnly: true
+
+    # --- Node 2 ---
+    - name: node-2
+      image: docker.io/bwbush/midnight-node:0.22.2-patched
+      args:
+        - --chain
+        - /chain-spec-raw.json
+        - --state-pruning
+        - archive
+        - --blocks-pruning
+        - archive
+        - --bootnodes
+        - /ip4/127.0.0.1/tcp/30334/p2p/12D3KooWB7c5RRVAtn98WkQTCPHjasNuVNnjNaFpEaQLsmTUaeuc
+        - --port
+        - "30335"
+        - --rpc-port
+        - "9946"
+        - --rpc-methods=Unsafe
+        - --rpc-external
+        - --rpc-cors
+        - all
+        - --log
+        - aura=trace,grandpa=trace,beefy=trace,afg=trace,babe=trace
+      env:
+        - name: CFG_PRESET
+          value: dev
+        - name: BASE_PATH
+          value: /data
+        - name: VALIDATOR
+          value: "true"
+        - name: NODE_KEY_FILE
+          value: /keys/key
+        - name: AURA_SEED_FILE
+          value: /keys/aura.seed
+        - name: GRANDPA_SEED_FILE
+          value: /keys/grandpa.seed
+        - name: BEEFY_SEED_FILE
+          value: /keys/beefy.seed
+        - name: CROSS_CHAIN_SEED_FILE
+          value: /keys/beefy.seed
+      ports:
+        - containerPort: 9946
+          hostPort: 9946
+        - containerPort: 30335
+          hostPort: 30335
+      volumeMounts:
+        - mountPath: /data
+          name: data-node-2
+        - mountPath: /keys
+          name: keys-node-2
+          readOnly: true
+        - mountPath: /chain-spec-raw.json
+          name: chain-spec
+          readOnly: true
+
+    # --- Node 3 ---
+    - name: node-3
+      image: docker.io/bwbush/midnight-node:0.22.2-patched
+      args:
+        - --chain
+        - /chain-spec-raw.json
+        - --state-pruning
+        - archive
+        - --blocks-pruning
+        - archive
+        - --bootnodes
+        - /ip4/127.0.0.1/tcp/30334/p2p/12D3KooWB7c5RRVAtn98WkQTCPHjasNuVNnjNaFpEaQLsmTUaeuc
+        - --port
+        - "30336"
+        - --rpc-port
+        - "9947"
+        - --rpc-methods=Unsafe
+        - --rpc-external
+        - --rpc-cors
+        - all
+        - --log
+        - aura=trace,grandpa=trace,beefy=trace,afg=trace,babe=trace
+      env:
+        - name: CFG_PRESET
+          value: dev
+        - name: BASE_PATH
+          value: /data
+        - name: VALIDATOR
+          value: "true"
+        - name: NODE_KEY_FILE
+          value: /keys/key
+        - name: AURA_SEED_FILE
+          value: /keys/aura.seed
+        - name: GRANDPA_SEED_FILE
+          value: /keys/grandpa.seed
+        - name: BEEFY_SEED_FILE
+          value: /keys/beefy.seed
+        - name: CROSS_CHAIN_SEED_FILE
+          value: /keys/beefy.seed
+      ports:
+        - containerPort: 9947
+          hostPort: 9947
+        - containerPort: 30336
+          hostPort: 30336
+      volumeMounts:
+        - mountPath: /data
+          name: data-node-3
+        - mountPath: /keys
+          name: keys-node-3
+          readOnly: true
+        - mountPath: /chain-spec-raw.json
+          name: chain-spec
+          readOnly: true
+
+    # --- Node 4 ---
+    - name: node-4
+      image: docker.io/bwbush/midnight-node:0.22.2-patched
+      args:
+        - --chain
+        - /chain-spec-raw.json
+        - --state-pruning
+        - archive
+        - --blocks-pruning
+        - archive
+        - --bootnodes
+        - /ip4/127.0.0.1/tcp/30334/p2p/12D3KooWB7c5RRVAtn98WkQTCPHjasNuVNnjNaFpEaQLsmTUaeuc
+        - --port
+        - "30337"
+        - --rpc-port
+        - "9948"
+        - --rpc-methods=Unsafe
+        - --rpc-external
+        - --rpc-cors
+        - all
+        - --log
+        - aura=trace,grandpa=trace,beefy=trace,afg=trace,babe=trace
+      env:
+        - name: CFG_PRESET
+          value: dev
+        - name: BASE_PATH
+          value: /data
+        - name: VALIDATOR
+          value: "true"
+        - name: NODE_KEY_FILE
+          value: /keys/key
+        - name: AURA_SEED_FILE
+          value: /keys/aura.seed
+        - name: GRANDPA_SEED_FILE
+          value: /keys/grandpa.seed
+        - name: BEEFY_SEED_FILE
+          value: /keys/beefy.seed
+        - name: CROSS_CHAIN_SEED_FILE
+          value: /keys/beefy.seed
+      ports:
+        - containerPort: 9948
+          hostPort: 9948
+        - containerPort: 30337
+          hostPort: 30337
+      volumeMounts:
+        - mountPath: /data
+          name: data-node-4
+        - mountPath: /keys
+          name: keys-node-4
+          readOnly: true
+        - mountPath: /chain-spec-raw.json
+          name: chain-spec
+          readOnly: true
+
+    # --- Node 5 ---
+    - name: node-5
+      image: docker.io/bwbush/midnight-node:0.22.2-patched
+      args:
+        - --chain
+        - /chain-spec-raw.json
+        - --state-pruning
+        - archive
+        - --blocks-pruning
+        - archive
+        - --bootnodes
+        - /ip4/127.0.0.1/tcp/30334/p2p/12D3KooWB7c5RRVAtn98WkQTCPHjasNuVNnjNaFpEaQLsmTUaeuc
+        - --port
+        - "30338"
+        - --rpc-port
+        - "9949"
+        - --rpc-methods=Unsafe
+        - --rpc-external
+        - --rpc-cors
+        - all
+        - --log
+        - aura=trace,grandpa=trace,beefy=trace,afg=trace,babe=trace
+      env:
+        - name: CFG_PRESET
+          value: dev
+        - name: BASE_PATH
+          value: /data
+        - name: VALIDATOR
+          value: "true"
+        - name: NODE_KEY_FILE
+          value: /keys/key
+        - name: AURA_SEED_FILE
+          value: /keys/aura.seed
+        - name: GRANDPA_SEED_FILE
+          value: /keys/grandpa.seed
+        - name: BEEFY_SEED_FILE
+          value: /keys/beefy.seed
+        - name: CROSS_CHAIN_SEED_FILE
+          value: /keys/beefy.seed
+      ports:
+        - containerPort: 9949
+          hostPort: 9949
+        - containerPort: 30338
+          hostPort: 30338
+      volumeMounts:
+        - mountPath: /data
+          name: data-node-5
+        - mountPath: /keys
+          name: keys-node-5
+          readOnly: true
+        - mountPath: /chain-spec-raw.json
+          name: chain-spec
+          readOnly: true
+
+    # --- Node 6 ---
+    - name: node-6
+      image: docker.io/bwbush/midnight-node:0.22.2-patched
+      args:
+        - --chain
+        - /chain-spec-raw.json
+        - --state-pruning
+        - archive
+        - --blocks-pruning
+        - archive
+        - --bootnodes
+        - /ip4/127.0.0.1/tcp/30334/p2p/12D3KooWB7c5RRVAtn98WkQTCPHjasNuVNnjNaFpEaQLsmTUaeuc
+        - --port
+        - "30339"
+        - --rpc-port
+        - "9950"
+        - --rpc-methods=Unsafe
+        - --rpc-external
+        - --rpc-cors
+        - all
+        - --log
+        - aura=trace,grandpa=trace,beefy=trace,afg=trace,babe=trace
+      env:
+        - name: CFG_PRESET
+          value: dev
+        - name: BASE_PATH
+          value: /data
+        - name: VALIDATOR
+          value: "true"
+        - name: NODE_KEY_FILE
+          value: /keys/key
+        - name: AURA_SEED_FILE
+          value: /keys/aura.seed
+        - name: GRANDPA_SEED_FILE
+          value: /keys/grandpa.seed
+        - name: BEEFY_SEED_FILE
+          value: /keys/beefy.seed
+        - name: CROSS_CHAIN_SEED_FILE
+          value: /keys/beefy.seed
+      ports:
+        - containerPort: 9950
+          hostPort: 9950
+        - containerPort: 30339
+          hostPort: 30339
+      volumeMounts:
+        - mountPath: /data
+          name: data-node-6
+        - mountPath: /keys
+          name: keys-node-6
+          readOnly: true
+        - mountPath: /chain-spec-raw.json
+          name: chain-spec
+          readOnly: true
+
+    # --- Node 7 ---
+    - name: node-7
+      image: docker.io/bwbush/midnight-node:0.22.2-patched
+      args:
+        - --chain
+        - /chain-spec-raw.json
+        - --state-pruning
+        - archive
+        - --blocks-pruning
+        - archive
+        - --bootnodes
+        - /ip4/127.0.0.1/tcp/30334/p2p/12D3KooWB7c5RRVAtn98WkQTCPHjasNuVNnjNaFpEaQLsmTUaeuc
+        - --port
+        - "30340"
+        - --rpc-port
+        - "9951"
+        - --rpc-methods=Unsafe
+        - --rpc-external
+        - --rpc-cors
+        - all
+        - --log
+        - aura=trace,grandpa=trace,beefy=trace,afg=trace,babe=trace
+      env:
+        - name: CFG_PRESET
+          value: dev
+        - name: BASE_PATH
+          value: /data
+        - name: VALIDATOR
+          value: "true"
+        - name: NODE_KEY_FILE
+          value: /keys/key
+        - name: AURA_SEED_FILE
+          value: /keys/aura.seed
+        - name: GRANDPA_SEED_FILE
+          value: /keys/grandpa.seed
+        - name: BEEFY_SEED_FILE
+          value: /keys/beefy.seed
+        - name: CROSS_CHAIN_SEED_FILE
+          value: /keys/beefy.seed
+      ports:
+        - containerPort: 9951
+          hostPort: 9951
+        - containerPort: 30340
+          hostPort: 30340
+      volumeMounts:
+        - mountPath: /data
+          name: data-node-7
+        - mountPath: /keys
+          name: keys-node-7
+          readOnly: true
+        - mountPath: /chain-spec-raw.json
+          name: chain-spec
+          readOnly: true
+
+    # --- Indexer (connected to node-1) ---
+    - name: indexer
+      image: docker.io/midnightntwrk/indexer-standalone:4.0.1
+      env:
+        - name: APP__APPLICATION__NETWORK_ID
+          value: undeployed
+        - name: APP__INFRA__SECRET
+          # Should match node-1's node key (hex content of node-1/key)
+          value: "c24711b7def7e81909a2a810257682688980f51d42d2c706447c3355d824f400"
+        - name: APP__INFRA__NODE__URL
+          value: ws://localhost:9945
+        - name: RUST_LOG
+          value: indexer=info,chain_indexer=info,indexer_api=info,wallet_indexer=info,indexer_common=info,fastrace_opentelemetry=info,info
+      ports:
+        - containerPort: 8088
+          hostPort: 8088
+      volumeMounts:
+        - mountPath: /data
+          name: data-index
+
+    # --- Proof server ---
+    - name: proofserver
+      image: docker.io/midnightntwrk/proof-server:8.0.3
+      args:
+        - --
+        - midnight-proof-server
+        - -v
+      ports:
+        - containerPort: 6300
+          hostPort: 6300
+
+    # --- BEEFY key inserter (exits after inserting keys into all 7 nodes) ---
+    - name: beefy-inserter
+      image: docker.io/curlimages/curl:latest
+      command:
+        - /bin/sh
+        - -c
+      args:
+        - |
+          wait_for_rpc() {
+            port="$1"
+            until curl -sS -H 'Content-Type: application/json' -X POST \
+              -d '{"jsonrpc":"2.0","id":1,"method":"system_health","params":[]}' \
+              "http://127.0.0.1:$port" > /dev/null 2>&1; do
+              sleep 1
+            done
+          }
+
+          insert_beefy_key() {
+            port="$1"
+            keydir="$2"
+            seed=$(sed -n '/Secret seed/{s/^  Secret seed:       \(.*\)$/\1/;p}' "$keydir/beefy.keygen")
+            pubkey=$(sed -n '/Public key (hex)/{s/^  Public key (hex):  \(.*\)$/\1/;p}' "$keydir/beefy.keygen")
+            curl -sS -H 'Content-Type: application/json' -X POST \
+              -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"author_insertKey\",\"params\":[\"beef\",\"$seed\",\"$pubkey\"]}" \
+              "http://127.0.0.1:$port"
+            echo "BEEFY key inserted for node at port $port"
+          }
+
+          for n in 1 2 3 4 5 6 7; do (
+            port=$((9944 + n))
+            wait_for_rpc "$port"
+            sleep 10
+            insert_beefy_key "$port" "/keys/$n"
+          ) & done
+          wait
+      volumeMounts:
+        - mountPath: /keys/1
+          name: keys-node-1
+          readOnly: false
+        - mountPath: /keys/2
+          name: keys-node-2
+          readOnly: false
+        - mountPath: /keys/3
+          name: keys-node-3
+          readOnly: false
+        - mountPath: /keys/4
+          name: keys-node-4
+          readOnly: false
+        - mountPath: /keys/5
+          name: keys-node-5
+          readOnly: false
+        - mountPath: /keys/6
+          name: keys-node-6
+          readOnly: false
+        - mountPath: /keys/7
+          name: keys-node-7
+          readOnly: false
+
+  volumes:
+    - name: chain-spec
+      hostPath:
+        path: ./chain-spec-raw.json
+        type: File
+    - name: data-node-1
+      hostPath:
+        path: ./node-1/state
+        type: DirectoryOrCreate
+    - name: keys-node-1
+      hostPath:
+        path: ./node-1
+        type: Directory
+    - name: data-node-2
+      hostPath:
+        path: ./node-2/state
+        type: DirectoryOrCreate
+    - name: keys-node-2
+      hostPath:
+        path: ./node-2
+        type: Directory
+    - name: data-node-3
+      hostPath:
+        path: ./node-3/state
+        type: DirectoryOrCreate
+    - name: keys-node-3
+      hostPath:
+        path: ./node-3
+        type: Directory
+    - name: data-node-4
+      hostPath:
+        path: ./node-4/state
+        type: DirectoryOrCreate
+    - name: keys-node-4
+      hostPath:
+        path: ./node-4
+        type: Directory
+    - name: data-node-5
+      hostPath:
+        path: ./node-5/state
+        type: DirectoryOrCreate
+    - name: keys-node-5
+      hostPath:
+        path: ./node-5
+        type: Directory
+    - name: data-node-6
+      hostPath:
+        path: ./node-6/state
+        type: DirectoryOrCreate
+    - name: keys-node-6
+      hostPath:
+        path: ./node-6
+        type: Directory
+    - name: data-node-7
+      hostPath:
+        path: ./node-7/state
+        type: DirectoryOrCreate
+    - name: keys-node-7
+      hostPath:
+        path: ./node-7
+        type: Directory
+    - name: data-index
+      hostPath:
+        path: ./index
+        type: DirectoryOrCreate

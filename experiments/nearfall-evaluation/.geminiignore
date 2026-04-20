@@ -1,0 +1,14 @@
+*.tmp
+*.log
+*.log.gz
+*.gz
+*.m4a
+tmp/
+dist/
+target/
+node_modules/
+.npm-global/
+midnight-level-db/
+experiments/node-lan/node-?/
+experiments/near-exploration/node/
+midnight-env/preprod/

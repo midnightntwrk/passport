@@ -1,0 +1,12 @@
+*.log.gz
+node-?/state/
+node-?/authority.json
+node-?/initialAuthority.json
+node-?/initialValidator.json
+authorities.json
+initialAuthorities.json
+initialValidators.json
+rpc_methods.yaml
+chain-spec-raw.json
+res/
+index/

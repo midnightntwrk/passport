@@ -1,0 +1,126 @@
+diff --git a/toolkit/data-sources/db-sync/src/block/mod.rs b/toolkit/data-sources/db-sync/src/block/mod.rs
+index c4b853e5f..fc9be4f74 100644
+--- a/toolkit/data-sources/db-sync/src/block/mod.rs
++++ b/toolkit/data-sources/db-sync/src/block/mod.rs
+@@ -250,15 +250,35 @@ impl BlockDataSourceImpl {
+ 		hash: McBlockHash,
+ 		reference_timestamp: NaiveDateTime,
+ 	) -> Result<Option<Block>, Box<dyn std::error::Error + Send + Sync>> {
+-		let block = db_model::get_block_by_hash(&self.pool, hash).await?;
+-		let latest_block = db_model::get_latest_block_info(&self.pool).await?;
+-		Ok(block
+-			.zip(latest_block)
+-			.filter(|(block, latest_block)| {
+-				block.block_no.saturating_add(self.security_parameter) <= latest_block.block_no
+-					&& self.is_block_time_valid(block, reference_timestamp)
+-			})
+-			.map(|(block, _)| block))
++		let block_opt = db_model::get_block_by_hash(&self.pool, hash).await?;
++		let latest_block_opt = db_model::get_latest_block_info(&self.pool).await?;
++		match block_opt.zip(latest_block_opt) {
++			None => Ok(None),
++			Some((block, latest_block)) => {
++				let is_stable = block
++					.block_no
++					.saturating_add(self.security_parameter)
++					<= latest_block.block_no;
++				let in_window = self.is_block_time_valid(&block, reference_timestamp);
++				if !in_window {
++					let window_lo = self.min_block_allowed_time(reference_timestamp);
++					let window_hi = self.max_allowed_block_time(reference_timestamp);
++					let offset_s = (reference_timestamp - block.time).num_seconds();
++					log::warn!(
++						"Cardano block {} rejected by timestamp window: \
++						 reference={reference_timestamp} UTC, \
++						 window=[{window_lo} UTC, {window_hi} UTC], \
++						 block_time={} UTC, \
++						 offset={}s ({:.1}d)",
++						block.block_no.0,
++						block.time,
++						offset_s,
++						offset_s as f64 / 86400.0,
++					);
++				}
++				Ok(if is_stable && in_window { Some(block) } else { None })
++			},
++		}
+ 	}
+ 
+ 	/// Caches stable blocks for lookup by hash.
+diff --git a/toolkit/sidechain/sidechain-mc-hash/Cargo.toml b/toolkit/sidechain/sidechain-mc-hash/Cargo.toml
+index fcd649336..2ed3a1a2a 100644
+--- a/toolkit/sidechain/sidechain-mc-hash/Cargo.toml
++++ b/toolkit/sidechain/sidechain-mc-hash/Cargo.toml
+@@ -13,6 +13,7 @@ workspace = true
+ 
+ [dependencies]
+ async-trait = { workspace = true }
++log = { workspace = true }
+ sp-consensus-slots = { workspace = true }
+ sp-partner-chains-consensus-aura = { workspace = true, features = ["std"] }
+ sidechain-domain = { workspace = true, features = ["std"] }
+diff --git a/toolkit/sidechain/sidechain-mc-hash/src/lib.rs b/toolkit/sidechain/sidechain-mc-hash/src/lib.rs
+index 84525c430..7f5c200ff 100644
+--- a/toolkit/sidechain/sidechain-mc-hash/src/lib.rs
++++ b/toolkit/sidechain/sidechain-mc-hash/src/lib.rs
+@@ -183,6 +183,8 @@ use sp_runtime::{
+ use sp_timestamp::Timestamp;
+ use std::{error::Error, ops::Deref};
+ 
++use log::warn;
++
+ #[cfg(test)]
+ mod test;
+ 
+@@ -308,6 +310,7 @@ pub trait McHashDataSource {
+ 		&self,
+ 		hash: McBlockHash,
+ 	) -> Result<Option<MainchainBlock>, Box<dyn std::error::Error + Send + Sync>>;
++
+ }
+ 
+ impl McHashInherentDataProvider {
+@@ -451,15 +454,41 @@ async fn get_mc_state_reference(
+ 	let timestamp = verified_block_slot
+ 		.timestamp(slot_duration)
+ 		.ok_or(McHashInherentError::SlotTooBig)?;
+-	data_source
++	if let Some(block) = data_source
+ 		.get_stable_block_for(verified_block_mc_hash.clone(), timestamp)
+ 		.await
+ 		.map_err(McHashInherentError::DataSourceError)?
++	{
++		return Ok(block);
++	}
++	// Fallback: the block exists but falls outside the expected timestamp window.
++	// This can occur when the Midnight slot clock diverges from Cardano wall time
++	// (observed on preprod genesis blocks).
++	let block = data_source
++		.get_block_by_hash(verified_block_mc_hash.clone())
++		.await
++		.map_err(McHashInherentError::DataSourceError)?
+ 		.ok_or(McHashInherentError::McStateReferenceInvalid(
+ 			verified_block_mc_hash,
+ 			verified_block_slot,
+ 			timestamp,
+-		))
++		))?;
++
++	// Log diagnostic information about the timestamp divergence.
++	let ref_ms = timestamp.as_millis();
++	let actual_ms = block.timestamp.saturating_mul(1000);
++	let offset_s = (ref_ms as i64).saturating_sub(actual_ms as i64) / 1000;
++	warn!(
++		"MC hash fallback activated: slot={}, reference={}s (UTC), \
++		 block_timestamp={}s (UTC), offset={}s ({:.1}d)",
++		verified_block_slot,
++		ref_ms / 1000,
++		block.timestamp,
++		offset_s,
++		offset_s as f64 / 86400.0,
++	);
++
++	Ok(block)
+ }
+ 
+ #[async_trait::async_trait]

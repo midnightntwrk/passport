@@ -1,0 +1,776 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 980 422"
+   width="980"
+   height="422"
+   font-family="Arial, Helvetica, sans-serif"
+   version="1.1"
+   id="svg45"
+   sodipodi:docname="midnight-near-sharding-flow.svg"
+   inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
+   inkscape:export-filename="midnight-near-sharding-flow.png"
+   inkscape:export-xdpi="150"
+   inkscape:export-ydpi="150"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview45"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="1.52"
+     inkscape:cx="744.07895"
+     inkscape:cy="210.85526"
+     inkscape:window-width="1889"
+     inkscape:window-height="1176"
+     inkscape:window-x="31"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg45" />
+  <defs
+     id="defs4">
+    <marker
+       id="ah-gray"
+       viewBox="0 0 8 8"
+       refX="7"
+       refY="4"
+       markerWidth="5"
+       markerHeight="5"
+       orient="auto">
+      <path
+         d="M0,0 L8,4 L0,8 Z"
+         fill="#4a5568"
+         id="path1" />
+    </marker>
+    <marker
+       id="ah-green"
+       viewBox="0 0 8 8"
+       refX="7"
+       refY="4"
+       markerWidth="5"
+       markerHeight="5"
+       orient="auto">
+      <path
+         d="M0,0 L8,4 L0,8 Z"
+         fill="#15803d"
+         id="path2" />
+    </marker>
+    <marker
+       id="ah-red"
+       viewBox="0 0 8 8"
+       refX="7"
+       refY="4"
+       markerWidth="5"
+       markerHeight="5"
+       orient="auto">
+      <path
+         d="M0,0 L8,4 L0,8 Z"
+         fill="#b91c1c"
+         id="path3" />
+    </marker>
+    <marker
+       id="ah-time"
+       viewBox="0 0 8 8"
+       refX="7"
+       refY="4"
+       markerWidth="5"
+       markerHeight="5"
+       orient="auto">
+      <path
+         d="M0,0 L8,4 L0,8 Z"
+         fill="#64748b"
+         id="path4" />
+    </marker>
+    <pattern
+       id="hatch-red"
+       width="6"
+       height="6"
+       patternTransform="rotate(45)"
+       patternUnits="userSpaceOnUse">
+      <line
+         x1="0"
+         y1="0"
+         x2="0"
+         y2="6"
+         stroke="#f87171"
+         stroke-width="1.5"
+         id="line4" />
+    </pattern>
+  </defs>
+  <!-- Page background -->
+  <rect
+     width="980"
+     height="422"
+     fill="#f7f8fc"
+     id="rect4" />
+  <!-- ── TITLE ── -->
+  <text
+     x="490"
+     y="16"
+     text-anchor="middle"
+     font-size="13"
+     font-weight="bold"
+     fill="#1a202c"
+     id="text4">
+    Midnight-on-NEAR: Cross-Shard Receipts and Partial Rollback
+  </text>
+  <!-- ── BLOCK COLUMN BACKGROUNDS ── -->
+  <rect
+     x="140"
+     y="24"
+     width="258"
+     height="352"
+     fill="#eff6ff"
+     opacity="0.55"
+     id="rect5" />
+  <rect
+     x="638"
+     y="24"
+     width="334"
+     height="352"
+     fill="#eff6ff"
+     opacity="0.55"
+     id="rect6" />
+  <!-- Block boundary dashed lines -->
+  <line
+     x1="398"
+     y1="24"
+     x2="398"
+     y2="376"
+     stroke="#94a3b8"
+     stroke-width="1.5"
+     stroke-dasharray="6,3"
+     id="line6" />
+  <line
+     x1="638"
+     y1="24"
+     x2="638"
+     y2="376"
+     stroke="#94a3b8"
+     stroke-width="1.5"
+     stroke-dasharray="6,3"
+     id="line7" />
+  <!-- Block column labels -->
+  <text
+     x="269"
+     y="33"
+     text-anchor="middle"
+     font-size="10"
+     font-weight="bold"
+     fill="#334155"
+     id="text7">Block N</text>
+  <text
+     x="518"
+     y="33"
+     text-anchor="middle"
+     font-size="10"
+     font-weight="bold"
+     fill="#334155"
+     id="text8">Block N+1</text>
+  <text
+     x="805"
+     y="33"
+     text-anchor="middle"
+     font-size="10"
+     font-weight="bold"
+     fill="#334155"
+     id="text9">Block N+2</text>
+  <!-- ── SHARD 0 BAND  (y 38–175) ── -->
+  <rect
+     x="0"
+     y="38"
+     width="980"
+     height="137"
+     fill="none"
+     stroke="#2b6cb0"
+     stroke-width="1.8"
+     id="rect9" />
+  <rect
+     x="0"
+     y="38"
+     width="138"
+     height="137"
+     fill="#dbeafe"
+     stroke="#2b6cb0"
+     stroke-width="1.8"
+     id="rect10" />
+  <text
+     x="69"
+     y="97"
+     text-anchor="middle"
+     font-size="10"
+     font-weight="bold"
+     fill="#1e3a8a"
+     id="text10">SHARD 0</text>
+  <text
+     x="69"
+     y="112"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#1e3a8a"
+     id="text11">Ledger Kernel</text>
+  <text
+     x="69"
+     y="126"
+     text-anchor="middle"
+     font-size="7.5"
+     fill="#60a5fa"
+     id="text12">(Night · ZSwap · DUST)</text>
+  <!-- ── SHARD 1 BAND  (y 175–282) ── -->
+  <rect
+     x="0"
+     y="175"
+     width="980"
+     height="107"
+     fill="none"
+     stroke="#6d28d9"
+     stroke-width="1.8"
+     id="rect12" />
+  <rect
+     x="0"
+     y="175"
+     width="138"
+     height="107"
+     fill="#ede9fe"
+     stroke="#6d28d9"
+     stroke-width="1.8"
+     id="rect13" />
+  <text
+     x="69"
+     y="222"
+     text-anchor="middle"
+     font-size="10"
+     font-weight="bold"
+     fill="#4c1d95"
+     id="text13">SHARD 1</text>
+  <text
+     x="69"
+     y="237"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#4c1d95"
+     id="text14">Contract A</text>
+  <!-- ── SHARD 2 BAND  (y 282–390) ── -->
+  <rect
+     x="0"
+     y="282"
+     width="980"
+     height="108"
+     fill="none"
+     stroke="#6d28d9"
+     stroke-width="1.8"
+     id="rect14" />
+  <rect
+     x="0"
+     y="282"
+     width="138"
+     height="108"
+     fill="#ede9fe"
+     stroke="#6d28d9"
+     stroke-width="1.8"
+     id="rect15" />
+  <text
+     x="69"
+     y="329"
+     text-anchor="middle"
+     font-size="10"
+     font-weight="bold"
+     fill="#4c1d95"
+     id="text15">SHARD 2</text>
+  <text
+     x="69"
+     y="344"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#4c1d95"
+     id="text16">Contract B</text>
+  <!-- ── TIME AXIS ── -->
+  <line
+     x1="140"
+     y1="400"
+     x2="970"
+     y2="400"
+     stroke="#64748b"
+     stroke-width="1.5"
+     marker-end="url(#ah-time)"
+     id="line16" />
+  <text
+     x="555"
+     y="416"
+     text-anchor="middle"
+     font-size="9"
+     fill="#64748b"
+     id="text17">time ──────────────────────────────────────────────────────────────────────────────▶</text>
+  <!-- ================================================================ -->
+  <!-- BLOCK N — Tx arrives at Shard 0                                  -->
+  <!-- ================================================================ -->
+  <!-- Tx arrival arrow -->
+  <line
+     x1="192"
+     y1="27"
+     x2="192"
+     y2="38"
+     stroke="#2b6cb0"
+     stroke-width="2"
+     marker-end="url(#ah-gray)"
+     id="line17" />
+  <text
+     x="192"
+     y="23"
+     text-anchor="middle"
+     font-size="9"
+     fill="#2b6cb0"
+     font-weight="bold"
+     id="text18">Tx</text>
+  <!-- seg0 guaranteed (permanent, applied immediately in Block N) -->
+  <rect
+     x="148"
+     y="48"
+     width="82"
+     height="22"
+     rx="3"
+     fill="#bbf7d0"
+     stroke="#15803d"
+     stroke-width="1.5"
+     id="rect18" />
+  <text
+     x="189"
+     y="63"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#14532d"
+     font-weight="bold"
+     id="text19">seg0 · guaranteed</text>
+  <!-- seg1 provisional — staged in Block N, spans through Block N+1 until resolved in Block N+2 -->
+  <rect
+     x="234"
+     y="48"
+     width="404"
+     height="22"
+     rx="3"
+     fill="#fef3c7"
+     stroke="#d97706"
+     stroke-width="1.5"
+     stroke-dasharray="5,3"
+     id="rect19" />
+  <text
+     x="400"
+     y="63"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#92400e"
+     id="text20">seg1 provisional  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·</text>
+  <!-- seg2 provisional -->
+  <rect
+     x="234"
+     y="76"
+     width="404"
+     height="22"
+     rx="3"
+     fill="#fef3c7"
+     stroke="#d97706"
+     stroke-width="1.5"
+     stroke-dasharray="5,3"
+     id="rect20" />
+  <text
+     x="400"
+     y="91"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#92400e"
+     id="text21">seg2 provisional  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·</text>
+  <!-- Shard 0 note (Block N) -->
+  <text
+     x="180"
+     y="110"
+     font-size="7.5"
+     fill="#93c5fd"
+     font-style="italic"
+     id="text22">seg0 committed; seg1 &amp; seg2 staged; receipts dispatched at block boundary</text>
+  <!-- ================================================================ -->
+  <!-- BLOCK N+1 — Receipts processed at contract shards                -->
+  <!-- ================================================================ -->
+  <!-- Shard 1: processing Tx seg1 -->
+  <rect
+     x="414"
+     y="192"
+     width="100"
+     height="24"
+     rx="3"
+     fill="#ddd6fe"
+     stroke="#6d28d9"
+     stroke-width="1.5"
+     id="rect22" />
+  <text
+     x="464"
+     y="208"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#3b0764"
+     font-weight="bold"
+     id="text23">seg1 · processing</text>
+  <!-- Shard 2: processing Tx seg2 -->
+  <rect
+     x="414"
+     y="300"
+     width="100"
+     height="24"
+     rx="3"
+     fill="#ddd6fe"
+     stroke="#6d28d9"
+     stroke-width="1.5"
+     id="rect23" />
+  <text
+     x="464"
+     y="316"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#3b0764"
+     font-weight="bold"
+     id="text24">seg2 · processing</text>
+  <!-- ================================================================ -->
+  <!-- BLOCK N+2 — Receipts return; partial rollback on Shard 0         -->
+  <!-- ================================================================ -->
+  <!-- seg1 COMMITTED -->
+  <rect
+     x="644"
+     y="48"
+     width="105"
+     height="22"
+     rx="3"
+     fill="#bbf7d0"
+     stroke="#15803d"
+     stroke-width="2"
+     id="rect24" />
+  <text
+     x="696"
+     y="63"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#14532d"
+     font-weight="bold"
+     id="text25">seg1 committed  ✓</text>
+  <!-- seg2 ROLLED BACK (hatched red) -->
+  <rect
+     x="644"
+     y="76"
+     width="105"
+     height="22"
+     rx="3"
+     fill="url(#hatch-red)"
+     stroke="#b91c1c"
+     stroke-width="2"
+     id="rect25" />
+  <rect
+     x="644"
+     y="76"
+     width="105"
+     height="22"
+     rx="3"
+     fill="#fecaca"
+     stroke="#b91c1c"
+     stroke-width="2"
+     opacity="0.6"
+     id="rect26" />
+  <text
+     x="696"
+     y="91"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#7f1d1d"
+     font-weight="bold"
+     id="text26">seg2 rolled back  ✗</text>
+  <!-- SucceedPartially callout -->
+  <rect
+     x="758"
+     y="42"
+     width="196"
+     height="65"
+     rx="5"
+     fill="white"
+     stroke="#475569"
+     stroke-width="1.2"
+     id="rect27" />
+  <text
+     x="856"
+     y="57"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#475569"
+     font-weight="bold"
+     id="text27">Tx outcome:</text>
+  <text
+     x="856"
+     y="72"
+     text-anchor="middle"
+     font-size="10"
+     fill="#b45309"
+     font-weight="bold"
+     id="text28">SucceedPartially</text>
+  <text
+     x="856"
+     y="87"
+     text-anchor="middle"
+     font-size="8"
+     fill="#64748b"
+     id="text29">{ seg1: true,  seg2: false }</text>
+  <text
+     x="856"
+     y="101"
+     text-anchor="middle"
+     font-size="7.5"
+     fill="#94a3b8"
+     font-style="italic"
+     id="text30">first-class outcome — not an error</text>
+  <!-- Shard 1: SUCCESS result -->
+  <!-- Shard 2: FAILURE result -->
+  <!-- ================================================================ -->
+  <!-- RECEIPT ARROWS                                                    -->
+  <!-- ================================================================ -->
+  <!-- ④ dispatch → Shard 1  (at Block N / N+1 boundary) -->
+  <line
+     x1="396"
+     y1="62"
+     x2="413"
+     y2="191"
+     stroke="#4a5568"
+     stroke-width="1.8"
+     stroke-dasharray="6,3"
+     marker-end="url(#ah-gray)"
+     id="line32" />
+  <!-- ④ dispatch → Shard 2 -->
+  <line
+     x1="396"
+     y1="89"
+     x2="413"
+     y2="299"
+     stroke="#4a5568"
+     stroke-width="1.8"
+     stroke-dasharray="6,3"
+     marker-end="url(#ah-gray)"
+     id="line33" />
+  <!-- ④ label (between the two dispatch lines) -->
+  <text
+     x="413"
+     y="157"
+     font-size="7.5px"
+     fill="#4a5568"
+     font-weight="bold"
+     id="text34">dispatch</text>
+  <text
+     x="413"
+     y="168"
+     font-size="7.5px"
+     fill="#4a5568"
+     font-weight="bold"
+     id="text35">receipts</text>
+  <!-- ⑤a SUCCESS receipt  Shard 1 → Shard 0  (at Block N+1 / N+2 boundary) -->
+  <line
+     x1="644"
+     y1="201"
+     x2="651"
+     y2="67"
+     stroke="#15803d"
+     stroke-width="2"
+     marker-end="url(#ah-green)"
+     id="line35" />
+  <!-- ⑤b FAILURE receipt  Shard 2 → Shard 0 -->
+  <line
+     x1="656"
+     y1="312"
+     x2="667"
+     y2="93"
+     stroke="#b91c1c"
+     stroke-width="2"
+     marker-end="url(#ah-red)"
+     id="line36" />
+  <!-- ⑤ SUCCESS label -->
+  <text
+     x="596"
+     y="147"
+     font-size="7.5px"
+     fill="#15803d"
+     font-weight="bold"
+     id="text37">SUCCESS</text>
+  <!-- ⑤ FAILURE label -->
+  <text
+     x="668"
+     y="240"
+     font-size="7.5px"
+     fill="#b91c1c"
+     font-weight="bold"
+     id="text39">FAILURE</text>
+  <!-- ================================================================ -->
+  <!-- LEGEND                                                            -->
+  <!-- ================================================================ -->
+  <rect
+     x="140"
+     y="392"
+     width="830"
+     height="22"
+     rx="4"
+     fill="white"
+     stroke="#cbd5e0"
+     stroke-width="1"
+     id="rect39" />
+  <rect
+     x="150"
+     y="399"
+     width="12"
+     height="9"
+     rx="2"
+     fill="#bbf7d0"
+     stroke="#15803d"
+     stroke-width="1.2"
+     id="rect40" />
+  <text
+     x="167"
+     y="407"
+     font-size="8"
+     fill="#374151"
+     id="text40">Guaranteed / committed</text>
+  <rect
+     x="295"
+     y="399"
+     width="12"
+     height="9"
+     rx="2"
+     fill="#fef3c7"
+     stroke="#d97706"
+     stroke-width="1.2"
+     stroke-dasharray="3,2"
+     id="rect41" />
+  <text
+     x="312"
+     y="407"
+     font-size="8"
+     fill="#374151"
+     id="text41">Provisional (staged)</text>
+  <rect
+     x="425"
+     y="399"
+     width="12"
+     height="9"
+     rx="2"
+     fill="#fecaca"
+     stroke="#b91c1c"
+     stroke-width="1.2"
+     id="rect42" />
+  <text
+     x="442"
+     y="407"
+     font-size="8"
+     fill="#374151"
+     id="text42">Rolled back</text>
+  <rect
+     x="520"
+     y="399"
+     width="12"
+     height="9"
+     rx="2"
+     fill="#ddd6fe"
+     stroke="#6d28d9"
+     stroke-width="1.2"
+     id="rect43" />
+  <text
+     x="537"
+     y="407"
+     font-size="8"
+     fill="#374151"
+     id="text43">Contract processing</text>
+  <line
+     x1="640"
+     y1="404"
+     x2="660"
+     y2="404"
+     stroke="#4a5568"
+     stroke-width="1.5"
+     stroke-dasharray="4,2"
+     id="line43" />
+  <polygon
+     points="660,401 665,404 660,407"
+     fill="#4a5568"
+     id="polygon43" />
+  <text
+     x="670"
+     y="408"
+     font-size="8"
+     fill="#374151"
+     id="text44">④ action receipt dispatch</text>
+  <line
+     x1="780"
+     y1="404"
+     x2="800"
+     y2="404"
+     stroke="#15803d"
+     stroke-width="1.5"
+     id="line44" />
+  <polygon
+     points="800,401 805,404 800,407"
+     fill="#15803d"
+     id="polygon44" />
+  <line
+     x1="825"
+     y1="404"
+     x2="845"
+     y2="404"
+     stroke="#b91c1c"
+     stroke-width="1.5"
+     id="line45" />
+  <polygon
+     points="845,401 850,404 845,407"
+     fill="#b91c1c"
+     id="polygon45" />
+  <text
+     x="855"
+     y="408"
+     font-size="8"
+     fill="#374151"
+     id="text45">⑤ receipt return</text>
+  <rect
+     x="644"
+     y="300"
+     width="100"
+     height="24"
+     rx="3"
+     fill="#fecaca"
+     stroke="#b91c1c"
+     stroke-width="1.8"
+     id="rect31" />
+  <text
+     x="694"
+     y="316"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#7f1d1d"
+     font-weight="bold"
+     id="text32">seg2 · FAILURE  ✗</text>
+  <rect
+     x="644"
+     y="189"
+     width="100"
+     height="24"
+     rx="3"
+     fill="#bbf7d0"
+     stroke="#15803d"
+     stroke-width="1.8"
+     id="rect30" />
+  <text
+     x="694"
+     y="205"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#14532d"
+     font-weight="bold"
+     id="text31"
+     inkscape:export-filename="midnight-near-sharding-flow.png"
+     inkscape:export-xdpi="150"
+     inkscape:export-ydpi="150">seg1 · SUCCESS  ✓</text>
+</svg>

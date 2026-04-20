@@ -1,0 +1,17 @@
+{
+  "bootnodes": [
+    "/dns/preprod/tcp/30333/p2p/12D3KooWDU3ydya1JaGttYuorL2e6EnZrEBzmWH1fGef1NnsSmtF"
+  ],
+  "chain_parameters": {
+    "genesis_utxo": "0000000000000000000000000000000000000000000000000000000000000000#0"
+  },
+  "cardano": {
+    "security_parameter": 2160,
+    "active_slots_coeff": 0.05,
+    "first_epoch_number": 4,
+    "first_slot_number": 86400,
+    "epoch_duration_millis": 432000000,
+    "first_epoch_timestamp_millis": 1655769600000,
+    "slot_duration_millis": 1000
+  }
+}

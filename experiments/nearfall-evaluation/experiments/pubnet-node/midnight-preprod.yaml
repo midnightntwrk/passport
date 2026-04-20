@@ -1,0 +1,91 @@
+# Podman Kubernetes YAML — Midnight node (preprod)
+# Usage:
+#   podman kube play midnight-preprod.yaml
+#   podman kube down midnight-preprod.yaml   # to stop
+#
+# The host directory ./data/preprod is mounted at /data for chain state.
+# Create it before starting: mkdir -p data/preprod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: midnight-preprod
+spec:
+  restartPolicy: Always
+  containers:
+    - name: node
+      image: docker.io/bwbush/midnight-node:0.22.2-patched
+      args:
+        - --log
+        - sidechain_mc_hash=error,partner_chains_db_sync_data_sources::block=error,sp_partner_chains_bridge=warn,midnight_node::some_module=warn
+        - --bootnodes
+        - /dns/bootnode-1.preprod.midnight.network/tcp/30333/ws/p2p/12D3KooWQxxUgq7ndPfAaCFNbAxtcKYxrAzTxDfRGNktF75SxdX5
+        - --bootnodes
+        - /dns/bootnode-2.preprod.midnight.network/tcp/30333/ws/p2p/12D3KooWNrUBs22FfmgjqFMa9ZqKED2jnxwsXWw5E4q2XVwN35TJ
+        - --chain
+        - /res/preprod/chain-spec-raw.json
+        - --state-pruning
+        - archive
+        - --blocks-pruning
+        - archive
+        - --port
+        - "30333"
+        - --rpc-port
+        - "9944"
+        - --rpc-methods=Safe
+        - --rpc-external
+        - --rpc-cors
+        - all
+      env:
+        - name: CFG_PRESET
+          value: preprod
+        - name: BASE_PATH
+          value: /data
+        - name: VALIDATOR
+          value: "false"
+        - name: NODE_KEY
+          value: "0a0076255e6b232f8656cb3f2516a16680639eb3dc4589cc12b090a1496131d7"
+        - name: DB_SYNC_POSTGRES_CONNECTION_STRING
+          value: "psql://cardano:bcb33b5c09e31e3dd5a2b4ff0ee111e6@192.168.1.11:5432/preprod?sslmode=disable"
+        - name: CARDANO_SECURITY_PARAMETER
+          value: "432"
+      ports:
+        - containerPort: 9615
+          hostPort: 9615
+        - containerPort: 9944
+          hostPort: 9944
+        - containerPort: 30333
+          hostPort: 30333
+      volumeMounts:
+        - mountPath: /data
+          name: data
+    - name: indexer
+      image: docker.io/midnightntwrk/indexer-standalone:4.0.1
+      env:
+        - name: APP__APPLICATION__NETWORK_ID
+          value: preprod
+        - name: APP__INFRA__SECRET
+          value: "0a0076255e6b232f8656cb3f2516a16680639eb3dc4589cc12b090a1496131d7"
+        - name: APP__INFRA__NODE__URL
+          value: ws://localhost:9944
+        - name: RUST_LOG
+          value: indexer=info,chain_indexer=info,indexer_api=info,wallet_indexer=info,indexer_common=info,fastrace_opentelemetry=info,info
+      ports:
+        - containerPort: 8088
+          hostPort: 8088
+      volumeMounts:
+        - mountPath: /data
+          name: data
+    - name: proofserver
+      image: docker.io/midnightntwrk/proof-server:8.0.3
+      args:
+        - --
+        - midnight-proof-server
+        - -v
+      ports:
+        - containerPort: 6300
+          hostPort: 6300
+  volumes:
+    - name: data
+      hostPath:
+        path: ./preprod
+        type: DirectoryOrCreate

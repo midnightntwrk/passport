@@ -1,0 +1,8 @@
+{
+  "version": 3,
+  "file": "index.js",
+  "sourceRoot": "../../../../",
+  "sources": ["contracts/fungible-token.compact", "compiler/standard-library.compact"],
+  "names": [],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;EAWA;;;;;;;;;;;;;MAiBA,AAAA,IAuCC;;;;;cAvCmB,QAAgB;cAAE,gBAAyB;;;;;;;;;;;;;;;;;;;;;;;;;yCAA3C,QAAgB,+BAAE,gBAAyB;;;;;;;;;sCAA3C,QAAgB;sCAAE,gBAAyB;;;OAuC9D;;;GArDA;EAHD;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;IALA;;;;;;;;;yEAAqC;IACrC;;;;;;;;;yEAAmC;UAK/B,KAAY;IAAZ;;;;;;;2HAAA,KAAY;;yEAAA;UACZ,KAAU;IAAV;;;;;;;2HAAA,KAAU;;yEAAA;;;;;;;GACb;ECuBD,AAAA,QAA0B;kCACkB;;EA+F5C,AAAA,aAAyB,cAAuB;qCACC,cAAY;;;EAG7D,AAAA;;uBACE;uBACA;uBACA;uBACA;;UAEM,kBAAiC;;yCAAwB;iEAAY;;;;;;;;;;;;4BAAuB;IAClG;;;;;;;;;;;2HAAoB;;;;;;2HAAY;;;;;;;;;;;;;yDACd,QAAM;UAClB,8BAAoB,QAAM;IAChC;;;;;;;;;;;2HAA2B;;;;;;SAEtB;;sBAAqB;8CAAyB;;;;;;;;;;;;;MACjD;;;;;;;;;;;6HAA6B;;;;;;;WAExB;;EAgHT,AAAA,kBACE,QACA;;;0CAKU;8CACI;;sCACJ;sCAAoB;sCAAuB;;EAjRvD,AAAA,kBAAA;oEAAA;;;EAAA,AAAA,oBAAA,SAAA;;uDAAA;uDAAA;;;EAAA,AAAA,gDAAA,QAAA;;wDAAA;wDAAA;;;;;;;EDwBA,AAAA,4BAAwD;;0DAAxD,yBAAwD;;;;;;;;;;;;;;GAAA;EAIxD,AAAA,OAuCC,4BAvCmB,QAAgB,EAAE,gBAAyB;UAIrD,WAAiD;;UAKjD,kBAAmC,GAAP,QAAM;UACxC,KAAY;;;;;6CAAI;;;;;;;;;;;kHAAY;;qBAAG,kBAAgB;IAA/C;;;;;;;2HAAA,KAAY;;yEAAA;UAGN,oBAA6C,GAAf,gBAAc;UAMlD,KAAU;;;;;6CAAI;;;;;;;;;;;kHAAU;;;IAAxB;;;;;;;2HAAA,KAAU;;yEAAA;UAMJ,WAA6D;;;UAK7D,cAAiD;wFAAjC;;;;;;;;;;;6JAAU;;UAK1B,qBAA0E,gBAAV,WAAS;;;8BAG7D,oBAAkB;8BAAE,kBAAgB;8BAAE,cAAY;8BAAE,qBAAmB;;GAC5F;;;;;;;;;;;;;;;;;;;;IA7DD;qCAAA;;;;;;;;;;;0GAAqC;KAAA;IACrC;qCAAA;;;;;;;;;;;0GAAmC;KAAA;;;;;;;;;;;;"
+}

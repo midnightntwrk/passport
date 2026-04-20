@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/*.tmp)",
+      "Read(**/*.log)",
+      "Read(**/*.log.gz)",
+      "Read(**/*.gz)",
+      "Read(**/*.m4a)",
+      "Read(**/tmp/**)",
+      "Read(**/dist/**)",
+      "Read(**/target/**)",
+      "Read(**/node_modules/**)",
+      "Read(.npm-global/**)",
+      "Read(midnight-level-db/**)",
+      "Read(experiments/node-lan/node-?/**)",
+      "Read(experiments/near-exploration/node/**)",
+      "Read(midnight-env/preprod/**)"
+    ]
+  }
+}

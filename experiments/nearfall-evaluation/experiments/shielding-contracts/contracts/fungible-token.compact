@@ -1,0 +1,68 @@
+pragma language_version >= 0.18.0;
+
+import CompactStandardLibrary;
+
+// --- PUBLIC STATE ---
+// This data is transparent and visible to the entire network.
+export ledger total_supply: Uint<64>;
+export ledger mint_nonce: Uint<64>; // Added to ensure cryptographic uniqueness
+
+// --- CONSTRUCTOR ---
+// Executes exactly once when the developer deploys the contract to the network.
+constructor() {
+    total_supply = 0 as Uint<64>;
+    mint_nonce = 0 as Uint<64>;
+}
+
+// --- WITNESSES (PRIVATE / OFF-CHAIN) ---
+// Witnesses execute locally inside the user's Proof Server. 
+// This asks the user's wallet for their shielded Zswap address without 
+// ever leaking that address into the public transaction payload.
+//
+// NOTE: Depending on your exact compiler version:
+// - Compiler <= 0.29 (Ledger v7): Use `ZswapCoinPublicKey`
+// - Compiler >= 0.30 (Ledger v8): Use `JubjubPoint`
+witness get_user_shielded_address(): ZswapCoinPublicKey; 
+
+// --- CIRCUITS (ON-CHAIN VERIFICATION) ---
+// Circuits contain the core logic. They are compiled into ZK-SNARKs.
+export circuit mint(amount: Uint<64>, token_id_bytes: Bytes<32>): [] {
+    // 1. Fetch the user's private shielded address locally.
+    // We wrap it in disclose() to acknowledge that minting a token
+    // to this address implies a cryptographic link to the network.
+    const recipient = disclose(get_user_shielded_address());
+    
+    // 2. Update the public state
+    // amount is treated as a witness (private) by default. Since we are 
+    // adding it to the public total_supply, we must explicitly disclose it.
+    const disclosed_amount = disclose(amount);
+    total_supply = (total_supply + disclosed_amount) as Uint<64>;
+    
+    // 2a. We must disclose the token_id since we pass it to a public Zswap event
+    const disclosed_token_id = disclose(token_id_bytes);
+    
+    // 3. Increment the unique nonce
+    // Zswap commitments must be cryptographically unique. If you mint the 
+    // exact same amount to the exact same address twice, the network would 
+    // reject it as a duplicate coin without a unique nonce.
+    mint_nonce = (mint_nonce + 1) as Uint<64>;
+    
+    // 4. Prepare the arguments for mintShieldedToken()
+    
+    // Arg 1: Token/Coin Type (Bytes<32>). We use 0 since we only have one token type.
+    // Compact requires strict casting: Uint<64> -> Field -> Bytes<32>
+    const coin_type = disclose(((0 as Uint<64>) as Field) as Bytes<32>);
+    
+    // Arg 2: Amount (already explicitly disclosed above)
+    
+    // Arg 3: Unique Nonce (Bytes<32>). Cast our incremented nonce to Bytes<32>.
+    const unique_nonce = (mint_nonce as Field) as Bytes<32>;
+    
+    // Arg 4: Recipient (Either<ZswapCoinPublicKey, ContractAddress>)
+    // Because a token can be sent to a user OR a contract, we wrap our 
+    // user address in an 'Either' type using 'left'.
+    const recipient_formatted = left<ZswapCoinPublicKey, ContractAddress>(recipient);
+    
+    // 5. Mint the shielded tokens
+    mintShieldedToken(disclosed_token_id, disclosed_amount, unique_nonce, recipient_formatted);
+}

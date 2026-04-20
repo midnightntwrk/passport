@@ -1,0 +1,124 @@
+pragma language_version 0.21;
+
+import CompactStandardLibrary;
+
+// ─── Registration ─────────────────────────────────────────────────────────────
+//
+// Human-readable name, e.g. "alice.midnight".
+export ledger name: Opaque<"string">;
+
+// Stealth meta-address components stored as NativePoint (Jubjub curve points).
+//
+// k_scan:  K_scan = k_scan_scalar * G.  Senders compute r*K_scan (ECDH with
+//          fresh ephemeral scalar r) to derive a shared secret.  The owner
+//          uses k_scan_scalar to recognise incoming payments without
+//          revealing k_spend_scalar.
+//
+// k_spend: K_spend = k_spend_scalar * G.  Combined with the ECDH result,
+//          the one-time stealth address is P = K_spend + hash_to_curve(r*K_scan).
+//          Ownership is proved via ZK in the claim circuit.
+export ledger k_scan:  NativePoint;
+export ledger k_spend: NativePoint;
+
+// Set or update the registration atomically.
+// Authorisation guard (ZK proof of k_spend knowledge) is deferred to the
+// next iteration.
+export circuit register(
+  newName:   Opaque<"string">,
+  newKScan:  NativePoint,
+  newKSpend: NativePoint
+): [] {
+  name    = disclose(newName);
+  k_scan  = disclose(newKScan);
+  k_spend = disclose(newKSpend);
+}
+
+// ─── Unshielded escrow ────────────────────────────────────────────────────────
+//
+// Single pending output slot (one unshielded tDUST transfer at a time).
+// A production system would use Map<Field, …> for concurrent outputs.
+//
+// pending_R      — R = r*G, the ephemeral public key published by the sender.
+// pending_P      — P = K_spend + hash_to_curve(r*K_scan), the stealth address.
+// pending_amount — tDUST quantity held in escrow; zero means no pending output.
+
+export ledger pending_R:      NativePoint;
+export ledger pending_P:      NativePoint;
+export ledger pending_amount: Uint<64>;
+
+// send: Bob provides his ephemeral scalar r and the pre-computed stealth
+// address P as private witnesses, along with the tDUST amount.  The circuit
+// derives R = r·G and stores R and P publicly so Alice can scan.
+//
+// P is not verified in-circuit because computing hash(S) mod JUBJUB_R inside
+// Compact is not currently possible: persistentHash returns Bytes<32> which
+// casts to a BLS12-381 Fr element (~255-bit), but ecMulGenerator requires a
+// Jubjub scalar (EmbeddedFr, ~252-bit).  Bob has no incentive to store a
+// wrong P — it would simply lock his own funds.
+//
+// NOTE: the CompactStandardLibrary API for accepting/releasing native tDUST in
+// a circuit is not yet confirmed; the escrow accounting is logically correct
+// but may require adjustment once the payment API is verified.
+
+export circuit send(r: Field, P: NativePoint, amount: Uint<64>): [] {
+  const R        = ecMulGenerator(r);
+  pending_R      = disclose(R);
+  pending_P      = disclose(P);
+  pending_amount = disclose(amount);
+}
+
+// claim: Alice provides her private k_scan_scalar, k_spend_scalar, and the
+// stealth scalar h as witnesses.  The circuit:
+//   1. Verifies k_scan_scalar and k_spend_scalar correspond to the registered
+//      public keys.
+//   2. Verifies the one-time address: P_expected = K_spend + h·G == pending_P.
+//   3. Clears the pending slot.
+//
+// h = persistentHash(k_scan_scalar · R) mod JUBJUB_R is computed in TypeScript
+// (where modular reduction is trivial) and passed as a witness.  The circuit
+// cannot recompute it because Bytes<32>→Field gives a BLS12-381 Fr element
+// that may exceed JUBJUB_R, causing ecMulGenerator to fail at runtime.
+// Security is preserved: an adversary who does not know k_spend_scalar cannot
+// find a valid h (that would require solving DLP on the Jubjub curve).
+//
+// Privacy note: because there is only one pending slot, Bob→Alice linkability
+// is implicit in this PoC.  A nullifier-based Map design removes this.
+
+export circuit claim(k_scan_scalar: Field, k_spend_scalar: Field, h: Field): [] {
+  // Verify the supplied private scalars correspond to the registered public keys.
+  const K_scan_check  = ecMulGenerator(k_scan_scalar);
+  const K_spend_check = ecMulGenerator(k_spend_scalar);
+  assert(K_scan_check.x  == k_scan.x,  "k_scan x mismatch");
+  assert(K_scan_check.y  == k_scan.y,  "k_scan y mismatch");
+  assert(K_spend_check.x == k_spend.x, "k_spend x mismatch");
+  assert(K_spend_check.y == k_spend.y, "k_spend y mismatch");
+
+  // Verify the one-time stealth address P = K_spend + h·G.
+  const hG         = ecMulGenerator(h);
+  const P_expected = ecAdd(k_spend, hG);
+  assert(P_expected.x == pending_P.x, "stealth point x mismatch");
+  assert(P_expected.y == pending_P.y, "stealth point y mismatch");
+
+  // Clear the escrow slot.
+  pending_amount = 0 as Uint<64>;
+
+  // TODO: transfer pending_amount tDUST to the caller's address.
+  // The CompactStandardLibrary payment release API needs to be confirmed
+  // before this can be completed.
+}
+
+// ─── Shielded path: ephemeral-key bulletin board ──────────────────────────────
+//
+// For shielded stealth sends, Bob creates the ZSwap output off-chain (wallet
+// SDK) and calls publish_ephemeral so Alice can scan.
+//
+// LIMITATION: hash_to_curve has unknown discrete log, so spending a shielded
+// coin at P requires a hash-to-scalar function (deferred to next iteration).
+//
+// shielded_R stores only the most recent ephemeral key.
+
+export ledger shielded_R: NativePoint;
+
+export circuit publish_ephemeral(r: Field): [] {
+  shielded_R = disclose(ecMulGenerator(r));
+}

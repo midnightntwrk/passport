@@ -1,0 +1,173 @@
+pragma language_version >= 0.18.0;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Compliance tier contract — local TEE proof of concept
+//
+// Demonstrates the TEE device key registration pattern:
+//   - A TEE device holds sk_device (random scalar in TrustZone/SGX).
+//   - At registration the circuit computes pk = sk·G in-circuit (ecMulGenerator).
+//     No off-chain Jubjub arithmetic is needed in TypeScript.
+//   - Subsequent updates use Schnorr signature verification:
+//       s·G == R + c·device_pk   where c = Hash(R ‖ device_pk ‖ message ‖ update_count)
+//     sk_device never leaves the TEE for update calls; only the signature (R, s) does.
+//   - Two exported pure circuits (compute_nonce_point, compute_schnorr_challenge)
+//     allow the TypeScript stub TEE to produce correct signatures using the same
+//     curve parameters and hash function as the ZK circuit, without any external
+//     Jubjub library.
+//   - The identity_commitment is stored in PRIVATE ledger state (LevelDB only;
+//     never appears on-chain). The compliance_tier IS public.
+//
+// Circuits:
+//   register_device(sk_device)              — one-time; sets device_pk
+//   update_compliance(R, s, tier, hash)     — Schnorr-authorised state update
+//   reset_device()                          — emergency reset (no auth — PoC only)
+//
+// Pure helper circuits (callable from TypeScript without a ZK proof):
+//   compute_nonce_point(r)                  — returns r·G for Schnorr nonce
+//   compute_schnorr_challenge(R, pk, ...)   — returns raw Bytes<32> hash (caller retries until < JUBJUB_R)
+// ---------------------------------------------------------------------------
+
+// ── Public ledger state (on-chain, visible to all observers) ────────────────
+
+export ledger compliance_tier: Uint<8>;
+// 0 = unverified  1 = basic KYC  2 = enhanced KYC  3 = institutional
+
+export ledger device_registered: Boolean;
+
+export ledger device_pk: NativePoint;
+// Jubjub point — the TEE device's public key: pk = sk_device · G
+
+export ledger update_count: Uint<64>;
+// Monotonically increasing; bound into every Schnorr challenge for replay protection
+
+// ── Private ledger state (LevelDB only, never on-chain) ─────────────────────
+
+ledger identity_commitment: Field;
+// Pedersen/SHA hash of (name ‖ date_of_birth ‖ jurisdiction_code) or similar.
+// Non-exported: not accessible via the public ledger() ABI function / indexer.
+// A regulator with knowledge of the PII can verify the commitment matches.
+// Note: Compact requires disclose() even for non-exported ledger fields when
+// the value is a circuit witness parameter.  The precise on-chain footprint of
+// non-exported fields warrants further investigation (see ReadMe).
+
+// ── Constructor ──────────────────────────────────────────────────────────────
+
+constructor() {
+  compliance_tier   = 0 as Uint<8>;
+  device_registered = false as Boolean;
+  update_count      = 0 as Uint<64>;
+  // device_pk and identity_commitment have zero-value defaults from the runtime
+}
+
+// ── Register device ──────────────────────────────────────────────────────────
+//
+// Called once when the user first activates their TEE device.
+//
+// sk_device is supplied by the TEE as a private ZK witness; it never appears
+// in any public output. The circuit derives pk = sk_device · G using the
+// generator point (ecMulGenerator), then discloses pk to on-chain state.
+//
+// After this call, device_pk is the contract's ground truth for TEE identity.
+
+export circuit register_device(sk_device: Field): [] {
+  assert(device_registered == false, "device already registered");
+  const pk: NativePoint = ecMulGenerator(sk_device);
+  device_pk         = disclose(pk);
+  device_registered = disclose(true as Boolean);
+}
+
+// ── Update compliance state ───────────────────────────────────────────────────
+//
+// Called by the TEE on behalf of the user after KYC verification.
+//
+// Uses Schnorr signature verification over the Jubjub curve:
+//   c = intLE(persistentHash(R ‖ device_pk ‖ new_tier ‖ new_ic ‖ update_count ‖ nonce)) as Field
+//   assert s·G == R + c·device_pk
+//
+// sk_device is NOT a circuit parameter — it stays inside the TEE.
+// The TEE computes the Schnorr nonce r (deterministic via HKDF), derives
+// R = r·G and c = Hash(...), then returns s = (r + c·sk) mod JUBJUB_R.
+//
+// The `nonce` parameter is a retry counter chosen by the TEE so that the
+// hash value (interpreted as a little-endian integer) is < JUBJUB_R.
+// This ensures ecMul(device_pk, c) never encounters an EmbeddedFr decode
+// failure.  The TEE iterates nonce = 0, 1, 2, … until the hash is in range;
+// on average ~17 iterations are needed (~5.7% success probability per try).
+// (See lessons-learned.md §10.)
+
+export circuit update_compliance(
+  sig_r:                   NativePoint, // Schnorr nonce point R = r·G
+  sig_s:                   Field,       // Schnorr response s = r + c·sk_device (mod JUBJUB_R)
+  new_tier:                Uint<8>,
+  new_identity_commitment: Field,
+  nonce:                   Uint<64>,    // retry nonce: chosen so that hash < JUBJUB_R
+): [] {
+  assert(device_registered, "no device registered");
+
+  // Schnorr challenge: bind to all mutable message fields and update_count.
+  // update_count prevents replay: each successful call increments it, so an
+  // old (R, s) pair is invalid for the next call even with identical other params.
+  // nonce is included so the TEE can retry with different nonces if the hash
+  // value (as a little-endian integer) would exceed JUBJUB_R.
+  const h: Bytes<32> = persistentHash<[NativePoint, NativePoint, Uint<8>, Field, Uint<64>, Uint<64>]>(
+    [sig_r, device_pk, new_tier, new_identity_commitment, update_count, nonce]
+  );
+  const c: Field = h as Field;
+  // h as Field is range-checked against FIELD_MODULUS.  The TEE ensures h < JUBJUB_R
+  // (< FIELD_MODULUS) before calling this circuit, so the cast always succeeds.
+
+  // Schnorr verification: s·G == R + c·device_pk
+  assert(
+    ecMulGenerator(sig_s) == ecAdd(sig_r, ecMul(device_pk, c)),
+    "invalid device signature"
+  );
+
+  compliance_tier     = disclose(new_tier);
+  update_count        = disclose((update_count + (1 as Uint<64>)) as Uint<64>);
+  identity_commitment = disclose(new_identity_commitment);
+}
+
+// ── Reset device (PoC only — no auth) ────────────────────────────────────────
+//
+// Allows re-registration with a new device key.
+// In a production design this would require a ZK-path recovery secret.
+// Kept permissionless here to reduce PoC friction.
+
+export circuit reset_device(): [] {
+  device_registered = disclose(false as Boolean);
+  compliance_tier   = disclose(0 as Uint<8>);
+  update_count      = disclose(0 as Uint<64>);
+}
+
+// ── Pure helper circuits ──────────────────────────────────────────────────────
+//
+// Exported pure circuits are callable from TypeScript without generating a
+// ZK proof (pureCircuits.compute_nonce_point(...)).  They let the stub TEE
+// compute the Schnorr nonce point and challenge using the same curve
+// parameters and hash function as the update_compliance circuit above,
+// without requiring an external Jubjub library in the host application.
+
+// Compute R = r·G for a given nonce scalar r.
+// The TypeScript stub TEE uses this to derive the Schnorr nonce point.
+export pure circuit compute_nonce_point(r: Field): NativePoint {
+  return ecMulGenerator(r);
+}
+
+// Compute the raw Schnorr challenge hash for a given (R, pk, message, update_count, nonce).
+// Returns Bytes<32> so the TypeScript caller can inspect the value and retry with a
+// different nonce if the little-endian integer representation is >= JUBJUB_R.
+// Must mirror the hash expression in update_compliance exactly.
+export pure circuit compute_schnorr_challenge(
+  sig_r:                   NativePoint,
+  pk:                      NativePoint,
+  new_tier:                Uint<8>,
+  new_identity_commitment: Field,
+  current_update_count:    Uint<64>,
+  nonce:                   Uint<64>,
+): Bytes<32> {
+  return persistentHash<[NativePoint, NativePoint, Uint<8>, Field, Uint<64>, Uint<64>]>(
+    [sig_r, pk, new_tier, new_identity_commitment, current_update_count, nonce]
+  );
+}

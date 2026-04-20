@@ -1,0 +1,5 @@
+contracts/managed/
+dist/
+midnight-level-db/
+deployment.json
+*.midnight.json

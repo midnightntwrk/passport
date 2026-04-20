@@ -1,0 +1,878 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 920 650"
+   width="920"
+   height="650"
+   font-family="Arial, Helvetica, sans-serif"
+   version="1.1"
+   id="svg69"
+   sodipodi:docname="midnight-near-sharding-design.svg"
+   inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
+   inkscape:export-filename="midnight-near-sharding-design.png"
+   inkscape:export-xdpi="150"
+   inkscape:export-ydpi="150"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview69"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.4323077"
+     inkscape:cx="562.03007"
+     inkscape:cy="327.09452"
+     inkscape:window-width="1889"
+     inkscape:window-height="1176"
+     inkscape:window-x="31"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg69"
+     showgrid="false" />
+  <defs
+     id="defs4">
+    <marker
+       id="arr-blue"
+       viewBox="0 0 8 8"
+       refX="7"
+       refY="4"
+       markerWidth="5"
+       markerHeight="5"
+       orient="auto">
+      <path
+         d="M0,0 L8,4 L0,8 Z"
+         fill="#2b6cb0"
+         id="path1" />
+    </marker>
+    <marker
+       id="arr-gray"
+       viewBox="0 0 8 8"
+       refX="7"
+       refY="4"
+       markerWidth="5"
+       markerHeight="5"
+       orient="auto">
+      <path
+         d="M0,0 L8,4 L0,8 Z"
+         fill="#4a5568"
+         id="path2" />
+    </marker>
+    <marker
+       id="arr-green"
+       viewBox="0 0 8 8"
+       refX="7"
+       refY="4"
+       markerWidth="5"
+       markerHeight="5"
+       orient="auto">
+      <path
+         d="M0,0 L8,4 L0,8 Z"
+         fill="#2f855a"
+         id="path3" />
+    </marker>
+    <marker
+       id="arr-red"
+       viewBox="0 0 8 8"
+       refX="7"
+       refY="4"
+       markerWidth="5"
+       markerHeight="5"
+       orient="auto">
+      <path
+         d="M0,0 L8,4 L0,8 Z"
+         fill="#c53030"
+         id="path4" />
+    </marker>
+  </defs>
+  <!-- Background -->
+  <rect
+     width="920"
+     height="650"
+     fill="#f7f8fc"
+     id="rect4" />
+  <!-- ====== TITLE ====== -->
+  <text
+     x="460"
+     y="26"
+     text-anchor="middle"
+     font-size="15"
+     font-weight="bold"
+     fill="#1a202c"
+     id="text4">
+    Midnight-on-NEAR: Ledger Kernel Sharding Design
+  </text>
+  <text
+     x="460"
+     y="44"
+     text-anchor="middle"
+     font-size="10"
+     fill="#718096"
+     id="text5"
+     style="-inkscape-font-specification:'Arial, Helvetica, sans-serif, Normal';font-family:Arial, Helvetica, sans-serif;font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;font-size:10px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#718096"><tspan
+       sodipodi:role="line"
+       id="tspan72">Transaction anatomy and commit/rollback flow</tspan></text>
+  <!-- ====== ① Transaction arrives ====== -->
+  <circle
+     cx="210"
+     cy="55"
+     r="12"
+     fill="#2b6cb0"
+     id="circle5" />
+  <text
+     x="210"
+     y="60"
+     text-anchor="middle"
+     font-size="12"
+     fill="white"
+     font-weight="bold"
+     id="text6">①</text>
+  <line
+     x1="210"
+     y1="67"
+     x2="210"
+     y2="75"
+     stroke="#2b6cb0"
+     stroke-width="2.5"
+     marker-end="url(#arr-blue)"
+     id="line6" />
+  <text
+     x="227"
+     y="59"
+     font-size="10"
+     fill="#2b6cb0"
+     font-weight="bold"
+     id="text7">Transaction arrives at Shard 0</text>
+  <!-- ====== SHARD 0 outer box ====== -->
+  <rect
+     x="12"
+     y="76"
+     width="425"
+     height="545"
+     rx="8"
+     fill="white"
+     stroke="#2b6cb0"
+     stroke-width="2.5"
+     id="rect7" />
+  <text
+     x="224"
+     y="98"
+     text-anchor="middle"
+     font-size="13"
+     font-weight="bold"
+     fill="#2b6cb0"
+     id="text8">
+    SHARD 0 — Ledger Kernel
+  </text>
+  <!-- Guaranteed subsection -->
+  <rect
+     x="22"
+     y="105"
+     width="403"
+     height="200"
+     rx="5"
+     fill="#f0fff4"
+     stroke="#2f855a"
+     stroke-width="1.5"
+     id="rect8" />
+  <circle
+     cx="40"
+     cy="119"
+     r="11"
+     fill="#2f855a"
+     id="circle8" />
+  <text
+     x="40"
+     y="124"
+     text-anchor="middle"
+     font-size="11"
+     fill="white"
+     font-weight="bold"
+     id="text9">②</text>
+  <text
+     x="224"
+     y="121"
+     text-anchor="middle"
+     font-size="11"
+     font-weight="bold"
+     fill="#2f855a"
+     id="text10">
+    Guaranteed — applied immediately (permanent)
+  </text>
+  <line
+     x1="32"
+     y1="128"
+     x2="415"
+     y2="128"
+     stroke="#2f855a"
+     stroke-width="0.5"
+     stroke-dasharray="3,3"
+     id="line10" />
+  <text
+     x="35"
+     y="148"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text11">▸  ZSwap proof verify → commitment tree + nullifier set updated</text>
+  <text
+     x="35"
+     y="166"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text12">▸  Night UTXO signature verify → UTXO set updated</text>
+  <text
+     x="35"
+     y="184"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text13">▸  DUST proof verify → DUST trees updated</text>
+  <text
+     x="35"
+     y="202"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text14">▸  binding_commitment check (ties all three token ledgers)</text>
+  <text
+     x="35"
+     y="220"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text15">▸  Guaranteed contract calls → non-rollbackable receipts dispatched</text>
+  <text
+     x="49"
+     y="238"
+     font-size="9px"
+     fill="#718096"
+     id="text16">to contract shard; contract ZK proof verified on that shard, not shard 0</text>
+  <text
+     x="35"
+     y="279"
+     font-size="8.5px"
+     fill="#718096"
+     font-style="italic"
+     id="text17">Fixed circuits (ZSwap, DUST) are ideal ProtoGalaxy folding targets | cost: bounded ≈ 10–20 ms/tx</text>
+  <!-- Provisional subsection -->
+  <rect
+     x="22"
+     y="316"
+     width="403"
+     height="220"
+     rx="5"
+     fill="#fffbf0"
+     stroke="#c05621"
+     stroke-width="1.5"
+     id="rect17" />
+  <circle
+     cx="40"
+     cy="330"
+     r="11"
+     fill="#c05621"
+     id="circle17" />
+  <text
+     x="40"
+     y="335"
+     text-anchor="middle"
+     font-size="11"
+     fill="white"
+     font-weight="bold"
+     id="text18">③</text>
+  <text
+     x="224"
+     y="332"
+     text-anchor="middle"
+     font-size="11"
+     font-weight="bold"
+     fill="#c05621"
+     id="text19">
+    Provisional / Fallible — staged, awaiting receipt
+  </text>
+  <line
+     x1="32"
+     y1="339"
+     x2="415"
+     y2="339"
+     stroke="#c05621"
+     stroke-width="0.5"
+     stroke-dasharray="3,3"
+     id="line19" />
+  <text
+     x="35"
+     y="359"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text20">▸  Night UTXO spend/create  (staged; invisible to other txns)</text>
+  <text
+     x="35"
+     y="377"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text21">▸  ZSwap shielded coin operations  (staged)</text>
+  <text
+     x="35"
+     y="395"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text22">▸  DUST changes  (staged)</text>
+  <line
+     x1="32"
+     y1="404"
+     x2="415"
+     y2="404"
+     stroke="#ddd"
+     stroke-width="0.5"
+     id="line22" />
+  <text
+     x="35"
+     y="424"
+     font-size="10.5"
+     font-weight="bold"
+     fill="#2f855a"
+     id="text23">
+    ▸  SUCCESS receipt → commit provisional state  ✓
+  </text>
+  <text
+     x="35"
+     y="446"
+     font-size="10.5"
+     font-weight="bold"
+     fill="#c53030"
+     id="text24">
+    ▸  FAILURE receipt → roll back provisional state  ✗
+  </text>
+  <line
+     x1="32"
+     y1="455"
+     x2="415"
+     y2="455"
+     stroke="#ddd"
+     stroke-width="0.5"
+     id="line24" />
+  <text
+     x="35"
+     y="479"
+     font-size="8.5px"
+     fill="#718096"
+     font-style="italic"
+     id="text25">Rollback is intra-shard — no cross-shard coordination needed</text>
+  <text
+     x="35"
+     y="493"
+     font-size="8.5px"
+     fill="#718096"
+     font-style="italic"
+     id="text26">Each fallible segment calls at most one contract (no AND-atomicity)</text>
+  <text
+     x="35"
+     y="507"
+     font-size="8.5px"
+     fill="#718096"
+     font-style="italic"
+     id="text27">Staging set prevents double-spend against provisional UTXOs</text>
+  <!-- Shard 0 footer note -->
+  <text
+     x="224"
+     y="562"
+     text-anchor="middle"
+     font-size="8.5px"
+     fill="#a0aec0"
+     font-style="italic"
+     id="text28">Night UTXOs, ZSwap coins, and DUST live exclusively on Shard 0.</text>
+  <text
+     x="224"
+     y="576"
+     text-anchor="middle"
+     font-size="8.5px"
+     fill="#a0aec0"
+     font-style="italic"
+     id="text29">Hoarfrost (persistent MPT, O(1) clone) provides underlying storage.</text>
+  <text
+     x="224"
+     y="590"
+     text-anchor="middle"
+     font-size="8.5px"
+     fill="#a0aec0"
+     font-style="italic"
+     id="text30">Shard 0 is the sole token-state authority; its cost profile is bounded and predictable.</text>
+  <!-- ====== CONTRACT SHARD (representative) ====== -->
+  <rect
+     x="499.88638"
+     y="75.886375"
+     width="405.22726"
+     height="346.91898"
+     rx="8.0044889"
+     fill="#ffffff"
+     stroke="#553c9a"
+     stroke-width="2.5"
+     id="rect30" />
+  <text
+     x="702"
+     y="100"
+     text-anchor="middle"
+     font-size="12"
+     font-weight="bold"
+     fill="#553c9a"
+     id="text31">
+    Contract Shard N
+  </text>
+  <text
+     x="702"
+     y="116"
+     text-anchor="middle"
+     font-size="9.5"
+     fill="#9b9bca"
+     id="text32">
+    (one logical shard per contract address)
+  </text>
+  <line
+     x1="511"
+     y1="122"
+     x2="895"
+     y2="122"
+     stroke="#553c9a"
+     stroke-width="0.5"
+     stroke-dasharray="3,3"
+     id="line32" />
+  <!-- Contract shard operations -->
+  <text
+     x="511"
+     y="142"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text33">▸  Contract ZK proof verification (verifier key lookup)</text>
+  <text
+     x="511"
+     y="160"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text34">▸  Public transcript validation</text>
+  <text
+     x="511"
+     y="178"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text35">▸  ChargedState / operations delta applied</text>
+  <text
+     x="511"
+     y="196"
+     font-size="10.5"
+     fill="#2d3748"
+     id="text36">▸  balance map updated (Night / ZSwap / DUST amounts)</text>
+  <line
+     x1="511"
+     y1="207"
+     x2="895"
+     y2="207"
+     stroke="#ddd"
+     stroke-width="0.5"
+     id="line36" />
+  <text
+     x="511"
+     y="223"
+     font-size="8.5"
+     fill="#718096"
+     font-style="italic"
+     id="text37">Proof verified here, not on Shard 0 — keeps Shard 0 cost bounded</text>
+  <text
+     x="511"
+     y="237"
+     font-size="8.5"
+     fill="#718096"
+     font-style="italic"
+     id="text38">Heterogeneous circuits: not generally ProtoGalaxy-compatible</text>
+  <text
+     x="511"
+     y="251"
+     font-size="8.5"
+     fill="#718096"
+     font-style="italic"
+     id="text39">Cost: variable (5 ms – seconds depending on contract complexity)</text>
+  <!-- Receipt return section inside contract shard -->
+  <line
+     x1="511"
+     y1="262"
+     x2="895"
+     y2="262"
+     stroke="#aaa"
+     stroke-width="0.5"
+     id="line39" />
+  <text
+     x="702"
+     y="280"
+     text-anchor="middle"
+     font-size="10"
+     font-weight="bold"
+     fill="#553c9a"
+     id="text40">On completion, sends receipt to Shard 0:</text>
+  <!-- Success path -->
+  <rect
+     x="520"
+     y="290"
+     width="170"
+     height="55"
+     rx="4"
+     fill="#f0fff4"
+     stroke="#2f855a"
+     stroke-width="1.2"
+     id="rect40" />
+  <text
+     x="605"
+     y="310"
+     text-anchor="middle"
+     font-size="10"
+     font-weight="bold"
+     fill="#2f855a"
+     id="text41">SUCCESS</text>
+  <text
+     x="605"
+     y="328"
+     text-anchor="middle"
+     font-size="9"
+     fill="#2d3748"
+     id="text42">state delta confirmed</text>
+  <text
+     x="605"
+     y="342"
+     text-anchor="middle"
+     font-size="9"
+     fill="#2d3748"
+     id="text43">receipt carries no error</text>
+  <!-- Failure path -->
+  <rect
+     x="706"
+     y="290"
+     width="180"
+     height="55"
+     rx="4"
+     fill="#fff5f5"
+     stroke="#c53030"
+     stroke-width="1.2"
+     id="rect43" />
+  <text
+     x="796"
+     y="310"
+     text-anchor="middle"
+     font-size="10"
+     font-weight="bold"
+     fill="#c53030"
+     id="text44">FAILURE</text>
+  <text
+     x="796"
+     y="328"
+     text-anchor="middle"
+     font-size="9"
+     fill="#2d3748"
+     id="text45">state delta discarded</text>
+  <text
+     x="796"
+     y="342"
+     text-anchor="middle"
+     font-size="9"
+     fill="#2d3748"
+     id="text46">failure data receipt returned</text>
+  <!-- Shard N footer -->
+  <text
+     x="702"
+     y="380"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#a0aec0"
+     font-style="italic"
+     id="text47">
+    Receipt travels back across the shard boundary to Shard 0.
+  </text>
+  <text
+     x="702"
+     y="394"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#a0aec0"
+     font-style="italic"
+     id="text48">
+    Shard 0 commits or rolls back provisional state based on receipt outcome.
+  </text>
+  <text
+     x="702"
+     y="408"
+     text-anchor="middle"
+     font-size="8.5"
+     fill="#a0aec0"
+     font-style="italic"
+     id="text49">
+    For a guaranteed call the receipt is non-rollbackable regardless of outcome.
+  </text>
+  <!-- ====== ARROWS between Shard 0 and Contract Shard ====== -->
+  <!-- ④ Dispatch action receipt: right edge of Shard 0 → left edge of Contract Shard, at ~y=162 -->
+  <line
+     x1="437"
+     y1="162"
+     x2="496"
+     y2="155"
+     stroke="#4a5568"
+     stroke-width="2"
+     stroke-dasharray="7,3"
+     marker-end="url(#arr-gray)"
+     id="line49" />
+  <circle
+     cx="454"
+     cy="160"
+     r="12"
+     fill="#4a5568"
+     id="circle49" />
+  <text
+     x="454"
+     y="165"
+     text-anchor="middle"
+     font-size="11"
+     fill="white"
+     font-weight="bold"
+     id="text50">④</text>
+  <text
+     x="447.75296"
+     y="189.19226"
+     font-size="8.5px"
+     fill="#4a5568"
+     font-weight="bold"
+     id="text51"
+     style="-inkscape-font-specification:'Arial, Helvetica, sans-serif, Bold';font-family:Arial, Helvetica, sans-serif;font-weight:bold;font-style:normal;font-stretch:normal;font-variant:normal;font-size:8.5px;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#4a5568"><tspan
+       sodipodi:role="line"
+       id="tspan69">dispatch</tspan><tspan
+       sodipodi:role="line"
+       id="tspan70">action</tspan><tspan
+       sodipodi:role="line"
+       id="tspan71">receipt</tspan></text>
+  <!-- ⑤ Return receipt: LEFT edge of Contract Shard → right edge of Shard 0 provisional -->
+  <!-- Route: from (496, 300) go left to x=462, down to y=424, then left to x=437 -->
+  <path
+     d="M 496 305 L 462 305 L 462 424 L 437 424"
+     stroke="#4a5568"
+     stroke-width="1.8"
+     fill="none"
+     stroke-dasharray="4,2"
+     marker-end="url(#arr-gray)"
+     id="path51" />
+  <!-- SUCCESS sub-arrow label (green, on upper part of return path) -->
+  <path
+     d="M 496 300 L 465 300 L 465 420 L 437 420"
+     stroke="#2f855a"
+     stroke-width="2"
+     fill="none"
+     marker-end="url(#arr-green)"
+     id="path52" />
+  <circle
+     cx="465"
+     cy="362"
+     r="12"
+     fill="#2f855a"
+     id="circle52" />
+  <text
+     x="465"
+     y="367"
+     text-anchor="middle"
+     font-size="11"
+     fill="white"
+     font-weight="bold"
+     id="text52">⑤</text>
+  <text
+     x="-96.562973"
+     y="606.3363"
+     font-size="8.5px"
+     fill="#2f855a"
+     font-weight="bold"
+     id="text53"
+     transform="rotate(-60)">SUCCESS</text>
+  <!-- FAILURE sub-arrow label (red, on lower part — from failure box) -->
+  <path
+     d="M 496 340 L 455 340 L 455 444 L 437 444"
+     stroke="#c53030"
+     stroke-width="2"
+     fill="none"
+     marker-end="url(#arr-red)"
+     id="path53" />
+  <circle
+     cx="455"
+     cy="394"
+     r="12"
+     fill="#c53030"
+     id="circle53" />
+  <text
+     x="455"
+     y="399"
+     text-anchor="middle"
+     font-size="11"
+     fill="white"
+     font-weight="bold"
+     id="text54">⑤</text>
+  <text
+     x="-130.46188"
+     y="622.70923"
+     font-size="8.5px"
+     fill="#c53030"
+     font-weight="bold"
+     id="text55"
+     transform="rotate(-60)">FAILURE</text>
+  <!-- ====== LEGEND ====== -->
+  <rect
+     x="500"
+     y="490"
+     width="405"
+     height="132"
+     rx="5"
+     fill="#ffffff"
+     stroke="#cbd5e0"
+     stroke-width="1"
+     id="rect55" />
+  <text
+     x="702"
+     y="509"
+     text-anchor="middle"
+     font-size="11"
+     font-weight="bold"
+     fill="#2d3748"
+     id="text56"
+     style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:11px;font-family:Arial, Helvetica, sans-serif;-inkscape-font-specification:'Arial, Helvetica, sans-serif, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-anchor:middle;fill:#2d3748"><tspan
+       sodipodi:role="line"
+       id="tspan73"
+       x="702"
+       y="509">Sequence — Commit/Rollback Flow</tspan></text>
+  <line
+     x1="510"
+     y1="515"
+     x2="895"
+     y2="515"
+     stroke="#e2e8f0"
+     stroke-width="1"
+     id="line56" />
+  <!-- Legend rows -->
+  <circle
+     cx="523"
+     cy="531"
+     r="9"
+     fill="#2b6cb0"
+     id="circle56" />
+  <text
+     x="523"
+     y="535"
+     text-anchor="middle"
+     font-size="9px"
+     fill="#ffffff"
+     font-weight="bold"
+     id="text57">①</text>
+  <text
+     x="538"
+     y="535"
+     font-size="10px"
+     fill="#2d3748"
+     id="text58">Transaction arrives at Shard 0</text>
+  <circle
+     cx="523"
+     cy="551"
+     r="9"
+     fill="#2f855a"
+     id="circle58" />
+  <text
+     x="523"
+     y="555"
+     text-anchor="middle"
+     font-size="9px"
+     fill="#ffffff"
+     font-weight="bold"
+     id="text59">②</text>
+  <text
+     x="538"
+     y="555"
+     font-size="10px"
+     fill="#2d3748"
+     id="text60">Guaranteed operations committed permanently</text>
+  <circle
+     cx="523"
+     cy="571"
+     r="9"
+     fill="#c05621"
+     id="circle60" />
+  <text
+     x="523"
+     y="575"
+     text-anchor="middle"
+     font-size="9px"
+     fill="#ffffff"
+     font-weight="bold"
+     id="text61">③</text>
+  <text
+     x="538"
+     y="575"
+     font-size="10px"
+     fill="#2d3748"
+     id="text62">Provisional state staged for each fallible segment</text>
+  <circle
+     cx="523"
+     cy="591"
+     r="9"
+     fill="#4a5568"
+     id="circle62" />
+  <text
+     x="523"
+     y="595"
+     text-anchor="middle"
+     font-size="9px"
+     fill="#ffffff"
+     font-weight="bold"
+     id="text63">④</text>
+  <text
+     x="538"
+     y="595"
+     font-size="10px"
+     fill="#2d3748"
+     id="text64">Action receipts dispatched to contract shard ╌╌▶</text>
+  <circle
+     cx="540"
+     cy="465"
+     r="9"
+     fill="#2f855a"
+     id="circle64" />
+  <text
+     x="540"
+     y="469"
+     text-anchor="middle"
+     font-size="9px"
+     fill="#ffffff"
+     font-weight="bold"
+     id="text65">⑤</text>
+  <text
+     x="555"
+     y="469"
+     font-size="10px"
+     fill="#2f855a"
+     id="text66">SUCCESS → commit</text>
+  <circle
+     cx="736"
+     cy="465"
+     r="9"
+     fill="#c53030"
+     id="circle66" />
+  <text
+     x="736"
+     y="469"
+     text-anchor="middle"
+     font-size="9px"
+     fill="#ffffff"
+     font-weight="bold"
+     id="text67">⑤</text>
+  <text
+     x="751"
+     y="469"
+     font-size="10px"
+     fill="#c53030"
+     id="text68">FAILURE → rollback</text>
+  <text
+     x="702"
+     y="614"
+     text-anchor="middle"
+     font-size="8.5px"
+     fill="#718096"
+     font-style="italic"
+     id="text69">Rollback is intra-shard-0; no cross-shard coordination is required for token state.</text>
+</svg>

@@ -1,0 +1,49 @@
+# Created with podman-5.4.1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: near-testnet
+spec:
+  containers:
+  - name: node
+    image: docker.io/nearprotocol/nearcore:testnet
+    command:
+    - /bin/sh
+    - /root/.near/run.sh
+    env:
+    - name: RUST_LOG_STYLE
+      value: always
+    ports:
+    - containerPort: 3030
+      hostPort: 3031
+    - containerPort: 24567
+      hostPort: 24567
+    volumeMounts:
+    - name: node
+      mountPath: /root/.near
+    tty: true
+    stdin: true
+  volumes:
+  - name: node
+    hostPath:
+      path: ./node
+      type: Directory
+  securityContext:
+    sysctls:
+#   - name: net.core.rmem_max
+#     value: "8388608"
+#   - name: net.core.wmem_max
+#     value: "8388608"
+    - name: net.ipv4.tcp_rmem
+      value: "4096 87380 8388608"
+    - name: net.ipv4.tcp_wmem
+      value: "4096 16384 8388608"
+    - name: net.ipv4.tcp_slow_start_after_idle
+      value: "0"
+    - name: net.ipv4.tcp_congestion_control
+      value: "bbr"
+    - name: net.ipv4.tcp_mtu_probing
+      value: "1"
+    - name: net.ipv4.tcp_max_syn_backlog
+      value: "8096"

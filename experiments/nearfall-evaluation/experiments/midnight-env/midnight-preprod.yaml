@@ -1,0 +1,73 @@
+# Created with podman-5.4.1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: midnight-preprod
+spec:
+  containers:
+  - name: proofserver
+    image: docker.io/midnightntwrk/proof-server:7.0.0
+    args:
+    - --
+    - midnight-proof-server
+    - -v
+    ports:
+    - containerPort: 6300
+      hostPort: 6300
+  - name: node
+    image: docker.io/midnightntwrk/midnight-node:0.21.0
+    env:
+    - name: DB_SYNC_POSTGRES_CONNECTION_STRING
+      value: psql://cardano:bcb33b5c09e31e3dd5a2b4ff0ee111e6@192.168.86.25:5432/preprod?sslmode=disable
+    - name: NODE_KEY
+      value: 0a0076255e6b232f8656cb3f2516a16680639eb3dc4589cc12b090a1496131d7
+    - name: BOOTNODES
+      value: /dns/bootnode-1.preprod.midnight.network/tcp/30333/ws/p2p/12D3KooWQxxUgq7ndPfAaCFNbAxtcKYxrAzTxDfRGNktF75SxdX5
+        /dns/bootnode-2.preprod.midnight.network/tcp/30333/ws/p2p/12D3KooWNrUBs22FfmgjqFMa9ZqKED2jnxwsXWw5E4q2XVwN35TJ
+    - name: CARDANO_SECURITY_PARAMETER
+      value: "432"
+    - name: APPEND_ARGS
+      value: --allow-private-ip --pool-limit 10 --trie-cache-size 0 --prometheus-external
+        --rpc-external --rpc-cors all
+    - name: CFG_PRESET
+      value: preprod
+    ports:
+    - containerPort: 9615
+      hostPort: 9615
+    - containerPort: 9944
+      hostPort: 9944
+    - containerPort: 30333
+      hostPort: 30333
+    volumeMounts:
+    - mountPath: /data
+      name: extra-iohk-midnight-node-docker-data-host-0
+    - mountPath: /pc-chain-config.json
+      name: extra-iohk-midnight-node-docker-envs-preprod-pc-chain-config.json-host-1
+    - mountPath: /node
+      name: midnight-node-docker-midnight-data-testnet-pvc
+##- name: indexer
+##  image: docker.io/midnightntwrk/indexer-standalone:3.1.0
+##  env:
+##  - name: APP__INFRA__SECRET
+##    value: "303132333435363738393031323334353637383930313233343536373839303132"
+##  - name: APP__INFRA__NODE__URL
+##    value: ws://node:9944
+##  - name: RUST_LOG
+##    value: indexer=info,chain_indexer=info,indexer_api=info,wallet_indexer=info,indexer_common=info,fastrace_opentelemetry=info,info
+##  ports:
+##  - containerPort: 8088
+##    hostPort: 8088
+  volumes:
+  - hostPath:
+      path: ./preprod/data
+      type: Directory
+    name: extra-iohk-midnight-node-docker-data-host-0
+  - hostPath:
+      path: ./preprod/envs/pc-chain-config.json
+      type: Directory
+    name: extra-iohk-midnight-node-docker-envs-preprod-pc-chain-config.json-host-1
+  - name: midnight-node-docker-midnight-data-testnet-pvc
+    hostPath:
+      path: ./preprod/node
+      type: Directory

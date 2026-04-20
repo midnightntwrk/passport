@@ -1,0 +1,41 @@
+{
+  "name": "test-contract-1",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "compile": "compact compile contracts/hello-world.compact contracts/managed/hello-world",
+    "build": "tsc",
+    "deploy": "tsx src/deploy.ts",
+    "cli": "tsx src/cli.ts",
+    "tx": "tsx src/tx-v2.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.14.0",
+    "@midnight-ntwrk/ledger": "^4.0.0",
+    "@midnight-ntwrk/midnight-js-contracts": "3.0.0",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "3.0.0",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "3.0.0",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "3.0.0",
+    "@midnight-ntwrk/midnight-js-network-id": "3.0.0",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "3.0.0",
+    "@midnight-ntwrk/midnight-js-types": "3.0.0",
+    "@midnight-ntwrk/wallet-api": "^5.0.0",
+    "@midnight-ntwrk/wallet-sdk-address-format": "3.0.0",
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": "1.0.0",
+    "@midnight-ntwrk/wallet-sdk-facade": "1.0.0",
+    "@midnight-ntwrk/wallet-sdk-hd": "3.0.0",
+    "@midnight-ntwrk/wallet-sdk-shielded": "1.0.0",
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "1.0.0",
+    "@midnight-ntwrk/zswap": "^4.0.0",
+    "@scure/bip39": "^2.0.1",
+    "bip39": "^3.1.0",
+    "rxjs": "^7.8.2",
+    "ws": "^8.19.0"
+  }
+}

@@ -1,0 +1,840 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 1000 590"
+   width="1000"
+   height="590"
+   font-family="'Segoe UI', Arial, sans-serif"
+   version="1.1"
+   id="svg61"
+   sodipodi:docname="secure-computing-spectrum.svg"
+   inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
+   inkscape:export-filename="secure-computing-spectrum.png"
+   inkscape:export-xdpi="100"
+   inkscape:export-ydpi="100"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview61"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.084"
+     inkscape:cx="500"
+     inkscape:cy="294.7417"
+     inkscape:window-width="1889"
+     inkscape:window-height="1176"
+     inkscape:window-x="31"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg61" />
+  <!-- Background -->
+  <rect
+     width="1000"
+     height="590"
+     fill="white"
+     id="rect1" />
+  <!-- Arrowhead markers -->
+  <defs
+     id="defs2">
+    <marker
+       id="arr"
+       markerWidth="8"
+       markerHeight="6"
+       refX="8"
+       refY="3"
+       orient="auto"
+       viewBox="0 0 8 6"
+       preserveAspectRatio="xMidYMid">
+      <polygon
+         points="0 0, 8 3, 0 6"
+         fill="#555"
+         id="polygon1" />
+    </marker>
+    <marker
+       id="arr-green"
+       markerWidth="8"
+       markerHeight="6"
+       refX="8"
+       refY="3"
+       orient="auto">
+      <polygon
+         points="0 0, 8 3, 0 6"
+         fill="#559933"
+         id="polygon2" />
+    </marker>
+    <marker
+       id="arr-green-3"
+       markerWidth="8"
+       markerHeight="6"
+       refX="8"
+       refY="3"
+       orient="auto">
+      <polygon
+         points="8,3 0,6 0,0 "
+         fill="#559933"
+         id="polygon2-6" />
+    </marker>
+    <marker
+       markerWidth="8"
+       markerHeight="6"
+       refX="8"
+       refY="3"
+       orient="auto"
+       viewBox="0 0 8 6"
+       preserveAspectRatio="xMidYMid"
+       id="arr9454"
+       inkscape:stockid="arr9454">
+      <polygon
+         points="0 0, 8 3, 0 6"
+         fill="#555"
+         id="polygon1-1"
+         style="stroke:#ed7d31;fill:#ed7d31" />
+    </marker>
+    <marker
+       markerWidth="8"
+       markerHeight="6"
+       refX="8"
+       refY="3"
+       orient="auto"
+       viewBox="0 0 8 6"
+       preserveAspectRatio="xMidYMid"
+       inkscape:stockid="arr94548039"
+       id="arr94548039">
+      <polygon
+         points="0 0, 8 3, 0 6"
+         fill="#555"
+         id="polygon1-1-1"
+         style="stroke:#ed7d31;fill:#ed7d31" />
+    </marker>
+  </defs>
+  <!-- Title -->
+  <text
+     x="500"
+     y="24"
+     text-anchor="middle"
+     font-size="15"
+     font-weight="bold"
+     fill="#222"
+     id="text2">Secure Computing: Security vs. Computational Capability</text>
+  <!-- ===== CATEGORICAL BANDS (plot y=40&#8211;510, 6 bands &#215; 78px) ===== -->
+  <!-- Boundaries: 40 | 118 | 196 | 274 | 352 | 430 | 510 -->
+  <!-- Plot x: 160&#8211;950 -->
+  <rect
+     x="160"
+     y="40"
+     width="790"
+     height="78"
+     fill="#f7f8fc"
+     id="rect2" />
+  <!-- f: General compute -->
+  <rect
+     x="160"
+     y="118"
+     width="790"
+     height="78"
+     fill="white"
+     id="rect3" />
+  <!-- e: Constrained TEE -->
+  <rect
+     x="160"
+     y="196"
+     width="790"
+     height="78"
+     fill="#f7f8fc"
+     id="rect4" />
+  <!-- d: Secure MCU -->
+  <rect
+     x="160"
+     y="274"
+     width="790"
+     height="78"
+     fill="white"
+     id="rect5" />
+  <!-- c: Secure element -->
+  <rect
+     x="160"
+     y="352"
+     width="790"
+     height="78"
+     fill="#f7f8fc"
+     id="rect6" />
+  <!-- b: FIDO-type key -->
+  <rect
+     x="160"
+     y="430"
+     width="790"
+     height="80"
+     fill="white"
+     id="rect7" />
+  <!-- a: Static token -->
+  <!-- Band dividers -->
+  <line
+     x1="160"
+     y1="118"
+     x2="950"
+     y2="118"
+     stroke="#d0d0d0"
+     stroke-width="1"
+     id="line7" />
+  <line
+     x1="160"
+     y1="196"
+     x2="950"
+     y2="196"
+     stroke="#d0d0d0"
+     stroke-width="1"
+     id="line8" />
+  <line
+     x1="160"
+     y1="274"
+     x2="950"
+     y2="274"
+     stroke="#d0d0d0"
+     stroke-width="1"
+     id="line9" />
+  <line
+     x1="160"
+     y1="352"
+     x2="950"
+     y2="352"
+     stroke="#d0d0d0"
+     stroke-width="1"
+     id="line10" />
+  <line
+     x1="160"
+     y1="430"
+     x2="950"
+     y2="430"
+     stroke="#d0d0d0"
+     stroke-width="1"
+     id="line11" />
+  <!-- Vertical grid lines (x = 160 + n*79, every 2 units &#8594; x = 318, 476, 634, 792, 950) -->
+  <line
+     x1="318"
+     y1="40"
+     x2="318"
+     y2="510"
+     stroke="#e8e8e8"
+     stroke-width="0.5"
+     id="line12" />
+  <line
+     x1="476"
+     y1="40"
+     x2="476"
+     y2="510"
+     stroke="#e8e8e8"
+     stroke-width="0.5"
+     id="line13" />
+  <line
+     x1="634"
+     y1="40"
+     x2="634"
+     y2="510"
+     stroke="#e8e8e8"
+     stroke-width="0.5"
+     id="line14" />
+  <line
+     x1="792"
+     y1="40"
+     x2="792"
+     y2="510"
+     stroke="#e8e8e8"
+     stroke-width="0.5"
+     id="line15" />
+  <line
+     x1="950"
+     y1="40"
+     x2="950"
+     y2="510"
+     stroke="#e8e8e8"
+     stroke-width="0.5"
+     id="line16" />
+  <!-- Axes -->
+  <line
+     x1="160"
+     y1="510"
+     x2="963"
+     y2="510"
+     stroke="#555"
+     stroke-width="2"
+     marker-end="url(#arr)"
+     id="line17" />
+  <line
+     x1="160"
+     y1="510"
+     x2="160"
+     y2="28"
+     stroke="#555"
+     stroke-width="2"
+     marker-end="url(#arr)"
+     id="line18" />
+  <!-- Y axis: categorical labels (two lines, centred in each band) -->
+  <!-- (f) General compute: centre y=79 -->
+  <text
+     x="155"
+     y="75"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text18">General</text>
+  <text
+     x="155"
+     y="88"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text19">compute</text>
+  <!-- (e) Constrained TEE: centre y=157 -->
+  <text
+     x="155"
+     y="153"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text20">Constrained</text>
+  <text
+     x="155"
+     y="166"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text21">TEE</text>
+  <!-- (d) Secure MCU: centre y=235 -->
+  <text
+     x="155"
+     y="231"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text22">Secure</text>
+  <text
+     x="155"
+     y="244"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text23">MCU</text>
+  <!-- (c) Secure element: centre y=313 -->
+  <text
+     x="155"
+     y="309"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text24">Secure</text>
+  <text
+     x="155"
+     y="322"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text25">element</text>
+  <!-- (b) FIDO-type key: centre y=391 -->
+  <text
+     x="155"
+     y="387"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text26">FIDO-type</text>
+  <text
+     x="155"
+     y="400"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text27">key</text>
+  <!-- (a) Static token: centre y=470 -->
+  <text
+     x="155"
+     y="466"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text28">Static</text>
+  <text
+     x="155"
+     y="479"
+     text-anchor="end"
+     font-size="11"
+     fill="#444"
+     id="text29">token</text>
+  <!-- X axis ticks and labels -->
+  <line
+     x1="318"
+     y1="510"
+     x2="318"
+     y2="515"
+     stroke="#666"
+     stroke-width="1"
+     id="line29" />
+  <text
+     x="318"
+     y="528"
+     text-anchor="middle"
+     font-size="11"
+     fill="#666"
+     id="text30">2</text>
+  <line
+     x1="476"
+     y1="510"
+     x2="476"
+     y2="515"
+     stroke="#666"
+     stroke-width="1"
+     id="line30" />
+  <text
+     x="476"
+     y="528"
+     text-anchor="middle"
+     font-size="11"
+     fill="#666"
+     id="text31">4</text>
+  <line
+     x1="634"
+     y1="510"
+     x2="634"
+     y2="515"
+     stroke="#666"
+     stroke-width="1"
+     id="line31" />
+  <text
+     x="634"
+     y="528"
+     text-anchor="middle"
+     font-size="11"
+     fill="#666"
+     id="text32">6</text>
+  <line
+     x1="792"
+     y1="510"
+     x2="792"
+     y2="515"
+     stroke="#666"
+     stroke-width="1"
+     id="line32" />
+  <text
+     x="792"
+     y="528"
+     text-anchor="middle"
+     font-size="11"
+     fill="#666"
+     id="text33">8</text>
+  <line
+     x1="950"
+     y1="510"
+     x2="950"
+     y2="515"
+     stroke="#666"
+     stroke-width="1"
+     id="line33" />
+  <text
+     x="950"
+     y="528"
+     text-anchor="middle"
+     font-size="11"
+     fill="#666"
+     id="text34">10</text>
+  <!-- Axis label -->
+  <text
+     x="555"
+     y="553"
+     text-anchor="middle"
+     font-size="13"
+     font-weight="bold"
+     fill="#444"
+     id="text35">Security level →</text>
+  <!-- ===== CLOUD TEE STACK cluster box (within band f, y=44&#8211;118) ===== -->
+  <rect
+     x="534"
+     y="44"
+     width="246"
+     height="74"
+     rx="8"
+     fill="#f0fae8"
+     stroke="#70AD47"
+     stroke-width="1.5"
+     stroke-dasharray="6,4"
+     id="rect35" />
+  <text
+     x="777"
+     y="56"
+     text-anchor="end"
+     font-size="10"
+     fill="#559933"
+     font-style="italic"
+     id="text36">Cloud TEE stack</text>
+  <!-- ===== DATA POINTS ===== -->
+  <!-- x = 160 + security*79 -->
+  <!-- &#9552;&#9552; Band f: General compute &#9552;&#9552; -->
+  <!-- Laptop: sec=0.5, x=200, y=108 -->
+  <circle
+     cx="200"
+     cy="108"
+     r="6"
+     fill="#4472C4"
+     id="circle36" />
+  <text
+     x="210"
+     y="112"
+     font-size="11"
+     fill="#222"
+     id="text37">Laptop</text>
+  <!-- SELinux: sec=2.0, x=318, y=93 -->
+  <circle
+     cx="318"
+     cy="93"
+     r="6"
+     fill="#4472C4"
+     id="circle37" />
+  <text
+     x="328"
+     y="97"
+     font-size="11"
+     fill="#222"
+     id="text38">SELinux</text>
+  <!-- Android/iOS sandbox: sec=3.5, x=437, y=82 &#8212; label left to avoid crowd -->
+  <circle
+     cx="437"
+     cy="82"
+     r="6"
+     fill="#4472C4"
+     id="circle38" />
+  <text
+     x="427"
+     y="77"
+     text-anchor="end"
+     font-size="11"
+     fill="#222"
+     id="text39">Android / iOS sandbox</text>
+  <!-- GrapheneOS: sec=4.0, x=476, y=100 &#8212; moved nearer to phone sandbox -->
+  <circle
+     cx="458"
+     cy="100"
+     r="6"
+     fill="#4472c4"
+     id="circle39" />
+  <text
+     x="468"
+     y="104"
+     font-size="11px"
+     fill="#222222"
+     id="text40">GrapheneOS</text>
+  <!-- SEV-SNP: sec=5.0, x=555, y=58 -->
+  <circle
+     cx="555"
+     cy="58"
+     r="6"
+     fill="#70AD47"
+     id="circle40" />
+  <text
+     x="545"
+     y="76"
+     font-size="11px"
+     fill="#222222"
+     id="text41">SEV-SNP</text>
+  <!-- Shielded VM: sec=6.5, x=674, y=72 -->
+  <circle
+     cx="674"
+     cy="72"
+     r="6"
+     fill="#70AD47"
+     id="circle41" />
+  <text
+     x="686"
+     y="72"
+     font-size="11px"
+     fill="#222222"
+     id="text42">Shielded VM</text>
+  <!-- Sealed image: sec=7.5, x=753, y=86 -->
+  <circle
+     cx="753"
+     cy="86"
+     r="6"
+     fill="#70AD47"
+     id="circle42" />
+  <text
+     x="707"
+     y="104"
+     font-size="11px"
+     fill="#222222"
+     id="text43">Sealed image</text>
+  <!-- Arrows: SEV-SNP &#8594; Shielded VM &#8594; Sealed image -->
+  <line
+     x1="562"
+     y1="61"
+     x2="667"
+     y2="70"
+     stroke="#559933"
+     stroke-width="1.5"
+     marker-end="url(#arr-green)"
+     id="line43" />
+  <line
+     x1="595.33502"
+     y1="179.73763"
+     x2="595.52063"
+     y2="285.12262"
+     stroke="#559933"
+     stroke-width="1.5"
+     id="line43-5"
+     style="stroke:#ed7d31;stroke-opacity:1;marker-end:url(#arr94548039);fill:none;fill-opacity:1" />
+  <line
+     x1="681"
+     y1="75"
+     x2="746"
+     y2="83"
+     stroke="#559933"
+     stroke-width="1.5"
+     marker-end="url(#arr-green)"
+     id="line44" />
+  <!-- &#9552;&#9552; Band e: Constrained TEE &#9552;&#9552; -->
+  <!-- ARM TrustZone: sec=5.5, x=595, y=147 -->
+  <circle
+     cx="595"
+     cy="171"
+     r="6"
+     fill="#ed7d31"
+     id="circle44" />
+  <text
+     x="605"
+     y="175"
+     font-size="11px"
+     fill="#222222"
+     id="text44">ARM TrustZone</text>
+  <text
+     x="511.82657"
+     y="296.77859"
+     font-size="10px"
+     fill="#888888"
+     font-style="italic"
+     id="text45"
+     style="fill:#ed7d31;fill-opacity:1">(OEM-locked on phones)</text>
+  <!-- Intel SGX: sec=8.5, x=832, y=173 -->
+  <circle
+     cx="832"
+     cy="135"
+     r="6"
+     fill="#7030a0"
+     id="circle45" />
+  <text
+     x="842"
+     y="139"
+     font-size="11px"
+     fill="#222222"
+     id="text46">Intel SGX</text>
+  <!-- &#9552;&#9552; Band d: Secure MCU &#9552;&#9552; -->
+  <!-- Hardware wallet (Ledger): sec=8.2, x=808, y=234 -->
+  <circle
+     cx="800"
+     cy="234"
+     r="6"
+     fill="#c00000"
+     id="circle46" />
+  <text
+     x="810"
+     y="238"
+     font-size="11px"
+     fill="#222222"
+     id="text47">Hardware wallet (Ledger)</text>
+  <!-- &#9552;&#9552; Band c: Secure element &#9552;&#9552; -->
+  <!-- TPM: sec=6.0, x=634, y=307 -->
+  <circle
+     cx="634"
+     cy="307"
+     r="6"
+     fill="#C00000"
+     id="circle47" />
+  <text
+     x="644"
+     y="316"
+     font-size="11"
+     fill="#222"
+     id="text48">TPM</text>
+  <!-- Apple Secure Enclave: sec=6.8, x=697, y=295 &#8212; label left -->
+  <circle
+     cx="697"
+     cy="295"
+     r="6"
+     fill="#ED7D31"
+     id="circle48" />
+  <text
+     x="807"
+     y="289"
+     text-anchor="end"
+     font-size="11px"
+     fill="#222222"
+     id="text49">Apple Secure Enclave</text>
+  <!-- Google Titan M2: sec=7.2, x=729, y=330 -->
+  <circle
+     cx="729"
+     cy="330"
+     r="6"
+     fill="#ED7D31"
+     id="circle49" />
+  <text
+     x="739"
+     y="338"
+     font-size="11"
+     fill="#222"
+     id="text50">Titan M2 (Google)</text>
+  <!-- HSM: sec=8.0, x=792, y=313 &#8212; label left, moved from band e -->
+  <circle
+     cx="792"
+     cy="313"
+     r="6"
+     fill="#C00000"
+     id="circle50" />
+  <text
+     x="782"
+     y="307"
+     text-anchor="end"
+     font-size="11"
+     fill="#222"
+     id="text51">HSM</text>
+  <!-- &#9552;&#9552; Band b: FIDO-type key &#9552;&#9552; -->
+  <!-- OpenPGP smartcard: sec=8.0, x=792, y=374 &#8212; label left -->
+  <circle
+     cx="792"
+     cy="374"
+     r="6"
+     fill="#C00000"
+     id="circle51" />
+  <text
+     x="782"
+     y="369"
+     text-anchor="end"
+     font-size="11"
+     fill="#222"
+     id="text52">OpenPGP smartcard</text>
+  <!-- FIDO2 / Nitrokey: sec=9.0, x=871, y=406 &#8212; label left -->
+  <circle
+     cx="871"
+     cy="406"
+     r="6"
+     fill="#C00000"
+     id="circle52" />
+  <text
+     x="859"
+     y="413"
+     text-anchor="end"
+     font-size="11"
+     fill="#222"
+     id="text53">FIDO2 / Nitrokey</text>
+  <!-- &#9552;&#9552; Band a: Static token &#9552;&#9552; -->
+  <!-- RSA SecureID: sec=6.0, x=634, y=470 -->
+  <circle
+     cx="634"
+     cy="470"
+     r="6"
+     fill="#C00000"
+     id="circle53" />
+  <text
+     x="644"
+     y="474"
+     font-size="11"
+     fill="#222"
+     id="text54">RSA SecureID</text>
+  <!-- U2F keys: sec=9.5, x=911, y=470 &#8212; label left -->
+  <circle
+     cx="911"
+     cy="470"
+     r="6"
+     fill="#C00000"
+     id="circle54" />
+  <text
+     x="899"
+     y="465"
+     text-anchor="end"
+     font-size="11"
+     fill="#222"
+     id="text55">U2F keys</text>
+  <!-- ===== LEGEND ===== -->
+  <rect
+     x="168"
+     y="362"
+     width="190"
+     height="127"
+     rx="5"
+     fill="white"
+     stroke="#ccc"
+     stroke-width="1"
+     id="rect55" />
+  <circle
+     cx="183"
+     cy="380"
+     r="5"
+     fill="#4472C4"
+     id="circle55" />
+  <text
+     x="194"
+     y="384"
+     font-size="11"
+     fill="#333"
+     id="text56">OS / software hardening</text>
+  <circle
+     cx="183"
+     cy="400"
+     r="5"
+     fill="#70AD47"
+     id="circle56" />
+  <text
+     x="194"
+     y="404"
+     font-size="11"
+     fill="#333"
+     id="text57">Cloud TEE stack</text>
+  <circle
+     cx="183"
+     cy="420"
+     r="5"
+     fill="#ED7D31"
+     id="circle57" />
+  <text
+     x="194"
+     y="424"
+     font-size="11"
+     fill="#333"
+     id="text58">Mobile TEE / enclave</text>
+  <circle
+     cx="183"
+     cy="440"
+     r="5"
+     fill="#C00000"
+     id="circle58" />
+  <text
+     x="194"
+     y="444"
+     font-size="11"
+     fill="#333"
+     id="text59">Dedicated hardware</text>
+  <circle
+     cx="183"
+     cy="460"
+     r="5"
+     fill="#7030A0"
+     id="circle59" />
+  <text
+     x="194"
+     y="464"
+     font-size="11"
+     fill="#333"
+     id="text60">Hardware TEE (Intel)</text>
+  <!-- Footnote -->
+  <text
+     x="500"
+     y="575"
+     text-anchor="middle"
+     font-size="10"
+     fill="#999"
+     font-style="italic"
+     id="text61"
+     inkscape:export-filename="secure-computing-spectrum.png"
+     inkscape:export-xdpi="100"
+     inkscape:export-ydpi="100">Security axis is approximate and multidimensional. Capability categories reflect programmability and addressable memory for cryptographic workloads.</text>
+</svg>

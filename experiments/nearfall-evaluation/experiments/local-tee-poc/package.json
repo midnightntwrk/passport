@@ -1,0 +1,50 @@
+{
+  "name": "local-tee-poc",
+  "version": "0.1.0",
+  "description": "TEE device key registration proof of concept on Midnight",
+  "type": "module",
+  "scripts": {
+    "compile": "compact compile contracts/compliance.compact contracts/managed/compliance",
+    "start": "tsx src/index.tsx",
+    "dev": "tsx watch src/index.tsx",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist/",
+    "contracts/"
+  ],
+  "dependencies": {
+    "@midnight-ntwrk/compact-js": "2.4.0",
+    "@midnight-ntwrk/ledger-v7": "7.0.0",
+    "@midnight-ntwrk/midnight-js-contracts": "3.0.0",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "3.0.0",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "3.0.0",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "3.0.0",
+    "@midnight-ntwrk/midnight-js-network-id": "3.0.0",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "3.0.0",
+    "@midnight-ntwrk/wallet-sdk-address-format": "3.0.0",
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": "1.0.0",
+    "@midnight-ntwrk/wallet-sdk-facade": "1.0.0",
+    "@midnight-ntwrk/wallet-sdk-hd": "3.0.0",
+    "@midnight-ntwrk/wallet-sdk-runtime": "1.0.0",
+    "@midnight-ntwrk/wallet-sdk-shielded": "1.0.0",
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "1.0.0",
+    "bip39": "^3.1.0",
+    "ink": "^5.0.1",
+    "ink-select-input": "^6.0.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "openpgp": "^6.3.0",
+    "react": "^18.3.1",
+    "rxjs": "^7.8.2",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.1",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
