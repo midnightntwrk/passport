@@ -1,6 +1,6 @@
 # Midnight Passport — Plan
 
-> **Date:** 2026/04/15
+> **Date:** 2026/04/20
 > **Status:** Draft
 > **Audience:** Partners, collaborators, and stakeholders
 
@@ -20,230 +20,289 @@ access. The user sees none of it.
 
 ## Why This Matters
 
-Midnight's privacy technology is powerful but hard to access directly. Today,
-interacting with the network requires managing cryptographic keys,
-understanding multiple address types, and navigating proof generation.
-No standard exists for how wallets connect to dApps, how users prove
-identity attributes without revealing personal data, or how accounts
-span multiple devices. Each implementor solves these problems
-independently and incompatibly.
+Midnight's privacy technology is powerful but hard to access directly.
+Today, interacting with the network requires managing cryptographic
+keys, understanding multiple address types, and navigating proof
+generation. No standard exists for how wallets connect to dApps, how
+users prove identity attributes without revealing personal data, or
+how accounts span multiple devices. Each implementor solves these
+problems independently and incompatibly.
 
 Midnight Passport addresses this by defining a common architecture and
 the standards needed to make it interoperable.
 
-## Three Steps to Self-Custody
+## The Delivery Arc
 
-The path from a working product to full decentralisation has three
-steps. Each step delivers a usable system. The user experience does
-not change between steps — only the trust model improves.
+The path from today to full self-custody is staged across four named
+milestones. Each is an independently demoable product. The user
+experience is stable across milestones — only the trust model
+underneath improves.
 
-### Step 1: MVP — Managed Signing
+The full week-by-week schedule lives in the delivery plan
+([`site/delivery-plan.html`](../site/delivery-plan.html)). The
+summary:
 
-The user authenticates with a **passkey** (WebAuthn/FIDO2). A
-**threshold signing network** holds the user's private key in a
-distributed fashion — no single node ever possesses the full key. When
-the user transacts, the network collaboratively produces a signature
-bound to the exact transaction parameters. The signature is verified
-inside a zero-knowledge proof and never appears on-chain.
+### MVP 1 — end of June 2026
 
-An **account provider** (OAuth-like) manages user registration, device
-credentials, and session tokens. An on-chain **registry contract**
-maps human-readable names (`alice.midnight`) to public keys.
+The user authenticates with a **passkey** (WebAuthn/FIDO2). An
+***n*-of-*t* FROST threshold committee** (default n=5, t=4) holds the
+user's private key via distributed key generation from day one — no
+single node ever possesses the full key. The committee is operated
+by a single trust party at MVP 1; federation across multiple
+independent trust parties is *not* a planned milestone — custody moves
+straight on-device at v2.0 Stream B.
 
-The user experience is familiar: passkey login, named accounts, no
-seed phrases. The trade-off is custodial trust in the signing network.
+When the user transacts, the committee collaboratively produces a
+FROST (threshold-Schnorr) signature bound to the exact transaction
+parameters. The signature is verified inside a zero-knowledge proof
+and never appears on-chain.
 
-### Step 2: Decentralisation and Migration
+An **account provider** (OAuth-like) manages user registration,
+passkey credentials, and capability tokens. At MVP 1 each user has
+one OAuth account with one passkey; accounts are referenced by their
+raw Midnight address — human-readable names arrive at MVP 1.1.
+
+### MVP 1.1 — multi-device, names, connection protocol
+
+The first post-MVP beat (~90-day effort cycle). **No new crypto** —
+the threshold committee, keys, and circuits are unchanged. What gets
+added is user-facing:
+
+- **Multi-device OAuth accounts** — the one OAuth account per user
+  now accepts multiple passkeys, with a device-addition ceremony. The
+  key in the threshold committee is still one per account. The
+  device-to-account mapping is held by the account provider at this
+  step; it moves on-chain at v2.0 Stream A.
+- **Human-readable names** — `alice.midnight` arrives as the name
+  layer. Accounts gain a name alongside their address.
+- **On-chain name registry** — the names live on-chain with
+  commit-reveal registration, multi-address resolution, and anti-squat
+  mitigations.
+- **Device-key ↔ wallet-grant CRUD** — users see, add, revoke, and
+  scope which devices and which dApp connections have which grants.
+- **QR onboarding returns** with channel-binding, timestamp, and
+  visual-confirmation mitigations.
+- **The dApp-wallet connection protocol** becomes a full MIP with
+  named external co-authors.
+
+### v2.0 — decentralisation (Stream A and Stream B, in parallel)
 
 Two research streams run in parallel to remove the centralised
-components introduced in Step 1.
+components introduced in MVP 1. Each is a ~90-day effort cycle.
 
-**Stream A — Multi-device accounts.** In Step 1, the signing network
-holds a single key and devices authenticate to it. This stream moves
-account management on-chain: the account is represented as a **set of
-authorised keys** (one per device), and any registered key can
-authorise transactions via zero-knowledge proof. This reduces the role
-of the account provider — device-to-account mapping is enforced by
-the smart contract, not by a centralised service.
+**Stream A — multi-key account contract.** The account becomes a
+smart-contract object on Midnight representing a *set of authorised
+device keys*. Any registered device key can authorise transactions via
+a ZK witness. Scoped function-call keys give dApps bounded permissions.
+Delivers **principle 4 (one key per device)** in its full form.
 
-**Stream B — On-device cryptography.** Move key material onto the
-user's device. The device's secure hardware (TEE) holds the private
-key. Proof generation runs locally. A **decentralised recovery
-protocol** replaces the signing network's implicit recovery model.
-This removes the signing network entirely.
+**Stream B — on-device cryptography.** The user's key moves into the
+device's trusted execution environment (Secure Enclave on iOS,
+StrongBox/TEE on Android) with AES-256-GCM wrapping. Zero-knowledge
+proof generation runs on-device. A decentralised recovery protocol
+replaces the signing network's implicit recovery model. With Stream B
+complete, the signing network retires. Delivers **principles 1 and 2**
+in full.
 
-These streams are independent. Stream A can ship while the signing
-network is still active. Stream B can ship with a single-device
-account model. Neither blocks the other. Both must complete before
-Step 3.
+The streams are independent — neither blocks the other — but both
+must complete before v3.0.
 
-### Step 3: Fully Decentralised
+### v3.0 and beyond — credentials, KYC, chain abstraction
 
-With both streams complete, the user has full self-custody with
-multi-device support. No signing network. No centralised account
-provider. The user experience has not changed.
+With self-custody delivered, v3.0 adds the layer that needed that
+foundation:
 
-From this foundation, new capabilities can be added:
-
-- **Privacy-preserving credentials** — selective disclosure of
-  identity attributes (age, residency, accreditation) via
-  zero-knowledge proofs, without revealing personal data
+- **Privacy-preserving credentials MIP** — selective disclosure of
+  identity attributes via zero-knowledge. Built on Midnight's
+  attestation-tree primitive. **Multi-issuer from day one** (zkMe and
+  alternatives). Delivers principle 5.
 - **KYC and compliance** — verifiable credentials issued by trusted
-  third parties, usable across dApps without re-verification
-- **Cross-chain operations** — intent-based transactions that span
-  multiple networks from a single account
+  third parties, reusable across dApps without re-verification.
+- **Cross-chain intent engine** — intent-based transactions that
+  settle on Midnight, other chains, or both, from the same account.
+  Delivers principle 3 in full.
+- **Social account linking** and **DeRec social recovery** — additive
+  features on top of the decentralised foundation.
 
-These are additive features that build on top of the decentralised
-account model. They do not require further changes to the custody
-architecture.
+v3.0 is additive: it requires no changes to the custody architecture
+and continues the 90-day cadence.
 
 ```
-    Step 1: MVP
-    (managed signing)
+    MVP 1 (end June 2026)
+    n-of-t threshold signing (single operator),
+    single device, address-only accounts
             │
             ▼
-    Step 2: Decentralisation
+    MVP 1.1 (~90 days later)
+    multi-device OAuth, human-readable names,
+    on-chain name registry, connection-protocol MIP
+            │
+            ▼
+    v2.0 — parallel streams
     ┌───────┴───────┐
     │               │
     ▼               ▼
  Stream A        Stream B
- Multi-device    On-device
- accounts        cryptography
+ Multi-key       On-device
+ account         cryptography
+ contract        + recovery
     │               │
     └───────┬───────┘
             │
             ▼
-    Step 3: Fully Decentralised
-    (self-custody + multi-device)
-            │
-            ▼
-    + Credentials, KYC,
-      cross-chain
+    v3.0 and beyond
+    credentials, KYC, chain abstraction
 ```
 
 ## What Needs to Be Built
 
-### 1. Threshold Signing Service
+### 1. Threshold signing service (FROST on JubJub)
 
-A federated network of nodes that collectively generate and hold user
-keys via distributed key generation. Nodes collaboratively sign
-transactions without any node ever seeing the full private key. The
-signature scheme is chosen to be efficient inside Midnight's
-zero-knowledge proving system.
+MVP 1 ships with an ***n*-of-*t* FROST threshold committee** (default
+n=5, t=4) holding the user's JubJub key via distributed key generation
+— no single node ever possesses the full key. The committee is
+operated by a single trust party for MVP 1 and MVP 1.1; custody moves
+on-device at v2.0 Stream B (no inter-party federation milestone in
+between).
 
-**Status:** Signature verification validated end-to-end inside a
-Compact circuit on a local devnet. Threshold protocol integration not
-yet tested.
+The signing scheme is **FROST on JubJub**, chosen because Schnorr
+verification on JubJub is native arithmetic inside Midnight's SNARK.
+Midnight Passport consumes the **`threshold-signatures` crate
+published by the NEAR-MPC project** as a library dependency — *this
+is not an integration with the NEAR blockchain or protocol*. The
+crate provides FROST, DKG, key-reshare, and key-refresh out of the
+box. The only cryptographic delta we add on top is a **JubjubPoseidon
+ciphersuite** so the challenge hash matches Midnight's native
+`persistentHash`.
 
-### 2. Account Provider
+**Status:** Schnorr-verification-in-a-Compact-circuit validated
+end-to-end on a local Midnight devnet. Rust and TypeScript signing
+sides produce identical outputs across the language boundary.
+Crate-consumption strategy decided at MVP 1 Week 3; cryptographer
+sign-off at Week 4; end-to-end with an in-process n=5 committee at
+Week 8.
 
-An OAuth-like service for user registration, passkey verification, JWT
-issuance, and device management. Handles the device-addition ceremony
-(QR code exchange between existing and new device).
+### 2. Account provider
 
-**Status:** Design only. No implementation.
+An OAuth-like service for user registration, passkey verification,
+JWT issuance with request-binding claims, and capability-token
+issuance. Handles the device-addition ceremony (QR code exchange
+between existing and new device) from MVP 1.1 onward.
 
-### 3. Name Registry
+**Status:** Design. Implementation begins at MVP 1 Week 7.
+
+### 3. Name registry
 
 An on-chain smart contract that maps human-readable names
 (`alice.midnight`) to public keys and address records. Includes
 commit-reveal registration to prevent front-running, multi-address
-resolution (shielded, unshielded, fee token), and anti-abuse
+resolution (shielded, unshielded, fee token), and anti-squat
 mechanisms.
 
-**Status:** Design only. No on-chain name registry exists on Midnight
-today.
+**Status:** Design. Ships at MVP 1.1. MVP 1 holds names off-chain in
+the account provider as a named compromise.
 
-### 4. Multi-Key Account Contract
+### 4. Multi-key account contract
 
-A smart contract that represents an account as a set of authorised
-keys (Merkle root of a key set). Supports adding, removing, and
-rotating device keys. Supports scoped "function-call" keys for dApp
-authorisation with limited permissions.
+A Midnight smart contract representing an account as a set of
+authorised device keys. Supports adding, removing, and rotating
+device keys. Supports scoped function-call keys for dApp
+authorisation with bounded permissions (expiry, value cap, allowed
+contracts).
 
-**Status:** Design only. Midnight accounts are currently single-key.
+**Status:** Design. Ships at v2.0 Stream A.
 
-### 5. dApp-Wallet Connection Protocol
+### 5. dApp-wallet connection protocol
 
-A formal interface between dApps and wallets, covering wallet
-discovery, session authorisation with privacy scopes, asynchronous
-proof coordination, credential disclosure, and sign-in. This is the
-equivalent of Cardano's CIP-30 — the interface that the ecosystem
-builds against.
+A formal interface between dApps and wallets — wallet discovery,
+session authorisation with privacy scopes, asynchronous proof
+coordination, credential disclosure, and sign-in. The equivalent of
+Cardano's CIP-30 for Midnight. **Our top-priority ecosystem MIP.**
 
-**Status:** Midnight has an early dApp connector API. No formal
-standard exists for privacy scoping, proof lifecycle, or credential
-proofs.
+**Status:** Working draft published at MVP 1 Week 7; becomes a full
+MIP at MVP 1.1 with named external co-authors.
 
-### 6. Privacy-Preserving Credential System
+### 6. Privacy-preserving credential system
 
 A standard for issuing and verifying identity credentials (age,
-residency, accreditation) using Midnight's attestation tree mechanism.
-Users prove attributes via zero-knowledge proofs without revealing
-personal data. Includes nullifier-based reuse prevention and
-credential lifecycle management (issuance, expiration, revocation).
+residency, accreditation) using Midnight's attestation tree
+mechanism. Users prove attributes via zero-knowledge proofs without
+revealing personal data. Includes nullifier-based reuse prevention,
+credential lifecycle management, and **multi-issuer interoperability
+from day one** (zkMe and alternatives).
 
-**Status:** The attestation tree primitive exists at the platform
-level. No standard for credential types, domain separators, nullifier
-construction, or issuer interoperability.
+**Status:** Platform primitive exists; standard to be drafted at v3.0.
 
-### 7. Onboarding SDK
+### 7. On-device cryptography and recovery
+
+Key material in the device TEE with AES-256-GCM wrapping; local ZK
+proof generation; decentralised recovery (DeRec or equivalent) to
+replace the signing network's implicit recovery model.
+
+**Status:** Design. Ships at v2.0 Stream B.
+
+### 8. Onboarding SDK
 
 A developer-facing SDK that collapses the entire onboarding flow (QR
 channel, key generation, wallet derivation, name registration, fee
-subsidisation, credential issuance) into a single API call. Ensures
+subsidisation, credential issuance) into a single API. Ensures
 consistent user experience across all dApps.
 
-**Status:** Design only. No SDK exists.
+**Status:** Design. Drafted alongside the connection protocol.
 
 ## Standards Required
 
-Midnight has an improvement proposal process, but no MIPs have been
-written yet. The following standards are needed for interoperability.
-Without them, each implementor builds incompatible solutions.
+All standards land as **Midnight Improvement Proposals (MIPs)** — the
+process is ratified. Without interoperable MIPs, each implementor
+builds incompatible solutions.
 
-| Standard | Gap | Depends on |
-|----------|-----|------------|
-| **Key Derivation Paths** | 1AM and Lace implement derivation internally but no public spec exists. Third-party wallets cannot derive compatible keys. | — |
-| **Address Format** | No canonical encoding for Midnight's three address types. | Key Derivation |
-| **Naming System** | No on-chain name registry or resolution protocol. | Address Format |
-| **Multi-Key Account Model** | No standard for multi-device accounts or scoped dApp keys. | Naming System |
-| **dApp-Wallet Connection** | No formal equivalent to CIP-30 with privacy scoping and proof coordination. | Account Model |
-| **Credential Standard** | No interoperable format for privacy-preserving credentials. | Account Model |
-| **Threshold Signing** | No spec for the MVP's distributed signing protocol on Midnight's native curve. | Address Format |
-| **Onboarding SDK** | No standard API for dApp onboarding flows. | Connection + Signing |
+| MIP | Title | Depends on | First drafted at |
+|-----|-------|------------|------------------|
+| MIP-1 | **Key Derivation Paths** | — | MVP 1 Week 6 |
+| MIP-2 | **Bech32 Address Format** | MIP-1 | MVP 1 Week 8 |
+| MIP-3 | **Naming System** | MIP-2 | MVP 1.1 |
+| MIP-4 | **Multi-Key Account Model** | MIP-3 | v2.0 Stream A |
+| MIP-5 | **dApp-Wallet Connection Protocol** | MIP-4 | MVP 1.1 (working draft from MVP 1 Week 7) |
+| MIP-6 | **Privacy-Preserving Credentials** | MIP-4 | v3.0 |
+| MIP-7 | **FROST Threshold Signing on JubJub** | MIP-2 | MVP 1 Week 4 cryptographer sign-off |
+| MIP-8 | **Onboarding SDK** | MIP-5 + MIP-7 | MVP 1.1 |
 
-**Priority:** The dApp-wallet connection protocol and the credential
-standard are the highest priority — they define how the ecosystem
-plugs together and what makes Midnight Passport distinctive. Key
-derivation and address format are prerequisites but are smaller
-specifications that can be extracted from existing implementations.
+**Priority.** MIP-5 (connection protocol) and MIP-6 (credentials) are
+the highest-value ecosystem MIPs — they define how the ecosystem
+plugs together. MIP-1 and MIP-2 are smaller mechanical specifications
+but are prerequisites for everything else, so they are the first two
+we draft — with **Lace ID** as the expected external co-author, since
+Lace's existing key-derivation and address implementation directly
+informs them.
 
 ## What We Are Asking Of Partners
 
-1. **Review the architecture** — does the three-layer approach
-   (managed signing → multi-device → self-custody) work for your use
-   cases?
-2. **Co-author standards** — the connection protocol and credential
-   standard in particular benefit from input from wallet developers,
+1. **Review the architecture** — does the staged approach (managed
+   signing → federation → multi-device on-chain → self-custody) work
+   for your use cases?
+2. **Co-author MIPs** — the key-derivation MIP and address-format MIP
+   are the first two out of the gate and benefit most from wallet
+   implementer input. The connection protocol and credentials
+   standards follow and benefit from input from wallet developers,
    dApp builders, and credential issuers.
 3. **Identify gaps** — what does your integration need that is not
    covered here?
 
 ## Open Questions
 
-1. **Standards process** — should Midnight adopt its own improvement
-   proposal process (MIPs), extend Cardano's CIP process with a
-   Midnight category, or use another governance model?
-2. **Account provider federation** — for production, the account
-   provider should not be a single point of failure. How should it be
-   decentralised?
-3. **Regulatory posture** — a federated custodial model may trigger
-   regulatory requirements depending on jurisdiction.
-4. **Credential issuer diversity** — the design currently references
-   a single credential issuer. The standard must support multiple
-   issuers from the start.
+1. **Account provider availability** — for production, the account
+   provider should not be a single point of failure. Options include
+   running redundant providers or using decentralised identity
+   standards. Orthogonal to the custody question, since the provider
+   authenticates but does not hold keys.
+2. **Regulatory posture** — a managed-custody model (single-party
+   operator of the threshold committee) may trigger regulatory
+   requirements depending on jurisdiction. Needs legal review before
+   MVP 1.1.
+3. **Wallet partner for the MVP demo** — Lace is the default;
+   commit-or-fallback decision is a Week-8 input on the MVP 1
+   schedule.
 
 ---
 
-*ARC — Input Output Global, 2026/04/15*
+*ARC — Input Output Global, 2026/04/20*

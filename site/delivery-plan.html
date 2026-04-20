@@ -438,26 +438,27 @@
       <h4>Principles we deliver</h4>
       <ul>
         <li><strong>Principle 6 · Seedless UX</strong> — <span class="pill done">DELIVERED</span>. Passkey (WebAuthn) authentication from day one. The user never sees a seed, a mnemonic, or a raw address.</li>
-        <li><strong>Principle 1 · Authorisation via ZK witnesses</strong> — <span class="pill partial">PARTIAL</span>. The ZK-witness authorisation model is fully in place. Custody of the key sits in a single managed signing service rather than on the device — we choose the correct <em>pattern</em> now and move custody later.</li>
-        <li><strong>Principle 2 · Single seed, three wallets</strong> — <span class="pill partial">PARTIAL</span>. Three wallets derived from one seed via CIP-1852 hierarchical derivation. The seed lives in the signing service; it moves onto the device in v2.0 Stream B.</li>
+        <li><strong>Principle 1 · Authorisation via ZK witnesses</strong> — <span class="pill partial">PARTIAL</span>. The ZK-witness authorisation model is fully in place. The key is distributed across an <em>n</em>-of-<em>t</em> FROST threshold committee (default n=5, t=4) from day one — no single node ever holds the full key. The committee is operated by a single trust party at MVP 1; custody moves on-device at v2.0 Stream B.</li>
+        <li><strong>Principle 2 · Single seed, three wallets</strong> — <span class="pill partial">PARTIAL</span>. Three wallets derived from one seed via CIP-1852 hierarchical derivation. The seed is held across the threshold committee via DKG; it moves onto the device in v2.0 Stream B.</li>
         <li><strong>Principle 3 · Chain abstraction</strong> — <span class="pill partial">ACHIEVABLE</span>. The adopted <code>threshold-signatures</code> crate already supports ECDSA, EdDSA, and FROST, so chain abstraction becomes an API layer on top, not a new crypto build. We do not expose cross-chain flows in MVP 1 but the substrate for them exists.</li>
       </ul>
 
       <h4>Principles we defer</h4>
       <ul>
-        <li><strong>Principle 4 · One key per device</strong> — deferred to MVP 1.1. The MVP has one key in the signing service and multiple devices authenticating via passkey. Same UX (multi-device), different mechanism.</li>
+        <li><strong>Principle 4 · One key per device</strong> — deferred to v2.0 Stream A. MVP 1 has one key in the threshold committee, one device, one OAuth account. MVP 1.1 keeps that single key and single committee but adds multi-device on the OAuth account (multiple passkeys per account). Stream A moves the device-to-account mapping on-chain as a multi-key account contract.</li>
         <li><strong>Principle 5 · Privacy-by-design identity (credentials)</strong> — deferred to v3.0. Not blocked by the MVP — it is independent of the custody model, so it can land later without architectural rework.</li>
       </ul>
 
       <h4>Compromises we accept (and name)</h4>
       <ul>
-        <li>Single signing node rather than the federated n-of-t network. Acknowledged trust model for the MVP; federation lands in MVP 1.1.</li>
-        <li>No on-chain name registry — <code>alice.midnight</code> names are held off-chain in the account provider for the MVP. Registry lands in MVP 1.1.</li>
+        <li>Single-party operator — the <em>n</em>-of-<em>t</em> threshold committee runs under a single trust party at MVP 1. Federation across multiple independent trust parties is <strong>not</strong> a separate milestone; custody moves directly on-device at v2.0 Stream B.</li>
+        <li>Single device per account — the user has one OAuth account with one passkey at MVP 1. Multiple passkeys on the same OAuth account (multi-device) land in MVP 1.1.</li>
+        <li>Address-only accounts — MVP 1 references accounts by raw Midnight address. Human-readable names (<code>alice.midnight</code>) and an on-chain name registry arrive together at MVP 1.1.</li>
         <li>No QR onboarding — web-passkey only. QR returns in MVP 1.1 with mitigations for channel-binding and swap attacks.</li>
       </ul>
 
       <h4>What ships at the June demo</h4>
-      <p>Passkey login → named account → wallet connects (Lace or stub) → capability grant approved in the management console → transaction signed → submitted to Midnight devnet. Plus a recovery sad-path. Plus a "what's next" slide pointing to MVP 1.1.</p>
+      <p>Passkey login → address-based account → wallet connects (Lace or stub) → capability grant approved in the management console → transaction signed by the threshold committee → submitted to Midnight devnet. Plus a recovery sad-path. Plus a "what's next" slide pointing to MVP 1.1.</p>
     </div>
   </section>
 
@@ -468,17 +469,18 @@
         <span class="step-id">MVP 1.1</span>
         <span class="step-window">~90-day effort cycle · begins after MVP 1 ships</span>
       </div>
-      <div class="step-title">Names, federation, and the connection protocol as a MIP</div>
+      <div class="step-title">Multi-device accounts, names, and the connection protocol as a MIP</div>
 
-      <p>MVP 1.1 is the first post-MVP beat. It adds the features we cut from MVP 1 and hardens the MVP scaffolding. Concretely:</p>
+      <p>MVP 1.1 is the first post-MVP beat — same architecture as MVP 1, more user-facing features on top. <strong>No new crypto</strong>: the <em>n</em>-of-<em>t</em> threshold committee, the keys, and the circuits are unchanged, still operated by the same single trust party. Concretely:</p>
       <ul>
-        <li><strong>Multi-device accounts (from the user's perspective)</strong> — a single account (<code>alice.midnight</code>) authenticated by multiple passkeys, including adding a new device. The device-to-account mapping is still held by the account provider at this step; it moves on-chain in v2.0 Stream A.</li>
-        <li><strong>Federated signing</strong> — replaces the single MVP signing node with an <em>n</em>-of-<em>t</em> federation (default n=5, t=4), using the same adopted Rust crate.</li>
-        <li><strong>Name registry</strong> — <code>alice.midnight</code> names become on-chain, with commit-reveal registration, multi-address resolution, and anti-squat mitigations.</li>
-        <li><strong>QR onboarding returns</strong> with the channel-binding, timestamp, and visual-confirmation mitigations we've already specified.</li>
+        <li><strong>Multi-device OAuth accounts</strong> — the one OAuth account per user now accepts multiple passkeys. Each device registers its own passkey as a DB row on the account. The key in the threshold committee is still one per account. A device-addition ceremony lets an existing device authorise a new one.</li>
+        <li><strong>Human-readable names</strong> — <code>alice.midnight</code> arrives as the name layer. Accounts gain a name alongside their address.</li>
+        <li><strong>On-chain name registry</strong> — the names live on-chain, with commit-reveal registration, multi-address resolution, and anti-squat mitigations.</li>
+        <li><strong>Device-key ↔ wallet-grant CRUD</strong> — users see, add, revoke, and scope which devices and which dApp connections have which grants. All of this still lives in the account provider at MVP 1.1 — it moves on-chain at v2.0 Stream A.</li>
+        <li><strong>QR onboarding returns</strong> with channel-binding, timestamp, and visual-confirmation mitigations we've already specified.</li>
         <li><strong>The dApp-wallet connection protocol</strong> — our top-priority ecosystem MIP — becomes a full MIP with named external co-authors. This is the formal interface every wallet and dApp in the Midnight ecosystem will build against.</li>
       </ul>
-      <p>Principles landed at MVP 1.1: none new (principles are fully landed in later steps) but principle 1 strengthens from "single trusted operator" to "federation" and the user-facing feature set gains multi-device and named accounts.</p>
+      <p>Principles landed at MVP 1.1: none new (principles are fully landed in later steps). The user-facing feature set gains multi-device access, named accounts, and fine-grained grant management; the connection protocol becomes a formal MIP. The crypto and trust model are unchanged from MVP 1.</p>
     </div>
   </section>
 
@@ -491,9 +493,9 @@
       </div>
       <div class="step-title">Move the device-to-account mapping onto the chain</div>
 
-      <p>Stream A delivers <strong>principle 4 (one key per device)</strong> in its full form. The account becomes a smart-contract object on Midnight that represents a <em>set of authorised device keys</em>. Any registered device key can authorise transactions via a ZK witness. The account provider no longer holds the device-to-account mapping — the contract does.</p>
+      <p>Stream A delivers <strong>principle 4 (one key per device)</strong> in its full form. The account becomes a smart-contract object on Midnight that represents a <em>set of authorised device keys</em>. Any registered device key can authorise transactions via a ZK witness. <strong>Removes the OAuth account provider as source-of-truth</strong> for the device-to-account mapping — the contract does.</p>
       <p>The stream also introduces <strong>scoped function-call keys</strong> for dApp authorisation with bounded permissions (expiry, value cap, allowed contracts), which is what turns the dApp connection protocol from a session grant into a typed capability.</p>
-      <p>Stream A is independent of Stream B. It can ship while the signing network is still operating. MIP-4 lands alongside the implementation.</p>
+      <p>Stream A is independent of Stream B. It can ship while the signer service is still operating. MIP-4 lands alongside the implementation.</p>
     </div>
   </section>
 

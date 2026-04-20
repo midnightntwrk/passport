@@ -473,7 +473,7 @@
             <rect x="0" y="0" width="520" height="86" rx="8" class="svg-card-fill" stroke="#E52321" stroke-width="3"/>
             <text x="22" y="30" font-size="12" font-weight="600" fill="#E52321" letter-spacing="2">STEP 1 · MVP · END OF JUNE 2026</text>
             <text x="22" y="56" font-size="20" font-weight="500" class="svg-text">Managed signing</text>
-            <text x="22" y="74" font-size="12" class="svg-text-mute">Passkey · threshold-signing network · account provider · on-chain registry</text>
+            <text x="22" y="74" font-size="12" class="svg-text-mute">Passkey · n-of-t threshold committee · account provider · single device · address-only</text>
           </g>
 
           <!-- Arrow -->
@@ -531,25 +531,25 @@
       <div class="ph">Step 3 · additive</div>
 
       <div class="principle">1. Keys never leave TEEs; authorisation via ZK witnesses</div>
-      <div><span class="badge partial">PARTIAL</span>FROST witness verified inside the Compact circuit; proof reveals nothing about the signature or key. Custody sits in the signing network, not yet the device TEE.</div>
+      <div><span class="badge partial">PARTIAL</span>FROST witness verified inside the Compact circuit; proof reveals nothing about the signature or key. Key distributed across an n-of-t threshold committee (n=5, t=4) from day one — no single node holds it — but custody is not yet on the device TEE.</div>
       <div><span class="badge additive">—</span></div>
       <div><span class="badge scheduled">SCHEDULED</span>JubJub key moves into device TEE (AES-256-GCM wrap). Signing network retires.</div>
       <div><span class="badge done">FULLY MET</span></div>
 
       <div class="principle">2. Single seed, three wallets (Shielded · Night · Dust)</div>
-      <div><span class="badge partial">PARTIAL</span>One seed per user, three wallets derived via CIP-1852. Seed lives in the signing network.</div>
+      <div><span class="badge partial">PARTIAL</span>One seed per user, three wallets derived via CIP-1852. Seed held across the threshold committee via DKG.</div>
       <div><span class="badge additive">—</span></div>
       <div><span class="badge scheduled">SCHEDULED</span>BIP39 seed generated and held on device; all three wallets derived locally.</div>
       <div><span class="badge done">FULLY MET</span></div>
 
       <div class="principle">3. Chain abstraction via intent model</div>
-      <div><span class="badge partial">ACHIEVABLE</span>The adopted <code>threshold-signatures</code> crate already supports ECDSA/EdDSA/FROST — chain abstraction becomes an API layer on top of the signing network, not a new crypto build.</div>
+      <div><span class="badge partial">ACHIEVABLE</span>The adopted <code>threshold-signatures</code> crate already supports ECDSA/EdDSA/FROST — chain abstraction becomes an API layer on top of the threshold committee, not a new crypto build.</div>
       <div><span class="badge additive">—</span></div>
       <div><span class="badge additive">—</span></div>
       <div><span class="badge done">FULLY MET</span>Intent engine lands with credentials and cross-chain.</div>
 
       <div class="principle">4. One key per device</div>
-      <div><span class="badge partial">INVERTED</span>One key in the signing network; many devices authenticate to it via passkey. Same UX, centralised mechanism.</div>
+      <div><span class="badge partial">INVERTED</span>One key in the threshold committee. MVP: one device per account. Step 1.1: multi-device OAuth — multiple passkeys on one account, still one key. Same UX goal, centralised mechanism.</div>
       <div><span class="badge scheduled">SCHEDULED</span>Key-set Merkle root on-chain. Each device holds its own key and registers on-chain.</div>
       <div><span class="badge additive">—</span></div>
       <div><span class="badge done">FULLY MET</span></div>
@@ -561,7 +561,7 @@
       <div><span class="badge scheduled">STEP 3</span>Credential standard with multi-issuer support, nullifier-based revocation.</div>
 
       <div class="principle">6. Seedless UX</div>
-      <div><span class="badge done">FULLY MET</span>User never sees a seed phrase, mnemonic, or raw address. Passkey-only authentication from day one.</div>
+      <div><span class="badge done">FULLY MET</span>User never sees a seed phrase or mnemonic. Passkey-only authentication from day one. Human-readable names land at Step 1.1 (MVP 1 references accounts by address).</div>
       <div><span class="badge additive">—</span></div>
       <div><span class="badge additive">—</span></div>
       <div><span class="badge done">FULLY MET</span></div>
@@ -618,7 +618,7 @@
         <text x="20" y="58" font-size="14" font-weight="500" class="svg-text">FROST on JubJub</text>
         <text x="20" y="82" font-size="11" class="svg-text-mute">threshold-signatures crate (MIT · audited)</text>
         <text x="20" y="100" font-size="11" class="svg-text-mute">+ JubjubPoseidon ciphersuite</text>
-        <text x="20" y="118" font-size="11" class="svg-text-mute">MVP = single node; Step 1.1 = n=5,t=4</text>
+        <text x="20" y="118" font-size="11" class="svg-text-mute">MVP: n=5, t=4 committee from day one</text>
         <text x="20" y="142" font-size="10" class="svg-text-faint">Phase 3 · Lucas · Jesus reviews</text>
       </g>
 
@@ -1143,7 +1143,7 @@
       <g transform="translate(1040, 80)" data-modal-id="MS5">
         <circle r="14" fill="#00B458"/>
         <text y="-24" font-size="11" font-weight="600" class="svg-text" text-anchor="middle">Step 1.1</text>
-        <text y="42" font-size="10" class="svg-text-faint" text-anchor="middle">federation + names</text>
+        <text y="42" font-size="10" class="svg-text-faint" text-anchor="middle">multi-device + names</text>
       </g>
 
       <!-- Weekly tick markers below the main line, rhythm -->
@@ -1166,7 +1166,7 @@
       <div>
         <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 12px;">90-day cadence</div>
         <h3>Step 1.1 → 2 → 3</h3>
-        <p style="margin-top: 12px; color: var(--text-mute); line-height: 1.6; font-size: 0.96rem;">After June, each 90-day cycle adds federation, name registry, multi-device on-chain, on-device cryptography, or credentials — in the order that clears the next principle in the migration narrative.</p>
+        <p style="margin-top: 12px; color: var(--text-mute); line-height: 1.6; font-size: 0.96rem;">After June, each 90-day cycle adds multi-device OAuth, name registry, multi-device on-chain, on-device cryptography, or credentials — in the order that clears the next principle in the migration narrative.</p>
       </div>
     </div>
 
@@ -1263,7 +1263,7 @@
       title: 'Re-sharing exposure window',
       what: 'Between re-share rounds, attacker-controlled nodes hold stale shares. The longer the cadence, the larger the exposure window if multiple nodes are compromised.',
       how: 'The threshold-signing spec states cadence explicitly (default monthly, per NEAR/Lit/Web3Auth prior art). Tighter cadence (weekly) available if needed. Documented, not "TBD".',
-      where: 'Phase 3 (threshold-signing spec) — relevant from federation (Step 1.1+)',
+      where: 'Phase 3 (threshold-signing spec) — relevant from MVP since the n-of-t committee ships from day one',
       source: 'Practical Asynchronous Proactive Secret Sharing (eprint 2022/1586); Silence Labs — Offline Proactive Refresh' },
     { id: 'C10', l1: 'passkey', l2: 'framing', status: 'mitigated', type: 'UX · Low',
       title: 'Passkey framing — users misunderstand what passkeys are',
@@ -1304,14 +1304,14 @@
     { id: 'C16', l1: 'node', l2: 'avail.', status: 'mitigated', type: 'Operational · Medium',
       title: 'Signer node availability (t+1 offline = signing failure)',
       what: 'In a t-of-n threshold scheme, if t+1 or more nodes go offline, signing fails (this is a signing-failure, not a security-failure — the key remains safe).',
-      how: 'For MVP: single node with monitoring + 99.x SLO. For Step 1.1+ federated: t-of-n cushion with monitoring + automated failover; the federation ops design covers this.',
-      where: 'MVP single-node ops · federation ops (Step 1.1+)',
+      how: 'MVP runs n=5/t=4 within the single operator from day one — the t-of-n cushion is present from launch, with monitoring + automated failover inside the operator\'s ops. Committee retires at v2.0 Stream B when crypto moves on-device.',
+      where: 'MVP committee ops · retires at v2.0 Stream B',
       source: 'NEAR MPC node availability incident reviews; Fireblocks SLO patterns' },
     { id: 'C17', l1: 'monitor', l2: 'gap', status: 'mitigated', type: 'Operational · Medium',
       title: 'Monitoring gap — detecting Byzantine without false positives',
       what: 'Byzantine node behaviour (selectively signing, equivocating, leaking) is hard to distinguish from honest-but-faulty behaviour. Naive monitoring spams false positives.',
-      how: 'Federation ops design includes monitoring criteria + alerting thresholds. For MVP single-node, this risk is moot (single trusted operator).',
-      where: 'Federation ops (Step 1.1+ / Step 2)',
+      how: 'Committee ops spec includes monitoring criteria + alerting thresholds. Scope is narrower than inter-party federation — all nodes live under one operator, so fewer trust boundaries to monitor.',
+      where: 'MVP committee ops',
       source: 'Lit Protocol V0→V1 cutover post-mortem; ZenGo monitoring patterns' },
     { id: 'C18', l1: 'recovery', l2: 'sad path', status: 'mitigated', type: 'UX · Medium',
       title: 'Recovery happy-path works, sad-path doesn\'t',
@@ -1358,8 +1358,8 @@
     { id: 'O2', l1: 'ops', l2: 'burden', status: 'mitigated', type: 'Operational · Medium',
       title: 'Re-sharing operational burden — perpetual ceremony',
       what: 'Some MPC networks fall into a "forever key-ceremony" pattern where re-sharing dominates ops. The team spends more time on key-rotation than on shipping.',
-      how: 'Federation ops design includes automated re-sharing scheduling (monthly default) + ops automation. For MVP single-node, no re-sharing burden.',
-      where: 'Federation ops (Step 1.1+ / Step 2)',
+      how: 'Committee ops includes automated re-sharing scheduling (monthly default) + ops automation from MVP, since we run n=5/t=4 with DKG from day one. Scope is bounded by the single-operator model — no cross-party ceremony coordination.',
+      where: 'MVP committee ops',
       source: 'Lit Protocol re-share automation patterns; Silence Labs offline-proactive-refresh design' }
   ];
 
@@ -1400,32 +1400,32 @@
       title: 'Step 1 — Managed signing MVP',
       type: 'The 12-week outcome',
       sections: [
-        { label: 'What ships', content: 'Passkey (WebAuthn) authentication. A federated threshold-signing network (single node for MVP, n=5/t=4 in Step 1.1) that holds the user\'s JubJub key via Distributed Key Generation. An OAuth-like account provider for registration, JWT issuance, and session management. A management console (visible demo artefact) and a draft dApp-wallet connection protocol.' },
-        { label: 'What this delivers for the user', content: 'Passkey login → named account → wallet connects → capability grant approved → signed transaction on Midnight devnet. No seed phrases, no address management, no gas-token purchase. Identical user experience to the target end-state.' },
+        { label: 'What ships', content: 'Passkey (WebAuthn) authentication. An n-of-t FROST threshold committee (default n=5, t=4) that holds the user\'s JubJub key via Distributed Key Generation from day one — no single node ever holds the full key, but the committee runs under a single operator. An OAuth-like account provider for registration, JWT issuance, and session management. A management console (visible demo artefact) and a draft dApp-wallet connection protocol. Single device per account; accounts referenced by Midnight address (human-readable names land at Step 1.1).' },
+        { label: 'What this delivers for the user', content: 'Passkey login → address-based account → wallet connects → capability grant approved → signed transaction on Midnight devnet. No seed phrases, no gas-token purchase. Human-readable names arrive at Step 1.1.' },
         { label: 'What it scaffolds', content: 'Every component here is either (a) the final architecture, or (b) scaffolding we retire in Step 2. Nothing is a dead-end investment.' }
       ],
       meta: [
-        { label: 'Trust model', content: 'Custodial — users trust the federation not to collude' },
-        { label: 'Not yet', content: 'Self-custody (Step 2 Stream B), multi-device on-chain (Step 2 Stream A), credentials (Step 3)' }
+        { label: 'Trust model', content: 'Custodial — single operator runs the n-of-t committee. Inter-party federation is not a planned milestone; custody moves on-device at v2.0 Stream B.' },
+        { label: 'Not yet', content: 'Multi-device OAuth + names (Step 1.1), self-custody (Step 2 Stream B), multi-device on-chain (Step 2 Stream A), credentials (Step 3)' }
       ]
     },
     { id: 'HERO-STEP2', status: 'tobuild', statusLabel: 'STEP 2 · STREAM A',
       title: 'Stream A — Multi-device accounts on Midnight',
       type: 'Post-MVP · 90-day cycle',
       sections: [
-        { label: 'What it solves', content: 'In the MVP, the signing network holds a single key per user and devices authenticate to it. Stream A moves device management on-chain: the account is represented as a set of authorised keys (Merkle root in a Compact circuit), and any registered device key can authorise transactions via ZK witness.' },
-        { label: 'Why it matters', content: 'Reduces the role of the account provider. Device-to-account mapping is enforced by the smart contract, not by a centralised service. This is the on-chain half of self-custody.' }
+        { label: 'What it solves', content: 'In the MVP, the threshold committee holds a single key per user and the OAuth account provider maps devices to accounts. Stream A moves device management on-chain: the account is represented as a set of authorised keys (Merkle root in a Compact circuit), and any registered device key can authorise transactions via ZK witness.' },
+        { label: 'Why it matters', content: 'Removes the OAuth account provider as source-of-truth for device-to-account mapping. It is enforced by the smart contract, not by a centralised service. This is the on-chain half of self-custody.' }
       ],
       meta: [
-        { label: 'Independence', content: 'Ships while the signing network is still active. Does not depend on Stream B.' }
+        { label: 'Independence', content: 'Ships while the signing service is still active. Does not depend on Stream B.' }
       ]
     },
     { id: 'HERO-STEP2B', status: 'tobuild', statusLabel: 'STEP 2 · STREAM B',
       title: 'Stream B — On-device cryptography',
       type: 'Post-MVP · 90-day cycle',
       sections: [
-        { label: 'What it solves', content: 'Moves key material and proof generation onto the user\'s device. The device\'s TEE holds the private key (AES-256-GCM wrapping). ZK proof generation runs locally. A decentralised recovery protocol (DeRec or equivalent) replaces the signing network\'s implicit recovery model.' },
-        { label: 'Why it matters', content: 'This retires the signing network. The device signs and proves directly. Self-custody achieved.' }
+        { label: 'What it solves', content: 'Moves key material and proof generation onto the user\'s device. The device\'s TEE holds the private key (AES-256-GCM wrapping). ZK proof generation runs locally. A decentralised recovery protocol (DeRec or equivalent) replaces the signing service\'s implicit recovery model.' },
+        { label: 'Why it matters', content: 'This retires the threshold committee. The device signs and proves directly. Self-custody achieved.' }
       ],
       meta: [
         { label: 'Independence', content: 'Ships with a single-device model if Stream A is still in progress. Both streams must complete before Step 3.' }
@@ -1448,8 +1448,8 @@
       title: 'User device — passkey + proof client',
       type: 'Client · constant across MVP → Step 3',
       sections: [
-        { label: 'What runs here', content: 'A WebAuthn passkey authenticates the user against the account provider. The client constructs transaction parameters (recipient, amount, token), signs a transaction digest with the device key, sends the signed digest to the signing network, and then generates the ZK proof locally using the returned FROST signature as a private witness.' },
-        { label: 'What does NOT live here (in MVP)', content: 'The Midnight signing key lives in the signing network, not on the device. In Step 2 Stream B, the key moves into the device TEE and the signing network retires.' }
+        { label: 'What runs here', content: 'A WebAuthn passkey authenticates the user against the account provider. The client constructs transaction parameters (recipient, amount, token), signs a transaction digest with the device key, sends the signed digest to the threshold committee, and then generates the ZK proof locally using the returned FROST signature as a private witness.' },
+        { label: 'What does NOT live here (in MVP)', content: 'The Midnight signing key is distributed across the threshold committee, not on the device. In Step 2 Stream B, the key moves into the device TEE and the committee retires.' }
       ],
       meta: [
         { label: 'Authority-boundary invariant', content: 'Signing nodes only contribute when given a user-device-signed digest. A compromised provider can refuse but cannot fabricate.' }
@@ -1476,7 +1476,7 @@
         { label: 'What we add', content: 'A sibling ciphersuite — <code>JubjubPoseidon</code> — that implements the same <code>Ciphersuite</code> trait but uses Poseidon for the challenge hash H2. Off-chain signing can use either (Blake2b for upstream parity, Poseidon for our in-circuit verifier). Same FROST3 protocol, two hash adapters. Spec covers H1–H4 and domain-separator prefixes.' }
       ],
       meta: [
-        { label: 'MVP → Step 1.1', content: 'MVP ships single-node (acknowledged trust). Step 1.1 moves to federated n=5 / t=4 with ROAST.' },
+        { label: 'MVP trajectory', content: 'MVP ships the n=5/t=4 committee under a single operator from day one. Step 1.1 makes no crypto change — it adds multi-device OAuth, names, and the connection-protocol MIP. Custody moves on-device at v2.0 Stream B; no inter-party federation milestone is planned.' },
         { label: 'Owner', content: 'Lucas (impl) · Jesus (review) · Formal Methods (P1 hand-off after stable)' }
       ]
     },
@@ -1944,10 +1944,11 @@
       meta: []
     },
     { id: 'MS5', status: 'tobuild', statusLabel: '+90 DAYS',
-      title: 'Step 1.1 — federation + names',
-      type: 'First 90-day beat post-MVP',
+      title: 'Step 1.1 — multi-device + names',
+      type: 'First 90-day beat post-MVP · no crypto change',
       sections: [
-        { label: 'What ships', content: 'Federated signing network (n=5 / t=4 with ROAST). Name registry (<code>alice.midnight</code>) on-chain. QR onboarding returns with the mitigations specified in the threat catalogue. Connection protocol finalised as a MIP.' },
+        { label: 'What ships', content: 'Multi-device OAuth accounts — one account, multiple passkeys via the account provider, with a device-addition ceremony. Human-readable names (<code>alice.midnight</code>) + on-chain name registry. Device-key ↔ wallet-grant CRUD. QR onboarding returns with the threat-catalogue mitigations. Connection protocol finalised as a MIP.' },
+        { label: 'What does NOT change', content: 'Same n=5/t=4 threshold committee. Same single operator. No new crypto. The gains are user-facing.' },
         { label: 'Cadence', content: 'Weekly demos continue. 90-day cycles replace the 12-week sprint from here forward.' }
       ],
       meta: []
