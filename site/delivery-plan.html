@@ -490,7 +490,7 @@
 
   <div class="callout update">
     <div class="label">Plan updated 2026/04/21</div>
-    <p>The current MVP path makes the user's passkey the signing root. All cryptographic operations run client-side in the browser; the account provider is a lighter service — JWT issuance, name resolution, rate limiting, optional sponsorship — with no custody authority. The trade-off is a limited browser / OS matrix at MVP and account recovery deferred behind genuine multi-device support. The original plan (Plan B — FROST threshold committee, universal browser support, federation-mediated recovery) is preserved as the foundation for Milestone 2 cross-chain and as the fallback. See <a href="evolution.html">how the plan evolved</a>.</p>
+    <p>The current MVP path makes the user's passkey the signing root. All cryptographic operations run client-side in the browser; the account provider is a lighter service — JWT issuance, name resolution, rate limiting, optional sponsorship — with no custody authority. The NightExternal intent signature verified at the Midnight node level is sufficient authorisation for Compact contract calls, including name registration: MVP 1 performs no in-circuit signature verification, and the 1-of-N in-circuit Schnorr primitive preserved in the experiments returns under MVP-09 as the multi-device foundation. The trade-off is a limited browser / OS matrix at MVP and account recovery deferred behind genuine multi-device support. The original plan (Plan B — FROST threshold committee, universal browser support, federation-mediated recovery) is preserved as the foundation for Milestone 2 cross-chain and as the fallback. See <a href="evolution.html">how the plan evolved</a>.</p>
   </div>
 
   <section id="sec-2-1">
@@ -591,26 +591,26 @@
 <section id="sec-3">
   <h2><span class="sec-num">3</span>The phases to the MVP</h2>
 
-  <p class="lede">Seven phases carry the MVP requirements. Phase 3 (threshold-signing cornerstone) is parked and preserved as Milestone 2 input; a new Phase 3' covers the client-side signing work introduced by the current path. The overall schedule is expected to be approximately two weeks lighter than the original plan.</p>
+  <p class="lede">Six live phases carry the MVP requirements. Phase 3 (threshold-signing cornerstone) is parked and preserved as Milestone 2 input; Phase 4 (in-circuit verification) is removed — the NightExternal intent signature verified at the node level is sufficient authorisation for MVP 1. A new Phase 3' covers the client-side signing work introduced by the current path. The overall schedule is now expected to be approximately three weeks lighter than the original plan.</p>
 
   <dl class="phase-list">
     <dt>Phase 1</dt>
     <dd><strong>Foundation</strong> — scope lock, delegation, weekly-demo contract, prototype-repo contract, evidence log. Covers META-01/02/03/05/07 and EVD-01. The ground rules everything else rests on.</dd>
 
     <dt>Phase 2</dt>
-    <dd><strong>Cross-cutting prerequisites</strong> — STD-03 domain-separation registry, the adoption narrative (META-04), and the formal-methods engagement plan (META-06). Priority-1 formal-methods target is set here: in-circuit single-signer Schnorr verification.</dd>
+    <dd><strong>Cross-cutting prerequisites</strong> — STD-03 domain-separation registry, the adoption narrative (META-04), and the formal-methods engagement plan (META-06). Priority-1 formal-methods target under the current path is the name-registry commit-reveal scheme with ENSIP-15 normalisation enforced in-circuit.</dd>
 
     <dt class="parked">Phase 3</dt>
     <dd><strong>Threshold-signing cornerstone</strong> — <span class="pill parked">Parked</span> 2026/04/21, deferred to Milestone 2 cross-chain. Preserved in full as Milestone 2 input and as the fallback should the current MVP path hit a blocking risk. See <a href="the-plan-b.html">the original Plan B</a> for the full treatment.</dd>
 
     <dt class="new">Phase 3'</dt>
-    <dd><strong>Client-side signing spec and browser support matrix</strong> — <span class="pill new">New</span>. Covers MVP-08 (client-side single-signer Schnorr, passkey → seed → wallet-role keys, Path A via WebAuthn PRF and Path B assertion fallback) and the first slice of MVP-09 (research programme on passkey material stability and multi-device design space). The MVP-08 browser × OS matrix is a product-owner-deferred decision.</dd>
+    <dd><strong>Client-side signing spec and browser support matrix</strong> — <span class="pill new">New</span>. Covers MVP-08 (client-side signing of Midnight intents with the NightExternal key, passkey → seed → wallet-role keys, Path A via WebAuthn PRF and Path B assertion fallback) and the first slice of MVP-09 (research programme on passkey material stability, multi-device design space, and the 1-of-N in-circuit Schnorr verification pattern absorbed from the removed MVP-02). The MVP-08 browser × OS matrix is a product-owner-deferred decision.</dd>
 
     <dt>Phase 4</dt>
-    <dd><strong>In-circuit verification</strong> — MVP-02 reframed. The private witness is now a single-signer Schnorr signature rather than a FROST aggregate. The single-signer circuit already compiles and runs end-to-end on devnet; the work is to lock the spec, add the "what's in the challenge" differential tests, and hand the package to the formal-methods team. Phase shortens under the current path.</dd>
+    <dd><strong>In-circuit verification</strong> — <span class="pill removed">Removed</span> 2026/04/21. The NightExternal intent signature verified at the Midnight node level is sufficient authorisation for Compact contract calls, including name registration; MVP 1 performs no in-circuit signature verification. The 1-of-N in-circuit Schnorr primitive preserved in the experiments returns under MVP-09 as the multi-device foundation.</dd>
 
     <dt>Phase 5</dt>
-    <dd><strong>Account provider (simplified) and name registry</strong> — MVP-03 and MVP-04. The account provider is a thin sideband — WebAuthn, JWT issuance with <code>cnf</code> claim, rate limiting, optional sponsorship paymaster. No co-signing, no recovery hand-off, no key custody. Name registry contract unchanged from the original plan.</dd>
+    <dd><strong>Account provider (simplified) and name registry</strong> — MVP-03 and MVP-04. The account provider is a thin sideband — WebAuthn, JWT issuance with <code>cnf</code> claim, rate limiting, optional sponsorship paymaster. No co-signing, no recovery hand-off, no key custody. Name registry contract unchanged from the original plan; ownership is bound by the NightExternal intent signature that the node already verifies.</dd>
 
     <dt>Phase 6</dt>
     <dd><strong>Prerequisite MIPs</strong> — STD-01 (key-derivation paths, CIP-1852-aligned, coin type 2400) and STD-02 (Bech32m <code>mn_</code> address format). Each opens as a PR against the Midnight Improvement Proposals repository with a named external co-author. STD-01 can start in parallel with Phase 3'.</dd>
@@ -620,7 +620,7 @@
   </dl>
 
   <h4>Dependency graph</h4>
-  <p>Phase 2 depends on Phase 1. Phase 3' depends on Phases 1 and 2. Phase 4 depends on Phases 1, 2, and 3' (the circuit must verify exactly what the browser signs). Phase 5 depends on Phases 2 and 3' (the provider must reject any request whose <code>cnf</code> does not bind the browser-signed body). Phase 6 depends on Phase 2 for STD-03 prefixes; STD-01 can run in parallel with Phase 3'. Phase 7 consumes Phases 3', 4, and 5.</p>
+  <p>Phase 2 depends on Phase 1. Phase 3' depends on Phases 1 and 2. Phase 5 depends on Phases 2 and 3' (the provider must reject any request whose <code>cnf</code> does not bind the browser-signed body). Phase 6 depends on Phase 2 for STD-03 prefixes; STD-01 can run in parallel with Phase 3'. Phase 7 consumes Phases 3' and 5. (Phase 4 is removed; the previous Phase 7 → Phase 4 dependency is dropped.)</p>
 
   <div class="callout">
     <div class="label">Weekly-demo cadence</div>
@@ -635,7 +635,7 @@
   <div class="callout update">
     <div class="label">Schedule under review — 2026/04/21</div>
     <p>The week-by-week schedule below is being updated for the current MVP path. <strong>Dates and specific weekly deliverables will be refined in the next planning pass</strong>; the phase sequence in §3 above is current and authoritative. The cadence shown below is the previous cadence under the original plan — it is preserved here for reference so stakeholders can see what has shifted, but it is not the new schedule.</p>
-    <p>The current path is expected to be approximately two weeks lighter than the original plan because the FROST adoption, the single-node operational model, and the committee-wiring work have been dropped from the MVP critical path. The next planning pass will rewrite the week-by-week table; in the meantime the weekly-demo contract (META-03) remains the binding cadence.</p>
+    <p>The current path is now expected to be approximately three weeks lighter than the original plan — another week lighter than the previous revision — because the FROST adoption, the in-circuit single-signer Schnorr verification (Phase 4 / MVP-02, removed 2026/04/21), the single-node operational model, and the committee-wiring work have all been dropped from the MVP critical path. The next planning pass will rewrite the week-by-week table; in the meantime the weekly-demo contract (META-03) remains the binding cadence.</p>
   </div>
 
   <h3><span class="sec-num">4.1</span>Previous cadence — under review</h3>
@@ -677,10 +677,10 @@
   <!-- Weeks 5-8 -->
   <div class="week archived" id="w58">
     <div class="week-head"><span class="week-id">Weeks 5–8 · previous cadence</span><span class="week-dates"><code>2026/05/18 → 2026/06/12</code></span></div>
-    <div class="week-title">In-circuit verification (long pole)</div>
+    <div class="week-title">In-circuit verification — REMOVED</div>
     <dl>
       <dt>Goal (original)</dt><dd>Close Phase 4 — Rust client signs with an in-process n=5 signing committee → Compact circuit verifies → tx lands on devnet.</dd>
-      <dt>Status</dt><dd>Remains the long pole, but reframed. The private witness is a single-signer Schnorr signature rather than a FROST aggregate, and the single-signer circuit already runs end-to-end on devnet. Phase shortens: lock the spec, add differential tests, hand off to formal methods.</dd>
+      <dt>Status</dt><dd>Removed 2026/04/21. The NightExternal intent signature verified at the Midnight node level is sufficient authorisation for Compact contract calls in MVP 1; no in-circuit signature verification is performed. The in-circuit Schnorr primitive preserved in <code>experiments/redjubjub-wallet*</code> returns under MVP-09 as the 1-of-N multi-device foundation. Weeks 5–8 now absorb into Phase 5 (provider + name registry) and the MVP-09 research programme.</dd>
     </dl>
   </div>
 

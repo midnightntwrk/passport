@@ -296,7 +296,7 @@
 <p>Two things emerged from the DUST funding and transaction-sponsorship research earlier in April. First, a gap in the original fee-payment story that needed closing before the MVP could ship. Second, a cleaner architectural path that avoids standing up an MPC federation at all. Once the new sponsorship primitives were on the table, the cost of operating a threshold-signing committee — infrastructure, re-sharing cadence, Byzantine monitoring, committee-recovery UX — became hard to justify when a simpler route reached the same user-facing outcome.</p>
 
 <h2>What we chose — the current MVP path</h2>
-<p>The user's <strong>passkey is the signing root</strong>. All cryptographic operations run client-side in the browser: key derivation, Schnorr signing over JubJub, proof construction. The account provider is a lighter service — JWT issuance, name resolution, rate limiting, optional sponsorship relaying — with no custody authority and no key material. Midnight Passport is decentralised from day one. The trade-off is scope: a limited browser and operating-system matrix at MVP, and account recovery deferred behind genuine multi-device support. One device, one account at MVP 1.</p>
+<p>The user's <strong>passkey is the signing root</strong>. All cryptographic operations run client-side in the browser: key derivation, signing of Midnight intents with the NightExternal key, proof construction. The Midnight node verifies the intent signature at submission time; Compact contracts — including the name registry — bind ownership to the signing pubkey and trust the node's intent-signature check, so MVP 1 performs no in-circuit signature verification. The account provider is a lighter service — JWT issuance, name resolution, rate limiting, optional sponsorship relaying — with no custody authority and no key material. Midnight Passport is decentralised from day one. The trade-off is scope: a limited browser and operating-system matrix at MVP, and account recovery deferred behind genuine multi-device support. One device, one account at MVP 1. The 1-of-N in-circuit Schnorr primitive preserved in the experiments returns under MVP-09 as the multi-device foundation.</p>
 
 <h2>What we kept — the original plan</h2>
 <p>Plan B — the FROST threshold-signing committee with universal browser support and federation-mediated recovery by design — is preserved in full. It becomes the foundation for Milestone 2 cross-chain support, where the threshold-signing substrate is the natural fit. It also remains the fallback: if Plan A hits a blocking risk, the Plan B artefacts are still current and still reviewable.</p>
@@ -343,8 +343,13 @@
     </tr>
     <tr>
       <td class="dimension">Formal-methods priority-1 target</td>
-      <td>In-circuit single-signer Schnorr verification (already passing)</td>
+      <td>Name-registry commit-reveal with ENSIP-15 normalisation enforced in-circuit</td>
       <td class="dim">In-circuit threshold (FROST) verification</td>
+    </tr>
+    <tr>
+      <td class="dimension">In-circuit signature verification at MVP</td>
+      <td><strong>None.</strong> The NightExternal intent signature verified at the node level is sufficient authorisation. The 1-of-N in-circuit Schnorr primitive returns under MVP-09 as the multi-device foundation.</td>
+      <td class="dim">FROST aggregate verification in-circuit</td>
     </tr>
   </tbody>
 </table>
@@ -360,6 +365,7 @@
     <li>The six secure-onboarding design principles</li>
     <li>The weekly-demo cadence; every Friday, one thing that works</li>
     <li>The MIP standards track — key derivation, address format, domain separation</li>
+    <li>The in-circuit signature work from <code>experiments/redjubjub-wallet*</code> (returns as the 1-of-N multi-device foundation under MVP-09)</li>
   </ul>
 </aside>
 

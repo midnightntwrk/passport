@@ -356,6 +356,10 @@
     border-left-color: var(--text-faint);
     opacity: 0.72;
   }
+  .phase-card.removed {
+    border-left-color: var(--bad);
+    opacity: 0.72;
+  }
   .phase-card.new {
     border-left-color: var(--warn);
     background: var(--warn-soft);
@@ -370,6 +374,7 @@
     text-transform: uppercase;
   }
   .phase-card.parked .phase-id { color: var(--text-faint); }
+  .phase-card.removed .phase-id { color: var(--bad); }
   .phase-card.new .phase-id { color: var(--warn); }
   .phase-card .phase-title {
     font-family: var(--font-display);
@@ -404,6 +409,11 @@
     background: var(--bg);
     color: var(--text-faint);
     border: 1px solid var(--text-faint);
+  }
+  .phase-card .phase-chip.removed {
+    background: var(--bad-soft);
+    color: var(--bad);
+    border: 1px solid var(--bad);
   }
   .phase-card .phase-chip.new {
     background: var(--iog-volt-yellow);
@@ -450,6 +460,8 @@
   <a href="#s5" data-scene="s5" title="Standards track"></a>
   <a href="#s6" data-scene="s6" title="Evidence"></a>
   <a href="#s7" data-scene="s7" title="Delivery contract"></a>
+  <!-- Scene count now 07 across the narrative; Phase 4 / MVP-02 removed 2026/04/21. -->
+
 </nav>
 
 <!-- ──────────────  SCENE 1 · HERO  ────────────── -->
@@ -536,8 +548,8 @@
           <g transform="translate(90, 348)">
             <rect x="0" y="0" width="420" height="72" rx="8" class="svg-card-fill" stroke="#00B458" stroke-width="2.5"/>
             <text x="22" y="28" font-size="11" font-weight="600" class="svg-good-text" letter-spacing="2">ON MIDNIGHT</text>
-            <text x="22" y="52" font-size="15" font-weight="500" class="svg-text">Schnorr-on-JubJub signature verified in-circuit</text>
-            <text x="22" y="66" font-size="11" class="svg-text-mute">Single-signer · already passing on devnet</text>
+            <text x="22" y="52" font-size="15" font-weight="500" class="svg-text">Intent signature verified at the node</text>
+            <text x="22" y="66" font-size="11" class="svg-text-mute">NightExternal key · name registry trusts node-level check</text>
           </g>
 
           <!-- Account provider sideband -->
@@ -638,16 +650,16 @@
         <text x="20" y="170" font-size="10" class="svg-text-faint">All crypto is here. No server custody.</text>
       </g>
 
-      <!-- In-circuit verifier -->
+      <!-- Node-level intent verification -->
       <g transform="translate(400, 60)">
         <rect x="0" y="0" width="360" height="200" rx="8" class="svg-card-fill" stroke="#00B458" stroke-width="2.5"/>
-        <text x="20" y="30" font-size="11" font-weight="600" class="svg-good-text" letter-spacing="2">IN-CIRCUIT VERIFIER · PHASE 4</text>
-        <text x="20" y="58" font-size="14" font-weight="500" class="svg-text">Single-signer Schnorr</text>
-        <text x="20" y="80" font-size="11" class="svg-text-mute">Compact circuit: s·G == R + c·PK</text>
-        <text x="20" y="98" font-size="11" class="svg-text-mute">Poseidon challenge · STD-03 domain prefix</text>
-        <text x="20" y="116" font-size="11" class="svg-text-mute">Signature consumed as private witness</text>
-        <text x="20" y="136" font-size="11" class="svg-text-mute">k=14 · 11,436 rows · already green on devnet</text>
-        <text x="20" y="170" font-size="10" class="svg-text-faint">No FROST aggregate; hand-off closer to ready</text>
+        <text x="20" y="30" font-size="11" font-weight="600" class="svg-good-text" letter-spacing="2">NODE-LEVEL INTENT CHECK · MVP 1</text>
+        <text x="20" y="58" font-size="14" font-weight="500" class="svg-text">NightExternal intent signature</text>
+        <text x="20" y="80" font-size="11" class="svg-text-mute">Signed in the browser, verified by the node</text>
+        <text x="20" y="98" font-size="11" class="svg-text-mute">Compact contracts bind ownership to the pubkey</text>
+        <text x="20" y="116" font-size="11" class="svg-text-mute">Name registry trusts the node's verification</text>
+        <text x="20" y="136" font-size="11" class="svg-text-mute">No in-circuit signature verification in MVP 1</text>
+        <text x="20" y="170" font-size="10" class="svg-text-faint">1-of-N in-circuit Schnorr returns under MVP-09 for multi-device</text>
       </g>
 
       <!-- Account provider -->
@@ -711,9 +723,9 @@
   <div class="scene-counter">04 / 07</div>
 
   <div class="scene-content">
-    <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 18px;">Seven phases · ~12 weeks to MVP</div>
+    <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 18px;">Six live phases · ~12 weeks to MVP</div>
     <h2>From scope-lock<br>to MVP.</h2>
-    <p class="lede">Seven phases carry MVP-01 through MVP-09. One phase — the threshold-signing cornerstone — is parked and preserved as input to Milestone 2 cross-chain. A new phase (3') covers the client-side signing spec and the browser support matrix introduced by the current path.</p>
+    <p class="lede">Six live phases carry MVP 1. Phase 3 (threshold signing) is parked and preserved as input to Milestone 2 cross-chain. Phase 4 (in-circuit verification) is removed: the NightExternal intent signature verified at the node level is sufficient authorisation for Compact contract calls, including name registration. A new phase (3') covers the client-side signing spec and the browser support matrix; the 1-of-N in-circuit Schnorr primitive preserved in the experiments returns under MVP-09 as the multi-device foundation.</p>
 
     <div class="phases">
 
@@ -730,7 +742,7 @@
         <span class="phase-id">Phase 2 · Cross-cutting</span>
         <span class="phase-title">Domain-separation registry, adoption narrative, formal-methods plan</span>
         <span class="phase-meta">STD-03 · META-04 · META-06</span>
-        <p class="phase-body">STD-03 domain-separation registry — every <code>persistentHash</code> use site gets a prefix. Adoption narrative naming the external co-author for each MIP. Formal-methods engagement plan with the priority-1 target set to in-circuit single-signer Schnorr verification.</p>
+        <p class="phase-body">STD-03 domain-separation registry — every <code>persistentHash</code> use site gets a prefix. Adoption narrative naming the external co-author for each MIP. Formal-methods engagement plan with the priority-1 target set to the name-registry commit-reveal scheme with ENSIP-15 normalisation enforced in-circuit — the circuit work that actually remains for MVP 1.</p>
       </div>
 
       <div class="phase-card parked">
@@ -745,16 +757,16 @@
         <span class="phase-chip new">New</span>
         <span class="phase-id">Phase 3' · Client-side signing</span>
         <span class="phase-title">Client-signing spec and browser support matrix</span>
-        <span class="phase-meta">MVP-08 · MVP-09 (first slice)</span>
-        <p class="phase-body">Passkey → seed → wallet-role keys → intent signing, with the WebAuthn PRF path and the assertion fallback both specified. First slice of the browser × OS support matrix (MVP-08; product-owner-deferred). Kicks off MVP-09 research on passkey-material stability and the design space for genuine multi-device, which gates recovery.</p>
+        <span class="phase-meta">MVP-08 · MVP-09 (first slice, including 1-of-N)</span>
+        <p class="phase-body">Passkey → seed → wallet-role keys → intent signing with the NightExternal key, with the WebAuthn PRF path and the assertion fallback both specified. First slice of the browser × OS support matrix (MVP-08; product-owner-deferred). Kicks off MVP-09 research on passkey-material stability, the design space for genuine multi-device (which gates recovery), and the 1-of-N in-circuit Schnorr verification pattern that MVP-09 absorbs from the removed MVP-02.</p>
       </div>
 
-      <div class="phase-card">
-        <span class="phase-chip current">Current</span>
+      <div class="phase-card removed">
+        <span class="phase-chip removed">Removed</span>
         <span class="phase-id">Phase 4 · In-circuit verification</span>
-        <span class="phase-title">Single-signer Schnorr verification spec and reference circuit</span>
-        <span class="phase-meta">MVP-02 · reframed under the current path</span>
-        <p class="phase-body">The circuit work continues; the private witness is now a single-signer Schnorr signature rather than a FROST aggregate. The single-signer circuit already compiles and runs end-to-end on devnet. Phase shortens: lock the spec, add the "what's in the challenge" table and differential tests, hand off to formal methods.</p>
+        <span class="phase-title">In-circuit single-signer Schnorr verification</span>
+        <span class="phase-meta">MVP-02 · removed 2026/04/21</span>
+        <p class="phase-body">Removed 2026/04/21. The NightExternal intent signature verified at the Midnight node level is sufficient authorisation for Compact contract calls, including name registration; no in-circuit signature verification is performed in MVP 1. The in-circuit Schnorr primitive preserved in <code>experiments/redjubjub-wallet*</code> returns under MVP-09 as the 1-of-N multi-device foundation — the work is not wasted, only re-sequenced.</p>
       </div>
 
       <div class="phase-card">
@@ -783,8 +795,8 @@
 
     </div>
 
-    <p class="one-liner" style="margin-top: 48px;"><span class="h-accent">Phase 3 is parked</span>, preserved as Milestone 2 input. <span class="h-warn">Phase 3' is new</span>, covering the client-side signing work. <span class="h-info">Phases 4, 5, and 7</span> shorten under the current path because there is no committee to operate. <span class="h-good">The June 2026 MVP target stands.</span></p>
-    <p class="footnote">The current path is expected to be approximately two weeks lighter than the original plan because the FROST adoption, the single-node operational model, and the committee-wiring work have been dropped from the MVP critical path.</p>
+    <p class="one-liner" style="margin-top: 48px;"><span class="h-accent">Phase 3 is parked</span>, preserved as Milestone 2 input. <span class="h-bad">Phase 4 is removed</span>, folded into MVP-09. <span class="h-warn">Phase 3' is new</span>, covering the client-side signing work. <span class="h-info">Phases 5 and 7</span> shorten under the current path because there is no committee to operate. <span class="h-good">The June 2026 MVP target stands.</span></p>
+    <p class="footnote">The current path is now expected to be approximately three weeks lighter than the original plan — another week lighter than the previous revision — because the FROST adoption, the in-circuit single-signer Schnorr verification, the single-node operational model, and the committee-wiring work have all been dropped from the MVP critical path.</p>
   </div>
 </section>
 
@@ -868,7 +880,7 @@
   <div class="scene-content center">
     <div class="ed-furniture" style="color: var(--iog-infared); margin-bottom: 18px;">What's validated</div>
     <h2>Already running<br>on devnet.</h2>
-    <p class="lede center">The cryptographic plan is not speculative. Three core assumptions are already validated end-to-end on a local Midnight devnet. Under the current path, the priority-1 formal-methods target — in-circuit single-signer Schnorr verification — is already implemented and passes, so the hand-off is closer to ready than under the original plan.</p>
+    <p class="lede center">The cryptographic plan is not speculative. Three core assumptions are already validated end-to-end on a local Midnight devnet. Under the current path, MVP 1 performs no in-circuit signature verification — the NightExternal intent signature is verified at the node level — but the in-circuit Schnorr primitive is preserved in the experiments and returns under MVP-09 as the 1-of-N multi-device foundation.</p>
 
     <svg class="scene-svg" viewBox="0 0 1200 220" xmlns="http://www.w3.org/2000/svg" style="max-height: 26vh; margin-top: 48px;">
       <g transform="translate(40, 20)">
@@ -954,8 +966,8 @@
 
       <g transform="translate(540, 60)">
         <circle r="14" fill="#E52321"/>
-        <text y="-24" font-size="11" font-weight="600" class="svg-text" text-anchor="middle">In-circuit verifier</text>
-        <text y="42" font-size="10" class="svg-text-faint" text-anchor="middle">Phase 4 complete</text>
+        <text y="-24" font-size="11" font-weight="600" class="svg-text" text-anchor="middle">Provider + registry</text>
+        <text y="42" font-size="10" class="svg-text-faint" text-anchor="middle">Phase 5 complete</text>
       </g>
 
       <g transform="translate(800, 60)">
