@@ -1,5 +1,7 @@
 # ARC Passport — MVP Architecture
 
+> **Status as of 2026/04/21:** This is the architecture for **Plan B — slow but universal**, the original MVP plan. Following the 2026/04/21 stakeholder call, Plan B has been parked in favour of Plan A (decentralised but limited); see [`../plan-A-decentralised-but-limited/README.md`](../plan-A-decentralised-but-limited/README.md) for the current MVP plan. The FROST-based architecture below remains the reference for Milestone 2 (cross-chain support) and as a fallback should Plan A hit a blocking risk.
+
 ## Problem Statement
 
 Midnight's zero-knowledge technology offers strong privacy guarantees for
