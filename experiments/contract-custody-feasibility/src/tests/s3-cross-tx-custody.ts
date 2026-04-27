@@ -1,42 +1,47 @@
 // S3 — cross-transaction shielded custody: a contract holds shielded
 // tokens for one or more blocks, then sends them in a later transaction.
 //
-// Historical blocker: "Merkle tree not rehashed" — the Zswap protocol
-// previously did not let a contract-owned shielded note be referenced
-// from a later transaction. Whether v1 still has this constraint is
-// what S3 measures.
-//
 // Procedure:
-//   1. Run mint_shielded_to_self (same circuit as S1) to put shielded
-//      notes on the contract.
-//   2. Wait for the indexer to confirm the mint block.
-//   3. In a separate transaction, call send_held_shielded.
-//   4. PASS iff both txs land. FAIL if step 3 trips the Merkle rehash
-//      error or a similar protocol-level rejection.
+//   1. mint_shielded_to_self → contract holds a fresh shielded note.
+//   2. Wait for the indexer to settle the mint block.
+//   3. Build the QualifiedShieldedCoinInfo for the contract-held note —
+//      this is the half of the recipe that's harder than S4. The user
+//      wallet's `state.shielded.availableCoins` only contains user-owned
+//      notes; contract-owned notes need a different surface.
+//   4. Call send_held_shielded with that coin.
+//   5. PASS iff the send tx lands.
+//
+// The on-chain color is straightforward — same `rawTokenType` derivation
+// as S4. The mt_index is what was previously missing; we probe several
+// candidate provider methods at runtime to find one that returns it.
 
 import { randomBytes } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import { firstValueFrom } from 'rxjs';
+import {
+  rawTokenType,
+  encodeRawTokenType,
+} from '@midnight-ntwrk/ledger-v8';
 import { setupContract, runTest } from '../test-helpers.js';
 import { hexToBytes32 } from '../common.js';
 
 const TEST_ID = 'S3';
-const SHIELDED_COLOR =
-  process.env.S3_COLOR ?? '00'.repeat(31) + '03';
+const SHIELDED_COLOR_HEX = process.env.S3_COLOR ?? '00'.repeat(31) + '03';
 
 await runTest({
   testId: TEST_ID,
   name: 'cross-tx-custody',
   description: 'mint shielded to contract, then send from held in a later block',
   action: async () => {
-    const { walletCtx, contract } = await setupContract({ slot: 'primary' });
+    const { walletCtx, contract, providers } = await setupContract({ slot: 'primary' });
     const amount = BigInt(process.env.S3_AMOUNT ?? '500');
     const mintNonce = new Uint8Array(randomBytes(32));
+    const SHIELDED_COLOR = hexToBytes32(SHIELDED_COLOR_HEX);
 
-    // Hop 1 — mint shielded to contract.
-    console.log(`Hop 1: mint ${amount} shielded to contract`);
+    // ── Hop 1: contract mints to itself ────────────────────────────────────
+    console.log(`Hop 1: mint ${amount} shielded to contract (nonce ${shortHex(mintNonce)})`);
     const mintResult = await contract.found.callTx.mint_shielded_to_self(
-      hexToBytes32(SHIELDED_COLOR),
+      SHIELDED_COLOR,
       amount,
       mintNonce,
     );
@@ -51,90 +56,208 @@ await runTest({
       };
     }
 
-    // Wait for indexer to advance one block before attempting the send.
-    console.log('Waiting 15s for indexer to settle the mint block...');
+    console.log('Waiting 15s for the indexer to settle the mint block...');
     await new Promise((r) => setTimeout(r, 15_000));
 
-    // Hop 2 — send shielded from held balance.
-    //
-    // sendShielded requires a QualifiedShieldedCoinInfo {nonce, color, value,
-    // mt_index}. nonce, color, and value we know — but mt_index is set by
-    // the ledger when the mint commits. The off-chain prover must look it
-    // up. This is itself the precise shape of the "Merkle rehash" finding.
-    //
-    // Look-up strategies, in order of preference:
-    //   1. providers.publicDataProvider exposes a contract-utxo query
-    //      (probe at runtime).
-    //   2. Fall back to env var S3_MT_INDEX, set by hand from the indexer
-    //      after running U1/S1 once.
-    //   3. Try mt_index = 0n and let the runtime error reveal whether
-    //      the lookup is needed.
+    // ── Color derivation — same recipe as S4 ───────────────────────────────
+    const derivedRawHex = rawTokenType(SHIELDED_COLOR, contract.address);
+    const derivedColor = encodeRawTokenType(derivedRawHex);
+    console.log(`Derived on-chain color: 0x${derivedRawHex.replace(/^0x/, '')}`);
 
-    const state = await firstValueFrom(walletCtx.wallet.state());
-    const recipientShieldedKey = state.shielded.coinPublicKey;
-
+    // ── Probe for the contract-held note's mt_index ────────────────────────
+    //
+    // For S4 (user-owned note), the wallet's `state.shielded.availableCoins`
+    // exposes a QualifiedShieldedCoinInfo carrying the mt_index. For S3 the
+    // note is contract-owned, so the user wallet doesn't surface it. Try
+    // several candidate APIs in order; whichever returns first is used.
     let mtIndex: bigint | null = null;
-    let mtIndexSource: string;
+    let mtIndexSource = 'not-found';
+    const probeReports: Array<{ surface: string; result: string }> = [];
+
+    type AvailableCoin = { coin?: any; commitment?: any };
+    const walletState: any = await firstValueFrom(walletCtx.wallet.state());
+
+    // Probe 1: maybe the wallet's availableCoins also exposes contract-owned
+    // notes (we don't expect this, but it's cheap to check).
     try {
-      const provs: any = (walletCtx as any).__providers ?? null;
-      if (provs?.publicDataProvider?.queryContractShieldedNotes) {
-        const notes = await provs.publicDataProvider.queryContractShieldedNotes(
-          contract.address,
-          hexToBytes32(SHIELDED_COLOR),
-        );
-        if (Array.isArray(notes) && notes.length > 0) {
-          mtIndex = BigInt(notes[0].mt_index ?? notes[0].mtIndex ?? 0);
-          mtIndexSource = 'publicDataProvider';
-        } else {
-          mtIndexSource = 'publicDataProvider-empty';
-        }
-      } else {
-        mtIndexSource = 'no-publicDataProvider-api';
+      const all: AvailableCoin[] = walletState?.shielded?.availableCoins ?? [];
+      const matches = all.filter(
+        (c) =>
+          (c?.coin as any)?.type === derivedRawHex.replace(/^0x/, '') ||
+          (c?.coin as any)?.type === '0x' + derivedRawHex.replace(/^0x/, ''),
+      );
+      probeReports.push({
+        surface: 'wallet.state.shielded.availableCoins',
+        result: `total=${all.length} matching-derived-color=${matches.length}`,
+      });
+      if (matches.length > 0) {
+        const q = (matches[0] as any).coin;
+        mtIndex = BigInt(q.mt_index ?? q.mtIndex);
+        mtIndexSource = 'availableCoins';
       }
     } catch (e: any) {
-      mtIndexSource = `lookup-error:${e?.message ?? e}`;
+      probeReports.push({
+        surface: 'wallet.state.shielded.availableCoins',
+        result: `error: ${e?.message ?? e}`,
+      });
     }
+
+    // Probe 2: the contract handle's `currentShieldedCoinState` / similar.
+    if (mtIndex === null) {
+      const contractAny: any = contract.found;
+      const candidates = [
+        'shieldedCoins',
+        'getShieldedCoins',
+        'currentShieldedCoinState',
+        'queryShieldedNotes',
+      ];
+      for (const c of candidates) {
+        if (typeof contractAny?.[c] === 'function') {
+          try {
+            const got = await contractAny[c](derivedColor);
+            probeReports.push({
+              surface: `contract.${c}(derivedColor)`,
+              result: `returned ${typeof got} (${Array.isArray(got) ? 'len=' + got.length : 'value'})`,
+            });
+            const hit = Array.isArray(got) ? got.find((g: any) => BigInt(g?.value ?? 0) === amount) : null;
+            if (hit) {
+              mtIndex = BigInt(hit.mt_index ?? hit.mtIndex);
+              mtIndexSource = `contract.${c}`;
+              break;
+            }
+          } catch (e: any) {
+            probeReports.push({
+              surface: `contract.${c}`,
+              result: `threw: ${e?.message ?? e}`,
+            });
+          }
+        }
+      }
+      if (probeReports.filter((p) => p.surface.startsWith('contract.')).length === 0) {
+        probeReports.push({
+          surface: 'contract.<probe-set>',
+          result: 'none of {shieldedCoins, getShieldedCoins, currentShieldedCoinState, queryShieldedNotes} present',
+        });
+      }
+    }
+
+    // Probe 3: publicDataProvider candidates.
+    if (mtIndex === null) {
+      const dp: any = providers.publicDataProvider;
+      const candidates = [
+        'queryContractShieldedNotes',
+        'getContractShieldedCoins',
+        'contractShieldedCoins',
+        'shieldedCoinsForContract',
+      ];
+      for (const c of candidates) {
+        if (typeof dp?.[c] === 'function') {
+          try {
+            const got = await dp[c](contract.address, derivedColor);
+            probeReports.push({
+              surface: `publicDataProvider.${c}(...)`,
+              result: `returned ${typeof got} (${Array.isArray(got) ? 'len=' + got.length : 'value'})`,
+            });
+            const hit = Array.isArray(got) ? got.find((g: any) => BigInt(g?.value ?? 0) === amount) : null;
+            if (hit) {
+              mtIndex = BigInt(hit.mt_index ?? hit.mtIndex);
+              mtIndexSource = `publicDataProvider.${c}`;
+              break;
+            }
+          } catch (e: any) {
+            probeReports.push({
+              surface: `publicDataProvider.${c}`,
+              result: `threw: ${e?.message ?? e}`,
+            });
+          }
+        }
+      }
+    }
+
+    // Probe 4: env override (S3_MT_INDEX=<n>) for hand-driven probes.
     if (mtIndex === null && process.env.S3_MT_INDEX) {
       mtIndex = BigInt(process.env.S3_MT_INDEX);
       mtIndexSource = 'env-S3_MT_INDEX';
     }
+
     if (mtIndex === null) {
+      // Surface the probe trace so a follow-up run can tell us which
+      // surface actually exists. Fall through with mt_index=0 to capture
+      // the runtime error.
+      console.log('  no contract-held-note lookup surface found; probes:');
+      for (const p of probeReports) console.log(`    - ${p.surface}: ${p.result}`);
       mtIndex = 0n;
       mtIndexSource = 'fallback-0';
+    } else {
+      console.log(`  mt_index = ${mtIndex} (via ${mtIndexSource})`);
     }
 
+    // ── Hop 2: send_held_shielded ──────────────────────────────────────────
+    const recipientShieldedKey = walletState.shielded.coinPublicKey;
     const coin = {
       nonce:    mintNonce,
-      color:    hexToBytes32(SHIELDED_COLOR),
+      color:    derivedColor,
       value:    amount,
       mt_index: mtIndex,
     };
 
-    console.log(`Hop 2: send_held_shielded → user (mt_index=${mtIndex} via ${mtIndexSource})`);
-    const sendResult = await contract.found.callTx.send_held_shielded(
-      coin,
-      recipientShieldedKey,
-      amount,
-    );
-    const sendTx = sendResult?.public?.txId ?? sendResult?.public?.transactionHash;
+    console.log(`Hop 2: send_held_shielded (mt_index=${mtIndex} via ${mtIndexSource})`);
+    let sendTx: string | undefined;
+    let sendError: string | undefined;
+    try {
+      const sendResult = await contract.found.callTx.send_held_shielded(
+        coin,
+        recipientShieldedKey,
+        amount,
+      );
+      sendTx = sendResult?.public?.txId ?? sendResult?.public?.transactionHash;
+    } catch (e: any) {
+      sendError = e?.message ?? String(e);
+    }
 
     await walletCtx.wallet.stop();
 
+    if (sendTx) {
+      return {
+        verdict: 'PASS',
+        txHash: sendTx,
+        note: `Cross-tx shielded custody confirmed: contract held shielded notes across blocks and spent them later (mt_index source: ${mtIndexSource}).`,
+        details: {
+          mintTx,
+          mintNonce: Buffer.from(mintNonce).toString('hex'),
+          sendTx,
+          contractScopedColor: SHIELDED_COLOR_HEX,
+          derivedOnChainColor: derivedRawHex,
+          amount: amount.toString(),
+          mtIndex: mtIndex.toString(),
+          mtIndexSource,
+          probes: probeReports,
+        },
+      };
+    }
+
     return {
-      verdict: sendTx ? 'PASS' : 'PARTIAL',
-      txHash: sendTx,
-      note: sendTx
-        ? `Cross-tx shielded custody confirmed: contract held shielded notes across blocks and spent them later (mt_index source: ${mtIndexSource}).`
-        : `send_held_shielded did not surface a tx hash. mt_index source: ${mtIndexSource}. The "Merkle rehash" finding's exact shape is whether the off-chain prover can recover the contract-held note's mt_index — capture node logs.`,
+      verdict: 'FAIL',
+      errorCode: mtIndexSource === 'fallback-0' ? 'no-mt-index-surface' : 'send-failed',
+      note:
+        mtIndexSource === 'fallback-0'
+          ? 'No contract-held-note lookup surface found in the SDK. The mt_index for the contract-owned note could not be recovered, so send_held_shielded was called with mt_index=0 and (correctly) rejected. The probe trace in `details.probes` records every surface that was checked.'
+          : `send_held_shielded failed even with mt_index=${mtIndex} from ${mtIndexSource}. See details.sendError for the exact failure.`,
       details: {
         mintTx,
         mintNonce: Buffer.from(mintNonce).toString('hex'),
-        sendTx,
-        color: SHIELDED_COLOR,
+        contractScopedColor: SHIELDED_COLOR_HEX,
+        derivedOnChainColor: derivedRawHex,
         amount: amount.toString(),
         mtIndex: mtIndex.toString(),
         mtIndexSource,
+        sendError,
+        probes: probeReports,
       },
     };
   },
 });
+
+function shortHex(b: Uint8Array): string {
+  return '0x' + Buffer.from(b).toString('hex').slice(0, 12) + '…';
+}

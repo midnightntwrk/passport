@@ -1,37 +1,36 @@
 // S4 — receiveShielded: user sends shielded tokens to a contract.
 //
-// **The most critical net-new test in the entire experiment.** Previously
-// untested on devnet. The Passport account model assumes a contract can
-// receive shielded tokens directly from a user. If it cannot, the
-// shielded-asset custody story collapses and the post-MVP multi-device
-// milestone must commit to a cryptographic alternative (FROST t≥2 with a
-// PIN factor) for shielded assets.
+// **The most critical net-new test in the entire experiment.** This test
+// originally surfaced as FAIL because the runner passed the user-supplied
+// (contract-scoped) color into the ShieldedCoinInfo, but the wallet
+// indexes notes by the *on-chain* color, which is derived from
+// (contract_address, contract_scoped_color).
 //
-// Pre-condition: the user wallet must hold the shielded token to send.
-// We therefore run a setup pass that mints shielded into the user's own
-// wallet (via mint_and_send_shielded with recipient = user's coin pk),
-// waits for confirmation, then attempts to send those shielded tokens
-// into the contract via the receive_shielded circuit.
+// The fix is the recipe demonstrated in `midnight-receive-shielded-sdk-gap-repro`:
 //
-// Verdict mapping:
-//   - PASS  — receive_shielded compiles, deploys, the call lands a tx, and
-//             the contract's shielded-mint-count or balance reflects the
-//             receive.
-//   - FAIL @ compile-time — receiveShielded() in the .compact contract is
-//                            not a real Compact-stdlib operation. The
-//                            language doesn't support contract-receive of
-//                            shielded tokens. Compiler error captured.
-//   - FAIL @ runtime — circuit compiles but the node rejects the
-//                       transaction. Node error code captured.
+//     import { rawTokenType, encodeRawTokenType, encodeShieldedCoinInfo }
+//       from '@midnight-ntwrk/ledger-v8';
+//     const onChainColor = encodeRawTokenType(
+//       rawTokenType(contractScopedColor, contractAddress),
+//     );
+//     await contract.callTx.receive_shielded(
+//       encodeShieldedCoinInfo({ type: onChainColor, nonce, value }),
+//     );
+//
+// `rawTokenType` and the `availableCoins` enumeration are both real public
+// SDK surfaces — the prior FAIL was operator error, not an SDK gap.
 
 import { randomBytes } from 'node:crypto';
 import { firstValueFrom } from 'rxjs';
+import {
+  rawTokenType,
+  encodeRawTokenType,
+} from '@midnight-ntwrk/ledger-v8';
 import { setupContract, runTest } from '../test-helpers.js';
 import { hexToBytes32 } from '../common.js';
 
 const TEST_ID = 'S4';
-const SHIELDED_COLOR =
-  process.env.S4_COLOR ?? '00'.repeat(31) + '04';
+const SHIELDED_COLOR_HEX = process.env.S4_COLOR ?? '00'.repeat(31) + '04';
 
 await runTest({
   testId: TEST_ID,
@@ -40,7 +39,6 @@ await runTest({
   action: async () => {
     const { walletCtx, contract } = await setupContract({ slot: 'primary' });
     const state = await firstValueFrom(walletCtx.wallet.state());
-    // ZswapCoinPublicKey struct wrapping (same as S2).
     const coinPubKey = state.shielded.coinPublicKey;
     const coinHex =
       typeof coinPubKey?.toHexString === 'function'
@@ -49,15 +47,12 @@ await runTest({
     const userShieldedKey = { bytes: hexToBytes32(coinHex) };
     const amount = BigInt(process.env.S4_AMOUNT ?? '500');
     const setupNonce = new Uint8Array(randomBytes(32));
+    const SHIELDED_COLOR = hexToBytes32(SHIELDED_COLOR_HEX);
 
-    // ── Setup: ensure the user holds shielded tokens to send ───────────────
-    //
-    // We use the contract's own atomic mint+send to mint shielded tokens
-    // straight to the user. If S2 PASSed, this re-uses the same flow.
-
-    console.log(`Setup: minting ${amount} shielded to the user wallet`);
+    // ── Setup: mint a fresh shielded note to the user wallet ───────────────
+    console.log(`Setup: minting ${amount} shielded to user with nonce ${shortHex(setupNonce)}`);
     const setupResult = await contract.found.callTx.mint_and_send_shielded(
-      hexToBytes32(SHIELDED_COLOR),
+      SHIELDED_COLOR,
       amount,
       setupNonce,
       userShieldedKey,
@@ -68,27 +63,48 @@ await runTest({
       return {
         verdict: 'FAIL',
         errorCode: 'setup-failed',
-        note: 'Setup mint_and_send_shielded did not land. Cannot proceed to receive_shielded.',
+        note: 'Setup mint_and_send_shielded did not land.',
         details: {},
       };
     }
 
-    console.log('Waiting 15s for indexer to confirm setup mint...');
+    console.log('Waiting 15s for the wallet to index the new note...');
     await new Promise((r) => setTimeout(r, 15_000));
 
-    // ── The actual S4 test: user → contract via receive_shielded ──────────
+    // ── Derive the on-chain color the wallet indexes by ────────────────────
     //
-    // receiveShielded takes a ShieldedCoinInfo {nonce, color, value} that
-    // identifies the user-held note being deposited into the contract.
-    // The note was created in the setup mint with nonce=setupNonce, so we
-    // know all three fields.
+    // The wallet stores notes under a derived on-chain color, not the
+    // contract-scoped color the source code uses. ledger-v8 exports the
+    // exact derivation primitive.
+    const derivedRawHex = rawTokenType(SHIELDED_COLOR, contract.address);
+    const derivedColor = encodeRawTokenType(derivedRawHex);
+    console.log(`Derived on-chain color: 0x${derivedRawHex.replace(/^0x/, '')}`);
 
+    // Sanity-check that the wallet actually has a note under that color.
+    const stateAfter = await firstValueFrom(walletCtx.wallet.state());
+    const walletColors = Object.keys(stateAfter.shielded.balances as Record<string, bigint>);
+    const matchesDerived = walletColors.some(
+      (c) => c.replace(/^0x/, '') === derivedRawHex.replace(/^0x/, ''),
+    );
+    if (!matchesDerived) {
+      console.log('  ⚠ wallet does not yet show a balance under the derived color.');
+      console.log(`  wallet colors: ${walletColors.map((c) => '0x' + c.slice(0, 10) + '…').join(', ')}`);
+    }
+
+    // ── The S4 call: user → contract via receive_shielded ──────────────────
+    //
+    // Pass the struct directly (same shape as Demo B in the tutorial repo):
+    //   nonce: Uint8Array(32)
+    //   color: Uint8Array(32) — the on-chain color from rawTokenType
+    //   value: bigint
+    // `encodeShieldedCoinInfo` is for the wallet-availableCoins path and
+    // expects hex-string fields (Demo C in the tutorial); we don't need it.
     const coin = {
       nonce: setupNonce,
-      color: hexToBytes32(SHIELDED_COLOR),
+      color: derivedColor,
       value: amount,
     };
-    console.log(`S4: user → contract: receive_shielded ${amount} of ${SHIELDED_COLOR}`);
+    console.log(`S4: user → contract: receive_shielded (rawTokenType-derived color)`);
     const result = await contract.found.callTx.receive_shielded(coin);
     const txHash = result?.public?.txId ?? result?.public?.transactionHash;
     await walletCtx.wallet.stop();
@@ -97,21 +113,27 @@ await runTest({
       return {
         verdict: 'FAIL',
         errorCode: 'no-tx-hash',
-        note: 'receive_shielded callTx returned without a tx hash. Check node logs and decide between FAIL and PARTIAL.',
-        details: { contractAddress: contract.address, setupTx },
+        note: 'receive_shielded callTx returned without a tx hash.',
+        details: { contractAddress: contract.address, setupTx, derivedColor: derivedRawHex },
       };
     }
 
     return {
       verdict: 'PASS',
       txHash,
-      note: 'receive_shielded user → contract confirmed on devnet. The Passport contract-custody account model is shielded-viable.',
+      note: 'receive_shielded user → contract confirmed on devnet using the rawTokenType-derived on-chain color. Shielded contract custody is feasible on v1 with a public ledger-v8 surface.',
       details: {
         contractAddress: contract.address,
-        color: SHIELDED_COLOR,
+        contractScopedColor: SHIELDED_COLOR_HEX,
+        derivedOnChainColor: derivedRawHex,
         amount: amount.toString(),
         setupTx,
+        recipe: 'receive_shielded({nonce, color: encodeRawTokenType(rawTokenType(color, contractAddress)), value})',
       },
     };
   },
 });
+
+function shortHex(b: Uint8Array): string {
+  return '0x' + Buffer.from(b).toString('hex').slice(0, 12) + '…';
+}
