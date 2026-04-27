@@ -1,0 +1,53 @@
+{
+  "name": "contract-custody-feasibility",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Empirical feasibility experiment — can a Compact contract custody Night, Zswap, and Dust on Midnight v1?",
+  "scripts": {
+    "compile": "compact compile contracts/custody.compact contracts/managed/custody",
+    "build": "tsc",
+    "deploy": "tsx src/deploy.ts",
+    "deploy-second": "CUSTODY_DEPLOY_SLOT=second tsx src/deploy.ts",
+    "test:u1": "tsx src/tests/u1-receive-unshielded.ts",
+    "test:u2": "tsx src/tests/u2-send-to-contract.ts",
+    "test:u3": "tsx src/tests/u3-send-to-user.ts",
+    "test:u4": "tsx src/tests/u4-roundtrip.ts",
+    "test:s1": "tsx src/tests/s1-mint-to-self.ts",
+    "test:s2": "tsx src/tests/s2-mint-and-send.ts",
+    "test:s3": "tsx src/tests/s3-cross-tx-custody.ts",
+    "test:s4": "tsx src/tests/s4-receive-shielded.ts",
+    "test:d1": "tsx src/tests/d1-self-payment.ts",
+    "test:d2": "tsx src/tests/d2-paymaster.ts",
+    "test:all": "tsx src/run-all.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "^0.15.0",
+    "@midnight-ntwrk/ledger-v8": "^8.0.3",
+    "@midnight-ntwrk/midnight-js-contracts": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-network-id": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-types": "^4.0.4",
+    "@midnight-ntwrk/wallet-api": "^5.0.0",
+    "@midnight-ntwrk/wallet-sdk-address-format": "^3.1.1",
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": "^4.0.0",
+    "@midnight-ntwrk/wallet-sdk-facade": "^4.0.0",
+    "@midnight-ntwrk/wallet-sdk-hd": "^3.0.2",
+    "@midnight-ntwrk/wallet-sdk-shielded": "^3.0.0",
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "^3.0.0",
+    "@midnight-ntwrk/zswap": "^4.0.0",
+    "@scure/bip39": "^2.0.1",
+    "bip39": "^3.1.0",
+    "rxjs": "^7.8.2",
+    "ws": "^8.19.0"
+  }
+}

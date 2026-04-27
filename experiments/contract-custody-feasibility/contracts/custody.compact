@@ -1,0 +1,223 @@
+pragma language_version 0.22;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Contract Custody Feasibility — single test contract exercising every
+// custody operation the experiment needs to evaluate.
+//
+// One contract, many circuits. Each in-scope test from EXPERIMENT_GUIDELINE.md
+// has either its own circuit here or shares one with another test.
+//
+// Every circuit is intentionally minimal: the experiment is about whether
+// each operation survives the v1 SDK / devnet, not about contract design.
+// Where an API surface is speculative, an EXPERIMENT-NOTE comment flags it.
+// A circuit that fails to compile is itself a finding and must be captured
+// in evidence/<test>.json.
+//
+// Circuit-to-test map:
+//   deposit_unshielded            → U1 (receiveUnshielded)
+//   send_unshielded_to_contract   → U2 (sendUnshielded → ContractAddress)
+//   send_unshielded_to_user       → U3 (sendUnshielded → UserAddress)
+//   {U1 + U2 + U3 sequenced}      → U4 (round trip)
+//   mint_shielded_to_self         → S1 + setup for S3
+//   mint_and_send_shielded        → S2 (atomic mint+send within one circuit)
+//   send_held_shielded            → S3 (cross-transaction shielded custody)
+//   receive_shielded              → S4 (the most critical net-new test)
+//   bump_counter                  → D1 + D2 (any state-changing op works for
+//                                            Dust fee-source tests; the test
+//                                            logic lives in the TS runner)
+// ---------------------------------------------------------------------------
+
+// ── Public ledger state ─────────────────────────────────────────────────────
+
+export ledger tx_count: Uint<64>;
+// Increments on every state-changing circuit. Lets evidence/*.json read a
+// stable post-condition without depending on any specific balance API.
+
+export ledger shielded_mint_count: Uint<64>;
+// Increments only on shielded mint operations. Used by S3 to detect that the
+// mint actually landed before attempting a later-block send.
+
+constructor() {
+  tx_count            = 0 as Uint<64>;
+  shielded_mint_count = 0 as Uint<64>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unshielded (Night)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// U1: user → contract. Mirrors experiments/redjubjub-wallet's `deposit`
+// circuit. Was the historical home of error 168 on SDK ≤ 3.2.0. Re-running
+// here re-tests whether the latest v1 SDK still rejects it.
+export circuit deposit_unshielded(color: Bytes<32>, amount: Uint<128>): [] {
+  receiveUnshielded(disclose(color), disclose(amount));
+  tx_count = disclose((tx_count + (1 as Uint<64>)) as Uint<64>);
+}
+
+// U2: contract → contract. Was the home of error 186 on older SDKs; CTO
+// confirmed (2026/04/27) that 186 is fixed. This circuit re-verifies.
+export circuit send_unshielded_to_contract(
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  recipient: ContractAddress,
+): [] {
+  sendUnshielded(
+    disclose(color),
+    disclose(amount),
+    left<ContractAddress, UserAddress>(disclose(recipient)),
+  );
+  tx_count = disclose((tx_count + (1 as Uint<64>)) as Uint<64>);
+}
+
+// U3: contract → user. Known to work since midnight-js-contracts v3.2.0;
+// re-run as a regression check.
+export circuit send_unshielded_to_user(
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  recipient: UserAddress,
+): [] {
+  sendUnshielded(
+    disclose(color),
+    disclose(amount),
+    right<ContractAddress, UserAddress>(disclose(recipient)),
+  );
+  tx_count = disclose((tx_count + (1 as Uint<64>)) as Uint<64>);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shielded (Zswap)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// S1: contract mints shielded tokens to itself. Known to work. Also primes
+// the ledger so S3 can attempt a later-block send of those tokens.
+//
+// API discovered on devnet 2026/04/27 (custody-feasibility run):
+//   mintShieldedToken(
+//     color: Bytes<32>,
+//     amount: Uint<64>,
+//     nonce: Bytes<32>,
+//     recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+//   )
+// Note Uint<64> for shielded amounts (vs Uint<128> for unshielded). The
+// nonce ensures each mint produces a distinct shielded note commitment;
+// the caller supplies a fresh value per call.
+export circuit mint_shielded_to_self(
+  color:  Bytes<32>,
+  amount: Uint<64>,
+  nonce:  Bytes<32>,
+): [] {
+  mintShieldedToken(
+    disclose(color),
+    disclose(amount),
+    disclose(nonce),
+    right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+  );
+  shielded_mint_count = disclose((shielded_mint_count + (1 as Uint<64>)) as Uint<64>);
+  tx_count            = disclose((tx_count + (1 as Uint<64>)) as Uint<64>);
+}
+
+// S2: atomic mint+send shielded — same primitive as S1 but the recipient is
+// a user (ZswapCoinPublicKey) instead of `kernel.self()`. This is the
+// "mint to user" path that bypasses cross-block custody.
+//
+// EXPERIMENT-NOTE [S2-API]: the brief named this `sendImmediateShielded`,
+// but the discovered Compact stdlib only exposes `mintShieldedToken` —
+// "atomic mint+send" is just the same primitive with a non-self recipient.
+export circuit mint_and_send_shielded(
+  color:     Bytes<32>,
+  amount:    Uint<64>,
+  nonce:     Bytes<32>,
+  recipient: ZswapCoinPublicKey,
+): [] {
+  mintShieldedToken(
+    disclose(color),
+    disclose(amount),
+    disclose(nonce),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+  );
+  tx_count = disclose((tx_count + (1 as Uint<64>)) as Uint<64>);
+}
+
+// S3: the cross-transaction shielded custody test. Pre-condition: a previous
+// transaction has already executed `mint_shielded_to_self` so the contract
+// holds shielded tokens. This circuit runs in a later block and tries to
+// send them out.
+//
+// API discovered on devnet 2026/04/27:
+//   sendShielded(
+//     coin:      QualifiedShieldedCoinInfo,    // {nonce, color, value, mt_index}
+//     recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+//     amount:    Uint<128>,                    // amount to send (≤ coin.value)
+//   )
+//
+// The "Merkle tree not rehashed" finding has a precise shape: cross-tx
+// custody is permitted, but the caller must qualify the held note by its
+// on-chain Merkle-tree index (`mt_index`). The mt_index is assigned by
+// the ledger when the mint commits, so the off-chain prover must look it
+// up after the mint block lands. This is itself a finding for S3 —
+// capture in evidence/s3-cross-tx-custody.json under `notes`.
+export circuit send_held_shielded(
+  coin:      QualifiedShieldedCoinInfo,
+  recipient: ZswapCoinPublicKey,
+  amount:    Uint<128>,
+): [] {
+  sendShielded(
+    disclose(coin),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  tx_count = disclose((tx_count + (1 as Uint<64>)) as Uint<64>);
+}
+
+// S4: receive_shielded — the most critical net-new test in the entire
+// experiment. The brief notes this was previously *untested* on devnet.
+//
+// API discovered on devnet 2026/04/27:
+//   receiveShielded(coin: ShieldedCoinInfo {nonce, color, value})
+//
+// **The language-level surface exists.** This is half of the S4 finding:
+// the Compact stdlib does expose a contract-receive operation for
+// shielded tokens. Note `ShieldedCoinInfo` (no mt_index) vs.
+// `QualifiedShieldedCoinInfo` (with mt_index) — receiveShielded consumes
+// a note created in *this* transaction, which has no on-chain Merkle
+// position yet. This is the symmetric-to-`receiveUnshielded` operation
+// the Passport account model assumes.
+//
+// Remaining S4 question: does the node accept the transaction at runtime?
+// If yes → INVALIDATED falls; the contract-custody account model is
+// shielded-viable. If no → capture the node error.
+export circuit receive_shielded(coin: ShieldedCoinInfo): [] {
+  receiveShielded(disclose(coin));
+  tx_count = disclose((tx_count + (1 as Uint<64>)) as Uint<64>);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dust
+// ─────────────────────────────────────────────────────────────────────────────
+
+// D1 + D2: any state-changing circuit suffices. The Dust questions are
+// transaction-construction questions, not circuit-language questions. The
+// TS test runner constructs the transaction with a contract-paid fee branch
+// (D1) or a user-tx with a contract-attached paymaster branch (D2) and
+// captures the node response.
+export circuit bump_counter(): [] {
+  tx_count = disclose((tx_count + (1 as Uint<64>)) as Uint<64>);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Read-only queries (no proof generated; cheap to call from TS)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export circuit query_unshielded_balance(color: Bytes<32>): Uint<128> {
+  return unshieldedBalance(disclose(color));
+}
+
+export circuit query_tx_count(): Uint<64> {
+  return tx_count;
+}
+
+export circuit query_shielded_mint_count(): Uint<64> {
+  return shielded_mint_count;
+}
