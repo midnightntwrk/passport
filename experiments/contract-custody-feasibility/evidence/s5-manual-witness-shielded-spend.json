@@ -1,0 +1,76 @@
+{
+  "test": "S5",
+  "name": "manual-witness-shielded-spend",
+  "verdict": "FAIL",
+  "errorCode": "contract-runtime-error",
+  "note": "Off-chain compact-runtime crashed during proof construction for `sendShielded` against a contract-held coin (ContractRuntimeError). The captured causeChain shows the underlying TypeError. The transaction never reached the node — the SDK runtime itself has no working contract-as-shielded-spender path on this version. Practically equivalent to Gap 2: a client-side `getContractShieldedCoins` API alone would not unblock contract-held shielded custody; the SDK / runtime support is also absent (matching OZ's archived ShieldedToken future-work note).",
+  "evidence": {
+    "outcome": "gap2",
+    "mintTx": "005a840042b6e984d6e6d2c547988e0521042ed211535b76745f7fb39bd27ac80c",
+    "mintNonce": "d2ee9f6d72082a9d27ea8f3f4b86a5489f6d629e63e09c155743f94261875e69",
+    "contractScopedColor": "0000000000000000000000000000000000000000000000000000000000000005",
+    "derivedOnChainColor": "a946d2f26db62b2c5556910b6cf98919cd2ef33048495deadf81dab5e476931a",
+    "amount": "500",
+    "mtIndex": "35",
+    "mtIndexSource": "indexer.transactions.startIndex",
+    "startIndex": "35",
+    "endIndex": "36",
+    "sendError": {
+      "name": "Error",
+      "message": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'send_held_shielded_manual'",
+      "stack": "Error: Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'send_held_shielded_manual'\n    at scoped (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-custody-clean/experiments/contract-custody-feasibility/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:222:21)\n    at async Object.action (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-custody-clean/experiments/contract-custody-feasibility/src/tests/s5-manual-witness-shielded-spend.ts:200:26)\n    at async runTest (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-custody-clean/experiments/contract-custody-feasibility/src/test-helpers.ts:110:14)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-custody-clean/experiments/contract-custody-feasibility/src/tests/s5-manual-witness-shielded-spend.ts:61:1)",
+      "causeChain": [
+        {
+          "name": "Error",
+          "tag": null,
+          "message": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'send_held_shielded_manual'",
+          "data": null,
+          "ownProps": {}
+        },
+        {
+          "name": "ContractRuntimeError",
+          "tag": "ContractRuntimeError",
+          "message": "Error executing circuit 'send_held_shielded_manual'",
+          "data": null,
+          "ownProps": {
+            "_tag": "ContractRuntimeError"
+          }
+        },
+        {
+          "name": "TypeError",
+          "tag": null,
+          "message": "Cannot read properties of undefined (reading 'buffer')",
+          "data": null,
+          "ownProps": {}
+        }
+      ]
+    },
+    "probes": [
+      {
+        "surface": "indexer.transactions(offset:{hash})",
+        "result": "{\"startIndex\":35,\"endIndex\":36,\"blockHeight\":148,\"blockHash\":\"f71117d083a491ac0218379ac9d7160c6fc411727c3efb36a02e12a29d8fd214\",\"status\":\"SUCCESS\",\"raw\":{\"id\":35,\"hash\":\"fdd50f72de40935ab41806bab68f05edeeef478462f846ded6dd14abe44ef98f\",\"startIndex\":35,\"endIndex\":36,\"transactionResult\":{\"status\":\"SUCCESS\"},\"block\":{\"height\":148,\"hash\":\"f71117d083a491ac0218379ac9d7160c6fc411727c3efb36a02e12a29d8fd214\"}}}"
+      }
+    ]
+  },
+  "ranAt": "2026-04-29T13:49:53.764Z",
+  "sdkVersions": {
+    "@midnight-ntwrk/compact-runtime": "^0.15.0",
+    "@midnight-ntwrk/ledger-v8": "^8.0.3",
+    "@midnight-ntwrk/midnight-js-contracts": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-network-id": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-types": "^4.0.4",
+    "@midnight-ntwrk/wallet-api": "^5.0.0",
+    "@midnight-ntwrk/wallet-sdk-address-format": "^3.1.1",
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": "^4.0.0",
+    "@midnight-ntwrk/wallet-sdk-facade": "^4.0.0",
+    "@midnight-ntwrk/wallet-sdk-hd": "^3.0.2",
+    "@midnight-ntwrk/wallet-sdk-shielded": "^3.0.0",
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "^3.0.0",
+    "@midnight-ntwrk/zswap": "^4.0.0"
+  },
+  "nodeVersion": "midnightntwrk/midnight-node:0.22.5"
+}

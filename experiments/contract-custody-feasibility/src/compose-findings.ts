@@ -19,7 +19,7 @@ const ROOT = path.resolve(HERE, '..');
 const EVIDENCE_DIR = path.join(ROOT, 'evidence');
 const FINDINGS = path.join(ROOT, 'FINDINGS.md');
 
-const TEST_ORDER = ['U1', 'U2', 'U3', 'U4', 'S1', 'S2', 'S3', 'S4', 'D1', 'D2'];
+const TEST_ORDER = ['U1', 'U2', 'U3', 'U4', 'S1', 'S2', 'S3', 'S4', 'S5', 'D1', 'D2'];
 const TEST_DESCRIPTIONS: Record<string, string> = {
   U1: 'receiveUnshielded user→contract',
   U2: 'sendUnshielded contract→contract (was 186)',
@@ -29,6 +29,7 @@ const TEST_DESCRIPTIONS: Record<string, string> = {
   S2: 'sendImmediateShielded (atomic mint+send)',
   S3: 'cross-transaction shielded custody',
   S4: 'receiveShielded user→contract (net-new)',
+  S5: 'manual-witness shielded spend (Gap 1 vs 2)',
   D1: 'contract pays its own tx Dust fee',
   D2: 'contract acts as paymaster for user tx',
 };

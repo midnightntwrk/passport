@@ -11,10 +11,16 @@ transaction hash or a specific node error code, no theoretical analysis.
 ## Quick start
 
 ```bash
-./run-all.sh                  # full sweep: u1..u4, s1..s4, d1..d2
+./run-all.sh                  # full sweep: u1..u4, s1..s5, d1..d2
 ./run-all.sh --fresh          # reset chain state first
 ./run-all.sh --tests=u1,u2    # subset
 ```
+
+> **S5 changes the contract bytecode** (a new `send_held_shielded_manual`
+> circuit). After pulling the S5 changes, run `./run-all.sh --fresh` once
+> to redeploy; an existing `deployment.json` from before S5 will be
+> reused otherwise and S5 will fail at submission because the deployed
+> contract instance has no such entry point.
 
 The script handles prerequisite checks, dependency installation, contract
 compilation, devnet startup, deployment, sequential test execution, and
@@ -54,6 +60,7 @@ mechanical regeneration of the results table in `FINDINGS.md`.
 | S2  | shielded-zswap     | atomic mint+send shielded                                   |
 | S3  | shielded-zswap     | cross-transaction shielded custody (Merkle-rehash)          |
 | S4  | shielded-zswap     | `receiveShielded` user → contract (**net-new, the dealbreaker**) |
+| S5  | shielded-zswap     | manual-witness shielded spend (Gap 1 vs Gap 2 disambiguator) |
 | D1  | contract-dust      | contract holds Dust + self-pays its tx fee                  |
 | D2  | contract-dust      | contract acts as paymaster for user transaction             |
 

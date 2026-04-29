@@ -23,6 +23,7 @@ import CompactStandardLibrary;
 //   mint_shielded_to_self         → S1 + setup for S3
 //   mint_and_send_shielded        → S2 (atomic mint+send within one circuit)
 //   send_held_shielded            → S3 (cross-transaction shielded custody)
+//   send_held_shielded_manual     → S5 (manual-witness shielded spend)
 //   receive_shielded              → S4 (the most critical net-new test)
 //   bump_counter                  → D1 + D2 (any state-changing op works for
 //                                            Dust fee-source tests; the test
@@ -159,6 +160,35 @@ export circuit mint_and_send_shielded(
 // up after the mint block lands. This is itself a finding for S3 —
 // capture in evidence/s3-cross-tx-custody.json under `notes`.
 export circuit send_held_shielded(
+  coin:      QualifiedShieldedCoinInfo,
+  recipient: ZswapCoinPublicKey,
+  amount:    Uint<128>,
+): [] {
+  sendShielded(
+    disclose(coin),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  tx_count = disclose((tx_count + (1 as Uint<64>)) as Uint<64>);
+}
+
+// S5: identical body to send_held_shielded, but documented as the
+// "manual-witness" path. The existing S3 finding is that no public
+// midnight-js 4.0.4 surface enumerates contract-owned shielded notes,
+// so the off-chain code cannot recover the held note's `mt_index` from
+// the wallet or the public data provider — the only client-side gap.
+// S5 removes that one variable: the runner reconstructs the
+// `QualifiedShieldedCoinInfo` directly from indexer state and passes
+// it in as the circuit argument. If the runtime accepts the resulting
+// transaction, the only remaining gap is the missing client surface
+// (Gap 1 in FINDINGS.md). If the runtime rejects with a proof,
+// nullifier, or owner-check error, the on-chain primitive is missing
+// too (Gap 2) — the same wall OpenZeppelin's archived ShieldedToken
+// flagged as a future-work item.
+//
+// Keeping S3's circuit intact preserves the FAIL evidence that
+// documented the API absence. S5 is purely additive.
+export circuit send_held_shielded_manual(
   coin:      QualifiedShieldedCoinInfo,
   recipient: ZswapCoinPublicKey,
   amount:    Uint<128>,

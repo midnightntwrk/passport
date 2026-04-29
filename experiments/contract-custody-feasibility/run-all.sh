@@ -38,7 +38,7 @@ for arg in "${@:-}"; do
   esac
 done
 
-ALL_TESTS=(u1 u2 u3 u4 s1 s2 s3 s4 d1 d2)
+ALL_TESTS=(u1 u2 u3 u4 s1 s2 s3 s4 s5 d1 d2)
 if [[ -n "$TESTS" ]]; then
   IFS=',' read -r -a SELECTED <<< "$TESTS"
 else
@@ -171,6 +171,7 @@ test_file_for() {
     s2) echo "src/tests/s2-mint-and-send.ts" ;;
     s3) echo "src/tests/s3-cross-tx-custody.ts" ;;
     s4) echo "src/tests/s4-receive-shielded.ts" ;;
+    s5) echo "src/tests/s5-manual-witness-shielded-spend.ts" ;;
     d1) echo "src/tests/d1-self-payment.ts" ;;
     d2) echo "src/tests/d2-paymaster.ts" ;;
     *)  echo "" ;;
