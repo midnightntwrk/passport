@@ -9,7 +9,10 @@
 > `Map<color, QualifiedShieldedCoinInfo>` + `Map.insertCoin` pattern
 > enables contract-held shielded spending on Midnight v1 today,
 > end-to-end on devnet (deposit `00f582dd…f5fe6` and spend
-> `00cdaf64…fc2d5b1`). Verdict and Passport-account-model
+> `00cdaf64…fc2d5b1`). All but one of the primitives are documented
+> at `/compact/standard-library/exports`; what's missing from the
+> docs is `Map.insertCoin` specifically and the recipe that ties
+> everything together. Verdict and Passport-account-model
 > implications below.
 
 ## Headline findings
@@ -76,10 +79,15 @@
    `insertCoin`, which is what `Map.lookup` returns. S3's
    "missing client API" framing is also wrong: discovery lives in
    the contract's ledger map, not in the SDK. The pattern is real
-   today — what's missing is **documentation**: none of Midnight's
-   developer guides mention `Map.insertCoin` or
-   `sendImmediateShielded`, and we discovered both by reading OZ's
-   work-in-progress branch.
+   today; what's missing from the docs is precisely one piece —
+   `Map.insertCoin` (the runtime-aware Map method that registers a
+   freshly-received shielded coin) — plus the recipe that ties the
+   already-documented primitives (`receiveShielded`, `sendShielded`,
+   `sendImmediateShielded`, `mergeCoinImmediate`) together into a
+   working contract-custody pattern. We discovered both by reading
+   OZ's work-in-progress branch; a full sitemap sweep of
+   `docs.midnight.network` (1295 pages, 2026/04/29) returns zero
+   hits for `insertCoin`.
 
 4. **Dust paymaster has no public API.** The wallet always pays.
    D1 (contract pays own tx fee) and D2 (contract pays user's tx
@@ -326,13 +334,24 @@ be bound to the contract's local Zswap state via the prior
 `insertCoin` call. S5 isn't a runtime gap; it's a contract-design
 mistake.
 
-What is genuinely missing is **documentation**: none of Midnight's
-published developer guides mention `Map.insertCoin`,
-`sendImmediateShielded`, or `mergeCoinImmediate`. The primitives
-exist in the Compact stdlib (we verified by compiling against the
-same `compact 0.30.0` toolchain) and OZ has working tests, but the
-recipe is not yet on docs.midnight.network. Filing a documentation
-ask with the Midnight Foundation rather than an API ask.
+What's genuinely missing is **one Map method and the recipe that
+combines everything**. `sendShielded`, `sendImmediateShielded`,
+`receiveShielded`, `mergeCoin`, `mergeCoinImmediate`, and
+`mintShieldedToken` are *all* documented at
+[`/compact/standard-library/exports`](https://docs.midnight.network/compact/standard-library/exports).
+The piece missing from the docs is **`Map.insertCoin`** — the Map
+method that registers a freshly-received shielded coin in contract
+ledger state and triggers the runtime to fill in `mt_index`
+post-block. A full sitemap sweep of `docs.midnight.network` (1295
+pages, 2026/04/29) returns zero hits for `insertCoin` in any case
+or spelling. Without that one primitive surfaced, the documented
+`sendShielded` circuit is effectively unreachable from a contract
+because the `QualifiedShieldedCoinInfo` it consumes has nowhere to
+come from. The documentation ask is therefore narrow: document
+`Map.insertCoin` and the OZ-style recipe (deposit → `insertCoin`,
+spend → `Map.lookup` → `sendShielded`, change →
+`sendImmediateShielded` + `insertCoin` / `Map.remove`) that ties
+the existing primitives into a working contract-custody pattern.
 
 ### Dust — NOT FEASIBLE TODAY
 
@@ -409,9 +428,13 @@ The experiment's clarified shape:
    `sendImmediateShielded` + another `insertCoin`, or `Map.remove`
    for full spends. Contract-as-vault designs are now in scope for
    the Passport account model. The remaining ask is **documentation,
-   not API** — these primitives exist in the Compact stdlib but are
-   not yet on docs.midnight.network; we discovered them by reading
-   OZ's work-in-progress branch.
+   not API**: most of the primitives are already on
+   docs.midnight.network/compact/standard-library/exports, but
+   `Map.insertCoin` is missing from the docs entirely (zero hits
+   across the full 1295-page sitemap), and the OZ-style recipe that
+   ties everything together isn't published anywhere on the official
+   site — we discovered both by reading OZ's work-in-progress
+   branch.
 5. **Dust paymaster does not exist.** The "user without Dust" version
    of the Passport onboarding flow — where the contract pays the user's
    Dust fee out of its own balance — is **not implementable on v1
@@ -424,15 +447,22 @@ The concrete recommendation for the post-MVP multi-device milestone:
   receive Zswap; both deposit flows (Night and shielded) are verified
   end-to-end with on-chain transactions.
 - **Shielded withdraw is feasible today; the upstream ask is
-  documentation, not API.** Filing with the Midnight Foundation:
-  *"please document `Map.insertCoin(key, coin, owner)`,
-  `sendImmediateShielded`, `mergeCoinImmediate`, and the
-  `ShieldedSendResult.{change, sent}` shape on
-  docs.midnight.network — the OpenZeppelin
+  narrow documentation, not API.** Filing with the Midnight
+  Foundation: *"`sendShielded`, `sendImmediateShielded`,
+  `receiveShielded`, `mergeCoin`, `mergeCoinImmediate`, and
+  `mintShieldedToken` are already documented at
+  `/compact/standard-library/exports`, but `Map.insertCoin` is
+  missing from the docs entirely (zero hits across the full 1295-
+  page sitemap as of 2026/04/29). Please document `Map.insertCoin`
+  and publish the OpenZeppelin
   [`ShieldedTreasury.compact`](https://github.com/OpenZeppelin/compact-contracts/blob/add-multisig/contracts/src/multisig/ShieldedTreasury.compact)
-  pattern works end-to-end against `midnight-node:0.22.5` and is
-  not currently discoverable from the public guides."* S6 tx
-  evidence: deposit `00f582dd…f5fe6`, spend `00cdaf64…fc2d5b1`.
+  recipe — `Map<Bytes<32>, QSCI>` keyed by colour, `insertCoin`
+  after `receiveShielded`, `Map.lookup` before `sendShielded`,
+  `sendImmediateShielded` + `insertCoin` for change — as the
+  canonical contract-custody pattern. It works end-to-end against
+  `midnight-node:0.22.5` (S6 evidence: deposit `00f582dd…f5fe6`,
+  spend `00cdaf64…fc2d5b1`) but is not currently discoverable from
+  the public guides without reading OZ's work-in-progress branch."*
 - **Adopt the OZ `Map<color, QSCI>` + `insertCoin` pattern in any
   Passport contract that custodies shielded notes.** The Passport
   account-model contract should mirror OZ's
