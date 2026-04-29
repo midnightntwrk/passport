@@ -12,9 +12,14 @@
 //   ledger _coins: Map<Bytes<32>, QualifiedShieldedCoinInfo>;
 //
 //   _deposit(coin):
-//     receiveShielded(coin);
+//     receiveShielded(coin);                        // allocates Merkle tree position in this tx
 //     _coins.insertCoin(coin.color, coin, selfAsRecipient());
-//     // runtime fills in mt_index when the deposit tx lands
+//     // insertCoin is a specialised Map method (data-types/ledger-adt#insertcoin-1):
+//     //   input:  ShieldedCoinInfo  (no mt_index)
+//     //   stored: QualifiedShieldedCoinInfo (mt_index added by the runtime,
+//     //           sourced from the same-transaction Merkle allocation above).
+//     //   The docs are explicit: "This index must have been allocated within
+//     //   the current transaction or this insertion fails."
 //
 //   _send(recipient, color, amount):
 //     const coin = _coins.lookup(color);   // ← QSCI pulled from contract state

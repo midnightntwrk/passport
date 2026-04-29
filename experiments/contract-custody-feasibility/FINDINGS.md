@@ -61,8 +61,13 @@
    `Map<Bytes<32>, QualifiedShieldedCoinInfo>`, register it via
    `Map.insertCoin(color, coin, selfAsRecipient())` immediately
    after `receiveShielded`, and at spend time pull the QSCI back via
-   `Map.lookup(color)` before passing it to `sendShielded`. The
-   runtime fills in `mt_index` post-block automatically, and change
+   `Map.lookup(color)` before passing it to `sendShielded`.
+   `Map.insertCoin` is a specialised Map method: it takes a
+   `ShieldedCoinInfo` (no `mt_index`) and the runtime lifts it to a
+   `QualifiedShieldedCoinInfo` by binding the Merkle tree position
+   that `receiveShielded` allocated *in the same transaction*. The
+   docs put it precisely: *"This index must have been allocated
+   within the current transaction or this insertion fails."* Change
    is re-deposited via `sendImmediateShielded` + another
    `insertCoin` (or `Map.remove` if the spend consumed the full
    coin). All four primitives — `mergeCoinImmediate`,
@@ -329,13 +334,30 @@ user→contract→user lifecycle lands across blocks:
   API is needed** — the QSCI is read from contract ledger state, not
   the SDK.
 
-What S5 actually demonstrated, in light of S6, is that
-`sendShielded` against a `QualifiedShieldedCoinInfo` arriving as a
-witness parameter (rather than from `Map.lookup`) is *the wrong
-contract pattern* — the off-chain proof builder needs the QSCI to
-be bound to the contract's local Zswap state via the prior
-`insertCoin` call. S5 isn't a runtime gap; it's a contract-design
-mistake.
+What S5 actually demonstrated, in light of S6 and the
+`/data-types/ledger-adt` docs, is that the manual-witness approach
+is *structurally impossible*, not just discouraged. `mt_index` is
+not a value a dApp can compute or supply: it's a Merkle tree
+position the runtime allocates the moment a same-transaction
+primitive (`receiveShielded`, `mintShieldedToken`) inserts the
+coin commitment into the chain's tree. `Map.insertCoin` is the
+only API that captures that allocation into a persistable
+`QualifiedShieldedCoinInfo`. Feeding a hand-crafted QSCI into
+`sendShielded` therefore can never work — there's no surface for
+the runtime to bind the spend against. S5 isn't a runtime gap;
+it's the wrong contract pattern, and the `data-types/ledger-adt`
+page documents the right one.
+
+A side note from this realisation: our `mint_shielded_to_self`
+circuit (S1) does **not** call `insertCoin`, so the contract's
+self-minted note isn't recoverable for a later cross-block spend
+either — the same root cause as S5, just hidden behind a "PASS"
+because S1 only verifies the mint lands. To make a self-mint
+spendable later, the mint circuit would need to call
+`oz_coins.insertCoin(color, ShieldedCoinInfo{nonce, color, value},
+selfAsRecipient())` in the same transaction. Worth a follow-up
+test if the Passport account model ever needs contract-to-self
+shielded mints that are spent in later transactions.
 
 No documentation gap on our side of the line: every primitive in
 the recipe is on `docs.midnight.network`. Top-level circuits
@@ -423,9 +445,12 @@ The experiment's clarified shape:
    OZ `Map<color, QSCI>` + `insertCoin` pattern.** S3 / S5 had the
    experiment looking for a missing API, but S6 demonstrates the
    complete cycle works without any new SDK surface: the contract
-   stores each held coin in a ledger map, `Map.insertCoin` registers
-   it after `receiveShielded` (runtime fills in `mt_index`
-   post-block), and `sendShielded` against `Map.lookup(color)`
+   stores each held coin in a ledger map; `Map.insertCoin`
+   registers it after `receiveShielded` (the input is a
+   `ShieldedCoinInfo` with no `mt_index`, the stored value is a
+   `QualifiedShieldedCoinInfo` with `mt_index` lifted from the
+   in-transaction Merkle allocation that `receiveShielded` just
+   produced); and `sendShielded` against `Map.lookup(color)`
    succeeds at spend time. Change is re-deposited via
    `sendImmediateShielded` + another `insertCoin`, or `Map.remove`
    for full spends. Contract-as-vault designs are now in scope for

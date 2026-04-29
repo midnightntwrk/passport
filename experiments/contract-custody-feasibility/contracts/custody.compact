@@ -43,12 +43,18 @@ export ledger shielded_mint_count: Uint<64>;
 
 // S6 ledger state — OpenZeppelin pattern.
 //
-// `Map<Bytes<32>, QualifiedShieldedCoinInfo>` keyed by on-chain colour, with
-// `Map.insertCoin` registering each held coin (and the runtime filling in
-// `mt_index` post-block). This is the missing piece S5 lacked: the
-// off-chain proof builder reads the contract's held coin from this map
-// rather than receiving it as a witness, which is what allows
-// `sendShielded` to construct the spend proof.
+// `Map<Bytes<32>, QualifiedShieldedCoinInfo>` keyed by on-chain colour.
+// `Map.insertCoin` is a specialised method (see
+// docs.midnight.network/compact/data-types/ledger-adt#insertcoin-1):
+// the input is a `ShieldedCoinInfo` (no `mt_index`), the stored value is a
+// `QualifiedShieldedCoinInfo` (with `mt_index`). The runtime sources
+// `mt_index` from the Merkle tree position assigned by a same-transaction
+// primitive — `receiveShielded` for inbound deposits, `mintShieldedToken`
+// for self-mints. The docs put it precisely: *"This index must have been
+// allocated within the current transaction or this insertion fails."*
+// This is the piece S5 was missing: there is no way to manually feed a
+// pre-computed `mt_index` into the runtime; `insertCoin` is the only API
+// that captures the in-tx Merkle allocation into a persistable QSCI.
 //
 // Pattern lifted verbatim from
 // https://github.com/OpenZeppelin/compact-contracts/blob/add-multisig/contracts/src/multisig/ShieldedTreasury.compact
@@ -245,10 +251,14 @@ export circuit receive_shielded(coin: ShieldedCoinInfo): [] {
 // pattern OpenZeppelin uses on their `add-multisig` branch's
 // `ShieldedTreasury.compact`:
 //
-//   1. After `receiveShielded`, register the held coin in the contract's
-//      ledger via `Map.insertCoin(key, coin, owner)`. The runtime fills
-//      in `mt_index` post-block so the QSCI persisted on-chain is valid
-//      for a later-block spend.
+//   1. After `receiveShielded` (which allocates the Merkle tree position
+//      for the inbound coin commitment in *this* transaction), register
+//      the held coin in the contract's ledger via
+//      `Map.insertCoin(key, coin, owner)`. The runtime takes the
+//      `ShieldedCoinInfo` argument and lifts it to a
+//      `QualifiedShieldedCoinInfo` by binding the in-tx Merkle position
+//      as the stored `mt_index`. The persisted QSCI is then valid for a
+//      later-block spend.
 //   2. At spend time, look up the QSCI from the map (`Map.lookup`) and
 //      pass it to `sendShielded`. The runtime can construct the spend
 //      proof because the coin is bound to the contract's local Zswap
