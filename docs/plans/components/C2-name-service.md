@@ -1,6 +1,6 @@
 # C2 · Name service
 
-**Serves:** P2 · P8.
+**Serves:** P2 · P8 · P10.
 
 ## Outcome
 

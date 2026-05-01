@@ -1,6 +1,6 @@
 # C10 · Scoped grant primitive
 
-**Serves:** P7.
+**Serves:** P7 · P10.
 
 ## Outcome
 

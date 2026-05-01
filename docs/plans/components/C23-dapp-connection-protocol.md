@@ -1,6 +1,6 @@
 # C23 · dApp connection protocol
 
-**Serves:** P7 · P8.
+**Serves:** P7 · P8 · P10.
 
 ## Outcome
 
