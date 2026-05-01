@@ -283,7 +283,15 @@
     align-items: baseline;
     gap: 10px;
     margin-bottom: 10px;
+    cursor: pointer;
+    padding: 4px 6px;
+    margin-left: -6px;
+    margin-right: -6px;
+    border-radius: 4px;
+    transition: background .12s ease;
   }
+  .promise-map-head:hover { background: var(--bg-soft); }
+  .promise-map-head:hover .promise-map-id { color: var(--iog-dawn); }
   .promise-map-id {
     font-family: var(--font-mono);
     font-size: 0.78rem;
@@ -494,12 +502,19 @@
 
 </main>
 
+<div class="panel-backdrop" id="panelBackdrop" aria-hidden="true"></div>
+<aside class="panel" id="panel" aria-hidden="true" aria-label="Detail panel">
+  <button class="panel-close" id="panelClose" aria-label="Close panel" title="Close">×</button>
+  <div class="panel-body" id="panelBody"></div>
+</aside>
+
 <footer class="landing-footer">
   <span>ARC · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="demo.html">demo</a></span>
   <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/01<!--/DEPLOY--></span>
 </footer>
 
 <script src="data.js"></script>
+<script src="panel.js"></script>
 <script>
 (function () {
   'use strict';
@@ -542,13 +557,13 @@
             </div>
             <div>
               <dt>Component</dt>
-              <dd>${c ? `<a href="index.html#${m.component}">${m.component} · ${escapeHtml(c.name)}</a>` : escapeHtml(m.component || '—')}</dd>
+              <dd>${c ? `<a href="index.html#${m.component}" data-component="${m.component}">${m.component} · ${escapeHtml(c.name)}</a>` : escapeHtml(m.component || '—')}</dd>
             </div>
             <div>
               <dt>Promises</dt>
               <dd>${(m.promises || []).map(p => {
                 const pr = promiseById[p];
-                return pr ? `<a href="index.html#${p}" title="${escapeHtml(pr.name)}">${p}</a>` : p;
+                return pr ? `<a href="index.html#${p}" data-promise="${p}" title="${escapeHtml(pr.name)}">${p}</a>` : p;
               }).join(' · ') || '—'}</dd>
             </div>
           </dl>
@@ -564,7 +579,7 @@
       const c = componentById[r.target];
       return `
         <tr>
-          <td><a class="reviews-id" href="index.html#${r.target}">${r.target}</a></td>
+          <td><a class="reviews-id" href="index.html#${r.target}" data-component="${r.target}">${r.target}</a></td>
           <td>${escapeHtml(r.label)}${r.note ? ` <span style="color:var(--text-faint);">— ${escapeHtml(r.note)}</span>` : ''}</td>
           <td><span class="review-kind">${escapeHtml(r.kind)}</span></td>
           <td>${escapeHtml(r.trigger)}</td>
@@ -587,7 +602,7 @@
       const ids = mipsByPromise[p.id];
       return `
         <div class="promise-map-card">
-          <div class="promise-map-head">
+          <div class="promise-map-head" data-promise="${p.id}" role="button" tabindex="0" title="Open ${escapeHtml(p.name)}">
             <span class="promise-map-id">${p.id}</span>
             <span class="promise-map-name">${escapeHtml(p.name)}</span>
           </div>
@@ -607,7 +622,7 @@
     cxHost.innerHTML = (data.crossovers || []).map(cx => {
       const items = (cx.items || []).map(id => {
         if (cx.kind === 'components' && componentById[id]) {
-          return `<a class="cx-chip" href="index.html#${id}" title="${escapeHtml(componentById[id].name)}">${id}</a>`;
+          return `<a class="cx-chip" href="index.html#${id}" data-component="${id}" title="${escapeHtml(componentById[id].name)}">${id}</a>`;
         }
         if (cx.kind === 'mips' && mipById[id]) {
           return `<a class="cx-chip" href="#${id}" title="${escapeHtml(mipById[id].title)}">${id}</a>`;

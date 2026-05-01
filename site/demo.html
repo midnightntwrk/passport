@@ -390,7 +390,7 @@
         <span>The October demo</span>
       </nav>
 
-      <div class="kind">ARC · Delivery · October 2026</div>
+      <div class="kind">Midnight Foundation · Delivery · October 2026</div>
       <h1>The October demo</h1>
       <p class="subtitle">An end-to-end Passport account on a screen, with a recovery sad-path. Six monthly phases, drawn against the components that exist by then. Architectural picks favour the cheapest path that works; the standards-and-spec body lands the principled path on a continuous timeline.</p>
 
@@ -470,12 +470,19 @@
 
 </main>
 
+<div class="panel-backdrop" id="panelBackdrop" aria-hidden="true"></div>
+<aside class="panel" id="panel" aria-hidden="true" aria-label="Detail panel">
+  <button class="panel-close" id="panelClose" aria-label="Close panel" title="Close">×</button>
+  <div class="panel-body" id="panelBody"></div>
+</aside>
+
 <footer class="landing-footer">
   <span>ARC · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="standards.html">standards</a></span>
   <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/01<!--/DEPLOY--></span>
 </footer>
 
 <script src="data.js"></script>
+<script src="panel.js"></script>
 <script>
 (function () {
   'use strict';
@@ -510,7 +517,7 @@
               ${p.components.map(cid => {
                 const c = componentById[cid];
                 return c
-                  ? `<a class="comp-chip" href="index.html#${cid}" title="${escapeHtml(c.name)}">${cid}</a>`
+                  ? `<a class="comp-chip" href="index.html#${cid}" data-component="${cid}" title="${escapeHtml(c.name)}">${cid}</a>`
                   : `<span class="comp-chip">${cid}</span>`;
               }).join('')}
             </div>
@@ -528,7 +535,7 @@
       const c = componentById[s.component];
       return `
         <tr>
-          <td><a class="picks-id" href="index.html#${s.component}">${s.component}</a></td>
+          <td><a class="picks-id" href="index.html#${s.component}" data-component="${s.component}">${s.component}</a></td>
           <td>${c ? escapeHtml(c.name) : ''}</td>
           <td class="picks-alt">${escapeHtml(s.alt || '—')}</td>
           <td class="picks-note">${escapeHtml(s.note || '')}</td>
@@ -543,7 +550,7 @@
     cxHost.innerHTML = (data.crossovers || []).map(cx => {
       const items = (cx.items || []).map(id => {
         if (cx.kind === 'components' && componentById[id]) {
-          return `<a class="cx-chip" href="index.html#${id}" title="${escapeHtml(componentById[id].name)}">${id}</a>`;
+          return `<a class="cx-chip" href="index.html#${id}" data-component="${id}" title="${escapeHtml(componentById[id].name)}">${id}</a>`;
         }
         if (cx.kind === 'mips' && mipById[id]) {
           return `<a class="cx-chip" href="standards.html#${id}" title="${escapeHtml(mipById[id].title)}">${id}</a>`;
