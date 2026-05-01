@@ -13,8 +13,8 @@ complexity-vs-simplicity one.
 
 ## The two plans
 
-- **[Plan A — decentralised but limited](./plan-A-decentralised-but-limited/README.md)** *(current primary, for MVP by end of June 2026)*
-- **[Plan B — slow but universal](./plan-B-slow-but-universal/README.md)** *(parked; foundation for Milestone 2 cross-chain)*
+- **[Plan A — decentralised but limited](./archive/plan-A-decentralised-but-limited/README.md)** *(archived 2026/04/30 — superseded by scope expansion and track split; see [archive/](./archive/README.md))*
+- **[Plan B — slow but universal](./archive/plan-B-slow-but-universal/README.md)** *(archived 2026/04/30 — superseded by scope expansion and track split; see [archive/](./archive/README.md))*
 
 ## Side-by-side comparison
 
