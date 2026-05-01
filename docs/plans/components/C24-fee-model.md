@@ -133,9 +133,9 @@ fastest bootstrap with eventual self-funding.
 acquire NIGHT before onboarding (faucet, exchange, external transfer).
 Hardest UX; incompatible with the "newcomer" persona.
 
-**E — Wait for contract-paymaster API.** Future direction once Midnight
-v1+ adds protocol-level paymaster surfaces. Not on v1.0; track as a
-future-enhancement candidate.
+*Future direction — once Midnight v1+ adds a protocol-level paymaster
+surface, it would obviate the sponsor model entirely. Not on v1.0;
+tracked as a v1+ enhancement.*
 
 ## Track readings
 
