@@ -15,8 +15,8 @@ intents, account identity, selective-disclosure proofs for compliance)
 and what Passport consumes (settlement confirmations).
 
 This canvas is a **placeholder** — the cross-chain machinery is delivered
-upstream by Shielded Technologies. Passport integrates against their
-architecture; we do not co-design it. The canvas captures the
+upstream in the Midnight ecosystem. Passport integrates against the
+upstream architecture; we do not co-design it. The canvas captures the
 *Passport-side* questions that will be answered once the upstream PRD /
 ARD stabilises.
 

@@ -16,10 +16,10 @@ shape the dApp connection protocol (C23) passes between dApps and the
 wallet.
 
 The native intent layer is no longer an open question. Midnight's ledger
-has the `Intent` struct natively; Shielded Technologies has the
-higher-level PRD trade-intent format. Passport's job is to be the
-wallet-side bridge between the user's declarative trade intent and the
-ledger Intent that authorises it.
+has the `Intent` struct natively, and a higher-level PRD trade-intent
+format is owned upstream in the Midnight ecosystem. Passport's job is to
+be the wallet-side bridge between the user's declarative trade intent
+and the ledger Intent that authorises it.
 
 ## Dependencies
 
@@ -153,20 +153,24 @@ dApp connection protocol passes ledger Intents (alt B). Different
 abstraction levels per consumer; doubles maintenance surface but matches
 each audience's needs.
 
-**D — Adopt upstream PRD format verbatim.** Passport contributes no new
-trade-intent format; uses the PRD's directly. Lowest divergence risk;
-least Passport ownership of the user-facing language. May constrain
-wallet UX if the PRD format isn't optimised for end-user presentation.
+**D — Consume an upstream wallet SDK.** If a wallet integration SDK is
+published upstream in the Midnight ecosystem that already handles
+trade-intent ↔ ledger Intent translation, Passport consumes it rather
+than building its own. Lowest effort; least Passport differentiation;
+depends on SDK availability, licensing, and feature coverage.
 
-**E — Consume upstream wallet SDK.** If Shielded Technologies ships a
-wallet integration SDK, Passport consumes it rather than building its own
-intent layer. Lowest effort; least Passport differentiation; depends on
-SDK availability and licensing.
+**E — Stop-gap intent shape if no upstream format is available in time.**
+Time-boxed fallback: Passport defines a trade-intent shape, contributes
+it upstream as a draft, and retires it as soon as the upstream format
+lands. Used only if upstream PRD adoption isn't possible by the time
+Passport needs to ship.
 
 ## Track readings
 
-- **Track 1 (Demo):** D (adopt upstream PRD verbatim) — lowest divergence
-  risk for a demo; the wallet-side UX is whatever the PRD format permits.
+- **Track 1 (Demo):** C (hybrid by audience), tracking the upstream
+  trade-intent format verbatim — wallet UI presents trade intents; dApp
+  protocol passes the canonical upstream form. Lowest divergence risk
+  for a demo.
 - **Track 2 (Spec / v1.0):** A (Passport-defined trade intent as primary
   user-facing object) — full UX ownership; the wallet's declarative
-  summary is independent of upstream PRD churn.
+  summary is independent of upstream format churn.

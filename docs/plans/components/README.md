@@ -22,8 +22,8 @@ a matter of architectural shape and intent primitive, not infrastructure.
 | **Settlement** | Ensures execution via bridging and transaction settlement | The Midnight chain itself — C25 (cross-chain integration interface) for the boundary with upstream cross-chain vaults |
 
 Cross-chain machinery (oracles, bridges, multi-chain solver networks, MPC
-chain signers for foreign curves) is delivered upstream by Shielded
-Technologies; Passport integrates against that architecture via C25.
+chain signers for foreign curves) is delivered upstream in the Midnight
+ecosystem; Passport integrates against that architecture via C25.
 
 ## Inventory
 

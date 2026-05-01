@@ -268,8 +268,8 @@ Recorded so the omission is not later mistaken for an oversight.
   project, not a v1.0 invariant of the product. Captured separately in the
   delivery contract.
 - **Operating the cross-chain machinery** (solver network, threshold-Schnorr
-  vaults on external chains, intent escrow contract). Owned upstream by
-  Shielded Technologies. Passport's promises cover what Passport
+  vaults on external chains, intent escrow contract). Owned upstream in
+  the Midnight ecosystem. Passport's promises cover what Passport
   *delivers*; the cross-chain capability is delivered through integration
   with the upstream architecture, not by Passport building it.
 
