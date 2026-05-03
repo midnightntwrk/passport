@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Midnight Passport — Parallelisation Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  body {
+    font-size: 17px;
+    line-height: 1.65;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  main { flex: 1; }
+
+  .container {
+    max-width: clamp(820px, 92vw, 1600px);
+    margin: 0 auto;
+    padding: 0 clamp(24px, 5vw, 80px);
+    width: 100%;
+  }
+
+  section.hero { padding: 56px 0 32px; }
+  .doc-logo, .doc-logo-dark {
+    height: clamp(40px, 4vw, 64px);
+    width: auto;
+    display: block;
+    margin-bottom: 32px;
+  }
+  .doc-logo-dark { display: none; }
+  html[data-theme="dark"] .doc-logo { display: none; }
+  html[data-theme="dark"] .doc-logo-dark { display: block; }
+  @media (not (prefers-color-scheme: light)) {
+    html:not([data-theme="light"]) .doc-logo { display: none; }
+    html:not([data-theme="light"]) .doc-logo-dark { display: block; }
+  }
+
+  .kind {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-mute);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 16px;
+  }
+  .subtitle {
+    font-size: 1.02rem;
+    color: var(--text-mute);
+    max-width: 60rem;
+    margin: 0;
+  }
+  .meta-bar {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text-faint);
+    margin-top: 28px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .meta-bar strong { color: var(--text-mute); font-weight: 500; }
+
+  section.chart-section { padding: 28px 0; }
+
+  .section-head { margin-bottom: 20px; }
+  .section-head .section-kind {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--iog-infared);
+    margin-bottom: 8px;
+  }
+  .section-head h2 {
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  .section-head p {
+    color: var(--text-mute);
+    margin: 0;
+    max-width: 60rem;
+    font-size: 0.96rem;
+  }
+
+  .legend {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin: 14px 0 18px;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text-mute);
+  }
+  .legend-item { display: inline-flex; align-items: center; gap: 8px; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--card-stroke); }
+  .legend-swatch.discovery { background: transparent; border: 1.5px dashed var(--iog-dawn); }
+  .legend-swatch.s1 { background: var(--iog-acid-green); }
+  .legend-swatch.s2 { background: var(--iog-electric-blue); }
+  .legend-swatch.s3 { background: var(--iog-volt-yellow); }
+  .legend-swatch.s4 { background: var(--iog-cobalt-pulse); }
+  .legend-swatch.s5 { background: var(--iog-ultraviolet); }
+  .legend-swatch.s6 { background: var(--iog-hyper-pink); }
+  .legend-swatch.gating { background: var(--iog-infared); border-color: var(--iog-infared); }
+
+  .chart-wrap {
+    background: var(--card-soft-fill);
+    border: 1px solid var(--card-stroke-faint);
+    border-radius: 6px;
+    padding: 20px 16px;
+    overflow-x: auto;
+  }
+  .chart-wrap svg { display: block; min-width: 1100px; }
+  .chart-wrap svg.wide { min-width: 1300px; }
+
+  /* Gantt */
+  .lane-bg { fill: transparent; }
+  .lane-bg.alt { fill: var(--bg-alt); opacity: 0.5; }
+  .lane-divider { stroke: var(--line); stroke-width: 1; }
+  .lane-label { font-family: var(--font-display); font-size: 13px; font-weight: 600; fill: var(--svg-text); }
+  .lane-sublabel { font-family: var(--font-mono); font-size: 10.5px; fill: var(--svg-text-mute); }
+  .axis-label { font-family: var(--font-mono); font-size: 11px; fill: var(--svg-text-mute); text-transform: uppercase; letter-spacing: 0.06em; }
+  .axis-line { stroke: var(--line-strong); stroke-width: 1; }
+  .axis-tick { stroke: var(--line); stroke-width: 1; }
+
+  .bar { stroke: var(--card-stroke); stroke-width: 1; }
+  .bar.discovery { fill: transparent; stroke: var(--iog-dawn); stroke-dasharray: 4 3; stroke-width: 1.4; }
+  .bar.s1 { fill: var(--iog-acid-green); }
+  .bar.s2 { fill: var(--iog-electric-blue); }
+  .bar.s3 { fill: var(--iog-volt-yellow); }
+  .bar.s4 { fill: var(--iog-cobalt-pulse); }
+  .bar.s5 { fill: var(--iog-ultraviolet); }
+  .bar.s6 { fill: var(--iog-hyper-pink); }
+  .bar.gating-edge { stroke: var(--iog-infared); stroke-width: 2; }
+
+  .bar-text { font-family: var(--font-mono); font-size: 11.5px; pointer-events: none; }
+  .bar-text.dark { fill: #0A0A0A; }
+  .bar-text.light { fill: #FFFFFF; }
+  .bar-text.discovery { fill: var(--svg-text); }
+
+  .gating-flag {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    fill: var(--iog-infared);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    pointer-events: none;
+  }
+
+  /* Dep graph */
+  .node { stroke: var(--card-stroke); stroke-width: 1; }
+  .node.discovery { fill: transparent; stroke: var(--iog-dawn); stroke-dasharray: 4 3; stroke-width: 1.4; }
+  .node.s1 { fill: var(--iog-acid-green); }
+  .node.s2 { fill: var(--iog-electric-blue); }
+  .node.s3 { fill: var(--iog-volt-yellow); }
+  .node.s4 { fill: var(--iog-cobalt-pulse); }
+  .node.s5 { fill: var(--iog-ultraviolet); }
+  .node.s6 { fill: var(--iog-hyper-pink); }
+  .node.gating-edge { stroke: var(--iog-infared); stroke-width: 2; }
+
+  .node-text { font-family: var(--font-mono); font-size: 11.5px; pointer-events: none; }
+  .node-text.dark { fill: #0A0A0A; }
+  .node-text.light { fill: #FFFFFF; }
+  .node-text.discovery { fill: var(--svg-text); }
+  .node-id { font-weight: 600; }
+
+  .edge { stroke: var(--text-mute); stroke-width: 1.2; fill: none; opacity: 0.45; }
+  .edge.gating { stroke: var(--iog-infared); stroke-width: 1.5; opacity: 0.85; }
+
+  /* Default-dim mode: graph is calm at rest; click a node to spotlight its up/downstream chain. */
+  svg.wide .node-group { cursor: pointer; opacity: 0.62; transition: opacity 0.15s ease; }
+  svg.wide .edge { opacity: 0.16; transition: opacity 0.15s ease, stroke-width 0.15s ease; }
+  svg.wide .edge.gating { opacity: 0.32; }
+  svg.wide .node-group.in-path,
+  svg.wide .node-group.selected { opacity: 1; }
+  svg.wide .node-group.selected .node { stroke: var(--iog-infared); stroke-width: 2.5; }
+  svg.wide .edge.path-active { opacity: 0.85; stroke-width: 1.7; }
+  svg.wide .edge.path-active.gating { opacity: 0.95; stroke-width: 2.2; }
+
+  .graph-hint {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text-faint);
+    margin: 4px 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .graph-hint::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--iog-infared);
+    display: inline-block;
+  }
+
+  .col-label { font-family: var(--font-mono); font-size: 11px; fill: var(--svg-text-mute); text-transform: uppercase; letter-spacing: 0.06em; }
+  .group-label { font-family: var(--font-mono); font-size: 11px; fill: var(--iog-dawn); text-transform: uppercase; letter-spacing: 0.06em; }
+  .group-frame { fill: none; stroke: var(--iog-dawn); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.6; }
+
+  /* Streams × sequence chart (Section 1) */
+  .chart-wrap svg.streams { min-width: 1300px; }
+  svg.streams .lane-bg.alt { opacity: 1; }
+  svg.streams .lane-divider { stroke: var(--line-strong); stroke-width: 1; opacity: 0.5; }
+  svg.streams .stream-node { cursor: pointer; transition: opacity 0.15s ease; }
+  svg.streams .stream-edge,
+  svg.streams .critical-path-line { transition: opacity 0.15s ease, stroke-width 0.15s ease; }
+  svg.streams.has-selection .stream-node:not(.in-path):not(.selected) { opacity: 0.16; }
+  svg.streams.has-selection .stream-edge:not(.path-active) { opacity: 0.04; }
+  svg.streams.has-selection .stream-edge.path-active { opacity: 0.85; stroke-width: 1.5; }
+  svg.streams.has-selection .critical-path-line { opacity: 0.08; }
+  svg.streams .stream-node.selected .node { stroke: var(--iog-infared); stroke-width: 2.5; }
+  .legend-swatch.critical {
+    width: 22px; height: 4px;
+    background: var(--iog-infared);
+    border: none; border-radius: 2px;
+    align-self: center;
+  }
+  .legend-swatch.pivot-marker {
+    background: var(--bg-soft);
+    border: 2px solid var(--iog-infared);
+  }
+  .stream-node .node { stroke: var(--card-stroke); stroke-width: 1; }
+  .stream-node.pivot .node { stroke: var(--iog-infared); stroke-width: 2.5; }
+  .stream-edge { fill: none; stroke: var(--text-mute); stroke-width: 1; opacity: 0.18; }
+  .critical-path-line {
+    fill: none;
+    stroke: var(--iog-infared);
+    stroke-width: 9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.22;
+  }
+  .pivot-badge {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    font-weight: 600;
+    fill: var(--iog-infared);
+    letter-spacing: 0.06em;
+    pointer-events: none;
+  }
+
+  /* Stream-owner table */
+  .stream-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-size: 0.92rem;
+  }
+  .stream-table th, .stream-table td {
+    text-align: left;
+    padding: 14px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .stream-table th {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-mute);
+    font-weight: 500;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .stream-table td.stream-cell { white-space: nowrap; }
+  .stream-table .stream-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+  }
+  .stream-table .stream-dot {
+    width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--card-stroke);
+  }
+  .stream-table .components { font-family: var(--font-mono); font-size: 0.85rem; color: var(--text); }
+  .stream-table .deps { color: var(--text-mute); font-size: 0.88rem; }
+
+  .footnote {
+    color: var(--text-mute);
+    font-size: 0.92rem;
+    margin-top: 18px;
+    max-width: 60rem;
+  }
+  .footnote code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--bg-code);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  footer.landing-footer {
+    border-top: 1px solid var(--line);
+    padding: 24px 0;
+    margin-top: 48px;
+    color: var(--text-mute);
+    font-size: 0.86rem;
+  }
+  footer.landing-footer .container {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .footer-meta { font-size: 0.74rem; color: var(--text-faint); }
+</style>
+</head>
+<body>
+
+<nav class="navbar" aria-label="Primary">
+  <a class="navbar-brand" href="index.html">Midnight Passport <span class="brand-tag">· ARC</span></a>
+  <div class="navbar-links">
+    <a href="index.html">Overview</a>
+    <a href="parallelisation.html" class="active">Parallelisation</a>
+    <a href="demo.html">Demo</a>
+    <a href="standards.html">Standards</a>
+  </div>
+</nav>
+
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle colour scheme" title="Auto · Light · Dark">
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+  </svg>
+</button>
+
+<main>
+
+  <section class="hero">
+    <div class="container">
+      <img class="doc-logo" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red POS.png" alt="Input Output">
+      <img class="doc-logo-dark" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red NEG.png" alt="Input Output">
+      <div class="kind">ARC · Midnight Passport · Draft</div>
+      <h1>Parallelisation map</h1>
+      <p class="subtitle">How v1.0 work splits across teams. Six streams, each owning a coherent group of components, plus a discovery lane that runs as research underneath. Every bar is the same length — sizing is illustrative only, the visual tells you what can run alongside what, not how long anything takes.</p>
+      <div class="meta-bar">
+        <span><strong>Status:</strong> Draft for review</span>
+        <span><strong>Drafted:</strong> 2026/05/03</span>
+        <span><strong>Source of truth:</strong> <code>site/data.js</code></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="chart-section">
+    <div class="container">
+      <header class="section-head">
+        <div class="section-kind">Section 1</div>
+        <h2>Streams &times; sequence</h2>
+        <p>Six streams plus discovery, laid out left-to-right by global dep-depth (longest chain to each component, computed from <code>data.js</code>). Streams are not synchronised — gaps are real, indicating where a stream is idle waiting on something elsewhere. The thick red ribbon traces the longest dependency chain (the critical path); whatever's on it sets the project's minimum duration. Two pivots are flagged: <strong>C1</strong> (the bidirectional core that everything identity-shaped flows through) and <strong>C8</strong> (the upstream gate every cryptographic spec waits on).</p>
+      </header>
+
+      <div class="legend">
+        <span class="legend-item"><span class="legend-swatch discovery"></span>Discovery</span>
+        <span class="legend-item"><span class="legend-swatch s1"></span>1 · Cryptography</span>
+        <span class="legend-item"><span class="legend-swatch s2"></span>2 · Protocol &amp; on-chain</span>
+        <span class="legend-item"><span class="legend-swatch s3"></span>3 · Wallet runtime</span>
+        <span class="legend-item"><span class="legend-swatch s4"></span>4 · Recovery</span>
+        <span class="legend-item"><span class="legend-swatch s5"></span>5 · Credentials</span>
+        <span class="legend-item"><span class="legend-swatch s6"></span>6 · Ecosystem</span>
+        <span class="legend-item"><span class="legend-swatch critical"></span>Critical path</span>
+        <span class="legend-item"><span class="legend-swatch pivot-marker"></span>Pivot</span>
+      </div>
+
+      <div class="chart-wrap">
+        <svg id="streamsChart" class="streams" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="Streams by sequence chart">
+          <!-- Populated at runtime from window.PASSPORT_DATA -->
+        </svg>
+      </div>
+      <p class="footnote">Components in the C1 ↔ C2 ↔ C4 ↔ C9 ↔ C10 ↔ C16 cycle (the identity-and-account core, see <code>data.js</code> <code>core_scc</code>) all sit at the same depth — their internal ordering is a build-order choice, not a strict precedence. The critical path's representative through the core is <strong>C1</strong>. The chart auto-recomputes whenever <code>data.js</code> changes; redraw is data-driven.</p>
+    </div>
+  </section>
+
+</main>
+
+<div class="panel-backdrop" id="panelBackdrop" aria-hidden="true"></div>
+<aside class="panel" id="panel" aria-hidden="true" aria-label="Detail panel">
+  <button class="panel-close" id="panelClose" aria-label="Close panel" title="Close">×</button>
+  <div class="panel-body" id="panelBody"></div>
+</aside>
+
+<footer class="landing-footer">
+  <div class="container">
+    <span>ARC · Input Output Global · Midnight Passport planning workspace</span>
+    <span class="footer-meta">Drafted 2026/05/03</span>
+  </div>
+</footer>
+
+<script src="data.js"></script>
+<script src="panel.js"></script>
+<script>
+  // Section 2 dep-graph IIFE retained for legacy / no-op (svg.wide no longer in DOM).
+  (function() {
+    const svg = document.querySelector('svg.wide');
+    if (!svg) return;
+    if (!window.PASSPORT_DATA || !Array.isArray(window.PASSPORT_DATA.components)) return;
+
+    // Node positions in viewBox coordinates. Mirrors the SVG markup above.
+    const BANNER_W = 150, MAIN_W = 180;
+    const POS = {
+      C4:  { x: 200,  y: 60,  w: BANNER_W }, C3:  { x: 450,  y: 60,  w: BANNER_W },
+      C22: { x: 700,  y: 60,  w: BANNER_W }, C24: { x: 950,  y: 60,  w: BANNER_W },
+      C25: { x: 1200, y: 60,  w: BANNER_W },
+      C8:  { x: 240,  y: 180, w: MAIN_W },   C10: { x: 240,  y: 236, w: MAIN_W },
+      C2:  { x: 240,  y: 292, w: MAIN_W },   C9:  { x: 240,  y: 348, w: MAIN_W },
+      C15: { x: 240,  y: 404, w: MAIN_W },
+      C5:  { x: 720,  y: 180, w: MAIN_W },   C6:  { x: 720,  y: 236, w: MAIN_W },
+      C18: { x: 720,  y: 292, w: MAIN_W },   C21: { x: 720,  y: 348, w: MAIN_W },
+      C1:  { x: 720,  y: 404, w: MAIN_W },   C11: { x: 720,  y: 460, w: MAIN_W },
+      C14: { x: 720,  y: 516, w: MAIN_W },
+      C7:  { x: 1200, y: 180, w: MAIN_W },   C16: { x: 1200, y: 236, w: MAIN_W },
+      C19: { x: 1200, y: 292, w: MAIN_W },   C20: { x: 1200, y: 348, w: MAIN_W },
+      C17: { x: 1200, y: 404, w: MAIN_W },   C13: { x: 1200, y: 460, w: MAIN_W },
+      C12: { x: 1200, y: 516, w: MAIN_W },   C23: { x: 1200, y: 572, w: MAIN_W },
+    };
+
+    function edgePath(srcId, tgtId) {
+      const src = POS[srcId], tgt = POS[tgtId];
+      if (!src || !tgt) return null;
+      const sy = src.y, ty = tgt.y;
+      let sx, tx;
+      if (src.x < tgt.x) {            // forward (left-to-right)
+        sx = src.x + src.w / 2;
+        tx = tgt.x - tgt.w / 2;
+        const dx = (tx - sx) * 0.5;
+        return `M ${sx} ${sy} C ${sx + dx} ${sy} ${tx - dx} ${ty} ${tx} ${ty}`;
+      }
+      if (src.x > tgt.x) {            // backward (right-to-left)
+        sx = src.x - src.w / 2;
+        tx = tgt.x + tgt.w / 2;
+        const dx = (sx - tx) * 0.5;
+        return `M ${sx} ${sy} C ${sx - dx} ${sy} ${tx + dx} ${ty} ${tx} ${ty}`;
+      }
+      // same column — loop out to the right and back in
+      sx = src.x + src.w / 2;
+      tx = tgt.x + tgt.w / 2;
+      const offset = 70;
+      return `M ${sx} ${sy} C ${sx + offset} ${sy} ${tx + offset} ${ty} ${tx} ${ty}`;
+    }
+
+    // Inject edges before the first node-group so they render under nodes.
+    const firstNode = svg.querySelector('.node-group');
+    const ancestors = {};
+    const descendants = {};
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+
+    for (const comp of window.PASSPORT_DATA.components) {
+      const tgtId = comp.id;
+      if (!POS[tgtId]) continue;
+      const deps = (comp.hard_deps || []);
+      for (const srcId of deps) {
+        if (!POS[srcId]) continue;
+        const d = edgePath(srcId, tgtId);
+        if (!d) continue;
+        const isGating = (srcId === 'C4' || srcId === 'C8');
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('class', isGating ? 'edge gating' : 'edge');
+        path.setAttribute('data-from', srcId);
+        path.setAttribute('data-to', tgtId);
+        path.setAttribute('marker-end', isGating ? 'url(#arrow-gating)' : 'url(#arrow)');
+        svg.insertBefore(path, firstNode);
+
+        (ancestors[tgtId] = ancestors[tgtId] || []).push(srcId);
+        (descendants[srcId] = descendants[srcId] || []).push(tgtId);
+      }
+    }
+
+    function reach(start, map) {
+      const seen = new Set();
+      const queue = [start];
+      while (queue.length) {
+        const n = queue.shift();
+        for (const m of (map[n] || [])) {
+          if (!seen.has(m)) { seen.add(m); queue.push(m); }
+        }
+      }
+      return seen;
+    }
+
+    function clearSelection() {
+      svg.querySelectorAll('.node-group.selected, .node-group.in-path')
+        .forEach(g => g.classList.remove('selected', 'in-path'));
+      svg.querySelectorAll('.edge.path-active')
+        .forEach(e => e.classList.remove('path-active'));
+    }
+
+    function highlight(id) {
+      const ups = reach(id, ancestors);
+      const downs = reach(id, descendants);
+      const inPath = new Set([id, ...ups, ...downs]);
+      svg.querySelectorAll('.node-group').forEach(g => {
+        const nid = g.getAttribute('data-id');
+        g.classList.toggle('selected', nid === id);
+        g.classList.toggle('in-path', inPath.has(nid) && nid !== id);
+      });
+      svg.querySelectorAll('.edge[data-from][data-to]').forEach(e => {
+        const f = e.getAttribute('data-from');
+        const t = e.getAttribute('data-to');
+        e.classList.toggle('path-active', inPath.has(f) && inPath.has(t));
+      });
+    }
+
+    let current = null;
+    svg.addEventListener('click', (ev) => {
+      const node = ev.target.closest('.node-group');
+      if (!node) { clearSelection(); current = null; return; }
+      const id = node.getAttribute('data-id');
+      if (current === id) { clearSelection(); current = null; }
+      else { current = id; highlight(id); }
+    });
+  })();
+
+  // ============================================================
+  // Section 1: Streams × sequence — depths from data.js, critical
+  // path overlay, pivot markers. Rendered into <svg id="streamsChart">.
+  // ============================================================
+  (function() {
+    const svg = document.getElementById('streamsChart');
+    if (!svg) return;
+    if (!window.PASSPORT_DATA || !Array.isArray(window.PASSPORT_DATA.components)) return;
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const data = window.PASSPORT_DATA;
+    const components = data.components;
+    const CORE = new Set(data.core_scc || []);
+
+    const depMap = {};
+    for (const c of components) depMap[c.id] = c.hard_deps || [];
+
+    // Compute longest-chain depth, condensing the SCC into one bundle.
+    const memo = {};
+    function depthOf(id) {
+      if (CORE.has(id)) {
+        if ('CORE' in memo) return memo.CORE;
+        memo.CORE = 0;  // recursion guard
+        let maxD = -1;
+        for (const m of CORE) {
+          for (const dep of (depMap[m] || [])) {
+            if (CORE.has(dep)) continue;
+            maxD = Math.max(maxD, depthOf(dep));
+          }
+        }
+        memo.CORE = maxD + 1;
+        return memo.CORE;
+      }
+      if (id in memo) return memo[id];
+      memo[id] = 0;  // recursion guard
+      let maxD = -1;
+      for (const dep of (depMap[id] || [])) {
+        maxD = Math.max(maxD, depthOf(dep));
+      }
+      memo[id] = maxD + 1;
+      return memo[id];
+    }
+
+    const depths = {};
+    for (const c of components) depths[c.id] = depthOf(c.id);
+    const maxDepth = Math.max(...Object.values(depths));
+
+    // Stream assignment (mirrors the rest of this page).
+    const STREAM_OF = {
+      C3: 0, C4: 0, C22: 0, C24: 0, C25: 0,
+      C5: 1, C6: 1, C7: 1, C8: 1,
+      C1: 2, C2: 2, C10: 2, C11: 2, C12: 2,
+      C9: 3, C13: 3, C16: 3, C17: 3,
+      C14: 4, C15: 4,
+      C18: 5, C19: 5, C20: 5, C21: 5,
+      C23: 6,
+    };
+    const STREAMS = [
+      { name: 'Discovery',                cls: 'discovery', textCls: 'discovery' },
+      { name: '1 · Cryptography',         cls: 's1',        textCls: 'dark' },
+      { name: '2 · Protocol & on-chain',  cls: 's2',        textCls: 'dark' },
+      { name: '3 · Wallet runtime',       cls: 's3',        textCls: 'dark' },
+      { name: '4 · Recovery',             cls: 's4',        textCls: 'light' },
+      { name: '5 · Credentials',          cls: 's5',        textCls: 'light' },
+      { name: '6 · Ecosystem',            cls: 's6',        textCls: 'dark' },
+    ];
+
+    // Bin each component into (stream, depth).
+    const cells = STREAMS.map(() => ({}));
+    for (const id in depths) {
+      const s = STREAM_OF[id];
+      if (s === undefined) continue;
+      const d = depths[id];
+      cells[s][d] = cells[s][d] || [];
+      cells[s][d].push(id);
+    }
+
+    // Sub-rows per stream (max simultaneous occupancy at any depth).
+    const subRows = STREAMS.map((_, s) => {
+      let max = 1;
+      for (const d in cells[s]) max = Math.max(max, cells[s][d].length);
+      return max;
+    });
+
+    // Layout constants.
+    const LEFT_MARGIN = 220, RIGHT_MARGIN = 30, COL_WIDTH = 140;
+    const HEADER_HEIGHT = 50, LANE_HEADER_HEIGHT = 24, SUB_ROW_HEIGHT = 30, LANE_PAD = 4;
+    const NODE_WIDTH = 122, NODE_HEIGHT = 24;
+
+    const totalWidth = LEFT_MARGIN + (maxDepth + 1) * COL_WIDTH + RIGHT_MARGIN;
+    const laneTops = [];
+    let cy = HEADER_HEIGHT;
+    for (let s = 0; s < STREAMS.length; s++) {
+      laneTops.push(cy);
+      cy += LANE_HEADER_HEIGHT + subRows[s] * SUB_ROW_HEIGHT + LANE_PAD;
+    }
+    const totalHeight = cy + 16;
+    svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
+
+    // Compute final node positions.
+    const POS = {};
+    for (let s = 0; s < STREAMS.length; s++) {
+      const subStart = laneTops[s] + LANE_HEADER_HEIGHT;
+      for (const d in cells[s]) {
+        cells[s][d].forEach((id, i) => {
+          POS[id] = {
+            cx: LEFT_MARGIN + parseInt(d) * COL_WIDTH + COL_WIDTH / 2,
+            cy: subStart + i * SUB_ROW_HEIGHT + SUB_ROW_HEIGHT / 2,
+            stream: s,
+            depth: parseInt(d),
+          };
+        });
+      }
+    }
+
+    function el(tag, attrs) {
+      const e = document.createElementNS(SVG_NS, tag);
+      if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
+      return e;
+    }
+
+    // Lane backgrounds.
+    for (let s = 0; s < STREAMS.length; s++) {
+      svg.appendChild(el('rect', {
+        x: 0, y: laneTops[s],
+        width: totalWidth,
+        height: LANE_HEADER_HEIGHT + subRows[s] * SUB_ROW_HEIGHT,
+        class: s % 2 === 0 ? 'lane-bg alt' : 'lane-bg',
+      }));
+    }
+
+    // Lane dividers — thin horizontal line between each stream row.
+    for (let s = 1; s < STREAMS.length; s++) {
+      svg.appendChild(el('line', {
+        x1: 0, y1: laneTops[s], x2: totalWidth, y2: laneTops[s],
+        class: 'lane-divider',
+      }));
+    }
+
+    // Top axis: depth column labels + dashed verticals.
+    for (let d = 0; d <= maxDepth; d++) {
+      const x = LEFT_MARGIN + d * COL_WIDTH + COL_WIDTH / 2;
+      const text = el('text', { x, y: 30, 'text-anchor': 'middle', class: 'axis-label' });
+      text.textContent = `Depth ${d}`;
+      svg.appendChild(text);
+    }
+    for (let d = 0; d <= maxDepth + 1; d++) {
+      svg.appendChild(el('line', {
+        x1: LEFT_MARGIN + d * COL_WIDTH, y1: 38,
+        x2: LEFT_MARGIN + d * COL_WIDTH, y2: totalHeight - 8,
+        class: 'axis-tick', 'stroke-dasharray': '3 4',
+      }));
+    }
+
+    // Lane labels.
+    for (let s = 0; s < STREAMS.length; s++) {
+      const t = el('text', { x: 14, y: laneTops[s] + 16, class: 'lane-label' });
+      t.textContent = STREAMS[s].name;
+      svg.appendChild(t);
+    }
+
+    // Cross-stream forward edges (dimmed). Skip cycles + same-depth.
+    for (const c of components) {
+      const tgt = POS[c.id];
+      if (!tgt) continue;
+      for (const depId of (c.hard_deps || [])) {
+        const src = POS[depId];
+        if (!src) continue;
+        if (src.depth >= tgt.depth) continue;
+        const sx = src.cx + NODE_WIDTH / 2;
+        const tx = tgt.cx - NODE_WIDTH / 2;
+        const sy = src.cy, ty = tgt.cy;
+        const dx = (tx - sx) * 0.5;
+        svg.appendChild(el('path', {
+          d: `M ${sx} ${sy} C ${sx + dx} ${sy} ${tx - dx} ${ty} ${tx} ${ty}`,
+          class: 'stream-edge',
+          'data-from': depId,
+          'data-to': c.id,
+        }));
+      }
+    }
+
+    // Critical path ribbon: C8 → C1 (CORE rep) → C5 → C7 → C6 → C20 → C22 → C23.
+    const CRITICAL_PATH = ['C8', 'C1', 'C5', 'C7', 'C6', 'C20', 'C22', 'C23'];
+    const ribbonNodes = CRITICAL_PATH.map(id => POS[id]).filter(Boolean);
+    if (ribbonNodes.length > 1) {
+      let pathD = `M ${ribbonNodes[0].cx} ${ribbonNodes[0].cy}`;
+      for (let i = 1; i < ribbonNodes.length; i++) {
+        const prev = ribbonNodes[i - 1], curr = ribbonNodes[i];
+        const midX = (prev.cx + curr.cx) / 2;
+        pathD += ` C ${midX} ${prev.cy} ${midX} ${curr.cy} ${curr.cx} ${curr.cy}`;
+      }
+      svg.appendChild(el('path', { d: pathD, class: 'critical-path-line' }));
+    }
+
+    // Component nodes.
+    const PIVOTS = new Set(['C1', 'C8']);
+    const SHORT_NAME = {
+      'Account-custody contract':         'Account contract',
+      'Name service':                     'Name service',
+      'DID surface':                      'DID surface',
+      'Asset custody model':              'Asset custody',
+      'Signing primitive':                'Signing',
+      'Proof generation':                 'Proof gen.',
+      'Witness handling':                 'Witness',
+      'Domain-separation registry':       'Domain sep.',
+      'Device-bound authentication':      'Device auth',
+      'Scoped grant primitive':           'Grant primitive',
+      'Grant lifecycle':                  'Grant lifecycle',
+      'Chain-side enforcement':           'Enforcement',
+      'Lost-device flow':                 'Lost-device',
+      'Total-loss recovery flow':         'Total-loss',
+      'Helper protocol':                  'Helper proto.',
+      'Wallet local storage':             'Local storage',
+      'View-key + indexer (sync)':        'View-key sync',
+      'Attestation tree':                 'Attestation',
+      'Credential issuance':              'Issuance',
+      'Selective-disclosure proof':       'Sel. disclosure',
+      'Nullifier':                        'Nullifier',
+      'Intent surface':                   'Intent',
+      'dApp connection protocol':         'dApp protocol',
+      'Fee model':                        'Fee model',
+      'Cross-chain integration interface':'Cross-chain',
+    };
+    function shortName(name) {
+      return SHORT_NAME[name] || name;
+    }
+
+    for (const id in POS) {
+      const pos = POS[id];
+      const stream = STREAMS[pos.stream];
+      const isPivot = PIVOTS.has(id);
+      const g = el('g', {
+        class: 'stream-node' + (isPivot ? ' pivot' : ''),
+        'data-id': id,
+        'data-component': id,
+      });
+      g.appendChild(el('rect', {
+        x: pos.cx - NODE_WIDTH / 2,
+        y: pos.cy - NODE_HEIGHT / 2,
+        width: NODE_WIDTH, height: NODE_HEIGHT, rx: 3,
+        class: 'node ' + stream.cls,
+      }));
+      const label = el('text', {
+        x: pos.cx, y: pos.cy + 4,
+        'text-anchor': 'middle',
+        class: 'node-text ' + stream.textCls,
+      });
+      const idSpan = el('tspan', { class: 'node-id' });
+      idSpan.textContent = id;
+      label.appendChild(idSpan);
+      const comp = components.find(c => c.id === id);
+      label.appendChild(document.createTextNode(' · ' + shortName(comp ? comp.name : id)));
+      g.appendChild(label);
+      if (isPivot) {
+        const badge = el('text', {
+          x: pos.cx + NODE_WIDTH / 2 + 3,
+          y: pos.cy - NODE_HEIGHT / 2 + 6,
+          class: 'pivot-badge',
+        });
+        badge.textContent = 'PIVOT';
+        g.appendChild(badge);
+      }
+      svg.appendChild(g);
+    }
+
+    // === Click highlight: dim everything outside the clicked component's
+    // dependency / dependent chain. Cooperates with panel.js (which auto-
+    // opens the side panel for any element carrying data-component).
+    const ancestors = {}, descendants = {};
+    for (const c of components) {
+      for (const depId of (c.hard_deps || [])) {
+        (ancestors[c.id] = ancestors[c.id] || []).push(depId);
+        (descendants[depId] = descendants[depId] || []).push(c.id);
+      }
+    }
+    function reach(start, map) {
+      const seen = new Set(), queue = [start];
+      while (queue.length) {
+        const n = queue.shift();
+        for (const m of (map[n] || [])) {
+          if (!seen.has(m)) { seen.add(m); queue.push(m); }
+        }
+      }
+      return seen;
+    }
+    function clearStreamsHighlight() {
+      svg.classList.remove('has-selection');
+      svg.querySelectorAll('.stream-node.selected, .stream-node.in-path')
+        .forEach(g => g.classList.remove('selected', 'in-path'));
+      svg.querySelectorAll('.stream-edge.path-active')
+        .forEach(e => e.classList.remove('path-active'));
+    }
+    function highlightStreams(id) {
+      const ups = reach(id, ancestors);
+      const downs = reach(id, descendants);
+      const inPath = new Set([id, ...ups, ...downs]);
+      svg.classList.add('has-selection');
+      svg.querySelectorAll('.stream-node').forEach(g => {
+        const nid = g.getAttribute('data-component');
+        g.classList.toggle('selected', nid === id);
+        g.classList.toggle('in-path', inPath.has(nid) && nid !== id);
+      });
+      svg.querySelectorAll('.stream-edge[data-from][data-to]').forEach(e => {
+        const f = e.getAttribute('data-from');
+        const t = e.getAttribute('data-to');
+        e.classList.toggle('path-active', inPath.has(f) && inPath.has(t));
+      });
+    }
+    let currentStreamSel = null;
+    svg.addEventListener('click', (ev) => {
+      const node = ev.target.closest('.stream-node');
+      if (!node) return;  // panel.js / its close handlers will clear
+      const id = node.getAttribute('data-component');
+      if (currentStreamSel === id) return;
+      currentStreamSel = id;
+      highlightStreams(id);
+    });
+    function clearAll() { clearStreamsHighlight(); currentStreamSel = null; }
+    const closeBtn = document.getElementById('panelClose');
+    const backdrop = document.getElementById('panelBackdrop');
+    if (closeBtn) closeBtn.addEventListener('click', clearAll);
+    if (backdrop) backdrop.addEventListener('click', clearAll);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') clearAll(); });
+  })();
+</script>
+<script src="theme-toggle.js"></script>
+</body>
+</html>
