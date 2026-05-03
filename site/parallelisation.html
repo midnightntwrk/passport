@@ -253,6 +253,24 @@
     pointer-events: none;
   }
 
+  /* Demo phase bars */
+  svg.streams .demo-phase { cursor: pointer; transition: opacity 0.15s ease; }
+  svg.streams .demo-phase rect {
+    fill: #FFBA36;
+    stroke: var(--card-stroke);
+    stroke-width: 1;
+  }
+  svg.streams .demo-phase-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    fill: #0A0A0A;
+    pointer-events: none;
+  }
+  svg.streams.has-selection .demo-phase:not(.selected) { opacity: 0.16; }
+  svg.streams .demo-phase.selected rect { stroke: var(--iog-infared); stroke-width: 2.5; }
+  .legend-swatch.demo-phase { background: #FFBA36; }
+
   /* Stream-owner table */
   .stream-table {
     width: 100%;
@@ -362,7 +380,7 @@
       <header class="section-head">
         <div class="section-kind">Section 1</div>
         <h2>Streams &times; sequence</h2>
-        <p>Six streams plus discovery, laid out left-to-right by global dep-depth (longest chain to each component, computed from <code>data.js</code>). Streams are not synchronised — gaps are real, indicating where a stream is idle waiting on something elsewhere. The thick red ribbon traces the longest dependency chain (the critical path); whatever's on it sets the project's minimum duration. Two pivots are flagged: <strong>C1</strong> (the bidirectional core that everything identity-shaped flows through) and <strong>C8</strong> (the upstream gate every cryptographic spec waits on).</p>
+        <p>Six streams plus discovery, laid out left-to-right by global dep-depth (longest chain to each component, computed from <code>data.js</code>). Streams are not synchronised — gaps are real, indicating where a stream is idle waiting on something elsewhere. The thick red ribbon traces the longest dependency chain (the critical path); whatever's on it sets the project's minimum duration. Two pivots are flagged: <strong>C1</strong> (the bidirectional core that everything identity-shaped flows through) and <strong>C8</strong> (the upstream gate every cryptographic spec waits on). Below the streams sits the <strong>Demo phases</strong> lane — Phase A through D, each spanning the dep-depth range of the components it consumes; click a phase bar to spotlight its components.</p>
       </header>
 
       <div class="legend">
@@ -375,6 +393,7 @@
         <span class="legend-item"><span class="legend-swatch s6"></span>6 · Ecosystem</span>
         <span class="legend-item"><span class="legend-swatch critical"></span>Critical path</span>
         <span class="legend-item"><span class="legend-swatch pivot-marker"></span>Pivot</span>
+        <span class="legend-item"><span class="legend-swatch demo-phase"></span>Demo phase</span>
       </div>
 
       <div class="chart-wrap">
@@ -622,7 +641,20 @@
       laneTops.push(cy);
       cy += LANE_HEADER_HEIGHT + subRows[s] * SUB_ROW_HEIGHT + LANE_PAD;
     }
-    const totalHeight = cy + 16;
+    const streamsBottom = cy;
+
+    // Demo phase data — only phases that actually carry components in this map.
+    const phases = (data.demo_phases || []).filter(p => (p.components || []).length > 0);
+    phases.forEach(p => {
+      const ds = (p.components || []).map(id => depths[id]).filter(d => typeof d === 'number');
+      p.minDepth = ds.length ? Math.min(...ds) : 0;
+      p.maxDepth = ds.length ? Math.max(...ds) : maxDepth;
+    });
+    const demoLaneTop = streamsBottom;
+    const demoLaneHeight = phases.length > 0
+      ? LANE_HEADER_HEIGHT + phases.length * SUB_ROW_HEIGHT
+      : 0;
+    const totalHeight = demoLaneTop + demoLaneHeight + 16;
     svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
 
     // Compute final node positions.
@@ -792,6 +824,46 @@
       svg.appendChild(g);
     }
 
+    // === Demo phases lane (below the streams). One bar per phase, spanning
+    // the dep-depth range of the components it pulls in. Click a bar to
+    // spotlight that phase's components.
+    if (phases.length > 0) {
+      svg.appendChild(el('rect', {
+        x: 0, y: demoLaneTop,
+        width: totalWidth, height: demoLaneHeight,
+        class: 'lane-bg',
+      }));
+      svg.appendChild(el('line', {
+        x1: 0, y1: demoLaneTop, x2: totalWidth, y2: demoLaneTop,
+        class: 'lane-divider',
+      }));
+      const demoLabel = el('text', {
+        x: 14, y: demoLaneTop + 16,
+        class: 'lane-label',
+      });
+      demoLabel.textContent = 'Demo phases';
+      svg.appendChild(demoLabel);
+
+      phases.forEach((p, i) => {
+        const barY = demoLaneTop + LANE_HEADER_HEIGHT + i * SUB_ROW_HEIGHT + 3;
+        const barX = LEFT_MARGIN + p.minDepth * COL_WIDTH + 6;
+        const barWidth = (p.maxDepth - p.minDepth + 1) * COL_WIDTH - 12;
+        const barHeight = SUB_ROW_HEIGHT - 6;
+        const g2 = el('g', { class: 'demo-phase', 'data-phase': p.id });
+        g2.appendChild(el('rect', {
+          x: barX, y: barY,
+          width: barWidth, height: barHeight, rx: 3,
+        }));
+        const lbl = el('text', {
+          x: barX + 10, y: barY + barHeight / 2 + 4,
+          class: 'demo-phase-label',
+        });
+        lbl.textContent = `${p.id} · ${p.name}`;
+        g2.appendChild(lbl);
+        svg.appendChild(g2);
+      });
+    }
+
     // === Click highlight: dim everything outside the clicked component's
     // dependency / dependent chain. Cooperates with panel.js (which auto-
     // opens the side panel for any element carrying data-component).
@@ -816,6 +888,8 @@
       svg.classList.remove('has-selection');
       svg.querySelectorAll('.stream-node.selected, .stream-node.in-path')
         .forEach(g => g.classList.remove('selected', 'in-path'));
+      svg.querySelectorAll('.demo-phase.selected')
+        .forEach(g => g.classList.remove('selected'));
       svg.querySelectorAll('.stream-edge.path-active')
         .forEach(e => e.classList.remove('path-active'));
     }
@@ -829,6 +903,26 @@
         g.classList.toggle('selected', nid === id);
         g.classList.toggle('in-path', inPath.has(nid) && nid !== id);
       });
+      svg.querySelectorAll('.demo-phase').forEach(g => g.classList.remove('selected'));
+      svg.querySelectorAll('.stream-edge[data-from][data-to]').forEach(e => {
+        const f = e.getAttribute('data-from');
+        const t = e.getAttribute('data-to');
+        e.classList.toggle('path-active', inPath.has(f) && inPath.has(t));
+      });
+    }
+    function highlightDemoPhase(phaseId) {
+      const phase = phases.find(p => p.id === phaseId);
+      if (!phase) return;
+      const inPath = new Set(phase.components || []);
+      svg.classList.add('has-selection');
+      svg.querySelectorAll('.stream-node').forEach(g => {
+        const nid = g.getAttribute('data-component');
+        g.classList.remove('selected');
+        g.classList.toggle('in-path', inPath.has(nid));
+      });
+      svg.querySelectorAll('.demo-phase').forEach(g => {
+        g.classList.toggle('selected', g.getAttribute('data-phase') === phaseId);
+      });
       svg.querySelectorAll('.stream-edge[data-from][data-to]').forEach(e => {
         const f = e.getAttribute('data-from');
         const t = e.getAttribute('data-to');
@@ -837,6 +931,14 @@
     }
     let currentStreamSel = null;
     svg.addEventListener('click', (ev) => {
+      const phaseEl = ev.target.closest('.demo-phase');
+      if (phaseEl) {
+        const phaseId = phaseEl.getAttribute('data-phase');
+        if (currentStreamSel === phaseId) return;
+        currentStreamSel = phaseId;
+        highlightDemoPhase(phaseId);
+        return;
+      }
       const node = ev.target.closest('.stream-node');
       if (!node) return;  // panel.js / its close handlers will clear
       const id = node.getAttribute('data-component');
