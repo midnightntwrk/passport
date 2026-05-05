@@ -235,6 +235,7 @@ window.PASSPORT_DATA = {
         'Privacy of DID Documents (device topology readable globally if listed).',
         'Interaction with total-loss recovery — does the DID survive?',
         'Target VC standards (W3C VC Data Model 1.1 vs 2.0; signature suite).',
+        'Proof cost in Compact — current did-core examples in midnight-did reach k=19, slow on the proof server. Whether the workstream resolution makes that cost go away, lives with it, or relocates it (e.g. onto C20) is open.',
       ],
       failure_modes: [
         'DID-name divergence between resolver and registry.',
@@ -781,7 +782,7 @@ window.PASSPORT_DATA = {
       id: 'Q3',
       workstream: 'C3',
       question: 'Define a DID method at all?',
-      detail: 'A binary call. "Yes" opens method-name negotiation, identifier shape, DID Document content, resolution model. "No" parks W3C interop and uses the name as the sole identifier.',
+      detail: 'A binary call. "Yes" runs through engagement with the active midnight-did effort (integration, wrapping, or co-authorship) and opens method-name negotiation, identifier shape, DID Document content, resolution model. "No" parks W3C interop and uses the name as the sole identifier.',
       cascade_to: ['C2', 'C9', 'C18', 'C19', 'C20', 'C21'],
       leverage: 'Six canvases shift on "yes"; "no" collapses the cascade entirely.',
     },

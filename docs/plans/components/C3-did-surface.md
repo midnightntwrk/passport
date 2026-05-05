@@ -49,6 +49,27 @@ This canvas frames the decision space, not the answer.
   [`docs/reference/.../credentials/did-investigation/did-midnight.md`](../../reference/machine-investigation/key-flows/credentials/did-investigation/did-midnight.md)
   evaluates IAMX's *original* design; that evaluation does not describe
   the current spec.
+- **External — active `midnight-did` effort.** The current spec and a
+  growing Compact reference implementation live in
+  [`midnightntwrk/midnight-did`](https://github.com/midnightntwrk/midnight-did)
+  (plus additional shielded repositories). The effort is led by **Yurii
+  (IOG)** — multiple months of focused work on Midnight DID, with prior
+  IOG DID background. Closing this workstream **runs through engagement
+  with that effort** — integration, wrapping, or co-authorship — rather
+  than starting from scratch. Several Compact / Midnight ledger caveats
+  have already been hit and worked around inside `midnight-did`; that
+  hard-won knowledge is upstream of every component touching identity,
+  not only C3.
+- **External — NightFi demo (review pending).** A demo built jointly
+  with the Midnight Foundation lives at
+  [`Midnight-Passport-Demo/NightFi`](https://github.com/Midnight-Passport-Demo/NightFi),
+  under what looks like an umbrella `Midnight-Passport-Demo` org for
+  Foundation-coordinated demos. Sibling to the `midnight-did` effort.
+  *To review:* which Passport components and promises NightFi actually
+  exercises (identity / dApp connection / cross-chain / chain
+  abstraction), and which surfaces are demo-tested vs. only
+  spec-described. Outcome of that review may move parts of this entry
+  to C23, C25, or P10.
 
 ## Open questions
 
@@ -93,6 +114,14 @@ reference an unresolvable DID — significant interop hazard.
 targeting (W3C VC Data Model 1.1 vs 2.0; JWT-VC vs LD-VC; BBS+, ZK-SNARK
 selective disclosure)? The DID method has to be compatible with the
 chosen VC stack.
+
+**Proof cost in Compact.** Some did-core surfaces in the current
+`midnight-did` Compact examples reach **k=19**, which is slow on the
+proof server. Whether the workstream resolution makes that cost go
+away, lives with it, or relocates it — for example onto C20
+(selective-disclosure proof) — is open. Until the driving operation is
+identified, k=19 is a known cost ceiling for did-core-shaped circuits
+and a constraint on what the DID surface can promise client-side.
 
 ## Failure modes
 
@@ -172,5 +201,7 @@ directly, which they may not support.
 - **MVP (October demo):** A or F — no DID layer for the demo. Parks the
   question; the demo uses `alice.midnight` directly.
 - **v1.0 deliverable:** B (DID == name), with method-name
-  coordination as the live sub-question. Adopting the current
-  `midnight-did` spec as the starting point shortens the path.
+  coordination as the live sub-question. The path runs through
+  engagement with the active `midnight-did` effort (integration,
+  wrapping, or co-authorship) rather than starting from scratch — the
+  workstream cannot resolve without that engagement.
