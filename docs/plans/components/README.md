@@ -97,6 +97,12 @@ ecosystem; Passport integrates against that architecture via C25.
 |----|-----------|-------------|--------|
 | [**C23**](C23-dapp-connection-protocol.md) | dApp connection protocol | The CAIP-25-shaped, EIP-6963-discoverable protocol surface that lets third-party dApps request scoped grants — including the Sign-In-with-Passport (DecentralisedAuth) authentication half of the same surface. | P7 · P8 · P10 |
 
+### Agent tooling
+
+| ID | Component | Description | Serves |
+|----|-----------|-------------|--------|
+| [**C26**](C26-ai-agent-skills.md) | AI agent skills | Claude-style agent rules and skills targeted at end-users, developers, and project managers. Meta-deliverable, built and maintained on the fly from day 1 to accumulate project context as the work moves. | (meta) |
+
 ## Promises → components map
 
 Every promise has at least one component serving it.

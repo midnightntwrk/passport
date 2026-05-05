@@ -147,6 +147,7 @@ window.PASSPORT_DATA = {
     { id: 'creds',    label: 'Credentials & privacy',     accent: 'iog-ultraviolet' },
     { id: 'network',  label: 'Midnight integration',      accent: 'iog-ember-orange' },
     { id: 'dapp',     label: 'dApp integration',          accent: 'iog-hyper-pink' },
+    { id: 'tooling',  label: 'Agent tooling',             accent: 'iog-solar-amber' },
   ],
 
   workstreams: ['C3', 'C4', 'C22', 'C24', 'C25'],
@@ -261,6 +262,7 @@ window.PASSPORT_DATA = {
       ],
       open_questions: [
         'Privacy trade-off for shielded contract holdings — accept publicity, design mitigations, or fall back to address-custody?',
+        'Compliance posture for inbound shielded transfers — receiver knows amount but not sender, so any KYC/AML regime requiring source-of-funds attestation cannot be satisfied receiver-side. Mitigation likely lives in C20 (sender-side selective-disclosure credential) or in a custody-side acceptance policy here, or both.',
         'Same custody pattern across Night, Shielded, and Dust, or hybrid by class?',
         'Per-device keys directly vs. derivation tree.',
         'Recovery semantics — how does the chosen model preserve "recovered account ↔ recovered assets"?',
@@ -356,10 +358,12 @@ window.PASSPORT_DATA = {
         'Centralised registry vs per-protocol prefixes.',
         'Versioning — does a domain separator get versioned with circuit updates?',
         'Audit cadence post-v1.',
+        'Registry interface and query surface — markdown document, on-chain contract, both? A bulk-queryable or probe-friendly read interface may itself become a usage-pattern oracle even if individual hashes don\'t leak.',
       ],
       failure_modes: [
         'Domain collision between protocols.',
         'Missing prefix at a persistentHash use site.',
+        'Registry query as oracle — the registry interface admits prefix → identifiers lookups or scoped existence-test probes, leaking participation patterns even when individual hashes don\'t. Mitigation: scope read access (write-only public surface, lookup by full path only, no enumeration) or accept the leak as a benign trade-off if the threat model permits.',
       ],
     },
     {
@@ -758,6 +762,41 @@ window.PASSPORT_DATA = {
         'Interface diverges from what the existing canvases assume; multiple downstream canvases need revisiting.',
         'Provider lock-in — single-provider dependency without substitutability.',
         'Compliance proof transport mismatched between Passport and the cross-chain provider.',
+      ],
+    },
+    {
+      id: 'C26', name: 'AI Agent skills', category: 'tooling',
+      serves: [],
+      // Meta-deliverable: not a protocol or wallet surface, but a Claude-style
+      // agent rules and skills package shipped alongside Passport. Built and
+      // maintained on the fly from day 1 to accumulate context as the project
+      // moves rather than be reconstructed retroactively.
+      outcome: 'A set of Claude-style agent rules and skills, packaged for distribution, that lower the threshold for people to engage with Passport. End-users get help with seedless / multi-device / recovery / disclosure flows; developers get pattern recipes for C23, C10–C12, and C18–C21; project managers get help reasoning about phase dependencies, parallelisation, and workstream gates. Built on the fly from day 1 so context accumulates through the project rather than being authored retroactively.',
+      hard_deps: [],
+      associations: [],
+      alternatives: [
+        { label: 'A — Single multi-audience skill', description: 'One package with audience routing on entry. Lowest maintenance burden; risk of muddled tone.' },
+        { label: 'B — Three audience-specific skills', description: 'Separate end-user, developer, and PM skills. Cleanest tone separation; highest maintenance.' },
+        { label: 'C — Two skills (technical / non-technical)', description: 'Devs and PMs share a technical skill; end-users get a non-technical one.' },
+        { label: 'D — Skills derived from canvases at build time', description: 'Pipeline reads docs/plans/ and emits skills automatically. Highest fidelity, highest infra cost.' },
+        { label: 'E — Defer', description: 'Park skills as a v1.0 by-product; revisit post-v1.0. Cost: misses the day-1 context-accumulation opportunity.' },
+      ],
+      open_questions: [
+        'Audience boundary — single package with routing, or three separately versioned packages?',
+        'Distribution shape — Claude Code plugin, public markdown repo, both?',
+        'Maintenance discipline — automated regeneration from canvases, or hand-maintained refresh cadence?',
+        'Source-of-truth coupling — embed canvas content (drift risk) or link to it (requires public canvases)?',
+        'Day-1 buildable scope — single Passport-overview skill, or one per audience?',
+        'Internal vs public — what stays IOG-only vs ships to ecosystem PMs / devs / users?',
+        'Voice across audiences — single voice or three?',
+        'Workstream-pending markers — how to represent unresolved workstreams without leading the user to assume they\'re decided.',
+      ],
+      failure_modes: [
+        'Skill drift — canvases evolve, skills don\'t, users get stale advice.',
+        'Audience confusion — single skill serves all three audiences poorly.',
+        'Branding misfire — voice or terminology clashes with IOG brand guidelines or Midnight Foundation comms.',
+        'Premature commitment — skills shipped too early codify soon-to-change architecture (workstream resolutions in flight).',
+        'Confidential context leakage — PM-facing skill cites pre-decisional or stakeholder-political content from .planning/.',
       ],
     },
   ],

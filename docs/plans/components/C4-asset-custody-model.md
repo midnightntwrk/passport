@@ -45,6 +45,16 @@ privacy regression vs. user-held shielded notes. Do we accept QSCI
 publicity as a v1.0 trade-off, or design mitigations (padding, dummy
 entries, value-bucketing, salted commitments)?
 
+**Compliance posture for inbound shielded transfers.** The shielded
+asset model reveals amount to the receiver but not the sender. Any
+KYC/AML regime applied at the receiver (source-of-funds attestation,
+sanctions-list screening) cannot be satisfied by receiver-side data
+alone. Plausible mitigation: sender-side selective-disclosure
+credential attached to the transfer — cross-link to **C20**. Open:
+which regimes Passport accommodates for v1.0, and whether the
+mitigation lives in C4 (custody-side acceptance policy), C20 (proof
+shape), or both.
+
 **Asset-class boundary.** Same custody pattern across Night, Shielded, and
 Dust, or hybrid by class? The Dust gap may force hybrid regardless of
 preference.
