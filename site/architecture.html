@@ -1,0 +1,1621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Midnight Passport — Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  body {
+    font-size: 17px;
+    line-height: 1.65;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  main { flex: 1; }
+  .container {
+    max-width: clamp(1100px, 92vw, 1500px);
+    margin: 0 auto;
+    padding: 0 clamp(20px, 4vw, 60px);
+    width: 100%;
+  }
+
+  section.hero { padding: 56px 0 24px; }
+  .doc-logo, .doc-logo-dark {
+    height: clamp(40px, 4vw, 64px);
+    margin-bottom: 18px;
+  }
+  html[data-theme="dark"] .doc-logo { display: none; }
+  html[data-theme="light"] .doc-logo-dark { display: none; }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) .doc-logo { display: none; }
+  }
+  @media (prefers-color-scheme: light) {
+    html:not([data-theme="dark"]) .doc-logo-dark { display: none; }
+  }
+
+  .breadcrumb {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    margin-bottom: 18px;
+  }
+  .breadcrumb a { color: var(--text-mute); text-decoration: none; }
+  .breadcrumb a:hover { color: var(--iog-infared); }
+  .breadcrumb .sep { margin: 0 8px; color: var(--text-faint); }
+
+  .kind {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--iog-infared);
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+  .subtitle {
+    font-size: 1.05rem;
+    line-height: 1.6;
+    color: var(--text-mute);
+    max-width: 880px;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    margin-top: 28px;
+  }
+  .toolbar-hint {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+  }
+
+  /* ---------- Diagram layout ---------- */
+
+  section.diagram-host { padding: 18px 0 50px; }
+
+  .diagram {
+    display: grid;
+    gap: 16px;
+    grid-auto-flow: row;
+  }
+
+  .arch-zone {
+    border: 1px solid var(--card-stroke-faint);
+    border-radius: 12px;
+    padding: 16px 18px;
+    background: var(--card-soft-fill);
+    transition: border-color .15s ease;
+  }
+  .arch-zone-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .arch-zone-label {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .arch-zone-sublabel {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+  }
+  .arch-zone-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* User-device zone wraps three sub-zones */
+  .userdevice-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: 14px;
+  }
+  @media (max-width: 980px) {
+    .userdevice-grid { grid-template-columns: 1fr; }
+  }
+  .userdevice-grid .arch-zone {
+    background: var(--card-fill);
+  }
+
+  /* Mid row: chain + off-chain split */
+  .midrow-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 980px) {
+    .midrow-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Bottom row: upstream + external identity split */
+  .bottomrow-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 980px) {
+    .bottomrow-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Cross-cutting strip */
+  .crosscut {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 1px dashed var(--card-stroke-soft);
+    border-radius: 12px;
+    background: var(--bg-soft);
+  }
+  .crosscut-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+  }
+  .crosscut-note {
+    font-size: 0.86rem;
+    color: var(--text-mute);
+    line-height: 1.5;
+    flex: 1 1 320px;
+  }
+  .crosscut-note code {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    background: var(--bg-code);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* ---------- Chips (components) ---------- */
+
+  .arch-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 13px;
+    border: 1px solid var(--card-stroke-faint);
+    border-radius: 999px;
+    background: var(--card-fill);
+    font-family: var(--font-body);
+    cursor: pointer;
+    transition: border-color .12s ease, background .12s ease, transform .12s ease, opacity .15s ease;
+    text-align: left;
+    line-height: 1;
+  }
+  .arch-chip:hover {
+    border-color: var(--iog-infared);
+    transform: translateY(-1px);
+  }
+  .arch-chip-id {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-mute);
+    letter-spacing: 0.04em;
+  }
+  .arch-chip-name {
+    font-size: 0.84rem;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  /* Workstream marker — dashed outline + ? badge */
+  .arch-chip.workstream {
+    border-style: dashed;
+    border-color: var(--warn);
+  }
+  .arch-chip.workstream::after {
+    content: '?';
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--warn);
+    color: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    margin-left: 2px;
+  }
+  .arch-chip.workstream:hover { border-color: var(--iog-infared); }
+
+  /* ---------- Actors ---------- */
+
+  .arch-actor {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    padding: 6px 12px;
+    border: 1px dashed var(--card-stroke-soft);
+    border-radius: 8px;
+    background: transparent;
+    font-family: var(--font-body);
+    cursor: pointer;
+    transition: border-color .12s ease, opacity .15s ease;
+    text-align: left;
+    line-height: 1.15;
+  }
+  .arch-actor:hover { border-color: var(--iog-infared); }
+  .arch-actor-label {
+    font-size: 0.84rem;
+    color: var(--text);
+    font-weight: 500;
+  }
+  .arch-actor-sub {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+  }
+
+  .actors-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 1px dashed var(--card-stroke-soft);
+    border-radius: 12px;
+    background: var(--bg-soft);
+  }
+  .actors-strip-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    margin-right: 4px;
+  }
+
+  /* ---------- Category filter pills + highlight ---------- */
+
+  .cat-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 24px;
+  }
+  .cat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--card-stroke-faint);
+    border-radius: 999px;
+    background: var(--card-fill);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color .12s ease, background .12s ease;
+  }
+  .cat-pill:hover { border-color: var(--cat-accent, var(--iog-infared)); }
+  .cat-pill .cat-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--cat-accent, var(--text-faint));
+    flex-shrink: 0;
+  }
+  .cat-pill[data-category="all"] .cat-dot { display: none; }
+  .cat-pill.active {
+    border-color: var(--cat-accent, var(--iog-infared));
+    background: color-mix(in srgb, var(--cat-accent, var(--iog-infared)) 18%, var(--card-fill));
+  }
+
+  /* Per-category accent — driven by data-category on both pills and chips */
+  [data-category="identity"] { --cat-accent: var(--iog-infared); }
+  [data-category="crypto"]   { --cat-accent: var(--iog-electric-blue); }
+  [data-category="auth"]     { --cat-accent: var(--iog-acid-green); }
+  [data-category="authz"]    { --cat-accent: var(--iog-cobalt-pulse); }
+  [data-category="recovery"] { --cat-accent: var(--iog-dawn); }
+  [data-category="wallet"]   { --cat-accent: var(--iog-volt-yellow); }
+  [data-category="creds"]    { --cat-accent: var(--iog-ultraviolet); }
+  [data-category="network"]  { --cat-accent: var(--iog-ember-orange); }
+  [data-category="dapp"]     { --cat-accent: var(--iog-hyper-pink); }
+  [data-category="tooling"]  { --cat-accent: var(--iog-solar-amber); }
+
+  /* When a category is active: dim everything by default… */
+  body[data-active-cat] .arch-chip,
+  body[data-active-cat] .arch-actor {
+    opacity: 0.30;
+    transition: opacity .15s ease, border-color .15s ease, background .15s ease, color .15s ease;
+  }
+
+  /* …then bring the matching-category chips back to full opacity with accent treatment */
+  body[data-active-cat="identity"] .arch-chip[data-category="identity"],
+  body[data-active-cat="crypto"]   .arch-chip[data-category="crypto"],
+  body[data-active-cat="auth"]     .arch-chip[data-category="auth"],
+  body[data-active-cat="authz"]    .arch-chip[data-category="authz"],
+  body[data-active-cat="recovery"] .arch-chip[data-category="recovery"],
+  body[data-active-cat="wallet"]   .arch-chip[data-category="wallet"],
+  body[data-active-cat="creds"]    .arch-chip[data-category="creds"],
+  body[data-active-cat="network"]  .arch-chip[data-category="network"],
+  body[data-active-cat="dapp"]     .arch-chip[data-category="dapp"],
+  body[data-active-cat="tooling"]  .arch-chip[data-category="tooling"] {
+    opacity: 1;
+    border-color: var(--cat-accent);
+    background: color-mix(in srgb, var(--cat-accent) 16%, var(--card-fill));
+  }
+  body[data-active-cat="identity"] .arch-chip[data-category="identity"] .arch-chip-id,
+  body[data-active-cat="crypto"]   .arch-chip[data-category="crypto"] .arch-chip-id,
+  body[data-active-cat="auth"]     .arch-chip[data-category="auth"] .arch-chip-id,
+  body[data-active-cat="authz"]    .arch-chip[data-category="authz"] .arch-chip-id,
+  body[data-active-cat="recovery"] .arch-chip[data-category="recovery"] .arch-chip-id,
+  body[data-active-cat="wallet"]   .arch-chip[data-category="wallet"] .arch-chip-id,
+  body[data-active-cat="creds"]    .arch-chip[data-category="creds"] .arch-chip-id,
+  body[data-active-cat="network"]  .arch-chip[data-category="network"] .arch-chip-id,
+  body[data-active-cat="dapp"]     .arch-chip[data-category="dapp"] .arch-chip-id,
+  body[data-active-cat="tooling"]  .arch-chip[data-category="tooling"] .arch-chip-id {
+    color: var(--cat-accent);
+  }
+
+  /* ---------- Legend & notes ---------- */
+
+  .legend, .notes {
+    margin-top: 36px;
+    padding: 24px;
+    border: 1px solid var(--card-stroke-faint);
+    border-radius: 12px;
+    background: var(--card-soft-fill);
+  }
+  .legend h3, .notes h3 {
+    font-family: var(--font-display);
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    margin-bottom: 14px;
+  }
+  .legend-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px 24px;
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.88rem;
+    color: var(--text-mute);
+  }
+  .legend-row .swatch-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--card-stroke-faint);
+    border-radius: 999px;
+    background: var(--card-fill);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-mute);
+  }
+  .legend-row .swatch-chip.workstream { border-style: dashed; border-color: var(--warn); }
+
+  .notes ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  .notes li {
+    font-size: 0.92rem;
+    color: var(--text-mute);
+    line-height: 1.55;
+    padding-left: 18px;
+    position: relative;
+  }
+  .notes li::before {
+    content: '·';
+    position: absolute;
+    left: 4px;
+    color: var(--text-faint);
+    font-weight: 700;
+  }
+
+  /* ---------- Runtime view ---------- */
+
+  section.runtime-host {
+    padding: 32px 0 50px;
+    border-top: 1px solid var(--line);
+    margin-top: 24px;
+  }
+
+  .section-head { margin-bottom: 28px; }
+  .section-head .section-kind {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--iog-infared);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .section-head h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+  .section-head p {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--text-mute);
+    max-width: 880px;
+  }
+
+  .diagram-card {
+    border: 1px solid var(--card-stroke-faint);
+    border-radius: 12px;
+    background: var(--card-soft-fill);
+    padding: 22px 24px 26px;
+    margin-bottom: 22px;
+  }
+  .diagram-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .diagram-card-label {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .diagram-card-sublabel {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+  }
+  .diagram-card-hint {
+    font-size: 0.88rem;
+    color: var(--text-mute);
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+  .diagram-card-hint code {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    background: var(--bg-code);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  /* ---------- Native SVG architecture diagram ---------- */
+  .arch-svg-host {
+    overflow-x: auto;
+    padding: 4px 0;
+  }
+  .arch-svg {
+    display: block;
+    width: 100%;
+    min-width: 1100px;
+    height: auto;
+    color: var(--text-mute);
+    font-family: var(--font-body);
+  }
+  .arch-svg .svg-zone-rect {
+    fill: var(--card-soft-fill);
+    stroke: var(--card-stroke-faint);
+    stroke-width: 1;
+  }
+  .arch-svg .svg-zone-rect-sub {
+    fill: var(--card-fill);
+    stroke: var(--card-stroke-faint);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+  }
+  .arch-svg .svg-zone-label {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 600;
+    fill: var(--text);
+  }
+  .arch-svg .svg-zone-sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    fill: var(--text-faint);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .arch-svg .svg-zone-label-sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    fill: var(--text-faint);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .arch-svg .svg-module { cursor: pointer; }
+  .arch-svg .svg-module-rect {
+    fill: var(--card-fill);
+    stroke: var(--card-stroke);
+    stroke-width: 1;
+    transition: fill .15s ease, stroke .15s ease, opacity .15s ease, stroke-width .15s ease;
+  }
+  .arch-svg .svg-module-rect.hyp { stroke-dasharray: 5 3; }
+  .arch-svg .svg-module:hover .svg-module-rect {
+    stroke: var(--iog-infared);
+    stroke-width: 1.6;
+  }
+  .arch-svg .svg-module-label {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 600;
+    fill: var(--text);
+    pointer-events: none;
+  }
+  .arch-svg .svg-module-sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--text-mute);
+    pointer-events: none;
+  }
+  .arch-svg .svg-module-sub-em {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--text-mute);
+    font-style: italic;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+  }
+  .arch-svg .svg-module-dot {
+    fill: var(--cat-accent, var(--text-faint));
+    opacity: 0.85;
+  }
+  /* "Protagonist" boxes — larger label, slightly thicker stroke */
+  .arch-svg .svg-module-rect.primary {
+    stroke-width: 1.6;
+  }
+  .arch-svg .svg-module-label.primary {
+    font-size: 16px;
+  }
+  .arch-svg .svg-module.primary:hover .svg-module-rect.primary {
+    stroke-width: 2.2;
+  }
+
+  /* Canvas-id pills inside SVG modules */
+  .arch-svg .svg-canvas-pill { cursor: pointer; }
+  .arch-svg .svg-pill-rect {
+    fill: var(--bg);
+    stroke: var(--card-stroke-faint);
+    stroke-width: 1;
+    transition: fill .12s ease, stroke .12s ease;
+  }
+  .arch-svg .svg-canvas-pill:hover .svg-pill-rect {
+    stroke: var(--iog-infared);
+    fill: var(--bad-soft);
+  }
+  .arch-svg .svg-pill-text {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    fill: var(--text-faint);
+    letter-spacing: 0.02em;
+    pointer-events: none;
+  }
+  .arch-svg .svg-canvas-pill:hover .svg-pill-text {
+    fill: var(--iog-infared);
+  }
+
+  .arch-svg .svg-actor { cursor: pointer; }
+  .arch-svg .svg-actor-rect {
+    fill: transparent;
+    stroke: var(--card-stroke-soft);
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+    transition: stroke .15s ease;
+  }
+  .arch-svg .svg-actor:hover .svg-actor-rect { stroke: var(--iog-infared); }
+  .arch-svg .svg-actor-label {
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    fill: var(--text);
+    pointer-events: none;
+  }
+  .arch-svg .svg-actor-sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--text-faint);
+    letter-spacing: 0.06em;
+    pointer-events: none;
+    text-transform: uppercase;
+  }
+
+  .arch-svg .svg-arrow {
+    fill: none;
+    stroke: var(--text-mute);
+    stroke-width: 1.4;
+  }
+  .arch-svg .svg-arrow.dashed { stroke-dasharray: 6 4; }
+  .arch-svg .svg-arrow.thick {
+    stroke-width: 2.2;
+    stroke: var(--text);
+  }
+  .arch-svg .svg-arrow-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--text-mute);
+    letter-spacing: 0.06em;
+    pointer-events: none;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .arch-svg .svg-arrow-label-bg {
+    fill: var(--bg);
+    pointer-events: none;
+  }
+  .arch-svg #arrowhead path { fill: currentColor; }
+
+  /* Category highlight applied to SVG */
+  .arch-svg .svg-module > * {
+    transition: opacity .15s ease, fill .15s ease, stroke .15s ease;
+  }
+  body[data-active-cat] .arch-svg .svg-module > *,
+  body[data-active-cat] .arch-svg .svg-actor > * {
+    opacity: 0.28;
+  }
+  body[data-active-cat="identity"] .arch-svg .svg-module[data-category="identity"] > *,
+  body[data-active-cat="crypto"]   .arch-svg .svg-module[data-category="crypto"] > *,
+  body[data-active-cat="auth"]     .arch-svg .svg-module[data-category="auth"] > *,
+  body[data-active-cat="authz"]    .arch-svg .svg-module[data-category="authz"] > *,
+  body[data-active-cat="recovery"] .arch-svg .svg-module[data-category="recovery"] > *,
+  body[data-active-cat="wallet"]   .arch-svg .svg-module[data-category="wallet"] > *,
+  body[data-active-cat="creds"]    .arch-svg .svg-module[data-category="creds"] > *,
+  body[data-active-cat="network"]  .arch-svg .svg-module[data-category="network"] > *,
+  body[data-active-cat="dapp"]     .arch-svg .svg-module[data-category="dapp"] > *,
+  body[data-active-cat="tooling"]  .arch-svg .svg-module[data-category="tooling"] > * {
+    opacity: 1;
+  }
+  body[data-active-cat="identity"] .arch-svg .svg-module[data-category="identity"] .svg-module-rect,
+  body[data-active-cat="crypto"]   .arch-svg .svg-module[data-category="crypto"] .svg-module-rect,
+  body[data-active-cat="auth"]     .arch-svg .svg-module[data-category="auth"] .svg-module-rect,
+  body[data-active-cat="authz"]    .arch-svg .svg-module[data-category="authz"] .svg-module-rect,
+  body[data-active-cat="recovery"] .arch-svg .svg-module[data-category="recovery"] .svg-module-rect,
+  body[data-active-cat="wallet"]   .arch-svg .svg-module[data-category="wallet"] .svg-module-rect,
+  body[data-active-cat="creds"]    .arch-svg .svg-module[data-category="creds"] .svg-module-rect,
+  body[data-active-cat="network"]  .arch-svg .svg-module[data-category="network"] .svg-module-rect,
+  body[data-active-cat="dapp"]     .arch-svg .svg-module[data-category="dapp"] .svg-module-rect,
+  body[data-active-cat="tooling"]  .arch-svg .svg-module[data-category="tooling"] .svg-module-rect {
+    stroke: var(--cat-accent);
+    fill: color-mix(in srgb, var(--cat-accent) 13%, var(--card-fill));
+  }
+
+  .panel-status {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .panel-status-blurb {
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-mute);
+  }
+  .canvas-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .known-pill {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 999px;
+    padding: 1px 9px;
+  }
+  .known-pill.known { background: var(--good-soft); color: var(--good); border: 1px solid var(--good); }
+  .known-pill.hyp   { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); }
+  .known-pill.open  { background: var(--bad-soft);  color: var(--bad);  border: 1px solid var(--bad); }
+
+  /* Footer */
+  footer.landing-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--line);
+    padding: 28px clamp(20px, 5vw, 60px);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    max-width: clamp(1100px, 92vw, 1500px);
+    margin: 0 auto;
+    width: 100%;
+  }
+  footer.landing-footer a { color: var(--text-mute); text-decoration: none; border-bottom: 1px solid var(--line); }
+  footer.landing-footer a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
+  .footer-meta { font-size: 0.74rem; color: var(--text-faint); }
+</style>
+</head>
+<body>
+
+<nav class="navbar" aria-label="Primary">
+  <a class="navbar-brand" href="index.html">Midnight Passport <span class="brand-tag">· ARC</span></a>
+  <div class="navbar-links">
+    <a href="index.html">Overview</a>
+    <a href="parallelisation.html">Parallelisation</a>
+    <a href="architecture.html" class="active">Architecture</a>
+    <a href="demo.html">Demo</a>
+    <a href="standards.html">Standards</a>
+  </div>
+</nav>
+
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle colour scheme" title="Auto · Light · Dark">
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+  </svg>
+</button>
+
+<main>
+
+  <section class="hero">
+    <div class="container">
+      <img class="doc-logo" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red POS.png" alt="Input Output">
+      <img class="doc-logo-dark" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red NEG.png" alt="Input Output">
+
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="index.html">Midnight Passport</a>
+        <span class="sep">›</span>
+        <span>Architecture</span>
+      </nav>
+
+      <div class="kind">ARC · Architecture · Discussion draft</div>
+      <h1>Architecture context</h1>
+      <p class="subtitle">Where the 26 components live, who they talk to, and what shape Passport's identity surface takes across the stack. Click any component for its canvas; click an actor for its role in the system. Toggle DID focus to dim everything outside the identity story.</p>
+
+      <div class="cat-pills" id="catPills" role="group" aria-label="Filter by category"></div>
+      <div class="toolbar">
+        <span class="toolbar-hint">Click a pill to highlight that category · workstreams marked with a dashed outline · ?</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="diagram-host">
+    <div class="container">
+      <div class="diagram">
+
+        <!-- Row 1: External actors above the user device -->
+        <div class="actors-strip" id="actorsTop">
+          <span class="actors-strip-label">External actors →</span>
+        </div>
+
+        <!-- Row 2: User device boundary (three sub-zones) -->
+        <div class="arch-zone">
+          <div class="arch-zone-head">
+            <span class="arch-zone-label">User device</span>
+            <span class="arch-zone-sublabel">Trust zone · client-side</span>
+          </div>
+          <div class="userdevice-grid">
+
+            <div class="arch-zone">
+              <div class="arch-zone-head">
+                <span class="arch-zone-label">Wallet runtime</span>
+                <span class="arch-zone-sublabel">TS / JS</span>
+              </div>
+              <div class="arch-zone-body" id="zone-wallet"></div>
+            </div>
+
+            <div class="arch-zone">
+              <div class="arch-zone-head">
+                <span class="arch-zone-label">Local proof server</span>
+                <span class="arch-zone-sublabel">Rust sidecar / WASM</span>
+              </div>
+              <div class="arch-zone-body" id="zone-prover"></div>
+            </div>
+
+            <div class="arch-zone">
+              <div class="arch-zone-head">
+                <span class="arch-zone-label">Wallet local storage</span>
+                <span class="arch-zone-sublabel">TEE-wrapped</span>
+              </div>
+              <div class="arch-zone-body" id="zone-storage"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Row 3: On-chain Passport contracts | Off-chain Passport-adjacent services -->
+        <div class="midrow-grid">
+          <div class="arch-zone">
+            <div class="arch-zone-head">
+              <span class="arch-zone-label">On-chain — Midnight</span>
+              <span class="arch-zone-sublabel">Trust zone · Compact contracts</span>
+            </div>
+            <div class="arch-zone-body" id="zone-onchain"></div>
+          </div>
+
+          <div class="arch-zone">
+            <div class="arch-zone-head">
+              <span class="arch-zone-label">Off-chain — Passport-adjacent services</span>
+              <span class="arch-zone-sublabel">Substitutable per P8</span>
+            </div>
+            <div class="arch-zone-body" id="zone-offchain"></div>
+          </div>
+        </div>
+
+        <!-- Row 4: Cross-cutting C8 strip -->
+        <div class="crosscut" id="crosscut"></div>
+
+        <!-- Row 5: Upstream Midnight ecosystem | External identity ecosystem -->
+        <div class="bottomrow-grid">
+          <div class="arch-zone">
+            <div class="arch-zone-head">
+              <span class="arch-zone-label">Upstream Midnight ecosystem</span>
+              <span class="arch-zone-sublabel">External · cross-chain</span>
+            </div>
+            <div class="arch-zone-body" id="zone-upstream"></div>
+          </div>
+
+          <div class="arch-zone">
+            <div class="arch-zone-head">
+              <span class="arch-zone-label">External identity ecosystem</span>
+              <span class="arch-zone-sublabel">External · DID / VC</span>
+            </div>
+            <div class="arch-zone-body" id="zone-external-id"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="legend">
+        <h3>Legend</h3>
+        <div class="legend-grid">
+          <div class="legend-row">
+            <span class="swatch-chip"><span>Cn</span></span>
+            <span>Component — click for canvas</span>
+          </div>
+          <div class="legend-row">
+            <span class="swatch-chip workstream"><span>Cn ?</span></span>
+            <span>Workstream — open architectural decision</span>
+          </div>
+          <div class="legend-row">
+            <span class="swatch-chip" style="border-color: var(--iog-electric-blue); background: color-mix(in srgb, var(--iog-electric-blue) 16%, var(--card-fill));"><span style="color: var(--iog-electric-blue);">Cn</span></span>
+            <span>Category accent — pills above filter the diagram</span>
+          </div>
+          <div class="legend-row">
+            <span class="arch-actor" style="cursor:default;pointer-events:none">
+              <span class="arch-actor-label">Name</span>
+              <span class="arch-actor-sub">role</span>
+            </span>
+            <span>External actor — click for role</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <h3>Notes for reviewers</h3>
+        <ul>
+          <li><strong>This is a context + container view.</strong> It shows where components live and who they talk to, not the data flow for any specific operation. The <a href="#runtime">runtime view</a> below names the actual modules and walks one end-to-end flow.</li>
+          <li><strong>Workstreams are explicitly unresolved.</strong> C3 (DID surface), C4 (asset custody), C22 (intent surface), C24 (fee model), and C25 (cross-chain interface) are dashed because the chosen alternative is not yet decided. Their placement may shift once a workstream resolves.</li>
+          <li><strong>C3 sits inside the on-chain zone</strong> as the primary architectural element, but the workstream's resolution runs through engagement with the external <em>midnight-did</em> repository — drawn alongside in the external identity ecosystem.</li>
+          <li><strong>C8 (domain separation) is cross-cutting</strong> and shown as an annotation rather than placed in any single zone — every <code>persistentHash</code> use site needs a registered prefix.</li>
+          <li><strong>C6 / C7 / C20 are placed in the proof server</strong> sub-zone for clarity; in practice their orchestration code lives in the wallet runtime. The trust property is what matters: witnesses must not leave the user device.</li>
+          <li><strong>C26 (AI agent skills) is omitted</strong> — it's a meta-deliverable about documentation and tooling, not a runtime element.</li>
+          <li><strong>The MVP vs. v1.0 split</strong> is not represented here; this view holds for both readings. <a href="standards.html">Standards</a> and <a href="demo.html">Demo</a> document where they diverge.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="runtime-host" id="runtime">
+    <div class="container">
+      <div class="section-head">
+        <div class="section-kind">Architecture · At a glance</div>
+        <h2>Identity, signing &amp; custody</h2>
+        <p>The conceptual shape of Passport — what authorises operations, what holds state, what lives on chain. Boxes are architectural concepts; arrow labels are the protocol verbs. Open relationships and unresolved boxes are marked <code>TBD</code> or with a dashed outline. Click any element for more detail. Integrations (dApp connect, fee sponsorship, credential issuance) live on a separate diagram still to come.</p>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-card-head">
+          <span class="diagram-card-label">Identity, signing &amp; custody</span>
+          <span class="diagram-card-sublabel">conceptual · open relationships marked TBD</span>
+        </div>
+        <p class="diagram-card-hint">User authorises operations via biometric on a Passport Key (their device-bound signing capability), which signs to the on-chain account custody contract using JubJub Schnorr. Multi-device is implied by P3 — the inter-device sync question is open. Click any element for its role.</p>
+        <div class="arch-svg-host">
+          <svg viewBox="0 0 1200 900" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" class="arch-svg" role="img" aria-label="Identity, signing and custody — Passport architecture at a glance">
+            <defs>
+              <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 Z" />
+              </marker>
+            </defs>
+
+            <!-- USER actor (top centre) -->
+            <g class="svg-actor" data-actor="user">
+              <rect x="540" y="30" width="120" height="44" rx="6" class="svg-actor-rect" />
+              <text x="600" y="51" class="svg-actor-label" text-anchor="middle">User</text>
+              <text x="600" y="66" class="svg-actor-sub" text-anchor="middle">account owner</text>
+            </g>
+
+            <!-- USER DEVICE zone -->
+            <g>
+              <rect x="60" y="110" width="1080" height="320" rx="10" class="svg-zone-rect" />
+              <text x="76" y="134" class="svg-zone-label">User device</text>
+              <text x="1124" y="134" class="svg-zone-sub" text-anchor="end">trust zone · client-side</text>
+            </g>
+
+            <!-- Local wallet storage -->
+            <g class="svg-module" data-module="local-storage" data-category="wallet">
+              <rect x="130" y="200" width="230" height="60" rx="6" class="svg-module-rect" />
+              <circle cx="348" cy="210" r="3" class="svg-module-dot" />
+              <text x="245" y="220" class="svg-module-label" text-anchor="middle">Local wallet storage</text>
+              <text x="245" y="236" class="svg-module-sub" text-anchor="middle">per-device · platform-secure</text>
+              <g class="svg-canvas-pill" data-component="C16">
+                <title>C16 · Wallet local storage</title>
+                <rect x="234" y="244" width="22" height="11" rx="3" class="svg-pill-rect" />
+                <text x="245" y="252" class="svg-pill-text" text-anchor="middle">C16</text>
+              </g>
+            </g>
+
+            <!-- Passport Key (centre, emphasised — the protagonist on the device) -->
+            <g class="svg-module primary" data-module="passport-key" data-category="crypto">
+              <rect x="470" y="190" width="260" height="80" rx="8" class="svg-module-rect primary" />
+              <circle cx="718" cy="202" r="3" class="svg-module-dot" />
+              <text x="600" y="218" class="svg-module-label primary" text-anchor="middle">Passport Key</text>
+              <text x="600" y="238" class="svg-module-sub" text-anchor="middle">device-bound signing capability</text>
+              <g class="svg-canvas-pill" data-component="C5">
+                <title>C5 · Signing primitive</title>
+                <rect x="550" y="250" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="561" y="259" class="svg-pill-text" text-anchor="middle">C5</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C9">
+                <title>C9 · Device-bound authentication</title>
+                <rect x="576" y="250" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="587" y="259" class="svg-pill-text" text-anchor="middle">C9</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C7">
+                <title>C7 · Witness handling</title>
+                <rect x="602" y="250" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="613" y="259" class="svg-pill-text" text-anchor="middle">C7</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C16">
+                <title>C16 · Wallet local storage</title>
+                <rect x="628" y="250" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="639" y="259" class="svg-pill-text" text-anchor="middle">C16</text>
+              </g>
+            </g>
+
+            <!-- Proof server -->
+            <g class="svg-module" data-module="proof-server" data-category="crypto">
+              <rect x="820" y="200" width="240" height="60" rx="6" class="svg-module-rect" />
+              <circle cx="1048" cy="210" r="3" class="svg-module-dot" />
+              <text x="940" y="220" class="svg-module-label" text-anchor="middle">Proof server</text>
+              <text x="940" y="236" class="svg-module-sub" text-anchor="middle">witnesses do not leave device</text>
+              <g class="svg-canvas-pill" data-component="C6">
+                <title>C6 · Proof generation</title>
+                <rect x="916" y="244" width="22" height="11" rx="3" class="svg-pill-rect" />
+                <text x="927" y="252" class="svg-pill-text" text-anchor="middle">C6</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C7">
+                <title>C7 · Witness handling</title>
+                <rect x="942" y="244" width="22" height="11" rx="3" class="svg-pill-rect" />
+                <text x="953" y="252" class="svg-pill-text" text-anchor="middle">C7</text>
+              </g>
+            </g>
+
+            <!-- + peer device(s) — multi-device hint, TBD treatment -->
+            <g class="svg-module" data-module="peer-devices" data-category="wallet">
+              <rect x="130" y="320" width="230" height="80" rx="6" class="svg-module-rect hyp" />
+              <circle cx="348" cy="332" r="3" class="svg-module-dot" />
+              <text x="245" y="342" class="svg-module-label" text-anchor="middle">+ peer device(s)</text>
+              <text x="245" y="360" class="svg-module-sub" text-anchor="middle">other authorised devices</text>
+              <text x="245" y="375" class="svg-module-sub-em" text-anchor="middle">P3 — first-class peers</text>
+              <g class="svg-canvas-pill" data-component="C16">
+                <title>C16 · Wallet local storage</title>
+                <rect x="208" y="384" width="22" height="11" rx="3" class="svg-pill-rect" />
+                <text x="219" y="392" class="svg-pill-text" text-anchor="middle">C16</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C17">
+                <title>C17 · View-key + indexer sync</title>
+                <rect x="234" y="384" width="22" height="11" rx="3" class="svg-pill-rect" />
+                <text x="245" y="392" class="svg-pill-text" text-anchor="middle">C17</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C9">
+                <title>C9 · Device-bound authentication</title>
+                <rect x="260" y="384" width="22" height="11" rx="3" class="svg-pill-rect" />
+                <text x="271" y="392" class="svg-pill-text" text-anchor="middle">C9</text>
+              </g>
+            </g>
+
+            <!-- EXTERNAL SERVICES zone -->
+            <g>
+              <rect x="60" y="460" width="1080" height="100" rx="10" class="svg-zone-rect" />
+              <text x="76" y="484" class="svg-zone-label">External services</text>
+              <text x="1124" y="484" class="svg-zone-sub" text-anchor="end">substitutable per P8</text>
+            </g>
+
+            <g class="svg-module" data-module="indexer" data-category="wallet">
+              <rect x="130" y="495" width="230" height="55" rx="6" class="svg-module-rect" />
+              <circle cx="348" cy="505" r="3" class="svg-module-dot" />
+              <text x="245" y="513" class="svg-module-label" text-anchor="middle">Indexer</text>
+              <text x="245" y="528" class="svg-module-sub" text-anchor="middle">view-key consumer · read state</text>
+              <g class="svg-canvas-pill" data-component="C17">
+                <title>C17 · View-key + indexer sync</title>
+                <rect x="234" y="535" width="22" height="11" rx="3" class="svg-pill-rect" />
+                <text x="245" y="543" class="svg-pill-text" text-anchor="middle">C17</text>
+              </g>
+            </g>
+
+            <g class="svg-module" data-module="recovery-helpers" data-category="recovery">
+              <rect x="880" y="495" width="230" height="55" rx="6" class="svg-module-rect" />
+              <circle cx="1098" cy="505" r="3" class="svg-module-dot" />
+              <text x="995" y="513" class="svg-module-label" text-anchor="middle">Recovery helpers</text>
+              <text x="995" y="528" class="svg-module-sub" text-anchor="middle">DeRec quorum · P5</text>
+              <g class="svg-canvas-pill" data-component="C14">
+                <title>C14 · Total-loss recovery flow</title>
+                <rect x="971" y="535" width="22" height="11" rx="3" class="svg-pill-rect" />
+                <text x="982" y="543" class="svg-pill-text" text-anchor="middle">C14</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C15">
+                <title>C15 · Helper protocol</title>
+                <rect x="997" y="535" width="22" height="11" rx="3" class="svg-pill-rect" />
+                <text x="1008" y="543" class="svg-pill-text" text-anchor="middle">C15</text>
+              </g>
+            </g>
+
+            <!-- MIDNIGHT CHAIN zone -->
+            <g>
+              <rect x="60" y="590" width="1080" height="280" rx="10" class="svg-zone-rect" />
+              <text x="76" y="614" class="svg-zone-label">Midnight chain</text>
+              <text x="1124" y="614" class="svg-zone-sub" text-anchor="end">Compact contracts</text>
+            </g>
+
+            <!-- Midnight DID contract (left, TBD) -->
+            <g class="svg-module" data-module="midnight-did" data-category="identity">
+              <rect x="130" y="690" width="250" height="60" rx="6" class="svg-module-rect hyp" />
+              <circle cx="368" cy="700" r="3" class="svg-module-dot" />
+              <text x="255" y="710" class="svg-module-label" text-anchor="middle">Midnight DID contract</text>
+              <text x="255" y="726" class="svg-module-sub" text-anchor="middle">midnight-did · partner repo</text>
+              <g class="svg-canvas-pill" data-component="C3">
+                <title>C3 · DID surface</title>
+                <rect x="244" y="734" width="22" height="11" rx="3" class="svg-pill-rect" />
+                <text x="255" y="742" class="svg-pill-text" text-anchor="middle">C3</text>
+              </g>
+            </g>
+
+            <!-- Account custody contract (centre, emphasised — the protagonist on chain) -->
+            <g class="svg-module primary" data-module="account-custody" data-category="identity">
+              <rect x="460" y="650" width="280" height="140" rx="8" class="svg-module-rect primary" />
+              <circle cx="728" cy="662" r="3" class="svg-module-dot" />
+              <text x="600" y="688" class="svg-module-label primary" text-anchor="middle">Account custody contract</text>
+              <text x="600" y="710" class="svg-module-sub" text-anchor="middle">device set · grants · custody</text>
+              <text x="600" y="728" class="svg-module-sub-em" text-anchor="middle">the on-chain account</text>
+              <g class="svg-canvas-pill" data-component="C1">
+                <title>C1 · Account-custody contract</title>
+                <rect x="498" y="770" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="509" y="779" class="svg-pill-text" text-anchor="middle">C1</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C4">
+                <title>C4 · Asset custody model</title>
+                <rect x="524" y="770" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="535" y="779" class="svg-pill-text" text-anchor="middle">C4</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C8">
+                <title>C8 · Domain-separation registry</title>
+                <rect x="550" y="770" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="561" y="779" class="svg-pill-text" text-anchor="middle">C8</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C10">
+                <title>C10 · Scoped grant primitive</title>
+                <rect x="576" y="770" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="587" y="779" class="svg-pill-text" text-anchor="middle">C10</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C11">
+                <title>C11 · Grant lifecycle</title>
+                <rect x="602" y="770" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="613" y="779" class="svg-pill-text" text-anchor="middle">C11</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C12">
+                <title>C12 · Chain-side enforcement</title>
+                <rect x="628" y="770" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="639" y="779" class="svg-pill-text" text-anchor="middle">C12</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C18">
+                <title>C18 · Attestation tree</title>
+                <rect x="654" y="770" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="665" y="779" class="svg-pill-text" text-anchor="middle">C18</text>
+              </g>
+              <g class="svg-canvas-pill" data-component="C21">
+                <title>C21 · Nullifier</title>
+                <rect x="680" y="770" width="22" height="12" rx="3" class="svg-pill-rect" />
+                <text x="691" y="779" class="svg-pill-text" text-anchor="middle">C21</text>
+              </g>
+            </g>
+
+            <!-- Name Service (right, TBD) -->
+            <g class="svg-module" data-module="name-service" data-category="identity">
+              <rect x="820" y="690" width="250" height="60" rx="6" class="svg-module-rect hyp" />
+              <circle cx="1058" cy="700" r="3" class="svg-module-dot" />
+              <text x="945" y="710" class="svg-module-label" text-anchor="middle">Name Service</text>
+              <text x="945" y="726" class="svg-module-sub" text-anchor="middle">alice.midnight resolution</text>
+              <g class="svg-canvas-pill" data-component="C2">
+                <title>C2 · Name service</title>
+                <rect x="934" y="734" width="22" height="11" rx="3" class="svg-pill-rect" />
+                <text x="945" y="742" class="svg-pill-text" text-anchor="middle">C2</text>
+              </g>
+            </g>
+
+            <!-- ARROWS · drawn last so they render above zone backgrounds -->
+            <g class="svg-arrows">
+              <!-- A1: User → Passport Key (biometric) -->
+              <path class="svg-arrow" d="M 600 74 V 190" marker-end="url(#arrowhead)" />
+              <text class="svg-arrow-label" x="612" y="135" text-anchor="start" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">biometric</text>
+
+              <!-- A2: Local storage ↔ Passport Key (state) -->
+              <path class="svg-arrow" d="M 360 230 H 470" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" />
+              <text class="svg-arrow-label" x="415" y="222" text-anchor="middle" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">state</text>
+
+              <!-- A3: Passport Key ↔ Proof server (witness · proof, emphasised) -->
+              <path class="svg-arrow thick" d="M 730 230 H 820" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" />
+              <text class="svg-arrow-label" x="775" y="222" text-anchor="middle" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">witness · IPC</text>
+
+              <!-- A4: Local storage ⇢ Peer devices (TBD sync) -->
+              <path class="svg-arrow dashed" d="M 245 260 V 320" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" />
+              <text class="svg-arrow-label" x="256" y="294" text-anchor="start" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">TBD sync</text>
+
+              <!-- A5: Passport Key → Account custody (JubJub Schnorr — the central authorisation) -->
+              <path class="svg-arrow thick" d="M 600 270 V 650" marker-end="url(#arrowhead)" />
+              <text class="svg-arrow-label" x="612" y="455" text-anchor="start" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">JubJub Schnorr</text>
+
+              <!-- A6: Passport Key ↔ Indexer (read state) -->
+              <path class="svg-arrow" d="M 540 270 Q 380 360 245 495" marker-end="url(#arrowhead)" />
+              <text class="svg-arrow-label" x="380" y="370" text-anchor="middle" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">read state</text>
+
+              <!-- A7: Recovery helpers ⇢ Passport Key (recovery, dashed) -->
+              <path class="svg-arrow dashed" d="M 995 495 Q 870 380 700 270" marker-end="url(#arrowhead)" />
+              <text class="svg-arrow-label" x="855" y="378" text-anchor="middle" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">recovery · P5</text>
+
+              <!-- A8: Account custody ⇢ Midnight DID (TBD) -->
+              <path class="svg-arrow dashed" d="M 460 720 H 380" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" />
+              <text class="svg-arrow-label" x="420" y="710" text-anchor="middle" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">TBD</text>
+
+              <!-- A9: Account custody ⇢ Name Service (TBD) -->
+              <path class="svg-arrow dashed" d="M 740 720 H 820" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" />
+              <text class="svg-arrow-label" x="780" y="710" text-anchor="middle" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">TBD</text>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<div class="panel-backdrop" id="panelBackdrop" aria-hidden="true"></div>
+<aside class="panel" id="panel" aria-hidden="true" aria-label="Detail panel">
+  <button class="panel-close" id="panelClose" aria-label="Close panel" title="Close">×</button>
+  <div class="panel-body" id="panelBody"></div>
+</aside>
+
+<footer class="landing-footer">
+  <span>ARC · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="parallelisation.html">parallelisation</a> · <a href="demo.html">demo</a> · <a href="standards.html">standards</a></span>
+  <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/07<!--/DEPLOY--></span>
+</footer>
+
+<script src="data.js"></script>
+<script src="theme-toggle.js"></script>
+<script src="panel.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const data = window.PASSPORT_DATA;
+  if (!data) { console.error('PASSPORT_DATA not loaded'); return; }
+
+  const componentById = Object.fromEntries(data.components.map(c => [c.id, c]));
+  const workstreams = new Set(data.workstreams || []);
+
+  // ---------- Placement: which zone each component lives in ----------
+  // C5/C6/C7/C20 are placed in the proof-server sub-zone for trust clarity;
+  // their orchestration is in the wallet runtime, but the witness boundary
+  // is the architecturally relevant fact.
+  const placement = {
+    'zone-wallet':   ['C9', 'C13', 'C14', 'C17', 'C22', 'C23', 'C24'],
+    'zone-prover':   ['C5', 'C6', 'C7', 'C20'],
+    'zone-storage':  ['C16'],
+    'zone-onchain':  ['C1', 'C2', 'C3', 'C10', 'C11', 'C12', 'C18', 'C21'],
+    'zone-offchain': ['C15', 'C19'],
+  };
+
+  // Category accent now drives highlighting — see data.categories
+
+  // ---------- External actors ----------
+  const topActors = [
+    { id: 'end-user',         label: 'End user',           sub: 'Device · passkey' },
+    { id: 'dapp',             label: 'dApp partner',       sub: 'CAIP-25 · EIP-6963' },
+    { id: 'issuer',           label: 'Credential issuer',  sub: 'e.g. zkMe' },
+    { id: 'verifier',         label: 'Credential verifier', sub: 'consumes proofs' },
+    { id: 'helper',           label: 'Recovery helper',    sub: 'DeRec or alt' },
+    { id: 'sponsor',          label: 'Sponsor service',    sub: 'pays Dust fees' },
+    { id: 'indexer-provider', label: 'Indexer provider',   sub: 'view-key consumer' },
+  ];
+
+  const upstreamActors = [
+    { id: 'prd-trade-intent', label: 'PRD trade intent',     sub: 'declarative format' },
+    { id: 'mcs',              label: 'MCS · threshold-Schnorr', sub: 'cross-chain signing' },
+    { id: 'intent-escrow',    label: 'Intent Escrow Contract', sub: 'on Midnight, upstream' },
+    { id: 'pmr',              label: 'PMR',                  sub: 'private message relay' },
+    { id: 'solver',           label: 'Solver network',       sub: 'fills intents' },
+  ];
+
+  const externalIdActors = [
+    { id: 'midnight-did',     label: 'midnight-did',         sub: 'partner repo · Yurii' },
+    { id: 'iamx',             label: 'IAMX',                 sub: 'did:midnight registry' },
+    { id: 'w3c-vc',           label: 'W3C DID / VC',         sub: 'verifiers · resolvers' },
+  ];
+
+  const actorDescriptions = {
+    'user': {
+      label: 'User',
+      body: 'The Passport account owner. Authorises operations via biometric (passkey) on any of their authorised devices. On total device loss, recovers via helpers (P5). One account, multiple devices (P3 — peer-device).',
+    },
+  };
+
+  // ---------- Renderers ----------
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function makeChip(c) {
+    if (!c) return '';
+    const isWS = workstreams.has(c.id);
+    const classes = ['arch-chip'];
+    if (isWS) classes.push('workstream');
+    const cat = c.category || '';
+    return `
+      <button class="${classes.join(' ')}" data-component="${c.id}"${cat ? ` data-category="${cat}"` : ''} type="button"
+              title="${escapeHtml((c.outcome || '').slice(0, 160))}">
+        <span class="arch-chip-id">${c.id}</span>
+        <span class="arch-chip-name">${escapeHtml(c.name)}</span>
+      </button>
+    `;
+  }
+
+  function makeActor(a) {
+    return `
+      <button class="arch-actor" data-actor="${a.id}" type="button">
+        <span class="arch-actor-label">${escapeHtml(a.label)}</span>
+        <span class="arch-actor-sub">${escapeHtml(a.sub)}</span>
+      </button>
+    `;
+  }
+
+  // ---------- Mount components ----------
+  Object.entries(placement).forEach(([zoneId, ids]) => {
+    const host = document.getElementById(zoneId);
+    if (!host) return;
+    host.innerHTML = ids.map(id => makeChip(componentById[id])).join('');
+  });
+
+  // ---------- Mount actors ----------
+  const actorsTop = document.getElementById('actorsTop');
+  if (actorsTop) {
+    actorsTop.insertAdjacentHTML('beforeend', topActors.map(makeActor).join(''));
+  }
+
+  const upstreamHost = document.getElementById('zone-upstream');
+  if (upstreamHost) {
+    upstreamHost.innerHTML =
+      upstreamActors.map(makeActor).join('') +
+      makeChip(componentById['C25']);
+  }
+
+  const externalIdHost = document.getElementById('zone-external-id');
+  if (externalIdHost) {
+    externalIdHost.innerHTML = externalIdActors.map(makeActor).join('');
+  }
+
+  // ---------- Mount cross-cutting C8 ----------
+  const crosscutHost = document.getElementById('crosscut');
+  if (crosscutHost) {
+    crosscutHost.innerHTML =
+      `<span class="crosscut-label">Cross-cutting →</span>` +
+      makeChip(componentById['C8']) +
+      `<span class="crosscut-note">C8 applies wherever <code>persistentHash</code> is used — namehash (C2), Schnorr Fiat-Shamir (C5), attestation leaf (C18), nullifier (C21). Registry document plus cryptographer review.</span>`;
+  }
+
+  // ---------- Category filter pills ----------
+  function renderCategoryPills() {
+    const host = document.getElementById('catPills');
+    if (!host) return;
+    const allPill = `<button class="cat-pill active" data-category="all" type="button">All</button>`;
+    const catPills = (data.categories || []).map(cat => `
+      <button class="cat-pill" data-category="${cat.id}" type="button" aria-pressed="false">
+        <span class="cat-dot" aria-hidden="true"></span>
+        <span>${escapeHtml(cat.label)}</span>
+      </button>
+    `).join('');
+    host.innerHTML = allPill + catPills;
+  }
+
+  function setActiveCategory(cat) {
+    if (!cat || cat === 'all') {
+      delete document.body.dataset.activeCat;
+    } else {
+      document.body.dataset.activeCat = cat;
+    }
+    document.querySelectorAll('.cat-pill').forEach(p => {
+      const active = p.dataset.category === (cat || 'all');
+      p.classList.toggle('active', active);
+      p.setAttribute('aria-pressed', String(active));
+    });
+  }
+
+  renderCategoryPills();
+
+  document.addEventListener('click', (e) => {
+    const pill = e.target.closest('.cat-pill');
+    if (!pill) return;
+    e.preventDefault();
+    setActiveCategory(pill.dataset.category);
+  });
+
+  // ---------- Actor click → side panel ----------
+  // Mirrors panel.js's open behaviour without exposing a new public API.
+  function openActorPanel(a) {
+    const panel = document.getElementById('panel');
+    const body = document.getElementById('panelBody');
+    const backdrop = document.getElementById('panelBackdrop');
+    if (!panel || !body) return;
+    body.innerHTML = `
+      <div class="panel-head">
+        <div class="panel-kind">External actor</div>
+        <h3 class="panel-title">${escapeHtml(a.label)}</h3>
+      </div>
+      <section class="panel-section">
+        <p>${escapeHtml(a.body)}</p>
+      </section>
+    `;
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+    if (backdrop) backdrop.classList.add('show');
+    panel.scrollTop = 0;
+  }
+
+  document.addEventListener('click', (e) => {
+    // [data-component] takes precedence — pills inside module groups are
+    // handled by panel.js's global handler. We must return early here so
+    // we don't overwrite the component panel with the module panel.
+    if (e.target.closest('[data-component]')) return;
+
+    const actorTrigger = e.target.closest('[data-actor]');
+    if (actorTrigger) {
+      const a = actorDescriptions[actorTrigger.dataset.actor];
+      if (a) {
+        e.preventDefault();
+        openActorPanel(a);
+        return;
+      }
+    }
+    const moduleTrigger = e.target.closest('[data-module]');
+    if (moduleTrigger) {
+      const m = moduleDescriptions[moduleTrigger.dataset.module];
+      if (m) {
+        e.preventDefault();
+        openModulePanel(m);
+      }
+    }
+  });
+
+  // ====================================================================
+  // Runtime view — native-SVG module diagram
+  // ====================================================================
+
+  // Each entry carries:
+  //   kind    — short type-of-thing label (Concept, Contract · Midnight chain, External service)
+  //   label   — display name
+  //   status  — 'known' | 'hypothetical' | 'open' (drives the side-panel pill)
+  //   body    — what this concept is and how it interacts
+  //   caveats — what's open / TBD about this entry (optional)
+  // Sidebar content for each module is a stub for now — second-pass review pending.
+  const moduleDescriptions = {
+    'passport-key': {
+      kind: 'Concept · on user device',
+      label: 'Passport Key',
+      status: 'known',
+      body: 'The device-bound signing capability that authorises Passport account operations from this device. Conceptually one thing the rest of the system trusts; in implementation it spans authentication (biometric / WebAuthn), the device-bound private material, and JubJub Schnorr signing.',
+      caveats: 'Stub — sidebar content pending second-pass review.',
+      relatedCanvases: ['C5', 'C9', 'C7', 'C16'],
+    },
+    'proof-server': {
+      kind: 'Concept · on user device',
+      label: 'Proof server',
+      status: 'known',
+      body: 'Local process that produces ZK proofs from witnesses without those witnesses crossing the device boundary. The witness-doesn\'t-leave-device invariant is the architecturally important fact.',
+      caveats: 'Performance is a known concern (~18–21 s per typical circuit; did-core examples reach k=19, slow on the proof server). Per-platform variant (Rust sidecar, WASM, native) is open. Stub — pending second-pass review.',
+      relatedCanvases: ['C6', 'C7'],
+    },
+    'local-storage': {
+      kind: 'Concept · on user device',
+      label: 'Local wallet storage',
+      status: 'known',
+      body: 'Per-device wallet state — wrapped key material, sync state, recently-used data, attestations. Encryption envelope keyed off the device biometric (PRF) so storage is device-bound.',
+      caveats: 'Stub — pending second-pass review.',
+      relatedCanvases: ['C16'],
+    },
+    'peer-devices': {
+      kind: 'Concept · multi-device',
+      label: 'Additional authorised device(s)',
+      status: 'open',
+      body: 'P3 (peer-device) makes every authorised device a first-class peer. This box represents the user\'s other devices on the same account. Architectural question: does wallet-state need to sync across them, or does each device reconstruct state independently from chain?',
+      caveats: 'TBD sync question — encrypted blob, off-chain sync service, or no shared state. Tied to C16 (storage) and C17 (indexer-driven reconstruction). Stub — pending second-pass review.',
+      relatedCanvases: ['C16', 'C17', 'C9'],
+    },
+    'indexer': {
+      kind: 'External service',
+      label: 'Indexer',
+      status: 'known',
+      body: 'Off-chain read service. Receives the wallet\'s view keys and projects user-visible chain state for the wallet UI. Substitutable per P8.',
+      caveats: 'Operator model is open — hosted singleton, multi-provider directory, or client-only light-client sync. Privacy of the indexer query surface needs explicit limits. Stub — pending second-pass review.',
+      relatedCanvases: ['C17'],
+    },
+    'recovery-helpers': {
+      kind: 'External service · P5',
+      label: 'Recovery helpers',
+      status: 'known',
+      body: 'DeRec quorum holding shares of the user\'s recovery secret. On total device loss (P5), helpers collectively release their shares so the user can re-establish the account on a fresh device.',
+      caveats: 'Recovery scheme variants (Shamir 3-of-5 default vs alternatives), helper authentication, and non-collusion guarantees are open at the C14 / C15 level. Stub — pending second-pass review.',
+      relatedCanvases: ['C14', 'C15'],
+    },
+    'account-custody': {
+      kind: 'Contract · Midnight chain',
+      label: 'Account custody contract',
+      status: 'open',
+      body: 'The on-chain Compact contract representing a Passport account. Holds the device set, name binding, scoped grants, and (depending on the C4 workstream) Midnight-native asset balances. The integration vessel for everything chain-side.',
+      caveats: 'Contract shape (per-account vs single registry vs hybrid) is the C1 open question. What it holds depends on C4. Upgrade path is open. Stub — pending second-pass review.',
+      relatedCanvases: ['C1', 'C4', 'C8', 'C10', 'C11', 'C12', 'C18', 'C21'],
+    },
+    'midnight-did': {
+      kind: 'Contract · Midnight chain · partner',
+      label: 'Midnight DID contract',
+      status: 'open',
+      body: "External Compact contract by Yurii's team (midnightntwrk/midnight-did). Defines the current did:midnight spec and reference implementation. Passport's C3 workstream is whether — and how — the account-custody integrates with this.",
+      caveats: 'C3 workstream — relationship with the account custody contract is TBD. Method-name negotiation with IAMX over did:midnight is the live sub-question. k=19 proof-server cost on did-core examples is a known performance bound to design around. Stub — pending second-pass review.',
+      relatedCanvases: ['C3'],
+    },
+    'name-service': {
+      kind: 'Contract · Midnight chain',
+      label: 'Name Service',
+      status: 'open',
+      body: 'Resolves alice.midnight to an account custody address. Could be Passport-authored or a Midnight-ecosystem name service we adopt.',
+      caveats: 'Open whether this is a separate Compact contract Passport authors, or whether we adopt an upstream name service. The relationship between account custody and the name service (does account reference name? does name resolve to account?) is TBD. Stub — pending second-pass review.',
+      relatedCanvases: ['C2'],
+    },
+  };
+
+  const componentByIdLookup = Object.fromEntries((data.components || []).map(c => [c.id, c]));
+
+  function relatedCanvasesHtml(ids) {
+    if (!ids || !ids.length) return '';
+    const pills = ids.map(id => {
+      const c = componentByIdLookup[id];
+      const name = c ? escapeHtml(c.name) : '';
+      return `<button class="dep-link" data-component="${id}" type="button">
+        <span class="dep-id">${id}</span>
+        ${name ? `<span class="dep-name">${name}</span>` : ''}
+      </button>`;
+    }).join('');
+    return `
+      <section class="panel-section">
+        <h4>Related canvases</h4>
+        <p class="panel-hint">Click a canvas to open it in the panel.</p>
+        <div class="canvas-pills">${pills}</div>
+      </section>
+    `;
+  }
+
+  const STATUS_LABELS = { known: 'Known', hypothetical: 'Hypothetical', open: 'Open' };
+  const STATUS_BLURB = {
+    known:        'Module name and architectural slot are both grounded in a canvas, an experiment, or an upstream package. Most likely correct as written.',
+    hypothetical: 'Architectural slot is real; the name shown is a placeholder. Expect the name to change once it is chosen — the slot itself stays.',
+    open:         'The architectural decision itself is unresolved (a workstream). Expect both the name and the architectural slot to shift once the workstream resolves.',
+  };
+
+  function openModulePanel(m) {
+    const panel = document.getElementById('panel');
+    const body = document.getElementById('panelBody');
+    const backdrop = document.getElementById('panelBackdrop');
+    if (!panel || !body) return;
+
+    const statusKey = m.status || '';
+    const statusPillClass = statusKey === 'hypothetical' ? 'hyp' : statusKey;
+    const statusHtml = statusKey ? `
+      <div class="panel-status">
+        <span class="known-pill ${statusPillClass}">${STATUS_LABELS[statusKey]}</span>
+        <span class="panel-status-blurb">${escapeHtml(STATUS_BLURB[statusKey] || '')}</span>
+      </div>
+    ` : '';
+
+    const caveatsHtml = m.caveats ? `
+      <section class="panel-section">
+        <h4>What's open · caveats</h4>
+        <p>${escapeHtml(m.caveats)}</p>
+      </section>
+    ` : '';
+
+    body.innerHTML = `
+      <div class="panel-head">
+        <div class="panel-kind">${escapeHtml(m.kind || 'Module')}</div>
+        <h3 class="panel-title">${escapeHtml(m.label)}</h3>
+        ${statusHtml}
+      </div>
+      <section class="panel-section">
+        <p>${escapeHtml(m.body)}</p>
+      </section>
+      ${relatedCanvasesHtml(m.relatedCanvases)}
+      ${caveatsHtml}
+    `;
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+    if (backdrop) backdrop.classList.add('show');
+    panel.scrollTop = 0;
+  }
+
+  // Public API in case other scripts want to open a module panel programmatically
+  window.openModule = function (id) {
+    const m = moduleDescriptions[id];
+    if (m) openModulePanel(m);
+  };
+
+})();
+</script>
+
+</body>
+</html>
