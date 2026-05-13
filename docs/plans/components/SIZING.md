@@ -50,11 +50,11 @@ A single person can carry several profiles. The table is about *what skills are 
 |---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|
 | **C1** Account-custody contract | L | 0.10 | 0.15 | 0.10 | 0.45 | 0.05 | 0.00 | 0.15 | 0.00 |
 | **C2** Name service | L | 0.10 | 0.20 | 0.10 | 0.35 | 0.10 | 0.05 | 0.05 | 0.05 |
-| **C3** DID surface | XL | 0.10 | 0.25 | 0.15 | 0.05 | 0.05 | 0.30 | 0.05 | 0.05 |
+| **C3** DID surface | L | 0.10 | 0.25 | 0.15 | 0.05 | 0.05 | 0.30 | 0.05 | 0.05 |
 | **C4** Asset custody model | XL | 0.30 | 0.15 | 0.15 | 0.20 | 0.05 | 0.00 | 0.15 | 0.00 |
 | **C5** Signing primitive | M | 0.40 | 0.10 | 0.20 | 0.05 | 0.05 | 0.00 | 0.20 | 0.00 |
-| **C6** Proof generation | L | 0.20 | 0.05 | 0.30 | 0.00 | 0.30 | 0.00 | 0.10 | 0.05 |
-| **C7** Witness handling | M | 0.20 | 0.05 | 0.10 | 0.00 | 0.40 | 0.00 | 0.25 | 0.00 |
+| **C6** Proof generation | L | 0.15 | 0.25 | 0.20 | 0.00 | 0.20 | 0.00 | 0.15 | 0.05 |
+| **C7** Witness handling | L | 0.15 | 0.20 | 0.15 | 0.00 | 0.30 | 0.00 | 0.20 | 0.00 |
 | **C8** Domain-separation registry | M | 0.40 | 0.20 | 0.15 | 0.05 | 0.00 | 0.00 | 0.20 | 0.00 |
 | **C9** Device-bound authentication | M | 0.15 | 0.05 | 0.00 | 0.05 | 0.50 | 0.00 | 0.20 | 0.05 |
 | **C10** Scoped grant primitive | L | 0.15 | 0.25 | 0.10 | 0.30 | 0.05 | 0.00 | 0.15 | 0.00 |
@@ -63,8 +63,8 @@ A single person can carry several profiles. The table is about *what skills are 
 | **C13** Lost-device flow | S | 0.05 | 0.10 | 0.05 | 0.10 | 0.20 | 0.00 | 0.20 | 0.30 |
 | **C14** Total-loss recovery flow | L | 0.25 | 0.10 | 0.05 | 0.10 | 0.20 | 0.00 | 0.15 | 0.15 |
 | **C15** Helper protocol | L | 0.20 | 0.30 | 0.00 | 0.05 | 0.20 | 0.00 | 0.20 | 0.05 |
-| **C16** Wallet local storage | M | 0.10 | 0.05 | 0.00 | 0.00 | 0.55 | 0.00 | 0.25 | 0.05 |
-| **C17** View-key + indexer sync | M | 0.10 | 0.20 | 0.00 | 0.05 | 0.40 | 0.00 | 0.20 | 0.05 |
+| **C16** Wallet local storage | L | 0.15 | 0.05 | 0.00 | 0.05 | 0.45 | 0.00 | 0.30 | 0.00 |
+| **C17** View-key + indexer sync | L | 0.10 | 0.30 | 0.00 | 0.05 | 0.30 | 0.00 | 0.20 | 0.05 |
 | **C18** Attestation tree | M | 0.20 | 0.10 | 0.20 | 0.20 | 0.05 | 0.15 | 0.10 | 0.00 |
 | **C19** Credential issuance | L | 0.10 | 0.20 | 0.05 | 0.15 | 0.10 | 0.30 | 0.10 | 0.00 |
 | **C20** Selective-disclosure proof | L | 0.35 | 0.15 | 0.20 | 0.05 | 0.05 | 0.15 | 0.05 | 0.00 |
@@ -77,21 +77,21 @@ A single person can carry several profiles. The table is about *what skills are 
 
 ## Distribution at a glance
 
-**Sizes:** 4 XL, 11 L, 8 M, 3 S, 0 XS.
+**Sizes:** 3 XL, 15 L, 5 M, 3 S, 0 XS.
 
-- **XL (4) — workstreams.** C3, C4, C22, C25. Discovery and ecosystem coordination dominate, not build effort. Sizing is the most volatile here — once a workstream resolves, both size and mix may shift.
-- **L (11) — substantial engineering with real discovery.** C1, C2, C6, C10, C12, C14, C15, C19, C20, C23, C24.
-- **M (8) — bounded engineering with known patterns.** C5, C7, C8, C9, C11, C16, C17, C18.
+- **XL (3) — workstreams.** C4, C22, C25. Discovery and ecosystem coordination dominate, not build effort. Sizing is the most volatile here — once a workstream resolves, both size and mix may shift.
+- **L (15) — substantial engineering with real discovery.** C1, C2, C3, C6, C7, C10, C12, C14, C15, C16, C17, C19, C20, C23, C24.
+- **M (5) — bounded engineering with known patterns.** C5, C8, C9, C11, C18.
 - **S (3) — narrow surface.** C13, C21, C26 (day-1 minimum scope).
 
-The L bucket is large because most components are real engineering with non-trivial discovery. Plausible demotions to M: C19, C24. Plausible promotions to XL: C20 (if compliance binding to C22 turns out architecturally hard), C23 (if MIP coordination becomes a quagmire).
+The L bucket dominates because most components are real engineering with non-trivial discovery. **C3's L is conditional** on the inheritance path through `midnight-did` holding; re-promotes to XL if a Passport-specific fork becomes necessary. **C7, C16, C17 moved from M during review** as their canvases were under-scoped relative to actual cross-component or upstream-coordination work. Plausible demotions to M: C19, C24. Plausible promotions to XL: C20 (if compliance binding to C22 turns out architecturally hard), C23 (if MIP coordination becomes a quagmire).
 
 ## Profile clusters
 
 A first scan of where each profile concentrates. Useful for thinking about who needs to be available at a given phase, not for ranking importance.
 
 - **Crypto-dominant.** C5 (signing primitive), C8 (domain separation), C20 (selective-disclosure proof), C21 (nullifier), C4 (asset-custody scheme), C14 (recovery scheme).
-- **Spec-dominant.** C23 (dApp connection — MIP-5 / MIP-7), C25 (cross-chain interface), C22 (intent surface — PRD interop), C15 (helper protocol — DeRec), C26 (AI agent skills as documentation), C3 (DID method registration).
+- **Spec-dominant.** C23 (dApp connection — MIP-5 / MIP-7), C25 (cross-chain interface), C22 (intent surface — PRD interop), C15 (helper protocol — DeRec), C26 (AI agent skills as documentation), C17 (indexer interface against an upstream rebuild — tied with wallet), C3 (DID method registration), C6 (prover-interface spec for remote-TEE path).
 - **Circuit-dominant.** C12 (verifier circuit), C6 (proof generation), C5, C20, C18 (attestation tree).
 - **Contract-dominant.** C1 (account custody), C11 (grant lifecycle), C2 (name service), C10 (scoped grant primitive).
 - **Wallet-dominant.** C16 (local storage), C9 (device-bound auth), C17 (indexer sync), C7 (witness handling pipeline), C24 (fee splitting), C23 (dApp transport).
@@ -102,7 +102,7 @@ A first scan of where each profile concentrates. Useful for thinking about who n
 ## Caveats
 
 - **The numbers are opinionated.** Two of us would not produce identical sizes or ratios. Treat cells as the *shape* of the work, not a precise allocation.
-- **Workstream components are provisional.** C3, C4, C22, C24, C25 are still in flux. Once a workstream resolves, the chosen alternative may change both size and mix. C4 is the clearest case — alternative A (contract-custody) is more crypto- and circuit-heavy than alternative B (address-custody), which would lean wallet.
+- **Workstream components are provisional.** C3, C4, C22, C24, C25 are still in flux. Workstream status no longer maps one-to-one to XL — C3 has moved to L conditional on the `midnight-did` inheritance path, and C24 sits at L. C4, C22, C25 remain XL pending resolution. Once a workstream resolves, the chosen alternative may change both size and mix. C4 is the clearest case — alternative A (contract-custody) is more crypto- and circuit-heavy than alternative B (address-custody), which would lean wallet.
 - **C26 is a meta-deliverable.** Its skill mix is dominated by writing and audience design, not engineering. Don't compare its column shape to engineering components without that context.
 - **External work absorbed upstream is not represented.** The MCS / threshold-Schnorr layer (C25) and the upstream Midnight Intents PRD (C22) are owned outside Passport — sizing only counts the Passport-side integration cost.
 
