@@ -1,4 +1,0 @@
-interface:
-  display_name: "ARC Passport Identity"
-  short_description: "Midnight Passport planning, research, standards, experiments, and subtree hygiene"
-  default_prompt: "Use this for arc-passport planning/research/spec work, experiment guidance, and repository style conventions."
