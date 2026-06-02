@@ -1,10 +1,3 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logos/Full%20Logo/Input%20Output_Full%20Logo_RGB_White.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/logos/Full%20Logo/Input%20Output_Full%20Logo_RGB_Black.png">
-    <img alt="Input Output" src="assets/logos/Full%20Logo/Input%20Output_Full%20Logo_RGB_Black.png" width="300">
-  </picture>
-</p>
 
 # Midnight Passport
 
