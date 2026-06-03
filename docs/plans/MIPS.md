@@ -33,7 +33,11 @@ A cross-cutting prerequisite ships alongside the MIPs:
 
 - **STD-03** — Domain-separation registry. Every `persistentHash` use
   site gets a prefix. Cryptographer-reviewed; required before
-  credentials, signing, and naming can be ratified.
+  credentials, signing, and naming can be ratified. Now framed by
+  [`mps/mps-domain-separation.md`](../mps/mps-domain-separation.md) and
+  decided in [ADR-0001](../adrs/0001-domain-separation-registry.md)
+  (central registry; enforcement deferred); evidenced by
+  `experiments/domain-separation-inventory/`.
 
 ---
 

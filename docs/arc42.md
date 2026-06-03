@@ -175,7 +175,7 @@ ADRs live under [`docs/adrs/`](adrs/). Template: [`docs/adrs/0000-template.md`](
 
 *Populated by `/arcsop-component-finalize`. Accepted ADRs:*
 
-- *(none yet)*
+- [0001](adrs/0001-domain-separation-registry.md) — Domain separation: central registry (A) adopted, enforcement (C) deferred; standardised via an MPS.
 
 ---
 
@@ -203,6 +203,7 @@ Component-level risks live in each canvas's Failure Modes section. Project-level
 - **Compact proof cost.** Current `midnight-did` examples reach k=19, slow on the proof server. Bears on C6, C20, and any component using selective-disclosure-shaped circuits.
 - **`did:midnight` registration.** Registered to IAMX; current spec is in our hands. Negotiation pending.
 - **Demo dependency.** October 2026 demo is the project's first public cut. Mechanism shortcuts (e.g. partner-MPC for C5) carry a migration plan to the principled v1.0 spec.
+- **Domain separation unenforced (C8).** The registry (ADR-0001, alternative A) documents domain prefixes but does not enforce them: missing-prefix and cross-protocol collision modes persist until compile-time enforcement (C) lands, and the existing `midnight:` / `mdn:` / `ni` scheme divergence is unreconciled. See [C8 failure modes](plans/components/C8-domain-separation-registry.md).
 
 *Populated by `/arcsop-component-finalize` and `/arcsop-component-review` as components complete.*
 
@@ -222,6 +223,7 @@ Component-level risks live in each canvas's Failure Modes section. Project-level
 | **Workstream** | A component carrying a live decision whose alternatives have not yet been selected. |
 | **Invariant** | A property the system must keep true to keep a promise. Numbered `I-N.M`. |
 | **Promise** | A user-observable property the system commits to. Numbered `P1 … P10`. |
+| **Domain separation** | Mixing a distinct constant tag into a hash preimage per use site, so hashes from different contexts cannot collide. Catalogued by C8 / ADR-0001. |
 
 ---
 

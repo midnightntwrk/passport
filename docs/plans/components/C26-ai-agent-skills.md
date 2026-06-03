@@ -141,3 +141,16 @@ first place.
 - **v1.0+ deliverable:** B or D — three skills (or auto-generated from
   canvases) once the audiences are validated and the maintenance
   discipline is clear.
+
+## Surfaces in motion
+
+Components mid-flight whose skills and docs the AI-skills work should
+treat as not-yet-settled.
+
+- *(none currently)*
+
+## Covered surfaces
+
+Finalised components with an ADR — eligible for skill coverage.
+
+- **C8** — Domain-separation registry · ADR 0001 · [canvas](C8-domain-separation-registry.md) · audiences eligible: dev, PM
