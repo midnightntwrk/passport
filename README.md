@@ -11,7 +11,7 @@ This repository holds the plan, the research that backs it, the reference materi
 
 | If you are… | Read |
 |---|---|
-| A stakeholder wanting the plan | https://input-output-hk.github.io/arc-passport |
+| A stakeholder wanting the plan | https://midnightntwrk.github.io/passport |
 | A developer joining the team | [`research/README.md`](research/README.md) |
 | A partner evaluating the proposal | [`docs/plans/README.md`](docs/plans/README.md) |
 | Looking for the design vision | [`docs/secure-onboarding-design.pdf`](docs/secure-onboarding-design.pdf) |
@@ -19,7 +19,7 @@ This repository holds the plan, the research that backs it, the reference materi
 ## Repository structure
 
 ```
-arc-passport/
+passport/
 ├── site/                        Static web artefacts deployed to GitHub Pages
 │   ├── index.html               Landing page and unified entry point
 │   ├── demo.html                The October MVP — what the team builds toward October 2026

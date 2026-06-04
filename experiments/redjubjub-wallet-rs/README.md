@@ -43,7 +43,7 @@ to `redjubjub-wallet-rs/`.
 
 ```bash
 # From within this experiments/ directory:
-cd ..   # now inside arc-passport/experiments/
+cd ..   # now inside passport/experiments/
 git clone https://github.com/midnightntwrk/midnight-ledger.git
 cd midnight-ledger
 git checkout ledger-8.0.2   # match the devnet version
@@ -52,7 +52,7 @@ git checkout ledger-8.0.2   # match the devnet version
 The resulting layout should be:
 
 ```
-arc-passport/
+passport/
   experiments/
     redjubjub-wallet-rs/
     midnight-ledger/        ← tag ledger-8.0.2
