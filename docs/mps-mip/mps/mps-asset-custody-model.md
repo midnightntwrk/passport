@@ -29,9 +29,9 @@ Replaces: none
 ## Abstract
 
 Midnight has no ratified model for an on-chain account that custodies and
-authorises all of a user's Midnight-native assets (Night, shielded (Zswap), and
-Dust) under multi-key, multi-device control while satisfying lost-device
-recovery, total-loss recovery, and key non-exfiltration at once. There is no
+authorises a user's Midnight-native assets — Night and shielded (Zswap) — under
+multi-key, multi-device control while satisfying lost-device recovery,
+total-loss recovery, and key non-exfiltration at once. There is no
 ratified answer to *where* those assets live or *how* their custody is
 authorised and recovered, and the asset classes do not behave uniformly:
 user↔contract Night works, contract custody of shielded notes works but leaks
@@ -116,7 +116,6 @@ access is a recovery failure.
 - **Total-loss recovery:** recovering the account restores the *same* balances.
 - **Receiving / spending shielded value** into and out of the account across
   blocks.
-- **Fee payment** that does not push the user into a separate custody surface.
 
 ## Goals
 
@@ -126,7 +125,7 @@ access is a recovery failure.
    same balances, verified by an end-to-end recovery test.
 3. **No seed re-entry and no key exfiltration** on any asset path, including at
    the proving boundary.
-4. **A defined custody path per asset class** (Night, shielded, Dust) and a
+4. **A custody path for Night and shielded, a fee path for Dust,** and a
    specified boundary with upstream cross-chain custody.
 5. **No net privacy regression** from custody, or an explicitly scoped and
    accepted trade-off.
