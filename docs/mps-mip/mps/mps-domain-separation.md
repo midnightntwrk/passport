@@ -28,13 +28,13 @@ Replaces: none
 
 ## Abstract
 
-Midnight hashes many distinct objects — coin commitments, nullifiers, public
-keys, addresses, intent hashes, Merkle nodes, and key derivations — with two
+Midnight hashes many distinct objects (coin commitments, nullifiers, public
+keys, addresses, intent hashes, Merkle nodes, and key derivations) with two
 shared primitives: `persistentHash` (SHA-256) and `transientHash` (Poseidon).
 Neither primitive takes a domain argument, so separation between use sites is
 achieved entirely by callers hand-prepending a tag to the preimage. This
-discipline is load-bearing — for a contract-owned coin the commitment and the
-nullifier hash an identical preimage and are kept distinct only by their tag —
+discipline is load-bearing (for a contract-owned coin the commitment and the
+nullifier hash an identical preimage and are kept distinct only by their tag),
 yet it is uncoordinated. An inventory of the shipped ledger and the Compact
 standard library found roughly 28 such sites carrying about 25 distinct tags,
 applied without a shared convention: two prefix schemes coexist in the code
@@ -44,7 +44,7 @@ varies (version suffixes, fixed-width padding, or neither); at least two sites
 carry no tag at all; and not one tag is declared in any specification or MIP.
 The same conceptual objects carry different separators across the
 implementation, the specification, and the specification's own diagram. There is
-no canonical convention, no authoritative registry, and no enforcement — so a
+no canonical convention, no authoritative registry, and no enforcement, so a
 third-party Compact author has nothing to conform to and no way to avoid
 colliding with a ledger or standard-library tag. The shipping implementation is
 internally consistent and these constructions work today; the gap is the absence
@@ -56,8 +56,8 @@ the implementation and the specifications aligned to it.
 
 Every hashed object on Midnight draws its domain separator from a single,
 published source of truth under one naming convention. A contract author
-reserves or looks up a domain tag the way they look up a token type — without
-reading ledger source — and is structurally unable to collide with an existing
+reserves or looks up a domain tag the way they look up a token type, without
+reading ledger source, and is structurally unable to collide with an existing
 one. The ledger, the Compact standard library, the wallet, the specifications,
 and their diagrams all reference the same canonical tags, and any divergence
 between them is a mechanically detectable error rather than a latent surprise
@@ -69,24 +69,24 @@ protocol surface.
 
 **Separation is load-bearing, yet the primitive is raw.** `persistent_hash`
 (SHA-256) and `transient_hash` (Poseidon) take no domain argument; separation
-exists only because each caller prepends a tag — into the SHA-256 preimage, as a
-Poseidon opening, or as a struct field. This is not optional hygiene. For a
-contract-owned coin, the commitment and the nullifier hash an *identical*
-preimage — same coin, same `data_type`, same contract address — and are kept
-distinct only by their domain tag (`mdn:cc` versus `mdn:cn`;
+exists only because each caller prepends a tag, whether into the SHA-256
+preimage, as a Poseidon opening, or as a struct field. This is not optional
+hygiene. For a contract-owned coin, the commitment and the nullifier hash an
+*identical* preimage (same coin, same `data_type`, same contract address) and
+are kept distinct only by their domain tag (`mdn:cc` versus `mdn:cn`;
 `midnight:zswap-cc[v1]` versus `…-cn[v1]`). A user coin additionally binds spend
 authority, so the tag is defence-in-depth there; a contract has no secret, so
-the tag is the *sole* separator — without it a coin's commitment would equal its
+the tag is the *sole* separator: without it a coin's commitment would equal its
 nullifier. Yet nothing in the primitive, the toolchain, or any document tells an
 author that this discipline exists, or how to apply it.
 
-**No canonical convention.** Across shipped code, two prefix schemes coexist —
-`midnight:` (zswap, intents, keys, kernel) and `mdn:` (dust, the Merkle leaf) —
-and Dust mixes both. The canonical wallet specification uses a third scheme
-(`ni`). Tag form is unsystematic: some carry a `[v1]` version suffix, some a
-trailing colon, some are NUL-padded to a fixed 32-byte width, most are plain. Of
-roughly 25 distinct tags, only four are hoisted even to a named constant; the
-rest are inline string literals.
+**No canonical convention.** Across shipped code, two prefix schemes coexist:
+`midnight:` (zswap, intents, keys, kernel) and `mdn:` (dust, the Merkle leaf).
+Dust mixes both. The canonical wallet specification uses a third scheme (`ni`).
+Tag form is unsystematic: some carry a `[v1]` version suffix, some a trailing
+colon, some are NUL-padded to a fixed 32-byte width, most are plain. Of roughly
+25 distinct tags, only four are hoisted even to a named constant; the rest are
+inline string literals.
 
 **No registry or source of truth.** No artefact enumerates the domain tags in
 use. There is no list a reviewer can consult to confirm completeness, no place a
@@ -103,13 +103,13 @@ encryption, and Dust key derivations use `midnight:`-prefixed tags in code but
 `ni` in the specification. These divergences went uncaught precisely because no
 registry exists to reconcile them. Within the shipping ledger the separators are
 internally consistent and the constructions work; the hazard is *between*
-artefacts — the specification a wallet implementor follows does not match the
-code — and whether any such pair denotes the same on-chain object (a latent
+artefacts (the specification a wallet implementor follows does not match the
+code), and whether any such pair denotes the same on-chain object (a latent
 mismatch) or merely distinct ones is itself unanswered (see the open questions
 below).
 
 **Untagged and ambiguous sites.** At least two hash use sites carry no domain
-tag where one would be expected — most clearly the user address, a bare
+tag where one would be expected: most clearly the user address, a bare
 `persistent_hash` of a verifying key. Several commitments separate by a numeric
 or random opening rather than a domain tag, which a reviewer cannot distinguish
 from "tag forgotten" without reading the construction.
@@ -118,9 +118,9 @@ from "tag forgotten" without reading the construction.
 
 - **Third-party contract author** commits to user state with `persistentHash`
   but has no convention to follow and no registry to consult, so they invent an
-  ad-hoc prefix — or forget one. If it collides with a ledger or
-  standard-library tag, two unrelated objects hash into the same space, and
-  nothing warns them, at author time or ever.
+  ad-hoc prefix, or forget one. If it collides with a ledger or standard-library
+  tag, two unrelated objects hash into the same space, and nothing warns them,
+  at author time or ever.
 - **Cross-implementation agreement:** a wallet (TypeScript), the ledger (Rust),
   and a Compact contract must compute the same commitment to recognise an
   object, yet each must reverse-engineer the correct tag from another's source.
@@ -128,21 +128,21 @@ from "tag forgotten" without reading the construction.
   specification and the implementation.
 - **Security review:** an auditor cannot enumerate the domain-separation
   surface, confirm every use site is tagged, or verify that no two objects share
-  a tag, without manually scanning the codebase — brittle, unrepeatable, and
-  exactly what this MPS had to do.
+  a tag, without manually scanning the codebase, which is brittle, unrepeatable,
+  and exactly what this MPS had to do.
 - **Specification maintenance:** a maintainer updating the wallet specification
   or its diagram has no canonical reference to validate separators against, so
   the text, the diagram source, and the rendered image drift apart and ship
   inconsistent.
 - **Evolving a tag:** a construction is revised and its separator should change
   (some tags already carry a `[v1]` suffix), but with no versioning convention
-  and no registry to record it there is no safe, observable way to do so —
+  and no registry to record it there is no safe, observable way to do so,
   particularly if separators are frozen at network deployment.
 
 ## Goals
 
-1. **One convention** for forming a domain separator — its scheme, length
-   discipline, and versioning — that every hash use site follows.
+1. **One convention** for forming a domain separator (its scheme, length
+   discipline, and versioning) that every hash use site follows.
 2. **One source of truth:** a single authoritative record of all domain tags in
    use, citable and verifiable, against which the implementation and the
    specifications are checked.
@@ -157,7 +157,7 @@ from "tag forgotten" without reading the construction.
 6. **Discoverability.** A contract author can discover or reserve a separator
    without reading ledger or standard-library source.
 7. **Privacy-preserving lookup.** Whatever interface exposes the source of truth
-   does not itself become an oracle for participation patterns — for example by
+   does not itself become an oracle for participation patterns, for example by
    admitting enumeration of identifiers per domain, or scoped existence probes,
    beyond what participants strictly need.
 
@@ -166,8 +166,8 @@ from "tag forgotten" without reading the construction.
 Domain collisions become structurally impossible rather than merely unlikely,
 and the divergences between the specification, the code, and the diagrams are
 resolved and kept aligned by construction. Third-party Compact authors gain a
-single integration target — look up or reserve a tag, conform to one convention
-— instead of reverse-engineering separators from source. Security reviewers gain
+single integration target (look up or reserve a tag, conform to one convention)
+instead of reverse-engineering separators from source. Security reviewers gain
 an enumerable, auditable surface they can check for completeness and
 collision-freedom mechanically. Maintainers can evolve separators safely under a
 versioning discipline. The domain-separation surface that today exists only as
@@ -178,8 +178,8 @@ protocol that wallets, contracts, and the ledger share.
 
 - **Same object, or two families?** Are the Compact standard library's `mdn:cc`
   / `mdn:cn` (coin commitment / nullifier) and the ledger's
-  `midnight:zswap-cc[v1]` / `midnight:zswap-cn[v1]` the same on-chain object — in
-  which case the differing separators are a latent mismatch — or distinct
+  `midnight:zswap-cc[v1]` / `midnight:zswap-cn[v1]` the same on-chain object (in
+  which case the differing separators are a latent mismatch), or distinct
   commitment families that the naming simply fails to distinguish?
 - **Which scheme is canonical?** `midnight:`, `mdn:`, or `ni`? Reconciling onto
   one is either a documentation fix or a consensus-affecting change, depending on
@@ -207,13 +207,13 @@ protocol that wallets, contracts, and the ledger share.
 
 - **Midnight Domain-Separation Convention and Registry.** Specify the canonical
   form of a domain separator (scheme, length, versioning) and an authoritative
-  registry of the tags in use — the source of truth that the ledger, the Compact
+  registry of the tags in use: the source of truth that the ledger, the Compact
   standard library, the wallet, and the specifications are checked against. The
   registry can be seeded directly from the inventory in the References. Must
   resolve the canonical-scheme and freeze-at-deployment choices. This is the
   keystone the others hang from.
 - **Domain-Separation Conformance and Tooling** *(optional / follow-on).*
-  Specify how use sites are checked against the registry — a compile-time or
+  Specify how use sites are checked against the registry: a compile-time or
   build-time check that every `persistentHash` / `transientHash` site carries a
   registered separator, and/or a standard-library helper that applies one.
 - **Separator Reconciliation and Migration** *(conditional).* If the
@@ -223,29 +223,29 @@ protocol that wallets, contracts, and the ledger share.
 
 ## References
 
-- **Domain-separation inventory** — a complete, reproducible scan of the hash
-  use sites and domain tags across the shipped ledger and the Compact standard
+- **Domain-separation inventory:** a complete, reproducible scan of the hash use
+  sites and domain tags across the shipped ledger and the Compact standard
   library, produced by Midnight Passport (ARC), 2026/06/02. The scan covers
   `midnightntwrk/midnight-ledger` (commit `dfb450d`; crates `base-crypto`,
   `transient-crypto`, `coin-structure`, `zswap`, `ledger`, `onchain-state`) and
   `midnightntwrk/compactc` (`compiler/standard-library.compact`, commit
   `0e76dafa`).
-- **Hash primitives** — `base-crypto/src/hash.rs` (`persistent_hash`, SHA-256);
+- **Hash primitives:** `base-crypto/src/hash.rs` (`persistent_hash`, SHA-256);
   `transient-crypto/src/hash.rs` (`transient_hash`, Poseidon); the snark-upgrade
   proposal that introduced the persistent/transient split.
-- **Divergence sources** — `coin-structure/src/coin.rs` (`midnight:zswap-pk[v1]`
+- **Divergence sources:** `coin-structure/src/coin.rs` (`midnight:zswap-pk[v1]`
   / `-cc[v1]` / `-cn[v1]`); the WalletEngine specification and
   `zswap-keys.puml` / `zswap-keys.svg` (`ni-pk[v1]` / `ni` / `mdn:pk`).
-- **Related MPSs** — MPS-0008 (Keccak-256 hashing) and MPS-0011 (native
+- **Related MPSs:** MPS-0008 (Keccak-256 hashing) and MPS-0011 (native
   cryptographic primitives), which add hash and signature primitives to Compact
   but do not address how they are domain-separated; MPS-0012 (human-readable
   aliasing), which similarly identifies an absent network-level standard.
-- **MIP-0001** — Midnight Improvement Proposal Process.
-- **MIP-0003** — ECDSA support; precedent for separators (here, address
+- **MIP-0001:** Midnight Improvement Proposal Process.
+- **MIP-0003:** ECDSA support; precedent for separators (here, address
   separators) that are frozen at network deployment.
-- **Prior art** — BIP-340 tagged hashes; RFC 9380 hash-to-curve domain
-  separation tags; NIST SP 800-185 cSHAKE customization strings; Zcash / ZIP
-  domain separation. Each establishes per-use-site domain separation as standard
+- **Prior art:** BIP-340 tagged hashes; RFC 9380 hash-to-curve domain separation
+  tags; NIST SP 800-185 cSHAKE customization strings; Zcash / ZIP domain
+  separation. Each establishes per-use-site domain separation as standard
   cryptographic practice.
 
 ## Acknowledgements
