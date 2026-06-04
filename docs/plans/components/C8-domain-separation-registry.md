@@ -87,6 +87,6 @@ declares).
 selected; compile-time enforcement (**C**) deferred as a later convergence.
 Recorded in [ADR-0001](../../adrs/0001-domain-separation-registry.md), and
 standardised via a solution-agnostic MPS
-([`docs/mps/mps-domain-separation.md`](../../mps/mps-domain-separation.md)),
+([`docs/mps-mip/mps/mps-domain-separation.md`](../../mps-mip/mps/mps-domain-separation.md)),
 evidenced by `experiments/domain-separation-inventory/` (the inventory
 doubles as the registry's first draft). Decided 2026/06/02.

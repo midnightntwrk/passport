@@ -32,7 +32,7 @@ existing-but-implicit practice explicit and auditable. Compile-time enforcement
 (C) is a later enhancement, added if registry discipline alone proves leaky.*
 
 The standardisation vehicle is a solution-agnostic MPS
-(`docs/mps/mps-domain-separation.md`) that frames the gap and recommends the
+(`docs/mps-mip/mps/mps-domain-separation.md`) that frames the gap and recommends the
 registry MIP; the A-versus-C choice lives in this ADR and in that MIP, never in
 the MPS. The inventory's `INVENTORY.md` is the first draft of the registry.
 
@@ -69,6 +69,6 @@ the MPS. The inventory's `INVENTORY.md` is the first draft of the registry.
 
 - Component canvas: [`docs/plans/components/C8-domain-separation-registry.md`](../plans/components/C8-domain-separation-registry.md)
 - Experiment: [`experiments/domain-separation-inventory/`](../../experiments/domain-separation-inventory/) (`INVENTORY.md`, `FINDINGS.md`)
-- Problem statement: [`docs/mps/mps-domain-separation.md`](../mps/mps-domain-separation.md)
+- Problem statement: [`docs/mps-mip/mps/mps-domain-separation.md`](../mps-mip/mps/mps-domain-separation.md)
 - Related arc42 sections: §8 (Crosscutting Concepts), §11 (Risks and Technical Debt).
 - Pipeline: `STD-03` in [`docs/plans/MIPS.md`](../plans/MIPS.md).
