@@ -534,7 +534,9 @@ function ProvingDock() {
         </div>
         <span className="provedock-elapsed">{elapsed}</span>
       </div>
-      <p className="provedock-detail">{PHASES[phaseIdx]?.detail} — real proving takes minutes.</p>
+      <p className="provedock-detail">
+        {PHASES[phaseIdx]?.detail} — real cryptographic work in progress.
+      </p>
     </div>
   );
 }
