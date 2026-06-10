@@ -152,14 +152,47 @@ body::after {
 .shell {
   display: grid;
   grid-template-columns: 272px 1fr;
+  /* dvh: keep the bottom docks above iOS Safari's dynamic toolbar */
   height: 100vh;
+  height: 100dvh;
 }
 
 .main {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ——— mobile bar + drawer (≤900px) ——— */
+
+.mobilebar {
+  display: none;
+}
+
+.menu-btn {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 1.05rem;
+  line-height: 1;
+  padding: 7px 11px;
+  cursor: pointer;
+  flex: none;
+}
+
+.mobilebar-spacer {
+  flex: 1;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
 }
 
 .content {
@@ -360,11 +393,19 @@ body::after {
 
 .side-foot {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
   padding: 14px 8px 0;
   border-top: 1px solid var(--line-soft);
   margin-top: 12px;
+}
+
+.side-foot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
 }
 
 .netdot {
@@ -964,6 +1005,7 @@ th {
 
 .stage {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -986,6 +1028,14 @@ th {
 
 .onboard-top {
   margin-bottom: 4vh;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.onboard-top .brand {
+  padding-bottom: 0;
 }
 
 .onboard-grid {
@@ -1297,10 +1347,79 @@ th {
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
-  .sidebar {
+  .mobilebar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .mobilebar .brand {
+    padding: 0;
+  }
+
+  .mobilebar .brand-name {
+    white-space: nowrap;
+    font-size: 0.95rem;
+  }
+
+  .mobilebar .brand-tag {
     display: none;
+  }
+
+  /* The sidebar becomes a drawer over the content. */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(312px, 85vw);
+    z-index: 60;
+    background: #0a0a0c;
+    border-right: 1px solid var(--line);
+    transform: translateX(-105%);
+    transition: transform 0.22s ease-out;
+  }
+
+  .sidebar-open {
+    transform: none;
+    box-shadow: 24px 0 60px rgba(0, 0, 0, 0.6);
+  }
+
+  .content {
+    padding: 18px 16px 20px;
+  }
+
+  .topbar {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .stage-onboard {
+    padding: 16px 18px 0;
+  }
+
+  .view-head {
+    gap: 12px;
+  }
+
+  .view-num {
+    min-width: 40px;
+    font-size: 1.8rem;
+  }
+
+  .provedock {
+    margin: 0 10px 8px;
+  }
+
+  .activity-body {
+    max-height: 108px;
   }
 }
 

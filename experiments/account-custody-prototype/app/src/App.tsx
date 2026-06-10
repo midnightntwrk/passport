@@ -8,7 +8,7 @@ import { getMidnight, type Midnight } from './lib/midnight.js';
 import { compiledAccountContract, BROWSER_PROVER } from './lib/providers.js';
 import { loadSession, saveSession, clearSession, type Session } from './lib/session.js';
 import { useTxTask, dismissTask, type TxTask } from './lib/txTracker.js';
-import { Busy, Mono } from './ui.js';
+import { Busy, Mono, Chip } from './ui.js';
 
 import { OnboardView } from './views/Onboard.js';
 import { OverviewView } from './views/Overview.js';
@@ -69,6 +69,7 @@ export default function App() {
     step: 1,
     view: 'overview',
   });
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const log = useCallback((msg: string) => {
     const time = new Date().toLocaleTimeString();
@@ -199,6 +200,7 @@ export default function App() {
       <div className="stage stage-onboard">
         <div className="onboard-top">
           <BrandMark />
+          <ProverChip />
         </div>
         <OnboardView
           mid={mid}
@@ -240,11 +242,20 @@ export default function App() {
 
   return (
     <div className="shell">
+      <MobileBar onMenu={() => setDrawerOpen(true)} />
+      {drawerOpen && <div className="scrim" onClick={() => setDrawerOpen(false)} />}
       <Sidebar
+        open={drawerOpen}
         nav={nav}
         stepDone={stepDone}
-        onStep={goToStep}
-        onView={(view) => setNav({ step: null, view })}
+        onStep={(s) => {
+          goToStep(s);
+          setDrawerOpen(false);
+        }}
+        onView={(view) => {
+          setNav({ step: null, view });
+          setDrawerOpen(false);
+        }}
         round={ledger ? String(ledger.round) : '…'}
         onDisconnect={resetSession}
       />
@@ -316,7 +327,30 @@ function BrandMark(props: { large?: boolean }) {
   );
 }
 
+function ProverChip() {
+  return (
+    <Chip tone={BROWSER_PROVER ? 'info' : 'muted'}>
+      {BROWSER_PROVER ? 'prover · this device' : 'prover · local server'}
+    </Chip>
+  );
+}
+
+// Compact top bar shown only on narrow screens (the sidebar becomes a drawer).
+function MobileBar(props: { onMenu: () => void }) {
+  return (
+    <div className="mobilebar">
+      <button className="menu-btn" onClick={props.onMenu} aria-label="open menu">
+        ☰
+      </button>
+      <BrandMark />
+      <span className="mobilebar-spacer" />
+      <ProverChip />
+    </div>
+  );
+}
+
 function Sidebar(props: {
+  open: boolean;
   nav: { step: StepId | null; view: ViewId };
   stepDone: Record<StepId, boolean>;
   onStep: (s: StepId) => void;
@@ -325,7 +359,7 @@ function Sidebar(props: {
   onDisconnect: () => void;
 }) {
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${props.open ? 'sidebar-open' : ''}`}>
       <BrandMark />
       <nav className="sidenav">
         <p className="nav-label">Demo flow</p>
@@ -359,13 +393,16 @@ function Sidebar(props: {
         </button>
       </nav>
       <footer className="side-foot">
-        <span className="netdot" />
-        <span className="side-net">
-          localnet · round <span className="side-round">{props.round}</span>
-        </span>
-        <button className="linkish" onClick={props.onDisconnect}>
-          disconnect
-        </button>
+        <div className="side-foot-row">
+          <span className="netdot" />
+          <span className="side-net">
+            localnet · round <span className="side-round">{props.round}</span>
+          </span>
+          <button className="linkish" onClick={props.onDisconnect}>
+            disconnect
+          </button>
+        </div>
+        <ProverChip />
       </footer>
     </aside>
   );
@@ -481,6 +518,7 @@ function ProvingDock() {
         <span className="provedock-pulse" />
         <span className="provedock-label">{task.label}</span>
         <code className="provedock-circuit">{task.circuit}</code>
+        {BROWSER_PROVER && <Chip tone="info">on-device</Chip>}
         <span className="provedock-spacer" />
         <div className="provedock-phases">
           {PHASES.map((p, i) => (
