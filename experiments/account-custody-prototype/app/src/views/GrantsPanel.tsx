@@ -32,60 +32,44 @@ export function GrantsPanel({ ctx, revokeBeat }: { ctx: AppContext; revokeBeat?:
         title="Grants on-chain"
         sub="Live from the ledger: each grant's cumulative spend against its cap, and whether the contract still honours it."
       >
-        <table>
-          <thead>
-            <tr>
-              <th>grant</th>
-              <th>spent / cap</th>
-              <th>status</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {grants.length === 0 && (
-              <tr>
-                <td className="dim" colSpan={4}>
-                  no grants issued yet
-                </td>
-              </tr>
-            )}
-            {grants.map(([commitment, info]) => (
-              <tr key={String(commitment)}>
-                <td>
-                  <Mono v={commitment.toString(16)} short />
-                </td>
-                <td className="cell-capbar">
-                  <CapBar spent={info.spent} cap={info.cap} />
-                </td>
-                <td>
-                  {!info.active ? (
-                    <Chip tone="danger">revoked</Chip>
-                  ) : info.epoch !== epoch ? (
-                    <Chip tone="muted">stale epoch</Chip>
-                  ) : (
-                    <Chip tone="ok">active</Chip>
-                  )}
-                </td>
-                <td className="row-actions">
-                  {info.active && (
-                    <ActionButton
-                      label="revoke"
-                      busyLabel="revoking…"
-                      kind="danger"
-                      task={{ label: 'Revoking the grant', circuit: 'revoke_grant' }}
-                      onRun={async () => {
-                        const r = await account.revokeGrantByCommitment(commitment);
-                        log(`revoke_grant → tx ${r.txId}`);
-                        await ctx.refreshLedger();
-                        return r.txId;
-                      }}
-                    />
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="list">
+          {grants.length === 0 && <p className="dim">no grants issued yet</p>}
+          {grants.map(([commitment, info]) => (
+            <div className="listrow" key={String(commitment)}>
+              <div className="listrow-id">
+                <span className="docfield-k">credential</span>
+                <Mono v={commitment.toString(16)} short group />
+              </div>
+              <div className="listrow-meter">
+                <span className="docfield-k">spent / cap</span>
+                <CapBar spent={info.spent} cap={info.cap} />
+              </div>
+              <div className="listrow-side">
+                {!info.active ? (
+                  <Chip stamp tone="danger">revoked</Chip>
+                ) : info.epoch !== epoch ? (
+                  <Chip stamp tone="muted">stale epoch</Chip>
+                ) : (
+                  <Chip stamp tone="ok">active</Chip>
+                )}
+                {info.active && (
+                  <ActionButton
+                    label="revoke"
+                    busyLabel="revoking…"
+                    kind="danger"
+                    task={{ label: 'Revoking the grant', circuit: 'revoke_grant' }}
+                    onRun={async () => {
+                      const r = await account.revokeGrantByCommitment(commitment);
+                      log(`revoke_grant → tx ${r.txId}`);
+                      await ctx.refreshLedger();
+                      return r.txId;
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
 
         <div className="row controls">
           <label className="field field-inline">

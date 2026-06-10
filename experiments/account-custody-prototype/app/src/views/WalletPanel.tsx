@@ -38,7 +38,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
       />
 
       <Panel title="Night — unshielded" sub="Custodied by the contract; the balance is public ledger state.">
-        <table>
+        <table className="table-tight">
           <thead>
             <tr>
               <th>colour</th>

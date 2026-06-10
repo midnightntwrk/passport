@@ -546,7 +546,8 @@ function fmtElapsed(ms: number): string {
 
 function ActivityDock({ lines }: { lines: string[] }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(true);
+  // Collapsed by default on phones — vertical space is the scarce resource.
+  const [open, setOpen] = useState(() => window.innerWidth >= 700);
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight });
   }, [lines, open]);

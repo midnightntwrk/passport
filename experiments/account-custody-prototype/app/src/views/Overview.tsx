@@ -1,35 +1,68 @@
 import React from 'react';
 
-import { ViewHeader, Panel, Mono, StatTile, Chip } from '../ui.js';
+import { ViewHeader, Panel, Mono, Chip, Field } from '../ui.js';
 import type { AppContext } from '../App.js';
+
+// Machine-readable-zone line: uppercase, non-alphanumerics become fillers,
+// padded to the classic 44 characters.
+function mrzLine(s: string): string {
+  return (s.toUpperCase().replace(/[^A-Z0-9]/g, '<') + '<'.repeat(44)).slice(0, 44);
+}
 
 export function OverviewView({ ctx }: { ctx: AppContext }) {
   const { session, ledger } = ctx;
   const grants = ledger ? [...ledger.grants] : [];
   const activeGrants = grants.filter(([, g]) => g.active).length;
   const shares = ledger ? Number(ledger.recovery_shares.size()) : 0;
+  const epoch = ledger ? ledger.device_epoch : 0n;
+  const holder = (session.devMode ? 'bearer' : (session.passkey?.label ?? 'bearer')).toUpperCase();
+  const reissued = epoch > 0n;
+
+  const mrz1 = mrzLine(`P<MN${holder}<<MIDNIGHT<PASSPORT`);
+  const mrz2 = mrzLine(
+    `${session.accountAddress.slice(0, 20)}<MN<E${String(epoch)}<R${ledger ? String(ledger.round) : ''}`,
+  );
 
   return (
     <>
       <ViewHeader
         numeral="01"
         title="Your account is a contract"
-        narration="Onboarding created a passkey, split a recovery secret 2-of-3, and deployed a personal Compact contract. Everything below is read live from the Midnight ledger."
+        narration="Onboarding created a passkey, split a recovery secret 2-of-3, and deployed a personal Compact contract. This page reads your document live from the Midnight ledger."
       />
 
-      <Panel
-        title="Account contract"
-        sub="The address of your personal account-custody contract on the localnet."
-      >
-        <Mono v={session.accountAddress} className="addr-hero" />
-        <div className="stat-row">
-          <StatTile label="round" value={ledger ? String(ledger.round) : '…'} />
-          <StatTile label="device epoch" value={ledger ? String(ledger.device_epoch) : '…'} />
-          <StatTile label="devices" value={ledger ? String(ledger.device_count) : '…'} />
-          <StatTile label="active grants" value={ledger ? String(activeGrants) : '…'} />
-          <StatTile label="recovery shares" value={ledger ? String(shares) : '…'} />
+      <section className="doc">
+        <header className="doc-head">
+          <span className="doc-authority">Midnight Network · Localnet</span>
+          <span className="doc-type">Passport · Account custody</span>
+        </header>
+        <span className="doc-chipmark" aria-hidden="true" />
+        <div className="doc-grid">
+          <Field k="Holder" v={holder} big />
+          <Field
+            k="Status"
+            v={
+              <Chip stamp tone={reissued ? 'warn' : 'ok'}>
+                {reissued ? `reissued · epoch ${String(epoch)}` : 'valid'}
+              </Chip>
+            }
+          />
+          <Field
+            k="Document no. — account contract"
+            v={<Mono v={session.accountAddress} short group />}
+            wide
+          />
+          <Field k="Issuing round" v={ledger ? String(ledger.round) : '…'} />
+          <Field k="Device epoch" v={String(epoch)} />
+          <Field k="Devices" v={ledger ? String(ledger.device_count) : '…'} />
+          <Field k="Active grants" v={ledger ? String(activeGrants) : '…'} />
+          <Field k="Recovery shares" v={ledger ? `${shares} — any 2 of 3` : '…'} />
         </div>
-      </Panel>
+        <div className="doc-mrz" title="machine-readable zone — decorative, derived from the document">
+          <span>{mrz1}</span>
+          <span>{mrz2}</span>
+        </div>
+      </section>
 
       <Panel
         title="How custody works here"

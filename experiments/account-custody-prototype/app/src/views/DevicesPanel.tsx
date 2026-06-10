@@ -24,59 +24,46 @@ export function DevicesPanel({ ctx }: { ctx: AppContext }) {
         title="Registered devices"
         sub="Hash-preimage auth — the prototype stand-in for C5's JubJub Schnorr. Any active device is admin (1-of-n). Removing your own device locks this browser out."
       >
-        <table>
-          <thead>
-            <tr>
-              <th>commitment</th>
-              <th>epoch</th>
-              <th>status</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {active.map(([commitment, e]) => (
-              <tr key={String(commitment)}>
-                <td>
-                  <Mono v={commitment.toString(16)} short />
-                </td>
-                <td className="num">{String(e)}</td>
-                <td>
-                  <Chip tone="ok">active</Chip>{' '}
-                  {ctx.deviceCommitment === commitment.toString() && (
-                    <Chip tone="info">this device</Chip>
-                  )}
-                </td>
-                <td className="row-actions">
-                  <ActionButton
-                    label="remove"
-                    busyLabel="removing…"
-                    kind="danger"
-                    disabled={active.length <= 1}
-                    task={{ label: 'Removing the device', circuit: 'remove_device' }}
-                    onRun={async () => {
-                      const r = await account.removeDeviceByCommitment(commitment);
-                      log(`remove_device → tx ${r.txId}`);
-                      await ctx.refreshLedger();
-                      return r.txId;
-                    }}
-                  />
-                </td>
-              </tr>
-            ))}
-            {stale.map(([commitment, e]) => (
-              <tr key={String(commitment)} className="stale">
-                <td>
-                  <Mono v={commitment.toString(16)} short />
-                </td>
-                <td className="num">{String(e)}</td>
-                <td>
-                  <Chip tone="muted">revoked — epoch {String(e)}</Chip>
-                </td>
-                <td />
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="list">
+          {active.map(([commitment, e]) => (
+            <div className="listrow" key={String(commitment)}>
+              <div className="listrow-id">
+                <span className="docfield-k">commitment · epoch {String(e)}</span>
+                <Mono v={commitment.toString(16)} short group />
+              </div>
+              <div className="listrow-side">
+                <Chip stamp tone="ok">active</Chip>
+                {ctx.deviceCommitment === commitment.toString() && (
+                  <Chip tone="info">this device</Chip>
+                )}
+                <ActionButton
+                  label="remove"
+                  busyLabel="removing…"
+                  kind="danger"
+                  disabled={active.length <= 1}
+                  task={{ label: 'Removing the device', circuit: 'remove_device' }}
+                  onRun={async () => {
+                    const r = await account.removeDeviceByCommitment(commitment);
+                    log(`remove_device → tx ${r.txId}`);
+                    await ctx.refreshLedger();
+                    return r.txId;
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+          {stale.map(([commitment, e]) => (
+            <div className="listrow stale" key={String(commitment)}>
+              <div className="listrow-id">
+                <span className="docfield-k">commitment · epoch {String(e)}</span>
+                <Mono v={commitment.toString(16)} short group />
+              </div>
+              <div className="listrow-side">
+                <Chip stamp tone="muted">revoked — epoch {String(e)}</Chip>
+              </div>
+            </div>
+          ))}
+        </div>
         <div className="row controls">
           <ActionButton
             label="Add device (new passkey)"

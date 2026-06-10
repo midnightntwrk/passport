@@ -45,11 +45,35 @@ export function Busy(props: { label: string }) {
   );
 }
 
-/** Copyable hash / address. */
-export function Mono(props: { v: string; short?: boolean; className?: string }) {
+/** Label-over-value document field, passport-data-page style. */
+export function Field(props: {
+  k: string;
+  v: React.ReactNode;
+  big?: boolean;
+  wide?: boolean;
+}) {
+  return (
+    <div className={`docfield ${props.wide ? 'docfield-wide' : ''}`}>
+      <span className="docfield-k">{props.k}</span>
+      <span className={`docfield-v ${props.big ? 'docfield-big' : ''}`}>{props.v}</span>
+    </div>
+  );
+}
+
+const group4 = (s: string) => s.replace(/(....)/g, '$1 ').trim().toUpperCase();
+
+/** Copyable hash / address. `group` renders document-number spacing. */
+export function Mono(props: { v: string; short?: boolean; group?: boolean; className?: string }) {
   const [copied, setCopied] = useState(false);
-  const text =
-    props.short && props.v.length > 24 ? `${props.v.slice(0, 12)}…${props.v.slice(-8)}` : props.v;
+  let text: string;
+  if (props.group && props.short && props.v.length > 28) {
+    text = `${group4(props.v.slice(0, 16))} … ${group4(props.v.slice(-8))}`;
+  } else if (props.short && props.v.length > 24) {
+    text = `${props.v.slice(0, 12)}…${props.v.slice(-8)}`;
+  } else {
+    text = props.v;
+  }
+  if (props.group && !(props.short && props.v.length > 28)) text = group4(text);
   return (
     <code
       className={`mono ${copied ? 'copied' : ''} ${props.className ?? ''}`}
@@ -68,8 +92,18 @@ export function Mono(props: { v: string; short?: boolean; className?: string }) 
 export function Chip(props: {
   tone: 'ok' | 'muted' | 'danger' | 'warn' | 'info';
   children: React.ReactNode;
+  /** Rubber-stamp rendering for document status (tilted when danger). */
+  stamp?: boolean;
 }) {
-  return <span className={`chip chip-${props.tone}`}>{props.children}</span>;
+  return (
+    <span
+      className={`chip chip-${props.tone} ${props.stamp ? 'chip-stamp' : ''} ${
+        props.stamp && props.tone === 'danger' ? 'chip-tilt' : ''
+      }`}
+    >
+      {props.children}
+    </span>
+  );
 }
 
 export function StatTile(props: { label: string; value: string }) {
