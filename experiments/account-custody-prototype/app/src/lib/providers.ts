@@ -29,6 +29,14 @@ import { hexToBytes } from '../../../src/wallet/hex.js';
 import * as FaucetModule from '../../../contracts/managed/faucet/contract/index.js';
 
 import { proveStarted, proveEnded } from './txTracker.js';
+import { wasmProofProvider } from './wasmProver.js';
+
+// Phase 0 spike: `?prover=browser` proves contract circuits in this browser
+// via the zkir-v2 wasm prover instead of the proof server (wallet balancing
+// still uses the server — Phase 2 in BROWSER-PROVING-SCOPE.md).
+export const BROWSER_PROVER =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('prover') === 'browser';
 
 // Localnet genesis wallet — the dev node funds this seed at genesis.
 // Demo-only; never use outside a throwaway local network.
@@ -194,20 +202,24 @@ export async function createProviders(walletCtx: WalletContext, contractName: 'a
     window.fetch.bind(window),
   );
 
-  // Wrapped so the UI's proving dock sees when the proof server is actually
-  // working (build → prove → submit phases in txTracker).
+  // Wrapped so the UI's proving dock sees when the prover is actually
+  // working (build → prove → submit phases in txTracker). With
+  // ?prover=browser the proof is computed in this tab by the zkir-v2 wasm
+  // prover; otherwise it goes to the local proof server.
   const baseProofProvider: any = httpClientProofProvider(CONFIG.proofServer, zkConfigProvider as any);
-  const proofProvider = {
-    ...baseProofProvider,
-    proveTx: async (...args: unknown[]) => {
-      proveStarted();
-      try {
-        return await baseProofProvider.proveTx(...args);
-      } finally {
-        proveEnded();
-      }
-    },
-  };
+  const proofProvider = BROWSER_PROVER
+    ? wasmProofProvider(zkConfigProvider)
+    : {
+        ...baseProofProvider,
+        proveTx: async (...args: unknown[]) => {
+          proveStarted();
+          try {
+            return await baseProofProvider.proveTx(...args);
+          } finally {
+            proveEnded();
+          }
+        },
+      };
 
   return {
     privateStateProvider: inMemoryPrivateStateProvider(),

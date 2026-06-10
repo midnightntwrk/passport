@@ -5,7 +5,7 @@ import type { Ledger } from '../../src/wallet/contract.js';
 import { hexToBytes32 } from '../../src/wallet/hex.js';
 
 import { getMidnight, type Midnight } from './lib/midnight.js';
-import { compiledAccountContract } from './lib/providers.js';
+import { compiledAccountContract, BROWSER_PROVER } from './lib/providers.js';
 import { loadSession, saveSession, clearSession, type Session } from './lib/session.js';
 import { useTxTask, dismissTask, type TxTask } from './lib/txTracker.js';
 import { Busy, Mono } from './ui.js';
@@ -87,6 +87,9 @@ export default function App() {
       .then((m) => {
         setMid(m);
         log('localnet connected — fee wallet synced.');
+        if (BROWSER_PROVER) {
+          log('browser proving enabled — contract circuits prove in this tab (zkir-v2 wasm).');
+        }
       })
       .catch((e) => setBootError(String(e?.message ?? e)));
   }, [log]);
@@ -397,7 +400,13 @@ function TopStat(props: { k: string; v: string }) {
 
 const PHASES: { id: TxTask['phase']; label: string; detail: string }[] = [
   { id: 'build', label: 'Build', detail: 'executing the circuit in this browser' },
-  { id: 'prove', label: 'Prove', detail: 'zero-knowledge proof on the proof server' },
+  {
+    id: 'prove',
+    label: 'Prove',
+    detail: BROWSER_PROVER
+      ? 'computing the zero-knowledge proof in this browser (zkir-v2 wasm)'
+      : 'zero-knowledge proof on the proof server',
+  },
   { id: 'submit', label: 'Submit', detail: 'balancing, signing & confirming' },
 ];
 

@@ -3,6 +3,17 @@
 Scope drafted 2026/06/10. Companion to `DECISIONS.md`; relates to component C6
 (proof generation, alternative B) and promise P8 (the user is the prover).
 
+**Phase 0 outcome (2026/06/10): validated, faster than scoped.** Upstream
+ships the prover as a wasm npm package (`@midnight-ntwrk/zkir-v2`, version
+paired with `ledger-v8`; see `wasm-proving-demos/` in the midnight-ledger
+repository), so no Rust port was needed. With `?prover=browser` the demo
+deploys the account contract and lands `deposit_night` on localnet with
+proofs computed in the tab (`app/src/lib/wasmProver.ts`; SRS slices staged by
+`app/scripts/fetch-zk-params.mjs`). Remaining for Phase 1: move proving off
+the main thread into a Web Worker, per-circuit progress, and timing capture.
+Phase 2 (wallet balancing proofs) is unchanged; upstream's `zkir-mt` demo
+shows the multithreaded option.
+
 ## Goal
 
 Replace the localnet proof server in the account-custody demo with a prover

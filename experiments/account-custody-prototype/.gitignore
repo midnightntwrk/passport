@@ -6,3 +6,4 @@ infra/.env
 deployment.json
 faucet-deployment.json
 *.log
+app/public/zk-params/

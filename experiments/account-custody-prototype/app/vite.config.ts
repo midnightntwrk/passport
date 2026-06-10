@@ -95,6 +95,7 @@ export default defineConfig({
       '@midnight-ntwrk/onchain-runtime-v3',
       '@midnight-ntwrk/compact-runtime',
       '@midnight-ntwrk/zswap',
+      '@midnight-ntwrk/zkir-v2',
     ],
     // CJS dependencies of the excluded (WASM) packages still need the
     // ESM-interop pre-bundle.
