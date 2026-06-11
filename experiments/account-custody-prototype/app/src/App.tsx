@@ -515,6 +515,10 @@ function ExplainTip() {
     const tip = ref.current;
     if (!tip) return;
     let current: Element | null = null;
+    const place = (e: MouseEvent) => {
+      tip.style.left = `${Math.min(e.clientX + 16, window.innerWidth - 350)}px`;
+      tip.style.top = `${Math.min(e.clientY + 18, window.innerHeight - tip.offsetHeight - 12)}px`;
+    };
     const over = (e: MouseEvent) => {
       const el = (e.target as Element | null)?.closest?.('[data-x]');
       if (!el || document.body.dataset.explain !== '1') return;
@@ -523,11 +527,11 @@ function ExplainTip() {
         '<span class="xtip-k">what you are seeing</span>' +
         ((el as HTMLElement).dataset.x ?? '');
       tip.classList.add('on');
+      place(e);
     };
     const move = (e: MouseEvent) => {
       if (!tip.classList.contains('on')) return;
-      tip.style.left = `${Math.min(e.clientX + 16, window.innerWidth - 350)}px`;
-      tip.style.top = `${Math.min(e.clientY + 18, window.innerHeight - tip.offsetHeight - 12)}px`;
+      place(e);
     };
     const out = (e: MouseEvent) => {
       if (current && !current.contains(e.relatedTarget as Node)) {

@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { ViewHeader, Mono, Chip, Field, X } from '../ui.js';
+import { FlowDiagram } from './FlowDiagram.js';
 import type { AppContext } from '../App.js';
 
 // Machine-readable-zone line: uppercase, non-alphanumerics become fillers,
@@ -170,6 +171,8 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
           <span className="tile-sub">{shares === 3 ? 'kit ready' : `${shares} shares on-chain`}</span>
         </button>
       </div>
+
+      <FlowDiagram ctx={ctx} />
     </>
   );
 }
