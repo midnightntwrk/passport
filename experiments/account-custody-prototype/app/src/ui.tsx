@@ -4,18 +4,19 @@ import React, { useState } from 'react';
 
 import { beginTask, completeTask, failTask } from './lib/txTracker.js';
 
-/** Card with brand "page furniture" header. */
+/** Card with brand "page furniture" header. `x` adds a hover explainer. */
 export function Panel(props: {
   title: string;
   sub?: string;
   children: React.ReactNode;
   tone?: 'default' | 'dapp' | 'scaffold';
   className?: string;
+  x?: string;
 }) {
   const tone = props.tone ?? 'default';
   return (
     <section className={`panel panel-${tone} ${props.className ?? ''}`}>
-      <header className="panel-head">
+      <header className="panel-head" data-x={props.x}>
         <h2 className="eyebrow">{props.title}</h2>
         {props.sub && <p className="panel-sub">{props.sub}</p>}
       </header>
@@ -34,6 +35,16 @@ export function ViewHeader(props: { numeral?: string; title: string; narration: 
         <p className="view-narration">{props.narration}</p>
       </div>
     </header>
+  );
+}
+
+/** Hover-explainer wrapper: dashed-underlined when explain mode is on; the
+    global ExplainTip tooltip (App.tsx) renders the `x` text on hover. */
+export function X(props: { x: string; children: React.ReactNode }) {
+  return (
+    <span className="x" data-x={props.x}>
+      {props.children}
+    </span>
   );
 }
 

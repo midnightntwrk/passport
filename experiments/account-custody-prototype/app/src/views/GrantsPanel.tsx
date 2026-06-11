@@ -6,7 +6,7 @@ import { userAddressBytes } from '../lib/providers.js';
 import { ViewHeader, Panel, ActionButton, Mono, Chip, CapBar } from '../ui.js';
 import type { AppContext } from '../App.js';
 
-export function GrantsPanel({ ctx, revokeBeat }: { ctx: AppContext; revokeBeat?: boolean }) {
+export function GrantsPanel({ ctx }: { ctx: AppContext }) {
   const { ledger, account, mid, log, nightColor } = ctx;
   const [cap, setCap] = useState('300');
   const [issuedSecret, setIssuedSecret] = useState<string | null>(null);
@@ -19,18 +19,14 @@ export function GrantsPanel({ ctx, revokeBeat }: { ctx: AppContext; revokeBeat?:
   return (
     <>
       <ViewHeader
-        numeral={revokeBeat ? '04' : '03'}
-        title={revokeBeat ? 'Revoke the grant' : 'Spend via a scoped grant'}
-        narration={
-          revokeBeat
-            ? 'One circuit call flips the grant inactive. The dApp still holds the secret — and it is now worthless. The contract, not the dApp, was always the enforcer.'
-            : 'Issue the dApp a credential scoped to operation × token colour × cumulative cap. Hand over the secret once; the contract enforces the boundary.'
-        }
+        title="Connections"
+        narration="A connection is a scoped credential: one operation, one token colour, a cumulative cap. The dApp holds the secret; the contract — not the dApp — enforces the boundary, and revocation makes the secret worthless."
       />
 
       <Panel
         title="Grants on-chain"
         sub="Live from the ledger: each grant's cumulative spend against its cap, and whether the contract still honours it."
+        x="Each row is a scoped grant in public ledger state — operation × token colour × cumulative cap, enforced by the contract circuit at proof verification, not by the dApp's goodwill (P7). An OAuth scope the ledger itself checks."
       >
         <div className="list">
           {grants.length === 0 && <p className="dim">no grants issued yet</p>}
@@ -91,7 +87,10 @@ export function GrantsPanel({ ctx, revokeBeat }: { ctx: AppContext; revokeBeat?:
           />
         </div>
         {issuedSecret && (
-          <div className="secret-callout">
+          <div
+            className="secret-callout"
+            data-x="The grant secret is the entire credential — hand it over once. The holder cannot widen its own scope (I-7.5), and on-chain revocation makes it worthless whatever the dApp still stores (I-7.6)."
+          >
             <div className="secret-head">
               <Chip tone="warn">grant secret — shown once</Chip>
               <span className="dim">hand this to the dApp; it is the entire credential</span>
@@ -105,6 +104,7 @@ export function GrantsPanel({ ctx, revokeBeat }: { ctx: AppContext; revokeBeat?:
         title="The dApp's console"
         sub="A separate connection holding only the grant secret — exactly what a dApp backend would hold. No device key, no recovery secret."
         tone="dapp"
+        x="The other side of the connection: a session holding ONLY the grant secret. Its witness structurally cannot produce device-authorised proofs — spending over the cap or after revocation fails in the circuit (C7, P7)."
       >
         <div className="row controls">
           <label className="field field-inline grow">

@@ -32,12 +32,15 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
   return (
     <>
       <ViewHeader
-        numeral="02"
-        title="Fund the account"
-        narration="Assets are held by the contract, not by a key. Night moves with an on-ledger balance mirror; shielded coins follow the OZ Map⟨colour, QSCI⟩ pattern — values public, an accepted prototype trade-off."
+        title="Holdings"
+        narration="Assets are held by your contract, not by a key. Night moves with an on-ledger balance mirror; shielded coins follow the OZ Map⟨colour, QSCI⟩ pattern — values public, an accepted prototype trade-off."
       />
 
-      <Panel title="Night — unshielded" sub="Custodied by the contract; the balance is public ledger state.">
+      <Panel
+        title="Night — unshielded"
+        sub="Custodied by the contract; the balance is public ledger state."
+        x="Night sits in your contract, not at a key-derived address. The contract keeps an on-ledger balance mirror, which is what makes balances readable from the indexer (C4)."
+      >
         <table className="table-tight">
           <thead>
             <tr>
@@ -100,6 +103,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
       <Panel
         title="Shielded — contract-held"
         sub="Coins sit in the contract keyed by colour; the QSCI keeps values public in this prototype."
+        x="Shielded coins held by the contract, keyed by colour (the OZ Map⟨colour, QSCI⟩ pattern). Contract-held coin values are public ledger state — the documented C4 trade-off, accepted for this prototype."
       >
         <table>
           <thead>
@@ -157,6 +161,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
         title="Faucet — localnet scaffolding"
         sub="Mints shielded test tokens to the fee wallet so they can be deposited; not part of the custody design."
         tone="scaffold"
+        x="Test scaffolding only: a faucet contract that mints shielded tokens on the localnet so the custody flows above have something to hold. Nothing like this exists in the real design."
       >
         <div className="row controls">
           <label className="field field-inline grow">

@@ -35,26 +35,67 @@ export interface AppContext {
   /** Commitment (decimal string) of this browser's device secret, when known. */
   deviceCommitment: string | null;
   setDeviceCommitment: (c: string | null) => void;
-  goToStep: (step: StepId) => void;
+  goToView: (view: ViewId) => void;
 }
 
-export type StepId = 1 | 2 | 3 | 4 | 5;
-type ViewId = 'overview' | 'assets' | 'grants' | 'devices' | 'recovery';
+export type ViewId = 'overview' | 'assets' | 'grants' | 'devices' | 'recovery';
 
-const STEP_VIEW: Record<StepId, ViewId> = {
-  1: 'overview',
-  2: 'assets',
-  3: 'grants',
-  4: 'grants',
-  5: 'recovery',
-};
-
-const STEPS: { n: StepId; title: string; sub: string }[] = [
-  { n: 1, title: 'Onboard', sub: 'Passkey → on-chain account' },
-  { n: 2, title: 'Fund the account', sub: 'Night & shielded custody' },
-  { n: 3, title: 'Spend via a grant', sub: 'The dApp holds a scoped credential' },
-  { n: 4, title: 'Revoke the grant', sub: 'The contract stops honouring it' },
-  { n: 5, title: 'Recover from total loss', sub: '2-of-3 shares, fresh device' },
+// App navigation — five surfaces, no demo-flow numbering. The functional
+// labels double as the screenshot harness's navigation targets.
+const NAV: { id: ViewId; label: string; icon: React.ReactNode }[] = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+        <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2" />
+        <rect x="13" y="3.5" width="7.5" height="7.5" rx="2" />
+        <rect x="3.5" y="13" width="7.5" height="7.5" rx="2" />
+        <rect x="13" y="13" width="7.5" height="7.5" rx="2" />
+      </svg>
+    ),
+  },
+  {
+    id: 'assets',
+    label: 'Holdings',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+        <rect x="3" y="6" width="18" height="13" rx="2.5" />
+        <path d="M3 10h18M7 15h4" />
+      </svg>
+    ),
+  },
+  {
+    id: 'grants',
+    label: 'Connections',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+        <circle cx="12" cy="12" r="3.2" />
+        <path d="M12 2.8v4M12 17.2v4M2.8 12h4M17.2 12h4" />
+      </svg>
+    ),
+  },
+  {
+    id: 'devices',
+    label: 'Devices',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+        <rect x="3" y="5" width="13" height="9" rx="1.8" />
+        <path d="M6.5 18h6M9.5 14v4" />
+        <rect x="17" y="9" width="4.5" height="9" rx="1.4" />
+      </svg>
+    ),
+  },
+  {
+    id: 'recovery',
+    label: 'Recovery',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+        <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" />
+        <path d="M9 12l2 2 4-4.5" />
+      </svg>
+    ),
+  },
 ];
 
 export default function App() {
@@ -65,11 +106,15 @@ export default function App() {
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [deviceCommitment, setDeviceCommitment] = useState<string | null>(null);
-  const [nav, setNav] = useState<{ step: StepId | null; view: ViewId }>({
-    step: 1,
-    view: 'overview',
-  });
+  const [nav, setNav] = useState<ViewId>('overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [explain, setExplain] = useState(() => localStorage.getItem('passport-explain') !== '0');
+
+  // Hover explainers: a body attribute the CSS and the tooltip listen to.
+  useEffect(() => {
+    document.body.dataset.explain = explain ? '1' : '0';
+    localStorage.setItem('passport-explain', explain ? '1' : '0');
+  }, [explain]);
 
   const log = useCallback((msg: string) => {
     const time = new Date().toLocaleTimeString();
@@ -108,8 +153,19 @@ export default function App() {
     setAccount(null);
     setLedger(null);
     setDeviceCommitment(null);
-    setNav({ step: 1, view: 'overview' });
+    setNav('overview');
   }, []);
+
+  // Lock: drop the in-memory account handle (and with it the device secret's
+  // session) but keep the remembered session — the unlock screen re-derives
+  // the secret from the passkey.
+  const lock = useCallback(() => {
+    log('session locked — the device secret is dropped; a passkey re-derives it next time.');
+    setAccount(null);
+    setLedger(null);
+    setDeviceCommitment(null);
+    setNav('overview');
+  }, [log]);
 
   const refreshLedger = useCallback(async () => {
     if (!account) return;
@@ -162,8 +218,8 @@ export default function App() {
     [mid],
   );
 
-  const goToStep = useCallback((step: StepId) => {
-    setNav({ step, view: STEP_VIEW[step] });
+  const goToView = useCallback((view: ViewId) => {
+    setNav(view);
   }, []);
 
   if (bootError) {
@@ -210,7 +266,7 @@ export default function App() {
             setSession(s);
             setAccount(a);
             setDeviceCommitment(commitment ?? null);
-            setNav({ step: 1, view: 'overview' });
+            setNav('overview');
           }}
           onReset={resetSession}
         />
@@ -218,6 +274,7 @@ export default function App() {
           <ProvingDock />
           <ActivityDock lines={logLines} />
         </div>
+        <ExplainTip />
       </div>
     );
   }
@@ -235,10 +292,10 @@ export default function App() {
     setSession,
     deviceCommitment,
     setDeviceCommitment,
-    goToStep,
+    goToView,
   };
 
-  const stepDone = journeyProgress(ledger, account);
+  const counts = navCounts(ledger);
 
   return (
     <div className="shell">
@@ -247,34 +304,35 @@ export default function App() {
       <Sidebar
         open={drawerOpen}
         nav={nav}
-        stepDone={stepDone}
-        onStep={(s) => {
-          goToStep(s);
-          setDrawerOpen(false);
-        }}
+        counts={counts}
         onView={(view) => {
-          setNav({ step: null, view });
+          goToView(view);
           setDrawerOpen(false);
         }}
         round={ledger ? String(ledger.round) : '…'}
         onDisconnect={resetSession}
       />
       <div className="main">
-        <HeaderStrip ctx={ctx} />
+        <HeaderStrip
+          ctx={ctx}
+          explain={explain}
+          onToggleExplain={() => setExplain((e) => !e)}
+          onLock={lock}
+        />
         <div className="content">
-          <div className={`view ${nav.view === 'overview' ? '' : 'view-hidden'}`}>
+          <div className={`view ${nav === 'overview' ? '' : 'view-hidden'}`}>
             <OverviewView ctx={ctx} />
           </div>
-          <div className={`view ${nav.view === 'assets' ? '' : 'view-hidden'}`}>
+          <div className={`view ${nav === 'assets' ? '' : 'view-hidden'}`}>
             <WalletPanel ctx={ctx} />
           </div>
-          <div className={`view ${nav.view === 'grants' ? '' : 'view-hidden'}`}>
-            <GrantsPanel ctx={ctx} revokeBeat={nav.step === 4} />
+          <div className={`view ${nav === 'grants' ? '' : 'view-hidden'}`}>
+            <GrantsPanel ctx={ctx} />
           </div>
-          <div className={`view ${nav.view === 'devices' ? '' : 'view-hidden'}`}>
+          <div className={`view ${nav === 'devices' ? '' : 'view-hidden'}`}>
             <DevicesPanel ctx={ctx} />
           </div>
-          <div className={`view ${nav.view === 'recovery' ? '' : 'view-hidden'}`}>
+          <div className={`view ${nav === 'recovery' ? '' : 'view-hidden'}`}>
             <RecoveryPanel
               ctx={ctx}
               onRecovered={(s, a, commitment) => {
@@ -290,23 +348,22 @@ export default function App() {
           <ActivityDock lines={logLines} />
         </div>
       </div>
+      <ExplainTip />
     </div>
   );
 }
 
-/** Which demo beats are complete — derived from on-chain state, not clicks. */
-function journeyProgress(ledger: Ledger | null, account: PassportAccount | null) {
-  const grants = ledger ? [...ledger.grants] : [];
+/** Live counts for the nav badges — derived from on-chain state. */
+function navCounts(ledger: Ledger | null): Partial<Record<ViewId, number>> {
+  if (!ledger) return {};
+  const epoch = ledger.device_epoch;
   return {
-    1: !!account,
-    2:
-      !!ledger &&
-      ([...ledger.night_balances].some(([, v]) => v > 0n) ||
-        [...ledger.coins].some(([, q]) => q.value > 0n)),
-    3: grants.some(([, g]) => g.spent > 0n),
-    4: grants.some(([, g]) => !g.active),
-    5: !!ledger && ledger.device_epoch > 0n,
-  } as Record<StepId, boolean>;
+    assets:
+      [...ledger.night_balances].filter(([, v]) => v > 0n).length +
+      [...ledger.coins].filter(([, q]) => q.value > 0n).length,
+    grants: [...ledger.grants].filter(([, g]) => g.active && g.epoch === epoch).length,
+    devices: [...ledger.devices].filter(([, e]) => e === epoch).length,
+  };
 }
 
 function BrandMark(props: { large?: boolean }) {
@@ -354,9 +411,8 @@ function MobileBar(props: { onMenu: () => void }) {
 
 function Sidebar(props: {
   open: boolean;
-  nav: { step: StepId | null; view: ViewId };
-  stepDone: Record<StepId, boolean>;
-  onStep: (s: StepId) => void;
+  nav: ViewId;
+  counts: Partial<Record<ViewId, number>>;
   onView: (v: ViewId) => void;
   round: string;
   onDisconnect: () => void;
@@ -365,79 +421,130 @@ function Sidebar(props: {
     <aside className={`sidebar ${props.open ? 'sidebar-open' : ''}`}>
       <BrandMark />
       <nav className="sidenav">
-        <p className="nav-label">Demo flow</p>
-        {STEPS.map((s) => {
-          const active = props.nav.step === s.n;
-          return (
-            <button
-              key={s.n}
-              className={`step ${active ? 'step-active' : ''} ${props.stepDone[s.n] ? 'step-done' : ''}`}
-              onClick={() => props.onStep(s.n)}
-            >
-              <span className="step-num">{`0${s.n}`}</span>
-              <span className="step-words">
-                <span className="step-title">{s.title}</span>
-                <span className="step-sub">{s.sub}</span>
-              </span>
-              <span className="step-check">{props.stepDone[s.n] ? '✓' : ''}</span>
-            </button>
-          );
-        })}
-        <p className="nav-label">Browse</p>
-        <button
-          className={`step step-flat ${props.nav.view === 'devices' ? 'step-active' : ''}`}
-          onClick={() => props.onView('devices')}
-        >
-          <span className="step-num">∙</span>
-          <span className="step-words">
-            <span className="step-title">Devices</span>
-            <span className="step-sub">Epochs & commitments</span>
-          </span>
-        </button>
+        {NAV.map((item) => (
+          <button
+            key={item.id}
+            className={`step ${props.nav === item.id ? 'step-active' : ''}`}
+            onClick={() => props.onView(item.id)}
+          >
+            <span className="step-ico">{item.icon}</span>
+            <span className="step-title">{item.label}</span>
+            {props.counts[item.id] !== undefined && (
+              <span className="step-n">{props.counts[item.id]}</span>
+            )}
+          </button>
+        ))}
       </nav>
       <footer className="side-foot">
         <div className="side-foot-row">
           <span className="netdot" />
-          <span className="side-net">
+          <span
+            className="side-net x"
+            data-x="Live connection to the Midnight network. Every balance and status in this app is read from chain state, not from a database; there is no server of ours behind it (P8)."
+          >
             localnet · round <span className="side-round">{props.round}</span>
           </span>
           <button className="linkish" onClick={props.onDisconnect}>
             disconnect
           </button>
         </div>
-        <ProverChip />
+        <p className="side-fine">Self-custodial · no operator</p>
       </footer>
     </aside>
   );
 }
 
-function HeaderStrip({ ctx }: { ctx: AppContext }) {
-  const { session, ledger } = ctx;
+function HeaderStrip(props: {
+  ctx: AppContext;
+  explain: boolean;
+  onToggleExplain: () => void;
+  onLock: () => void;
+}) {
+  const { session, ledger } = props.ctx;
   return (
     <header className="topbar">
       <div className="topbar-id">
         {/* "Passport account" stays verbatim — the e2e harness waits for it. */}
         <span className="eyebrow">Passport account</span>
-        <Mono v={session.accountAddress} short className="topbar-addr" />
+        <span
+          className="x"
+          data-x="The address of your personal account contract on Midnight. The passport is the contract; anyone can verify this document against the ledger."
+        >
+          <Mono v={session.accountAddress} short className="topbar-addr" />
+        </span>
       </div>
-      <div className="topbar-stats">
-        <TopStat k="round" v={ledger ? String(ledger.round) : '…'} />
-        <TopStat k="epoch" v={ledger ? String(ledger.device_epoch) : '…'} />
-        <TopStat k="devices" v={ledger ? String(ledger.device_count) : '…'} />
-      </div>
+      <span className="topbar-spacer" />
+      <span
+        className="statchip x"
+        data-x="The current ledger round and your device epoch. The epoch is bumped by recovery, which instantly retires every previously enrolled device and grant (P4, P5)."
+      >
+        round <b>{ledger ? String(ledger.round) : '…'}</b> · epoch{' '}
+        <b>{ledger ? String(ledger.device_epoch) : '…'}</b>
+      </span>
+      <span
+        className="x"
+        data-x={
+          BROWSER_PROVER
+            ? 'Zero-knowledge proofs are computed on this device by a wasm prover. Transactions leave your hands already proven; no proof server sees your witnesses (P6).'
+            : 'Proofs are computed by the local Docker proof server. Add ?prover=server to a URL to force this mode; the default is on-device proving.'
+        }
+      >
+        <ProverChip />
+      </span>
+      <button
+        className={`xtoggle ${props.explain ? 'xtoggle-on' : ''}`}
+        onClick={props.onToggleExplain}
+        title="Toggle hover explainers"
+      >
+        explain · {props.explain ? 'on' : 'off'}
+      </button>
+      <button className="lockbtn" onClick={props.onLock} title="Lock the session">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="4" y="10" width="16" height="11" rx="2.5" />
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+        </svg>
+      </button>
     </header>
   );
 }
 
-function TopStat(props: { k: string; v: string }) {
-  return (
-    <div className="topstat">
-      <span className="topstat-k">{props.k}</span>
-      <span className="topstat-v" key={props.v}>
-        {props.v}
-      </span>
-    </div>
-  );
+/** Floating tooltip for the hover explainers ([data-x] elements). */
+function ExplainTip() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const tip = ref.current;
+    if (!tip) return;
+    let current: Element | null = null;
+    const over = (e: MouseEvent) => {
+      const el = (e.target as Element | null)?.closest?.('[data-x]');
+      if (!el || document.body.dataset.explain !== '1') return;
+      current = el;
+      tip.innerHTML =
+        '<span class="xtip-k">what you are seeing</span>' +
+        ((el as HTMLElement).dataset.x ?? '');
+      tip.classList.add('on');
+    };
+    const move = (e: MouseEvent) => {
+      if (!tip.classList.contains('on')) return;
+      tip.style.left = `${Math.min(e.clientX + 16, window.innerWidth - 350)}px`;
+      tip.style.top = `${Math.min(e.clientY + 18, window.innerHeight - tip.offsetHeight - 12)}px`;
+    };
+    const out = (e: MouseEvent) => {
+      if (current && !current.contains(e.relatedTarget as Node)) {
+        tip.classList.remove('on');
+        current = null;
+      }
+    };
+    document.addEventListener('mouseover', over);
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseout', out);
+    return () => {
+      document.removeEventListener('mouseover', over);
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseout', out);
+    };
+  }, []);
+  return <div id="xtip" ref={ref} />;
 }
 
 const PHASES: { id: TxTask['phase']; label: string; detail: string }[] = [

@@ -24,14 +24,14 @@ export function RecoveryPanel(props: {
   return (
     <>
       <ViewHeader
-        numeral="05"
-        title="Recover from total loss"
-        narration="Every device is gone. Two of the three shares reconstruct the recovery secret; the recover circuit proves knowledge of it, bumps the device epoch — killing every device and grant — and registers a fresh device."
+        title="Recovery"
+        narration="If every device is gone, two of the three shares reconstruct the recovery secret; the recover circuit proves knowledge of it, bumps the device epoch — retiring every device and grant — and registers a fresh device."
       />
 
       <Panel
         title="Recovery shares"
         sub="The recovery secret is split 2-of-3 at onboarding; any two shares reconstruct it."
+        x="The recovery secret is split 2-of-3 over GF(256) (Shamir): any two shares reconstruct it; any single share is information-theoretically useless (I-6.4). Recovery re-keys the account — same name, balances, and history (I-5.3)."
       >
         <div className="share-row">
           {[1, 2, 3].map((i) => (

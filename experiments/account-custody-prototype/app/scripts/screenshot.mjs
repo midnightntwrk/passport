@@ -87,7 +87,7 @@ try {
   await shot('03-overview');
 
   // ——— fund ———
-  await clickStep('Fund the account');
+  await clickStep('Holdings');
   await clickButton('Deposit Night');
   console.log('… proving deposit_night');
   await sleep(15_000);
@@ -101,7 +101,7 @@ try {
   await shot('05-assets-funded');
 
   // ——— grant: issue, hand over, spend ———
-  await clickStep('Spend via a grant');
+  await clickStep('Connections');
   await clickButton('Issue grant (Night, capped)');
   console.log('… proving add_grant');
   await waitForText('GRANT SECRET — SHOWN ONCE', 300_000);
@@ -123,7 +123,7 @@ try {
   await shot('07-grant-spent');
 
   // ——— revoke ———
-  await clickStep('Revoke the grant');
+  // revoke happens in place on the Connections view
   await sleep(700);
   await clickButton('revoke');
   console.log('… proving revoke_grant');
@@ -134,7 +134,7 @@ try {
   // ——— browse views ———
   await clickStep('Devices');
   await shot('09-devices');
-  await clickStep('Recover from total loss');
+  await clickStep('Recovery');
   await shot('10-recovery');
 
   console.log('SCREENSHOTS DONE');

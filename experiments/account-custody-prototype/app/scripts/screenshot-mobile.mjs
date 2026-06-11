@@ -64,7 +64,7 @@ try {
   await shot('m03-drawer');
   await page.evaluate(() => {
     const el = [...document.querySelectorAll('.step-title')].find(
-      (s) => s.textContent === 'Fund the account',
+      (s) => s.textContent === 'Holdings',
     );
     el.closest('button').click();
   });

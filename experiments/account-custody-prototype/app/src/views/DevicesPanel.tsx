@@ -23,6 +23,7 @@ export function DevicesPanel({ ctx }: { ctx: AppContext }) {
       <Panel
         title="Registered devices"
         sub="Hash-preimage auth — the prototype stand-in for C5's JubJub Schnorr. Any active device is admin (1-of-n). Removing your own device locks this browser out."
+        x="Each row is a device-secret commitment in public ledger state, tagged with its enrolment epoch. Only commitments at the current epoch authorise anything; recovery bumps the epoch and strands the rest (P3, P4)."
       >
         <div className="list">
           {active.map(([commitment, e]) => (
@@ -34,7 +35,9 @@ export function DevicesPanel({ ctx }: { ctx: AppContext }) {
               <div className="listrow-side">
                 <Chip stamp tone="ok">active</Chip>
                 {ctx.deviceCommitment === commitment.toString() && (
-                  <Chip tone="info">this device</Chip>
+                  <span data-x="This browser's device commitment — re-derived from your passkey via PRF moments ago and matched against the on-chain registry. The secret itself never left the device (P1, P6).">
+                    <Chip tone="info">this device</Chip>
+                  </span>
                 )}
                 <ActionButton
                   label="remove"
