@@ -28,10 +28,11 @@ using JSON
 #       "outputs": ["ChannelName", ...] }
 #   ],
 #   "wires": [
-#     { "from": { "box": 0,  "port": 0 },   -- box  0 = outer input boundary
-#       "to":   { "box": 1,  "port": 0 } },
-#     { "from": { "box": 1,  "port": 0 },
-#       "to":   { "box": -1, "port": 0 } }  -- box -1 = outer output boundary
+#     { "fromBox": 0,  "fromPort": 0, "toBox": 1,  "toPort": 0 },
+#     { "fromBox": 1,  "fromPort": 0, "toBox": -1, "toPort": 0 }
+#     -- fromBox 0  = outer input boundary
+#     -- toBox  -1  = outer output boundary
+#     -- ports are 0-indexed
 #   ]
 # }
 
@@ -60,13 +61,10 @@ function build_diagram(spec::Dict)::WiringDiagram
     end
 
     for wire_spec in spec["wires"]
-        src = wire_spec["from"]
-        tgt = wire_spec["to"]
-
-        src_box  = id_map[src["box"]::Int]
-        src_port = src["port"]::Int + 1   # JSON 0-indexed → Julia 1-indexed
-        tgt_box  = id_map[tgt["box"]::Int]
-        tgt_port = tgt["port"]::Int + 1
+        src_box  = id_map[wire_spec["fromBox"]::Int]
+        src_port = wire_spec["fromPort"]::Int + 1   # JSON 0-indexed → Julia 1-indexed
+        tgt_box  = id_map[wire_spec["toBox"]::Int]
+        tgt_port = wire_spec["toPort"]::Int + 1
 
         add_wire!(d, Wire(
             Port(src_box, OutputPort, src_port),
