@@ -339,3 +339,15 @@ compileToJSON = compileFMTerm
 compileToWiringDiagramJSON : List String → List String → FMTerm → String
 compileToWiringDiagramJSON ins outs t =
   renderWiringDiagram (flattenWithInterface ins outs t)
+
+-- Emit a flat wiring-diagram JSON object with a leading "name" field.
+-- Use this when bundling multiple diagrams into a JSON array.
+compileNamedDiagram : String → List String → List String → FMTerm → String
+compileNamedDiagram n ins outs t =
+  let d = flattenWithInterface ins outs t
+  in  "{ \"name\": "    ⟨++⟩ quoted n                                                ⟨++⟩
+      ", \"inputs\": "  ⟨++⟩ jsonStringArray (WiringDiagramJSON.inputs  d)            ⟨++⟩
+      ", \"outputs\": " ⟨++⟩ jsonStringArray (WiringDiagramJSON.outputs d)            ⟨++⟩
+      ", \"boxes\": ["  ⟨++⟩ commas (map renderBoxJSON  (WiringDiagramJSON.boxes d)) ⟨++⟩ "]" ⟨++⟩
+      ", \"wires\": ["  ⟨++⟩ commas (map renderWireJSON (WiringDiagramJSON.wires d)) ⟨++⟩ "]" ⟨++⟩
+      " }"

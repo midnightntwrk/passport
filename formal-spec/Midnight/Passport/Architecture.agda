@@ -239,3 +239,60 @@ credentialPath =
 
 passport : FMTerm
 passport = authPath ⊗ grantPath ⊗ recoveryPath ⊗ credentialPath
+
+------------------------------------------------------------------------
+-- Identity / signing / custody runtime diagram
+--
+-- The runtime interaction of local storage, device auth, signing,
+-- witness handling, proof generation, indexer, recovery, account
+-- custody, name service, and DID surface.
+--
+-- Five parallel entry lanes converge through signing and proof
+-- generation into account custody, which fans out to the name service,
+-- DID surface, and the chain boundary.
+--
+--   C16-in  → C16-LocalStorage       → C16-keys  ⎫
+--   User-C9 → C9-DeviceAuth          → C9-C5     ⎬→ C5-Signing → C5-C6  ⎫
+--   C7-C6   → C7-WitnessHandling     → C7-C6     ⎭               C7-C6   ⎬→ C6-ProofGeneration → C6-C1  ⎫
+--   C17-in  → C17-Indexer            → C17-state ────────────────────────────────────────────── C17-state ⎬→ C1-AccountCustody
+--   C14-in  → C14-TotalLossRecovery                                                                        ⎭
+--           → C15-HelperProtocol     → C15-out  ────────────────────────────────────────────── C15-out   ⎛
+
+identitySigningCustody : FMTerm
+identitySigningCustody =
+  -- Step 1: five parallel entry components
+  ( gen "C16-LocalStorage"        ("C16-in"  ∷ []) ("C16-keys"  ∷ [])
+  ⊗ gen "C9-DeviceAuth"           ("User-C9" ∷ []) ("C9-C5"     ∷ [])
+  ⊗ gen "C7-WitnessHandling"      ("C7-C6"   ∷ []) ("C7-C6"     ∷ [])
+  ⊗ gen "C17-Indexer"             ("C17-in"  ∷ []) ("C17-state" ∷ [])
+  ⊗ ( gen "C14-TotalLossRecovery" ("C14-in"  ∷ []) ("C14-C15"   ∷ [])
+      >> gen "C15-HelperProtocol" ("C14-C15" ∷ []) ("C15-out"   ∷ []) )
+  )
+  >>
+  -- Step 2: signing (lanes 1–2) with pass-through (lanes 3–5)
+  -- in : [ C16-keys, C9-C5, C7-C6, C17-state, C15-out ]
+  ( gen "C5-Signing"
+        ("C16-keys" ∷ "C9-C5" ∷ [])
+        ("C5-C6" ∷ [])
+  ⊗ idm ("C7-C6" ∷ "C17-state" ∷ "C15-out" ∷ [])
+  )
+  >>
+  -- Step 3: proof generation (lanes 1–2) with pass-through (lanes 3–4)
+  -- in : [ C5-C6, C7-C6, C17-state, C15-out ]
+  ( gen "C6-ProofGeneration"
+        ("C5-C6" ∷ "C7-C6" ∷ [])
+        ("C6-C1" ∷ [])
+  ⊗ idm ("C17-state" ∷ "C15-out" ∷ [])
+  )
+  >>
+  -- Step 4: account custody aggregates all remaining channels
+  -- in : [ C6-C1, C17-state, C15-out ]   out : [ C1-C2, C1-C3, C1-Chain ]
+  gen "C1-AccountCustody"
+      ("C6-C1" ∷ "C17-state" ∷ "C15-out" ∷ [])
+      ("C1-C2" ∷ "C1-C3"    ∷ "C1-Chain" ∷ [])
+  >>
+  -- Step 5: downstream name service, DID surface, and chain pass-through
+  ( gen "C2-NameService" ("C1-C2" ∷ []) ("C2-Chain" ∷ [])
+  ⊗ gen "C3-DIDSurface"  ("C1-C3" ∷ []) ("C3-Chain" ∷ [])
+  ⊗ idm                  ("C1-Chain" ∷ [])
+  )

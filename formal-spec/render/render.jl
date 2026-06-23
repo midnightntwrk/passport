@@ -1,12 +1,14 @@
 #!/usr/bin/env julia
-# render.jl — render a passport wiring diagram from JSON to SVG (or DOT).
+# render.jl — render passport wiring diagrams from JSON to SVG (or DOT).
 #
 # Usage:
-#   julia render.jl <input.json> [output.svg]
-#   julia render.jl <input.json> [output.dot] --dot
+#   julia render.jl <input.json> [output.svg]          # single diagram object
+#   julia render.jl <input.json> [output_dir]          # array of diagrams
+#   julia render.jl <input.json> [output.svg] --dot    # emit DOT instead of SVG
 #
-# If the output path is omitted the SVG is written to stdout.
-# Pass --dot to emit Graphviz DOT source instead of SVG.
+# For a single diagram object, output defaults to stdout.
+# For a JSON array, each diagram is written to <output_dir>/<name>.svg
+# (defaulting to the current directory when no output arg is given).
 #
 # Run `julia -e 'import Pkg; Pkg.instantiate()'` once inside formal-spec/render/
 # to fetch Catlab, Graphviz_jll, and JSON from the General registry.
@@ -19,6 +21,7 @@ using JSON
 
 # ── JSON interchange schema ───────────────────────────────────────────────────
 #
+# Single diagram:
 # {
 #   "inputs":  ["ChannelName", ...],   -- outer input port names
 #   "outputs": ["ChannelName", ...],   -- outer output port names
@@ -35,6 +38,12 @@ using JSON
 #     -- ports are 0-indexed
 #   ]
 # }
+#
+# Array (multiple diagrams, each with an additional "name" field):
+# [
+#   { "name": "passport", "inputs": [...], ... },
+#   { "name": "identity-signing-custody", "inputs": [...], ... }
+# ]
 
 # ── Build a WiringDiagram from the parsed JSON dict ───────────────────────────
 function build_diagram(spec::Dict)::WiringDiagram
@@ -75,22 +84,10 @@ function build_diagram(spec::Dict)::WiringDiagram
     return d
 end
 
-# ── Entry point ───────────────────────────────────────────────────────────────
-function main(args::Vector{String})
-    if isempty(args)
-        println(stderr, "Usage: julia render.jl <input.json> [output.svg] [--dot]")
-        exit(1)
-    end
-
-    input_path  = args[1]
-    want_dot    = "--dot" in args
-    out_path    = let candidates = filter(a -> a != "--dot" && a != input_path, args)
-        isempty(candidates) ? nothing : candidates[1]
-    end
-
-    spec = open(JSON.parse, input_path)
-    d    = build_diagram(spec)
-    g    = to_graphviz(d; orientation=LeftToRight, labels=true)
+# ── Render a single diagram spec ──────────────────────────────────────────────
+function render_one(spec::Dict, want_dot::Bool, out_path::Union{String,Nothing})
+    d = build_diagram(spec)
+    g = to_graphviz(d; orientation=LeftToRight, labels=true)
 
     if want_dot
         if out_path === nothing
@@ -106,6 +103,35 @@ function main(args::Vector{String})
             open(out_path, "w") do io; run_graphviz(io, g; format="svg") end
             println(stderr, "Wrote SVG to: ", out_path)
         end
+    end
+end
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+function main(args::Vector{String})
+    if isempty(args)
+        println(stderr, "Usage: julia render.jl <input.json> [output.svg|output_dir] [--dot]")
+        exit(1)
+    end
+
+    input_path = args[1]
+    want_dot   = "--dot" in args
+    out_arg    = let candidates = filter(a -> a != "--dot" && a != input_path, args)
+        isempty(candidates) ? nothing : candidates[1]
+    end
+
+    parsed = open(JSON.parse, input_path)
+
+    if parsed isa Vector
+        # Array of named diagrams: write <out_dir>/<name>.svg for each.
+        out_dir = out_arg === nothing ? "." : out_arg
+        mkpath(out_dir)
+        for spec in parsed
+            name = spec["name"]::String
+            ext  = want_dot ? ".dot" : ".svg"
+            render_one(spec, want_dot, joinpath(out_dir, name * ext))
+        end
+    else
+        render_one(parsed, want_dot, out_arg)
     end
 end
 

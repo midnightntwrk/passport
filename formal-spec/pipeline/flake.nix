@@ -68,7 +68,7 @@
 
             installPhase = ''
               mkdir -p $out
-              ./passport-compiler > $out/passport.json
+              ./passport-compiler > $out/diagrams.json
             '';
           };
         });
@@ -82,7 +82,7 @@
           passportJSON = self.packages.${system}.default;
           renderProg   = render.apps.${system}.default.program;
           script = pkgs.writeShellScript "passport-pipeline" ''
-            exec ${renderProg} ${passportJSON}/passport.json "''${1:-passport.svg}"
+            exec ${renderProg} ${passportJSON}/diagrams.json "''${1:-.}"
           '';
         in
         {
