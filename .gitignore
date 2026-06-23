@@ -41,3 +41,6 @@ venv/
 
 # Agda
 .pagda
+
+# Julia
+formal-spec/render/flake.lock
