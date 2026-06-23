@@ -9,6 +9,7 @@ import puppeteer from 'puppeteer-core';
 
 const url = process.argv[2] ?? 'http://localhost:5173/';
 const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const demoHandle = `bubbles-${Date.now().toString(36).slice(-6)}`;
 
 const browser = await puppeteer.launch({ executablePath: chrome, headless: 'new' });
 const page = await browser.newPage();
@@ -94,13 +95,23 @@ try {
   await waitForText('CREATE YOUR PASSPORT', 120_000);
 
   // Dev-mode onboarding.
-  await setFirstTextInput('bubbles');
+  await setFirstTextInput(demoHandle);
   await page.click('input[type="checkbox"]');
   await page.type('input[type="password"]', 'e2e-test-passphrase');
   await clickButton('Create account (dev mode)');
-  console.log('… deploying account from the browser (this takes a while)');
+  console.log('… deploying account and registering identity from the browser (this takes a while)');
   await waitForText('Earn yield, privately.', 300_000);
   await waitForText('Passport account', 60_000);
+  const identitySession = await page.evaluate(() => {
+    const raw = localStorage.getItem('passport-demo-session');
+    return raw ? JSON.parse(raw) : null;
+  });
+  if (!identitySession?.identityRegistryAddress || !identitySession?.identityRegistrationTxId) {
+    throw new Error('identity registry fields missing from saved session');
+  }
+  console.log(
+    `✓ identity registry ${identitySession.identityRegistryAddress} tx ${identitySession.identityRegistrationTxId}`,
+  );
 
   // One real circuit call: deposit 1000 Night through the account-custody contract.
   await clickButtonContaining('Deposit into pool');
@@ -113,10 +124,10 @@ try {
   await clickButtonContaining('Continue with 1am connector');
   console.log('… proving deposit_night through the demo prover');
   await waitForText('Deposited into your Passport account contract', 300_000);
-  await clickButton('Continue - claim Night ID');
+  await clickButton('Continue - verify Night ID');
 
-  await waitForText('Claim your Night ID.', 60_000);
-  await clickButton('Confirm Night ID');
+  await waitForText('Verify your Night ID.', 60_000);
+  await clickButton('Continue with registry identity');
   await waitForText('Deploy into pool.', 60_000);
   await clickButton('Sign deposit');
   await waitForText('Position opened', 60_000);

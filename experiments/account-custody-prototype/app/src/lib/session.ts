@@ -8,6 +8,8 @@ import type { PasskeyRef } from './passkey.js';
 export interface Session {
   accountAddress: string;
   alias?: string;
+  identityRegistryAddress?: string;
+  identityRegistrationTxId?: string;
   passkey?: PasskeyRef;
   devMode?: boolean;
 }
@@ -18,6 +20,8 @@ const ALIAS_KEY = 'passport-demo-aliases';
 export interface AliasRecord {
   alias: string;
   accountAddress: string;
+  identityRegistryAddress?: string;
+  identityRegistrationTxId?: string;
   claimedAt: string;
 }
 
@@ -51,7 +55,14 @@ export function loadAliasForAccount(accountAddress: string): AliasRecord | null 
   return loadAliases().find((r) => r.accountAddress === accountAddress) ?? null;
 }
 
-export function saveAlias(alias: string, accountAddress: string): AliasRecord {
+export function saveAlias(
+  alias: string,
+  accountAddress: string,
+  identity?: {
+    identityRegistryAddress?: string;
+    identityRegistrationTxId?: string;
+  },
+): AliasRecord {
   const normalized = normalizeAlias(alias);
   const records = loadAliases().filter(
     (r) => r.alias !== normalized && r.accountAddress !== accountAddress,
@@ -59,6 +70,8 @@ export function saveAlias(alias: string, accountAddress: string): AliasRecord {
   const record = {
     alias: normalized,
     accountAddress,
+    identityRegistryAddress: identity?.identityRegistryAddress,
+    identityRegistrationTxId: identity?.identityRegistrationTxId,
     claimedAt: new Date().toISOString(),
   };
   localStorage.setItem(ALIAS_KEY, JSON.stringify([...records, record]));

@@ -7,6 +7,7 @@ import {
   normalizeAlias,
   saveAlias,
 } from '../lib/session.js';
+import { registerIdentity } from '../lib/midnight.js';
 import {
   loadDynamicMidnightState,
   type DynamicMidnightState,
@@ -56,7 +57,7 @@ const STEPS = [
   'Set amount',
   'Source funds',
   'Bridge transaction',
-  'Claim Night ID',
+  'Verify Night ID',
   'Deploy capital',
   'Manage positions',
 ];
@@ -208,17 +209,35 @@ export function NightFiFlowView({
     setScene(4);
   }
 
-  function confirmNightId() {
+  async function confirmNightId() {
     setError('');
+    setBusy('identity');
     try {
       const alias = normalizeAlias(nightHandle || storedAlias || 'bubbles');
-      saveAlias(alias, ctx.session.accountAddress);
-      ctx.setSession({ ...ctx.session, alias });
+      if (ctx.session.alias !== alias || !ctx.session.identityRegistrationTxId) {
+        const identity = await registerIdentity(ctx.mid, alias, ctx.session.accountAddress);
+        saveAlias(alias, ctx.session.accountAddress, {
+          identityRegistryAddress: identity.registryAddress,
+          identityRegistrationTxId: identity.txId,
+        });
+        ctx.setSession({
+          ...ctx.session,
+          alias,
+          identityRegistryAddress: identity.registryAddress,
+          identityRegistrationTxId: identity.txId,
+        });
+        ctx.log(`identity registry updated ${alias}.night -> ${ctx.session.accountAddress} tx ${identity.txId}`);
+      } else {
+        ctx.log(
+          `identity registry verified ${alias}.night -> ${ctx.session.accountAddress} tx ${ctx.session.identityRegistrationTxId}`,
+        );
+      }
       setNightHandle(alias);
-      ctx.log(`night id ${alias}.night mapped to ${ctx.session.accountAddress}`);
       setScene(5);
     } catch (e: any) {
       setError(String(e?.message ?? e));
+    } finally {
+      setBusy('');
     }
   }
 
@@ -284,6 +303,7 @@ export function NightFiFlowView({
             <SceneNightId
               handle={nightHandle}
               error={error}
+              busy={busy === 'identity'}
               onChange={setNightHandle}
               onClaim={confirmNightId}
             />
@@ -795,7 +815,7 @@ function TxModal(props: {
           </div>
           <div className={`nf-tx-status ${props.status}`}>{props.statusText}</div>
           <button className="nf-btn" disabled={props.status !== 'confirmed'} onClick={props.onContinue}>
-            Continue - claim Night ID
+            Continue - verify Night ID
           </button>
         </div>
       </div>
@@ -808,6 +828,7 @@ function SceneNightId(props: {
   onChange: (v: string) => void;
   onClaim: () => void;
   error: string;
+  busy: boolean;
 }) {
   const normalized = props.handle.trim().toLowerCase();
   const valid = normalized.length >= 3 && /^[a-z0-9_-]+$/.test(normalized);
@@ -816,24 +837,24 @@ function SceneNightId(props: {
       <div className="nf-scene-head">
         <div className="nf-eyebrow">Identity provisioning · Midnight Passport</div>
         <h1 className="nf-title">
-          Claim your <span className="serif">Night ID.</span>
+          Verify your <span className="serif">Night ID.</span>
         </h1>
         <p className="nf-sub-text">
-          A human-readable handle bound to the account-custody contract. For this demo, the binding
-          is local storage; production swaps in the name service.
+          A human-readable handle bound to the account-custody contract through the Passport
+          identity registry. The binding is created during onboarding and can be refreshed here.
         </p>
       </div>
       <div className="nf-id-setup">
         <div className="nf-id-card">
-          <div className="nf-id-step">Step 1 / 2 - Reserve handle</div>
-          <div className="nf-id-title">Pick your Night ID</div>
+          <div className="nf-id-step">Step 1 / 2 - Registry handle</div>
+          <div className="nf-id-title">Your Night ID</div>
           <div className="nf-id-input">
             <input value={props.handle} onChange={(e) => props.onChange(e.target.value)} autoFocus />
             <span className="nf-id-suffix">.night</span>
           </div>
           <div className={`nf-avail ${valid ? 'ok' : 'bad'}`}>
             <span className="ind" />
-            {valid ? `${normalized}.night is available` : 'Use 3+ letters, numbers, dash, underscore'}
+            {valid ? `${normalized}.night is registered` : 'Use 3+ letters, numbers, dash, underscore'}
           </div>
         </div>
         <div className="nf-id-card">
@@ -855,8 +876,8 @@ function SceneNightId(props: {
               </div>
             </div>
           </div>
-          <button className="nf-btn" disabled={!valid} onClick={props.onClaim}>
-            Confirm Night ID
+          <button className="nf-btn" disabled={!valid || props.busy} onClick={props.onClaim}>
+            {props.busy ? 'Checking registry...' : 'Continue with registry identity'}
           </button>
           {props.error && <div className="nf-tx-status error">{props.error}</div>}
         </div>

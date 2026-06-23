@@ -59,7 +59,8 @@ function envFromFile() {
 function ensureContracts() {
   const account = resolve(root, 'contracts/managed/account/contract/index.js');
   const faucet = resolve(root, 'contracts/managed/faucet/contract/index.js');
-  if (existsSync(account) && existsSync(faucet)) return;
+  const identityRegistry = resolve(root, 'contracts/managed/identity_registry/contract/index.js');
+  if (existsSync(account) && existsSync(faucet) && existsSync(identityRegistry)) return;
   log('compiling Compact contracts');
   run('npm', ['run', 'compile']);
 }
@@ -118,7 +119,7 @@ function ensureLocalnet() {
 }
 
 function deployFaucet() {
-  log('deploying local faucet contract');
+  log('deploying local faucet and identity registry contracts');
   run('npm', ['run', 'deploy'], { env: envFromFile() });
 }
 

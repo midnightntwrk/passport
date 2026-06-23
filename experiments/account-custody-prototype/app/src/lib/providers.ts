@@ -27,6 +27,7 @@ import { Contract } from '../../../src/wallet/contract.js';
 import { makeWitnesses } from '../../../src/wallet/witnesses.js';
 import { hexToBytes } from '../../../src/wallet/hex.js';
 import * as FaucetModule from '../../../contracts/managed/faucet/contract/index.js';
+import { Contract as IdentityRegistryContract } from '../../../src/wallet/identity.js';
 
 import { proveStarted, proveEnded } from './txTracker.js';
 import { wasmProofProvider, wasmWalletProvingService } from './wasmProver.js';
@@ -179,7 +180,10 @@ export function inMemoryPrivateStateProvider(): any {
   };
 }
 
-export async function createProviders(walletCtx: WalletContext, contractName: 'account' | 'faucet') {
+export async function createProviders(
+  walletCtx: WalletContext,
+  contractName: 'account' | 'faucet' | 'identity_registry',
+) {
   const state = await awaitSync(walletCtx);
 
   const signFn = (payload: Uint8Array) => walletCtx.unshieldedKeystore.signData(payload);
@@ -247,6 +251,13 @@ export function compiledFaucetContract() {
   return CompiledContract.make('faucet', (FaucetModule as any).Contract).pipe(
     CompiledContract.withVacantWitnesses,
     CompiledContract.withCompiledFileAssets('/zk/faucet'),
+  );
+}
+
+export function compiledIdentityRegistryContract() {
+  return CompiledContract.make('identity_registry', IdentityRegistryContract as any).pipe(
+    CompiledContract.withVacantWitnesses,
+    CompiledContract.withCompiledFileAssets('/zk/identity_registry'),
   );
 }
 

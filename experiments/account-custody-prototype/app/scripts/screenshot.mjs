@@ -18,6 +18,7 @@ const url = process.argv[3] ?? 'http://localhost:5173/';
 const here = dirname(fileURLToPath(import.meta.url));
 const outDir = process.argv[4] ?? resolve(here, '../../../../tmp/passport-ui');
 const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const demoHandle = `bubbles-${Date.now().toString(36).slice(-6)}`;
 
 mkdirSync(outDir, { recursive: true });
 
@@ -121,11 +122,11 @@ try {
   }
 
   // ——— dev-mode onboarding ———
-  await setFirstTextInput('bubbles');
+  await setFirstTextInput(demoHandle);
   await page.click('input[type="checkbox"]');
   await page.type('input[type="password"]', 'screenshot-run-passphrase');
   await clickButton('Create account (dev mode)');
-  console.log('… deploying account from the browser');
+  console.log('… deploying account and registering identity from the browser');
   await sleep(20_000); // mid-deploy: proving dock live
   await shot('02-deploying');
   await waitForText('Earn yield, privately.', 300_000);
@@ -163,12 +164,12 @@ try {
   await sleep(1200);
   await shot('07-bridge-confirmed');
 
-  // ——— local Night ID ———
-  await clickButton('Continue - claim Night ID');
-  await waitForText('Claim your Night ID.', 60_000);
+  // ——— registry-backed Night ID ———
+  await clickButton('Continue - verify Night ID');
+  await waitForText('Verify your Night ID.', 60_000);
   await sleep(700);
   await shot('08-night-id');
-  await clickButton('Confirm Night ID');
+  await clickButton('Continue with registry identity');
 
   // ——— staged capital deployment ———
   await waitForText('Deploy into pool.', 60_000);

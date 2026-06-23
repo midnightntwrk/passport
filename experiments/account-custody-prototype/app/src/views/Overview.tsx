@@ -81,6 +81,24 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
             wide
           />
           <Field
+            k="Night ID registry"
+            v={
+              <X x="The shared Passport identity registry contract that recorded this handle during onboarding. The readable alias is a UI label; the registry transaction binds it to the account contract.">
+                <Mono v={session.identityRegistryAddress ?? 'deploying'} short group />
+              </X>
+            }
+            wide
+          />
+          <Field
+            k="Identity tx"
+            v={
+              <X x="The transaction that registered this Night ID to the Passport account-management contract.">
+                <Mono v={session.identityRegistrationTxId ?? 'pending'} short group />
+              </X>
+            }
+            wide
+          />
+          <Field
             k="Issuing round"
             v={
               <X x="The current ledger round. Every authorised operation bumps an internal round counter, so a captured transaction can never be replayed.">

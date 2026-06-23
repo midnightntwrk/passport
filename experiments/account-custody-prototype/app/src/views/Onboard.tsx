@@ -5,6 +5,7 @@ import { deviceCommitment } from '../../../src/wallet/contract.js';
 import { randomBytes32 } from '../../../src/wallet/hex.js';
 
 import type { Midnight } from '../lib/midnight.js';
+import { registerIdentity } from '../lib/midnight.js';
 import { compiledAccountContract } from '../lib/providers.js';
 import { createPasskey, deriveDeviceSecret, deriveDevModeSecret } from '../lib/passkey.js';
 import { normalizeAlias, saveAlias } from '../lib/session.js';
@@ -82,7 +83,8 @@ export function OnboardView(props: {
             Account <code className="mono">{session.accountAddress.slice(0, 16)}…</code> — the
             device secret is re-derived from your{' '}
             {session.devMode ? 'dev-mode passphrase' : 'passkey'} on every visit. Nothing secret is
-            stored on this machine.
+            stored on this machine. Identity{' '}
+            <code className="mono">{session.alias ?? 'passport'}.night</code> is registry-backed.
           </p>
         </div>
         <div className="onboard-cards">
@@ -176,6 +178,13 @@ export function OnboardView(props: {
               enforced by the ledger, not by a server.
             </span>
           </li>
+          <li>
+            <span className="hero-step-n">4</span>
+            <span>
+              Your Night ID is created on the Passport identity registry and bound to the account
+              contract address.
+            </span>
+          </li>
         </ol>
       </div>
 
@@ -214,9 +223,21 @@ export function OnboardView(props: {
               );
               log(`account deployed @ ${account.address}`);
               const alias = normalizeAlias(label || 'passport-user');
-              saveAlias(alias, account.address);
+              log(`registering ${alias}.night on the identity registry...`);
+              const identity = await registerIdentity(mid, alias, account.address);
+              log(`identity registered ${alias}.night -> ${account.address} tx ${identity.txId}`);
+              saveAlias(alias, account.address, {
+                identityRegistryAddress: identity.registryAddress,
+                identityRegistrationTxId: identity.txId,
+              });
               props.onConnected(
-                { accountAddress: account.address, alias, ...partial },
+                {
+                  accountAddress: account.address,
+                  alias,
+                  identityRegistryAddress: identity.registryAddress,
+                  identityRegistrationTxId: identity.txId,
+                  ...partial,
+                },
                 account,
                 deviceCommitment(secret).toString(),
               );

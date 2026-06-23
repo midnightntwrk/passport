@@ -14,6 +14,7 @@ in [DECISIONS.md](./DECISIONS.md).
 | Path | What |
 |---|---|
 | `contracts/account.compact` | The per-account custody contract (11 circuits). |
+| `contracts/identity_registry.compact` | Shared demo registry binding a Night ID handle to the deployed Passport account contract. |
 | `contracts/faucet.compact` | Test scaffolding: shielded-token origin for localnet. |
 | `src/wallet/` | Platform-neutral client core: contract bindings, witnesses (C7), Shamir 2-of-3, `PassportAccount` API. |
 | `src/node/` | Node-side wiring: funding wallet, providers, deploy helpers. |
@@ -38,7 +39,7 @@ in [DECISIONS.md](./DECISIONS.md).
 
 ```sh
 npm install
-npm run compile                  # both contracts → contracts/managed/
+npm run compile                  # account, identity registry, and faucet → contracts/managed/
 
 # unit tests — contract logic in-process, no network
 npm test
@@ -61,7 +62,7 @@ npm run test:recovery            # share reconstruction → recover → old devi
 npm run demo                     # localnet + faucet + Vite, proof-server mode
 
 # or manually:
-npm run deploy                   # deploys the faucet, saves faucet-deployment.json
+npm run deploy                   # deploys faucet + identity registry, saves local addresses
 cd app && npm install && npm run dev
 ```
 
@@ -70,7 +71,9 @@ proof server, and serves the zk artefacts — no CORS in the way).
 
 - **Create your passport** — creates a passkey, derives the device secret
   from the WebAuthn PRF output, deploys your account contract, and splits a
-  fresh recovery secret 2-of-3 into on-chain shares.
+  fresh recovery secret 2-of-3 into on-chain shares. It then registers the
+  selected Night ID on the Passport identity registry contract and stores the
+  registry tx in the local session.
 - **Assets** — deposit and withdraw Night; mint shielded tokens from the
   faucet, deposit the note, withdraw with change.
 - **Devices** — register additional passkeys, remove devices (the contract
@@ -91,9 +94,10 @@ deposits — the fee model is C24's problem, not this prototype's.
 Headless checks (drive the installed Chrome; passkeys excluded):
 `node scripts/smoke.mjs` boots the app and reports console errors;
 `node scripts/e2e-devmode.mjs` onboards in dev mode (deploys an account
-from the browser) and proves one `deposit_night` through the configured
-demo prover. The reliable local-call default is the Docker proof server;
-add `?prover=browser` to the URL to exercise the experimental in-tab prover.
+from the browser), registers the Night ID on the identity registry, and proves
+one `deposit_night` through the configured demo prover. The reliable local-call
+default is the Docker proof server; add `?prover=browser` to the URL to
+exercise the experimental in-tab prover.
 
 ## Dynamic Midnight demo path
 
