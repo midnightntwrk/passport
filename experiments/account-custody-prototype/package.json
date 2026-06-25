@@ -5,8 +5,10 @@
   "private": true,
   "description": "Prototype of the Passport account-custody contract (C1/C4) with hash-preimage device auth, scoped grants (C10), and PVSS-placeholder recovery (C14).",
   "scripts": {
-    "compile": "compact compile contracts/account.compact contracts/managed/account && compact compile contracts/faucet.compact contracts/managed/faucet",
+    "compile": "compact compile contracts/account.compact contracts/managed/account && compact compile contracts/faucet.compact contracts/managed/faucet && compact compile contracts/identity_registry.compact contracts/managed/identity_registry",
     "build": "tsc",
+    "demo": "node scripts/demo-local.mjs",
+    "demo:e2e": "node app/scripts/e2e-devmode.mjs http://127.0.0.1:5173/",
     "test": "vitest run",
     "test:watch": "vitest",
     "deploy": "tsx src/tests/deploy.ts",

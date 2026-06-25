@@ -27,21 +27,19 @@ import { Contract } from '../../../src/wallet/contract.js';
 import { makeWitnesses } from '../../../src/wallet/witnesses.js';
 import { hexToBytes } from '../../../src/wallet/hex.js';
 import * as FaucetModule from '../../../contracts/managed/faucet/contract/index.js';
+import { Contract as IdentityRegistryContract } from '../../../src/wallet/identity.js';
 
 import { proveStarted, proveEnded } from './txTracker.js';
 import { wasmProofProvider, wasmWalletProvingService } from './wasmProver.js';
 
-// The browser prover is the DEFAULT: everything — contract circuits, zswap,
-// dust — is proved in this tab by the zkir-v2 wasm prover (see
-// BROWSER-PROVING-SCOPE.md). No proof server is needed anywhere in the
-// stack. `?prover=server` opts back into the Docker proof server at
-// 127.0.0.1:6300 (works on localhost only — the server is unreachable from
-// tunnel/LAN origins).
+// The local demo defaults to the Docker proof server because it is the most
+// reliable path for live calls. `?prover=browser` opts into the experimental
+// in-tab zkir-v2 prover described in BROWSER-PROVING-SCOPE.md.
 const proverParam =
   typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('prover')
     : null;
-export const BROWSER_PROVER = proverParam !== 'server';
+export const BROWSER_PROVER = proverParam === 'browser';
 
 // Localnet genesis wallet — the dev node funds this seed at genesis.
 // Demo-only; never use outside a throwaway local network.
@@ -182,7 +180,10 @@ export function inMemoryPrivateStateProvider(): any {
   };
 }
 
-export async function createProviders(walletCtx: WalletContext, contractName: 'account' | 'faucet') {
+export async function createProviders(
+  walletCtx: WalletContext,
+  contractName: 'account' | 'faucet' | 'identity_registry',
+) {
   const state = await awaitSync(walletCtx);
 
   const signFn = (payload: Uint8Array) => walletCtx.unshieldedKeystore.signData(payload);
@@ -250,6 +251,13 @@ export function compiledFaucetContract() {
   return CompiledContract.make('faucet', (FaucetModule as any).Contract).pipe(
     CompiledContract.withVacantWitnesses,
     CompiledContract.withCompiledFileAssets('/zk/faucet'),
+  );
+}
+
+export function compiledIdentityRegistryContract() {
+  return CompiledContract.make('identity_registry', IdentityRegistryContract as any).pipe(
+    CompiledContract.withVacantWitnesses,
+    CompiledContract.withCompiledFileAssets('/zk/identity_registry'),
   );
 }
 

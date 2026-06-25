@@ -92,7 +92,7 @@ export function FlowDiagram({ ctx }: { ctx: AppContext }) {
             data-x={
               BROWSER_PROVER
                 ? 'The zero-knowledge prover runs in this tab (wasm). When it lights up, your machine is doing the real cryptographic work — the witness (your secret) never leaves it. Nothing to intercept, no server to trust (P6).'
-                : 'Server mode (?prover=server): proofs go to the local Docker proof server. The default is on-device proving in this tab.'
+                : 'Default demo mode: proofs go to the local Docker proof server. Add ?prover=browser to opt into on-device proving.'
             }
           >
             {phase === 'prove' && <span className="flow-scan" />}

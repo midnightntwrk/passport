@@ -1,5 +1,5 @@
-// Mobile-viewport capture (iPhone-sized emulation): onboarding, drawer nav,
-// proving dock, funded state — using the browser prover end to end.
+// Mobile-viewport capture (iPhone-sized emulation): onboarding, MN Passport earn,
+// bridge proof, Night ID, deploy, and dashboard.
 //
 // Usage: node scripts/screenshot-mobile.mjs [url] [outDir]
 
@@ -8,15 +8,18 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 
-const url = process.argv[2] ?? 'http://localhost:5173/?prover=browser';
+const url = process.argv[2] ?? 'http://localhost:5173/';
 const here = dirname(fileURLToPath(import.meta.url));
 const outDir = process.argv[3] ?? resolve(here, '../../../../tmp/passport-ui');
 const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const demoHandle = `bubbles-${Date.now().toString(36).slice(-6)}`;
 
 mkdirSync(outDir, { recursive: true });
 
 const browser = await puppeteer.launch({ executablePath: chrome, headless: 'new' });
 const page = await browser.newPage();
+page.setDefaultTimeout(300_000);
+page.setDefaultNavigationTimeout(120_000);
 await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
 page.on('pageerror', (err) => console.log(`[pageerror] ${err.message}`));
 page.on('console', (msg) => {
@@ -31,54 +34,126 @@ const shot = async (name) => {
 };
 const waitForText = async (text, timeout) => {
   await page.waitForFunction(
-    (t) => document.body.innerText.includes(t),
+    (t) => document.body.innerText.toLowerCase().includes(t.toLowerCase()),
     { timeout, polling: 1000 },
     text,
   );
   console.log(`✓ saw: ${text}`);
 };
 const clickButton = async (label) => {
+  await page.waitForFunction(
+    (l) => {
+      const visible = (el) => {
+        const style = window.getComputedStyle(el);
+        return el.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      return [...document.querySelectorAll('button')].some(
+        (b) => visible(b) && !b.disabled && b.textContent.trim() === l,
+      );
+    },
+    { timeout: 60_000, polling: 500 },
+    label,
+  );
   await page.evaluate((l) => {
-    const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === l);
+    const visible = (el) => {
+      const style = window.getComputedStyle(el);
+      return el.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const btn = [...document.querySelectorAll('button')].find(
+      (b) => visible(b) && !b.disabled && b.textContent.trim() === l,
+    );
     if (!btn) throw new Error(`no button: ${l}`);
     btn.click();
   }, label);
 };
+const clickButtonContaining = async (text, timeout = 60_000) => {
+  await page.waitForFunction(
+    (t) => {
+      const visible = (el) => {
+        const style = window.getComputedStyle(el);
+        return el.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      };
+      return [...document.querySelectorAll('button')].some(
+        (b) => visible(b) && !b.disabled && b.textContent.trim().includes(t),
+      );
+    },
+    { timeout, polling: 500 },
+    text,
+  );
+  await page.evaluate((t) => {
+    const visible = (el) => {
+      const style = window.getComputedStyle(el);
+      return el.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const btn = [...document.querySelectorAll('button')].find(
+      (b) => visible(b) && !b.disabled && b.textContent.trim().includes(t),
+    );
+    if (!btn) throw new Error(`no button containing: ${t}`);
+    btn.click();
+  }, text);
+};
+const setFirstTextInput = async (value) => {
+  const input = await page.$('.onboard-card .field input:not([type="password"])');
+  if (!input) throw new Error('no onboarding name input');
+  await page.$eval(
+    '.onboard-card .field input:not([type="password"])',
+    (el, nextValue) => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(el, nextValue);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    },
+    value,
+  );
+};
 
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await waitForText('CREATE YOUR PASSPORT', 180_000);
+  await waitForText('CREATE YOUR MN PASSPORT', 180_000);
   await sleep(800);
   await shot('m01-onboard');
 
-  await page.click('input[type="checkbox"]');
-  await page.type('input[type="password"]', 'mobile-shot-passphrase');
-  await clickButton('Create account (dev mode)');
-  console.log('… deploying (browser prover)');
-  await waitForText('PASSPORT ACCOUNT', 300_000);
+  await setFirstTextInput(demoHandle);
+  await clickButton('Deploy MN Passport account');
+  console.log('… deploying account and registering identity');
+  await waitForText('Earn yield, privately.', 300_000);
   await sleep(1000);
-  await shot('m02-overview');
+  await shot('m02-foundations-earn');
 
-  await page.click('.menu-btn');
-  await sleep(500);
-  await shot('m03-drawer');
-  await page.evaluate(() => {
-    const el = [...document.querySelectorAll('.step-title')].find(
-      (s) => s.textContent === 'Holdings',
-    );
-    el.closest('button').click();
-  });
+  await clickButtonContaining('Deposit into pool');
+  await waitForText('Deposit amount', 60_000);
   await sleep(700);
+  await shot('m03-amount');
 
-  await clickButton('Deposit Night');
+  await clickButton('Continue - choose source');
+  await waitForText('Dynamic 1am connector', 60_000);
+  await waitForText('getUnshieldedAddress()', 60_000);
+  await waitForText('getShieldedAddresses()', 60_000);
+  await waitForText('getDustAddress()', 60_000);
+  await sleep(700);
+  await shot('m04-source');
+
+  await clickButtonContaining('Continue with 1am connector');
   await sleep(6_000); // mid-prove: dock live with the on-device chip
-  await shot('m04-proving');
-  await page.waitForFunction(
-    () => [...document.querySelectorAll('td')].some((td) => td.textContent.trim() === '1000'),
-    { timeout: 300_000, polling: 2000 },
-  );
+  await shot('m05-bridge-proving');
+  await waitForText('Deposited into your MN Passport custody account', 300_000);
   await sleep(1000);
-  await shot('m05-funded');
+  await shot('m06-bridge-confirmed');
+
+  await clickButton('Continue - verify Night ID');
+  await waitForText('Verify your Night ID.', 60_000);
+  await sleep(700);
+  await shot('m07-night-id');
+  await clickButton('Continue with registry identity');
+
+  await waitForText('Deploy into pool.', 60_000);
+  await sleep(700);
+  await shot('m08-deploy');
+  await clickButton('Sign deposit');
+  await waitForText('Position opened', 60_000);
+  await clickButtonContaining('View dashboard');
+  await waitForText('Retail Yield Pool', 60_000);
+  await sleep(1000);
+  await shot('m09-dashboard');
 
   console.log('MOBILE SHOTS DONE');
 } catch (e) {

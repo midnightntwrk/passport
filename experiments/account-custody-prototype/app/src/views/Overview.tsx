@@ -16,7 +16,10 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
   const epoch = ledger ? ledger.device_epoch : 0n;
   const activeGrants = grants.filter(([, g]) => g.active && g.epoch === epoch).length;
   const shares = ledger ? Number(ledger.recovery_shares.size()) : 0;
-  const holder = (session.devMode ? 'bearer' : (session.passkey?.label ?? 'bearer')).toUpperCase();
+  const holder = (
+    session.alias ??
+    (session.devMode ? 'bearer' : (session.passkey?.label ?? 'bearer'))
+  ).toUpperCase();
   const reissued = epoch > 0n;
   const nightTotal = ledger
     ? [...ledger.night_balances].reduce((acc, [, v]) => acc + v, 0n)
@@ -26,7 +29,7 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
     ? [...ledger.devices].filter(([, e]) => e === epoch).length
     : 0;
 
-  const mrz1 = mrzLine(`P<MN${holder}<<MIDNIGHT<PASSPORT`);
+  const mrz1 = mrzLine(`N<FI${holder}<<MN PASSPORT<WALLET`);
   const mrz2 = mrzLine(
     `${session.accountAddress.slice(0, 20)}<MN<E${String(epoch)}<R${ledger ? String(ledger.round) : ''}`,
   );
@@ -34,25 +37,25 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
   return (
     <>
       <ViewHeader
-        title="Your account is a contract"
-        narration="A personal Compact contract on the Midnight ledger holds this account. Everything on this page is read live from chain state — hover any dotted term for what it means."
+        title="Your MN Passport wallet is a contract"
+        narration="A personal Compact contract on the Midnight ledger holds this wallet. Everything on this page is read live from chain state — hover any dotted term for what it means."
       />
 
       <section className="doc">
         <header className="doc-head">
-          <span className="doc-authority">Midnight Network · Localnet</span>
-          <span className="doc-type">Passport · Account custody</span>
+          <span className="doc-authority">MN Passport · Localnet</span>
+          <span className="doc-type">Private yield custody</span>
         </header>
         <span
           className="doc-chipmark"
           aria-hidden="true"
-          data-x="The e-passport chip mark, worn here as a badge: like a passport chip, the cryptography lives with the document — your device derives the key, the contract verifies the proof."
+          data-x="MN Passport wallet cryptography: your device derives the key, the contract verifies the proof, and the app reads the result from ledger state."
         />
         <div className="doc-grid">
           <Field
             k="Holder"
             v={
-              <X x="The bearer of this passport. The account is operated by whoever can prove knowledge of an enrolled device secret — derived from your passkey, never stored anywhere (P1).">
+              <X x="The owner label for this MN Passport wallet. The account is operated by whoever can prove knowledge of an enrolled device secret — derived from your passkey, never stored anywhere (P1).">
                 {holder}
               </X>
             }
@@ -69,10 +72,28 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
             }
           />
           <Field
-            k="Document no. — account contract"
+            k="Custody account contract"
             v={
-              <X x="The address of your personal account contract — the passport is the contract. Anyone can verify this document against the ledger; no issuing authority is involved (P8).">
+              <X x="The address of your personal MN Passport custody contract. Anyone can verify this wallet state against the ledger; no issuing authority is involved (P8).">
                 <Mono v={session.accountAddress} short group />
+              </X>
+            }
+            wide
+          />
+          <Field
+            k="MN Passport ID registry"
+            v={
+              <X x="The identity registry contract that recorded this handle during onboarding. The readable alias is a UI label; the registry transaction binds it to the custody account contract.">
+                <Mono v={session.identityRegistryAddress ?? 'deploying'} short group />
+              </X>
+            }
+            wide
+          />
+          <Field
+            k="Identity tx"
+            v={
+              <X x="The transaction that registered this Night ID to the MN Passport custody account.">
+                <Mono v={session.identityRegistrationTxId ?? 'pending'} short group />
               </X>
             }
             wide
@@ -120,7 +141,7 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
         </div>
         <div
           className="doc-mrz"
-          data-x="Machine-readable zone, as on a printed passport — decorative here, derived from the holder, the contract address, the epoch, and the round."
+          data-x="Machine-readable wallet line — decorative here, derived from the holder, the contract address, the epoch, and the round."
         >
           <span>{mrz1}</span>
           <span>{mrz2}</span>
