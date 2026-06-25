@@ -1,5 +1,5 @@
 // Headless end-to-end check of the local NightFi demo stack using dev mode (no
-// passkey): onboard, choose a pool, deposit Night through the Passport account
+// passkey): onboard, choose a pool, deposit Night through the NightFi custody
 // contract, claim a local Night ID, deploy a staged position, and reach the
 // dashboard. WebAuthn flows still need a human.
 //
@@ -13,6 +13,7 @@ const demoHandle = `bubbles-${Date.now().toString(36).slice(-6)}`;
 
 const browser = await puppeteer.launch({ executablePath: chrome, headless: 'new' });
 const page = await browser.newPage();
+await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
 page.on('pageerror', (err) => console.log(`[pageerror] ${err.message}`));
 page.on('console', (msg) => {
   const t = msg.text();
@@ -76,6 +77,21 @@ const clickButtonContaining = async (text, timeout) => {
   }, text);
 };
 
+const clickNav = async (label) => {
+  await page.waitForFunction(
+    (l) => [...document.querySelectorAll('.sidenav .step')].some((b) => b.textContent.includes(l)),
+    { timeout: 60_000, polling: 500 },
+    label,
+  );
+  await page.evaluate((l) => {
+    const btn = [...document.querySelectorAll('.sidenav .step')].find((b) =>
+      b.textContent.includes(l),
+    );
+    if (!btn) throw new Error(`no nav item: ${l}`);
+    btn.click();
+  }, label);
+};
+
 const setFirstTextInput = async (value) => {
   const input = await page.$('.onboard-card .field input:not([type="password"])');
   if (!input) throw new Error('no onboarding name input');
@@ -92,16 +108,16 @@ const setFirstTextInput = async (value) => {
 
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await waitForText('CREATE YOUR PASSPORT', 120_000);
+  await waitForText('CREATE YOUR NIGHTFI WALLET', 120_000);
 
   // Dev-mode onboarding.
   await setFirstTextInput(demoHandle);
   await page.click('input[type="checkbox"]');
   await page.type('input[type="password"]', 'e2e-test-passphrase');
-  await clickButton('Create account (dev mode)');
+  await clickButton('Create NightFi wallet (dev mode)');
   console.log('… deploying account and registering identity from the browser (this takes a while)');
   await waitForText('Earn yield, privately.', 300_000);
-  await waitForText('Passport account', 60_000);
+  await waitForText('Custody balance', 60_000);
   const identitySession = await page.evaluate(() => {
     const raw = localStorage.getItem('passport-demo-session');
     return raw ? JSON.parse(raw) : null;
@@ -123,7 +139,7 @@ try {
   await waitForText('getDustAddress()', 60_000);
   await clickButtonContaining('Continue with 1am connector');
   console.log('… proving deposit_night through the demo prover');
-  await waitForText('Deposited into your Passport account contract', 300_000);
+  await waitForText('Deposited into your NightFi custody account', 300_000);
   await clickButton('Continue - verify Night ID');
 
   await waitForText('Verify your Night ID.', 60_000);
@@ -135,6 +151,43 @@ try {
   await waitForText('Retail Yield Pool', 60_000);
   await waitForText('Active', 60_000);
   console.log('✓ NightFi flow completed — dashboard shows an active Retail Yield Pool position');
+
+  // The second demo flow: the NightFi custody/account-management workspace.
+  // It should expose the live contract wallet state created above.
+  await clickButton('Custody details');
+  await waitForText('NightFi holdings', 60_000);
+  await waitForText('Night — unshielded', 60_000);
+  await waitForText('Shielded — NightFi custody', 60_000);
+  const custodyHasDeposit = await page.evaluate(() =>
+    [...document.querySelectorAll('tbody tr')].some((row) => row.textContent?.includes('1000')),
+  );
+  if (!custodyHasDeposit) {
+    throw new Error('custody holdings did not show the deposited 1000 Night balance');
+  }
+  console.log('✓ custody holdings show the deposited Night balance');
+
+  await clickNav('Wallet Overview');
+  await waitForText('Your NightFi wallet is a contract', 60_000);
+  await waitForText('NightFi ID registry', 60_000);
+  await waitForText('Identity tx', 60_000);
+  await waitForText('Recovery shares', 60_000);
+  console.log('✓ wallet overview exposes contract, identity, device, grant, and recovery state');
+
+  await clickNav('Connections');
+  await waitForText('Grants on-chain', 60_000);
+  await waitForText("The dApp's console", 60_000);
+
+  await clickNav('Devices');
+  await waitForText('Registered devices', 60_000);
+  await waitForText('this device', 60_000);
+
+  await clickNav('Recovery');
+  await waitForText('Recovery shares', 60_000);
+  await waitForText('Simulate the disaster', 60_000);
+
+  await clickNav('NightFi Flow');
+  await waitForText('Earn yield, privately.', 60_000);
+  console.log('✓ custody workspace completed — overview, holdings, connections, devices, recovery, and return flow render');
 
   console.log('E2E PASS');
 } catch (e) {

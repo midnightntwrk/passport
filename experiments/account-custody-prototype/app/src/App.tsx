@@ -11,7 +11,7 @@ import { useTxTask, dismissTask, type TxTask } from './lib/txTracker.js';
 import { Busy, Mono, Chip } from './ui.js';
 
 import { OnboardView } from './views/Onboard.js';
-import { NightFiFlowView } from './views/NightFiFlow.js';
+import { NightFiFlowView, NightFiLogo } from './views/NightFiFlow.js';
 import { OverviewView } from './views/Overview.js';
 import { WalletPanel } from './views/WalletPanel.js';
 import { DevicesPanel } from './views/DevicesPanel.js';
@@ -41,12 +41,12 @@ export interface AppContext {
 
 export type ViewId = 'flow' | 'overview' | 'assets' | 'grants' | 'devices' | 'recovery';
 
-// App navigation — five surfaces, no demo-flow numbering. The functional
-// labels double as the screenshot harness's navigation targets.
+// App navigation — NightFi is the product shell; these are the embedded
+// custody surfaces behind the earn flow.
 const NAV: { id: ViewId; label: string; icon: React.ReactNode }[] = [
   {
     id: 'flow',
-    label: 'Token Flow',
+    label: 'NightFi Flow',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
         <path d="M4 6h8a4 4 0 0 1 4 4v8" />
@@ -57,7 +57,7 @@ const NAV: { id: ViewId; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: 'overview',
-    label: 'Overview',
+    label: 'Wallet Overview',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
         <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2" />
@@ -398,21 +398,17 @@ function navCounts(ledger: Ledger | null): Partial<Record<ViewId, number>> {
 }
 
 function BrandMark(props: { large?: boolean }) {
-  // Crescent marque (sketch 005). The mask carves a true crescent so the
-  // glyph works on any background; the id must be unique per instance.
-  const maskId = React.useId();
   return (
     <div className={`brand ${props.large ? 'brand-large' : ''}`}>
-      <svg className="brand-glyph" viewBox="0 0 32 32" aria-hidden="true">
-        <mask id={maskId}>
-          <rect width="32" height="32" fill="white" />
-          <circle cx="21.2" cy="11.8" r="10.6" fill="black" />
-        </mask>
-        <circle cx="16" cy="16" r="14.5" fill="#d92c25" mask={`url(#${maskId})`} />
-      </svg>
+      <span className="brand-glyph brand-nf-glyph" aria-hidden="true">
+        <NightFiLogo />
+      </span>
       <div className="brand-words">
-        <span className="brand-name">Midnight Passport</span>
-        <span className="brand-tag">Account-custody prototype</span>
+        <span className="brand-name brand-nf-name">
+          <span>Night</span>
+          <em>fi</em>
+        </span>
+        <span className="brand-tag">Private yield wallet</span>
       </div>
     </div>
   );
@@ -495,11 +491,10 @@ function HeaderStrip(props: {
   return (
     <header className="topbar">
       <div className="topbar-id">
-        {/* "Passport account" stays verbatim — the e2e harness waits for it. */}
-        <span className="eyebrow">Passport account</span>
+        <span className="eyebrow">NightFi custody account</span>
         <span
           className="x"
-          data-x="The address of your personal account contract on Midnight. The passport is the contract; anyone can verify this document against the ledger."
+          data-x="The address of your personal NightFi custody contract on Midnight. Anyone can verify this wallet state against the ledger."
         >
           <Mono v={session.accountAddress} short className="topbar-addr" />
         </span>

@@ -1,8 +1,6 @@
-/* Midnight Passport — "Clarity" identity (sketch 005).
-   Light, readable, pure: warm near-white paper, ink text, one calm red
-   accent, green only for live/landed status. Bricolage Grotesque (display),
-   Barlow (body/UI), JetBrains Mono (hashes). Derived from the IOG brand
-   (Barlow + Bricolage are the brand stack) without the dark-first look. */
+/* NightFi demo shell.
+   Light, readable, product-focused: warm near-white paper, ink text, one
+   NightFi green accent, red reserved for true errors. */
 
 :root {
   /* clarity palette */
@@ -14,9 +12,15 @@
   --faint: #9a9da4;
   --line: #eae7e0;
   --line-2: #dcd8cd;
-  --red: #d92c25;
-  --red-deep: #b7211b;
-  --red-tint: #fcefee;
+  --brand: #2c5e1f;
+  --brand-deep: #214818;
+  --brand-tint: #eaf3e6;
+  --danger: #d92c25;
+  --danger-deep: #b7211b;
+  --danger-tint: #fcefee;
+  --red: var(--brand);
+  --red-deep: var(--brand-deep);
+  --red-tint: var(--brand-tint);
   --green: #157f52;
   --green-tint: #e9f5ef;
   --amber: #9a6b15;
@@ -69,7 +73,7 @@ body::before {
   inset: 0;
   z-index: -2;
   background:
-    linear-gradient(90deg, var(--red), var(--red-deep)) top / 100% 3px no-repeat,
+    linear-gradient(90deg, var(--brand), var(--brand-deep)) top / 100% 3px no-repeat,
     radial-gradient(900px 420px at 50% -80px, #ffffff 0%, rgba(255, 255, 255, 0) 70%),
     var(--paper);
 }
@@ -156,7 +160,7 @@ body::after {
 }
 
 .error {
-  color: var(--red-deep);
+  color: var(--danger-deep);
   font-size: 0.9rem;
 }
 
@@ -272,6 +276,26 @@ body::after {
   width: 32px;
   height: 32px;
   flex: none;
+}
+
+.brand-nf-glyph {
+  display: grid;
+  place-items: center;
+}
+
+.brand-nf-name {
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+}
+
+.brand-nf-name em {
+  margin-left: 2px;
+  color: var(--brand);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.15em;
+  font-style: italic;
+  font-weight: 400;
 }
 
 .brand-words {
@@ -703,12 +727,12 @@ input[type='checkbox'] {
 .btn-danger {
   background: var(--surface);
   border-color: #ecc8c5;
-  color: var(--red-deep);
+  color: var(--danger-deep);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: var(--red-tint);
-  border-color: var(--red);
+  background: var(--danger-tint);
+  border-color: var(--danger);
 }
 
 .btn-block {
@@ -1041,9 +1065,9 @@ th {
 }
 
 .chip-danger {
-  color: var(--red-deep);
+  color: var(--danger-deep);
   border-color: #ecc8c5;
-  background: var(--red-tint);
+  background: var(--danger-tint);
 }
 
 .chip-warn {
@@ -1079,8 +1103,8 @@ th {
 }
 
 .chip-stamp.chip-danger {
-  border-color: var(--red);
-  color: var(--red);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .chip-stamp.chip-warn {
@@ -2090,7 +2114,7 @@ body[data-explain='1'] .x {
 
 .passport-rings::before {
   inset: 36px;
-  border: 1px solid rgba(0, 0, 254, 0.46);
+  border: 1px solid rgba(77, 139, 63, 0.55);
 }
 
 .passport-rings::after {
@@ -2117,7 +2141,7 @@ body[data-explain='1'] .x {
   color: white;
   box-shadow:
     0 32px 90px rgba(0, 0, 0, 0.38),
-    0 0 0 1px rgba(0, 0, 254, 0.18),
+    0 0 0 1px rgba(77, 139, 63, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transform: rotateX(7deg) rotateY(-9deg);
   animation: passport-float 6s ease-in-out infinite;
@@ -2157,7 +2181,7 @@ body[data-explain='1'] .x {
   position: absolute;
   inset: 16px 0 auto;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(0, 0, 254, 0.85), transparent);
+  background: linear-gradient(90deg, transparent, rgba(93, 202, 165, 0.9), transparent);
   content: '';
   animation: passport-reveal-scan 720ms ease-out both;
 }
@@ -2202,7 +2226,7 @@ body[data-explain='1'] .x {
 
 .passport-demo-mark::before {
   inset: 15px;
-  border: 1px solid rgba(0, 0, 254, 0.58);
+  border: 1px solid rgba(93, 202, 165, 0.7);
 }
 
 .passport-demo-mark::after {
@@ -2252,7 +2276,7 @@ body[data-explain='1'] .x {
 }
 
 .passport-flow-dot-active i {
-  background: #0000fe;
+  background: var(--brand);
 }
 
 @keyframes passport-spin {

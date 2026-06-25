@@ -3,6 +3,13 @@
 .serena/
 .arcsop/
 
+# Local/private planning exports
+docs/plans/2026-06-18-new-user-onboarding-sdk-plan.md
+docs/plans/2026-06-22-dynamic-midnight-*.md
+docs/plans/2026-06-22-token-deliverable-meeting-brief.md
+docs/plans/assets/dynamic-midnight/
+output/
+
 # Build artefacts
 /target/
 **/target/

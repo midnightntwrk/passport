@@ -191,7 +191,7 @@ export function NightFiFlowView({
       setTxId(id);
       setTxConfirms(12);
       setTxStatus('confirmed');
-      setTxStatusText('Deposited into your Passport account contract');
+      setTxStatusText('Deposited into your NightFi custody account');
       ctx.log(`nightfi deposit ${amount} -> tx ${id}`);
       await ctx.refreshLedger();
       completeTask(id);
@@ -376,25 +376,28 @@ export function NightFiFlowView({
   );
 }
 
-function NightFiLogo() {
+export function NightFiLogo() {
+  const baseId = React.useId().replace(/:/g, '');
+  const baseGradientId = `${baseId}-base`;
+  const accentGradientId = `${baseId}-accent`;
   return (
     <svg viewBox="0 0 1024 1024" role="img" aria-label="NightFi" width="100%" height="100%">
       <defs>
-        <linearGradient id="passport-nf-base" x1="240" y1="240" x2="800" y2="840">
+        <linearGradient id={baseGradientId} x1="240" y1="240" x2="800" y2="840">
           <stop offset="0" stopColor="var(--logo-base-0, #20272a)" />
           <stop offset="1" stopColor="var(--logo-base-1, #101416)" />
         </linearGradient>
-        <linearGradient id="passport-nf-accent" x1="650" y1="250" x2="790" y2="440">
+        <linearGradient id={accentGradientId} x1="650" y1="250" x2="790" y2="440">
           <stop offset="0" stopColor="var(--logo-acc-0, #3f6747)" />
           <stop offset="1" stopColor="var(--logo-acc-1, #263f2c)" />
         </linearGradient>
       </defs>
-      <g fill="url(#passport-nf-base)">
+      <g fill={`url(#${baseGradientId})`}>
         <path d="M248 268H376V806H248Z" />
         <path d="M248 268H376L776 806H648Z" />
         <path d="M648 454L776 376V806H648Z" />
       </g>
-      <path d="M648 314L776 236V360L648 438Z" fill="url(#passport-nf-accent)" />
+      <path d="M648 314L776 236V360L648 438Z" fill={`url(#${accentGradientId})`} />
     </svg>
   );
 }
@@ -487,19 +490,19 @@ function SceneYield({
   return (
     <div className="nf-scene">
       <div className="nf-scene-head">
-        <div className="nf-eyebrow">Yield protocol · Passport powered</div>
+        <div className="nf-eyebrow">NightFi private yield</div>
         <h1 className="nf-title">
           Earn yield, <span className="serif">privately.</span>
         </h1>
         <p className="nf-sub-text">
-          Choose a pool, source funds through your Passport account, bind a Night ID, and deploy
-          capital. The deposit step is a real Midnight localnet custody transaction.
+          Choose a pool, source funds through your NightFi custody account, bind a Night ID, and
+          deploy capital. The deposit step is a real Midnight localnet custody transaction.
         </p>
       </div>
 
       <div className="nf-market">
         <MarketCell label="Total value locked" value="$296.8M" delta="+2.4%" />
-        <MarketCell label="Passport account" value={`${ledgerNightTotal} Night`} />
+        <MarketCell label="Custody balance" value={`${ledgerNightTotal} Night`} />
         <MarketCell label="Active depositors" value="14,892" />
         <MarketCell label="Yield distributed" value="$8.4M" />
       </div>
@@ -619,7 +622,7 @@ function DepositModal(props: {
                 {isRetail ? 'Retail tier - open access' : 'Accredited tier - verification required'}
               </div>
               <div className="nf-banner-desc">
-                Local demo deposits the matching amount of Night into your Passport account contract.
+                Local demo deposits the matching amount of Night into your NightFi custody account.
               </div>
             </div>
           </div>
@@ -802,13 +805,13 @@ function TxModal(props: {
         <ModalHead title="Step 03 · Bridge transaction" onClose={props.onClose} />
         <div className="nf-modal-body">
           <div className="nf-tx-flow">
-            <TxNode label="From" name="Passport wallet" active />
+            <TxNode label="From" name="NightFi wallet" active />
             <div className={`nf-tx-arr ${props.status === 'confirmed' ? '' : 'flowing'}`} />
             <TxNode label="To" name="Night vault" active={props.status === 'confirmed'} />
           </div>
           <div className="nf-tx-rows">
             <TxRow k="Amount" v={`${fmtUsd(props.amount)} USDC`} />
-            <TxRow k="Bridge" v="Midnight Passport · localnet" />
+            <TxRow k="Bridge" v="NightFi custody · localnet" />
             <TxRow k="Tx hash" v={props.txId || '-'} mono />
             <TxRow k="Confirmations" v={`${props.confirms} / 12`} />
             <TxRow k="Network fee" v="sponsored in local demo" />
@@ -835,13 +838,13 @@ function SceneNightId(props: {
   return (
     <div className="nf-scene">
       <div className="nf-scene-head">
-        <div className="nf-eyebrow">Identity provisioning · Midnight Passport</div>
+        <div className="nf-eyebrow">NightFi identity</div>
         <h1 className="nf-title">
           Verify your <span className="serif">Night ID.</span>
         </h1>
         <p className="nf-sub-text">
-          A human-readable handle bound to the account-custody contract through the Passport
-          identity registry. The binding is created during onboarding and can be refreshed here.
+          A human-readable handle bound to your NightFi custody account through the identity
+          registry. The binding is created during onboarding and can be refreshed here.
         </p>
       </div>
       <div className="nf-id-setup">
@@ -858,7 +861,7 @@ function SceneNightId(props: {
           </div>
         </div>
         <div className="nf-id-card">
-          <div className="nf-id-step">Step 2 / 2 - Bind Passport</div>
+          <div className="nf-id-step">Step 2 / 2 - Bind wallet</div>
           <div className="nf-id-title">Account-backed signing</div>
           <div className="nf-passkey-illu">
             <div className="nf-passkey-asset">
@@ -905,8 +908,8 @@ function SceneDeploy(props: {
           Deploy into <span className="serif">{p.serif.toLowerCase()}.</span>
         </h1>
         <p className="nf-sub-text">
-          Your capital is now held by the Passport account. Sign the deploy intent to open the
-          NightFi position.
+          Your capital is now held by the NightFi custody account. Sign the deploy intent to open
+          the NightFi position.
         </p>
       </div>
       <div className="nf-tx-panel">
@@ -959,7 +962,7 @@ function SceneDashboard({
               <span className="acc">.night</span>
             </div>
             <div className="nf-dash-sub">
-              <span>Passport verified</span>
+              <span>NightFi verified</span>
               <span className="nf-verified-pill">localnet</span>
             </div>
           </div>

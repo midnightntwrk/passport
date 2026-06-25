@@ -47,11 +47,11 @@ export function RecoveryPanel(props: {
           </div>
         </div>
         <div className="caveat">
-          <Chip tone="warn">TODO(PVSS)</Chip>
+          <Chip tone="warn">local demo</Chip>
           <p>
-            In this prototype the shares sit in <em>plaintext public ledger state</em> — anyone
-            can reconstruct the recovery secret. The target design encrypts each share to a
-            recovery helper and publishes correctness proofs instead. Do not ship this.
+            In this local demo the shares sit in <em>plaintext public ledger state</em>. The
+            production design encrypts each share to a recovery helper and publishes correctness
+            proofs instead.
           </p>
         </div>
       </Panel>

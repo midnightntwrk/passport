@@ -63,7 +63,7 @@ export function OnboardView(props: {
       return { secret: await deriveDevModeSecret(passphrase), session: { devMode: true } };
     }
     log('creating passkey…');
-    const ref = await createPasskey(label || 'passport-user');
+    const ref = await createPasskey(label || 'nightfi-user');
     log('passkey created — evaluating PRF for the device secret…');
     const secret = await deriveDeviceSecret(ref);
     log('device secret derived from WebAuthn PRF.');
@@ -76,15 +76,15 @@ export function OnboardView(props: {
     return (
       <div className="onboard-grid onboard-grid-narrow">
         <div className="onboard-copy">
-          <PassportShowcase label={session.alias ?? 'passport'} compact />
+          <PassportShowcase label={session.alias ?? 'nightfi'} compact />
           <p className="eyebrow">Welcome back</p>
-          <h1 className="hero-title">Unlock your passport.</h1>
+          <h1 className="hero-title">Unlock your NightFi wallet.</h1>
           <p className="lede">
-            Account <code className="mono">{session.accountAddress.slice(0, 16)}…</code> — the
-            device secret is re-derived from your{' '}
+            Custody account <code className="mono">{session.accountAddress.slice(0, 16)}…</code>{' '}
+            re-derives its device secret from your{' '}
             {session.devMode ? 'dev-mode passphrase' : 'passkey'} on every visit. Nothing secret is
             stored on this machine. Identity{' '}
-            <code className="mono">{session.alias ?? 'passport'}.night</code> is registry-backed.
+            <code className="mono">{session.alias ?? 'nightfi'}.night</code> is registry-backed.
           </p>
         </div>
         <div className="onboard-cards">
@@ -149,40 +149,36 @@ export function OnboardView(props: {
     <div className="onboard-grid">
       <div className="onboard-copy">
         <PassportShowcase label={label || 'bubbles'} />
-        {/* Verbatim heading — the e2e harness waits for its uppercased text. */}
-        <p className="eyebrow">Create your passport</p>
-        <h1 className="hero-title">One passkey becomes an on-chain account.</h1>
+        <p className="eyebrow">Create your NightFi wallet</p>
+        <h1 className="hero-title">One passkey opens private yield.</h1>
         <p className="lede">
-          No seed phrase. Your device's passkey derives the secret, and a personal Compact
-          contract on Midnight holds the assets and enforces who may move them.
+          No seed phrase. Your passkey derives the secret for a NightFi custody account on
+          Midnight, then the app walks straight into the earn flow.
         </p>
         <ol className="hero-steps">
           <li>
             <span className="hero-step-n">1</span>
             <span>
-              A WebAuthn passkey is created; its PRF output becomes this device's secret —
-              biometric-gated, never written down.
+              A WebAuthn passkey creates the device secret — biometric-gated, never written down.
             </span>
           </li>
           <li>
             <span className="hero-step-n">2</span>
             <span>
-              A fresh recovery secret is split 2-of-3; the shares go on-chain (prototype
-              placeholder for PVSS).
+              A fresh recovery secret is split 2-of-3 for account recovery on Midnight.
             </span>
           </li>
           <li>
             <span className="hero-step-n">3</span>
             <span>
-              Your account-custody contract deploys — devices, grants, and recovery are
-              enforced by the ledger, not by a server.
+              Your NightFi custody contract deploys — devices, grants, and recovery are enforced
+              by the ledger, not by a server.
             </span>
           </li>
           <li>
             <span className="hero-step-n">4</span>
             <span>
-              Your Night ID is created on the Passport identity registry and bound to the account
-              contract address.
+              Your Night ID is created and bound to the NightFi custody account.
             </span>
           </li>
         </ol>
@@ -206,23 +202,23 @@ export function OnboardView(props: {
             </label>
           )}
           <ActionButton
-            label={devMode ? 'Create account (dev mode)' : 'Create passkey & deploy account'}
-            busyLabel="deploying account contract…"
+            label={devMode ? 'Create NightFi wallet (dev mode)' : 'Create passkey & open NightFi'}
+            busyLabel="deploying NightFi custody…"
             block
-            task={{ label: 'Deploying your account contract', circuit: 'deploy account' }}
+            task={{ label: 'Deploying your NightFi custody account', circuit: 'deploy account' }}
             onError={setError}
             onRun={async () => {
               setError(null);
               const { secret, session: partial } = await deviceSecretForOnboarding();
               const recoverySecret = randomBytes32();
-              log('deploying the account-custody contract…');
+              log('deploying the NightFi custody contract…');
               const account = await PassportAccount.deploy(
                 mid.accountProviders,
                 compiledAccountContract(),
                 { deviceSecret: secret, recoverySecret },
               );
               log(`account deployed @ ${account.address}`);
-              const alias = normalizeAlias(label || 'passport-user');
+              const alias = normalizeAlias(label || 'nightfi-user');
               log(`registering ${alias}.night on the identity registry...`);
               const identity = await registerIdentity(mid, alias, account.address);
               log(`identity registered ${alias}.night -> ${account.address} tx ${identity.txId}`);
@@ -255,7 +251,7 @@ export function OnboardView(props: {
         </div>
 
         <div className="panel onboard-card onboard-card-secondary">
-          <h2 className="eyebrow">Connect to an existing account</h2>
+          <h2 className="eyebrow">Connect existing NightFi wallet</h2>
           <p className="panel-sub">
             Paste an account contract address; the device secret comes from any resident passkey
             for this origin{devMode ? ' (or the dev-mode passphrase above)' : ''}.
@@ -310,19 +306,19 @@ function PassportShowcase(props: { label: string; compact?: boolean }) {
       <div className="passport-rings" />
       <div className="passport-demo-card" aria-hidden="true">
         <div className="passport-demo-top">
-          <span>MIDNIGHT</span>
-          <span>ACCOUNT</span>
+          <span>NIGHTFI</span>
+          <span>WALLET</span>
         </div>
         <div className="passport-demo-mark">
           <span />
         </div>
         <div className="passport-demo-bottom">
-          <small>ALIAS</small>
-          <strong>{display}.passport</strong>
+          <small>NIGHT ID</small>
+          <strong>{display}.night</strong>
         </div>
       </div>
       <div className="passport-flow-dots" aria-hidden="true">
-        {['Passkey', 'Contract', 'Alias', 'Fund', 'Deploy'].map((item, index) => (
+        {['Passkey', 'Custody', 'Night ID', 'Fund', 'Earn'].map((item, index) => (
           <span className={index <= 1 ? 'passport-flow-dot passport-flow-dot-active' : 'passport-flow-dot'} key={item}>
             <i />
             {item}

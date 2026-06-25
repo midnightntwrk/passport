@@ -13,7 +13,7 @@
 
 const PRF_SALT = new TextEncoder().encode('midnight:passport:prf:device:v0');
 
-const RP_NAME = 'Midnight Passport Prototype';
+const RP_NAME = 'NightFi Demo';
 
 export interface PasskeyRef {
   credentialIdB64: string;

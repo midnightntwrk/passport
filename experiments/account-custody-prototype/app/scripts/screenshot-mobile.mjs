@@ -18,6 +18,8 @@ mkdirSync(outDir, { recursive: true });
 
 const browser = await puppeteer.launch({ executablePath: chrome, headless: 'new' });
 const page = await browser.newPage();
+page.setDefaultTimeout(300_000);
+page.setDefaultNavigationTimeout(120_000);
 await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
 page.on('pageerror', (err) => console.log(`[pageerror] ${err.message}`));
 page.on('console', (msg) => {
@@ -106,14 +108,14 @@ const setFirstTextInput = async (value) => {
 
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await waitForText('CREATE YOUR PASSPORT', 180_000);
+  await waitForText('CREATE YOUR NIGHTFI WALLET', 180_000);
   await sleep(800);
   await shot('m01-onboard');
 
   await setFirstTextInput(demoHandle);
   await page.click('input[type="checkbox"]');
   await page.type('input[type="password"]', 'mobile-shot-passphrase');
-  await clickButton('Create account (dev mode)');
+  await clickButton('Create NightFi wallet (dev mode)');
   console.log('… deploying account and registering identity');
   await waitForText('Earn yield, privately.', 300_000);
   await sleep(1000);
@@ -135,7 +137,7 @@ try {
   await clickButtonContaining('Continue with 1am connector');
   await sleep(6_000); // mid-prove: dock live with the on-device chip
   await shot('m05-bridge-proving');
-  await waitForText('Deposited into your Passport account contract', 300_000);
+  await waitForText('Deposited into your NightFi custody account', 300_000);
   await sleep(1000);
   await shot('m06-bridge-confirmed');
 
