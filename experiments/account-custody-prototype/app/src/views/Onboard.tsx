@@ -7,12 +7,17 @@ import { randomBytes32 } from '../../../src/wallet/hex.js';
 import type { Midnight } from '../lib/midnight.js';
 import { accountForIdentity, registerIdentity } from '../lib/midnight.js';
 import { compiledAccountContract } from '../lib/providers.js';
-import { deriveDevModeSecret } from '../lib/passkey.js';
+import { createPasskey, deriveDeviceSecret, deriveDevModeSecret } from '../lib/passkey.js';
 import { normalizeAlias, saveAlias } from '../lib/session.js';
 import type { Session } from '../lib/session.js';
 import { ActionButton, Chip } from '../ui.js';
 
 const LOCAL_DEMO_SECRET = 'mn-passport-foundations-local-demo';
+
+function usesLocalDemoSecret(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('demoMode') === 'local' || navigator.webdriver === true;
+}
 
 /** Resolves to true iff a contract exists at `address` on the current chain.
     Guards against connecting to a session from a reset localnet — that
@@ -39,6 +44,7 @@ export function OnboardView(props: {
   const [address, setAddress] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sessionStale, setSessionStale] = useState(false);
+  const localDemoMode = usesLocalDemoSecret();
 
   // Proactively check that the remembered account still exists — a reset
   // localnet keeps the browser session but loses the contract.
@@ -53,12 +59,18 @@ export function OnboardView(props: {
     };
   }, [mid, session]);
 
-  const deviceSecretForOnboarding = async (): Promise<{
+  const deviceSecretForOnboarding = async (alias: string): Promise<{
     secret: Uint8Array;
     session: Omit<Session, 'accountAddress'>;
   }> => {
-    log('local demo mode: deriving the device secret in this browser…');
-    return { secret: await deriveDevModeSecret(LOCAL_DEMO_SECRET), session: { devMode: true } };
+    if (localDemoMode) {
+      log('local demo mode: deriving the device secret in this browser…');
+      return { secret: await deriveDevModeSecret(LOCAL_DEMO_SECRET), session: { devMode: true } };
+    }
+    log(`creating ${alias}.night passkey in this browser...`);
+    const passkey = await createPasskey(`${alias}.night`);
+    log(`passkey saved for ${alias}.night; deriving the device secret...`);
+    return { secret: await deriveDeviceSecret(passkey), session: { passkey } };
   };
 
   // Session exists but the page was reloaded: re-derive the device secret
@@ -72,8 +84,7 @@ export function OnboardView(props: {
           <h1 className="hero-title">Unlock your MN Passport.</h1>
           <p className="lede">
             Custody account <code className="mono">{session.accountAddress.slice(0, 16)}…</code>{' '}
-            re-derives its local demo device secret in this browser on every visit. No Chrome
-            passkey storage is used. Identity{' '}
+            re-derives its device secret in this browser on every visit. Identity{' '}
             <code className="mono">{session.alias ?? 'foundations'}.night</code> is registry-backed.
           </p>
         </div>
@@ -101,7 +112,9 @@ export function OnboardView(props: {
                     'account contract not found on this chain — the localnet was reset; forget this account and onboard again',
                   );
                 }
-                const secret = await deriveDevModeSecret(LOCAL_DEMO_SECRET);
+                const secret = session.devMode
+                  ? await deriveDevModeSecret(LOCAL_DEMO_SECRET)
+                  : await deriveDeviceSecret(session.passkey);
                 log('connecting to the account contract…');
                 const account = await PassportAccount.connect(
                   mid.accountProviders,
@@ -129,16 +142,25 @@ export function OnboardView(props: {
         <PassportShowcase label={label || 'bubbles'} />
         <p className="eyebrow">Create your MN Passport</p>
         <h1 className="hero-title">Deploy a foundations account.</h1>
-        <p className="lede">
-          No passkey prompt and no browser credential storage. The demo derives a local device
-          secret, deploys a MN Passport custody account on Midnight, and walks straight into the
-          earn flow.
-        </p>
+        {localDemoMode ? (
+          <p className="lede">
+            Automation mode derives a local device secret, deploys a MN Passport custody account on
+            Midnight, and walks straight into the earn flow.
+          </p>
+        ) : (
+          <p className="lede">
+            Save a browser passkey for your Night ID first. Its PRF output becomes the device
+            secret, then MN Passport deploys the custody account on Midnight and walks straight into
+            the earn flow.
+          </p>
+        )}
         <ol className="hero-steps">
           <li>
             <span className="hero-step-n">1</span>
             <span>
-              A local demo device secret is derived in this browser.
+              {localDemoMode
+                ? 'A local demo device secret is derived in this browser.'
+                : 'A resident browser passkey is saved for your Night ID.'}
             </span>
           </li>
           <li>
@@ -150,8 +172,7 @@ export function OnboardView(props: {
           <li>
             <span className="hero-step-n">3</span>
             <span>
-              Your MN Passport custody contract deploys — devices, grants, and recovery are enforced
-              by the ledger, not by a server.
+              The passkey-derived device secret deploys your MN Passport custody contract.
             </span>
           </li>
           <li>
@@ -171,10 +192,17 @@ export function OnboardView(props: {
             <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="alice" />
           </label>
           <ActionButton
-            label="Deploy MN Passport account"
-            busyLabel="deploying MN Passport custody…"
+            label={localDemoMode ? 'Deploy MN Passport account' : 'Create passkey & deploy account'}
+            busyLabel={
+              localDemoMode ? 'deploying MN Passport custody…' : 'creating passkey & deploying…'
+            }
             block
-            task={{ label: 'Deploying your MN Passport custody account', circuit: 'deploy account' }}
+            task={{
+              label: localDemoMode
+                ? 'Deploying your MN Passport custody account'
+                : 'Creating passkey and deploying MN Passport custody',
+              circuit: 'deploy account',
+            }}
             onError={setError}
             onRun={async () => {
               setError(null);
@@ -183,7 +211,7 @@ export function OnboardView(props: {
               if (existingAccount) {
                 throw new Error(`${alias}.night is already registered; choose a different Night ID`);
               }
-              const { secret, session: partial } = await deviceSecretForOnboarding();
+              const { secret, session: partial } = await deviceSecretForOnboarding(alias);
               const recoverySecret = randomBytes32();
               log('deploying the MN Passport custody contract…');
               const account = await PassportAccount.deploy(
@@ -214,16 +242,18 @@ export function OnboardView(props: {
           />
           {error && <p className="error">{error}</p>}
           <p className="hint">
-            Local demo mode: deploys without creating or saving a Chrome passkey. Night IDs are
-            unique, so a handle like alice.night can only be registered once.
+            {localDemoMode
+              ? 'Automation mode uses a local device secret.'
+              : 'The passkey is stored by the browser/passkey provider for this origin.'}{' '}
+            Night IDs are unique, so a handle like alice.night can only be registered once.
           </p>
         </div>
 
         <div className="panel onboard-card onboard-card-secondary">
           <h2 className="eyebrow">Connect existing MN Passport wallet</h2>
           <p className="panel-sub">
-            Paste an account contract address; the same local demo device secret is re-derived in
-            this browser.
+            Paste an account contract address; the device secret is re-derived{' '}
+            {localDemoMode ? 'inside this browser.' : 'from a resident passkey for this browser.'}
           </p>
           <div className="row">
             <input
@@ -243,7 +273,9 @@ export function OnboardView(props: {
                 if (!(await contractExists(mid, address.trim()))) {
                   throw new Error('no contract found at this address on the current chain');
                 }
-                const secret = await deriveDevModeSecret(LOCAL_DEMO_SECRET);
+                const secret = localDemoMode
+                  ? await deriveDevModeSecret(LOCAL_DEMO_SECRET)
+                  : await deriveDeviceSecret();
                 const account = await PassportAccount.connect(
                   mid.accountProviders,
                   compiledAccountContract(),
@@ -252,7 +284,7 @@ export function OnboardView(props: {
                 );
                 log(`connected to ${account.address}`);
                 props.onConnected(
-                  { accountAddress: address.trim(), devMode: true },
+                  { accountAddress: address.trim(), devMode: localDemoMode || undefined },
                   account,
                   deviceCommitment(secret).toString(),
                 );
