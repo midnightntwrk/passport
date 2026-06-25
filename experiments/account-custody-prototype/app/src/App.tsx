@@ -11,7 +11,7 @@ import { useTxTask, dismissTask, type TxTask } from './lib/txTracker.js';
 import { Busy, Mono, Chip } from './ui.js';
 
 import { OnboardView } from './views/Onboard.js';
-import { NightFiFlowView, NightFiLogo } from './views/NightFiFlow.js';
+import { FoundationsFlowView, FoundationsLogo } from './views/FoundationsFlow.js';
 import { OverviewView } from './views/Overview.js';
 import { WalletPanel } from './views/WalletPanel.js';
 import { DevicesPanel } from './views/DevicesPanel.js';
@@ -41,12 +41,12 @@ export interface AppContext {
 
 export type ViewId = 'flow' | 'overview' | 'assets' | 'grants' | 'devices' | 'recovery';
 
-// App navigation — NightFi is the product shell; these are the embedded
+// App navigation — MN Passport is the product shell; these are the embedded
 // custody surfaces behind the earn flow.
 const NAV: { id: ViewId; label: string; icon: React.ReactNode }[] = [
   {
     id: 'flow',
-    label: 'NightFi Flow',
+    label: 'Foundations Flow',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
         <path d="M4 6h8a4 4 0 0 1 4 4v8" />
@@ -311,8 +311,8 @@ export default function App() {
 
   if (nav === 'flow') {
     return (
-      <div className="nightfi-page">
-        <NightFiFlowView
+      <div className="foundations-page">
+        <FoundationsFlowView
           ctx={ctx}
           onOpenCustody={() => setNav('assets')}
           onDisconnect={resetSession}
@@ -401,14 +401,14 @@ function BrandMark(props: { large?: boolean }) {
   return (
     <div className={`brand ${props.large ? 'brand-large' : ''}`}>
       <span className="brand-glyph brand-nf-glyph" aria-hidden="true">
-        <NightFiLogo />
+        <FoundationsLogo />
       </span>
       <div className="brand-words">
         <span className="brand-name brand-nf-name">
-          <span>Night</span>
-          <em>fi</em>
+          <span>MN</span>
+          <em>Passport</em>
         </span>
-        <span className="brand-tag">Private yield wallet</span>
+        <span className="brand-tag">Foundations demo</span>
       </div>
     </div>
   );
@@ -491,10 +491,10 @@ function HeaderStrip(props: {
   return (
     <header className="topbar">
       <div className="topbar-id">
-        <span className="eyebrow">NightFi custody account</span>
+        <span className="eyebrow">MN Passport custody account</span>
         <span
           className="x"
-          data-x="The address of your personal NightFi custody contract on Midnight. Anyone can verify this wallet state against the ledger."
+          data-x="The address of your personal MN Passport custody contract on Midnight. Anyone can verify this wallet state against the ledger."
         >
           <Mono v={session.accountAddress} short className="topbar-addr" />
         </span>

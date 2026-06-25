@@ -1,7 +1,7 @@
-// Visual capture of the NightFi demo journey (dev-mode, headless Chrome).
+// Visual capture of the MN Passport demo journey (dev-mode, headless Chrome).
 //
 //   node scripts/screenshot.mjs onboard   — boot + onboarding hero only (fast)
-//   node scripts/screenshot.mjs nightfi   — onboard + NightFi earn screen
+//   node scripts/screenshot.mjs foundations   — onboard + MN Passport earn screen
 //   node scripts/screenshot.mjs full      — onboard, pool, source, bridge,
 //                                           Night ID, deploy, dashboard
 //
@@ -111,7 +111,7 @@ const setFirstTextInput = async (value) => {
 
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await waitForText('CREATE YOUR NIGHTFI WALLET', 180_000);
+  await waitForText('CREATE YOUR MN PASSPORT', 180_000);
   await sleep(1000);
   await shot('01-onboard');
 
@@ -121,25 +121,23 @@ try {
     process.exit(0);
   }
 
-  // ——— dev-mode onboarding ———
+  // ——— local-demo onboarding ———
   await setFirstTextInput(demoHandle);
-  await page.click('input[type="checkbox"]');
-  await page.type('input[type="password"]', 'screenshot-run-passphrase');
-  await clickButton('Create NightFi wallet (dev mode)');
+  await clickButton('Deploy MN Passport account');
   console.log('… deploying account and registering identity from the browser');
   await sleep(20_000); // mid-deploy: proving dock live
   await shot('02-deploying');
   await waitForText('Earn yield, privately.', 300_000);
   await sleep(1200);
-  await shot('03-nightfi-earn');
+  await shot('03-foundations-earn');
 
-  if (mode === 'token' || mode === 'nightfi') {
-    console.log('DONE (nightfi mode)');
+  if (mode === 'token' || mode === 'foundations') {
+    console.log('DONE (foundations mode)');
     await browser.close();
     process.exit(0);
   }
 
-  // ——— NightFi pool + amount ———
+  // ——— MN Passport pool + amount ———
   await clickButtonContaining('Deposit into pool');
   await waitForText('Deposit amount', 60_000);
   await sleep(700);
@@ -159,7 +157,7 @@ try {
   console.log('… proving deposit_night');
   await sleep(8_000);
   await shot('06-bridge-proving');
-  await waitForText('Deposited into your NightFi custody account', 300_000);
+  await waitForText('Deposited into your MN Passport custody account', 300_000);
   console.log('✓ deposit landed');
   await sleep(1200);
   await shot('07-bridge-confirmed');
@@ -186,7 +184,7 @@ try {
 
   // Keep one technical custody shot for engineering review.
   await clickButton('Custody details');
-  await waitForText('NIGHTFI CUSTODY ACCOUNT', 60_000);
+  await waitForText('MN PASSPORT CUSTODY ACCOUNT', 60_000);
   await sleep(1200);
   await shot('12-custody-funded');
 

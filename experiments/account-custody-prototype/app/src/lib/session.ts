@@ -85,5 +85,5 @@ export function normalizeAlias(alias: string): string {
     .replace(/[^a-z0-9-]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
-  return cleaned || 'nightfi-user';
+  return cleaned || 'mn-passport-user';
 }

@@ -124,7 +124,7 @@ function deployFaucet() {
 }
 
 function startApp() {
-  log('starting Vite at http://127.0.0.1:5173/');
+  log('starting Vite at http://localhost:5173/');
   const child = spawn('npm', ['run', 'dev', '--', '--host', '127.0.0.1'], {
     cwd: resolve(root, 'app'),
     env: process.env,

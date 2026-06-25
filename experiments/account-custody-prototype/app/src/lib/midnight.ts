@@ -133,10 +133,7 @@ export async function registerIdentity(
 ): Promise<IdentityRegistration> {
   let registry = await getIdentityRegistry(mid);
   try {
-    const state = await registry.ledgerState();
-    if (state.registration_count > 0n) {
-      registry = await deployFreshIdentityRegistry(mid);
-    }
+    await registry.ledgerState();
   } catch {
     registry = await deployFreshIdentityRegistry(mid);
   }
@@ -165,6 +162,9 @@ export async function registerIdentity(
       await awaitSync(mid.walletCtx);
       registry = await reconnectIdentityRegistry(mid);
       const landed = await registry.accountFor(handle);
+      if (landed && landed !== accountAddress.toLowerCase()) {
+        throw new Error(`${handle}.night is already registered; choose a different Night ID`);
+      }
       if (landed === accountAddress.toLowerCase()) {
         return {
           registryAddress: registry.address,
@@ -176,4 +176,14 @@ export async function registerIdentity(
     }
   }
   throw lastError;
+}
+
+export async function accountForIdentity(mid: Midnight, handle: string): Promise<string | null> {
+  let registry = await getIdentityRegistry(mid);
+  try {
+    await registry.ledgerState();
+  } catch {
+    registry = await deployFreshIdentityRegistry(mid);
+  }
+  return registry.accountFor(handle);
 }

@@ -13,11 +13,31 @@
 
 const PRF_SALT = new TextEncoder().encode('midnight:passport:prf:device:v0');
 
-const RP_NAME = 'NightFi Demo';
+const RP_NAME = 'MN Passport Foundations';
 
 export interface PasskeyRef {
   credentialIdB64: string;
   label: string;
+}
+
+function isIpHost(hostname: string): boolean {
+  return /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname === '[::1]';
+}
+
+function rpEntity(): PublicKeyCredentialRpEntity {
+  const hostname = window.location.hostname;
+  if (hostname === 'localhost') return { name: RP_NAME, id: 'localhost' };
+  if (hostname.endsWith('.localhost')) return { name: RP_NAME, id: hostname };
+  if (isIpHost(hostname)) return { name: RP_NAME };
+  return { name: RP_NAME, id: hostname };
+}
+
+function explainPasskeyError(error: unknown): string {
+  const message = String((error as { message?: unknown })?.message ?? error);
+  if (/invalid domain|relying party|rp id|security/i.test(message)) {
+    return 'Passkeys need a valid local domain. Open the demo at http://localhost:5173/ and try again.';
+  }
+  return message;
 }
 
 function b64encode(buf: ArrayBuffer): string {
@@ -32,26 +52,31 @@ function b64decode(s: string): Uint8Array<ArrayBuffer> {
 }
 
 export async function createPasskey(label: string): Promise<PasskeyRef> {
-  const cred = (await navigator.credentials.create({
-    publicKey: {
-      rp: { name: RP_NAME, id: window.location.hostname },
-      user: {
-        id: crypto.getRandomValues(new Uint8Array(16)),
-        name: label,
-        displayName: label,
+  let cred: PublicKeyCredential | null;
+  try {
+    cred = (await navigator.credentials.create({
+      publicKey: {
+        rp: rpEntity(),
+        user: {
+          id: crypto.getRandomValues(new Uint8Array(16)),
+          name: label,
+          displayName: label,
+        },
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 }, // ES256
+          { type: 'public-key', alg: -257 }, // RS256
+        ],
+        authenticatorSelection: {
+          residentKey: 'required',
+          userVerification: 'required',
+        },
+        extensions: { prf: {} } as any,
       },
-      challenge: crypto.getRandomValues(new Uint8Array(32)),
-      pubKeyCredParams: [
-        { type: 'public-key', alg: -7 }, // ES256
-        { type: 'public-key', alg: -257 }, // RS256
-      ],
-      authenticatorSelection: {
-        residentKey: 'required',
-        userVerification: 'required',
-      },
-      extensions: { prf: {} } as any,
-    },
-  })) as PublicKeyCredential | null;
+    })) as PublicKeyCredential | null;
+  } catch (error) {
+    throw new Error(explainPasskeyError(error));
+  }
   if (!cred) throw new Error('passkey creation was cancelled');
 
   const ext: any = cred.getClientExtensionResults();

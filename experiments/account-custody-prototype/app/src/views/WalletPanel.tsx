@@ -32,14 +32,14 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
   return (
     <>
       <ViewHeader
-        title="NightFi holdings"
-        narration="Assets are held by your NightFi custody contract, not by a key. Night moves with an on-ledger balance mirror; shielded coins follow the OZ Map⟨colour, QSCI⟩ pattern — values public in this local demo."
+        title="MN Passport holdings"
+        narration="Assets are held by your MN Passport custody contract, not by a key. Night moves with an on-ledger balance mirror; shielded coins follow the OZ Map⟨colour, QSCI⟩ pattern — values public in this local demo."
       />
 
       <Panel
         title="Night — unshielded"
-        sub="Custodied by the NightFi account contract; the balance is public ledger state."
-        x="Night sits in your NightFi custody contract, not at a key-derived address. The contract keeps an on-ledger balance mirror, which is what makes balances readable from the indexer (C4)."
+        sub="Custodied by the MN Passport account contract; the balance is public ledger state."
+        x="Night sits in your MN Passport custody contract, not at a key-derived address. The contract keeps an on-ledger balance mirror, which is what makes balances readable from the indexer (C4)."
       >
         <table className="table-tight">
           <thead>
@@ -52,7 +52,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
             {nights.length === 0 && (
               <tr>
                 <td className="dim" colSpan={2}>
-                  no Night held by the NightFi custody account yet — deposit from the fee wallet below
+                  no Night held by the MN Passport custody account yet — deposit from the fee wallet below
                 </td>
               </tr>
             )}
@@ -71,7 +71,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
           <ActionButton
             label="Deposit Night"
             busyLabel="depositing…"
-            task={{ label: 'Depositing Night into NightFi custody', circuit: 'deposit_night' }}
+            task={{ label: 'Depositing Night into MN Passport custody', circuit: 'deposit_night' }}
             onRun={async () => {
               const r = await account.depositNight(nightColor, BigInt(depositAmt));
               log(`deposit_night ${depositAmt} → tx ${r.txId}`);
@@ -101,7 +101,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
       </Panel>
 
       <Panel
-        title="Shielded — NightFi custody"
+        title="Shielded — MN Passport custody"
         sub="Coins sit in the contract keyed by colour; the QSCI keeps values public in this local demo."
         x="Shielded coins held by the contract, keyed by colour (the OZ Map⟨colour, QSCI⟩ pattern). Contract-held coin values are public ledger state — the documented C4 trade-off for this local demo."
       >
@@ -117,7 +117,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
             {coins.length === 0 && (
               <tr>
                 <td className="dim" colSpan={3}>
-                  no shielded coins held by the NightFi custody account yet — mint from the faucet below
+                  no shielded coins held by the MN Passport custody account yet — mint from the faucet below
                 </td>
               </tr>
             )}
@@ -217,7 +217,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
             <ActionButton
               label="Deposit into account"
               busyLabel="depositing…"
-              task={{ label: 'Depositing the shielded note into NightFi custody', circuit: 'deposit_shielded' }}
+              task={{ label: 'Depositing the shielded note into MN Passport custody', circuit: 'deposit_shielded' }}
               onRun={async () => {
                 const r = await account.depositShielded({
                   nonce: hexToBytes(note.nonceHex),

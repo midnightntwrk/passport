@@ -1,5 +1,5 @@
-// Headless end-to-end check of the local NightFi demo stack using dev mode (no
-// passkey): onboard, choose a pool, deposit Night through the NightFi custody
+// Headless end-to-end check of the local MN Passport demo stack using a local
+// demo device secret: onboard, choose a pool, deposit Night through the MN Passport custody
 // contract, claim a local Night ID, deploy a staged position, and reach the
 // dashboard. WebAuthn flows still need a human.
 //
@@ -108,13 +108,11 @@ const setFirstTextInput = async (value) => {
 
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await waitForText('CREATE YOUR NIGHTFI WALLET', 120_000);
+  await waitForText('CREATE YOUR MN PASSPORT', 120_000);
 
-  // Dev-mode onboarding.
+  // Local-demo onboarding: no browser passkey or credential storage.
   await setFirstTextInput(demoHandle);
-  await page.click('input[type="checkbox"]');
-  await page.type('input[type="password"]', 'e2e-test-passphrase');
-  await clickButton('Create NightFi wallet (dev mode)');
+  await clickButton('Deploy MN Passport account');
   console.log('… deploying account and registering identity from the browser (this takes a while)');
   await waitForText('Earn yield, privately.', 300_000);
   await waitForText('Custody balance', 60_000);
@@ -139,7 +137,7 @@ try {
   await waitForText('getDustAddress()', 60_000);
   await clickButtonContaining('Continue with 1am connector');
   console.log('… proving deposit_night through the demo prover');
-  await waitForText('Deposited into your NightFi custody account', 300_000);
+  await waitForText('Deposited into your MN Passport custody account', 300_000);
   await clickButton('Continue - verify Night ID');
 
   await waitForText('Verify your Night ID.', 60_000);
@@ -150,14 +148,14 @@ try {
   await clickButtonContaining('View dashboard');
   await waitForText('Retail Yield Pool', 60_000);
   await waitForText('Active', 60_000);
-  console.log('✓ NightFi flow completed — dashboard shows an active Retail Yield Pool position');
+  console.log('✓ MN Passport flow completed — dashboard shows an active Retail Yield Pool position');
 
-  // The second demo flow: the NightFi custody/account-management workspace.
+  // The second demo flow: the MN Passport custody/account-management workspace.
   // It should expose the live contract wallet state created above.
   await clickButton('Custody details');
-  await waitForText('NightFi holdings', 60_000);
+  await waitForText('MN Passport holdings', 60_000);
   await waitForText('Night — unshielded', 60_000);
-  await waitForText('Shielded — NightFi custody', 60_000);
+  await waitForText('Shielded — MN Passport custody', 60_000);
   const custodyHasDeposit = await page.evaluate(() =>
     [...document.querySelectorAll('tbody tr')].some((row) => row.textContent?.includes('1000')),
   );
@@ -167,8 +165,8 @@ try {
   console.log('✓ custody holdings show the deposited Night balance');
 
   await clickNav('Wallet Overview');
-  await waitForText('Your NightFi wallet is a contract', 60_000);
-  await waitForText('NightFi ID registry', 60_000);
+  await waitForText('Your MN Passport wallet is a contract', 60_000);
+  await waitForText('MN Passport ID registry', 60_000);
   await waitForText('Identity tx', 60_000);
   await waitForText('Recovery shares', 60_000);
   console.log('✓ wallet overview exposes contract, identity, device, grant, and recovery state');
@@ -185,7 +183,7 @@ try {
   await waitForText('Recovery shares', 60_000);
   await waitForText('Simulate the disaster', 60_000);
 
-  await clickNav('NightFi Flow');
+  await clickNav('Foundations Flow');
   await waitForText('Earn yield, privately.', 60_000);
   console.log('✓ custody workspace completed — overview, holdings, connections, devices, recovery, and return flow render');
 

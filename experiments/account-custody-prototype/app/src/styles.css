@@ -1,6 +1,6 @@
-/* NightFi demo shell.
+/* MN Passport foundations shell.
    Light, readable, product-focused: warm near-white paper, ink text, one
-   NightFi green accent, red reserved for true errors. */
+   Passport green accent, red reserved for true errors. */
 
 :root {
   /* clarity palette */
@@ -2825,7 +2825,7 @@ body[data-explain='1'] .x {
   }
 }
 
-/* ——— NightFi client-facing flow ——— */
+/* ——— MN Passport foundations flow ——— */
 
 .passport-nf[data-theme='light'] {
   --bg-0: #f7f6f1;
@@ -2864,7 +2864,7 @@ body[data-explain='1'] .x {
   --logo-acc-1: #263f2c;
 }
 
-.nightfi-page {
+.foundations-page {
   min-height: 100vh;
   background: #f7f6f1;
 }
@@ -4328,7 +4328,7 @@ body[data-explain='1'] .x {
   pointer-events: none;
 }
 
-.nightfi-page:has(.nf-mb) .nf-demo-docks {
+.foundations-page:has(.nf-mb) .nf-demo-docks {
   display: none;
 }
 

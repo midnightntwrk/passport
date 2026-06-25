@@ -1,4 +1,4 @@
-// Mobile-viewport capture (iPhone-sized emulation): onboarding, NightFi earn,
+// Mobile-viewport capture (iPhone-sized emulation): onboarding, MN Passport earn,
 // bridge proof, Night ID, deploy, and dashboard.
 //
 // Usage: node scripts/screenshot-mobile.mjs [url] [outDir]
@@ -108,18 +108,16 @@ const setFirstTextInput = async (value) => {
 
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await waitForText('CREATE YOUR NIGHTFI WALLET', 180_000);
+  await waitForText('CREATE YOUR MN PASSPORT', 180_000);
   await sleep(800);
   await shot('m01-onboard');
 
   await setFirstTextInput(demoHandle);
-  await page.click('input[type="checkbox"]');
-  await page.type('input[type="password"]', 'mobile-shot-passphrase');
-  await clickButton('Create NightFi wallet (dev mode)');
+  await clickButton('Deploy MN Passport account');
   console.log('… deploying account and registering identity');
   await waitForText('Earn yield, privately.', 300_000);
   await sleep(1000);
-  await shot('m02-nightfi-earn');
+  await shot('m02-foundations-earn');
 
   await clickButtonContaining('Deposit into pool');
   await waitForText('Deposit amount', 60_000);
@@ -137,7 +135,7 @@ try {
   await clickButtonContaining('Continue with 1am connector');
   await sleep(6_000); // mid-prove: dock live with the on-device chip
   await shot('m05-bridge-proving');
-  await waitForText('Deposited into your NightFi custody account', 300_000);
+  await waitForText('Deposited into your MN Passport custody account', 300_000);
   await sleep(1000);
   await shot('m06-bridge-confirmed');
 
