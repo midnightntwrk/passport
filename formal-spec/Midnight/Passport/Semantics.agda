@@ -38,7 +38,7 @@ import CategoricalCrypto.Channel.Core as Ch
 import CategoricalCrypto.Machine.Core as Mc
 
 ------------------------------------------------------------------------
--- 0.  Object generators: the architecture's channels
+-- 1.  Object generators: the architecture's channels
 ------------------------------------------------------------------------
 
 data ArchChan : Set where
@@ -49,7 +49,7 @@ module HA = FSM.FreeMonoidalHelper Symm ArchChan
 open HA using (ObjTerm; _⊗₀_; unit; Var)
 
 ------------------------------------------------------------------------
--- 1.  Morphism generators: exactly the boxes of `architecture`
+-- 2.  Morphism generators: exactly the boxes of `architecture`
 ------------------------------------------------------------------------
 
 data ArchBox : ObjTerm → ObjTerm → Set where
@@ -69,7 +69,7 @@ data ArchBox : ObjTerm → ObjTerm → Set where
 open HA.Mor ArchBox
 
 ------------------------------------------------------------------------
--- 2.  `architecture`, rebuilt in C_arch
+-- 3.  `architecture`, rebuilt in C_arch
 ------------------------------------------------------------------------
 
 opaque
@@ -83,7 +83,7 @@ opaque
     ∘ ( var didContract ⊗₁ var nameService ⊗₁ var peerDevices )
 
 ------------------------------------------------------------------------
--- 3.  Syntax functor  C_arch → FMTerm
+-- 4.  Syntax functor  C_arch → FMTerm
 ------------------------------------------------------------------------
 
 chanName : ArchChan → String
@@ -140,27 +140,75 @@ opaque
   architectureˢ = syn architectureᶜ
 
 ------------------------------------------------------------------------
--- 4.  Semantics interpretation: generators → Machine
+-- 5.  Semantics interpretation: generators → Machine
 ------------------------------------------------------------------------
 
--- Placeholder channel for every architecture channel.
-● : Ch.Channel
-● = ⊤ Ch.⇿ ⊤
-
-objₘ : ArchChan → Ch.Channel
-objₘ _ = ●
-
+-- Lift a per-channel assignment to a Channel over the whole object term.
 opaque
   unfolding ObjTerm _⊗₀_ unit Var
 
+  objChannels : (ArchChan → Ch.Channel) → ObjTerm → Ch.Channel
+  objChannels f []       = Ch.I
+  objChannels f (x ∷ xs) = f x Ch.⊗₀ objChannels f xs
+
+-- The per-channel assignment: one actual Channel per ArchChan constructor,
+-- lifted to the object map ⟦_⟧₀ of the interpretation functor.
+record ChannelModel : Set₁ where
+  field
+    ⟦TBD⟧            : Ch.Channel
+    ⟦TBD-SYNC⟧       : Ch.Channel
+    ⟦RECOVERY-P5⟧    : Ch.Channel
+    ⟦READ-STATE⟧     : Ch.Channel
+    ⟦JUBJUB-SCHNORR⟧ : Ch.Channel
+    ⟦STATE⟧          : Ch.Channel
+    ⟦WITNESS-IPC⟧    : Ch.Channel
+    ⟦User⟧           : Ch.Channel
+
+  chanObj : ArchChan → Ch.Channel
+  chanObj TBD            = ⟦TBD⟧
+  chanObj TBD-SYNC       = ⟦TBD-SYNC⟧
+  chanObj RECOVERY-P5    = ⟦RECOVERY-P5⟧
+  chanObj READ-STATE     = ⟦READ-STATE⟧
+  chanObj JUBJUB-SCHNORR = ⟦JUBJUB-SCHNORR⟧
+  chanObj STATE          = ⟦STATE⟧
+  chanObj WITNESS-IPC    = ⟦WITNESS-IPC⟧
+  chanObj User           = ⟦User⟧
+
+  -- the functor's action on objects
   ⟦_⟧₀ : ObjTerm → Ch.Channel
-  ⟦ []     ⟧₀ = Ch.I
-  ⟦ x ∷ xs ⟧₀ = objₘ x Ch.⊗₀ ⟦ xs ⟧₀
+  ⟦_⟧₀ = objChannels chanObj
 
--- The chaotic stub machine: every transition is permitted.
-stub : ∀ {A B} → Mc.Machine A B
-stub = Mc.MkMachine {State = ⊤} (λ _ _ _ _ → ⊤)
+-- A model assigns an actual Channel to each channel generator (via the
+-- ChannelModel) and an actual Machine to each box generator.  Reading the
+-- machine fields off gives the morphism map ⟦_⟧₁ : ArchBox → Machine — the
+-- generator data that induces the semantics functor C_arch → Machine.
+record MachineModel : Set₁ where
+  field
+    channels : ChannelModel
+  open ChannelModel channels public
+  field
+    ⟦didContract⟧     : Mc.Machine ⟦ unit ⟧₀ ⟦ Var TBD ⟧₀
+    ⟦nameService⟧     : Mc.Machine ⟦ unit ⟧₀ ⟦ Var TBD ⟧₀
+    ⟦peerDevices⟧     : Mc.Machine ⟦ unit ⟧₀ ⟦ Var TBD-SYNC ⟧₀
+    ⟦recoveryHelpers⟧ : Mc.Machine ⟦ unit ⟧₀ ⟦ Var RECOVERY-P5 ⟧₀
+    ⟦indexer⟧         : Mc.Machine ⟦ unit ⟧₀ ⟦ Var READ-STATE ⟧₀
+    ⟦accountCustody⟧  : Mc.Machine ⟦ Var TBD ⊗₀ Var TBD ⟧₀ ⟦ Var JUBJUB-SCHNORR ⟧₀
+    ⟦localWallet⟧     : Mc.Machine ⟦ Var TBD-SYNC ⟧₀ ⟦ Var STATE ⟧₀
+    ⟦proofServer⟧     : Mc.Machine ⟦ unit ⟧₀ ⟦ Var WITNESS-IPC ⟧₀
+    ⟦passportKey⟧     : Mc.Machine
+                          ⟦ Var RECOVERY-P5 ⊗₀ Var READ-STATE ⊗₀ Var JUBJUB-SCHNORR
+                          ⊗₀ Var STATE ⊗₀ Var WITNESS-IPC ⟧₀
+                          ⟦ Var User ⟧₀
 
--- Morphism-generator interpretation.
-morₘ : ∀ {A B} → ArchBox A B → Mc.Machine ⟦ A ⟧₀ ⟦ B ⟧₀
-morₘ _ = stub
+  -- The functor from the box generators into the category of machines,
+  -- reading each box off its field.
+  ⟦_⟧₁ : ∀ {A B} → ArchBox A B → Mc.Machine ⟦ A ⟧₀ ⟦ B ⟧₀
+  ⟦ didContract     ⟧₁ = ⟦didContract⟧
+  ⟦ nameService     ⟧₁ = ⟦nameService⟧
+  ⟦ peerDevices     ⟧₁ = ⟦peerDevices⟧
+  ⟦ recoveryHelpers ⟧₁ = ⟦recoveryHelpers⟧
+  ⟦ indexer         ⟧₁ = ⟦indexer⟧
+  ⟦ accountCustody  ⟧₁ = ⟦accountCustody⟧
+  ⟦ localWallet     ⟧₁ = ⟦localWallet⟧
+  ⟦ proofServer     ⟧₁ = ⟦proofServer⟧
+  ⟦ passportKey     ⟧₁ = ⟦passportKey⟧
