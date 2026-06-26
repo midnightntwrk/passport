@@ -30,10 +30,12 @@
       # ── nix run ─────────────────────────────────────────────────────────────
       # Runs the renderer directly:
       #
-      #   nix run formal-spec/render -- input.json [output.svg] [--dot]
+      #   nix run formal-spec/render -- input.jl [output_dir] [--dot]
       #
-      # Julia packages are fetched into ~/.julia on first run (needs network).
-      # Subsequent runs are instant since the depot is cached.
+      # input.jl is the generated Julia source from ./passport-compiler.
+      # Julia packages (including Graphviz_jll, which bundles `dot`) are fetched
+      # into ~/.julia on first run (needs network). Subsequent runs are instant
+      # since the depot is cached.
       apps = forAllSystems (system:
         let
           pkgs     = nixpkgs.legacyPackages.${system};

@@ -1,93 +1,65 @@
 #!/usr/bin/env julia
-# render.jl — render passport wiring diagrams from JSON to SVG (or DOT).
+# render.jl — render passport wiring diagrams from generated Julia source to SVG (or DOT).
 #
 # Usage:
-#   julia render.jl <input.json> [output.svg]          # single diagram object
-#   julia render.jl <input.json> [output_dir]          # array of diagrams
-#   julia render.jl <input.json> [output.svg] --dot    # emit DOT instead of SVG
+#   julia render.jl <input.jl> [output_dir]          # render every diagram
+#   julia render.jl <input.jl> [output_dir] --dot    # emit DOT instead of SVG
 #
-# For a single diagram object, output defaults to stdout.
-# For a JSON array, each diagram is written to <output_dir>/<name>.svg
-# (defaulting to the current directory when no output arg is given).
+# <input.jl> is produced by the Agda compiler (./passport-compiler). It binds
+# a `DIAGRAMS` vector of `"name" => WiringDiagram` pairs by reconstructing each
+# diagram through Catlab's symmetric-monoidal combinators (compose/otimes/id).
+# Each diagram is written to <output_dir>/<name>.svg (or .dot), defaulting to
+# the current directory when no output arg is given.
 #
 # Run `julia -e 'import Pkg; Pkg.instantiate()'` once inside formal-spec/render/
-# to fetch Catlab, Graphviz_jll, and JSON from the General registry.
+# to fetch Catlab and Graphviz_jll from the General registry. Graphviz_jll
+# bundles the `dot` binary, so no system Graphviz install is required.
 
 using Catlab
 using Catlab.WiringDiagrams
+using Catlab.Theories
 using Catlab.Graphics
-using Catlab.Graphics.Graphviz: run_graphviz, pprint
-using JSON
+using Catlab.Graphics.Graphviz: run_graphviz, pprint, Graph, Node
+# Loading Graphviz_jll activates Catlab's CatlabGraphvizExt, so run_graphviz
+# uses the bundled `dot` binary — no system Graphviz install or PATH needed.
+using Graphviz_jll
 
-# ── JSON interchange schema ───────────────────────────────────────────────────
-#
-# Single diagram:
-# {
-#   "inputs":  ["ChannelName", ...],   -- outer input port names
-#   "outputs": ["ChannelName", ...],   -- outer output port names
-#   "boxes": [
-#     { "id": 1, "name": "ComponentName",
-#       "inputs": ["ChannelName", ...],
-#       "outputs": ["ChannelName", ...] }
-#   ],
-#   "wires": [
-#     { "fromBox": 0,  "fromPort": 0, "toBox": 1,  "toPort": 0 },
-#     { "fromBox": 1,  "fromPort": 0, "toBox": -1, "toPort": 0 }
-#     -- fromBox 0  = outer input boundary
-#     -- toBox  -1  = outer output boundary
-#     -- ports are 0-indexed
-#   ]
-# }
-#
-# Array (multiple diagrams, each with an additional "name" field):
-# [
-#   { "name": "passport", "inputs": [...], ... },
-#   { "name": "identity-signing-custody", "inputs": [...], ... }
-# ]
+# ── Generated source is evaluated in its own module ──────────────────────────
+# Base.include(mod, path) runs the file's `using`/`gen`/`DIAGRAMS` bindings
+# inside `Generated`, keeping them out of Main.
+module Generated end
 
-# ── Build a WiringDiagram from the parsed JSON dict ───────────────────────────
-function build_diagram(spec::Dict)::WiringDiagram
-    d = WiringDiagram(
-        spec["inputs"]::Vector,
-        spec["outputs"]::Vector,
-    )
-
-    # Map from JSON box id → Catlab vertex id.
-    # JSON box 0  → input_id(d)   (outer input boundary)
-    # JSON box -1 → output_id(d)  (outer output boundary)
-    id_map = Dict{Int,Int}(
-        0  => input_id(d),
-        -1 => output_id(d),
-    )
-
-    for box_spec in spec["boxes"]
-        v = add_box!(d, Box(
-            box_spec["name"]::String,
-            box_spec["inputs"]::Vector,
-            box_spec["outputs"]::Vector,
-        ))
-        id_map[box_spec["id"]::Int] = v
+# ── Fix rounded style after to_graphviz ──────────────────────────────────────
+# to_graphviz's cell_attrs removes the inner TD border, but graphviz_box
+# hardcodes style="solid" per node, overriding the global node_attrs default.
+# There is no public API parameter to change this; post-process here.
+function set_rounded_style!(g::Graph)
+    for stmt in g.stmts
+        if stmt isa Node
+            stmt.attrs[:style] = "rounded,filled"
+        end
     end
-
-    for wire_spec in spec["wires"]
-        src_box  = id_map[wire_spec["fromBox"]::Int]
-        src_port = wire_spec["fromPort"]::Int + 1   # JSON 0-indexed → Julia 1-indexed
-        tgt_box  = id_map[wire_spec["toBox"]::Int]
-        tgt_port = wire_spec["toPort"]::Int + 1
-
-        add_wire!(d, Wire(
-            Port(src_box, OutputPort, src_port),
-            Port(tgt_box, InputPort,  tgt_port),
-        ))
-    end
-
-    return d
+    return g
 end
 
-# ── Render a single diagram spec ──────────────────────────────────────────────
-function render_one(spec::Dict, want_dot::Bool, out_path::Union{String,Nothing})
-    d = build_diagram(spec)
-    g = to_graphviz(d; orientation=LeftToRight, labels=true)
+# Catlab defaults to the "Serif" font, for which Graphviz has no built-in
+# metrics; without a working pango plugin it warns and falls back to Times.
+# Pin Times-Roman directly (graph, node, and edge) — a font Graphviz has
+# metrics for — so layout is deterministic and the warnings disappear.
+const FONT = "Times-Roman"
+
+# ── Render a single WiringDiagram ─────────────────────────────────────────────
+function render_one(d, want_dot::Bool, out_path::Union{String,Nothing})
+    g = to_graphviz(d;
+        orientation = BottomToTop,
+        labels      = true,
+        graph_attrs = Dict(:fontname => FONT),
+        node_attrs  = Dict(:shape => "rectangle", :fontcolor => "black",
+                           :fillcolor => "white", :fontname => FONT),
+        edge_attrs  = Dict(:fontname => FONT),
+        cell_attrs  = Dict(:border => "0"),
+    )
+    set_rounded_style!(g)
 
     if want_dot
         if out_path === nothing
@@ -97,42 +69,41 @@ function render_one(spec::Dict, want_dot::Bool, out_path::Union{String,Nothing})
             println(stderr, "Wrote DOT to: ", out_path)
         end
     else
-        if out_path === nothing
-            run_graphviz(stdout, g; format="svg")
-        else
-            open(out_path, "w") do io; run_graphviz(io, g; format="svg") end
-            println(stderr, "Wrote SVG to: ", out_path)
+        # Catlab runs the bundled `dot` as a bare path, so the subprocess does
+        # not inherit Graphviz_jll's library path and its pango plugin fails to
+        # load. Prepend LIBPATH so plugins (and proper font shaping) resolve.
+        withenv("LD_LIBRARY_PATH" => string(Graphviz_jll.LIBPATH[],
+                    Sys.iswindows() ? ";" : ":", get(ENV, "LD_LIBRARY_PATH", ""))) do
+            if out_path === nothing
+                run_graphviz(stdout, g; format="svg")
+            else
+                open(out_path, "w") do io; run_graphviz(io, g; format="svg") end
+                println(stderr, "Wrote SVG to: ", out_path)
+            end
         end
     end
 end
 
 # ── Entry point ───────────────────────────────────────────────────────────────
-function main(args::Vector{String})
-    if isempty(args)
-        println(stderr, "Usage: julia render.jl <input.json> [output.svg|output_dir] [--dot]")
-        exit(1)
-    end
-
-    input_path = args[1]
-    want_dot   = "--dot" in args
-    out_arg    = let candidates = filter(a -> a != "--dot" && a != input_path, args)
-        isempty(candidates) ? nothing : candidates[1]
-    end
-
-    parsed = open(JSON.parse, input_path)
-
-    if parsed isa Vector
-        # Array of named diagrams: write <out_dir>/<name>.svg for each.
-        out_dir = out_arg === nothing ? "." : out_arg
-        mkpath(out_dir)
-        for spec in parsed
-            name = spec["name"]::String
-            ext  = want_dot ? ".dot" : ".svg"
-            render_one(spec, want_dot, joinpath(out_dir, name * ext))
-        end
-    else
-        render_one(parsed, want_dot, out_arg)
-    end
+# These run as separate top-level statements (not wrapped in a function) so the
+# world age advances between Base.include — which creates Generated.DIAGRAMS —
+# and the loop that reads it.
+if isempty(ARGS)
+    println(stderr, "Usage: julia render.jl <input.jl> [output_dir] [--dot]")
+    exit(1)
 end
 
-main(ARGS)
+const INPUT_PATH = ARGS[1]
+const WANT_DOT   = "--dot" in ARGS
+const OUT_DIR    = let candidates = filter(a -> a != "--dot" && a != INPUT_PATH, ARGS)
+    isempty(candidates) ? "." : candidates[1]
+end
+
+# Evaluate the generated source; it binds `Generated.DIAGRAMS`.
+Base.include(Generated, abspath(INPUT_PATH))
+
+# Separate top-level statement: world age has advanced past the include above.
+mkpath(OUT_DIR)
+for (name, d) in Generated.DIAGRAMS
+    render_one(d, WANT_DOT, joinpath(OUT_DIR, name * (WANT_DOT ? ".dot" : ".svg")))
+end
