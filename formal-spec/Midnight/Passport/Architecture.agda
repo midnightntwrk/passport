@@ -157,24 +157,3 @@ opaque
     ⊗ gen "C3-DIDSurface"  (Var "C1-C3") (Var "C3-Chain")
     ⊗ idm                  (Var "C1-Chain")
     )
-
-  ------------------------------------------------------------------------
-  -- Full architecture overview
-
-  architecture : HomTerm unit (Var "User")
-  architecture =
-    ( gen "Midnight DID contract"  unit (Var "TBD")
-    ⊗ gen "Name Service"           unit (Var "TBD")
-    ⊗ gen "+ peer devices"         unit (Var "TBD SYNC")
-    )
-    >>
-    ( gen "Recovery helpers"       unit (Var "RECOVERY-P5")
-    ⊗ gen "Indexer"                unit (Var "READ STATE")
-    ⊗ gen "Account custody contract" (Var "TBD" ⊗₀ Var "TBD") (Var "JUBJUB SCHNORR")
-    ⊗ gen "Local wallet storage"   (Var "TBD SYNC") (Var "STATE")
-    ⊗ gen "Proof server"           unit (Var "WITNESS-IPC")
-    )
-    >>
-    gen "Passport Key"
-        ( Var "RECOVERY-P5" ⊗₀ Var "READ STATE" ⊗₀ Var "JUBJUB SCHNORR" ⊗₀ Var "STATE" ⊗₀ Var "WITNESS-IPC" )
-        ( Var "User" )

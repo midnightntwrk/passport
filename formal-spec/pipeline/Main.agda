@@ -21,11 +21,12 @@ open import IO
 open import Data.String using (String; _++_)
 
 open import Midnight.Passport.Architecture
+open import Midnight.Passport.Semantics using (architectureˢ)
 open import Midnight.Passport.Compiler
 
 main : Main
 main = run (putStrLn (wrapJuliaDiagrams (
-  compileNamedDiagram "architecture" architecture
+  compileNamedDiagram "architecture" architectureˢ
   -- ++ ",\n" ++ compileNamedDiagram "passport" passport
   -- ++ ",\n" ++ compileNamedDiagram "identity-signing-custody" identitySigningCustody
   )))
