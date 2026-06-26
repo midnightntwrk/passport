@@ -70,10 +70,14 @@ function render_one(d, want_dot::Bool, out_path::Union{String,Nothing})
         end
     else
         # Catlab runs the bundled `dot` as a bare path, so the subprocess does
-        # not inherit Graphviz_jll's library path and its pango plugin fails to
-        # load. Prepend LIBPATH so plugins (and proper font shaping) resolve.
-        withenv("LD_LIBRARY_PATH" => string(Graphviz_jll.LIBPATH[],
-                    Sys.iswindows() ? ";" : ":", get(ENV, "LD_LIBRARY_PATH", ""))) do
+        # not inherit Graphviz_jll's library path and fails to load its shared
+        # libs (libexpat, pango, …). Prepend LIBPATH on the platform's dynamic
+        # loader variable so they resolve.
+        var = Sys.iswindows() ? "PATH" :
+              Sys.isapple()   ? "DYLD_FALLBACK_LIBRARY_PATH" :
+                                "LD_LIBRARY_PATH"
+        sep = Sys.iswindows() ? ";" : ":"
+        withenv(var => string(Graphviz_jll.LIBPATH[], sep, get(ENV, var, ""))) do
             if out_path === nothing
                 run_graphviz(stdout, g; format="svg")
             else
