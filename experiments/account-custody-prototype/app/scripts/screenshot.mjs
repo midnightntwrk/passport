@@ -1,9 +1,8 @@
-// Visual capture of the MN Passport demo journey (dev-mode, headless Chrome).
+// Visual capture of the demo journey (dev-mode, headless Chrome).
 //
 //   node scripts/screenshot.mjs onboard   — boot + onboarding hero only (fast)
-//   node scripts/screenshot.mjs foundations   — onboard + MN Passport earn screen
-//   node scripts/screenshot.mjs full      — onboard, pool, source, bridge,
-//                                           Night ID, deploy, dashboard
+//   node scripts/screenshot.mjs full      — dev-mode onboard, fund, grant,
+//                                           spend, revoke + per-view shots
 //
 // Shots land in <outDir> (default ../../../../tmp/passport-ui relative to
 // this script, i.e. repo-root tmp/).
@@ -18,7 +17,6 @@ const url = process.argv[3] ?? 'http://localhost:5173/';
 const here = dirname(fileURLToPath(import.meta.url));
 const outDir = process.argv[4] ?? resolve(here, '../../../../tmp/passport-ui');
 const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const demoHandle = `bubbles-${Date.now().toString(36).slice(-6)}`;
 
 mkdirSync(outDir, { recursive: true });
 
@@ -40,78 +38,34 @@ const shot = async (name) => {
 
 const waitForText = async (text, timeout) => {
   await page.waitForFunction(
-    (t) => document.body.innerText.toLowerCase().includes(t.toLowerCase()),
+    (t) => document.body.innerText.includes(t),
     { timeout, polling: 1000 },
     text,
   );
   console.log(`✓ saw: ${text}`);
 };
 
-const waitForButton = async (matcher, value, timeout = 60_000) => {
-  await page.waitForFunction(
-    ({ kind, value: v }) => {
-      const visible = (el) => {
-        const style = window.getComputedStyle(el);
-        return el.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
-      };
-      return [...document.querySelectorAll('button')].some((b) => {
-        const text = b.textContent.trim();
-        const matches = kind === 'exact' ? text === v : text.includes(v);
-        return matches && visible(b) && !b.disabled;
-      });
-    },
-    { timeout, polling: 500 },
-    { kind: matcher, value },
-  );
-};
-
 const clickButton = async (label) => {
-  await waitForButton('exact', label);
   await page.evaluate((l) => {
-    const visible = (el) => {
-      const style = window.getComputedStyle(el);
-      return el.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
-    };
-    const btn = [...document.querySelectorAll('button')].find(
-      (b) => visible(b) && !b.disabled && b.textContent.trim() === l,
-    );
+    const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === l);
     if (!btn) throw new Error(`no button: ${l}`);
     btn.click();
   }, label);
 };
 
-const clickButtonContaining = async (text, timeout) => {
-  await waitForButton('contains', text, timeout);
+// Sidebar navigation by step title.
+const clickStep = async (title) => {
   await page.evaluate((t) => {
-    const visible = (el) => {
-      const style = window.getComputedStyle(el);
-      return el.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
-    };
-    const btn = [...document.querySelectorAll('button')].find(
-      (b) => visible(b) && !b.disabled && b.textContent.trim().includes(t),
-    );
-    if (!btn) throw new Error(`no button containing: ${t}`);
-    btn.click();
-  }, text);
-};
-
-const setFirstTextInput = async (value) => {
-  const input = await page.$('.onboard-card .field input:not([type="password"])');
-  if (!input) throw new Error('no onboarding name input');
-  await page.$eval(
-    '.onboard-card .field input:not([type="password"])',
-    (el, nextValue) => {
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-      setter?.call(el, nextValue);
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    },
-    value,
-  );
+    const el = [...document.querySelectorAll('.step-title')].find((s) => s.textContent === t);
+    if (!el) throw new Error(`no nav step: ${t}`);
+    el.closest('button').click();
+  }, title);
+  await sleep(700); // let the reveal animation settle
 };
 
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await waitForText('CREATE YOUR MN PASSPORT', 180_000);
+  await waitForText('CREATE YOUR PASSPORT', 180_000);
   await sleep(1000);
   await shot('01-onboard');
 
@@ -121,70 +75,67 @@ try {
     process.exit(0);
   }
 
-  // ——— local-demo onboarding ———
-  await setFirstTextInput(demoHandle);
-  await clickButton('Deploy MN Passport account');
-  console.log('… deploying account and registering identity from the browser');
+  // ——— dev-mode onboarding ———
+  await page.click('input[type="checkbox"]');
+  await page.type('input[type="password"]', 'screenshot-run-passphrase');
+  await clickButton('Create account (dev mode)');
+  console.log('… deploying account from the browser');
   await sleep(20_000); // mid-deploy: proving dock live
   await shot('02-deploying');
-  await waitForText('Earn yield, privately.', 300_000);
+  await waitForText('PASSPORT ACCOUNT', 300_000);
   await sleep(1200);
-  await shot('03-foundations-earn');
+  await shot('03-overview');
 
-  if (mode === 'token' || mode === 'foundations') {
-    console.log('DONE (foundations mode)');
-    await browser.close();
-    process.exit(0);
-  }
-
-  // ——— MN Passport pool + amount ———
-  await clickButtonContaining('Deposit into pool');
-  await waitForText('Deposit amount', 60_000);
-  await sleep(700);
-  await shot('04-amount');
-
-  // ——— source funds ———
-  await clickButton('Continue - choose source');
-  await waitForText('Localnet fee wallet', 60_000);
-  await waitForText('deposit_night', 60_000);
-  await sleep(700);
-  await shot('05-source');
-
-  // ——— real custody deposit ———
-  await clickButtonContaining('Deposit Night into custody');
+  // ——— fund ———
+  await clickStep('Holdings');
+  await clickButton('Deposit Night');
   console.log('… proving deposit_night');
-  await sleep(8_000);
-  await shot('06-bridge-proving');
-  await waitForText('Night deposited into your MN Passport custody account', 300_000);
+  await sleep(15_000);
+  await shot('04-deposit-proving');
+  await page.waitForFunction(
+    () => [...document.querySelectorAll('td')].some((td) => td.textContent.trim() === '1000'),
+    { timeout: 300_000, polling: 2000 },
+  );
   console.log('✓ deposit landed');
   await sleep(1200);
-  await shot('07-bridge-confirmed');
+  await shot('05-assets-funded');
 
-  // ——— registry-backed Night ID ———
-  await clickButton('Continue - verify Night ID');
-  await waitForText('Verify your Night ID.', 60_000);
-  await sleep(700);
-  await shot('08-night-id');
-  await clickButton('Continue with registry identity');
-
-  // ——— staged capital deployment ———
-  await waitForText('Deploy into pool.', 60_000);
-  await sleep(700);
-  await shot('09-deploy');
-  await clickButton('Sign deposit');
-  await waitForText('Position opened', 60_000);
-  await sleep(700);
-  await shot('10-position-opened');
-  await clickButtonContaining('View dashboard');
-  await waitForText('Retail Yield Pool', 60_000);
+  // ——— grant: issue, hand over, spend ———
+  await clickStep('Connections');
+  await clickButton('Issue grant (Night, capped)');
+  console.log('… proving add_grant');
+  await waitForText('GRANT SECRET — SHOWN ONCE', 300_000);
   await sleep(1200);
-  await shot('11-dashboard');
+  await shot('06-grant-issued');
 
-  // Keep one technical custody shot for engineering review.
-  await clickButton('Custody details');
-  await waitForText('MN PASSPORT CUSTODY ACCOUNT', 60_000);
-  await sleep(1200);
-  await shot('12-custody-funded');
+  const secret = await page.evaluate(
+    () => document.querySelector('.secret-callout .mono').title.split(' ')[0],
+  );
+  console.log(`grant secret captured (${secret.length} hex chars)`);
+  await page.evaluate(() => {
+    document.querySelector('.panel-dapp input').focus();
+  });
+  await page.keyboard.type(secret);
+  await clickButton('Spend via grant');
+  console.log('… proving grant_withdraw_night');
+  await waitForText('grant_withdraw_night 50 → tx', 300_000);
+  await sleep(1500);
+  await shot('07-grant-spent');
+
+  // ——— revoke ———
+  // revoke happens in place on the Connections view
+  await sleep(700);
+  await clickButton('revoke');
+  console.log('… proving revoke_grant');
+  await waitForText('revoke_grant → tx', 300_000);
+  await sleep(1500);
+  await shot('08-grant-revoked');
+
+  // ——— browse views ———
+  await clickStep('Devices');
+  await shot('09-devices');
+  await clickStep('Recovery');
+  await shot('10-recovery');
 
   console.log('SCREENSHOTS DONE');
 } catch (e) {

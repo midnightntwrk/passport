@@ -1,0 +1,10 @@
+node_modules/
+dist/
+contracts/managed/
+midnight-level-db/
+infra/.env
+deployment.json
+faucet-deployment.json
+identity-registry-deployment.json
+*.log
+app/public/zk-params/

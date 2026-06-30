@@ -11,7 +11,6 @@ import { useTxTask, dismissTask, type TxTask } from './lib/txTracker.js';
 import { Busy, Mono, Chip } from './ui.js';
 
 import { OnboardView } from './views/Onboard.js';
-import { FoundationsFlowView, FoundationsLogo } from './views/FoundationsFlow.js';
 import { OverviewView } from './views/Overview.js';
 import { WalletPanel } from './views/WalletPanel.js';
 import { DevicesPanel } from './views/DevicesPanel.js';
@@ -39,25 +38,14 @@ export interface AppContext {
   goToView: (view: ViewId) => void;
 }
 
-export type ViewId = 'flow' | 'overview' | 'assets' | 'grants' | 'devices' | 'recovery';
+export type ViewId = 'overview' | 'assets' | 'grants' | 'devices' | 'recovery';
 
-// App navigation — MN Passport is the product shell; these are the embedded
-// custody surfaces behind the earn flow.
+// App navigation — five surfaces, no demo-flow numbering. The functional
+// labels double as the screenshot harness's navigation targets.
 const NAV: { id: ViewId; label: string; icon: React.ReactNode }[] = [
   {
-    id: 'flow',
-    label: 'Foundations Flow',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
-        <path d="M4 6h8a4 4 0 0 1 4 4v8" />
-        <path d="M4 6l3.5-3.5M4 6l3.5 3.5" />
-        <circle cx="16" cy="18" r="2.5" />
-      </svg>
-    ),
-  },
-  {
     id: 'overview',
-    label: 'Wallet Overview',
+    label: 'Overview',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
         <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2" />
@@ -118,7 +106,7 @@ export default function App() {
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [deviceCommitment, setDeviceCommitment] = useState<string | null>(null);
-  const [nav, setNav] = useState<ViewId>('flow');
+  const [nav, setNav] = useState<ViewId>('overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [explain, setExplain] = useState(() => localStorage.getItem('passport-explain') !== '0');
 
@@ -149,8 +137,6 @@ export default function App() {
           log(
             'browser proving enabled — ALL proofs (contract circuits, zswap, dust) are computed in this tab; no proof server.',
           );
-        } else {
-          log('local proof server enabled — reliable mode for the end-to-end demo.');
         }
       })
       .catch((e) => setBootError(String(e?.message ?? e)));
@@ -167,7 +153,7 @@ export default function App() {
     setAccount(null);
     setLedger(null);
     setDeviceCommitment(null);
-    setNav('flow');
+    setNav('overview');
   }, []);
 
   // Lock: drop the in-memory account handle (and with it the device secret's
@@ -178,7 +164,7 @@ export default function App() {
     setAccount(null);
     setLedger(null);
     setDeviceCommitment(null);
-    setNav('flow');
+    setNav('overview');
   }, [log]);
 
   const refreshLedger = useCallback(async () => {
@@ -280,7 +266,7 @@ export default function App() {
             setSession(s);
             setAccount(a);
             setDeviceCommitment(commitment ?? null);
-            setNav('flow');
+            setNav('overview');
           }}
           onReset={resetSession}
         />
@@ -308,23 +294,6 @@ export default function App() {
     setDeviceCommitment,
     goToView,
   };
-
-  if (nav === 'flow') {
-    return (
-      <div className="foundations-page">
-        <FoundationsFlowView
-          ctx={ctx}
-          onOpenCustody={() => setNav('assets')}
-          onDisconnect={resetSession}
-        />
-        <div className="nf-demo-docks">
-          <ProvingDock />
-          <ActivityDock lines={logLines} defaultOpen={false} />
-        </div>
-        <ExplainTip />
-      </div>
-    );
-  }
 
   const counts = navCounts(ledger);
 
@@ -398,17 +367,21 @@ function navCounts(ledger: Ledger | null): Partial<Record<ViewId, number>> {
 }
 
 function BrandMark(props: { large?: boolean }) {
+  // Crescent marque (sketch 005). The mask carves a true crescent so the
+  // glyph works on any background; the id must be unique per instance.
+  const maskId = React.useId();
   return (
     <div className={`brand ${props.large ? 'brand-large' : ''}`}>
-      <span className="brand-glyph brand-nf-glyph" aria-hidden="true">
-        <FoundationsLogo />
-      </span>
+      <svg className="brand-glyph" viewBox="0 0 32 32" aria-hidden="true">
+        <mask id={maskId}>
+          <rect width="32" height="32" fill="white" />
+          <circle cx="21.2" cy="11.8" r="10.6" fill="black" />
+        </mask>
+        <circle cx="16" cy="16" r="14.5" fill="#d92c25" mask={`url(#${maskId})`} />
+      </svg>
       <div className="brand-words">
-        <span className="brand-name brand-nf-name">
-          <span>MN</span>
-          <em>Passport</em>
-        </span>
-        <span className="brand-tag">Foundations demo</span>
+        <span className="brand-name">Midnight Passport</span>
+        <span className="brand-tag">Account-custody prototype</span>
       </div>
     </div>
   );
@@ -491,10 +464,11 @@ function HeaderStrip(props: {
   return (
     <header className="topbar">
       <div className="topbar-id">
-        <span className="eyebrow">MN Passport custody account</span>
+        {/* "Passport account" stays verbatim — the e2e harness waits for it. */}
+        <span className="eyebrow">Passport account</span>
         <span
           className="x"
-          data-x="The address of your personal MN Passport custody contract on Midnight. Anyone can verify this wallet state against the ledger."
+          data-x="The address of your personal account contract on Midnight. The passport is the contract; anyone can verify this document against the ledger."
         >
           <Mono v={session.accountAddress} short className="topbar-addr" />
         </span>
@@ -512,7 +486,7 @@ function HeaderStrip(props: {
         data-x={
           BROWSER_PROVER
             ? 'Zero-knowledge proofs are computed on this device by a wasm prover. Transactions leave your hands already proven; no proof server sees your witnesses (P6).'
-            : 'Proofs are computed by the local Docker proof server. Add ?prover=browser to opt into experimental on-device proving.'
+            : 'Proofs are computed by the local Docker proof server. Add ?prover=server to a URL to force this mode; the default is on-device proving.'
         }
       >
         <ProverChip />
@@ -686,16 +660,10 @@ function fmtElapsed(ms: number): string {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-function ActivityDock({
-  lines,
-  defaultOpen,
-}: {
-  lines: string[];
-  defaultOpen?: boolean;
-}) {
+function ActivityDock({ lines }: { lines: string[] }) {
   const ref = useRef<HTMLDivElement>(null);
   // Collapsed by default on phones — vertical space is the scarce resource.
-  const [open, setOpen] = useState(() => defaultOpen ?? window.innerWidth >= 700);
+  const [open, setOpen] = useState(() => window.innerWidth >= 700);
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight });
   }, [lines, open]);

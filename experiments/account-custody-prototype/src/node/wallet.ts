@@ -75,7 +75,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const managedPath = path.resolve(__dirname, '..', '..', 'contracts', 'managed');
 export const zkConfigPath = path.join(managedPath, 'account');
 export const faucetZkConfigPath = path.join(managedPath, 'faucet');
-export const identityRegistryZkConfigPath = path.join(managedPath, 'identity_registry');
 
 export function deriveKeys(seed: string) {
   const hdWallet = HDWallet.fromSeed(Buffer.from(seed, 'hex'));

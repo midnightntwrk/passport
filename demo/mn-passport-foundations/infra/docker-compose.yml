@@ -1,0 +1,78 @@
+# Midnight local devnet — node + indexer + proof-server.
+# Run: docker compose up -d
+# macOS: docker compose -f docker-compose.yml -f docker-compose.macos.yml up -d
+#
+# Image versions are pinned to those used by experiments/redjubjub-wallet/.
+#
+# The explicit project name keeps this stack's containers and volumes
+# separate from other experiments whose compose dir is also named `infra`
+# (a shared default project name means a shared — and stale — chain volume).
+
+name: mn-passport-foundations-demo
+
+services:
+  node:
+    image: 'midnightntwrk/midnight-node:1.0.0'
+    network_mode: host
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    volumes:
+      - node-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9944/health']
+      interval: 2s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    environment:
+      CFG_PRESET: 'dev'
+      SIDECHAIN_BLOCK_BENEFICIARY: '04bcf7ad3be7a5c790460be82a713af570f22e0f801f6659ab8e84a52be6969e'
+
+  indexer:
+    image: 'midnightntwrk/indexer-standalone:4.3.3'
+    network_mode: host
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - indexer-data:/data
+    env_file:
+      - .env
+    environment:
+      RUST_LOG: 'indexer=info,chain_indexer=info,indexer_api=info,info'
+      APP__INFRA__NODE__URL: 'ws://localhost:9944'
+      APP__APPLICATION__NETWORK_ID: 'undeployed'
+      # Required non-empty since indexer 4.3.x; SPO features are unused on
+      # the localnet, any placeholder is accepted (see the image's config.yaml).
+      APP__INFRA__SPO_NODE__BLOCKFROST_ID: 'dummy-not-using-spo'
+    healthcheck:
+      test: ['CMD-SHELL', 'cat /var/run/indexer-standalone/running']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    depends_on:
+      node:
+        condition: service_healthy
+
+  proof-server:
+    image: 'midnightntwrk/proof-server:8.1.0'
+    network_mode: host
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      disable: true
+    environment:
+      RUST_BACKTRACE: 'full'
+      EXTRA_ARGS: -v
+
+volumes:
+  node-data:
+  indexer-data:

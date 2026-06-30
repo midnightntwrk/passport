@@ -22,7 +22,7 @@ export function DevicesPanel({ ctx }: { ctx: AppContext }) {
 
       <Panel
         title="Registered devices"
-        sub="Hash-preimage auth for the local demo. Any active device is admin (1-of-n). Removing your own device locks this browser out."
+        sub="Hash-preimage auth — the prototype stand-in for C5's JubJub Schnorr. Any active device is admin (1-of-n). Removing your own device locks this browser out."
         x="Each row is a device-secret commitment in public ledger state, tagged with its enrolment epoch. Only commitments at the current epoch authorise anything; recovery bumps the epoch and strands the rest (P3, P4)."
       >
         <div className="list">

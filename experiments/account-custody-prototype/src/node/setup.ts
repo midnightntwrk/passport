@@ -8,7 +8,6 @@ import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
 
 import * as FaucetModule from '../../contracts/managed/faucet/contract/index.js';
-import { Contract as IdentityRegistryContract, IdentityRegistry } from '../wallet/identity.js';
 import { Contract } from '../wallet/contract.js';
 import { makeWitnesses } from '../wallet/witnesses.js';
 import { PassportAccount, type AccountSecrets } from '../wallet/account.js';
@@ -18,7 +17,6 @@ import {
   syncWallet,
   zkConfigPath,
   faucetZkConfigPath,
-  identityRegistryZkConfigPath,
   type WalletContext,
 } from './wallet.js';
 
@@ -42,9 +40,6 @@ export async function setupWallet(seed?: string): Promise<TestContext> {
   if (!walletSeed) throw new Error('WALLET_SEED env var required');
   if (!fs.existsSync(path.join(zkConfigPath, 'contract', 'index.js'))) {
     throw new Error('Contract not compiled. Run: npm run compile');
-  }
-  if (!fs.existsSync(path.join(identityRegistryZkConfigPath, 'contract', 'index.js'))) {
-    throw new Error('Identity registry contract not compiled. Run: npm run compile');
   }
   const walletCtx = await createWallet(walletSeed);
   await syncWallet(walletCtx, 'funding-wallet');
@@ -90,13 +85,6 @@ export function compiledFaucetContract() {
   );
 }
 
-export function compiledIdentityRegistryContract() {
-  return CompiledContract.make('identity_registry', IdentityRegistryContract as any).pipe(
-    CompiledContract.withVacantWitnesses,
-    CompiledContract.withCompiledFileAssets(identityRegistryZkConfigPath),
-  );
-}
-
 export interface FaucetHandle {
   address: string;
   providers: any;
@@ -126,9 +114,4 @@ export async function deployFaucet(walletCtx: WalletContext): Promise<FaucetHand
       return r?.public?.txId ?? r?.public?.transactionHash;
     },
   };
-}
-
-export async function deployIdentityRegistry(walletCtx: WalletContext): Promise<IdentityRegistry> {
-  const providers = await createProviders(walletCtx, identityRegistryZkConfigPath);
-  return IdentityRegistry.deploy(providers, compiledIdentityRegistryContract());
 }

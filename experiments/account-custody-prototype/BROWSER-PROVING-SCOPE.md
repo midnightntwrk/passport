@@ -1,10 +1,5 @@
 # Browser proving: removing the proof server from the demo
 
-**Token-demo note (2026/06/22):** the end-to-end demo now defaults to the
-local Docker proof server for reliability. Browser proving remains available
-behind `?prover=browser`, but it should be revalidated before using it in a
-client call.
-
 Scope drafted 2026/06/10. Companion to `DECISIONS.md`; relates to component C6
 (proof generation, alternative B) and promise P8 (the user is the prover).
 

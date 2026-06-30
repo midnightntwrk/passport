@@ -39,20 +39,10 @@ function faucetAddress(): string {
   }
 }
 
-function identityRegistryAddress(): string {
-  const p = path.resolve(__dirname, '..', 'identity-registry-deployment.json');
-  try {
-    return JSON.parse(fs.readFileSync(p, 'utf-8')).identityRegistryAddress ?? '';
-  } catch {
-    return '';
-  }
-}
-
 export default defineConfig({
   plugins: [react(), wasm(), topLevelAwait(), serveZkAssets()],
   define: {
     __FAUCET_ADDRESS__: JSON.stringify(faucetAddress()),
-    __IDENTITY_REGISTRY_ADDRESS__: JSON.stringify(identityRegistryAddress()),
   },
   resolve: {
     alias: {

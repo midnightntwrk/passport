@@ -1,0 +1,49 @@
+{
+  "name": "mn-passport-foundations-demo",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Self-contained MN Passport foundations demo with passkey onboarding, identity registration, direct custody deposit, and restore flow.",
+  "scripts": {
+    "compile": "compact compile contracts/account.compact contracts/managed/account && compact compile contracts/faucet.compact contracts/managed/faucet && compact compile contracts/identity_registry.compact contracts/managed/identity_registry",
+    "build": "tsc",
+    "demo": "node scripts/demo-local.mjs",
+    "demo:e2e": "node app/scripts/e2e-devmode.mjs http://127.0.0.1:5173/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "deploy": "tsx src/tests/deploy.ts",
+    "test:lifecycle": "tsx src/tests/lifecycle-night.ts",
+    "test:shielded": "tsx src/tests/lifecycle-shielded.ts",
+    "test:grants": "tsx src/tests/lifecycle-grants.ts",
+    "test:recovery": "tsx src/tests/lifecycle-recovery.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "^0.16.0",
+    "@midnight-ntwrk/ledger-v8": "^8.0.3",
+    "@midnight-ntwrk/midnight-js-contracts": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-network-id": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-types": "^4.0.4",
+    "@midnight-ntwrk/wallet-api": "^5.0.0",
+    "@midnight-ntwrk/wallet-sdk-address-format": "^3.1.1",
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": "^4.0.0",
+    "@midnight-ntwrk/wallet-sdk-facade": "^4.0.0",
+    "@midnight-ntwrk/wallet-sdk-hd": "^3.0.2",
+    "@midnight-ntwrk/wallet-sdk-shielded": "^3.0.0",
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "^3.0.0",
+    "@midnight-ntwrk/zswap": "^4.0.0",
+    "bip39": "^3.1.0",
+    "rxjs": "^7.8.2",
+    "ws": "^8.19.0"
+  }
+}
