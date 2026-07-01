@@ -1,0 +1,48 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Passport identity registry — demo contract.
+//
+// The registry binds a user-facing Night ID handle to the Passport
+// account-management/account-custody contract deployed during onboarding.
+// Handles are supplied as normalized, zero-padded Bytes<32>; the ledger key is
+// a domain-separated hash so later versions can swap the visible handle format
+// without changing the map surface.
+//
+// Prototype trade-off: this demo registry permits an existing handle to be
+// re-registered to a new account. Production would gate updates through
+// account ownership proofs and name-policy rules.
+// ---------------------------------------------------------------------------
+
+struct IdentityRecord {
+  handle: Bytes<32>;
+  account: Bytes<32>;
+  registration: Uint<64>;
+  active: Boolean;
+}
+
+export ledger registration_count: Uint<64>;
+export ledger identities: Map<Field, IdentityRecord>;
+
+export pure circuit derive_identity_key(handle: Bytes<32>): Field {
+  return transientHash<[Bytes<32>, Bytes<32>]>(
+    [pad(32, "midnight:passport:id:v0"), handle]
+  );
+}
+
+constructor() {
+  registration_count = 0 as Uint<64>;
+}
+
+export circuit register_identity(handle: Bytes<32>, account: Bytes<32>): [] {
+  const key = disclose(derive_identity_key(handle));
+  registration_count = ((registration_count + (1 as Uint<64>)) as Uint<64>);
+  identities.insert(key, IdentityRecord {
+    handle:       disclose(handle),
+    account:      disclose(account),
+    registration: registration_count,
+    active:       true,
+  });
+}

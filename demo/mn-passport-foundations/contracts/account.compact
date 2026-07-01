@@ -1,0 +1,406 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Passport account-custody contract — prototype (C1 + C4 + C10 + C14).
+//
+// One contract instance per Passport account (C1 alternative A). The contract
+// custodies Midnight-native assets (C4 alternative A): Night via the
+// receive/sendUnshielded pair with an explicit ledger balance mirror, and
+// shielded tokens via the OpenZeppelin Map<color, QualifiedShieldedCoinInfo>
+// pattern proven by contract-custody-feasibility S4/S6.
+//
+// Authentication (C1 authentication alternative A — prototype decision):
+// hash-preimage witness. A device holds a 32-byte secret (derived from the
+// passkey WebAuthn PRF in the demo app); the ledger stores
+// transientHash(tag, secret); every gated circuit proves preimage knowledge.
+// JubJub Schnorr (C5 alternative A) is deliberately deferred — the witness
+// pipeline (C7) and the circuit surface are designed so the auth check is a
+// single helper circuit that a Schnorr verifier can replace later.
+//
+// Hashing (prototype decision): transientHash (Poseidon) everywhere, not
+// persistentHash. Known caveat: transientHash output is not guaranteed
+// stable across Compact language versions, so commitments stored in the
+// ledger would not survive a toolchain upgrade. Accepted for a prototype;
+// the C8 registry decision will revisit this.
+//
+// Device revocation and recovery use an epoch counter instead of map
+// iteration (Compact ledger maps cannot be cleared in-circuit): a device or
+// grant is valid only if its recorded epoch equals the current device_epoch.
+// recover() bumps the epoch, instantly invalidating every device and grant.
+//
+// Recovery (C14 — prototype decision): the ledger stores a commitment to a
+// recovery secret plus three Shamir shares (2-of-3) of that secret.
+// TODO(PVSS): the shares are currently stored in plaintext in public ledger
+// state, which means anyone can reconstruct the recovery secret. This is a
+// placeholder for a publicly verifiable secret sharing scheme in which each
+// share is encrypted to a helper's public key and accompanied by a proof of
+// correct sharing (C15 territory). Do not ship.
+//
+// Known privacy trade-offs accepted for the prototype (record in C4):
+//   - QSCI publicity: contract-held shielded coin values/colours are public.
+//   - Device-commitment linkability: each authorised call discloses the
+//     calling device's commitment, linking calls by device. A Merkle-tree
+//     membership proof would hide this; deferred.
+// ---------------------------------------------------------------------------
+
+// ── Domain-separated commitment derivations (C8 — ad-hoc v0 tags) ──────────
+//
+// Exported pure circuits so TypeScript derives identical commitments via
+// pureCircuits without reimplementing Poseidon (same trick as
+// redjubjub-wallet's compute_withdraw_challenge).
+
+export pure circuit derive_device_commitment(secret: Bytes<32>): Field {
+  return transientHash<[Bytes<32>, Bytes<32>]>(
+    [pad(32, "midnight:passport:device:v0"), secret]
+  );
+}
+
+export pure circuit derive_grant_commitment(secret: Bytes<32>): Field {
+  return transientHash<[Bytes<32>, Bytes<32>]>(
+    [pad(32, "midnight:passport:grant:v0"), secret]
+  );
+}
+
+export pure circuit derive_recovery_commitment(secret: Bytes<32>): Field {
+  return transientHash<[Bytes<32>, Bytes<32>]>(
+    [pad(32, "midnight:passport:recovery:v0"), secret]
+  );
+}
+
+// ── Witnesses (C7) ──────────────────────────────────────────────────────────
+//
+// Key material enters proof generation through these three witness functions,
+// implemented client-side over the wallet's private state (C16 stand-in).
+// The secrets never appear in any public output; only their commitments are
+// disclosed (as ledger-map keys).
+
+witness device_secret(): Bytes<32>;
+witness grant_secret(): Bytes<32>;
+witness recovery_secret(): Bytes<32>;
+
+// ── Public ledger state ─────────────────────────────────────────────────────
+
+struct GrantInfo {
+  epoch: Uint<32>;
+  color: Bytes<32>;
+  cap: Uint<128>;
+  spent: Uint<128>;
+  active: Boolean;
+}
+
+export ledger round: Uint<64>;
+// Bumped by every authorised circuit. Guarantees every authorised call
+// changes contract state (replay defence) and gives tests a post-condition.
+
+export ledger device_epoch: Uint<32>;
+// Bumped by recover(). Devices and grants are valid only in the epoch they
+// were registered in.
+
+export ledger devices: Map<Field, Uint<32>>;
+// device commitment → epoch it was registered in.
+
+export ledger device_count: Uint<8>;
+// Active devices in the current epoch. Guards against removing the last one.
+
+export ledger recovery: Field;
+// Commitment to the recovery secret (derive_recovery_commitment).
+
+export ledger recovery_shares: Map<Uint<8>, Bytes<32>>;
+// Shamir shares (2-of-3) of the recovery secret, keyed by share index 1..3.
+// TODO(PVSS): plaintext shares in public state — see header comment.
+
+export ledger grants: Map<Field, GrantInfo>;
+// grant commitment → scope (C10: operation is fixed to "withdraw", object
+// scope is the token colour, quantitative bound is a cumulative value cap).
+
+export ledger night_balances: Map<Bytes<32>, Uint<128>>;
+// Explicit mirror of the contract's Night holdings per colour. Night balances
+// of a contract are not part of contract ledger state, so without this
+// mirror neither the indexer-decoded ledger nor the simulator could report
+// balances. Deposits that bypass deposit_night are invisible to the mirror —
+// accepted for the prototype.
+
+export ledger coins: Map<Bytes<32>, QualifiedShieldedCoinInfo>;
+// OZ pattern: contract-held shielded coins, one entry per colour, qualified
+// with the Merkle-tree index allocated in the depositing transaction.
+
+// ── Constructor ─────────────────────────────────────────────────────────────
+//
+// Deployed per account at onboarding. The deploying client derives the
+// commitments via the pure circuits above and splits the recovery secret
+// client-side (src/wallet/shamir.ts).
+
+constructor(
+  initial_device_commitment: Field,
+  recovery_commitment: Field,
+  share_1: Bytes<32>,
+  share_2: Bytes<32>,
+  share_3: Bytes<32>,
+) {
+  round        = 0 as Uint<64>;
+  device_epoch = 0 as Uint<32>;
+  devices.insert(disclose(initial_device_commitment), 0 as Uint<32>);
+  device_count = 1 as Uint<8>;
+  recovery     = disclose(recovery_commitment);
+  recovery_shares.insert(1 as Uint<8>, disclose(share_1));
+  recovery_shares.insert(2 as Uint<8>, disclose(share_2));
+  recovery_shares.insert(3 as Uint<8>, disclose(share_3));
+}
+
+// ── Authentication helpers ──────────────────────────────────────────────────
+//
+// C5's future in-circuit Schnorr verifier replaces the body of
+// require_device; everything downstream is agnostic to the auth scheme.
+
+circuit require_device(): [] {
+  const c = disclose(derive_device_commitment(device_secret()));
+  assert(devices.member(c), "unknown device");
+  assert(devices.lookup(c) == device_epoch, "device of revoked epoch");
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}
+
+// Scope enforcement for grant-authorised withdrawals (C10/C12): colour must
+// match, cumulative spend must stay under the cap, grant must be active and
+// from the current epoch.
+circuit require_grant(color: Bytes<32>, amount: Uint<128>): [] {
+  const g = disclose(derive_grant_commitment(grant_secret()));
+  assert(grants.member(g), "unknown grant");
+  const info = grants.lookup(g);
+  assert(info.active, "grant revoked");
+  assert(info.epoch == device_epoch, "grant of revoked epoch");
+  assert(info.color == color, "colour outside grant scope");
+  const new_spent = ((info.spent + amount) as Uint<128>);
+  assert(new_spent <= info.cap, "grant cap exceeded");
+  grants.insert(g, GrantInfo {
+    epoch:  info.epoch,
+    color:  info.color,
+    cap:    info.cap,
+    spent:  new_spent,
+    active: true,
+  });
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}
+
+// Night balance-mirror bookkeeping.
+
+circuit credit_night(color: Bytes<32>, amount: Uint<128>): [] {
+  if (night_balances.member(color)) {
+    night_balances.insert(
+      color,
+      ((night_balances.lookup(color) + amount) as Uint<128>)
+    );
+  } else {
+    night_balances.insert(color, amount);
+  }
+}
+
+circuit debit_night(color: Bytes<32>, amount: Uint<128>): [] {
+  assert(night_balances.member(color), "no balance for colour");
+  const bal = night_balances.lookup(color);
+  assert(bal >= amount, "insufficient balance");
+  night_balances.insert(color, ((bal - amount) as Uint<128>));
+}
+
+// ── Night custody (C4 — U1/U3-proven paths) ─────────────────────────────────
+
+// Permissionless deposit: anyone may fund the account.
+export circuit deposit_night(color: Bytes<32>, amount: Uint<128>): [] {
+  const c = disclose(color);
+  const a = disclose(amount);
+  receiveUnshielded(c, a);
+  credit_night(c, a);
+}
+
+// Device-authorised withdrawal to a user address.
+export circuit withdraw_night(
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  recipient: UserAddress,
+): [] {
+  require_device();
+  const c = disclose(color);
+  const a = disclose(amount);
+  debit_night(c, a);
+  sendUnshielded(c, a, right<ContractAddress, UserAddress>(disclose(recipient)));
+}
+
+// Grant-authorised withdrawal (the dApp spend path, C10).
+export circuit grant_withdraw_night(
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  recipient: UserAddress,
+): [] {
+  const c = disclose(color);
+  const a = disclose(amount);
+  require_grant(c, a);
+  debit_night(c, a);
+  sendUnshielded(c, a, right<ContractAddress, UserAddress>(disclose(recipient)));
+}
+
+// ── Shielded custody (C4 — S4/S6-proven OZ pattern) ─────────────────────────
+
+// Permissionless deposit. receiveShielded allocates the Merkle position in
+// this transaction; insertCoin persists the qualified coin for later spends.
+export circuit deposit_shielded(coin: ShieldedCoinInfo): [] {
+  receiveShielded(disclose(coin));
+  const c = disclose(coin.color);
+  if (coins.member(c)) {
+    const merged = mergeCoinImmediate(coins.lookup(c), disclose(coin));
+    coins.insertCoin(
+      c,
+      disclose(merged),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    );
+  } else {
+    coins.insertCoin(
+      c,
+      disclose(coin),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    );
+  }
+}
+
+// Device-authorised shielded withdrawal to a user's Zswap key.
+export circuit withdraw_shielded(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): [] {
+  require_device();
+  const coin = coins.lookup(disclose(color));
+  const result = sendShielded(
+    disclose(coin),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  if (disclose(result.change.is_some)) {
+    sendImmediateShielded(
+      disclose(result.change.value),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+      disclose(result.change.value.value),
+    );
+    coins.insertCoin(
+      disclose(color),
+      result.change.value,
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    );
+  } else {
+    coins.remove(disclose(color));
+  }
+}
+
+// Grant-authorised shielded withdrawal. Same OZ body as withdraw_shielded,
+// gated by the grant scope instead of a device.
+export circuit grant_withdraw_shielded(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): [] {
+  require_grant(disclose(color), disclose(amount));
+  const coin = coins.lookup(disclose(color));
+  const result = sendShielded(
+    disclose(coin),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  if (disclose(result.change.is_some)) {
+    sendImmediateShielded(
+      disclose(result.change.value),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+      disclose(result.change.value.value),
+    );
+    coins.insertCoin(
+      disclose(color),
+      result.change.value,
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    );
+  } else {
+    coins.remove(disclose(color));
+  }
+}
+
+// ── Device management (C9-facing surface) ───────────────────────────────────
+//
+// Any active device is an admin (1-of-n). Lost-device recovery (P4) is
+// remove_device called from a surviving device.
+
+export circuit add_device(new_device: Field): [] {
+  require_device();
+  const d = disclose(new_device);
+  if (devices.member(d)) {
+    assert(devices.lookup(d) != device_epoch, "device already active");
+  }
+  devices.insert(d, device_epoch);
+  device_count = ((device_count + (1 as Uint<8>)) as Uint<8>);
+}
+
+export circuit remove_device(device: Field): [] {
+  require_device();
+  const d = disclose(device);
+  assert(device_count > (1 as Uint<8>), "cannot remove last device");
+  assert(devices.member(d), "unknown device");
+  assert(devices.lookup(d) == device_epoch, "device not active");
+  devices.remove(d);
+  device_count = ((device_count - (1 as Uint<8>)) as Uint<8>);
+}
+
+// ── Grant management (C11 lifecycle: issue / revoke) ────────────────────────
+
+export circuit add_grant(grant: Field, color: Bytes<32>, cap: Uint<128>): [] {
+  require_device();
+  const g = disclose(grant);
+  if (grants.member(g)) {
+    const old = grants.lookup(g);
+    assert(!old.active || old.epoch != device_epoch, "grant already active");
+  }
+  grants.insert(g, GrantInfo {
+    epoch:  device_epoch,
+    color:  disclose(color),
+    cap:    disclose(cap),
+    spent:  0 as Uint<128>,
+    active: true,
+  });
+}
+
+export circuit revoke_grant(grant: Field): [] {
+  require_device();
+  const g = disclose(grant);
+  assert(grants.member(g), "unknown grant");
+  const old = grants.lookup(g);
+  grants.insert(g, GrantInfo {
+    epoch:  old.epoch,
+    color:  old.color,
+    cap:    old.cap,
+    spent:  old.spent,
+    active: false,
+  });
+}
+
+// ── Total-loss recovery (C14) ───────────────────────────────────────────────
+//
+// Proves knowledge of the recovery secret, bumps the device epoch (which
+// invalidates every device and grant in one step), registers the fresh
+// device, and rotates the recovery secret. Assets stay where they are:
+// recovered account ↔ recovered assets (I-5.3) holds by construction under
+// contract-custody.
+
+export circuit recover(
+  new_device_commitment:   Field,
+  new_recovery_commitment: Field,
+  new_share_1: Bytes<32>,
+  new_share_2: Bytes<32>,
+  new_share_3: Bytes<32>,
+): [] {
+  const c = derive_recovery_commitment(recovery_secret());
+  assert(c == recovery, "invalid recovery secret");
+  device_epoch = ((device_epoch + (1 as Uint<32>)) as Uint<32>);
+  devices.insert(disclose(new_device_commitment), device_epoch);
+  device_count = 1 as Uint<8>;
+  recovery = disclose(new_recovery_commitment);
+  recovery_shares.insert(1 as Uint<8>, disclose(new_share_1));
+  recovery_shares.insert(2 as Uint<8>, disclose(new_share_2));
+  recovery_shares.insert(3 as Uint<8>, disclose(new_share_3));
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}
