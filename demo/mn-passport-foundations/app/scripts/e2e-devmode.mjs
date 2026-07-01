@@ -143,6 +143,12 @@ try {
   await clickButtonContaining('Deposit Night into custody');
   console.log('… proving deposit_night through the localnet custody path');
   await waitForText('Night deposited into your MN Passport custody account', 300_000);
+  await clickButtonContaining('Open explorer');
+  await waitForText('Midnight local explorer', 60_000);
+  await waitForText('Custody deposit transaction', 60_000);
+  await waitForText('Full transaction hash', 60_000);
+  await waitForText('Local explorer payload', 60_000);
+  await clickButton('Close');
   await clickButton('Continue - verify Night ID');
 
   await waitForText('Verify your Night ID.', 60_000);
@@ -153,6 +159,10 @@ try {
   await clickButtonContaining('View dashboard');
   await waitForText('Retail Yield Pool', 60_000);
   await waitForText('Active', 60_000);
+  await clickButtonContaining('Explorer');
+  await waitForText('Midnight local explorer', 60_000);
+  await waitForText('Custody deposit transaction', 60_000);
+  await clickButton('Close');
   console.log('✓ MN Passport flow completed — dashboard shows an active Retail Yield Pool position');
 
   // The second demo flow: the MN Passport custody/account-management workspace.

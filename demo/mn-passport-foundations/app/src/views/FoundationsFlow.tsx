@@ -67,6 +67,12 @@ interface Position {
   txId: string;
 }
 
+interface ExplorerTxRow {
+  k: string;
+  v: string;
+  mono?: boolean;
+}
+
 const fmtUsd = (value: number | string) => {
   const n = typeof value === 'string' ? Number(value) : value;
   if (!Number.isFinite(n)) return '$0';
@@ -110,6 +116,12 @@ export function FoundationsFlowView({
   const [txStatusText, setTxStatusText] = useState('Awaiting custody deposit...');
   const [txConfirms, setTxConfirms] = useState(0);
   const [txId, setTxId] = useState('');
+  const [explorerTx, setExplorerTx] = useState<{
+    pool: PoolKey;
+    amount: string;
+    txId: string;
+    confirms: number;
+  } | null>(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [positions, setPositions] = useState<Position[]>(() => {
@@ -280,6 +292,7 @@ export function FoundationsFlowView({
   function startNew() {
     setAmount(pool === 'retail' ? '1000' : '50000');
     setTxId('');
+    setExplorerTx(null);
     setShowSuccess(false);
     setScene(0);
   }
@@ -332,14 +345,37 @@ export function FoundationsFlowView({
               amount={amount}
               handle={nightHandle}
               txId={txId}
+              accountAddress={ctx.session.accountAddress}
               busy={busy === 'deploy'}
               error={error}
               onBack={() => setScene(4)}
+              onOpenExplorer={() =>
+                txId &&
+                setExplorerTx({
+                  pool,
+                  amount,
+                  txId,
+                  confirms: 12,
+                })
+              }
               onDeploy={deployCapital}
             />
           )}
           {passportSignedIn && scene === 6 && (
-            <SceneDashboard handle={nightHandle} positions={positions} onNew={startNew} />
+            <SceneDashboard
+              handle={nightHandle}
+              accountAddress={ctx.session.accountAddress}
+              positions={positions}
+              onNew={startNew}
+              onOpenExplorer={(position) =>
+                setExplorerTx({
+                  pool: position.pool,
+                  amount: String(position.amount),
+                  txId: position.txId,
+                  confirms: 12,
+                })
+              }
+            />
           )}
         </div>
       </div>
@@ -377,6 +413,9 @@ export function FoundationsFlowView({
           confirms={txConfirms}
           status={txStatus}
           statusText={txStatusText}
+          accountAddress={ctx.session.accountAddress}
+          handle={nightHandle}
+          pool={pool}
           onClose={() => setShowTx(false)}
           onContinue={continueAfterBridge}
         />
@@ -388,6 +427,19 @@ export function FoundationsFlowView({
           amount={amount}
           apy={activePool.apy}
           onContinue={finishDeploy}
+        />
+      )}
+
+      {explorerTx && (
+        <NightFiExplorerModal
+          title="Custody deposit transaction"
+          amount={explorerTx.amount}
+          txId={explorerTx.txId}
+          confirms={explorerTx.confirms}
+          accountAddress={ctx.session.accountAddress}
+          handle={nightHandle}
+          pool={explorerTx.pool}
+          onClose={() => setExplorerTx(null)}
         />
       )}
     </main>
@@ -748,9 +800,15 @@ function TxModal(props: {
   confirms: number;
   status: TxStatus;
   statusText: string;
+  accountAddress: string;
+  handle: string;
+  pool: PoolKey;
   onClose: () => void;
   onContinue: () => void;
 }) {
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const canOpenExplorer = props.txId.length > 0 && props.txId !== '-';
+
   return (
     <div className="nf-mb">
       <div className="nf-modal">
@@ -764,7 +822,12 @@ function TxModal(props: {
           <div className="nf-tx-rows">
             <TxRow k="Amount" v={fmtNight(props.amount)} />
             <TxRow k="Circuit" v="deposit_night" />
-            <TxRow k="Tx hash" v={props.txId || '-'} mono />
+            <TxRow
+              k="Tx hash"
+              v={props.txId || 'Waiting for transaction hash'}
+              mono
+              onOpen={canOpenExplorer ? () => setExplorerOpen(true) : undefined}
+            />
             <TxRow k="Confirmations" v={`${props.confirms} / 12`} />
             <TxRow k="Network" v="Midnight localnet" />
           </div>
@@ -774,6 +837,18 @@ function TxModal(props: {
           </button>
         </div>
       </div>
+      {explorerOpen && (
+        <NightFiExplorerModal
+          title="Custody deposit transaction"
+          amount={props.amount}
+          txId={props.txId}
+          confirms={props.confirms}
+          accountAddress={props.accountAddress}
+          handle={props.handle}
+          pool={props.pool}
+          onClose={() => setExplorerOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -846,9 +921,11 @@ function SceneDeploy(props: {
   amount: string;
   handle: string;
   txId: string;
+  accountAddress: string;
   busy: boolean;
   error: string;
   onBack: () => void;
+  onOpenExplorer: () => void;
   onDeploy: () => void;
 }) {
   const p = POOLS[props.pool];
@@ -875,7 +952,12 @@ function SceneDeploy(props: {
           <TxRow k="Amount" v={fmtNight(props.amount)} />
           <TxRow k="Night ID" v={`${props.handle || 'you'}.night`} />
           <TxRow k="Expected APY" v={`${p.apy}%`} />
-          <TxRow k="Custody tx" v={props.txId || '-'} mono />
+          <TxRow
+            k="Custody tx"
+            v={props.txId || '-'}
+            mono
+            onOpen={props.txId ? props.onOpenExplorer : undefined}
+          />
         </div>
         <div className="nf-row-flex">
           <button className="nf-btn-ghost" onClick={props.onBack} disabled={props.busy}>
@@ -893,12 +975,16 @@ function SceneDeploy(props: {
 
 function SceneDashboard({
   handle,
+  accountAddress,
   positions,
   onNew,
+  onOpenExplorer,
 }: {
   handle: string;
+  accountAddress: string;
   positions: Position[];
   onNew: () => void;
+  onOpenExplorer: (position: Position) => void;
 }) {
   const total = positions.reduce((sum, p) => sum + p.amount, 0);
   const earned = positions.reduce((sum, p) => sum + p.earned, 0);
@@ -936,7 +1022,7 @@ function SceneDashboard({
           <div>Deposited</div>
           <div>Earned</div>
           <div>Status</div>
-          <div>Action</div>
+          <div>Tx</div>
         </div>
         {positions.map((p, i) => (
           <div className="nf-pos-row" key={`${p.txId}-${i}`}>
@@ -949,10 +1035,14 @@ function SceneDashboard({
             <div className="nf-pos-earned">{fmtUsdDec(p.earned)}</div>
             <div className="nf-pos-status active">Active</div>
             <div className="nf-pos-action">
-              <button>Manage</button>
+              <button onClick={() => onOpenExplorer(p)}>Explorer</button>
             </div>
           </div>
         ))}
+      </div>
+      <div className="nf-dashboard-contract">
+        <span>MN Passport custody account</span>
+        <code>{shortMiddle(accountAddress, 18, 14)}</code>
       </div>
     </div>
   );
@@ -990,6 +1080,134 @@ function SuccessModal(props: {
   );
 }
 
+function buildNightFiExplorerRows({
+  amount,
+  txId,
+  confirms,
+  accountAddress,
+  handle,
+  pool,
+}: {
+  amount: string;
+  txId: string;
+  confirms: number;
+  accountAddress: string;
+  handle: string;
+  pool: PoolKey;
+}): ExplorerTxRow[] {
+  const owner = `${normalizeAlias(handle || 'bubbles')}.night`;
+  return [
+    { k: 'Circuit', v: 'deposit_night' },
+    { k: 'Network', v: 'Midnight localnet' },
+    { k: 'From', v: 'Passport funding rail' },
+    { k: 'To', v: accountAddress, mono: true },
+    { k: 'Amount', v: fmtNight(amount) },
+    { k: 'Pool', v: `${POOLS[pool].name} ${POOLS[pool].serif}` },
+    { k: 'Owner identity', v: owner },
+    { k: 'Confirmations', v: `${confirms} / 12` },
+    { k: 'Status', v: confirms >= 12 ? 'landed' : 'confirming' },
+    { k: 'Tx hash', v: txId, mono: true },
+  ];
+}
+
+function NightFiExplorerModal({
+  title,
+  amount,
+  txId,
+  confirms,
+  accountAddress,
+  handle,
+  pool,
+  onClose,
+}: {
+  title: string;
+  amount: string;
+  txId: string;
+  confirms: number;
+  accountAddress: string;
+  handle: string;
+  pool: PoolKey;
+  onClose: () => void;
+}) {
+  const rows = buildNightFiExplorerRows({
+    amount,
+    txId,
+    confirms,
+    accountAddress,
+    handle,
+    pool,
+  });
+  const status = confirms >= 12 ? 'landed' : 'confirming';
+  const owner = `${normalizeAlias(handle || 'bubbles')}.night`;
+  const payload = {
+    type: 'nightfi_custody_deposit',
+    status,
+    network: 'Midnight localnet',
+    circuit: 'deposit_night',
+    tx_id: txId,
+    source: 'Passport funding rail',
+    destination: 'MN Passport custody account',
+    custody_account_contract: accountAddress,
+    owner_identity: owner,
+    amount: fmtNight(amount),
+    pool: `${POOLS[pool].name} ${POOLS[pool].serif}`,
+    confirmations: confirms,
+  };
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div
+      className="nf-mb nf-explorer-mb"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="nf-explorer-title"
+      onClick={onClose}
+    >
+      <section className="nf-modal nf-explorer-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="nf-explorer-head">
+          <div>
+            <div className="nf-explorer-label">Midnight local explorer</div>
+            <h2 id="nf-explorer-title">{title}</h2>
+          </div>
+          <button className="nf-explorer-close" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="nf-explorer-hero">
+          <span className={`nf-explorer-status ${status}`}>{status}</span>
+          <div className="nf-explorer-fullhash">
+            <span>Full transaction hash</span>
+            <code>{txId}</code>
+          </div>
+        </div>
+        <p className="nf-explorer-summary">
+          {fmtNight(amount)} moved through the Passport funding rail into the MN Passport custody
+          account before deployment to {POOLS[pool].name} {POOLS[pool].serif}.
+        </p>
+        <div className="nf-explorer-grid">
+          {rows.map((row) => (
+            <div key={row.k}>
+              <span>{row.k}</span>
+              {row.mono ? <code>{row.v}</code> : <strong>{row.v}</strong>}
+            </div>
+          ))}
+        </div>
+        <details className="nf-explorer-raw" open>
+          <summary>Local explorer payload</summary>
+          <pre>{JSON.stringify(payload, null, 2)}</pre>
+        </details>
+      </section>
+    </div>
+  );
+}
+
 function ModalHead({ title, onClose }: { title: string; onClose: () => void }) {
   return (
     <div className="nf-modal-head">
@@ -1014,11 +1232,18 @@ function TxNode(props: { label: string; name: string; active?: boolean }) {
   );
 }
 
-function TxRow(props: { k: string; v: string; mono?: boolean }) {
+function TxRow(props: { k: string; v: string; mono?: boolean; onOpen?: () => void }) {
   return (
     <div className="nf-tx-row">
       <span className="k">{props.k}</span>
-      <span className={`v ${props.mono ? 'nf-tx-hash' : ''}`}>{props.v}</span>
+      {props.onOpen ? (
+        <button type="button" className={`v nf-tx-value-btn ${props.mono ? 'nf-tx-hash' : ''}`} onClick={props.onOpen}>
+          <span>{props.v}</span>
+          <small>Open explorer</small>
+        </button>
+      ) : (
+        <span className={`v ${props.mono ? 'nf-tx-hash' : ''}`}>{props.v}</span>
+      )}
     </div>
   );
 }
