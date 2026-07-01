@@ -4,6 +4,41 @@ import { ViewHeader, Mono, Chip, Field, X } from '../ui.js';
 import { FlowDiagram } from './FlowDiagram.js';
 import type { AppContext } from '../App.js';
 
+type ExplorerTxStatus = 'landed' | 'pending' | 'recorded';
+
+interface StoredPosition {
+  pool?: 'retail' | 'accredited';
+  amount?: number;
+  apy?: number;
+  deposited?: number;
+  txId?: string;
+}
+
+interface ExplorerRow {
+  k: string;
+  v: string;
+  mono?: boolean;
+}
+
+interface ExplorerTx {
+  id: string;
+  title: string;
+  label: string;
+  status: ExplorerTxStatus;
+  circuit: string;
+  txId: string;
+  amount?: string;
+  timestamp?: string;
+  summary: string;
+  rows: ExplorerRow[];
+  json: Record<string, unknown>;
+}
+
+const POOL_LABELS: Record<string, string> = {
+  retail: 'Retail Yield Pool',
+  accredited: 'Accredited Vault',
+};
+
 function bytesHex(bytes: Uint8Array): string {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -14,6 +49,118 @@ function bytesHex(bytes: Uint8Array): string {
 // padded to the classic 44 characters.
 function mrzLine(s: string): string {
   return (s.toUpperCase().replace(/[^A-Z0-9]/g, '<') + '<'.repeat(44)).slice(0, 44);
+}
+
+function loadPositions(): StoredPosition[] {
+  try {
+    const raw = localStorage.getItem('passport-foundations-positions');
+    const positions = raw ? (JSON.parse(raw) as StoredPosition[]) : [];
+    return positions.filter((p) => p && typeof p.txId === 'string' && p.txId.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function fmtExplorerDate(value?: number): string {
+  if (!value) return 'recent session';
+  return new Date(value).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function fmtNight(value?: number): string {
+  if (!Number.isFinite(value)) return '0 Night';
+  return `${Math.round(value as number).toLocaleString('en-US')} Night`;
+}
+
+function buildExplorerTxs({
+  session,
+  ledgerRound,
+  epoch,
+  positions,
+}: {
+  session: AppContext['session'];
+  ledgerRound: string | null;
+  epoch: bigint;
+  positions: StoredPosition[];
+}): ExplorerTx[] {
+  const alias = `${session.alias ?? 'bearer'}.night`;
+  const depositTxs = [...positions]
+    .reverse()
+    .slice(0, 5)
+    .map((p, index): ExplorerTx => {
+      const amount = fmtNight(p.amount);
+      const pool = POOL_LABELS[p.pool ?? 'retail'] ?? 'NightFi pool';
+      const txId = p.txId ?? 'pending';
+      return {
+        id: `deposit-${txId}-${index}`,
+        title: 'NightFi custody deposit',
+        label: 'deposit',
+        status: 'landed',
+        circuit: 'deposit_night',
+        txId,
+        amount,
+        timestamp: fmtExplorerDate(p.deposited),
+        summary: `${amount} moved through the Passport funding rail into the MN Passport custody contract before deployment to ${pool}.`,
+        rows: [
+          { k: 'Circuit', v: 'deposit_night' },
+          { k: 'Network', v: 'Midnight localnet' },
+          { k: 'From', v: 'Passport funding rail' },
+          { k: 'To', v: session.accountAddress, mono: true },
+          { k: 'Amount', v: amount },
+          { k: 'Pool', v: pool },
+          { k: 'Confirmations', v: '12 / 12' },
+          { k: 'Ledger round', v: ledgerRound ?? 'syncing' },
+        ],
+        json: {
+          type: 'custody_deposit',
+          status: 'landed',
+          network: 'Midnight localnet',
+          circuit: 'deposit_night',
+          tx_id: txId,
+          amount,
+          pool,
+          custody_account_contract: session.accountAddress,
+          owner_identity: alias,
+          ledger_round: ledgerRound,
+        },
+      };
+    });
+
+  const identityTx: ExplorerTx = {
+    id: `identity-${session.identityRegistrationTxId ?? session.accountAddress}`,
+    title: 'Night ID registration',
+    label: 'identity',
+    status: session.identityRegistrationTxId ? 'landed' : 'pending',
+    circuit: 'identity_registry.register',
+    txId: session.identityRegistrationTxId ?? 'pending',
+    timestamp: session.identityRegistrationTxId ? 'onboarding' : 'awaiting registry',
+    summary: `The registry binds ${alias} to this MN Passport custody contract so dApps can use the account as the user identity.`,
+    rows: [
+      { k: 'Circuit', v: 'identity_registry.register' },
+      { k: 'Night ID', v: alias },
+      { k: 'Registry', v: session.identityRegistryAddress ?? 'deploying', mono: true },
+      { k: 'Custody account', v: session.accountAddress, mono: true },
+      { k: 'Device epoch', v: String(epoch) },
+      { k: 'Network', v: 'Midnight localnet' },
+    ],
+    json: {
+      type: 'identity_registration',
+      status: session.identityRegistrationTxId ? 'landed' : 'pending',
+      network: 'Midnight localnet',
+      circuit: 'identity_registry.register',
+      tx_id: session.identityRegistrationTxId ?? null,
+      owner_identity: alias,
+      custody_account_contract: session.accountAddress,
+      identity_registry_contract: session.identityRegistryAddress ?? null,
+      device_epoch: String(epoch),
+    },
+  };
+
+  return [...depositTxs, identityTx];
 }
 
 export function OverviewView({ ctx }: { ctx: AppContext }) {
@@ -34,6 +181,16 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
   const activeDevices = ledger
     ? [...ledger.devices].filter(([, e]) => e === epoch).length
     : 0;
+  const positions = loadPositions();
+  const explorerTxs = buildExplorerTxs({
+    session,
+    ledgerRound: ledger ? String(ledger.round) : null,
+    epoch,
+    positions,
+  });
+  const [selectedExplorerTxId, setSelectedExplorerTxId] = React.useState<string | null>(null);
+  const selectedExplorerTx =
+    explorerTxs.find((tx) => tx.id === selectedExplorerTxId) ?? explorerTxs[0];
 
   const mrz1 = mrzLine(`N<FI${holder}<<MN PASSPORT<WALLET`);
   const mrz2 = mrzLine(
@@ -69,6 +226,7 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
           active: value.active && value.epoch === epoch,
         }))
       : [],
+    transactions: explorerTxs.map((tx) => tx.json),
   };
 
   return (
@@ -276,30 +434,89 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
             <p className="eyebrow">Local explorer</p>
             <h2>Account custody inspection</h2>
           </div>
-          <Chip tone={ledger ? 'ok' : 'muted'}>{ledger ? 'synced' : 'syncing'}</Chip>
+          <Chip tone={ledger ? 'ok' : 'muted'}>
+            {ledger ? `${explorerTxs.length} records synced` : 'syncing'}
+          </Chip>
         </div>
         <div className="explorer-grid">
-          <div className="explorer-kpis">
-            <div>
-              <span>Contract</span>
-              <Mono v={session.accountAddress} short group />
+          <div className="explorer-ledger">
+            <div className="explorer-kpis">
+              <div>
+                <span>Contract</span>
+                <Mono v={session.accountAddress} short group />
+              </div>
+              <div>
+                <span>Identity tx</span>
+                <Mono v={session.identityRegistrationTxId ?? 'pending'} short group />
+              </div>
+              <div>
+                <span>Devices</span>
+                <strong>{ledger ? activeDevices : '...'}</strong>
+              </div>
+              <div>
+                <span>Grants</span>
+                <strong>{ledger ? activeGrants : '...'}</strong>
+              </div>
             </div>
-            <div>
-              <span>Identity tx</span>
-              <Mono v={session.identityRegistrationTxId ?? 'pending'} short group />
-            </div>
-            <div>
-              <span>Devices</span>
-              <strong>{ledger ? activeDevices : '...'}</strong>
-            </div>
-            <div>
-              <span>Grants</span>
-              <strong>{ledger ? activeGrants : '...'}</strong>
+            <div className="explorer-timeline">
+              <div className="explorer-subhead">
+                <span>Transaction timeline</span>
+                <small>latest first</small>
+              </div>
+              {explorerTxs.map((tx) => (
+                <button
+                  key={tx.id}
+                  type="button"
+                  className={`explorer-tx-card ${selectedExplorerTx?.id === tx.id ? 'active' : ''}`}
+                  onClick={() => setSelectedExplorerTxId(tx.id)}
+                >
+                  <span className={`explorer-status ${tx.status}`}>{tx.status}</span>
+                  <span className="explorer-tx-main">
+                    <strong>{tx.title}</strong>
+                    <small>{tx.circuit}</small>
+                  </span>
+                  <span className="explorer-tx-meta">
+                    {tx.amount && <span>{tx.amount}</span>}
+                    <Mono v={tx.txId} short />
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
-          <pre className="explorer-json">
-            {JSON.stringify(explorerSnapshot, null, 2)}
-          </pre>
+          <aside className="explorer-inspector">
+            <div className="explorer-inspector-head">
+              <div>
+                <span className="explorer-inspector-label">Transaction inspector</span>
+                <h3>{selectedExplorerTx.title}</h3>
+              </div>
+              <span className={`explorer-status ${selectedExplorerTx.status}`}>
+                {selectedExplorerTx.status}
+              </span>
+            </div>
+            <p>{selectedExplorerTx.summary}</p>
+            <div className="explorer-hash">
+              <span>Tx hash</span>
+              <Mono v={selectedExplorerTx.txId} short group />
+            </div>
+            <div className="explorer-detail-grid">
+              {selectedExplorerTx.rows.map((row) => (
+                <div key={`${selectedExplorerTx.id}-${row.k}`}>
+                  <span>{row.k}</span>
+                  {row.mono ? <Mono v={row.v} short group /> : <strong>{row.v}</strong>}
+                </div>
+              ))}
+            </div>
+            <details className="explorer-raw">
+              <summary>Raw explorer payload</summary>
+              <pre className="explorer-json">
+                {JSON.stringify(
+                  { selected_transaction: selectedExplorerTx.json, account_snapshot: explorerSnapshot },
+                  null,
+                  2,
+                )}
+              </pre>
+            </details>
+          </aside>
         </div>
       </section>
 

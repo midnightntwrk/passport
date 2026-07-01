@@ -175,6 +175,9 @@ try {
   await waitForText('Identity tx', 60_000);
   await waitForText('Recovery shares', 60_000);
   await waitForText('Account custody inspection', 60_000);
+  await waitForText('Transaction inspector', 60_000);
+  await waitForText('NightFi custody deposit', 60_000);
+  await waitForText('deposit_night', 60_000);
   console.log('✓ wallet overview exposes contract, identity, device, grant, and recovery state');
 
   await clickNav('Connections');
