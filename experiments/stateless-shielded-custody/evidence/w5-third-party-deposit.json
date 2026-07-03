@@ -1,0 +1,50 @@
+{
+  "testId": "W5",
+  "name": "third-party-deposit",
+  "description": "third-party deposit via advertised key + owner discovery from chain data",
+  "verdict": "PARTIAL",
+  "txHash": "00f51d4244acd8375eefd023e057eea9cb3a23d7d3c736a74fab0cb1bf7aaca2c6",
+  "note": "Deposit, decrypt, and spend all worked, but the contract-address → tx indexer lookup is missing — the discovery loop needs an indexer surface or block scan (C17 sync finding). See details.contractTxLookup.",
+  "details": {
+    "custodyAddress": "1d24abfcb7b02e91c1bdc021899fa4694058170997e0ec0125cb02ad707e7193",
+    "mintTx": "008aded4bf27848c24e55bc6dfeea4af649c76ec4dcbff5190497e5dc7f58d5cae",
+    "advertisedKeyHex": "d140d328938a47a715977143a4acd225ccddbdf4b84bc39456b714dd3128e028",
+    "depositTx": "006ef6582ff356a17ea26a7d9b00306ceb856e8f39a545b02f178bd9cc0e8c06cb",
+    "discoveredCoin": {
+      "colorHex": "215d850d9a9dc379c0b01451143b6cb94ef2bd858a125b13a08ff0b39ef4eb99",
+      "value": "350",
+      "matches": true
+    },
+    "contractTxLookup": [
+      {
+        "surface": "contractAction(address)",
+        "outcome": "ok: 1 tx(s)"
+      }
+    ],
+    "discoveryGap": "no indexer surface yielded usable candidates by contract address; fell back to the depositor-known txId (recovery/sync needs an indexer surface or block scan)",
+    "candidateSets": [
+      {
+        "source": "fallback: depositor-supplied txId",
+        "candidates": [
+          "65"
+        ]
+      }
+    ],
+    "spendAttempts": [
+      {
+        "source": "fallback: depositor-supplied txId",
+        "mtIndex": "65",
+        "outcome": "accepted",
+        "txId": "00f51d4244acd8375eefd023e057eea9cb3a23d7d3c736a74fab0cb1bf7aaca2c6"
+      }
+    ],
+    "mtIndexSource": "fallback: depositor-supplied txId @ index 65",
+    "spendTx": "00f51d4244acd8375eefd023e057eea9cb3a23d7d3c736a74fab0cb1bf7aaca2c6"
+  },
+  "ranAt": "2026-07-03T11:00:38.835Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

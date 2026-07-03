@@ -1,0 +1,190 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Stateless shielded custody — experiment contract (C4 alternative A″).
+//
+// Question under test: can a contract custody shielded coins WITHOUT
+// publishing their QualifiedShieldedCoinInfo (QSCI) in public ledger state?
+// The OZ pattern proven by contract-custody-feasibility S6 stores
+// Map<colour, QSCI> publicly, which is the entire "QSCI publicity" leak:
+// nonce, colour, and value in the clear make the coin's commitment and
+// nullifier watchable by anyone (the contract coin has no secret; the
+// random nonce is its only blinding).
+//
+// This contract keeps the QSCI off the public ledger:
+//   - deposits claim the coin (receiveShielded) and persist ONLY an opaque
+//     encrypted blob (the coin info encrypted to the account's advertised
+//     encryption key) in an inbox — durable discovery + recovery channel,
+//     nothing an observer can read;
+//   - spends take the QSCI from a witness (wallet-local coin store, C16
+//     stand-in) — the mt_index is captured client-side from the indexer at
+//     deposit time (the S5 technique);
+//   - change is re-owned to the contract in-transaction and re-captured
+//     client-side; no insertCoin anywhere on the stateless path.
+//
+// The contract ALSO carries the S6 insertCoin pattern verbatim
+// (deposit_public / spend_public) as the control group: the W6 leak audit
+// runs both paths and diffs what an observer sees.
+//
+// No authentication in this contract — device auth is proven elsewhere
+// (account-custody-prototype) and would only add variables here.
+//
+// Disclosure discipline: this main contract discloses conservatively (same
+// style as the working prototype) so it compiles and runs; the probe
+// variants under contracts/probes/ strip disclosures one at a time to map
+// the compiler-forced minimum (W1).
+// ---------------------------------------------------------------------------
+
+// ── Witness (C7): the wallet-local coin store ───────────────────────────────
+//
+// Supplies the QSCI for the coin of a given colour at spend time. The data
+// never exists in public ledger state; it enters the proof as private input.
+
+witness held_coin(color: Bytes<32>): QualifiedShieldedCoinInfo;
+
+// ── Public ledger state ─────────────────────────────────────────────────────
+
+export ledger round: Uint<64>;
+// Bumped by every circuit; gives tests a cheap post-condition.
+
+export ledger enc_key: Bytes<32>;
+// The account's advertised encryption public key (X25519 in the runner).
+// Third-party depositors encrypt the coin info to this key.
+
+export ledger inbox: Map<Uint<64>, Bytes<160>>;
+export ledger inbox_count: Uint<64>;
+// Encrypted coin-info blobs, append-only, keyed by ordinal. Doubles as the
+// durable backup for recovery: whoever can decrypt (account key holder)
+// can reconstruct every held coin. 160 bytes = X25519 ephemeral pub (32)
+// + AES-256-GCM IV (12) + tag (16) + ciphertext (80: nonce‖colour‖value)
+// + padding.
+
+export ledger public_coins: Map<Bytes<32>, QualifiedShieldedCoinInfo>;
+// CONTROL GROUP ONLY — the S6/OZ insertCoin pattern, used by the W6 leak
+// audit as the baseline to diff against. Not part of the stateless design.
+
+constructor(encryption_key: Bytes<32>) {
+  round       = 0 as Uint<64>;
+  inbox_count = 0 as Uint<64>;
+  enc_key     = disclose(encryption_key);
+}
+
+circuit bump(): [] {
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}
+
+// ── Stateless path (the design under test) ──────────────────────────────────
+
+// Deposit: claim the coin, persist only the encrypted blob. The depositor
+// (who knows the coin info — they built the Zswap output) encrypts it to
+// enc_key client-side. mt_index is NOT stored: the owner recovers it from
+// the indexer (deposit tx → startIndex), same as the client runner does.
+export circuit deposit_stateless(coin: ShieldedCoinInfo, blob: Bytes<160>): [] {
+  receiveShielded(disclose(coin));
+  inbox.insert(inbox_count, disclose(blob));
+  inbox_count = ((inbox_count + (1 as Uint<64>)) as Uint<64>);
+  bump();
+}
+
+// Spend: the QSCI arrives via witness, never from ledger state. Change is
+// re-owned to the contract in this same transaction (sendImmediateShielded)
+// and returned to the caller — return values travel in the communication
+// commitment (private to the caller), not in the transcript. The client
+// re-captures the change's mt_index from the indexer and, in a follow-up
+// call, appends an encrypted backup blob via append_backup so the inbox
+// stays complete (the change nonce is derived in-circuit, so it cannot be
+// pre-encrypted as an argument to this same call).
+//
+// CRITICAL (found by W3 phase 2/3): sendImmediateShielded re-owns the
+// change by TRANSIENTLY SPENDING it — result.change's nullifier is burnt
+// in this very transaction — and creates a fresh coin with an evolved
+// nonce, returned as `.sent`. The holdable coin is `.sent`, NOT
+// result.change. Storing result.change (as OZ ShieldedTreasury._send and
+// our S6 port both do) leaves an unspendable zombie: any later spend hits
+// NullifierAlreadyPresent ("attempted double spend").
+export circuit spend_stateless(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  const result = sendShielded(
+    disclose(coin),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  if (disclose(result.change.is_some)) {
+    const redeposit = sendImmediateShielded(
+      disclose(result.change.value),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+      disclose(result.change.value.value),
+    );
+    bump();
+    return some<ShieldedCoinInfo>(disclose(redeposit.sent));
+  }
+  bump();
+  return none<ShieldedCoinInfo>();
+}
+
+// Append an encrypted coin-info blob to the inbox backup after the fact
+// (used for change coins, whose nonce only exists once the spend ran).
+export circuit append_backup(blob: Bytes<160>): [] {
+  inbox.insert(inbox_count, disclose(blob));
+  inbox_count = ((inbox_count + (1 as Uint<64>)) as Uint<64>);
+  bump();
+}
+
+// ── Control path (S6/OZ pattern, verbatim shape) — W6 baseline only ─────────
+
+export circuit deposit_public(coin: ShieldedCoinInfo): [] {
+  receiveShielded(disclose(coin));
+  const c = disclose(coin.color);
+  if (public_coins.member(c)) {
+    const merged = mergeCoinImmediate(public_coins.lookup(c), disclose(coin));
+    public_coins.insertCoin(
+      c,
+      disclose(merged),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    );
+  } else {
+    public_coins.insertCoin(
+      c,
+      disclose(coin),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    );
+  }
+  bump();
+}
+
+export circuit spend_public(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): [] {
+  const coin = public_coins.lookup(disclose(color));
+  const result = sendShielded(
+    disclose(coin),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  if (disclose(result.change.is_some)) {
+    // Insert the RE-OWNED coin (.sent, evolved nonce), not result.change —
+    // see the note on spend_stateless. Inserting result.change is the OZ /
+    // S6 bug that makes the change unspendable (NullifierAlreadyPresent).
+    const redeposit = sendImmediateShielded(
+      disclose(result.change.value),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+      disclose(result.change.value.value),
+    );
+    public_coins.insertCoin(
+      disclose(color),
+      disclose(redeposit.sent),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    );
+  } else {
+    public_coins.remove(disclose(color));
+  }
+  bump();
+}

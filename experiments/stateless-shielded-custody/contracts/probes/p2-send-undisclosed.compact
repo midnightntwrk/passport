@@ -1,0 +1,32 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// W1 probe 2 — sendShielded with a witness-supplied QSCI, coin undisclosed.
+//
+// Question: can the witness coin flow into the stdlib spend path without a
+// disclose() on the coin itself (recipient and amount stay disclosed)? If
+// the compiler rejects, its error names the exact position that demands
+// publicity — which is the position the W6 transcript audit must inspect.
+
+witness held_coin(color: Bytes<32>): QualifiedShieldedCoinInfo;
+
+export ledger round: Uint<64>;
+
+constructor() {
+  round = 0 as Uint<64>;
+}
+
+export circuit spend_undisclosed(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): [] {
+  const coin = held_coin(color);
+  const result = sendShielded(
+    coin,
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}

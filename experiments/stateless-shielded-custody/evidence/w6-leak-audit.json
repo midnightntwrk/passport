@@ -1,0 +1,171 @@
+{
+  "testId": "W6",
+  "name": "leak-audit",
+  "description": "observer-surface scan: stateless path vs insertCoin control",
+  "verdict": "PASS",
+  "note": "The insertCoin control leaks its coin (nonce/colour) into the raw transaction and the indexer per-call state (positive control confirms the scanner); the stateless path shows NO coin artefact on any observer surface scanned. The QSCI-publicity leak is a storage-pattern consequence, not a ledger inevitability.",
+  "details": {
+    "custodyAddress": "f56c7249331c7911e9aad0a061fd220167f6d33cf3d765fd2f4d1eab1716ec48",
+    "contractStateBytes": 21,
+    "txFetchProbes": {
+      "controlDeposit": [
+        "raw: ok (37370 chars)",
+        "contractActions: ok (21710 chars)",
+        "identifiers: GraphQL error \"Unknown field \\\"identifiers\\\" on type \\\"Transaction\\\".\""
+      ],
+      "controlSpend": [
+        "raw: ok (68952 chars)",
+        "contractActions: ok (21702 chars)",
+        "identifiers: GraphQL error \"Unknown field \\\"identifiers\\\" on type \\\"Transaction\\\".\""
+      ],
+      "statelessDeposit": [
+        "raw: ok (37284 chars)",
+        "contractActions: ok (22544 chars)",
+        "identifiers: GraphQL error \"Unknown field \\\"identifiers\\\" on type \\\"Transaction\\\".\""
+      ],
+      "statelessSpend": [
+        "raw: ok (68074 chars)",
+        "contractActions: ok (22544 chars)",
+        "identifiers: GraphQL error \"Unknown field \\\"identifiers\\\" on type \\\"Transaction\\\".\""
+      ]
+    },
+    "report": {
+      "control": {
+        "contractState": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "controlDeposit.raw": {
+          "nonce": true,
+          "color": true,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "controlDeposit.contractActions": {
+          "nonce": true,
+          "color": true,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "controlSpend.raw": {
+          "nonce": true,
+          "color": true,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "controlSpend.contractActions": {
+          "nonce": false,
+          "color": true,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "statelessDeposit.raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "statelessDeposit.contractActions": {
+          "nonce": false,
+          "color": true,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "statelessSpend.raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "statelessSpend.contractActions": {
+          "nonce": false,
+          "color": true,
+          "valueBE": false,
+          "valueLE": false
+        }
+      },
+      "stateless": {
+        "contractState": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "controlDeposit.raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "controlDeposit.contractActions": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "controlSpend.raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "controlSpend.contractActions": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "statelessDeposit.raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "statelessDeposit.contractActions": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "statelessSpend.raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "statelessSpend.contractActions": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        }
+      }
+    },
+    "needles": {
+      "control": {
+        "label": "control",
+        "nonceHex": "007d7ed4d3db2000c6fedc01b0bd99e1383377ebb94e2e7f1bd961796690e434",
+        "colorHex": "e8ff33fcad741e40804f4c636029d3baf13a6b872529947219cf84ea45207499",
+        "valueHexBE": "00000000000000000000000000000258",
+        "valueHexLE": "58020000000000000000000000000000"
+      },
+      "stateless": {
+        "label": "stateless",
+        "nonceHex": "f9c905c500ff952821eb8ac7bbb1495e30b4b0dcafdf2d738a3edafc801c2e2e",
+        "colorHex": "cf4d4481b5eccf08b99328bed243eab00da0ea5efd477c36ee1e58e21881a373",
+        "valueHexBE": "00000000000000000000000000000258",
+        "valueHexLE": "58020000000000000000000000000000"
+      }
+    },
+    "controlLeaksInState": true,
+    "statelessHits": []
+  },
+  "ranAt": "2026-07-03T11:04:48.341Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}
