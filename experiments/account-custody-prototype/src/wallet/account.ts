@@ -7,8 +7,10 @@ import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-j
 
 import { deviceCommitment, grantCommitment, recoveryCommitment, ledger, type Ledger } from './contract.js';
 import { privateStateFromSecrets, type AccountPrivateState } from './witnesses.js';
-import { split, type Share } from './shamir.js';
 import { bytesToHex } from './hex.js';
+
+const MAX_PHI = 4;
+const ZERO_32 = new Uint8Array(32);
 
 export interface AccountSecrets {
   deviceSecret?: Uint8Array;
@@ -41,8 +43,8 @@ export class PassportAccount {
 
   /**
    * Deploy a fresh account contract: derives the device and recovery
-   * commitments, splits the recovery secret 2-of-3 (TODO(PVSS) — shares land
-   * in public ledger state), and submits the deployment.
+   * commitments. No recovery backup exists at deploy time — publish one via
+   * publishRecoveryBackup once guardians are enrolled (BUSS, C14).
    */
   static async deploy(
     providers: any,
@@ -53,7 +55,6 @@ export class PassportAccount {
       privateStateId?: string;
     },
   ): Promise<PassportAccount> {
-    const shares: Share[] = split(opts.recoverySecret, 2, 3);
     const deployed = await deployContract(providers, {
       compiledContract,
       privateStateId: opts.privateStateId ?? freshPrivateStateId(),
@@ -61,9 +62,6 @@ export class PassportAccount {
       args: [
         deviceCommitment(opts.deviceSecret),
         recoveryCommitment(opts.recoverySecret),
-        shares[0].value,
-        shares[1].value,
-        shares[2].value,
       ],
     } as any);
     const address = deployed.deployTxData.public.contractAddress;
@@ -155,23 +153,45 @@ export class PassportAccount {
     return this.call('revoke_grant', commitment);
   }
 
-  // ── Recovery (C14) ────────────────────────────────────────────────────────
+  // ── Recovery (C14 — BUSS) ─────────────────────────────────────────────────
+
+  /**
+   * Publish a BUSS recovery backup: rotates the recovery commitment to a
+   * FRESH secret and stores φ under a FRESH session nonce (both rules are
+   * load-bearing — see contracts/account.compact header). Device-authorised.
+   * `phi` holds 1..4 entries of 32 bytes each, straight from buildPhi().
+   */
+  publishRecoveryBackup(
+    newRecoverySecret: Uint8Array,
+    sessionNonce: Uint8Array,
+    phi: Uint8Array[],
+  ): Promise<TxResult> {
+    if (phi.length < 1 || phi.length > MAX_PHI) {
+      throw new Error(`phi must have 1..${MAX_PHI} entries, got ${phi.length}`);
+    }
+    const slots = Array.from({ length: MAX_PHI }, (_, i) => phi[i] ?? ZERO_32);
+    return this.call(
+      'publish_recovery_backup',
+      recoveryCommitment(newRecoverySecret),
+      sessionNonce,
+      ...slots,
+      BigInt(phi.length),
+    );
+  }
 
   /**
    * Total-loss recovery. The connected client must hold the recovery secret
-   * in its private state. Bumps the device epoch (invalidating all devices
-   * and grants), registers the new device, rotates the recovery secret, and
-   * stores fresh shares. Reconnect with the new device secret afterwards.
+   * in its private state (reconstructed via BUSS from guardian σ values plus
+   * the on-chain φ, or held directly). Bumps the device epoch (invalidating
+   * all devices and grants), registers the new device, rotates the recovery
+   * commitment, and clears φ. Reconnect with the new device secret, then
+   * publish a fresh backup with a new guardian ceremony.
    */
   recover(newDeviceSecret: Uint8Array, newRecoverySecret: Uint8Array): Promise<TxResult> {
-    const shares = split(newRecoverySecret, 2, 3);
     return this.call(
       'recover',
       deviceCommitment(newDeviceSecret),
       recoveryCommitment(newRecoverySecret),
-      shares[0].value,
-      shares[1].value,
-      shares[2].value,
     );
   }
 
