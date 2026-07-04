@@ -1,0 +1,24 @@
+[package]
+name = "passport-buss-wasm"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+description = "BUSS (ANARKey, EPRINT 2025/551) bindings for the Passport account-custody prototype — wraps Pleiades for use from TypeScript"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pleiades = { git = "https://github.com/input-output-hk/Pleiades.git", rev = "62a2961e964d583b9cb20af897ee0c2e16fa5f2e" }
+midnight-curves = "0.3"
+ff = "0.13"
+sha2 = "0.10"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+wasm-bindgen = "0.2"
+
+[profile.release]
+opt-level = "s"
+lto = true
