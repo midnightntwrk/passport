@@ -123,23 +123,54 @@ before the loss event.
 
 ## C14 — Total-loss recovery
 
-**Recovery key alongside the account key, split K-of-N (2-of-3 for now),
-per the directed decision.** At onboarding the client generates a recovery
-secret, stores `transientHash(tag, secret)` in the ledger, splits the
-secret byte-wise over GF(256) (Shamir), and stores the three share values
-in the ledger keyed by share index. Recovery reconstructs from any two
-shares, proves preimage knowledge, bumps the device epoch (instantly
-invalidating all devices and grants), registers the fresh device, and
-rotates the recovery secret plus shares.
+**BUSS (ANARKey, EPRINT 2025/551) replaces the plaintext-Shamir
+placeholder.** The ledger stores the recovery commitment plus the BUSS
+public vector φ (up to four 32-byte points), a session nonce, and nothing
+else. Guardians store nothing: each derives its share on demand as
+σ = H(session_id ‖ own_sk) from a key it already holds, and any t+1
+guardians plus the on-chain φ reconstruct the recovery secret off-chain.
+φ is provably simulatable, so no secret material sits in public state; the
+previous TODO(PVSS) weakness is removed rather than patched. Recovery then
+proves preimage knowledge exactly as before: the recover circuit lost its
+share arguments and gained a φ-clearing step, and a device-authorised
+publish_recovery_backup circuit was added. The BUSS mathematics runs in
+the client through `buss-wasm` (a wasm-bindgen crate over the Pleiades
+library, consumed as a git dependency; the `nodejs` build serves the tests
+and CLI, the `bundler` build serves the demo app, and both bind the same
+platform-neutral core in `src/wallet/buss-core.ts`); see
+`research/anarkey-buss-recovery-assessment.md` for the full analysis.
 
-**TODO(PVSS).** The shares currently sit in plaintext public ledger state,
-so anyone can reconstruct the recovery secret. This is a placeholder for a
-publicly verifiable secret sharing scheme: each share encrypted to a
-recovery helper's public key with a published proof of correct sharing
-(C15 helper protocol). The contract surface (commitment, share slots,
-recover circuit) is the part this prototype pins down; the share
-distribution and reassembly protocol is the open work. Flagged in the
-contract header, the Shamir module, the demo UI, and here. Do not ship.
+**One wire format everywhere.** The copy/paste strings (`buss-req.v0.…`,
+`buss-sig.v0.…`, `buss-paper.v0.…`) and the guardian-key derivation are
+identical across the CLI demo and the app, so an app user can guard a CLI
+account and vice versa. The app's guardian mode answers requests with a key
+derived from the passkey device secret behind a biometric prompt.
+
+**Mixed quorums unify social and cold recovery.** A guardian is anything
+holding a field element: another passport (its guardian key is derived
+from its own device secret; a real design would use a dedicated recovery
+role of the key hierarchy so it survives device rotation), or a paper key
+(a random field element written down). The lifecycle test and the CLI demo
+use one passport guardian plus two paper keys with threshold two.
+
+**Two client-side rules are load-bearing.** Every published backup MUST
+use a fresh session nonce AND a fresh recovery secret: correlated φ
+vectors across sessions degrade the threshold (with enough guardians a
+passive observer recovers the secret from two correlated publications).
+Guardian-set changes are therefore a full re-ceremony, which BUSS makes
+cheap: one message per guardian, no guardian state. Removal is only
+effective because the secret and commitment rotate with the re-publication;
+the superseded φ then protects a worthless secret. The contract cannot
+enforce either rule; they belong to the client and to the future
+recovery-paths MIP.
+
+**Known BUSS-specific gaps.** No identifiable abort (a lying guardian is
+only detected by the commitment check failing; retry with a different
+quorum). Recovery bootstrap metadata (guardian identities, indices, and
+count) lives off-chain with the owner: the φ length is on-chain but the
+guardian count is not, which is deliberate graph-privacy minimisation.
+The session identifier and guardian-share hash tags are ad-hoc v0 tags
+pending the C8 registry.
 
 **Continuity (I-5.3) holds by construction.** Under contract-custody the
 assets live in the account contract; recovery changes who may authorise,
@@ -166,6 +197,7 @@ environments without PRF-capable authenticators.
   device. A Merkle membership proof would hide it; deferred (C12-adjacent).
 - **Grant linkability.** Same shape: grant commitments are disclosed per
   spend, which is arguably desirable for auditability and revocation.
-- **Plaintext recovery shares** (see C14 TODO).
+- **BUSS session discipline is client-enforced** (see C14: fresh session
+  nonce and secret rotation per backup; the contract cannot check it).
 - **transientHash version instability** (see C8).
 - **Witness zeroisation** (see C7).
