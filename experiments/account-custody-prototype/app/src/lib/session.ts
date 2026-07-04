@@ -1,7 +1,7 @@
 // LocalStorage persistence of the user's session. Secrets are NOT stored:
 // the device secret is re-derived from the passkey (PRF) on each use; the
-// recovery secret only ever exists transiently (and as on-chain shares —
-// TODO(PVSS)).
+// recovery secret only ever exists transiently — it is reconstructable from
+// a guardian quorum plus the public BUSS points on-chain.
 
 import type { PasskeyRef } from './passkey.js';
 
