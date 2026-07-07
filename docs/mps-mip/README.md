@@ -22,9 +22,10 @@ the others hang from". We author that keystone as small building blocks,
 each independently reviewable, each usable without the others:
 
 1. **Asset custody** (`mips/mip-xxxx-native-asset-custody.md`): how a
-   contract holds and releases Night and shielded values; authorisation
-   abstracted to a single seam; validated by the stateless-custody and
-   account-custody experiments.
+   contract holds and releases unshielded values (Night and any other
+   unshielded color) and shielded values; authorisation abstracted to a
+   single seam; validated by the stateless-custody and account-custody
+   experiments.
 2. **Account and authorisation** (not yet drafted): credential schemes,
    device lifecycle, revocation epochs, and scoped grants; instantiates
    the seam.

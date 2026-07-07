@@ -30,7 +30,8 @@ Replaces: none
 ## Abstract
 
 This MIP specifies how a Compact contract custodies Midnight-native
-values: Night (unshielded tokens) and shielded Zswap coins. It is the
+values: unshielded tokens (Night and any other unshielded color) and
+shielded Zswap coins. It is the
 first building block of the multi-key account contract recommended by
 MPS-0018, deliberately limited to the asset surface. Who may authorise a
 release, how credentials are managed, and how control is recovered are
@@ -39,10 +40,10 @@ the seam they attach to.
 
 Deposits are permissionless. Releases are gated by a single internal
 authorisation seam whose observable semantics this MIP fixes and whose
-credential scheme it deliberately does not. Night custody pairs the
-protocol receive and send operations with an explicit per-colour balance
+credential scheme it deliberately does not. Unshielded custody pairs the
+protocol receive and send operations with an explicit per-color balance
 mirror. Shielded custody is **stateless**: a held coin's description
-(nonce, colour, value) never enters public ledger state. Deposits pair
+(nonce, color, value) never enters public ledger state. Deposits pair
 the protocol-level coin claim with an encrypted inbox entry, addressed to
 an account encryption key advertised on-ledger, and spends supply the
 coin description as a private witness from a wallet-local coin store. An
@@ -127,14 +128,17 @@ interpreted as described in RFC 2119.
   descriptions of the contract's shielded holdings.
 - **Inbox**: an append-only map of encrypted coin descriptions in the
   custody contract's public state; the discovery and recovery channel.
-- **Colour**: the 32-byte token-type identifier of an unshielded or
-  shielded token. Prose in this document uses the spelling "colour";
-  code positions use the standard library spelling `color`.
+- **Color**: the 32-byte token-type identifier of an unshielded or
+  shielded token, spelled throughout as the ecosystem term of art.
+- **Night**: the native unshielded token, whose color is the
+  all-zero value. This MIP treats it as one unshielded color among
+  many.
 
 ### 2. Scope and composition
 
-This MIP specifies the custody of Night and shielded Zswap coins by a
-per-account contract instance. The following are explicitly out of
+This MIP specifies the custody of unshielded tokens and shielded Zswap
+coins, across all colors of each class, by a per-account contract
+instance. The following are explicitly out of
 scope, and conforming extensions MUST NOT weaken any invariant in
 section 7 when adding them:
 
@@ -154,9 +158,10 @@ section 7 when adding them:
 - **Dust**: the custody contract holds no Dust; where Dust balances
   live and how fees are paid without fragmenting custody is the open
   question MPS-0018 records, and is out of scope here.
-- **Token issuance**: minting and burning of a contract's own colours
-  is specified by MIP-0011. A custody contract holds arbitrary colours
-  it did not issue.
+- **Token issuance**: minting and burning of a contract's own colors
+  is specified by MIP-0011 for the shielded class, and by the ledger's
+  contract-mint effects for the unshielded class. A custody contract
+  holds arbitrary colors it did not issue.
 - **Name discovery**: locating a custody contract by human-readable
   name is the name service's subject (MIP-0007).
 
@@ -180,8 +185,9 @@ export ledger inbox_count: Uint<64>;
 // Append-only encrypted coin descriptions (InboxEntry, section 6.4),
 // keyed by ordinal.
 
-export ledger night_balances: Map<Bytes<32>, Uint<128>>;
-// Explicit mirror of the contract's Night holdings per colour.
+export ledger unshielded_balances: Map<Bytes<32>, Uint<128>>;
+// Explicit mirror of the contract's unshielded holdings per color.
+// Night is the all-zero color.
 ```
 
 Implementations MAY extend this state (for example with the account
@@ -232,31 +238,36 @@ Deposits (sections 5 and 6.2) and inbox appends (section 6.2) are
 permissionless: anyone may fund the account or contribute a discovery
 entry. They still increment `round`.
 
-### 5. Night custody
+### 5. Unshielded custody
 
-- `deposit_night(color, amount)` (permissionless): receives the
-  unshielded tokens for the contract and credits `night_balances` for
-  that colour.
-- `withdraw_night(color, amount, recipient)` (authorised): checks and
-  debits the mirror, then sends the tokens to a user address.
+The unshielded class is color-generic: Night is the native color, and
+any contract may mint further unshielded colors through the ledger's
+contract-mint effects. This MIP custodies every unshielded color
+identically; nothing in this section is specific to Night.
 
-The mirror exists because contract Night balances are not otherwise
-readable from contract state. Night transferred to the contract outside
-`deposit_night` is held but not mirrored; clients MUST treat the mirror
-as a lower bound on holdings. Implementations MAY provide an authorised
-reconciliation circuit that lifts the mirror to observed deposits; such
-a circuit MUST NOT credit beyond deposits observed on-chain, and the
-ledger's protocol-level balance check remains the backstop against
-over-withdrawal even if the mirror drifts high. Withdrawal recipients
-are user addresses; contract-to-contract Night transfer is not part of
-this standard.
+- `deposit_unshielded(color, amount)` (permissionless): receives the
+  unshielded tokens for the contract and credits `unshielded_balances`
+  for that color.
+- `withdraw_unshielded(color, amount, recipient)` (authorised): checks
+  and debits the mirror, then sends the tokens to a user address.
+
+The mirror exists because contract unshielded balances are not
+otherwise readable from contract state. Tokens transferred to the
+contract outside `deposit_unshielded` are held but not mirrored;
+clients MUST treat the mirror as a lower bound on holdings.
+Implementations MAY provide an authorised reconciliation circuit that
+lifts the mirror to observed deposits; such a circuit MUST NOT credit
+beyond deposits observed on-chain, and the ledger's protocol-level
+balance check remains the backstop against over-withdrawal even if the
+mirror drifts high. Withdrawal recipients are user addresses;
+contract-to-contract unshielded transfer is not part of this standard.
 
 ### 6. Shielded custody (stateless)
 
 #### 6.1 Design rule
 
 The custody contract MUST NOT write a held coin's description (nonce,
-colour, or value), in whole or in part, into public ledger state or into
+color, or value), in whole or in part, into public ledger state or into
 any publicly disclosed circuit output. The only coin-derived values that
 may appear publicly are the protocol-level hiding commitments and
 nullifiers, and the single-bit comparison outcomes inherent to the
@@ -432,7 +443,7 @@ A conforming implementation MUST satisfy all of the following.
   `require_authorised()`; no circuit releases assets on any other
   authority.
 - **INV-2 (no public coin material).** No execution of any circuit
-  writes a held coin's nonce, colour, or value into public ledger state
+  writes a held coin's nonce, color, or value into public ledger state
   or into the public transcript, beyond protocol commitments,
   nullifiers, and the send path's single-bit comparison outcomes.
 - **INV-3 (change continuity).** After a partial spend, the coin
@@ -451,9 +462,9 @@ A conforming implementation MUST satisfy all of the following.
   contract addresses.
 - **INV-7 (round monotonicity).** Every state-changing call strictly
   increases `round`.
-- **INV-8 (mirror soundness).** `night_balances` never exceeds the
-  contract's actual Night holdings per colour; a conforming withdrawal
-  never debits below zero.
+- **INV-8 (mirror soundness).** `unshielded_balances` never exceeds
+  the contract's actual unshielded holdings per color; a conforming
+  withdrawal never debits below zero.
 
 ### 8. Versioning
 
@@ -565,8 +576,8 @@ and the depositor of a coin can watch that coin's first onward move
 balances, and conforming counterparties are hidden.
 
 **R8. Relationship to neighbouring standards.** MIP-0011 governs a
-contract's own issued colours (mint and burn); this MIP governs holding
-arbitrary colours on an account's behalf; the two compose, and this MIP
+contract's own issued colors (mint and burn); this MIP governs holding
+arbitrary colors on an account's behalf; the two compose, and this MIP
 adopts MIP-0011's spend-path discipline and caller-authentication
 prohibition. Token registry and NFT standardisation effects are
 upstream of custody only at the metadata layer. The name service
@@ -664,7 +675,8 @@ instance. Wallets unaware of this standard are unaffected.
   write), the only holder of the change description is the client.
   Clients SHOULD minimise this window; the reference behaviour appends
   immediately.
-- **S8. Mirror drift.** The Night mirror is a lower bound (section 5).
+- **S8. Mirror drift.** The unshielded mirror is a lower bound
+  (section 5).
   Treating it as exact can under-report holdings but cannot enable
   over-withdrawal (INV-8): the ledger enforces actual balances at the
   protocol level.
@@ -684,10 +696,11 @@ instance. Wallets unaware of this standard are unaffected.
   unversioned inbox container with a key-derivation stand-in; the
   versioned container of section 6.4 is specified here and awaits the
   reference implementation required by Path to Active. The
-  account-custody prototype validates the Night surface and a working
-  seam instantiation; it predates this specification and diverges from
-  it in known ways (its deposits do not increment `round`, and its
-  shielded path is the public-map control pattern).
+  account-custody prototype validates the unshielded surface (under
+  Night-specific naming) and a working seam instantiation; it predates
+  this specification and diverges from it in known ways (its deposits
+  do not increment `round`, and its shielded path is the public-map
+  control pattern).
 - Upstream dependencies: a defect report and change-rule fix for the
   affected contract library, and the MIP-0011 clarifying note, both
   tracked by the Implementation Plan; an indexer surface for
@@ -720,9 +733,10 @@ observe the failures this standard rules out):
    and through the public-map pattern; a byte-scan of raw transactions
    and contract state finds coin material in the control (validating
    the scanner) and none in the conforming path (INV-2).
-6. **Night mirror**: deposit, withdraw, and attempted over-withdrawal
-   against the mirror (INV-8), plus an unmirrored transfer confirming
-   lower-bound semantics.
+6. **Unshielded mirror**: deposit, withdraw, and attempted
+   over-withdrawal against the mirror (INV-8), plus an unmirrored
+   transfer confirming lower-bound semantics; run for Night and for at
+   least one non-native unshielded color.
 7. **One-hop payment**: a payment between two custody contracts routed
    per section 6.6; no transaction in the flow contains both contract
    addresses (INV-6).
