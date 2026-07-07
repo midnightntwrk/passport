@@ -1,3 +1,14 @@
+> **Canonical copy upstream.** This document was submitted to
+> [midnightntwrk/midnight-improvement-proposals](https://github.com/midnightntwrk/midnight-improvement-proposals)
+> and merged as
+> [MPS-0018](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mps/mps-0018-asset-custody-model.md),
+> which is now the canonical version. The copy below is retained for
+> local reference only; where the two differ, MPS-0018 governs. Note
+> that experimental evidence gathered after submission shows the
+> shielded-custody publicity described in the Abstract is a property of
+> the prevailing storage pattern, not of the ledger; see the
+> asset-custody MIP draft in `../mips/`.
+
 <!--
  Copyright 2026 Midnight Foundation
 
