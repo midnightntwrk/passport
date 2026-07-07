@@ -299,7 +299,12 @@ discovery and total-loss recovery must work from chain data alone
 
 A separate circuit, `append_inbox(entry)`, appends an entry without a
 coin claim. Clients use it to backfill entries for change coins, whose
-descriptions only exist once the spend has executed (section 6.3).
+descriptions only exist once the spend has executed (section 6.3): the
+spend returns the re-owned change description privately to the caller,
+and the client encrypts it and appends the entry in a later
+transaction. All InboxEntry cryptography is performed client-side, by
+depositors and by the owner's client; the contract never encrypts,
+decrypts, or inspects entries, and stores them as opaque bytes.
 Implementations MAY gate `append_inbox` behind the authorisation seam:
 change-coin backfill is always performed by the owner's own client, so
 gating it loses nothing, while the entry paired with `deposit_shielded`
