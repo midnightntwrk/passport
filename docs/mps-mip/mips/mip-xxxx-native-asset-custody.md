@@ -56,9 +56,10 @@ production node, including a byte-level audit of every observer-visible
 surface.
 
 The specification also makes normative a change-handling rule (persist
-the re-owned coin returned by `sendImmediateShielded`, never the consumed
-change coin) whose violation has been observed to silently strand funds
-in ecosystem library code.
+the change coin that leaves the transaction live, never a coin the
+transaction consumed) whose violation has been observed to silently
+strand funds in ecosystem library code; the defect is fixed upstream,
+and the rule keeps the failure class out of conforming implementations.
 
 ## Motivation
 
@@ -97,15 +98,19 @@ custody that does not pay the privacy price MPS-0018 had to assume, and
 the corresponding MPS-0018 open question resolves to a narrower one
 about residual metadata (Security Considerations S4).
 
-**The prevailing recipe also strands change.** `sendImmediateShielded`
-re-owns a change coin by consuming it and creating a replacement,
-returned as the `sent` field of its result. Library code that persists
-the consumed coin instead of the replacement produces holdings whose
-next spend the node rejects as a double spend. MIP-0011 requires the
-change coin to be returned and recommends persisting it, but its burn
-flows never surface the re-owning step, where two coin objects exist and
-only one survives; that step is precisely where library code fails. A
-standard is the right place to state the rule normatively.
+**The prevailing recipe stranded change.** `sendShielded` already
+routes change back to the sending contract as a live, self-owned
+output. Widely used library code nevertheless followed it with a
+redundant re-owning call, `sendImmediateShielded(change, self)`, which
+consumes the change coin (revealing its nullifier in that same
+transaction) and creates a replacement returned as the `sent` field of
+its result; the code then persisted the consumed coin, so every later
+spend of change was rejected by the node as a double spend. The defect
+was reported upstream with a node-level reproducer and has been fixed
+by removing the redundant step. A standard is still the right place to
+state the surviving-coin rule normatively, because implementations
+that deliberately route change onward re-enter the two-coin situation
+the defect lived in (section 6.3).
 
 ## Specification
 
@@ -300,7 +305,7 @@ discovery and total-loss recovery must work from chain data alone
 A separate circuit, `append_inbox(entry)`, appends an entry without a
 coin claim. Clients use it to backfill entries for change coins, whose
 descriptions only exist once the spend has executed (section 6.3): the
-spend returns the re-owned change description privately to the caller,
+spend returns the surviving change description privately to the caller,
 and the client encrypts it and appends the entry in a later
 transaction. All InboxEntry cryptography is performed client-side, by
 depositors and by the owner's client; the contract never encrypts,
@@ -331,16 +336,23 @@ Semantics (authorised):
    (`sendShielded` over a `QualifiedShieldedCoinInfo` with a valid
    `mt_index`), per the spend-path discipline MIP-0011 codifies.
 2. `sendShielded(coin, recipient, amount)` executes the spend.
-3. **Change rule (normative).** If change exists, the circuit MUST
-   re-own it in the same transaction via `sendImmediateShielded(change,
-   self, change.value)` and MUST treat the **`sent` field of that call's
-   result** as the coin the contract now holds. The consumed change coin
-   (`result.change`) MUST NOT be persisted, returned as the held coin,
-   or recorded in any coin store: its nullifier is revealed in this very
-   transaction, and any later spend of it is rejected as a double spend.
-   Rationale R4 documents the failure this rule prevents.
-4. The circuit returns the re-owned change coin description (or none) to
-   the caller. Circuit return values travel in the transaction's
+3. **Change rule (normative).** The coin recorded as held after a
+   partial spend MUST be live at the end of the transaction: its
+   commitment created by the transaction and its nullifier not
+   revealed in it. `sendShielded` already routes change back to the
+   contract as a self-owned output, so the baseline realisation is to
+   persist the change coin of its result directly; no re-owning step
+   is needed. A circuit MAY instead spend the change onward in the
+   same transaction via `sendImmediateShielded`, which is meaningful
+   only towards a recipient other than the contract itself; a circuit
+   that does so MUST treat the **`sent` field of that call's result**
+   as the surviving coin, and MUST NOT persist, return, or record the
+   coin that call consumed, whose nullifier is revealed in that very
+   transaction and whose later spend the node rejects as a double
+   spend. Rationale R4 documents the failure this rule prevents and
+   its upstream history.
+4. The circuit returns the surviving change coin description (or none)
+   to the caller. Circuit return values travel in the transaction's
    communication commitment and are not public.
 5. `round` is incremented.
 
@@ -385,10 +397,10 @@ behaviour:
   `mt_index` from the depositing transaction's commitment-tree
   positions; for a single-output transaction this is the transaction's
   start index.
-- After a spend with change, the client records the returned re-owned
-  coin and captures its `mt_index` from the spend transaction's position
-  window, then backfills the inbox via `append_inbox` no later than its
-  next inbox write (invariant INV-4).
+- After a spend with change, the client records the returned change
+  coin and captures its `mt_index` from the spend transaction's
+  position window, then backfills the inbox via `append_inbox` no later
+  than its next inbox write (invariant INV-4).
 - Where a transaction carries several commitments, clients MAY resolve
   the index by candidate retry: an incorrect qualified description
   yields an unsatisfiable witness at proving time and no transaction is
@@ -452,8 +464,9 @@ A conforming implementation MUST satisfy all of the following.
   or into the public transcript, beyond protocol commitments,
   nullifiers, and the send path's single-bit comparison outcomes.
 - **INV-3 (change continuity).** After a partial spend, the coin
-  recorded as held is spendable in a later transaction. Equivalently:
-  the re-owned coin, never the consumed change coin, is what survives.
+  recorded as held is spendable in a later transaction. Equivalently: a
+  coin whose nullifier the spend transaction revealed is never what
+  survives.
 - **INV-4 (reconstruction completeness).** For every coin the contract
   holds, the inbox contains an entry from which the coin description is
   recoverable by the holder of the account encryption secret, subject
@@ -531,20 +544,26 @@ write. What the stateless design costs is wallet-side
 state management, which section 6.5 specifies, with the inbox as its
 durable backstop.
 
-**R4. The change rule.** `sendImmediateShielded` consumes the change
-coin it is given (its nullifier is revealed in that same transaction)
-and creates a replacement with an evolved nonce, returned as `.sent`.
-Persisting the consumed coin makes every later change spend fail as an
-attempted double spend, while the replacement sits unrecorded; the
+**R4. The change rule.** `sendImmediateShielded` consumes the coin it
+is given (its nullifier is revealed in that same transaction) and
+creates a replacement with an evolved nonce, returned as `.sent`. The
+prevailing treasury recipe applied it redundantly to change that
+`sendShielded` had already routed back to the contract, and then
+persisted the consumed coin; every later change spend failed as an
+attempted double spend while the replacement sat unrecorded. The
 failure was reproduced on a production node through both custody
 patterns, in the treasury modules of a widely used contract library
-(the same pattern MPS-0018 cites as the working recipe), and disappears
-under the rule of section 6.3. MIP-0011 requires the change coin to be
-returned by the circuit and recommends persisting it, which is correct
-for its own burn flows, but those flows never surface the re-owning
-step, where two coin objects exist and only one survives; this MIP
-states the rule at the level where the defect lives, and recommends a
-clarifying note upstream for consumers who add the re-owning step.
+(the same pattern MPS-0018 cites as the working recipe), reported
+upstream with the reproducer, and resolved by removing the redundant
+step so implementations persist the live change coin of the send
+result. This MIP states the rule at the level of the surviving coin so
+both realisations conform: the baseline (persist the send result's
+change directly, which is also MIP-0011's guidance for its burn flows)
+and deliberate onward routing (persist that call's `sent` coin). The
+node-level evidence behind this rationale validated the re-owning
+variant; the baseline realisation is upstream-tested in a simulator,
+and its cross-transaction change spend is exercised on a node by
+conformance test 3.
 
 **R5. Inbox rather than out-of-band delivery or ledger ciphertexts.**
 Ledger ciphertexts on contract-owned outputs are rejected by the node,
@@ -598,10 +617,10 @@ upstream of custody only at the metadata layer. The name service
 - [ ] Cryptographer review of section 6 (secretless-coin analysis, the
       InboxEntry construction, and the disclosure bounds) with findings
       addressed.
-- [ ] The change rule (6.3, R4) accepted upstream in at least one widely
-      used contract library, or that library documents divergence; the
-      clarifying note recommended against MIP-0011 (R4) resolved either
-      way.
+- [ ] The change rule (6.3, R4) upheld upstream: the defect report and
+      library fix are merged; node-level validation of the baseline
+      realisation's cross-transaction change spend (conformance test 3)
+      completed against a fixed release.
 - [ ] A public reference implementation passing the conformance suite
       (Testing section), including the observer leak audit with a
       passing positive control.
@@ -616,8 +635,10 @@ upstream of custody only at the metadata layer. The name service
 ### Implementation Plan
 
 1. Publish the reference implementation and conformance suite.
-2. File and track the upstream library defect report and change-rule
-   fix, and the MIP-0011 clarifying note.
+2. Track the upstream change-rule fix (report filed, fix merged)
+   through node-level validation of the fixed pattern; no MIP-0011
+   change is needed, since its guidance matches the baseline
+   realisation.
 3. File and track the indexer discovery surface.
 4. Engage a wallet provider for the independent implementation.
 5. Submit for editor numbering; iterate through community commentary.
@@ -706,10 +727,11 @@ instance. Wallets unaware of this standard are unaffected.
   this specification and diverges from it in known ways (its deposits
   do not increment `round`, and its shielded path is the public-map
   control pattern).
-- Upstream dependencies: a defect report and change-rule fix for the
-  affected contract library, and the MIP-0011 clarifying note, both
-  tracked by the Implementation Plan; an indexer surface for
-  contract-transaction enumeration (Path to Active).
+- Upstream status: the change-rule defect report and the library fix
+  are filed and merged (References); node-level validation of the fixed
+  pattern is tracked by the Implementation Plan. Remaining dependency:
+  an indexer surface for contract-transaction enumeration (Path to
+  Active).
 - This MIP contains no implementation code; the artefacts above are its
   evidence base, and the reference implementation is an acceptance
   criterion, not an existing artefact.
@@ -727,10 +749,11 @@ observe the failures this standard rules out):
    INV-4, INV-5).
 2. **Witness spend**: full-amount spend from the coin store is accepted
    by the node (INV-1, INV-2).
-3. **Change chain**: partial spend, re-capture of the re-owned change,
-   spend of the change in a later transaction (INV-3). This test is the
-   regression gate for the change rule and fails on the consumed-coin
-   defect.
+3. **Change chain**: partial spend, re-capture of the surviving
+   change, spend of the change in a later transaction (INV-3),
+   exercised under the realisation the implementation uses (6.3). This
+   test is the regression gate for the change rule and fails on the
+   consumed-coin defect.
 4. **Third-party deposit and discovery**: a second, independent wallet
    deposits against the advertised key; the owner discovers and spends
    using the inbox walk and chain data only (INV-4).
@@ -769,8 +792,10 @@ without a satisfying witness and observing the abort.
   derivations, the contract-call communication commitment, and the
   rejection of ciphertexts on contract-owned outputs.
 - OpenZeppelin Compact contracts: the public-map treasury pattern and
-  the stateless precedents; the change-rule defect report is to be
-  filed and linked per the Implementation Plan.
+  the stateless precedents; the change-rule
+  [defect report](https://github.com/OpenZeppelin/compact-contracts/issues/656)
+  and its
+  [resolution](https://github.com/OpenZeppelin/compact-contracts/pull/661).
 - Midnight Passport workspace: the stateless custody experiment
   (evidence and conformance probes, `experiments/stateless-shielded-custody/`)
   and the account-custody prototype
