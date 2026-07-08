@@ -3,6 +3,7 @@ MIP: X
 Title: Contract Custody of Midnight-Native Assets
 Authors:
   - Nicolas Di Prima (NicolasDP)
+  - Hector Bulgarini (hbulgarini)
 Status: Draft
 Category: Standards
 Created: 2026-07-07
