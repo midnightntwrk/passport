@@ -1980,6 +1980,36 @@ body[data-explain='1'] .x {
   padding: 18px 24px;
 }
 
+.dynamic-wallet-ready {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+
+.dynamic-wallet-ready .eyebrow {
+  margin-bottom: 10px;
+}
+
+.dynamic-wallet-row {
+  display: grid;
+  grid-template-columns: minmax(128px, 0.42fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 8px 0;
+  border-top: 1px solid rgba(37, 43, 58, 0.08);
+}
+
+.dynamic-wallet-row span {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.dynamic-wallet-row code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .stage-onboard {
   padding: 26px 48px 0;
 }
@@ -2065,6 +2095,21 @@ body[data-explain='1'] .x {
 
 .onboard-copy {
   animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.dynamic-gate-grid {
+  align-items: center;
+}
+
+.dynamic-auth-card {
+  display: grid;
+  gap: 18px;
+  justify-items: start;
+  min-height: 220px;
+}
+
+.dynamic-passport-showcase {
+  max-width: 520px;
 }
 
 .passport-showcase {

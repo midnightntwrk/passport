@@ -138,7 +138,7 @@ export function FoundationsFlowView({
     return () => {
       cancelled = true;
     };
-  }, [ctx.mid, ctx.ledger, ctx.session.accountAddress]);
+  }, [ctx.dynamicWallet, ctx.ledger, ctx.session.accountAddress]);
 
   useEffect(() => {
     if (positions.length === 0) return;
@@ -182,9 +182,13 @@ export function FoundationsFlowView({
     setTxId('');
     setTxConfirms(0);
     setTxStatus('confirming');
-    setTxStatusText('Depositing through the 1am connector demo path...');
+    setTxStatusText('Requesting Dynamic wallet authorization...');
     beginTask('Depositing Night into the MN Passport vault', 'deposit_night');
     try {
+      await ctx.dynamicWallet?.signMessage(
+        `MN Passport deposit authorization\nAmount: ${amount} USDC\nAccount: ${ctx.session.accountAddress}`,
+      );
+      setTxStatusText('Depositing through the MN Passport custody account...');
       const depositValue = BigInt(Math.max(1, Math.floor(Number(amount))));
       const result = await ctx.account.depositNight(ctx.nightColor, depositValue);
       const id = result.txId;
@@ -245,6 +249,9 @@ export function FoundationsFlowView({
     setBusy('deploy');
     setError('');
     try {
+      await ctx.dynamicWallet?.signMessage(
+        `MN Passport deploy capital\nNight ID: ${nightHandle}.night\nAmount: ${amount} USDC\nPool: ${activePool.name} ${activePool.serif}`,
+      );
       await new Promise((resolve) => setTimeout(resolve, 900));
       setPositions((current) => [
         ...current,
@@ -636,36 +643,25 @@ function SourceModal(props: {
         <ModalHead title="Step 02 · Source funds" onClose={props.onClose} />
         <div className="nf-modal-body">
           <p className="nf-small-copy">
-            Bridging <b>{fmtUsd(props.amount)}</b> USDC through the Dynamic Midnight connector
-            path. The demo mirrors the supported 1am flow and keeps social-auth Midnight wallets
-            disabled until embedded wallet state ships.
+            Bridging <b>{fmtUsd(props.amount)}</b> USDC after Dynamic Midnight wallet
+            authorization. The MN Passport custody account receives the localnet deposit and the
+            Dynamic wallet surfaces remain visible below.
           </p>
           <div className="nf-witem selected nf-dynamic-wallet">
-            <div className="nf-wicon">1A</div>
+            <div className="nf-wicon">D</div>
             <div className="nf-winfo">
               <div className="nf-wname">
-                Dynamic 1am connector <span className="nf-recommended">Supported today</span>
+                Dynamic embedded Midnight wallet <span className="nf-recommended">Connected</span>
               </div>
-              <div className="nf-waddr">@dynamic-labs/midnight · MidnightWalletConnectors</div>
+              <div className="nf-waddr">@dynamic-labs/midnight · DynamicWaasMidnightConnectors</div>
             </div>
             <div className="nf-wbal">
-              <div className="nf-wbal-lbl">Connect</div>
+              <div className="nf-wbal-lbl">Authorize</div>
             </div>
           </div>
           <DynamicConnectorPanel state={props.dynamicState} error={props.dynamicError} />
-          <div className="nf-witem nf-witem-disabled">
-            <div className="nf-wicon muted">S</div>
-            <div className="nf-winfo">
-              <div className="nf-wname">
-                Social-auth embedded wallet <span className="nf-recommended muted">Rolling out</span>
-              </div>
-              <div className="nf-waddr">
-                No usable Midnight wallet state yet; 1am is the working demo path.
-              </div>
-            </div>
-          </div>
           <button className="nf-btn" onClick={props.onContinue}>
-            Continue with 1am connector {'->'}
+            Sign with Dynamic and deposit {'->'}
           </button>
         </div>
       </div>
@@ -711,21 +707,22 @@ function DynamicConnectorPanel({
         <span>3 address surfaces</span>
       </div>
       <div className="nf-import-line">{state.importLine}</div>
+      <div className="nf-dynamic-note">{state.socialAuthStatus}</div>
       <div className="nf-surface-list">
         <SurfaceRow
-          method="getUnshieldedAddress()"
+          method="wallet.address"
           label="Unshielded deposit address"
           value={state.addresses.unshieldedAddress}
         />
         <SurfaceRow
-          method="getShieldedAddresses()"
+          method="wallet.additionalAddresses · midnight_shielded"
           label="Shielded address plus coin/encryption public keys"
-          value={state.addresses.shieldedAddress}
+          value={state.addresses.shieldedAddress || 'not returned yet'}
         />
         <SurfaceRow
-          method="getDustAddress()"
+          method="wallet.additionalAddresses · midnight_dust"
           label="DUST fee address"
-          value={state.addresses.dustAddress}
+          value={state.addresses.dustAddress || 'not returned yet'}
         />
       </div>
       <div className="nf-balance-grid">

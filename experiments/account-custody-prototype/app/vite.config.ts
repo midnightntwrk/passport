@@ -55,13 +55,13 @@ export default defineConfig({
     __IDENTITY_REGISTRY_ADDRESS__: JSON.stringify(identityRegistryAddress()),
   },
   resolve: {
-    alias: {
-      'isomorphic-ws': path.resolve(__dirname, 'src/lib/ws-shim.ts'),
+    alias: [
+      { find: 'isomorphic-ws', replacement: path.resolve(__dirname, 'src/lib/ws-shim.ts') },
       // Userland Buffer for wallet-SDK imports of node's `buffer` module —
       // applies to deps served from the parent tree too.
-      buffer: path.resolve(__dirname, 'node_modules/buffer/index.js'),
-      'node:buffer': path.resolve(__dirname, 'node_modules/buffer/index.js'),
-    },
+      { find: /^buffer$/, replacement: path.resolve(__dirname, 'node_modules/buffer/index.js') },
+      { find: /^node:buffer$/, replacement: path.resolve(__dirname, 'node_modules/buffer/index.js') },
+    ],
     // The shared ../src/wallet code would otherwise resolve @midnight-ntwrk
     // packages from the PARENT node_modules — a second physical module
     // instance, so setNetworkId() lands in a different module state than

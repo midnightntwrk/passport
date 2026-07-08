@@ -10,6 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@dynamic-labs/ethereum": "^4.91.6",
+    "@dynamic-labs/midnight": "^4.91.6",
+    "@dynamic-labs/sdk-api-core": "^0.0.1070",
+    "@dynamic-labs/sdk-react-core": "^4.91.6",
     "@midnight-ntwrk/compact-js": "^2.0.2",
     "@midnight-ntwrk/compact-runtime": "^0.16.0",
     "@midnight-ntwrk/ledger-v8": "^8.0.3",

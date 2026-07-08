@@ -1,4 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  DynamicWidget,
+  useDynamicContext,
+  useUserWallets,
+} from '@dynamic-labs/sdk-react-core';
+import { WalletAddressType } from '@dynamic-labs/sdk-api-core';
+import { isMidnightWallet, type MidnightWallet } from '@dynamic-labs/midnight';
 
 import { PassportAccount } from '../../src/wallet/account.js';
 import type { Ledger } from '../../src/wallet/contract.js';
@@ -17,6 +24,20 @@ import { WalletPanel } from './views/WalletPanel.js';
 import { DevicesPanel } from './views/DevicesPanel.js';
 import { GrantsPanel } from './views/GrantsPanel.js';
 import { RecoveryPanel } from './views/RecoveryPanel.js';
+
+function normalizeDynamicHandle(value: string): string {
+  const [local] = value.split('@');
+  const normalized = local
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized.length >= 3 ? normalized.slice(0, 24) : 'bubbles';
+}
+
+function midnightAdditionalAddress(wallet: MidnightWallet, type: WalletAddressType): string {
+  return wallet.additionalAddresses.find((address) => address.type === type)?.address ?? 'pending';
+}
 
 export interface AppContext {
   mid: Midnight;
@@ -37,6 +58,7 @@ export interface AppContext {
   deviceCommitment: string | null;
   setDeviceCommitment: (c: string | null) => void;
   goToView: (view: ViewId) => void;
+  dynamicWallet: MidnightWallet | null;
 }
 
 export type ViewId = 'flow' | 'overview' | 'assets' | 'grants' | 'devices' | 'recovery';
@@ -111,6 +133,8 @@ const NAV: { id: ViewId; label: string; icon: React.ReactNode }[] = [
 ];
 
 export default function App() {
+  const { primaryWallet, user, handleLogOut } = useDynamicContext();
+  const userWallets = useUserWallets();
   const [mid, setMid] = useState<Midnight | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [session, setSessionState] = useState<Session | null>(() => loadSession());
@@ -121,6 +145,27 @@ export default function App() {
   const [nav, setNav] = useState<ViewId>('flow');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [explain, setExplain] = useState(() => localStorage.getItem('passport-explain') !== '0');
+
+  const dynamicWallet = useMemo(() => {
+    const fromList = userWallets.find((candidate) => isMidnightWallet(candidate));
+    if (fromList) return fromList;
+    if (primaryWallet && isMidnightWallet(primaryWallet)) return primaryWallet;
+    return null;
+  }, [primaryWallet, userWallets]);
+
+  const dynamicIdentity = useMemo(() => {
+    const profile = user as any;
+    const social = profile?.verifiedCredentials?.find?.(
+      (credential: any) => credential?.format === 'oauth' || credential?.oauthProvider,
+    );
+    const candidate =
+      social?.oauthUsername ||
+      social?.oauthDisplayName ||
+      profile?.username ||
+      profile?.email ||
+      'bubbles';
+    return normalizeDynamicHandle(candidate);
+  }, [user]);
 
   // Hover explainers: a body attribute the CSS and the tooltip listen to.
   useEffect(() => {
@@ -138,8 +183,12 @@ export default function App() {
     console.log(`[passport] ${msg}`);
   }, []);
 
-  // Boot the Midnight context (wallet sync) once.
+  // Boot the Midnight context only after Dynamic has produced a Midnight wallet.
+  // Otherwise the login screen spams localnet websocket retries while Dynamic is
+  // still creating or recovering the embedded wallet.
   useEffect(() => {
+    if (!dynamicWallet || mid) return;
+
     log('connecting to localnet (syncing fee wallet)…');
     getMidnight()
       .then((m) => {
@@ -154,7 +203,7 @@ export default function App() {
         }
       })
       .catch((e) => setBootError(String(e?.message ?? e)));
-  }, [log]);
+  }, [dynamicWallet, log, mid]);
 
   const setSession = useCallback((s: Session) => {
     saveSession(s);
@@ -252,12 +301,69 @@ export default function App() {
     );
   }
 
+  if (!user) {
+    return (
+      <div className="stage stage-onboard">
+        <div className="onboard-top">
+          <BrandMark />
+          <ProverChip />
+        </div>
+        <DynamicGate
+          title="Sign in with Dynamic first."
+          copy="Use Discord in the Dynamic modal, then MN Passport will create or unlock the custody account for the same session."
+        />
+        <div className="dock-stack">
+          <ProvingDock />
+          <ActivityDock lines={logLines} />
+        </div>
+        <ExplainTip />
+      </div>
+    );
+  }
+
+  if (!dynamicWallet) {
+    return (
+      <div className="stage stage-onboard">
+        <div className="onboard-top">
+          <BrandMark />
+          <button className="linkish" onClick={() => handleLogOut()}>
+            log out
+          </button>
+        </div>
+        <DynamicGate
+          title="Creating your Dynamic Midnight wallet."
+          copy="Auth is connected. Waiting for Dynamic to return the embedded Midnight wallet object with unshielded, shielded, and DUST address surfaces."
+        />
+        <div className="dock-stack">
+          <ProvingDock />
+          <ActivityDock lines={logLines} />
+        </div>
+        <ExplainTip />
+      </div>
+    );
+  }
+
   if (!mid) {
     return (
       <div className="stage stage-center">
         <BrandMark large />
         <div className="boot-card">
           <Busy label="Connecting to the localnet and syncing the fee wallet…" />
+          <div className="dynamic-wallet-ready">
+            <p className="eyebrow">Dynamic Midnight wallet ready</p>
+            <div className="dynamic-wallet-row">
+              <span>wallet.address</span>
+              <Mono v={dynamicWallet.address} />
+            </div>
+            <div className="dynamic-wallet-row">
+              <span>midnight_shielded</span>
+              <Mono v={midnightAdditionalAddress(dynamicWallet, WalletAddressType.MidnightShielded)} />
+            </div>
+            <div className="dynamic-wallet-row">
+              <span>midnight_dust</span>
+              <Mono v={midnightAdditionalAddress(dynamicWallet, WalletAddressType.MidnightDust)} />
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -275,6 +381,8 @@ export default function App() {
         <OnboardView
           mid={mid}
           session={session}
+          dynamicIdentity={dynamicIdentity}
+          dynamicWallet={dynamicWallet}
           log={log}
           onConnected={(s, a, commitment) => {
             setSession(s);
@@ -307,6 +415,7 @@ export default function App() {
     deviceCommitment,
     setDeviceCommitment,
     goToView,
+    dynamicWallet,
   };
 
   if (nav === 'flow') {
@@ -408,7 +517,64 @@ function BrandMark(props: { large?: boolean }) {
           <span>MN</span>
           <em>Passport</em>
         </span>
-        <span className="brand-tag">Foundations demo</span>
+      </div>
+    </div>
+  );
+}
+
+function DynamicGate(props: { title: string; copy: string }) {
+  return (
+    <div className="onboard-grid onboard-grid-narrow dynamic-gate-grid">
+      <div className="onboard-copy">
+        <PassportDynamicShowcase />
+        <p className="eyebrow">Dynamic embedded wallet</p>
+        <h1 className="hero-title">{props.title}</h1>
+        <p className="lede">{props.copy}</p>
+        <ol className="hero-steps">
+          <li>
+            <span className="hero-step-n">1</span>
+            <span>Authenticate with Dynamic using the enabled social provider.</span>
+          </li>
+          <li>
+            <span className="hero-step-n">2</span>
+            <span>Dynamic provisions the embedded Midnight wallet for this account.</span>
+          </li>
+          <li>
+            <span className="hero-step-n">3</span>
+            <span>MN Passport uses that wallet context before deploying the custody account.</span>
+          </li>
+        </ol>
+      </div>
+      <div className="onboard-cards">
+        <div className="panel onboard-card dynamic-auth-card">
+          <h2 className="eyebrow">Sign in</h2>
+          <DynamicWidget />
+          <p className="hint">
+            Discord appears here when it is enabled for this Dynamic environment.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PassportDynamicShowcase() {
+  return (
+    <div className="passport-showcase passport-showcase-compact dynamic-passport-showcase">
+      <div className="passport-showcase-grid" />
+      <div className="passport-rings" />
+      <div className="passport-demo-card" aria-hidden="true">
+        <div className="passport-demo-top">
+          <span>DYNAMIC</span>
+          <span>MIDNIGHT</span>
+        </div>
+        <div className="passport-demo-mark">
+          <span />
+        </div>
+        <div className="passport-demo-bottom">
+          <small>MN PASSPORT</small>
+          <strong>social wallet</strong>
+        </div>
       </div>
     </div>
   );

@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
+import type { MidnightWallet } from '@dynamic-labs/midnight';
 
 import { PassportAccount } from '../../../src/wallet/account.js';
 import { deviceCommitment } from '../../../src/wallet/contract.js';
-import { randomBytes32 } from '../../../src/wallet/hex.js';
+import { bytesToHex, hexToBytes32, randomBytes32 } from '../../../src/wallet/hex.js';
 
 import type { Midnight } from '../lib/midnight.js';
 import { accountForIdentity, registerIdentity } from '../lib/midnight.js';
 import { compiledAccountContract } from '../lib/providers.js';
-import { createPasskey, deriveDeviceSecret, deriveDevModeSecret } from '../lib/passkey.js';
+import { deriveDeviceSecret, deriveDevModeSecret } from '../lib/passkey.js';
 import {
   loadPasskeyForAlias,
   normalizeAlias,
@@ -18,6 +19,60 @@ import type { Session } from '../lib/session.js';
 import { ActionButton, Chip } from '../ui.js';
 
 const LOCAL_DEMO_SECRET = 'mn-passport-foundations-local-demo';
+const DYNAMIC_SECRET_KEY = 'passport-demo-dynamic-wallet-secrets';
+
+interface DynamicSecretRecord {
+  walletKey: string;
+  walletAddress: string;
+  secretHex: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function dynamicWalletKey(wallet: MidnightWallet): string {
+  return wallet.id || wallet.address;
+}
+
+function loadDynamicSecrets(): DynamicSecretRecord[] {
+  try {
+    const raw = localStorage.getItem(DYNAMIC_SECRET_KEY);
+    return raw ? (JSON.parse(raw) as DynamicSecretRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadDynamicSecret(wallet: MidnightWallet): DynamicSecretRecord | null {
+  const key = dynamicWalletKey(wallet);
+  return (
+    loadDynamicSecrets().find(
+      (record) => record.walletKey === key || record.walletAddress === wallet.address,
+    ) ?? null
+  );
+}
+
+function saveDynamicSecret(wallet: MidnightWallet, secret: Uint8Array): DynamicSecretRecord {
+  const now = new Date().toISOString();
+  const key = dynamicWalletKey(wallet);
+  const existing = loadDynamicSecret(wallet);
+  const record: DynamicSecretRecord = {
+    walletKey: key,
+    walletAddress: wallet.address,
+    secretHex: bytesToHex(secret),
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+  localStorage.setItem(
+    DYNAMIC_SECRET_KEY,
+    JSON.stringify([
+      ...loadDynamicSecrets().filter(
+        (item) => item.walletKey !== key && item.walletAddress !== wallet.address,
+      ),
+      record,
+    ]),
+  );
+  return record;
+}
 
 function usesLocalDemoSecret(): boolean {
   const params = new URLSearchParams(window.location.search);
@@ -43,16 +98,22 @@ async function contractExists(mid: Midnight, address: string): Promise<boolean> 
 export function OnboardView(props: {
   mid: Midnight;
   session: Session | null;
+  dynamicIdentity: string;
+  dynamicWallet: MidnightWallet;
   log: (m: string) => void;
   onConnected: (s: Session, a: PassportAccount, commitment?: string) => void;
   onReset: () => void;
 }) {
   const { mid, session, log } = props;
-  const [label, setLabel] = useState('alice');
+  const [label, setLabel] = useState(props.dynamicIdentity);
   const [address, setAddress] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sessionStale, setSessionStale] = useState(false);
   const localDemoMode = usesLocalDemoSecret();
+
+  useEffect(() => {
+    setLabel((current) => (current === 'alice' || current === 'bubbles' ? props.dynamicIdentity : current));
+  }, [props.dynamicIdentity]);
 
   // Proactively check that the remembered account still exists — a reset
   // localnet keeps the browser session but loses the contract.
@@ -75,16 +136,48 @@ export function OnboardView(props: {
       log('local demo mode: deriving the device secret in this browser…');
       return { secret: await deriveDevModeSecret(LOCAL_DEMO_SECRET), session: { devMode: true } };
     }
-    const storedPasskey = loadPasskeyForAlias(alias)?.passkey;
-    if (storedPasskey) {
-      log(`using saved passkey reference for ${alias}.night; deriving the device secret...`);
-      return { secret: await deriveDeviceSecret(storedPasskey), session: { passkey: storedPasskey } };
+    const storedDynamicSecret = loadDynamicSecret(props.dynamicWallet);
+    if (storedDynamicSecret) {
+      log(`using saved Dynamic wallet authorization for ${alias}.night...`);
+      return {
+        secret: hexToBytes32(storedDynamicSecret.secretHex),
+        session: {
+          dynamicWalletId: storedDynamicSecret.walletKey,
+          dynamicWalletAddress: storedDynamicSecret.walletAddress,
+        },
+      };
     }
-    log(`creating ${alias}.night passkey in this browser...`);
-    const passkey = await createPasskey(`${alias}.night`);
-    savePasskeyRecord(alias, passkey);
-    log(`passkey reference saved for ${alias}.night; deriving the device secret...`);
-    return { secret: await deriveDeviceSecret(passkey), session: { passkey } };
+    log(`requesting Dynamic wallet signature for ${alias}.night account creation...`);
+    await props.dynamicWallet.signMessage(
+      `MN Passport account creation\nNight ID: ${alias}.night\nWallet: ${props.dynamicWallet.address}`,
+    );
+    const secret = randomBytes32();
+    const record = saveDynamicSecret(props.dynamicWallet, secret);
+    log(`Dynamic wallet authorization saved for ${alias}.night.`);
+    return {
+      secret,
+      session: {
+        dynamicWalletId: record.walletKey,
+        dynamicWalletAddress: record.walletAddress,
+      },
+    };
+  };
+
+  const deviceSecretForSession = async (currentSession: Session): Promise<Uint8Array> => {
+    if (currentSession.devMode) return deriveDevModeSecret(LOCAL_DEMO_SECRET);
+    if (currentSession.dynamicWalletAddress || currentSession.dynamicWalletId) {
+      const storedDynamicSecret = loadDynamicSecret(props.dynamicWallet);
+      if (!storedDynamicSecret) {
+        await props.dynamicWallet.signMessage(
+          `MN Passport account unlock\nAccount: ${currentSession.accountAddress}\nWallet: ${props.dynamicWallet.address}`,
+        );
+        throw new Error(
+          'Dynamic wallet authorization is present, but the local demo device secret is missing for this browser. Create a new demo account or restore on the original browser profile.',
+        );
+      }
+      return hexToBytes32(storedDynamicSecret.secretHex);
+    }
+    return deriveDeviceSecret(currentSession.passkey);
   };
 
   // Session exists but the page was reloaded: re-derive the device secret
@@ -126,9 +219,7 @@ export function OnboardView(props: {
                     'account contract not found on this chain — the localnet was reset; forget this account and onboard again',
                   );
                 }
-                const secret = session.devMode
-                  ? await deriveDevModeSecret(LOCAL_DEMO_SECRET)
-                  : await deriveDeviceSecret(session.passkey);
+                const secret = await deviceSecretForSession(session);
                 log('connecting to the account contract…');
                 const account = await PassportAccount.connect(
                   mid.accountProviders,
@@ -166,9 +257,9 @@ export function OnboardView(props: {
           </p>
         ) : (
           <p className="lede">
-            Save a browser passkey for your Night ID first. Its PRF output becomes the device
-            secret, then MN Passport deploys the custody account on Midnight and walks straight into
-            the earn flow.
+            Dynamic has authenticated the user and returned the embedded Midnight wallet. MN
+            Passport now deploys the custody account on Midnight and walks straight into the earn
+            flow.
           </p>
         )}
         <ol className="hero-steps">
@@ -177,7 +268,7 @@ export function OnboardView(props: {
             <span>
               {localDemoMode
                 ? 'A local demo device secret is derived in this browser.'
-                : 'A resident browser passkey is saved for your Night ID.'}
+                : 'Dynamic creates the embedded Midnight wallet for this authenticated user.'}
             </span>
           </li>
           <li>
@@ -189,7 +280,7 @@ export function OnboardView(props: {
           <li>
             <span className="hero-step-n">3</span>
             <span>
-              The passkey-derived device secret deploys your MN Passport custody contract.
+              The account device secret deploys your MN Passport custody contract.
             </span>
           </li>
           <li>
@@ -213,17 +304,17 @@ export function OnboardView(props: {
               localDemoMode
                 ? 'Deploy MN Passport account'
                 : storedPasskey
-                  ? 'Use saved passkey & deploy account'
-                  : 'Create passkey & deploy account'
+                  ? 'Use saved account secret & deploy account'
+                  : 'Deploy MN Passport account'
             }
             busyLabel={
-              localDemoMode ? 'deploying MN Passport custody…' : 'creating passkey & deploying…'
+              localDemoMode ? 'deploying MN Passport custody…' : 'deploying MN Passport custody…'
             }
             block
             task={{
               label: localDemoMode
                 ? 'Deploying your MN Passport custody account'
-                : 'Creating passkey and deploying MN Passport custody',
+                : 'Deploying MN Passport custody from Dynamic session',
               circuit: 'deploy account',
             }}
             onError={setError}
@@ -275,8 +366,8 @@ export function OnboardView(props: {
             {localDemoMode
               ? 'Automation mode uses a local device secret.'
               : storedPasskey
-                ? `Saved passkey reference found for ${aliasPreview}.night.`
-                : 'The passkey is stored by the browser/passkey provider for this origin.'}{' '}
+                ? `Saved account secret reference found for ${aliasPreview}.night.`
+                : `Dynamic wallet connected: ${props.dynamicWallet.address.slice(0, 18)}...`}{' '}
             Night IDs are unique, so a handle like alice.night can only be registered once.
           </p>
         </div>
@@ -285,7 +376,7 @@ export function OnboardView(props: {
           <h2 className="eyebrow">Connect existing MN Passport wallet</h2>
           <p className="panel-sub">
             Paste an account contract address; the device secret is re-derived{' '}
-            {localDemoMode ? 'inside this browser.' : 'from a resident passkey for this browser.'}
+            {localDemoMode ? 'inside this browser.' : 'after the Dynamic wallet session is active.'}
           </p>
           <div className="row">
             <input
@@ -307,7 +398,11 @@ export function OnboardView(props: {
                 }
                 const secret = localDemoMode
                   ? await deriveDevModeSecret(LOCAL_DEMO_SECRET)
-                  : await deriveDeviceSecret();
+                  : await deviceSecretForSession({
+                      accountAddress: address.trim(),
+                      dynamicWalletId: dynamicWalletKey(props.dynamicWallet),
+                      dynamicWalletAddress: props.dynamicWallet.address,
+                    });
                 const account = await PassportAccount.connect(
                   mid.accountProviders,
                   compiledAccountContract(),
@@ -316,7 +411,12 @@ export function OnboardView(props: {
                 );
                 log(`connected to ${account.address}`);
                 props.onConnected(
-                  { accountAddress: address.trim(), devMode: localDemoMode || undefined },
+                  {
+                    accountAddress: address.trim(),
+                    devMode: localDemoMode || undefined,
+                    dynamicWalletId: localDemoMode ? undefined : dynamicWalletKey(props.dynamicWallet),
+                    dynamicWalletAddress: localDemoMode ? undefined : props.dynamicWallet.address,
+                  },
                   account,
                   deviceCommitment(secret).toString(),
                 );
@@ -349,7 +449,7 @@ function PassportShowcase(props: { label: string; compact?: boolean }) {
         </div>
       </div>
       <div className="passport-flow-dots" aria-hidden="true">
-        {['Local key', 'Custody', 'Night ID', 'Fund', 'Earn'].map((item, index) => (
+        {['Dynamic auth', 'Custody', 'Night ID', 'Fund', 'Earn'].map((item, index) => (
           <span className={index <= 1 ? 'passport-flow-dot passport-flow-dot-active' : 'passport-flow-dot'} key={item}>
             <i />
             {item}

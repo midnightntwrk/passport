@@ -1,7 +1,8 @@
-// LocalStorage persistence of the user's session. Secrets are NOT stored:
-// the device secret is re-derived from the passkey (PRF) on each use; the
-// recovery secret only ever exists transiently (and as on-chain shares —
-// TODO(PVSS)).
+// LocalStorage persistence of the user's demo session. Passkey sessions
+// re-derive the device secret from WebAuthn PRF. Dynamic sessions remember
+// the demo device secret in a separate wallet-keyed local record after the
+// user authorizes creation with the Dynamic Midnight wallet. The recovery
+// secret only ever exists transiently (and as on-chain shares — TODO(PVSS)).
 
 import type { PasskeyRef } from './passkey.js';
 
@@ -11,6 +12,8 @@ export interface Session {
   identityRegistryAddress?: string;
   identityRegistrationTxId?: string;
   passkey?: PasskeyRef;
+  dynamicWalletId?: string;
+  dynamicWalletAddress?: string;
   devMode?: boolean;
 }
 

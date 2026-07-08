@@ -1,11 +1,9 @@
-import { firstValueFrom } from 'rxjs';
+import { WalletAddressType } from '@dynamic-labs/sdk-api-core';
 
 import type { AppContext } from '../App.js';
-import { bytesToHex } from '../../../src/wallet/hex.js';
-import { CONFIG, userAddressBytes } from './providers.js';
 
 export const DYNAMIC_MIDNIGHT_IMPORT =
-  'import { MidnightWalletConnectors } from "@dynamic-labs/midnight";';
+  'import { DynamicWaasMidnightConnectors } from "@dynamic-labs/midnight";';
 
 export const UNSHIELDED_NIGHT_TOKEN_KEY =
   '0000000000000000000000000000000000000000000000000000000000000000';
@@ -47,92 +45,71 @@ export interface DynamicMidnightState {
   socialAuthStatus: string;
 }
 
-function keyHex(key: unknown): string {
-  if (typeof key === 'string') return key.replace(/^0x/, '');
-  if (key && typeof (key as { toHexString?: () => string }).toHexString === 'function') {
-    return (key as { toHexString: () => string }).toHexString().replace(/^0x/, '');
-  }
-  if (key && (key as { bytes?: Uint8Array }).bytes instanceof Uint8Array) {
-    return bytesToHex((key as { bytes: Uint8Array }).bytes);
-  }
-  return String(key ?? '').replace(/^0x/, '');
+function sumRecord(record?: Record<string, bigint>): bigint {
+  if (!record) return 0n;
+  return Object.values(record).reduce((sum, value) => sum + value, 0n);
 }
 
-function dustPublicKeyHex(publicKey: bigint): string {
-  const hex = publicKey.toString(16);
-  return hex.length % 2 === 0 ? hex : `0${hex}`;
-}
-
-function formatConnectorAddress(type: 'addr' | 'shield-addr' | 'dust', payloadHex: string): string {
-  // Browser-safe display surface for the Dynamic demo. The real
-  // @dynamic-labs/midnight connector returns address strings from these same
-  // public-key surfaces; this avoids pulling the Node-oriented formatter into
-  // the Vite tab.
-  return `mn_${type}_${CONFIG.networkId}1${payloadHex}`;
-}
-
-function sumNight(ctx: Pick<AppContext, 'ledger'>): bigint {
-  return ctx.ledger ? [...ctx.ledger.night_balances].reduce((sum, [, v]) => sum + v, 0n) : 0n;
-}
-
-function sumShielded(ctx: Pick<AppContext, 'ledger'>): bigint {
-  return ctx.ledger ? [...ctx.ledger.coins].reduce((sum, [, q]) => sum + q.value, 0n) : 0n;
-}
-
-function readDustBalance(walletState: any): bigint {
-  const candidates = [
-    walletState?.dust?.balance,
-    walletState?.dust?.balances?.total,
-    walletState?.balances?.dust,
-  ];
-  for (const value of candidates) {
-    if (typeof value === 'bigint') return value;
-    if (typeof value === 'number' && Number.isFinite(value)) return BigInt(value);
-    if (typeof value === 'string' && /^\d+$/.test(value)) return BigInt(value);
-  }
-  return 0n;
+function publicKeyParts(publicKey?: string): {
+  shieldedCoinPublicKey: string;
+  shieldedEncryptionPublicKey: string;
+} {
+  if (!publicKey) return { shieldedCoinPublicKey: '', shieldedEncryptionPublicKey: '' };
+  const half = Math.floor(publicKey.length / 2);
+  return {
+    shieldedCoinPublicKey: publicKey.slice(0, half),
+    shieldedEncryptionPublicKey: publicKey.slice(half),
+  };
 }
 
 export async function loadDynamicMidnightState(ctx: AppContext): Promise<DynamicMidnightState> {
-  const walletState: any = await firstValueFrom(ctx.mid.walletCtx.wallet.state());
-  const shieldedCoinPublicKey = keyHex(walletState.shielded?.coinPublicKey);
-  const shieldedEncryptionPublicKey = keyHex(walletState.shielded?.encryptionPublicKey);
-  const unshieldedAddressHex = bytesToHex(userAddressBytes(ctx.mid.walletCtx));
-  const dustAddressHex = dustPublicKeyHex(ctx.mid.walletCtx.dustSecretKey.publicKey);
+  const wallet = ctx.dynamicWallet;
+  if (!wallet) throw new Error('Dynamic Midnight wallet is not connected');
+
+  const shielded = wallet.additionalAddresses.find(
+    (address) => address.type === WalletAddressType.MidnightShielded,
+  );
+  const dust = wallet.additionalAddresses.find(
+    (address) => address.type === WalletAddressType.MidnightDust,
+  );
+  const keyParts = publicKeyParts(shielded?.publicKey);
+
+  const formatted = await wallet.getFormattedBalances().catch(() => null);
+  const raw = await wallet.getBalances().catch(() => null);
+  const firstShieldedToken = raw ? Object.keys(raw.shielded)[0] : undefined;
 
   return {
     addresses: {
-      unshieldedAddress: formatConnectorAddress('addr', unshieldedAddressHex),
-      shieldedAddress: formatConnectorAddress(
-        'shield-addr',
-        `${shieldedCoinPublicKey}${shieldedEncryptionPublicKey}`,
-      ),
-      shieldedCoinPublicKey,
-      shieldedEncryptionPublicKey,
-      dustAddress: formatConnectorAddress('dust', dustAddressHex),
+      unshieldedAddress: wallet.address,
+      shieldedAddress: shielded?.address ?? '',
+      shieldedCoinPublicKey: keyParts.shieldedCoinPublicKey,
+      shieldedEncryptionPublicKey: keyParts.shieldedEncryptionPublicKey,
+      dustAddress: dust?.address ?? '',
     },
     balances: {
       unshielded: {
         symbol: 'NIGHT',
         tokenKey: UNSHIELDED_NIGHT_TOKEN_KEY,
         decimals: 6,
-        amount: sumNight(ctx).toString(),
+        amount:
+          formatted?.unshieldedBalance ??
+          (raw ? (raw.unshielded[UNSHIELDED_NIGHT_TOKEN_KEY] ?? sumRecord(raw.unshielded)).toString() : '0'),
       },
       shielded: {
         symbol: 'shielded NIGHT',
-        tokenKey: SHIELDED_NIGHT_TOKEN_KEY,
+        tokenKey: firstShieldedToken ?? SHIELDED_NIGHT_TOKEN_KEY,
         decimals: 6,
-        amount: sumShielded(ctx).toString(),
+        amount: raw ? sumRecord(raw.shielded).toString() : String(formatted?.shieldedTokenCount ?? 0),
       },
       dust: {
         symbol: 'DUST',
         tokenKey: 'DUST',
         decimals: 15,
-        amount: readDustBalance(walletState).toString(),
+        amount: formatted?.dustBalance?.balance ?? raw?.dust.balance.toString() ?? '0',
       },
     },
     importLine: DYNAMIC_MIDNIGHT_IMPORT,
     socialAuthStatus:
-      'Embedded social-auth Midnight wallet state is pending rollout; use the 1am connector path today.',
+      'Dynamic embedded wallet connected; MN Passport is using its wallet object for address, balance, and authorization surfaces.',
   };
 }
