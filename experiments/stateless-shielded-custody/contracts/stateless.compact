@@ -21,8 +21,9 @@ import CompactStandardLibrary;
 //   - spends take the QSCI from a witness (wallet-local coin store, C16
 //     stand-in) — the mt_index is captured client-side from the indexer at
 //     deposit time (the S5 technique);
-//   - change is re-owned to the contract in-transaction and re-captured
-//     client-side; no insertCoin anywhere on the stateless path.
+//   - change comes back to the contract from sendShielded itself (a fresh
+//     self-owned output) and is re-captured client-side; no insertCoin
+//     anywhere on the stateless path.
 //
 // The contract ALSO carries the S6 insertCoin pattern verbatim
 // (deposit_public / spend_public) as the control group: the W6 leak audit
@@ -88,22 +89,27 @@ export circuit deposit_stateless(coin: ShieldedCoinInfo, blob: Bytes<160>): [] {
   bump();
 }
 
-// Spend: the QSCI arrives via witness, never from ledger state. Change is
-// re-owned to the contract in this same transaction (sendImmediateShielded)
-// and returned to the caller — return values travel in the communication
-// commitment (private to the caller), not in the transcript. The client
-// re-captures the change's mt_index from the indexer and, in a follow-up
-// call, appends an encrypted backup blob via append_backup so the inbox
-// stays complete (the change nonce is derived in-circuit, so it cannot be
-// pre-encrypted as an argument to this same call).
+// Spend: the QSCI arrives via witness, never from ledger state. When the
+// spend produces change, sendShielded itself routes it back to the contract
+// as a fresh self-owned output and hands it to the circuit as result.change
+// — no separate re-owning step is needed (upstream removed the redundant
+// re-send after our defect report; OpenZeppelin/compact-contracts#661).
+// The change coin is returned to the caller — return values travel in the
+// communication commitment (private to the caller), not in the transcript.
+// The client re-captures the change's mt_index from the indexer and, in a
+// follow-up call, appends an encrypted backup blob via append_backup so the
+// inbox stays complete (the change nonce is derived in-circuit, so it
+// cannot be pre-encrypted as an argument to this same call).
 //
-// CRITICAL (found by W3 phase 2/3): sendImmediateShielded re-owns the
-// change by TRANSIENTLY SPENDING it — result.change's nullifier is burnt
-// in this very transaction — and creates a fresh coin with an evolved
-// nonce, returned as `.sent`. The holdable coin is `.sent`, NOT
-// result.change. Storing result.change (as OZ ShieldedTreasury._send and
-// our S6 port both do) leaves an unspendable zombie: any later spend hits
-// NullifierAlreadyPresent ("attempted double spend").
+// CRITICAL (found by W3 phase 2/3): the rule is about the SURVIVING coin.
+// result.change is live and contract-owned the moment sendShielded returns;
+// hold it and it stays spendable. Re-spending it in the same transaction
+// (the old sendImmediateShielded re-owning step) burns its nullifier and
+// evolves the nonce — the surviving coin becomes that call's `.sent`, and
+// holding anything else is the zombie-change defect: the later spend proves
+// (the commitment is in the tree) but the node rejects with
+// NullifierAlreadyPresent ("attempted double spend"). Re-spending change is
+// only meaningful to route it somewhere other than self.
 export circuit spend_stateless(
   recipient: ZswapCoinPublicKey,
   color:     Bytes<32>,
@@ -115,16 +121,10 @@ export circuit spend_stateless(
     left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
     disclose(amount),
   );
-  if (disclose(result.change.is_some)) {
-    const redeposit = sendImmediateShielded(
-      disclose(result.change.value),
-      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
-      disclose(result.change.value.value),
-    );
-    bump();
-    return some<ShieldedCoinInfo>(disclose(redeposit.sent));
-  }
   bump();
+  if (disclose(result.change.is_some)) {
+    return some<ShieldedCoinInfo>(disclose(result.change.value));
+  }
   return none<ShieldedCoinInfo>();
 }
 
@@ -170,17 +170,16 @@ export circuit spend_public(
     disclose(amount),
   );
   if (disclose(result.change.is_some)) {
-    // Insert the RE-OWNED coin (.sent, evolved nonce), not result.change —
-    // see the note on spend_stateless. Inserting result.change is the OZ /
-    // S6 bug that makes the change unspendable (NullifierAlreadyPresent).
-    const redeposit = sendImmediateShielded(
-      disclose(result.change.value),
-      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
-      disclose(result.change.value.value),
-    );
+    // Insert the change exactly as sendShielded emitted it — it is already
+    // a live, self-owned output (the upstream ShieldedTreasury fix,
+    // OpenZeppelin/compact-contracts#661). The earlier re-owning step
+    // (sendImmediateShielded to self, insert `.sent`) also worked but spent
+    // an extra nullifier per change; inserting result.change while ALSO
+    // re-spending it was the original zombie-change bug — see the note on
+    // spend_stateless.
     public_coins.insertCoin(
       disclose(color),
-      disclose(redeposit.sent),
+      disclose(result.change.value),
       right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
     );
   } else {

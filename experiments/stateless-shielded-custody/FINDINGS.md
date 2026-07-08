@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Experiment run | 2026/07/03 (localnet) |
+| Experiment run | 2026/07/03; re-run 2026/07/08 with upstream-simplified change handling (localnet) |
 | Compact toolchain | 0.31.1 (language 0.23) |
 | Node image | `midnightntwrk/midnight-node:1.0.0` |
 | Indexer image | `midnightntwrk/indexer-standalone:4.3.3` |
@@ -42,11 +42,11 @@ and the C4 stakes.
 
 | Probe | Verdict | Tx hash / error | Ran | Note |
 |-------|---------|-----------------|-----|------|
-| **W1** compile-disclosure | **PASS** | — | 2026/07/03 | Compiler-forced disclosures decompose into 33 hiding-hash clause(s) (commitment/nullifier links) and 8 single-bit clause(s) (has-change / sufficient-balance com |
-| **W2** stateless-deposit | **PASS** | `00d77fbc79dce3d7…` | 2026/07/03 | Deposit landed with no QSCI in public ledger state; the encrypted inbox blob round-trips to the exact coin; mt_index recovered from the indexer (startIndex infe |
-| **W3** witness-spend | **PASS** | `0097444fac9a43eb…` | 2026/07/03 | Node ACCEPTED a contract shielded spend whose QSCI came from the witness — the S5 "structurally impossible" reading is refuted on this stack; stateless custody  |
-| **W5** third-party-deposit | **PARTIAL** | `00f51d4244acd837…` | 2026/07/03 | Deposit, decrypt, and spend all worked, but the contract-address → tx indexer lookup is missing — the discovery loop needs an indexer surface or block scan (C17 |
-| **W6** leak-audit | **PASS** | — | 2026/07/03 | The insertCoin control leaks its coin (nonce/colour) into the raw transaction and the indexer per-call state (positive control confirms the scanner); the statel |
+| **W1** compile-disclosure | **PASS** | — | 2026/07/08 | Compiler-forced disclosures decompose into 15 hiding-hash clause(s) (commitment/nullifier links), 2 single-bit clause(s) (has-change / sufficient-balance compar |
+| **W2** stateless-deposit | **PASS** | `0051a26e9223a421…` | 2026/07/08 | Deposit landed with no QSCI in public ledger state; the encrypted inbox blob round-trips to the exact coin; mt_index recovered from the indexer (startIndex infe |
+| **W3** witness-spend | **PASS** | `00e18429467f7e2b…` | 2026/07/08 | Node ACCEPTED a contract shielded spend whose QSCI came from the witness — the S5 "structurally impossible" reading is refuted on this stack; stateless custody  |
+| **W5** third-party-deposit | **PARTIAL** | `00cbf033a557c041…` | 2026/07/08 | Deposit, decrypt, and spend all worked, but the contract-address → tx indexer lookup is missing — the discovery loop needs an indexer surface or block scan (C17 |
+| **W6** leak-audit | **PASS** | — | 2026/07/08 | The insertCoin control leaks its coin (nonce/colour) into the raw transaction and the indexer per-call state (positive control confirms the scanner); the statel |
 
 <!-- END RESULTS -->
 
@@ -54,15 +54,26 @@ and the C4 stakes.
 
 ### W1 — compile-time disclosure
 
-**PASS** (2026/07/03, toolchain 0.31.1). All three undisclosed probe
-variants are rejected, and the 41 disclosure clauses across them decompose
-cleanly: **33 hiding-hash clauses** (commitment/nullifier "link"
+**PASS** (re-run 2026/07/08, toolchain 0.31.1). All three undisclosed probe
+variants are rejected, and the 23 disclosure clauses across them decompose
+cleanly: **15 hiding-hash clauses** (commitment/nullifier "link"
 diagnostics — "…the coin with the commitment given by a hash of the witness
-value") and **8 single-bit clauses** (booleans of comparisons involving
+value"), **2 single-bit clauses** (booleans of comparisons involving
 subtractions on the witness value — the has-change / sufficient-balance
-checks inside `sendShielded`/`sendImmediateShielded` — plus the change
-conditional). **Zero clauses name a raw coin field as the published
-object.** The main contract compiles with the disclosures declared.
+checks inside `sendShielded`, plus the change conditional), and **6
+caller-return clauses** (p3 only: returning the kept change coin from the
+circuit — return values travel in the communication commitment, which is
+caller-visible rather than an observer surface, and handing the change to
+the caller IS the design; W6 confirms nothing coin-shaped reaches observer
+surfaces). **Zero clauses name a raw coin field as published to the
+transcript.** The main contract compiles with the disclosures declared.
+
+The p3 probe matches the current change handling: upstream removed the
+redundant re-owning step (OpenZeppelin/compact-contracts#661), so keeping
+change now means returning `result.change` to the caller, and the probe
+omits disclose() on that path rather than on a `sendImmediateShielded`
+re-send. The clause counts dropped from the first run (41 → 23) because
+the re-send's own stdlib machinery no longer appears.
 
 Catalogued finding: each stateless spend structurally leaks a handful of
 comparison **bits** (change existed or not, balance sufficed) on top of the
@@ -86,11 +97,12 @@ spend whose QualifiedShieldedCoinInfo is witness-supplied from wallet-local
 storage. The S5 "witness/off-ledger spend is structurally impossible"
 reading is refuted empirically on `midnight-node:1.0.0`; contract-held
 shielded coins can be spent with no QSCI in public state (phase 1). The
-change chain also completes (phase 2): the change is re-owned
-in-transaction, returned through the private call result, re-captured with
+change chain also completes (phase 2): `sendShielded` itself routes the
+change back to the contract as a fresh self-owned output, the circuit
+returns it through the private call result, the client re-captures it with
 candidate-mt_index retry (a wrong candidate fails at the prover as an
-unsatisfiable witness — prove HTTP 400 — and cannot mis-spend), spent in a
-later transaction, and its backup blob appended to the inbox.
+unsatisfiable witness — prove HTTP 400 — and cannot mis-spend), spends it
+in a later transaction, and appends its backup blob to the inbox.
 
 **Along the way W3 exposed an upstream bug** (phases 2–3, confirmed by the
 insertCoin control comparator failing identically before the fix):
@@ -109,6 +121,23 @@ both the stateless and the insertCoin change chains work. This means the
 canonical OZ treasury change path has plausibly never been spent on a real
 node (their tests are simulator-only), and the prototype's second
 `withdraw_shielded` from the same colour would fail.
+
+**Resolved upstream since the first run.** The re-owning step was itself
+redundant: `sendShielded` already emits change as a fresh self-owned output
+dwelling at the contract address, so `result.change` is live the moment the
+call returns — the defect only arises when the same transaction ALSO burns
+that coin's nullifier. Upstream dropped the re-send at all three sites and
+retains `result.change` directly (OpenZeppelin/compact-contracts#661).
+Both paths of this experiment now carry the same simplified realisation,
+and the full change chain re-ran green on localnet 2026/07/08: the
+stateless path spent the retained change cross-transaction (two candidate
+mt_indices in the spend window, first accepted), and the insertCoin control
+spent its recorded change from the authoritative mt_index. The upstream
+regression tests assert only that the change nullifier is absent within the
+same transaction (dry simulator); this run is the cross-transaction
+confirmation on a real node. The general rule survives at the
+surviving-coin level: hold `result.change` when change is kept, hold
+`.sent` when change is deliberately routed onward in-transaction.
 
 ### W4 — manual offer (fallback)
 
@@ -179,10 +208,17 @@ confirmed, H4 with one indexer-surface gap (W5).
 
 Two upstream items fall out:
 
-1. **OZ `ShieldedTreasury` change bug** — `_send` persists
-   `result.change` instead of `sendImmediateShielded(...).sent`, leaving
-   the treasury's change unspendable on a real node (see W3). Applies to
-   every consumer of the pattern, including our account-custody prototype.
+1. **OZ `ShieldedTreasury` change bug — reported, and resolved upstream.**
+   `_send` persisted `result.change` while also re-spending it, leaving the
+   treasury's change unspendable on a real node (see W3). Upstream resolved
+   it by deleting the redundant re-send
+   (OpenZeppelin/compact-contracts#661); this experiment adopted the same
+   realisation on both paths and re-verified the full change chain on
+   localnet — the cross-transaction evidence the upstream simulator tests
+   cannot provide. Still outstanding on our side: the account-custody
+   prototype's `withdraw_shielded` / `grant_withdraw_shielded` carry the
+   pre-fix pattern (re-spend plus persist `result.change`) and need the
+   same deletion.
 2. **Indexer discovery surface** — no query enumerates a contract's
    transactions or Zswap outputs by address, which third-party-deposit
    discovery (and any C17 sync of contract-held coins) needs.

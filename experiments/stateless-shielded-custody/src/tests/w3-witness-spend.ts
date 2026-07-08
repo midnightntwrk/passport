@@ -10,9 +10,9 @@
 //
 //   Phase 1 — full-amount spend (no change): deposit 500, spend 500 to the
 //     user. Node accept ⇒ witness-QSCI custody is REAL on this node tag.
-//   Phase 2 — change chain: deposit 400, spend 150 (change 250 re-owned to
-//     the contract in-tx, returned to the caller through the private call
-//     result), re-capture the change (candidate mt_index retry over the
+//   Phase 2 — change chain: deposit 400, spend 150 (change 250 routed back
+//     to the contract by sendShielded itself, returned to the caller through
+//     the private call result), re-capture the change (candidate mt_index retry over the
 //     2-commitment spend tx), spend the change. Proves custody SURVIVES
 //     spends without ever touching public state. Change blob appended to
 //     the inbox afterwards (append_backup) to keep the recovery channel
@@ -146,8 +146,8 @@ await runScenario('w3-witness-spend', async () => {
 
   // ── Phase 3 — control comparator for the change chain ────────────────────
   // Discriminates whether a phase-2 failure is stateless-specific or a
-  // generic wall for spending a sendImmediateShielded-created change coin:
-  // the S6/insertCoin lifecycle verified the change's MAP entry but never
+  // generic wall for spending a sendShielded-created change coin: the
+  // S6/insertCoin lifecycle verified the change's MAP entry but never
   // SPENT the change. Run the identical chain through the public path.
   step('phase 3 (control): deposit_public 400, spend 150, then spend the 250 change');
   const phase3: Record<string, unknown> = {};

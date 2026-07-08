@@ -3,15 +3,15 @@
   "name": "witness-spend",
   "description": "node acceptance of witness-QSCI contract spends (S5 settle-it)",
   "verdict": "PASS",
-  "txHash": "0097444fac9a43ebb0e592188a0036d346437e69357601efa9456dc97316bbc5b4",
+  "txHash": "00e18429467f7e2b5576eb43f24cb7c13377b15eba3380e48329aa4a1fb4d3d33f",
   "note": "Node ACCEPTED a contract shielded spend whose QSCI came from the witness — the S5 \"structurally impossible\" reading is refuted on this stack; stateless custody is live.",
   "details": {
-    "custodyAddress": "1b3b5d00835d1c87e23647e4dd5cc12117023f2d929f5a01452cdff40cf72834",
+    "custodyAddress": "a0dfd9b1d57afea4b179ca50902f2c913209e2d5a38172f1079214f529a2db87",
     "phase1": {
-      "mintTx": "0089bc01997f587ec4441fadf1a42d078d2cc201980cc1873deba1eeb84794f791",
-      "depositTx": "007525908655e504eafac1b63bea00d01cf532ad38d78933b00dd5c46f0f010eee",
-      "mtIndex": "78",
-      "spendTx": "0097444fac9a43ebb0e592188a0036d346437e69357601efa9456dc97316bbc5b4",
+      "mintTx": "00ab01ffdd88ffa4547b558c5964e1a4c04368e8b17399d50a65144e7f4daa7527",
+      "depositTx": "007da82bff7a284cb16b28410009c2d25c321c96d4c62775023d067dfddd76419a",
+      "mtIndex": "31",
+      "spendTx": "00e18429467f7e2b5576eb43f24cb7c13377b15eba3380e48329aa4a1fb4d3d33f",
       "resultSurfaceProbes": [
         {
           "surface": "private.result",
@@ -44,8 +44,8 @@
         "outputs": [
           {
             "coinInfo": {
-              "type": "d44437de470c643c68404f913e48c8634bdd2b3d6bb929667f91cb94da1087a4",
-              "nonce": "17ca75c6301ef5218b6a9706de9d923da039511f5f65d25138a2599de222a200",
+              "type": "11081650ed91a6113d78a7a47a89a2283112b2d4e6688c75e9caf88130ef8ab4",
+              "nonce": "29137e62ed90a2041d1620ea02875a958374a78cdf4b58feadeb9b8fea014600",
               "value": "500"
             },
             "recipient": {
@@ -58,9 +58,9 @@
       }
     },
     "phase2": {
-      "mintTx": "000bec4a304c07b67077057b5415986dffac931ab212fa07f1df4ebcd9e2bc5645",
-      "depositTx": "00532a8fd036726e39c904f397d7e677200e9b41f400a372807c7047c3ce056fc7",
-      "spendTx": "000c2ae4e02a946d53222f3658e3718112db3bde18b0ffb9dcedd7ecdb607cf1f1",
+      "mintTx": "00b1780f5c52c0c733686faeb532b259299742119a62cd4b7fa7220311a0519f69",
+      "depositTx": "004c7565b2e696a6da358ded79b22ec01297820bf9a9256328d34a18ed15dedb55",
+      "spendTx": "00722f45e2f7b49e49d5b21eb16699eba899a4e96756390ef3cf7f7d2d075743cd",
       "resultSurface": "private.result",
       "resultSurfaceProbes": [
         {
@@ -94,8 +94,8 @@
         "outputs": [
           {
             "coinInfo": {
-              "type": "faac05703fff9a1f132c3f35107534756647b9e70daaee1b5dd33e53e85106ba",
-              "nonce": "159aebc6a3a73bb483b143101e9ba0dcdec5098a866ddb05308ee84189bbcd00",
+              "type": "c7a49d48f23713add112f41d699675784c0663587b712c902c1234fb1d69ea5e",
+              "nonce": "af2218d80873a2f9e982a30d46916fb7aa359cabab14e372ce8af58812757e00",
               "value": "150"
             },
             "recipient": {
@@ -106,124 +106,84 @@
           },
           {
             "coinInfo": {
-              "type": "faac05703fff9a1f132c3f35107534756647b9e70daaee1b5dd33e53e85106ba",
-              "nonce": "cc592d7f1ac50e4fe547931581ea066a4e65e60cffb6320ae010fab75067e200",
+              "type": "c7a49d48f23713add112f41d699675784c0663587b712c902c1234fb1d69ea5e",
+              "nonce": "abc726e63f7fa2876b72de85dc2df448e0424d7ef79346d2844ef510c07f1000",
               "value": "250"
             },
             "recipient": {
               "is_left": false,
               "left": "0000000000000000000000000000000000000000000000000000000000000000",
-              "right": "1b3b5d00835d1c87e23647e4dd5cc12117023f2d929f5a01452cdff40cf72834"
-            }
-          },
-          {
-            "coinInfo": {
-              "type": "faac05703fff9a1f132c3f35107534756647b9e70daaee1b5dd33e53e85106ba",
-              "nonce": "d936367b0fe032871e0ade687ba1626365a18ab3e2f5df3b7048554f0c61f800",
-              "value": "250"
-            },
-            "recipient": {
-              "is_left": false,
-              "left": "0000000000000000000000000000000000000000000000000000000000000000",
-              "right": "1b3b5d00835d1c87e23647e4dd5cc12117023f2d929f5a01452cdff40cf72834"
+              "right": "a0dfd9b1d57afea4b179ca50902f2c913209e2d5a38172f1079214f529a2db87"
             }
           }
         ]
       },
       "changeCandidates": [
-        "82",
-        "83",
-        "84"
+        "35",
+        "36"
       ],
       "spendTxPosition": {
-        "startIndex": 82,
-        "endIndex": 85,
-        "blockHeight": 536,
+        "startIndex": 35,
+        "endIndex": 37,
+        "blockHeight": 61,
         "status": "SUCCESS",
         "raw": {
-          "id": 94,
-          "hash": "064ee7395e9d58523825b2531b1de8b7ca953cbc8d2b5988ba8d26e6050f27ab",
-          "startIndex": 82,
-          "endIndex": 85,
+          "id": 38,
+          "hash": "595709934fc10100b9254d1c0af87a51fb9184508190560d299b505caac10160",
+          "startIndex": 35,
+          "endIndex": 37,
           "transactionResult": {
             "status": "SUCCESS"
           },
           "block": {
-            "height": 536,
-            "hash": "660c9e55e4868d7a02003b8a98603d091453116cfa8c8239f14ceb602bacd0ca"
+            "height": 61,
+            "hash": "d5e70eb24c4f271d3735e48e87c645702dd319eadbcfb5614e036afae209f0cd"
           }
         }
       },
       "changeSpendAttempts": [
         {
-          "mtIndex": "82",
-          "outcome": "rejected",
-          "classification": {
-            "outcome": "prover-rejected",
-            "errorCode": "prove-400",
-            "note": "The proof server rejected the witness as unsatisfiable (HTTP 400) — for spends this is the wrong-mt_index signature: the Merkle path does not match the coin commitment. No transaction was submitted."
-          },
-          "error": {
-            "name": "Error",
-            "message": "Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", code=\"400\", status=\"Bad Request\"",
-            "stack": "Error: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", code=\"400\", status=\"Bad Request\"\n    at scoped (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/stateless-shielded-custody/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:266:23)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async StatelessCustody.spendStateless (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/stateless-shielded-custody/src/wallet/custody.ts:149:15)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/stateless-shielded-custody/src/tests/w3-witness-spend.ts:118:19)\n    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/stateless-shielded-custody/src/tests/runner.ts:7:5)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/stateless-shielded-custody/src/tests/w3-witness-spend.ts:34:1)",
-            "causeChain": [
-              {
-                "name": "Error",
-                "tag": null,
-                "message": "Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", code=\"400\", status=\"Bad Request\""
-              },
-              {
-                "name": "Error",
-                "tag": null,
-                "message": "'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", code=\"400\", status=\"Bad Request\""
-              }
-            ]
-          }
-        },
-        {
-          "mtIndex": "83",
+          "mtIndex": "35",
           "outcome": "accepted",
-          "txId": "0029fd81bc85b8f7bf67e46de7cd78dd3eefbdd9822960b92289173599e83bc6ba"
+          "txId": "009639fd6336ec27fbd8a19e1f4117bcb27196471612e839a2e06f38fb7026336c"
         }
       ],
-      "changeSpendTx": "0029fd81bc85b8f7bf67e46de7cd78dd3eefbdd9822960b92289173599e83bc6ba",
-      "appendBackupTx": "0091c7eb9831363d34d21646b071e499ce1c60df78ec372721530b7dd94d749933"
+      "changeSpendTx": "009639fd6336ec27fbd8a19e1f4117bcb27196471612e839a2e06f38fb7026336c",
+      "appendBackupTx": "008253a5b007113b873300ada24408d25377e69e869392708b15ecda8ed44fb924"
     },
     "phase3": {
-      "depositTx": "00191dfd0a2a8dc122cbd5d82c7fc61464366b90ea65f430e55e19eab159b1e594",
-      "firstSpendTx": "00181bf74afbc5ea2099d7debf074fc6b4d247755ec6d6c83c06a7dc7bf3b4f447",
-      "insertCoinMtIndex": "89",
+      "depositTx": "00cc547651e10df8def36dda8f38441bc2aeaa10e981f1af520051f0bda362274e",
+      "firstSpendTx": "000a310783d8cd400beb3751bab38e7c207174d5a7705aa9a26e6f7f5d5df21d4f",
+      "insertCoinMtIndex": "40",
       "firstSpendCandidates": [
-        "88",
-        "89",
-        "90"
+        "40",
+        "41"
       ],
       "firstSpendPosition": {
-        "startIndex": 88,
-        "endIndex": 91,
-        "blockHeight": 559,
+        "startIndex": 40,
+        "endIndex": 42,
+        "blockHeight": 83,
         "status": "SUCCESS",
         "raw": {
-          "id": 99,
-          "hash": "6e1d7a46b41994da604cc6dfd70916cdd0b5e059fdf61e31e07f8a58c8b325a0",
-          "startIndex": 88,
-          "endIndex": 91,
+          "id": 43,
+          "hash": "fd5f4a0b6a4ffa5898c7401611543f0ddf60ca15b5fc0ad2d775ab9992ccf7ad",
+          "startIndex": 40,
+          "endIndex": 42,
           "transactionResult": {
             "status": "SUCCESS"
           },
           "block": {
-            "height": 559,
-            "hash": "143f90343bffd765e9844aa3cb7cf96828faecfa225e6170f6f41ed6138e43b6"
+            "height": 83,
+            "hash": "9d4e62f2c54354b92100a97d226b0d271218556de0b5b5890332d10be6783beb"
           }
         }
       },
       "mtIndexInsideWindow": true,
-      "changeSpendTx": "00bcb1213219c2cc2989a7199130840d636deacd56453444d66506fbd752ddb4ab",
+      "changeSpendTx": "0045b7c957ef43cb9892439a7103796db6b593d81c95f041a9c5d982998d735b13",
       "changeSpendOutcome": "accepted"
     }
   },
-  "ranAt": "2026-07-03T11:17:38.865Z",
+  "ranAt": "2026-07-08T15:04:14.717Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

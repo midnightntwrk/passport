@@ -5,27 +5,27 @@
   "verdict": "PASS",
   "note": "The insertCoin control leaks its coin (nonce/colour) into the raw transaction and the indexer per-call state (positive control confirms the scanner); the stateless path shows NO coin artefact on any observer surface scanned. The QSCI-publicity leak is a storage-pattern consequence, not a ledger inevitability.",
   "details": {
-    "custodyAddress": "f56c7249331c7911e9aad0a061fd220167f6d33cf3d765fd2f4d1eab1716ec48",
+    "custodyAddress": "ffd140929d61ea2982a9db18663e5b02026db327246573a1f51af79de26db7e7",
     "contractStateBytes": 21,
     "txFetchProbes": {
       "controlDeposit": [
-        "raw: ok (37370 chars)",
-        "contractActions: ok (21710 chars)",
-        "identifiers: GraphQL error \"Unknown field \\\"identifiers\\\" on type \\\"Transaction\\\".\""
-      ],
-      "controlSpend": [
-        "raw: ok (68952 chars)",
+        "raw: ok (37376 chars)",
         "contractActions: ok (21702 chars)",
         "identifiers: GraphQL error \"Unknown field \\\"identifiers\\\" on type \\\"Transaction\\\".\""
       ],
+      "controlSpend": [
+        "raw: ok (48710 chars)",
+        "contractActions: ok (21694 chars)",
+        "identifiers: GraphQL error \"Unknown field \\\"identifiers\\\" on type \\\"Transaction\\\".\""
+      ],
       "statelessDeposit": [
-        "raw: ok (37284 chars)",
-        "contractActions: ok (22544 chars)",
+        "raw: ok (37290 chars)",
+        "contractActions: ok (22536 chars)",
         "identifiers: GraphQL error \"Unknown field \\\"identifiers\\\" on type \\\"Transaction\\\".\""
       ],
       "statelessSpend": [
-        "raw: ok (68074 chars)",
-        "contractActions: ok (22544 chars)",
+        "raw: ok (47790 chars)",
+        "contractActions: ok (22536 chars)",
         "identifiers: GraphQL error \"Unknown field \\\"identifiers\\\" on type \\\"Transaction\\\".\""
       ]
     },
@@ -146,15 +146,15 @@
     "needles": {
       "control": {
         "label": "control",
-        "nonceHex": "007d7ed4d3db2000c6fedc01b0bd99e1383377ebb94e2e7f1bd961796690e434",
-        "colorHex": "e8ff33fcad741e40804f4c636029d3baf13a6b872529947219cf84ea45207499",
+        "nonceHex": "70bbdd04dd2d8459452a786a12d0fcfbc18ac1f0913077d29ccab959d64a60cd",
+        "colorHex": "7595c3e644ff8f423533a980137ef455e76528e8a1fadd90d97c88ca70b5546a",
         "valueHexBE": "00000000000000000000000000000258",
         "valueHexLE": "58020000000000000000000000000000"
       },
       "stateless": {
         "label": "stateless",
-        "nonceHex": "f9c905c500ff952821eb8ac7bbb1495e30b4b0dcafdf2d738a3edafc801c2e2e",
-        "colorHex": "cf4d4481b5eccf08b99328bed243eab00da0ea5efd477c36ee1e58e21881a373",
+        "nonceHex": "fca29dcb5790a3fccb5929ce0ccb852b571ac82d765d1d7a7e8e88d187375c35",
+        "colorHex": "f9931bcca2ea5344ca9f421960332ad5bc08f42bf2f17c4fd3876a52ec2c3068",
         "valueHexBE": "00000000000000000000000000000258",
         "valueHexLE": "58020000000000000000000000000000"
       }
@@ -162,7 +162,7 @@
     "controlLeaksInState": true,
     "statelessHits": []
   },
-  "ranAt": "2026-07-03T11:04:48.341Z",
+  "ranAt": "2026-07-08T15:11:36.872Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",
