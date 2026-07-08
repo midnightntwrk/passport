@@ -560,10 +560,12 @@ result. This MIP states the rule at the level of the surviving coin so
 both realisations conform: the baseline (persist the send result's
 change directly, which is also MIP-0011's guidance for its burn flows)
 and deliberate onward routing (persist that call's `sent` coin). The
-node-level evidence behind this rationale validated the re-owning
-variant; the baseline realisation is upstream-tested in a simulator,
-and its cross-transaction change spend is exercised on a node by
-conformance test 3.
+node-level evidence behind this rationale covers both realisations:
+the re-owning variant was validated when the defect was reproduced,
+and the baseline realisation has since passed the same change chains
+on a node through both custody patterns, including the
+cross-transaction change spend that simulator tests cannot exercise.
+Conformance test 3 keeps that check as the standing regression gate.
 
 **R5. Inbox rather than out-of-band delivery or ledger ciphertexts.**
 Ledger ciphertexts on contract-owned outputs are rejected by the node,
@@ -649,9 +651,9 @@ upstream of custody only at the metadata layer. The name service
 
 This MIP introduces a new contract standard. It requires no ledger,
 consensus, or node change and no hard fork: every mechanism used
-(contract-owned Zswap coins, witness-supplied spends, in-transaction
-re-owning of change, contract state) exists in the current stable
-network protocol. Existing deployments of the public-map pattern remain
+(contract-owned Zswap coins, witness-supplied spends, send-level
+change routing back to the contract, contract state) exists in the
+current stable network protocol. Existing deployments of the public-map pattern remain
 valid; they do not conform to INV-2 and carry the documented publicity
 leak, and migrating requires spending held coins into a conforming
 instance. Wallets unaware of this standard are unaffected.
@@ -728,10 +730,11 @@ instance. Wallets unaware of this standard are unaffected.
   do not increment `round`, and its shielded path is the public-map
   control pattern).
 - Upstream status: the change-rule defect report and the library fix
-  are filed and merged (References); node-level validation of the fixed
-  pattern is tracked by the Implementation Plan. Remaining dependency:
-  an indexer surface for contract-transaction enumeration (Path to
-  Active).
+  are filed and merged (References); the fixed pattern is validated on
+  a node by the stateless custody experiment, whose change chains run
+  the baseline realisation through both custody patterns. Remaining
+  dependency: an indexer surface for contract-transaction enumeration
+  (Path to Active).
 - This MIP contains no implementation code; the artefacts above are its
   evidence base, and the reference implementation is an acceptance
   criterion, not an existing artefact.
