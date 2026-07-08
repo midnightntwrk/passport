@@ -1,0 +1,41 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// W1 probe 3 — change handling with the SendResult undisclosed.
+//
+// Question: does re-owning the change to the contract
+// (sendImmediateShielded on result.change) compile without disclosing the
+// change coin? The change coin's info is exactly what the stateless design
+// keeps private, so a forced disclosure here would matter — subject to the
+// usual caveat that disclose() permits publication but only transcript
+// writes cause it (W6 settles what is actually published).
+
+witness held_coin(color: Bytes<32>): QualifiedShieldedCoinInfo;
+
+export ledger round: Uint<64>;
+
+constructor() {
+  round = 0 as Uint<64>;
+}
+
+export circuit spend_change_undisclosed(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): [] {
+  const coin = held_coin(color);
+  const result = sendShielded(
+    coin,
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  if (result.change.is_some) {
+    sendImmediateShielded(
+      result.change.value,
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+      result.change.value.value,
+    );
+  }
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}

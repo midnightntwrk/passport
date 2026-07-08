@@ -1,0 +1,10 @@
+
+Exception: p1-receive-undisclosed.compact line 19 char 3:
+  potential witness-value disclosure must be declared but is not:
+    witness value potentially disclosed:
+      the value of parameter coin of exported circuit deposit_undisclosed at line 18 char 36
+    nature of the disclosure:
+      the call to standard-library circuit receiveShielded might disclose a link between a
+      coin receive and the coin with the commitment given by a hash of the witness value
+    via this path through the program:
+      the argument to receiveShielded at line 19 char 3

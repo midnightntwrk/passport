@@ -1,0 +1,41 @@
+{
+  "testId": "W2",
+  "name": "stateless-deposit",
+  "description": "deposit_stateless + encrypted inbox + client-side QSCI capture",
+  "verdict": "PASS",
+  "txHash": "00d77fbc79dce3d7f8e012ec0d1e357815ae39c1966868fdc478b3bfdd46e2dfe6",
+  "note": "Deposit landed with no QSCI in public ledger state; the encrypted inbox blob round-trips to the exact coin; mt_index recovered from the indexer (startIndex inference).",
+  "details": {
+    "mintTx": "00af18d5087e8c65db1825572041f94924edaf7ebfe92dc9331be6dacab7567c50",
+    "depositTx": "00d77fbc79dce3d7f8e012ec0d1e357815ae39c1966868fdc478b3bfdd46e2dfe6",
+    "mtIndex": "29",
+    "indexerPosition": {
+      "startIndex": 29,
+      "endIndex": 30,
+      "blockHeight": 112,
+      "status": "SUCCESS",
+      "raw": {
+        "id": 39,
+        "hash": "52a5aeb62afd758d2de46338d27e989c2f2d1ac17db6000f511f1a180d47b831",
+        "startIndex": 29,
+        "endIndex": 30,
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "block": {
+          "height": 112,
+          "hash": "882cf49899f10f5ff59e40ddb49154803b35b56f24912af15f1246107aaf07ea"
+        }
+      }
+    },
+    "custodyAddress": "28f1199a78c8743372a3a1a23ed37396f33c720e1e0f6a0b6ca7b3fc1af89467",
+    "colorHex": "b7d0234687f5b44885ffb0123c3622a71920aa0df1d0e751fd6dbe5388256985",
+    "amount": "500"
+  },
+  "ranAt": "2026-07-03T10:32:43.031Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

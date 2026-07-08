@@ -1,0 +1,21 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// W1 probe 1 — receiveShielded WITHOUT disclosing the coin.
+//
+// Question: does the compiler force `disclose(coin)` at the receive claim,
+// i.e. is full-coin disclosure structural in the stdlib receive path, or
+// was the prototype's disclose() merely conservative? The compile attempt
+// itself is the test; the runner records the compiler's verdict verbatim.
+
+export ledger round: Uint<64>;
+
+constructor() {
+  round = 0 as Uint<64>;
+}
+
+export circuit deposit_undisclosed(coin: ShieldedCoinInfo): [] {
+  receiveShielded(coin);
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}

@@ -17,15 +17,18 @@ cleanly with C1 (account-custody contract), C5 (signing primitive), C14
 ## Feasibility map
 
 Established by `experiments/contract-custody-feasibility/` (S1 – S6,
-evaluated against `midnight-node:0.22.5`).
+evaluated against `midnight-node:0.22.5`) and extended by
+`experiments/stateless-shielded-custody/` (W1 – W6, evaluated against
+`midnight-node:1.0.0`).
 
 | Asset class · direction | Status |
 |---|---|
 | Night · user ↔ contract | **Feasible** (U1, U3 PASS) |
 | Night · contract ↔ contract | **Protocol-feasible; SDK-blocked.** Pending fixes: `midnight-js` multi-contract-call utility + wallet `midnight-wallet#293`. Workaround: route through user → user. |
 | Shielded · user → contract deposit | **Feasible** (S4 PASS, via `rawTokenType` recipe). |
-| Shielded · contract → user / cross-block | **Feasible** (S6 PASS, via OZ `Map<color, QualifiedShieldedCoinInfo>` + `Map.insertCoin` pattern). |
-| Shielded · contract ↔ contract | **Untested.** Not exercised by S1 – S6. Plausibly subject to the same same-tx pairing requirement that blocks Night U2 — and therefore plausibly blocked by the same SDK gap. Follow-up probe needed. |
+| Shielded · contract → user / cross-block | **Feasible by two patterns.** Public-state (S6 PASS, OZ `Map<color, QualifiedShieldedCoinInfo>` + `Map.insertCoin`: publishes holdings), and stateless witness-supplied QSCI (W3 PASS: no coin material in public ledger state). |
+| Shielded · third-party deposit + owner discovery | **Feasible** (W5 PASS, encrypted on-contract inbox + indexer lookup). Gap: the indexer offers no contract-address → transaction enumeration, so discovery routes through the inbox counter (C17 finding). |
+| Shielded · contract ↔ contract | **Untested.** Not exercised by S1 – S6 or W1 – W6. Plausibly subject to the same same-tx pairing requirement that blocks Night U2 — and therefore plausibly blocked by the same SDK gap. Follow-up probe needed. Note: paying another custody contract directly also links both accounts in one transaction; the one-hop user-key routing rule avoids this. |
 | Dust · contract pays user fee | **Not feasible on v1** — *contract-attached* paymaster only. Does not preclude wallet-level sponsorship; see C24. |
 | Foreign-chain assets (cross-chain) | **Out of C4's scope** — handled by upstream cross-chain vaults via C25 (Cross-chain integration interface). Passport's account-custody contract custodies Midnight-native assets only. |
 
@@ -33,17 +36,37 @@ evaluated against `midnight-node:0.22.5`).
 
 - **C1** — implementation vessel. C4 determines what C1 holds.
 - **C5** — signing surface constrained by custody choice.
+- **C16** — the stateless shielded pattern makes the wallet-local coin
+  store load-bearing: coin info exists only there and in the encrypted
+  inbox backup on the contract.
+- **C17** — third-party deposit discovery needs an indexer surface; the
+  current enumeration gap is worked around via the inbox counter.
 - **Upstream** — `midnight-js` multi-contract-call utility and
   `midnight-wallet#293` (gates contract ↔ contract Night).
 
 ## Open questions
 
-**QSCI privacy trade-off.** The OZ pattern stores `Map<color,
-QualifiedShieldedCoinInfo>` in *public* ledger state — the contract's
-holdings (value and colour) are publicly visible. This is a meaningful
-privacy regression vs. user-held shielded notes. Do we accept QSCI
-publicity as a v1.0 trade-off, or design mitigations (padding, dummy
-entries, value-bucketing, salted commitments)?
+**QSCI privacy trade-off (resolved).** The leak is a consequence of the
+storage pattern, not of the ledger. Contract-owned inputs and outputs
+publish no cleartext value or colour, and the node accepts spends whose
+`QualifiedShieldedCoinInfo` is supplied as a witness rather than read
+from public ledger state (`experiments/stateless-shielded-custody/`,
+W1 – W6). Contract custody therefore does not require publishing
+holdings, and the accept-or-mitigate question falls away. What remains
+is narrower: is the residual metadata profile of stateless contract
+custody acceptable? The residue is structural to any contract custody:
+the contract address appears in cleartext on every deposit and spend
+(activity counts and timing), a depositor can trace the first hop of
+the coin they deposited (the coin has no owner secret and its change
+nonce evolves deterministically), and the change branch discloses
+single comparison bits.
+
+**Indexer discovery surface.** The indexer exposes no
+contract-address → transaction enumeration, so a wallet discovering
+third-party deposits walks the account's inbox counter instead of
+querying by address. Whether to request the enumeration surface
+upstream or standardise the inbox walk is a C17 question; C4 owns only
+the requirement that discovery work from public chain data alone.
 
 **Compliance posture for inbound shielded transfers.** The shielded
 asset model reveals amount to the receiver but not the sender. Any
@@ -85,11 +108,23 @@ appended to `experiments/contract-custody-feasibility/`.
 
 ## Failure modes
 
-**QSCI publicity is unacceptable.** We adopt the OZ shielded pattern;
-publicly-visible contract holdings break a downstream privacy invariant —
-e.g., balance-based linkability across calls. *Detection:* on-chain
-analysis of the contract's ledger state reveals balance and token-type
-distributions per account.
+**Residual custody metadata is unacceptable.** Even stateless contract
+custody labels every deposit and spend with the contract address, and a
+direct contract → contract payment links the two accounts in one
+transaction. *Detection:* on-chain analysis correlates account activity
+(counts, timing, counterparties) even though values and colours stay
+hidden. *Mitigation:* the one-hop user-key routing rule for payments
+between custody accounts.
+
+**Change handling persists the wrong coin.** After a partial spend the
+change must be re-owned in-transaction, and the coin to persist is the
+re-owned one (the `sent` field of the `sendImmediateShielded` result);
+persisting the pre-transient change coin stores an entry whose
+nullifier is already on-chain, so the funds become unspendable. The
+reference pattern in circulation gets this wrong, and simulator-only
+tests cannot catch it. *Detection:* the next spend from change proves
+successfully and is then rejected by the node with
+`NullifierAlreadyPresent`.
 
 **Inter-contract Night fix never lands.** The two pending SDK PRs stall.
 Designs that depend on contract ↔ contract Night flows remain stuck on
@@ -122,6 +157,20 @@ commitments). Cost:
 additional contract complexity and on-chain state. Open question: are the
 mitigations sufficient, or do they only narrow the leak?
 
+**A″ — Stateless contract-custody (witness-supplied QSCI + encrypted
+inbox).** Coin info never enters public ledger state: it lives in the
+wallet-local store (C16) and enters the spend circuit as a witness.
+Deposits pair `receiveShielded` with an inbox blob encrypted to the
+account's advertised encryption key; change is re-owned to the contract
+in-transaction, and the re-owned coin is re-captured client-side and
+backed up to the inbox. Validated end-to-end
+(`experiments/stateless-shielded-custody/`, W1 – W6): observer surfaces
+carry zero coin artefacts where the public-state control leaks nonce
+and colour verbatim. Cost: the wallet coin store becomes mandatory, and
+third-party deposit discovery depends on the inbox plus indexer
+lookups. Residue: contract-address activity metadata, depositor
+first-hop traceability, and single-bit change disclosures.
+
 **B — Address-custody.** Assets at chain-native addresses derived from a
 seed-shaped root. C1 holds only devices, grants, and names. Inherits
 CIP-1852 or equivalent HD derivation. P1 tension: I-1.1 says "user never
@@ -142,8 +191,9 @@ date.
 - **MVP (October demo):** B (address-custody) — fastest to ship; sidesteps the
   QSCI publicity question; takes the seed-existing-but-wrapped reading of
   P1.
-- **v1.0 deliverable:** A or A′ (contract-custody) — the principled
-  path; requires resolving the QSCI publicity question and either
-  accepting the trade-off or layering mitigations. The cryptographic-stack
-  design downstream of this canvas is calibrated to A / A′ as the v1.0
-  destination.
+- **v1.0 deliverable:** A″ (stateless contract-custody), the principled
+  path: QSCI publicity is avoided rather than accepted or mitigated,
+  which retires A and A′ as privacy-regressive variants. The remaining
+  acceptance question is the residual metadata profile (see open
+  questions). The cryptographic-stack design downstream of this canvas
+  is calibrated to A″ as the v1.0 destination.

@@ -16,6 +16,15 @@
 > simply us not having found the data-types page; the contract-side
 > recipe was already discoverable. Verdict and Passport-account-
 > model implications below.
+>
+> **Update:** the S5 re-interpretation below ("witness-supplied QSCI
+> is structurally impossible; `insertCoin` is the only capture path")
+> is itself superseded by
+> [`../stateless-shielded-custody/`](../stateless-shielded-custody/FINDINGS.md)
+> (W1 – W6, `midnight-node:1.0.0`): witness-supplied QSCI spends prove
+> and are accepted by the node, with no coin material in public ledger
+> state. The S5 failure was an off-chain artefact of that harness, not
+> a protocol verdict.
 
 ## Headline findings
 
@@ -347,6 +356,18 @@ only API that captures that allocation into a persistable
 the runtime to bind the spend against. S5 isn't a runtime gap;
 it's the wrong contract pattern, and the `data-types/ledger-adt`
 page documents the right one.
+
+> **Retraction.** The paragraph above is wrong, and
+> [`../stateless-shielded-custody/`](../stateless-shielded-custody/FINDINGS.md)
+> (W1 – W6, `midnight-node:1.0.0`) demonstrates the opposite:
+> `mt_index` *is* recoverable client-side (the indexer's
+> `transactions(offset: {identifier})` returns the deposit's
+> `startIndex`, exactly the technique S5 attempted), a
+> witness-supplied QSCI fed to `sendShielded` proves and is accepted
+> by the node, and `Map.insertCoin` is one capture pattern rather
+> than the only spend path. The S5 crash was an artefact of this
+> harness's off-chain glue, not a protocol wall. The stateless
+> pattern is the basis of C4 alternative A″.
 
 A side note from this realisation: our `mint_shielded_to_self`
 circuit (S1) does **not** call `insertCoin`, so the contract's

@@ -1,0 +1,58 @@
+
+Exception: p2-send-undisclosed.compact line 26 char 18:
+  potential witness-value disclosure must be declared but is not:
+    witness value potentially disclosed:
+      the return value of witness held_coin at line 12 char 1
+    nature of the disclosure:
+      the call to standard-library circuit sendShielded might disclose a link between a claim
+      of nullifier and the coin with the nullifier given by a hash of the witness value
+    via this path through the program:
+      the binding of coin at line 25 char 9
+      the first argument to sendShielded at line 26 char 18
+    nature of the disclosure:
+      the call to standard-library circuit sendShielded might disclose a link between a coin
+      receive and the coin with the commitment given by a hash of the witness value
+    via this path through the program:
+      the binding of coin at line 25 char 9
+      the first argument to sendShielded at line 26 char 18
+    nature of the disclosure:
+      the call to standard-library circuit sendShielded might disclose a link between a coin
+      spend and the coin with the commitment given by a hash of the witness value
+    via this path through the program:
+      the binding of coin at line 25 char 9
+      the first argument to sendShielded at line 26 char 18
+    nature of the disclosure:
+      the call to standard-library circuit sendShielded might disclose a link between a coin
+      receive and the coin with the commitment given by a hash of the result of a subtraction
+      involving the witness value
+    via this path through the program:
+      the binding of coin at line 25 char 9
+      the first argument to sendShielded at line 26 char 18
+    nature of the disclosure:
+      the call to standard-library circuit sendShielded might disclose a link between a coin
+      spend and the coin with the commitment given by a hash of the result of a subtraction
+      involving the witness value
+    via this path through the program:
+      the binding of coin at line 25 char 9
+      the first argument to sendShielded at line 26 char 18
+    nature of the disclosure:
+      the call to standard-library circuit sendShielded might disclose the boolean value of
+      the result of a comparison involving the result of a subtraction involving the witness
+      value
+    via this path through the program:
+      the binding of coin at line 25 char 9
+      the first argument to sendShielded at line 26 char 18
+    nature of the disclosure:
+      the call to standard-library circuit sendShielded might disclose a link between a coin
+      receive and the coin with the commitment given by a hash of a converted form of a hash
+      of a modulus of the witness value
+    via this path through the program:
+      the binding of coin at line 25 char 9
+      the first argument to sendShielded at line 26 char 18
+    nature of the disclosure:
+      the call to standard-library circuit sendShielded might disclose a link between a coin
+      spend and the coin with the commitment given by a hash of a converted form of a hash of
+      a modulus of the witness value
+    via this path through the program:
+      the binding of coin at line 25 char 9
+      the first argument to sendShielded at line 26 char 18
