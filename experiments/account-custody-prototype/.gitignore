@@ -7,3 +7,10 @@ deployment.json
 faucet-deployment.json
 *.log
 app/public/zk-params/
+
+# BUSS demo scaffolding
+owner-identity.json
+guardian-identity.json
+buss-wasm/target/
+buss-wasm/pkg-node/
+buss-wasm/pkg-bundler/

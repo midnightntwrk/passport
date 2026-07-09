@@ -162,8 +162,8 @@ export function OnboardView(props: {
           <li>
             <span className="hero-step-n">2</span>
             <span>
-              A fresh recovery secret is split 2-of-3; the shares go on-chain (prototype
-              placeholder for PVSS).
+              A recovery commitment goes on-chain. Guardians come later — people and paper
+              keys who store nothing until the day you need them.
             </span>
           </li>
           <li>

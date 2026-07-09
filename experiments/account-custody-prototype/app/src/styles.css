@@ -1604,62 +1604,172 @@ body[data-explain='1'] .x {
   margin-bottom: 4px;
 }
 
-/* ——— recovery shares ——— */
+/* ——— recovery: guardian enrolment & quorum (BUSS) ——— */
 
-.share-row {
+select {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-family: inherit;
+  font-size: 0.92rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(26, 27, 30, 0.08);
+}
+
+.ceremony-cfg {
   display: flex;
   gap: 14px;
-  align-items: stretch;
   flex-wrap: wrap;
+  align-items: flex-end;
+  margin-top: 12px;
 }
 
-.share-slot {
-  width: 108px;
-  border: 1px dashed var(--line-2);
+.backup-stats {
+  align-items: stretch;
+}
+
+.guardian-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 14px;
+}
+
+/* One guardian = one endorsement card in the passport. */
+.gslot {
+  border: 1px solid var(--line-2);
   border-radius: 12px;
-  padding: 12px;
+  padding: 14px;
+  background: var(--surface);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  color: var(--faint);
-  background: var(--surface);
+  gap: 8px;
 }
 
-.share-live {
-  border-style: solid;
+.gslot-done {
   border-color: #bfdfd0;
   background: var(--green-tint);
-  color: var(--ink);
 }
 
-.share-n {
+.gslot-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.gslot-n {
   font-family: var(--font-disp);
   font-weight: 700;
-  font-size: 1.6rem;
+  font-size: 1.25rem;
+  color: var(--faint);
+}
+
+.gslot-done .gslot-n {
   color: var(--green);
 }
 
-.share-slot:not(.share-live) .share-n {
-  color: var(--faint);
-}
-
-.share-k {
+.gslot-k {
   font-weight: 600;
   font-size: 0.58rem;
   text-transform: uppercase;
   letter-spacing: 0.15em;
+  color: var(--muted);
 }
 
-.share-v {
-  font-size: 0.78rem;
+/* Wire strings (buss-req / buss-sig / buss-paper) — long, wrapping, copyable. */
+.wire {
+  display: block;
+  font-size: 0.66rem;
+  line-height: 1.55;
+  word-break: break-all;
+  white-space: normal;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  max-height: 76px;
+  overflow-y: auto;
 }
 
-.share-meta {
+.paste-input {
+  font-family: var(--font-mono);
+  font-size: max(16px, 0.72rem) !important;
+}
+
+.paste-err {
+  color: var(--red-deep);
+  font-size: 0.8rem;
+  margin: 6px 0 0;
+}
+
+/* Paper slip: a cut-out to physically write down. */
+.slip {
+  position: relative;
+  border: 1.5px dashed var(--line-2);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--card-paper);
+}
+
+.slip::before {
+  content: '✂';
+  position: absolute;
+  top: -11px;
+  left: 14px;
+  background: var(--card-paper);
+  padding: 0 5px;
+  color: var(--faint);
+  font-size: 0.85rem;
+}
+
+/* σ reply block in guardian mode — the endorsement handed back. */
+.sigma-out {
+  border: 1px solid #bfdfd0;
+  background: var(--green-tint);
+  border-radius: 10px;
+  padding: 10px 12px;
   display: flex;
-  gap: 14px;
-  flex: 1;
-  min-width: 220px;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+/* Collected quorum entries at recovery. */
+.quorum-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.quorum-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 0.8rem;
+  background: var(--surface);
+}
+
+.quorum-x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0 2px;
+}
+
+.quorum-x:hover {
+  color: var(--red-deep);
 }
 
 /* ——— onboarding stage ——— */

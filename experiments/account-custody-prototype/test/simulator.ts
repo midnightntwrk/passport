@@ -23,7 +23,6 @@ import {
   privateStateFromSecrets,
   type AccountPrivateState,
 } from '../src/wallet/witnesses.js';
-import { split, type Share } from '../src/wallet/shamir.js';
 
 const COIN_PUBLIC_KEY = '00'.repeat(32);
 
@@ -36,12 +35,10 @@ export interface SimulatorSecrets {
 export class AccountSimulator {
   readonly contract: any;
   readonly address = sampleContractAddress();
-  readonly initialShares: Share[];
   ctx: CircuitContext<AccountPrivateState>;
 
   constructor(opts: { deviceSecret: Uint8Array; recoverySecret: Uint8Array }) {
     this.contract = new (Contract as any)(makeWitnesses());
-    this.initialShares = split(opts.recoverySecret, 2, 3);
     const constructorCtx = createConstructorContext(
       privateStateFromSecrets(opts),
       COIN_PUBLIC_KEY,
@@ -51,9 +48,6 @@ export class AccountSimulator {
         constructorCtx,
         deviceCommitment(opts.deviceSecret),
         recoveryCommitment(opts.recoverySecret),
-        this.initialShares[0].value,
-        this.initialShares[1].value,
-        this.initialShares[2].value,
       );
     this.ctx = createCircuitContext(
       this.address,

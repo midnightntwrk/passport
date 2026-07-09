@@ -15,7 +15,8 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
   const grants = ledger ? [...ledger.grants] : [];
   const epoch = ledger ? ledger.device_epoch : 0n;
   const activeGrants = grants.filter(([, g]) => g.active && g.epoch === epoch).length;
-  const shares = ledger ? Number(ledger.recovery_shares.size()) : 0;
+  const phiLen = ledger ? Number(ledger.recovery_phi_len) : 0;
+  const backupLive = phiLen > 0;
   const holder = (session.devMode ? 'bearer' : (session.passkey?.label ?? 'bearer')).toUpperCase();
   const reissued = epoch > 0n;
   const nightTotal = ledger
@@ -110,10 +111,10 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
             }
           />
           <Field
-            k="Recovery shares"
+            k="Recovery backup"
             v={
-              <X x="The recovery secret is split 2-of-3. Any two shares reconstruct it, re-key the account, and retire every old device — total loss is survivable (P5).">
-                {ledger ? `${shares} — any 2 of 3` : '…'}
+              <X x="Guardians (people and paper keys) derive their shares from keys they already hold and store nothing. On-chain: a commitment plus a few public points that provably leak nothing. A threshold quorum re-keys the account — total loss is survivable (P5).">
+                {ledger ? (backupLive ? `live — ${phiLen} public points` : 'not published') : '…'}
               </X>
             }
           />
@@ -162,13 +163,13 @@ export function OverviewView({ ctx }: { ctx: AppContext }) {
         <button
           className="tile"
           onClick={() => ctx.goToView('recovery')}
-          data-x="Losing every device does not lose the account: any two of the three on-chain shares restore the same account — same name, balances, and history (P5)."
+          data-x="Losing every device does not lose the account: a quorum of guardians — people and paper keys who store nothing — restores the same account, same address, balances, and history (P5)."
         >
           <span className="tile-k">Recovery</span>
-          <span className="tile-v">
-            2 <small>of</small> 3
+          <span className="tile-v">{ledger ? (backupLive ? 'live' : '—') : '…'}</span>
+          <span className="tile-sub">
+            {backupLive ? 'guardian backup on-chain' : 'no guardians enrolled yet'}
           </span>
-          <span className="tile-sub">{shares === 3 ? 'kit ready' : `${shares} shares on-chain`}</span>
         </button>
       </div>
 

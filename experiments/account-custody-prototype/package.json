@@ -7,13 +7,18 @@
   "scripts": {
     "compile": "compact compile contracts/account.compact contracts/managed/account && compact compile contracts/faucet.compact contracts/managed/faucet",
     "build": "tsc",
+    "build:buss": "buss-wasm/build.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "deploy": "tsx src/tests/deploy.ts",
     "test:lifecycle": "tsx src/tests/lifecycle-night.ts",
     "test:shielded": "tsx src/tests/lifecycle-shielded.ts",
     "test:grants": "tsx src/tests/lifecycle-grants.ts",
-    "test:recovery": "tsx src/tests/lifecycle-recovery.ts"
+    "test:recovery": "tsx src/tests/lifecycle-recovery.ts",
+    "demo:onboard": "tsx src/demo/onboard.ts",
+    "demo:guardian": "tsx src/demo/guardian.ts",
+    "demo:backup": "tsx src/demo/backup.ts",
+    "demo:recover": "tsx src/demo/recover.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
