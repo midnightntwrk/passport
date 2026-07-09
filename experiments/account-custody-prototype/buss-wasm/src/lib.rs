@@ -1,6 +1,6 @@
 //! BUSS (ANARKey, EPRINT 2025/551) bindings for the account-custody prototype.
 //!
-//! Thin wasm-bindgen wrapper over the Pleiades library. All field elements
+//! Thin wasm-bindgen wrapper over the arc-pleiades (Pleiades) library. All field elements
 //! cross the JS boundary as hex strings of the canonical 32-byte `to_repr`
 //! encoding of the BLS12-381 scalar field (`midnight_curves::Fq`).
 //!
@@ -18,9 +18,11 @@
 use wasm_bindgen::prelude::*;
 
 mod core {
+    use arc_pleiades::bottom_up::buss::Share;
+    use arc_pleiades::bottom_up::BottumUpSS;
+    use arc_pleiades::{guardian_share, BottomUpSSS};
     use ff::{FromUniformBytes, PrimeField};
     use midnight_curves::Fq;
-    use pleiades::{guardian_share, BottomUpSSS};
     use serde::{Deserialize, Serialize};
     use sha2::Sha512;
 
@@ -51,11 +53,18 @@ mod core {
         pub sigma: String,
     }
 
-    fn parse_sigmas(sigmas_json: &str) -> Result<Vec<(usize, Fq)>, String> {
+    /// Guardian shares as `Share<Fq>` (x = guardian index, y = σ), the shape
+    /// `BottumUpSS::split`/`reconstruct` expect.
+    fn parse_sigmas(sigmas_json: &str) -> Result<Vec<Share<Fq>>, String> {
         let raw: Vec<SigmaEntry> =
             serde_json::from_str(sigmas_json).map_err(|e| format!("bad sigmas JSON: {e}"))?;
         raw.iter()
-            .map(|e| Ok((e.index, fq_from_hex(&e.sigma)?)))
+            .map(|e| {
+                Ok(Share {
+                    x: Fq::from(e.index as u64),
+                    y: fq_from_hex(&e.sigma)?,
+                })
+            })
             .collect()
     }
 
@@ -96,8 +105,10 @@ mod core {
         let secret = fq_from_hex(secret_hex)?;
         let sigmas = parse_sigmas(sigmas_json)?;
         let buss = BottomUpSSS::new(t, n).map_err(|e| e.to_string())?;
-        let phi = buss.share(secret, &sigmas).map_err(|e| e.to_string())?;
-        let phi_hex: Vec<String> = phi.iter().map(fq_to_hex).collect();
+        let phi = buss.split(secret, &sigmas).map_err(|e| e.to_string())?;
+        // Wire format is unchanged: phi's x-coordinates (-1, -2, …) are
+        // implicit in position, so only the y values are carried over JSON.
+        let phi_hex: Vec<String> = phi.iter().map(|s| fq_to_hex(&s.y)).collect();
         serde_json::to_string(&phi_hex).map_err(|e| e.to_string())
     }
 
@@ -109,10 +120,16 @@ mod core {
     ) -> Result<String, String> {
         let phi_hex: Vec<String> =
             serde_json::from_str(phi_json).map_err(|e| format!("bad phi JSON: {e}"))?;
-        let phi: Vec<Fq> = phi_hex
+        let phi: Vec<Share<Fq>> = phi_hex
             .iter()
-            .map(|h| fq_from_hex(h))
-            .collect::<Result<_, _>>()?;
+            .enumerate()
+            .map(|(k, h)| {
+                Ok(Share {
+                    x: -Fq::from((k + 1) as u64),
+                    y: fq_from_hex(h)?,
+                })
+            })
+            .collect::<Result<_, String>>()?;
         let sigmas = parse_sigmas(sigmas_json)?;
         let buss = BottomUpSSS::new(t, n).map_err(|e| e.to_string())?;
         let secret = buss.reconstruct(&phi, &sigmas).map_err(|e| e.to_string())?;

@@ -3,6 +3,19 @@
 version = 4
 
 [[package]]
+name = "arc-pleiades"
+version = "0.1.0"
+source = "git+https://github.com/input-output-hk/arc-pleiades.git?rev=26f19f7a527e79831edf5d202a301d2c7c1a601c#26f19f7a527e79831edf5d202a301d2c7c1a601c"
+dependencies = [
+ "digest",
+ "ff",
+ "group",
+ "midnight-curves",
+ "rand_core",
+ "thiserror",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -484,10 +497,10 @@ dependencies = [
 name = "passport-buss-wasm"
 version = "0.1.0"
 dependencies = [
+ "arc-pleiades",
  "ff",
  "hex",
  "midnight-curves",
- "pleiades",
  "serde",
  "serde_json",
  "sha2",
@@ -514,19 +527,6 @@ checksum = "f950b2377845cebe5cf8b5165cb3cc1a5e0fa5cfa3e1f7f55707d8fd82e0a7b7"
 dependencies = [
  "der",
  "spki",
-]
-
-[[package]]
-name = "pleiades"
-version = "0.1.0"
-source = "git+https://github.com/input-output-hk/Pleiades.git?rev=62a2961e964d583b9cb20af897ee0c2e16fa5f2e#62a2961e964d583b9cb20af897ee0c2e16fa5f2e"
-dependencies = [
- "digest",
- "ff",
- "group",
- "midnight-curves",
- "rand_core",
- "thiserror",
 ]
 
 [[package]]

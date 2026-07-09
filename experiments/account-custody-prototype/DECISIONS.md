@@ -134,8 +134,8 @@ previous TODO(PVSS) weakness is removed rather than patched. Recovery then
 proves preimage knowledge exactly as before: the recover circuit lost its
 share arguments and gained a φ-clearing step, and a device-authorised
 publish_recovery_backup circuit was added. The BUSS mathematics runs in
-the client through `buss-wasm` (a wasm-bindgen crate over the Pleiades
-library, consumed as a git dependency; the `nodejs` build serves the tests
+the client through `buss-wasm` (a wasm-bindgen crate over the arc-pleiades
+(Pleiades) library, consumed as a git dependency; the `nodejs` build serves the tests
 and CLI, the `bundler` build serves the demo app, and both bind the same
 platform-neutral core in `src/wallet/buss-core.ts`); see
 `research/anarkey-buss-recovery-assessment.md` for the full analysis.

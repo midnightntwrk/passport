@@ -32,7 +32,7 @@ Performance is a non-issue: milliseconds even at high guardian counts, and netwo
 
 ## 2. Implementation review: Pleiades
 
-`tmp/Pleiades`, to be consumed as a git dependency from `github.com/input-output-hk/Pleiades`. MIT licensed, single small crate plus a `pleiades-wasm` binding crate. The full test suite passes locally (89 tests). Explicitly not audited and not production-ready per its own README.
+`tmp/Pleiades`, consumed as a git dependency from `github.com/input-output-hk/arc-pleiades` (now public; the crate itself is named `arc-pleiades`). MIT licensed, single small crate plus an `arc-pleiades-wasm` binding crate. The full test suite passes locally (89 tests). Explicitly not audited and not production-ready per its own README.
 
 What it provides:
 
@@ -54,11 +54,11 @@ Gaps to raise upstream before we depend on it in anger:
 4. No zeroisation of secret material; `guardian_share` hashes raw secret-key bytes in host memory. The dedicated-guardian-key and cold-wallet patterns mitigate this.
 5. Cosmetic: the README states edition 2024 while the manifest says 2021.
 
-Dependency line for a Rust consumer (SSH form while the repository is private):
+Dependency line for a Rust consumer (the repository is now public):
 
 ```toml
 [dependencies]
-pleiades = { git = "ssh://git@github.com/input-output-hk/Pleiades.git" }
+arc-pleiades = { git = "https://github.com/input-output-hk/arc-pleiades.git" }
 ```
 
 ## 3. Fit for Passport
@@ -140,5 +140,5 @@ One adaptation needs a cryptographer's nod: the paper checks the recovered secre
 
 - ANARKey: A New Approach to (Socially) Recover Keys. [EPRINT 2025/551](https://eprint.iacr.org/2025/551), to appear at IEEE EuroS&P 2026.
 - Traceable Bottom-Up Secret Sharing and Law & Order on Community Social Key Recovery. [EPRINT 2025/2089](https://eprint.iacr.org/2025/2089).
-- Pleiades implementation: `github.com/input-output-hk/Pleiades` (local copy under `tmp/Pleiades`).
+- Pleiades implementation: `github.com/input-output-hk/arc-pleiades` (local copy under `tmp/Pleiades`).
 - Current surface: `experiments/account-custody-prototype/contracts/account.compact`, `docs/plans/components/C14-total-loss-recovery-flow.md`, `docs/plans/components/C15-helper-protocol.md`, `docs/mps-mip/mips/mip-xxxx-account-custody-contract.md` (recovery seam), `docs/mps-mip/mps/mps-asset-custody-model.md`.

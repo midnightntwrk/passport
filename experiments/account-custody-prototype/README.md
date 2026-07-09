@@ -17,7 +17,7 @@ in [DECISIONS.md](./DECISIONS.md).
 |---|---|
 | `contracts/account.compact` | The per-account custody contract (12 circuits). |
 | `contracts/faucet.compact` | Test scaffolding: shielded-token origin for localnet. |
-| `buss-wasm/` | BUSS bridge: wasm-bindgen crate over [Pleiades](https://github.com/input-output-hk/Pleiades) (git dependency), built to `pkg-node/`. |
+| `buss-wasm/` | BUSS bridge: wasm-bindgen crate over [Pleiades](https://github.com/input-output-hk/arc-pleiades) (`arc-pleiades`, git dependency), built to `pkg-node/`. |
 | `src/wallet/` | Platform-neutral client core: contract bindings, witnesses (C7), BUSS recovery (`buss.ts`), `PassportAccount` API. |
 | `src/node/` | Node-side wiring: funding wallet, providers, deploy helpers. |
 | `src/tests/` | Localnet integration scenarios (see below). |
@@ -46,7 +46,7 @@ in [DECISIONS.md](./DECISIONS.md).
 ```sh
 npm install
 npm run compile                  # both contracts → contracts/managed/
-npm run build:buss               # Pleiades → buss-wasm/pkg-node/ (once)
+npm run build:buss               # arc-pleiades → buss-wasm/pkg-node/ (once)
 
 # unit tests — contract logic + full BUSS ceremony in-process, no network
 npm test
