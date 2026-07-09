@@ -56,6 +56,13 @@ stateless custody pattern has been validated end to end against a
 production node, including a byte-level audit of every observer-visible
 surface.
 
+The same encryption that hides holdings also separates reading from
+releasing: reconstructing the contract's shielded position needs only the
+account encryption secret, whereas releasing assets needs the authorisation
+seam, so that secret can be delegated as a read-only viewing capability —
+to an accountant, auditor, or compliance function — without ceding custody
+(Rationale R9).
+
 The specification also makes normative a change-handling rule (persist
 the change coin that leaves the transaction live, never a coin the
 transaction consumed) whose violation has been observed to silently
@@ -134,6 +141,10 @@ interpreted as described in RFC 2119.
   descriptions of the contract's shielded holdings.
 - **Inbox**: an append-only map of encrypted coin descriptions in the
   custody contract's public state; the discovery and recovery channel.
+- **Viewing capability**: the account encryption secret used as a
+  read-only credential — it decrypts the inbox and drives the discovery
+  walk (section 6.5), reconstructing the contract's shielded holdings from
+  chain data, and confers no authority to release assets (Rationale R9).
 - **Color**: the 32-byte token-type identifier of an unshielded or
   shielded token, spelled throughout as the ecosystem term of art.
 - **Night**: the native unshielded token, whose color is the
@@ -610,6 +621,39 @@ prohibition. Token registry and NFT standardisation effects are
 upstream of custody only at the metadata layer. The name service
 (MIP-0007) locates accounts; nothing here depends on it.
 
+**R9. Viewing delegation (read/write separation).** Reconstructing the
+contract's shielded holdings and history from chain data requires only the
+account encryption secret: it drives the inbox walk (section 6.5), which
+yields every coin description, amount, color, and reconstructable
+counterparty. Releasing those assets requires the authorisation seam
+(INV-1). The two capabilities live in different secrets, so read and write
+separate cleanly — the encryption secret is a pure viewing capability that
+confers no power to move a single coin, a corollary of INV-1 rather than a
+new mechanism. This makes read-only delegation a first-class affordance of
+the design: a holder can hand a purpose-specific encryption secret to an
+accountant, an auditor, a tax authority, or an institutional compliance
+function — the oversight need the institutional problem statements
+(MPS-0006, MPS-0016, MPS-0024) carry — and obtain third-party bookkeeping
+over otherwise private holdings without ceding custody. The unshielded
+balances are already public through the section 5 mirror, so a delegate
+holding the viewing capability sees the whole position: public unshielded,
+private shielded. The delegation is out of band — it shares a secret,
+invokes no circuit, and needs no ledger support — which is why this MIP adds
+no viewing mechanism; custody of the encryption secret itself remains the
+instantiating and recovery standards' subject (section 2, section 6.7).
+
+The capability is coarse, deliberately. A single encryption secret governs
+the whole inbox, so disclosing it reveals the contract's entire shielded
+past and future until `enc_key` is rotated (section 6.7); there is no native
+scoping to a date range, a coin subset, or a color, and revoking a
+delegate's view means rotating the key and re-encrypting the live entries,
+after which the delegate retains whatever it has already read (Security
+Considerations S2). Finer-grained viewing — hierarchical or epoch-scoped
+viewing keys, or an incoming/outgoing split in the manner of shielded-pool
+viewing keys — advertises additional keys without disturbing any invariant
+here, and is left to a successor standard, the read-side analogue of the
+scoped-spending policies section 2 defers.
+
 ## Path to Active
 
 ### Acceptance Criteria
@@ -672,7 +716,10 @@ instance. Wallets unaware of this standard are unaffected.
   watching, but does not enable theft: releasing assets still requires
   the authorisation seam (INV-1). Key rotation is the procedure of
   section 6.7; old entries remain readable to the attacker, so rotation
-  bounds future, not past, exposure.
+  bounds future, not past, exposure. The same property is a feature under
+  deliberate disclosure (delegated viewing, R9): the encryption secret is a
+  read capability and never a release capability, so the trust boundary is
+  identical whether it leaks or is shared on purpose.
 - **S3. Inbox poisoning.** The contract cannot verify that a deposit's
   inbox entry matches the deposited coin. A malicious depositor can
   deposit a coin whose entry is garbage, producing value the owner
