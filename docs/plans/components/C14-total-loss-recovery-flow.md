@@ -38,6 +38,14 @@ device key. How does that key get registered on the (existing)
 account-custody contract? Special recovery transaction, or normal
 device-add via the recovered seed?
 
+**Factor-set registration.** For a heterogeneous m-of-n factor set
+(Alternative E), how does an account register its *n* factors and its *m*
+threshold on C1 without leaking the factor set itself?
+
+**Ai-vouch soundness.** Can an Ai that holds persistent memory of a user's
+behaviour vouch verifiably (a challenge/response bound to that memory)
+without itself becoming a single point of failure or a coercion target?
+
 ## Failure modes
 
 **Insufficient helpers respond.** Below-quorum participation.
@@ -65,3 +73,18 @@ users without a social graph (per MIP-4 scope).
 
 **D — Identity-proof-based recovery** (proven KYC re-establishes the
 account; weaker security, easier UX).
+
+**E — m-of-n soulbound-attribute recovery** (varied factor sets; strongest
+anti-collusion). The user registers *n* soulbound factors spanning distinct
+categories — inherent biometrics (face, fingerprint, voice, wearable bio
+signal), issued credentials (driver's licence, SSN-proof, other KYC-grade
+attestations), paired custodial/OAuth (Google/Apple, never sole), trusted
+people (DeRec helpers, per C15), and a novel **Ai-vouch factor** — and
+recovers by proving any *m of n* as selective-disclosure proofs (P9 / C20),
+never revealing the underlying attributes. Because a quorum must span
+independent categories, no single compromised category (a leaked biometric,
+a coerced helper set, a phished OAuth) can forge recovery — directly
+strengthening this canvas's "compromised helpers collude" failure mode.
+Extends Alternative D from a single KYC proof to a user-chosen threshold over
+a heterogeneous soulbound set, and enriches C15 by widening what counts as a
+"factor". *Open sub-question: Ai-vouch soundness (see above).*
