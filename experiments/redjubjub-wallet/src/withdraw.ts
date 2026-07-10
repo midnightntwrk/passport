@@ -92,7 +92,7 @@ async function main() {
     //
     // Split between TypeScript and Rust:
     //   - TypeScript: generates nonce r, computes R = r*G via pureCircuits,
-    //     runs the nonce-retry loop for the Poseidon challenge hash
+    //     runs the nonce-retry loop for the persistentHash (SHA-256) challenge
     //   - Rust CLI: computes s = (r + c * sk) mod JUBJUB_R (pure scalar arithmetic)
     //
     // In a FROST threshold setup, the Rust CLI would be replaced by a threshold

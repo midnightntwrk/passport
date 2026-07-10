@@ -302,7 +302,7 @@ async fn cmd_e2e(seed_hex: &str, contract_arg: Option<&str>) -> Result<()> {
     println!();
 
     // ── Step 7: Compute Schnorr withdrawal signature ─────────────────────
-    println!("--- Step 7: Schnorr withdrawal signature (Poseidon + JubJub) ---\n");
+    println!("--- Step 7: Schnorr withdrawal signature (persistentHash + JubJub) ---\n");
 
     // Load the owner's secret key from the TS experiment
     let wallet_key_path = "../redjubjub-wallet/wallet-key.json";
@@ -349,7 +349,7 @@ async fn cmd_e2e(seed_hex: &str, contract_arg: Option<&str>) -> Result<()> {
     println!("    amount:   {amount}");
     println!("    tx_count: {}", ledger.tx_count);
 
-    // Compute the Schnorr signature using Poseidon hash
+    // Compute the Schnorr signature using the persistentHash (SHA-256) challenge
     let sig = circuits::sign_withdrawal(
         &sk,
         &pk_embedded,
@@ -372,7 +372,7 @@ async fn cmd_e2e(seed_hex: &str, contract_arg: Option<&str>) -> Result<()> {
         circuits::verify_schnorr(&pk_embedded, &sig.challenge_bytes, &sig.sig_r, &sig.sig_s);
     anyhow::ensure!(valid, "Schnorr withdrawal signature verification FAILED");
     println!("\n  Signature verification: PASS");
-    println!("  (s*G == R + c*pk using midnight-curves, challenge via Poseidon)");
+    println!("  (s*G == R + c*pk using midnight-curves, challenge via persistentHash/SHA-256)");
     println!();
 
     // ── Step 8: Local proof generation ───────────────────────────────────

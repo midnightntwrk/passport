@@ -3,8 +3,9 @@
 ## Purpose
 
 This experiment proves that Midnight's cryptographic primitives — JubJub
-curve arithmetic, Poseidon hashing, wallet key derivation, Schnorr
-signing, contract artifact handling, and devnet interaction — can all be
+curve arithmetic, `persistentHash` (SHA-256) challenge hashing, wallet
+key derivation, Schnorr signing, contract artifact handling, and devnet
+interaction — can all be
 performed in **pure Rust** using the `midnight-ledger` crates directly,
 without TypeScript, WASM, or npm dependencies.
 

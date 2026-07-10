@@ -98,9 +98,13 @@ Displays the current `owner_pk`, `registered` flag, and `tx_count`.
 ## How The Schnorr Signature Works
 
 The contract uses a "Midnight-flavoured Schnorr" scheme — standard
-Schnorr verification but with `persistentHash` (Poseidon) instead of
-Blake2b for the challenge hash. This keeps all operations native to
-Midnight's SNARK.
+Schnorr verification but with `persistentHash` (SHA-256 over the
+compiler's field-aligned encoding) instead of Blake2b for the
+challenge hash. `persistentHash` is available in-circuit and its
+output is guaranteed stable across toolchain upgrades — unlike the
+circuit-optimised `transientHash` (Poseidon), which carries no such
+guarantee and so cannot anchor signatures that independent signers
+must reproduce.
 
 ### Signing (Rust CLI, off-chain)
 
@@ -123,7 +127,8 @@ assert(ecMulGenerator(sig_s) == ecAdd(sig_r, ecMul(owner_pk, c)), "invalid signa
 
 The signer only needs:
 - The private scalar `sk` (or threshold shares of it)
-- Access to JubJub curve operations and Poseidon hashing
+- Access to JubJub curve operations and SHA-256 hashing of the
+  field-aligned challenge preimage
 
 A FROST threshold network would replace step 5 with a distributed
 signing protocol where each node computes a partial response from its
