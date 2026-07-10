@@ -3,36 +3,36 @@
   "name": "stateless-deposit",
   "description": "deposit_stateless + encrypted inbox + client-side QSCI capture",
   "verdict": "PASS",
-  "txHash": "00d77fbc79dce3d7f8e012ec0d1e357815ae39c1966868fdc478b3bfdd46e2dfe6",
+  "txHash": "0051a26e9223a42173cd753753cc86a6b0668c7a22cb23bbfe52ff8e9baab4a8b6",
   "note": "Deposit landed with no QSCI in public ledger state; the encrypted inbox blob round-trips to the exact coin; mt_index recovered from the indexer (startIndex inference).",
   "details": {
-    "mintTx": "00af18d5087e8c65db1825572041f94924edaf7ebfe92dc9331be6dacab7567c50",
-    "depositTx": "00d77fbc79dce3d7f8e012ec0d1e357815ae39c1966868fdc478b3bfdd46e2dfe6",
+    "mintTx": "00bf23648acf78dffec5a7442a2df309d0fac7a15b08d715a78e3134c78b3993e0",
+    "depositTx": "0051a26e9223a42173cd753753cc86a6b0668c7a22cb23bbfe52ff8e9baab4a8b6",
     "mtIndex": "29",
     "indexerPosition": {
       "startIndex": 29,
       "endIndex": 30,
-      "blockHeight": 112,
+      "blockHeight": 20,
       "status": "SUCCESS",
       "raw": {
-        "id": 39,
-        "hash": "52a5aeb62afd758d2de46338d27e989c2f2d1ac17db6000f511f1a180d47b831",
+        "id": 30,
+        "hash": "c1317bd6951cba7bc24ba40c11325450d1da0f60fb186d144d09b975cda2e96a",
         "startIndex": 29,
         "endIndex": 30,
         "transactionResult": {
           "status": "SUCCESS"
         },
         "block": {
-          "height": 112,
-          "hash": "882cf49899f10f5ff59e40ddb49154803b35b56f24912af15f1246107aaf07ea"
+          "height": 20,
+          "hash": "792946c7fce1d635095ba900c38b59da21cc47867027862b1b9dc629d878a556"
         }
       }
     },
-    "custodyAddress": "28f1199a78c8743372a3a1a23ed37396f33c720e1e0f6a0b6ca7b3fc1af89467",
-    "colorHex": "b7d0234687f5b44885ffb0123c3622a71920aa0df1d0e751fd6dbe5388256985",
+    "custodyAddress": "5fe2feb60784fcf7889968086988c4ce93b318e1f6f8173d33c2a72f894d91af",
+    "colorHex": "29f3ac9d0bf78f7f4b6e1c94bd1adfe60afdac07d06b27b4096e47ecd5a2ded0",
     "amount": "500"
   },
-  "ranAt": "2026-07-03T10:32:43.031Z",
+  "ranAt": "2026-07-08T14:57:48.687Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

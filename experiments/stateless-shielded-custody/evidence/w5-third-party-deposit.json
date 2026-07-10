@@ -3,15 +3,15 @@
   "name": "third-party-deposit",
   "description": "third-party deposit via advertised key + owner discovery from chain data",
   "verdict": "PARTIAL",
-  "txHash": "00f51d4244acd8375eefd023e057eea9cb3a23d7d3c736a74fab0cb1bf7aaca2c6",
+  "txHash": "00cbf033a557c0413a718d16e2e89d8284cae104809001ca2886f58c3cfc833ed6",
   "note": "Deposit, decrypt, and spend all worked, but the contract-address → tx indexer lookup is missing — the discovery loop needs an indexer surface or block scan (C17 sync finding). See details.contractTxLookup.",
   "details": {
-    "custodyAddress": "1d24abfcb7b02e91c1bdc021899fa4694058170997e0ec0125cb02ad707e7193",
-    "mintTx": "008aded4bf27848c24e55bc6dfeea4af649c76ec4dcbff5190497e5dc7f58d5cae",
-    "advertisedKeyHex": "d140d328938a47a715977143a4acd225ccddbdf4b84bc39456b714dd3128e028",
-    "depositTx": "006ef6582ff356a17ea26a7d9b00306ceb856e8f39a545b02f178bd9cc0e8c06cb",
+    "custodyAddress": "78fafde3fb2e7abc05ca9a85960233b722a834418e3ad68987a09073366080f1",
+    "mintTx": "00f85d9e8ea05e8a2d7a00fabf9e3a5cf531ba62f23b03dc40d299cd22bf2beb2a",
+    "advertisedKeyHex": "d176f726bd7f314a86b5cca7b85b53c95a3b23befe9ea508a3675e5f18d9fb47",
+    "depositTx": "0029ed82438fdd88e79ec1f765bf7b06b3e385957d4009450e21b7276169a4f654",
     "discoveredCoin": {
-      "colorHex": "215d850d9a9dc379c0b01451143b6cb94ef2bd858a125b13a08ff0b39ef4eb99",
+      "colorHex": "c232f5d73ae22de5722e251f3c4d67e31650bb089283587d0a612dbe6de16ede",
       "value": "350",
       "matches": true
     },
@@ -26,22 +26,22 @@
       {
         "source": "fallback: depositor-supplied txId",
         "candidates": [
-          "65"
+          "44"
         ]
       }
     ],
     "spendAttempts": [
       {
         "source": "fallback: depositor-supplied txId",
-        "mtIndex": "65",
+        "mtIndex": "44",
         "outcome": "accepted",
-        "txId": "00f51d4244acd8375eefd023e057eea9cb3a23d7d3c736a74fab0cb1bf7aaca2c6"
+        "txId": "00cbf033a557c0413a718d16e2e89d8284cae104809001ca2886f58c3cfc833ed6"
       }
     ],
-    "mtIndexSource": "fallback: depositor-supplied txId @ index 65",
-    "spendTx": "00f51d4244acd8375eefd023e057eea9cb3a23d7d3c736a74fab0cb1bf7aaca2c6"
+    "mtIndexSource": "fallback: depositor-supplied txId @ index 44",
+    "spendTx": "00cbf033a557c0413a718d16e2e89d8284cae104809001ca2886f58c3cfc833ed6"
   },
-  "ranAt": "2026-07-03T11:00:38.835Z",
+  "ranAt": "2026-07-08T15:07:38.052Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

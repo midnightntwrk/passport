@@ -15,8 +15,10 @@ See [`EXPERIMENT_GUIDELINE.md`](EXPERIMENT_GUIDELINE.md) for the brief and
   inbox (coin info encrypted to the account's advertised key). No
   `insertCoin`.
 - **Spend**: the QSCI enters the circuit as a **witness** from wallet-local
-  storage; change is re-owned in-transaction and returned through the
-  private call result.
+  storage; `sendShielded` itself routes any change back to the contract as a
+  self-owned output, which the circuit returns through the private call
+  result (no re-owning step; upstream removed the redundant re-send in
+  OpenZeppelin/compact-contracts#661).
 - **Control**: the same contract carries the S6/OZ `insertCoin` pattern for
   the leak-audit baseline.
 

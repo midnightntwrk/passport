@@ -63,15 +63,23 @@ function extractNatures(output: string): string[] {
   return natures;
 }
 
-// Classify each disclosure clause by what the compiler says is published:
+// Classify each disclosure clause by what the compiler says is disclosed,
+// and through which channel:
+//   return — a circuit return value ("the value returned from …" /
+//     "returning this value from …"): caller-visible through the
+//     communication commitment, not an observer surface. The design hands
+//     the change coin back to the caller on purpose (custody is
+//     client-side), so these clauses are expected on the change path; W6
+//     settles that nothing coin-shaped lands on observer surfaces.
 //   hash — a commitment/nullifier link ("… given by a hash of the witness
 //     value"): hiding, the design's assumption.
 //   bit — a boolean ("the boolean value of … a comparison involving …"):
 //     1-bit facts such as has-change / sufficient-balance, plus the change
 //     conditional branch. Real but bounded leakage; catalogued as a finding.
-//   other — anything else, which would include raw-field publication and
-//     fails the probe.
-function classifyNature(nature: string): 'hash' | 'bit' | 'other' {
+//   other — anything else, which would include raw-field publication to the
+//     transcript and fails the probe.
+function classifyNature(nature: string): 'return' | 'hash' | 'bit' | 'other' {
+  if (/value returned from|returning this value from/.test(nature)) return 'return';
   if (/hash of|commitment|nullifier/.test(nature)) return 'hash';
   if (/boolean value|conditional|branch/.test(nature)) return 'bit';
   return 'other';
@@ -106,7 +114,7 @@ console.log(`   exit=${main.code}`);
 
 const allRejected = results.every((r) => r.rejected);
 const allNatures = results.flatMap((r) => r.disclosureNatures);
-const byClass = { hash: [] as string[], bit: [] as string[], other: [] as string[] };
+const byClass = { return: [] as string[], hash: [] as string[], bit: [] as string[], other: [] as string[] };
 for (const n of allNatures) byClass[classifyNature(n)].push(n);
 
 const verdict = allRejected && mainCompiled && byClass.other.length === 0 ? 'PASS' : 'FAIL';
@@ -120,16 +128,20 @@ writeEvidence({
   note:
     verdict === 'PASS'
       ? `Compiler-forced disclosures decompose into ${byClass.hash.length} hiding-hash clause(s) ` +
-        `(commitment/nullifier links) and ${byClass.bit.length} single-bit clause(s) (has-change / ` +
-        'sufficient-balance comparisons and the change branch). No clause forces raw ' +
-        'nonce/colour/value publication, and the main contract compiles with the disclosures ' +
-        'declared. The bit-level clauses are a catalogued finding: each stateless spend leaks ' +
-        'a handful of comparison bits. On-chain confirmation of what is actually published is W6.'
+        `(commitment/nullifier links), ${byClass.bit.length} single-bit clause(s) (has-change / ` +
+        `sufficient-balance comparisons and the change branch), and ${byClass.return.length} ` +
+        'caller-return clause(s) (the kept change coin handed back through the communication ' +
+        'commitment — deliberate, custody is client-side; not an observer surface). No clause ' +
+        'forces raw nonce/colour/value publication to the transcript, and the main contract ' +
+        'compiles with the disclosures declared. The bit-level clauses are a catalogued finding: ' +
+        'each stateless spend leaks a handful of comparison bits. On-chain confirmation of what ' +
+        'is actually published is W6.'
       : 'Unexpected disclosure shape or compile outcome — read details and the .compiler.txt files.',
   details: {
     probes: results,
     mainContractCompiled: mainCompiled,
-    disclosuresByClass: { hash: byClass.hash.length, bit: byClass.bit.length, other: byClass.other.length },
+    disclosuresByClass: { return: byClass.return.length, hash: byClass.hash.length, bit: byClass.bit.length, other: byClass.other.length },
+    returnChannelClauses: [...new Set(byClass.return)],
     bitLevelClauses: [...new Set(byClass.bit)],
     otherClauses: byClass.other,
     compactVersion: spawnSync('compact', ['compile', '--version'], { encoding: 'utf-8' }).stdout?.trim(),

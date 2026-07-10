@@ -1,3 +1,11 @@
+> **Canonical copy upstream.** This document was submitted to
+> [midnightntwrk/midnight-improvement-proposals](https://github.com/midnightntwrk/midnight-improvement-proposals)
+> and merged as
+> [MPS-0027](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mps/mps-0027-domain-separation.md),
+> which is now the canonical version. The copy below is a pre-numbering
+> snapshot retained for local reference only; where the two differ,
+> MPS-0027 governs.
+
 <!--
  Copyright 2026 Midnight Foundation
 

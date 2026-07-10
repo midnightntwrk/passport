@@ -4,12 +4,18 @@ import CompactStandardLibrary;
 
 // W1 probe 3 — change handling with the SendResult undisclosed.
 //
-// Question: does re-owning the change to the contract
-// (sendImmediateShielded on result.change) compile without disclosing the
-// change coin? The change coin's info is exactly what the stateless design
-// keeps private, so a forced disclosure here would matter — subject to the
-// usual caveat that disclose() permits publication but only transcript
-// writes cause it (W6 settles what is actually published).
+// Question: does KEEPING the change coin compile without disclosing it? In
+// the current design (after upstream removed the redundant re-owning step,
+// OpenZeppelin/compact-contracts#661) keeping the change means returning
+// result.change to the caller — sendShielded has already routed the coin
+// back to the contract as a self-owned output, and the caller must learn
+// its info to retain custody client-side. This probe omits disclose() on
+// the whole change path (the branch on result.change.is_some and the
+// returned coin) to map what the compiler forces — subject to the usual
+// caveat that disclose() permits publication but only transcript writes
+// cause it, and that circuit return values travel in the communication
+// commitment (caller-visible, not an observer surface); W6 settles what is
+// actually published.
 
 witness held_coin(color: Bytes<32>): QualifiedShieldedCoinInfo;
 
@@ -23,19 +29,16 @@ export circuit spend_change_undisclosed(
   recipient: ZswapCoinPublicKey,
   color:     Bytes<32>,
   amount:    Uint<128>,
-): [] {
+): Maybe<ShieldedCoinInfo> {
   const coin = held_coin(color);
   const result = sendShielded(
     coin,
     left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
     disclose(amount),
   );
-  if (result.change.is_some) {
-    sendImmediateShielded(
-      result.change.value,
-      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
-      result.change.value.value,
-    );
-  }
   round = ((round + (1 as Uint<64>)) as Uint<64>);
+  if (result.change.is_some) {
+    return some<ShieldedCoinInfo>(result.change.value);
+  }
+  return none<ShieldedCoinInfo>();
 }

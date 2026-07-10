@@ -3,7 +3,7 @@
   "name": "compile-disclosure",
   "description": "Compiler-forced disclosure surface for stdlib receiveShielded/sendShielded with witness coins",
   "verdict": "PASS",
-  "note": "Compiler-forced disclosures decompose into 33 hiding-hash clause(s) (commitment/nullifier links) and 8 single-bit clause(s) (has-change / sufficient-balance comparisons and the change branch). No clause forces raw nonce/colour/value publication, and the main contract compiles with the disclosures declared. The bit-level clauses are a catalogued finding: each stateless spend leaks a handful of comparison bits. On-chain confirmation of what is actually published is W6.",
+  "note": "Compiler-forced disclosures decompose into 15 hiding-hash clause(s) (commitment/nullifier links), 2 single-bit clause(s) (has-change / sufficient-balance comparisons and the change branch), and 6 caller-return clause(s) (the kept change coin handed back through the communication commitment — deliberate, custody is client-side; not an observer surface). No clause forces raw nonce/colour/value publication to the transcript, and the main contract compiles with the disclosures declared. The bit-level clauses are a catalogued finding: each stateless spend leaks a handful of comparison bits. On-chain confirmation of what is actually published is W6.",
   "details": {
     "probes": [
       {
@@ -44,50 +44,37 @@
           "the call to standard-library circuit sendShielded might disclose the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
           "the call to standard-library circuit sendShielded might disclose a link between a coin receive and the coin with the commitment given by a hash of a converted form of a hash of a modulus of the witness value",
           "the call to standard-library circuit sendShielded might disclose a link between a coin spend and the coin with the commitment given by a hash of a converted form of a hash of a modulus of the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a claim of nullifier and the coin with the nullifier given by a hash of the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin receive and the coin with the commitment given by a hash of the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin spend and the coin with the commitment given by a hash of the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose the boolean value of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a claim of nullifier and the coin with the nullifier given by a hash of the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin receive and the coin with the commitment given by a hash of the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin receive and the coin with the commitment given by a hash of the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin spend and the coin with the commitment given by a hash of the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin spend and the coin with the commitment given by a hash of the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose the boolean value of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose the boolean value of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a claim of nullifier and the coin with the nullifier given by a hash of a converted form of a hash of a modulus of the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a claim of nullifier and the coin with the nullifier given by a hash of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin receive and the coin with the commitment given by a hash of a converted form of a hash of a modulus of the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin receive and the coin with the commitment given by a hash of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin receive and the coin with the commitment given by a hash of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin spend and the coin with the commitment given by a hash of a converted form of a hash of a modulus of the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin spend and the coin with the commitment given by a hash of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin spend and the coin with the commitment given by a hash of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin receive and the coin with the commitment given by a hash of a converted form of a hash of a modulus of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "the call to standard-library circuit sendImmediateShielded might disclose a link between a coin spend and the coin with the commitment given by a hash of a converted form of a hash of a modulus of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-          "performing this ledger operation might disclose the boolean value of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value"
+          "returning this value from exported circuit spend_change_undisclosed might disclose the boolean value of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
+          "the value returned from exported circuit spend_change_undisclosed might disclose the witness value",
+          "the value returned from exported circuit spend_change_undisclosed might disclose the result of a subtraction involving the witness value",
+          "the value returned from exported circuit spend_change_undisclosed might disclose a converted form of a hash of a modulus of the witness value",
+          "the value returned from exported circuit spend_change_undisclosed might disclose the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
+          "returning this value from exported circuit spend_change_undisclosed might disclose the boolean value of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value"
         ],
         "rawOutputFile": "evidence/w1-p3-change-undisclosed.compiler.txt"
       }
     ],
     "mainContractCompiled": true,
     "disclosuresByClass": {
-      "hash": 33,
-      "bit": 8,
+      "return": 6,
+      "hash": 15,
+      "bit": 2,
       "other": 0
     },
+    "returnChannelClauses": [
+      "returning this value from exported circuit spend_change_undisclosed might disclose the boolean value of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
+      "the value returned from exported circuit spend_change_undisclosed might disclose the witness value",
+      "the value returned from exported circuit spend_change_undisclosed might disclose the result of a subtraction involving the witness value",
+      "the value returned from exported circuit spend_change_undisclosed might disclose a converted form of a hash of a modulus of the witness value",
+      "the value returned from exported circuit spend_change_undisclosed might disclose the boolean value of the result of a comparison involving the result of a subtraction involving the witness value"
+    ],
     "bitLevelClauses": [
-      "the call to standard-library circuit sendShielded might disclose the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-      "the call to standard-library circuit sendImmediateShielded might disclose the boolean value of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-      "the call to standard-library circuit sendImmediateShielded might disclose the boolean value of the result of a comparison involving the result of a subtraction involving the witness value",
-      "performing this ledger operation might disclose the boolean value of the boolean value of the result of a comparison involving the result of a subtraction involving the witness value"
+      "the call to standard-library circuit sendShielded might disclose the boolean value of the result of a comparison involving the result of a subtraction involving the witness value"
     ],
     "otherClauses": [],
     "compactVersion": "0.31.1"
   },
-  "ranAt": "2026-07-03T10:20:00.984Z",
+  "ranAt": "2026-07-08T14:55:25.709Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",
