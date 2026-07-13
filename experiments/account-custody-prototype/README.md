@@ -1,5 +1,10 @@
 # Account-custody prototype
 
+> **Prototype only.** This directory contains localnet experiments, including
+> disposable fixture-wallet plumbing. It is not a Passport SDK package and
+> must not be deployed to a shared environment or presented as production
+> custody infrastructure.
+
 A working Passport wallet against the **account-custody contract** (C1) on a
 Midnight localnet: per-account Compact contract, hash-preimage device
 authentication derived from a passkey (WebAuthn PRF), contract-custodied

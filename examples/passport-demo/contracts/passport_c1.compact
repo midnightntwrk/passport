@@ -1,0 +1,66 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// Midnight Passport C1 pilot contract.
+//
+// This contract deliberately owns only account-management state: device
+// membership and permission records. It contains no recovery shares, wallet
+// seed, asset custody, or embedded fixture wallet. The pilot is for Dynamic
+// Midnight testnet validation only; it is not a production custody contract.
+
+export pure circuit derive_device_commitment(secret: Bytes<32>): Field {
+  return transientHash<[Bytes<32>, Bytes<32>]>(
+    [pad(32, "mn:passport:c1:device:v1"), secret]
+  );
+}
+
+witness device_secret(): Bytes<32>;
+
+struct Permission {
+  scope: Bytes<32>;
+  active: Boolean;
+}
+
+export ledger round: Uint<64>;
+export ledger device_epoch: Uint<32>;
+export ledger devices: Map<Field, Uint<32>>;
+export ledger device_count: Uint<8>;
+export ledger permissions: Map<Field, Permission>;
+
+constructor(initial_device: Field) {
+  round = 0 as Uint<64>;
+  device_epoch = 0 as Uint<32>;
+  devices.insert(disclose(initial_device), 0 as Uint<32>);
+  device_count = 1 as Uint<8>;
+}
+
+circuit require_device(): [] {
+  const commitment = disclose(derive_device_commitment(device_secret()));
+  assert(devices.member(commitment), "unknown device");
+  assert(devices.lookup(commitment) == device_epoch, "revoked device");
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}
+
+export circuit add_device(device: Field): [] {
+  require_device();
+  const next = disclose(device);
+  assert(!devices.member(next), "device already registered");
+  devices.insert(next, device_epoch);
+  device_count = ((device_count + (1 as Uint<8>)) as Uint<8>);
+}
+
+export circuit register_permission(permission: Field, scope: Bytes<32>): [] {
+  require_device();
+  const key = disclose(permission);
+  assert(!permissions.member(key), "permission already registered");
+  permissions.insert(key, Permission { scope: disclose(scope), active: true });
+}
+
+export circuit revoke_permission(permission: Field): [] {
+  require_device();
+  const key = disclose(permission);
+  assert(permissions.member(key), "unknown permission");
+  const current = permissions.lookup(key);
+  permissions.insert(key, Permission { scope: current.scope, active: false });
+}

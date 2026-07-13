@@ -1,0 +1,39 @@
+{
+  "name": "passport-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare:c1": "node scripts/prepare-c1.mjs",
+    "test:c1": "npm run prepare:c1 && node scripts/check-c1-draft.mjs",
+    "dev": "npm run prepare:c1 && vite",
+    "build": "npm run prepare:c1 && tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "@dynamic-labs/midnight": "^4.91.6",
+    "@dynamic-labs/sdk-react-core": "^4.91.6",
+    "@fontsource/space-grotesk": "^5.2.10",
+    "@midnight-ntwrk/compact-js": "2.5.0",
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@midnight-ntwrk/ledger-v8": "8.0.3",
+    "@midnight-ntwrk/midnight-js-contracts": "4.0.4",
+    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "4.0.4",
+    "@midnight-ntwrk/midnight-js-network-id": "4.0.4",
+    "@midnight-ntwrk/midnight-js-types": "4.0.4",
+    "@midnight-ntwrk/passport-sdk": "file:../../sdk",
+    "@midnight-ntwrk/wallet-sdk-address-format": "3.1.1",
+    "buffer": "^6.0.3",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.0",
+    "vite-plugin-top-level-await": "^1.4.4",
+    "vite-plugin-wasm": "^3.3.0"
+  }
+}
