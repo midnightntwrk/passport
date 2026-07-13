@@ -9,6 +9,16 @@ proof generation (C6) without leaking outside the trusted boundary. The
 interaction point between P6 (key non-exfiltration) and the cryptographic
 stack.
 
+**Status 2026/07:** the account-authorisation MIP materially shrinks
+this boundary for account operations. The witness the prover consumes
+is a one-call Schnorr *signature*, never the device key: proof
+generation cannot exfiltrate a credential it never receives (the MIP's
+non-exfiltration invariant, with a conformance audit enumerating every
+gated call's proving inputs). Witness discipline here now centres on
+the remaining secrets that do enter proofs — shielded coin
+descriptions on the spend path, and any preimage-style credentials in
+legacy or prototype flows.
+
 ## Dependencies
 
 - **C5** — signs over witness commitments.

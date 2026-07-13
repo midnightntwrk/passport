@@ -8,6 +8,23 @@ Cross-cutting hash-prefix discipline: every `persistentHash` use site
 gets a 6+ byte domain prefix. Prerequisite to credentials, signing, and
 naming. The registry ships alongside the standards pipeline.
 
+**Status 2026/07:** the problem statement is merged upstream as
+**MPS-0027**, and the registry has its first customers — the custody
+and account-authorisation MIP drafts name their tags against it:
+`midnight:custody:inbox:v1` (inbox HKDF info),
+`midnight:account:device:v1` (device commitments), and
+`midnight:account:auth:v1:<circuit>` (per-circuit Schnorr challenges).
+
+A cross-toolchain finding sharpens the hash discipline itself:
+`persistentHash` is **SHA-256 over the compiler's field-aligned
+encoding**, with a documented cross-upgrade stability guarantee, while
+`transientHash` is the Poseidon-family circuit-optimised hash whose
+output is explicitly *not* guaranteed across upgrades — unfit for
+ledger-persisted commitments or any hash independent implementations
+must reproduce. The custody MIP's hash-discipline clause and the
+authorisation MIP's challenge-hash rationale both rest on this
+distinction.
+
 ## Dependencies
 
 - **C2** — namehashes use domain separators.

@@ -8,6 +8,16 @@ The flow by which a user revokes a lost or compromised device while
 retaining access via others. Implements P4 (revoke-and-continue).
 Mirrors I-4.1 through I-4.4.
 
+**Status 2026/07 — decided.** Alternative A: any surviving device
+revokes, via the `remove_device` ceremony the account-authorisation
+MIP specifies (1-of-n, guarded so the last active device cannot be
+removed), with the epoch mechanism as the stronger fallback — one bump
+invalidates every credential and grant registered under prior epochs,
+which is also exactly the machinery the AnarKey recovery flow (C14)
+executes on total loss. The prototype implements the flow end to end;
+the contract surface is already drafted (MIP-3B), so what remains here
+is client-flow polish, not decisions of substance.
+
 ## Dependencies
 
 - **C1** — device set is in account-custody contract state.
@@ -46,9 +56,13 @@ telemetry; warning UX before destructive action.
 
 ## Alternatives
 
-**A — Any remaining device can revoke** (simplest).
+**A — Any remaining device can revoke.** **Chosen 2026/07** — matches
+the account-authorisation MIP's 1-of-n `remove_device` with last-device
+guard; implemented in the prototype.
 
-**B — Two-of-N approval for revocation** (safer, requires multi-device).
+**B — Two-of-N approval for revocation** (safer, requires
+multi-device). Available later as an on-ledger policy extension against
+the same seam; not baked in.
 
 **C — Hybrid — single-device for normal revocation, two-of-N for
-high-value-grant revocation.**
+high-value-grant revocation.** Same status as B.
