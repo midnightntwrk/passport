@@ -1181,7 +1181,7 @@
               <rect x="820" y="690" width="250" height="60" rx="6" class="svg-module-rect hyp" />
               <circle cx="1058" cy="700" r="3" class="svg-module-dot" />
               <text x="945" y="710" class="svg-module-label" text-anchor="middle">Name Service</text>
-              <text x="945" y="726" class="svg-module-sub" text-anchor="middle">alice.midnight resolution</text>
+              <text x="945" y="726" class="svg-module-sub" text-anchor="middle">alice.passport.night resolution</text>
               <g class="svg-canvas-pill" data-component="C2">
                 <title>C2 · Name service</title>
                 <rect x="934" y="734" width="22" height="11" rx="3" class="svg-pill-rect" />
@@ -1528,14 +1528,14 @@
       label: 'Midnight DID contract',
       status: 'open',
       body: "External Compact contract by Yurii's team (midnightntwrk/midnight-did). Defines the current did:midnight spec and reference implementation. Passport's C3 workstream is how account identity, name linkage, and the delivery model integrate with this.",
-      caveats: 'C3 workstream — relationship with the account custody contract is TBD; open questions include how alice.midnight is linked and proven, whether one account may maintain multiple DIDs, and whether DID-facing behaviour is embedded in Passport or delegated to Identity Wallet. Method-name negotiation with IAMX over did:midnight remains a live sub-question. k=19 proof-server cost on some did-core examples is a known performance bound to design around. Stub — pending second-pass review.',
+      caveats: 'C3 workstream — relationship with the account custody contract is TBD; open questions include how alice.passport.night is linked and proven, whether one account may maintain multiple DIDs, and whether DID-facing behaviour is embedded in Passport or delegated to Identity Wallet. Method-name negotiation with IAMX over did:midnight remains a live sub-question. k=19 proof-server cost on some did-core examples is a known performance bound to design around. Stub — pending second-pass review.',
       relatedCanvases: ['C3'],
     },
     'name-service': {
       kind: 'Contract · Midnight chain',
       label: 'Name Service',
       status: 'open',
-      body: 'Resolves alice.midnight to an account custody address. Could be Passport-authored or a Midnight-ecosystem name service we adopt; if names are exposed as stable URLs, C3 may link them from DID Documents via alsoKnownAs.',
+      body: 'Resolves alice.passport.night to an account custody address. Decided 2026/07: the deployed upstream name service (MIP-0007), with free first-come-first-served sub-domains under the Foundation-held passport.night; if names are exposed as stable URLs, C3 may link them from DID Documents via alsoKnownAs.',
       caveats: 'Open whether this is a separate Compact contract Passport authors, or whether we adopt an upstream name service. The relationship between account custody and the name service (does account reference name? does name resolve to account?) is TBD, as is the proof model for showing that a DID subject actually controls the linked name. Stub — pending second-pass review.',
       relatedCanvases: ['C2'],
     },
