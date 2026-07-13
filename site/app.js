@@ -84,14 +84,21 @@
     body.innerHTML = data.components.map(c => {
       const cat = categoryById[c.category];
       const isWs = workstreamSet.has(c.id);
+      const isDone = c.status === 'specified';
       const serves = (c.serves || []).map(p =>
         `<span class="serves-pill" title="${promiseById[p] ? escapeHtml(promiseById[p].name) : p}">${p}</span>`
       ).join('');
+      const flag = isDone
+        ? `<span class="done-badge" title="${escapeHtml(c.status_note || 'Specified — decision set in stone')}">✓ Specified</span>`
+        : c.status === 'decided'
+          ? `<span class="decided-badge" title="${escapeHtml(c.status_note || 'Decision set in stone; specification pending')}">● Decided</span>`
+          : isWs ? '<span class="ws-badge">Open decision</span>' : '';
       return `
         <tr class="comp-row" data-component="${c.id}" tabindex="0"
             data-category="${escapeHtml(c.category)}"
             data-serves="${(c.serves || []).join(',')}"
-            data-workstream="${isWs ? '1' : '0'}">
+            data-workstream="${isWs ? '1' : '0'}"
+            data-specified="${isDone ? '1' : '0'}">
           <td class="comp-id">${c.id}</td>
           <td>
             <div class="comp-name">${escapeHtml(c.name)}</div>
@@ -99,7 +106,7 @@
           </td>
           <td class="col-cat"><span class="comp-category">${cat ? escapeHtml(cat.label) : escapeHtml(c.category)}</span></td>
           <td class="col-serves"><div class="comp-serves-pills">${serves}</div></td>
-          <td class="col-flag">${isWs ? '<span class="ws-badge">Open decision</span>' : ''}</td>
+          <td class="col-flag">${flag}</td>
         </tr>
       `;
     }).join('') + `
@@ -162,6 +169,8 @@
     const promises = activePromiseFilters();
     const category = document.getElementById('categoryFilter').value;
     const wsOnly = document.getElementById('workstreamOnly').getAttribute('aria-pressed') === 'true';
+    const doneEl = document.getElementById('specifiedOnly');
+    const doneOnly = doneEl && doneEl.getAttribute('aria-pressed') === 'true';
 
     let visible = 0;
     document.querySelectorAll('#compTableBody .comp-row:not(.is-empty)').forEach(row => {
@@ -177,6 +186,7 @@
       }
       if (show && category && c.category !== category) show = false;
       if (show && wsOnly && !workstreamSet.has(c.id)) show = false;
+      if (show && doneOnly && !c.status) show = false;
 
       row.hidden = !show;
       if (show) visible++;
@@ -200,6 +210,10 @@
     const ws = document.getElementById('workstreamOnly');
     if (ws) {
       ws.setAttribute('aria-pressed', 'false');
+    }
+    const done = document.getElementById('specifiedOnly');
+    if (done) {
+      done.setAttribute('aria-pressed', 'false');
     }
     applyComponentFilters();
   }
@@ -244,6 +258,8 @@
       const classes = [];
       if (workstreamSet.has(c.id)) classes.push('node-workstream');
       else classes.push('node-component');
+      if (c.status === 'specified') classes.push('node-specified');
+      else if (c.status === 'decided') classes.push('node-decided');
       const nodeData = {
         id: c.id,
         label: c.id + '\n' + c.name,
@@ -329,6 +345,8 @@
       const classes = [];
       if (workstreamSet.has(c.id)) classes.push('node-workstream');
       else classes.push('node-component');
+      if (c.status === 'specified') classes.push('node-specified');
+      else if (c.status === 'decided') classes.push('node-decided');
       elements.push({
         data: {
           id: c.id,
@@ -439,6 +457,27 @@
           'width': 140,
           'height': 50,
           'padding': 8,
+        },
+      },
+      // Decided components — decision set in stone, specification
+      // pending; overrides the workstream/component colouring.
+      {
+        selector: '.node-decided',
+        style: {
+          'background-color': cssVar('--info-soft'),
+          'border-color': cssVar('--info'),
+          'border-width': 2,
+        },
+      },
+      // Specified components — decision set in stone and drafted as a
+      // standard; overrides the workstream/component colouring, hence
+      // listed after both.
+      {
+        selector: '.node-specified',
+        style: {
+          'background-color': cssVar('--good-soft'),
+          'border-color': cssVar('--good'),
+          'border-width': 2,
         },
       },
       // Open-decision (question) nodes.
@@ -667,8 +706,9 @@
 
     const html = `
       <div class="panel-head">
-        <div class="panel-kind">Component${c.workstream ? ' · open decision' : ''}${cat ? ' · ' + escapeHtml(cat.label) : ''}</div>
+        <div class="panel-kind">Component${c.status === 'specified' ? ' · specified' : c.status === 'decided' ? ' · decided' : c.workstream ? ' · open decision' : ''}${cat ? ' · ' + escapeHtml(cat.label) : ''}</div>
         <h3 class="panel-title"><span class="panel-id">${c.id}</span> ${escapeHtml(c.name)}</h3>
+        ${c.status_note ? `<p class="panel-status-${c.status === 'specified' ? 'done' : 'decided'}">${c.status === 'specified' ? '✓' : '●'} ${escapeHtml(c.status_note)}</p>` : ''}
         ${c.serves && c.serves.length ? `
           <div class="panel-serves">
             ${c.serves.map(p => {
@@ -915,6 +955,12 @@
     if (wsOnly) wsOnly.addEventListener('click', () => {
       const pressed = wsOnly.getAttribute('aria-pressed') === 'true';
       wsOnly.setAttribute('aria-pressed', String(!pressed));
+      applyComponentFilters();
+    });
+    const doneOnly = document.getElementById('specifiedOnly');
+    if (doneOnly) doneOnly.addEventListener('click', () => {
+      const pressed = doneOnly.getAttribute('aria-pressed') === 'true';
+      doneOnly.setAttribute('aria-pressed', String(!pressed));
       applyComponentFilters();
     });
     const clearBtn = document.getElementById('clearFilters');

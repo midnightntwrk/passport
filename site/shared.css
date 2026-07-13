@@ -325,6 +325,26 @@ html[data-theme="dark"] .panel { box-shadow: -8px 0 28px rgba(0,0,0,0.4); }
   font-weight: 600;
   margin-right: 8px;
 }
+.panel-status-done {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--good);
+  background: var(--good-soft);
+  border: 1px solid var(--good);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 12px 0 0;
+}
+.panel-status-decided {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--info);
+  background: var(--info-soft);
+  border: 1px solid var(--info);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 12px 0 0;
+}
 
 .panel-serves {
   display: flex;
