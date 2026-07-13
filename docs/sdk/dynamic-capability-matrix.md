@@ -1,0 +1,34 @@
+# Dynamic Capability Matrix
+
+This matrix follows Dynamic's current [embedded Midnight wallet guide](https://www.dynamic.xyz/docs/react/wallets/using-wallets/midnight/midnight-embedded-wallets).
+Validation must be performed against the intended Dynamic environment; a code
+build alone is not live proof.
+
+| Capability | Demo implementation | Live acceptance evidence | Status |
+|---|---|---|---|
+| Discord authentication | Dynamic modal, Discord social filter | Successful login on approved origin | Configuration required |
+| Email authentication | Enabled by the Dynamic dashboard | Successful OTP login | Configuration required |
+| Embedded Midnight wallet | `MidnightWalletConnectors` | `isMidnightWallet(wallet)` true | Configuration required |
+| Three address surfaces | `wallet.address`, `getUnshieldedAddress()`, `getShieldedAddresses()`, and `getDustAddress()` | Unshielded, shielded, and DUST addresses rendered | Configuration required |
+| Balance/DUST sync | `getFormattedBalances()` | DUST sync settles or reports a visible pending state | Configuration required |
+| Message signing | `wallet.signMessage()` | User approval and resolved signature | Configuration required |
+| DUST registration | `wallet.registerDust()` | Returned status and transaction hash, where applicable | Funded wallet required |
+| Unshielded transfer | Explicit `createTransferTransaction` -> `signTransaction` -> `submitTransaction` with `type: 'unshielded'` | Confirmed transaction hash | Funded wallet/DUST required |
+| Shielded transfer | Explicit `createTransferTransaction` -> `signTransaction` -> `submitTransaction` with `type: 'shielded'` | Confirmed transaction hash | Funded wallet/DUST required |
+| Pending cleanup | `wallet.revertAllPending()` | Abandoned transfer can be reverted | Funded wallet/DUST required |
+| Passport C1 testnet deployment | Passport builds a real unsigned Compact deployment from the Dynamic wallet's shielded public keys, then calls `signTransaction` and `submitTransaction` | User-authorized Dynamic signer result, returned transaction hash, and on-chain contract verification | Ready for live testnet validation |
+
+## Required dashboard setup
+
+1. Enable Midnight under **Chains & Networks**.
+2. Enable embedded wallets and create them at sign-up.
+3. Enable **Private Key Exports** under **Embedded Wallets > Security**. Dynamic documents this as required for Midnight balance reads, signing, and transfers.
+4. Enable Discord and/or email sign-in and register local and deployed origins.
+
+The application must report the exact failed operation and environment rather
+than converting an unavailable wallet or rate-limit response into an empty
+wallet state.
+
+The C1 integration is deliberately testnet-only. Its current pilot contract
+owns device membership and permission records, not custody, recovery, aliasing,
+or cross-contract settlement.

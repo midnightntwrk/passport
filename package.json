@@ -1,0 +1,21 @@
+{
+  "name": "midnight-passport-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "sdk",
+    "examples/passport-demo"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @midnight-ntwrk/passport-sdk && npm run build --workspace passport-demo",
+    "test": "npm run test --workspace @midnight-ntwrk/passport-sdk",
+    "test:sdk": "npm run test --workspace @midnight-ntwrk/passport-sdk",
+    "test:c1": "npm run test:c1 --workspace passport-demo",
+    "demo": "npm run dev --workspace passport-demo"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

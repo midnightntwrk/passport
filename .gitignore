@@ -18,9 +18,12 @@ experiments/dynamic-midnight-sdk-validation/
 /target/
 **/target/
 *.rlib
+examples/passport-demo/.generated/
+examples/passport-demo/public/zk/
 
 # Node
 node_modules/
+dist/
 npm-debug.log
 yarn-error.log
 .npm/
@@ -41,6 +44,8 @@ yarn-error.log
 # Coverage / test output
 coverage/
 *.lcov
+playwright-report/
+test-results/
 
 # Python
 __pycache__/
