@@ -31,17 +31,17 @@ ecosystem; Passport integrates against that architecture via C25.
 
 | ID | Component | Description | Serves |
 |----|-----------|-------------|--------|
-| [**C1**](C1-account-custody-contract.md) | Account-custody contract | The on-chain object representing an account — holds device set, name binding, grants. Whether it also holds assets directly is contingent on C4. | P1 · P3 · P4 · P5 · P8 |
-| [**C2**](C2-name-service.md) | Name service | Name ↔ account binding plus resolution. Internal split between Registry (`name → owner`) and Resolver (`name → addresses`) is an alternative. | P2 · P8 · P10 |
+| [**C1**](C1-account-custody-contract.md) | Account-custody contract | The on-chain object representing an account — holds device set, name binding, grants, and (per C4's resolved choice) the user's Midnight-native assets. Drafted as two MIP building blocks: contract custody and multi-key authorisation. | P1 · P3 · P4 · P5 · P8 |
+| [**C2**](C2-name-service.md) | Name service | Name ↔ account binding plus resolution — decided: adopt the deployed upstream name service (MIP-0007); account names are free, first-come-first-served sub-domains of the Foundation-held `passport.night`. | P2 · P8 · P10 |
 | [**C3**](C3-did-surface.md) | DID surface | Interop with W3C DID standards — whether `alice.midnight` is itself the DID, or DID is a separate layer over Passport identity. **Workstream.** | P2 (tentative) |
 
 ### Asset custody and cryptographic operations
 
 | ID | Component | Description | Serves |
 |----|-----------|-------------|--------|
-| [**C4**](C4-asset-custody-model.md) | Asset custody model | The design choice of how user assets are held and authorised: contract-custody, address-custody, or hybrid. Upstream of all key / derivation decisions. **Workstream.** | P3 · P4 · P5 · P6 |
-| [**C5**](C5-signing-primitive.md) | Signing primitive | Schnorr-on-Jubjub for authorising chain operations. Whether keys are seed-derived or per-device-generated is contingent on C4. | P6 |
-| [**C6**](C6-proof-generation.md) | Proof generation | Client-side ZK proving — the user is the prover, the node is the verifier. No hosted prover holds user data. | P6 · P8 |
+| [**C4**](C4-asset-custody-model.md) | Asset custody model | How user assets are held and authorised — resolved: stateless contract custody, normative in the custody MIP draft, and exclusive (assets at rest live only in the account contract; Dust is the ledger-forced fee-path exception). Upstream of all key / derivation decisions. **Workstream — resolved.** | P3 · P4 · P5 · P6 |
+| [**C5**](C5-signing-primitive.md) | Signing primitive | Schnorr-on-Jubjub per device, verified in-circuit — set in stone by the account-authorisation MIP draft. Per-device keys, no derivation tree. | P6 |
+| [**C6**](C6-proof-generation.md) | Proof generation | Client-side ZK proving — decided: browser WASM is the promoted path, validated end-to-end in the account-custody prototype (proof server stopped, every proof in-tab). The Foundation's third-party provider is the bounded-trust hosted fallback. | P6 · P8 |
 | [**C7**](C7-witness-handling.md) | Witness handling | Passing key material into proof generation safely — the boundary where C5 / C6 interact with key non-exfiltration. | P6 |
 | [**C8**](C8-domain-separation-registry.md) | Domain-separation registry | Cross-cutting hash-prefix discipline — every `persistentHash` use site gets a domain prefix. Prerequisite to credentials, signing, and naming. | P6 · P9 |
 
@@ -49,7 +49,7 @@ ecosystem; Passport integrates against that architecture via C25.
 
 | ID | Component | Description | Serves |
 |----|-----------|-------------|--------|
-| [**C9**](C9-device-bound-authentication.md) | Device-bound authentication | How a device proves it is the user's device — passkey (WebAuthn) bound to the device's secure boundary. | P1 · P3 · P6 |
+| [**C9**](C9-device-bound-authentication.md) | Device-bound authentication | How a device proves it is the user's device — decided: WebAuthn passkeys in both custody models. PRF evaluation derives the on-device JubJub device key (decentralised path); the same passkey authenticates to the MPC service holding the JubJub threshold-DSA capability (managed path). | P1 · P3 · P6 |
 
 ### Authorisation and access control
 
@@ -63,9 +63,9 @@ ecosystem; Passport integrates against that architecture via C25.
 
 | ID | Component | Description | Serves |
 |----|-----------|-------------|--------|
-| [**C13**](C13-lost-device-flow.md) | Lost-device flow | The flow by which a user revokes a lost or compromised device while retaining access via others. | P3 · P4 |
-| [**C14**](C14-total-loss-recovery-flow.md) | Total-loss recovery flow | The flow by which a user recovers their account when all authorised devices are lost. | P1 · P5 · P6 |
-| [**C15**](C15-helper-protocol.md) | Helper protocol | The protocol recovery helpers run — interface between C14 and the people / services holding shares. Substitutable per P8. | P5 · P8 |
+| [**C13**](C13-lost-device-flow.md) | Lost-device flow | Decided: any surviving device revokes via the account-authorisation MIP's `remove_device` (1-of-n, last-device guard), with the epoch bump as the stronger fallback. Implemented in the prototype. | P3 · P4 |
+| [**C14**](C14-total-loss-recovery-flow.md) | Total-loss recovery flow | Decided: BUSS / ANARKey stateless guardians plus paper keys (EPRINT 2025/551), implemented in the prototype behind the recovery seam. The recovery-paths MIP specifies it next. | P1 · P5 · P6 |
+| [**C15**](C15-helper-protocol.md) | Helper protocol | The protocol recovery helpers run. The working candidate is the prototype's stateless-guardian BUSS wire format (shared across CLI and app); formalisation belongs to the recovery-paths MIP. Substitutable per P8. | P5 · P8 |
 
 ### Wallet state and storage
 
@@ -122,18 +122,21 @@ Every promise has at least one component serving it.
 
 ## Workstreams
 
-Five components carry live decisions whose alternatives have not yet been
-selected. Each workstream canvas frames the decision space — the question
-the canvas answers is "what are the alternatives and what would force a
-choice", not "what is the answer".
+Four components carry live decisions whose alternatives have not yet
+been selected; a fifth (C4) is resolved and retained here for the
+record. Each open workstream canvas frames the decision space — the
+question the canvas answers is "what are the alternatives and what
+would force a choice", not "what is the answer".
 
 - [**C3 — DID surface.**](C3-did-surface.md) Whether `alice.midnight` is
   the DID, whether DID is a separate identifier layer, and what DID method
   (if any) Passport defines.
-- [**C4 — Asset custody model.**](C4-asset-custody-model.md) Whether
-  assets live in the account-custody contract (C1), at chain-native
-  addresses, or hybrid. Constrained by the QSCI publicity trade-off for
-  shielded contract custody.
+- [**C4 — Asset custody model.**](C4-asset-custody-model.md)
+  **Resolved 2026/07.** Stateless contract custody: assets live in the
+  account contract with no coin material in public ledger state,
+  validated end-to-end and now normative in the custody MIP draft. The
+  QSCI publicity trade-off dissolved — the leak was a property of the
+  storage pattern, not the ledger.
 - [**C22 — Intent surface.**](C22-intent-surface.md) Reframed against the
   ledger `Intent` struct and the upstream PRD trade-intent layering. The
   question is no longer "do we have intents" but "what abstraction does

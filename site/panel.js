@@ -54,8 +54,9 @@
     const cat = categoryById[c.category];
     return `
       <div class="panel-head">
-        <div class="panel-kind">Component${c.workstream ? ' · open decision' : ''}${cat ? ' · ' + escapeHtml(cat.label) : ''}</div>
+        <div class="panel-kind">Component${c.status === 'specified' ? ' · specified' : c.status === 'decided' ? ' · decided' : c.workstream ? ' · open decision' : ''}${cat ? ' · ' + escapeHtml(cat.label) : ''}</div>
         <h3 class="panel-title"><span class="panel-id">${c.id}</span> ${escapeHtml(c.name)}</h3>
+        ${c.status_note ? `<p class="panel-status-${c.status === 'specified' ? 'done' : 'decided'}">${c.status === 'specified' ? '✓' : '●'} ${escapeHtml(c.status_note)}</p>` : ''}
       </div>
 
       <section class="panel-section">

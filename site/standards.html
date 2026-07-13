@@ -460,7 +460,7 @@
       <header class="section-head">
         <div class="section-kind">Pipeline</div>
         <h2>The MIP pipeline</h2>
-        <p>Sequenced by dependency. Every MIP carries a named external co-author from the start — that's what makes it portable across wallets rather than a Passport-shaped specification. STD-03 is a cryptographic prerequisite that ships before any MIP that hashes user state.</p>
+        <p>Sequenced by dependency. Every MIP carries a named external co-author from the start — that's what makes it portable across wallets rather than a Passport-shaped specification. STD-03 is a cryptographic prerequisite that ships before any MIP that hashes user state. A note on identifiers: four-digit ids (MIP-0003, MIP-0007) are upstream-assigned numbers; short ids (MIP-3A, MIP-4…) are workspace pipeline labels — our drafts carry the literal <code>mip-xxxx</code> filename until an upstream editor assigns a number at merge.</p>
       </header>
 
       <div class="mips" id="mipsList"></div>
@@ -563,7 +563,7 @@
         : m.kind === 'upstream' ? '<span class="mip-upstream-badge">Adopted upstream</span>'
         : '';
       const secondMeta = m.kind === 'upstream'
-        ? `<dt>Upstream</dt><dd><a href="${escapeHtml(m.upstream || '#')}" target="_blank" rel="noopener">MIP-0003 — review #129</a></dd>`
+        ? `<dt>Upstream</dt><dd><a href="${escapeHtml(m.upstream || '#')}" target="_blank" rel="noopener">${escapeHtml(m.upstream_label || m.id)}</a></dd>`
         : `<dt>Co-author target</dt><dd>${escapeHtml(m.co_author || '—')}</dd>`;
       return `
         <div class="mip-card" id="${m.id}">
