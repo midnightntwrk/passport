@@ -5,8 +5,9 @@
 //!   sign   — compute s = (r + c * sk) mod JUBJUB_R given (sk, challenge, r)
 //!
 //! The sign command is a pure scalar arithmetic tool. It does NOT compute
-//! the challenge hash (that uses Midnight's Poseidon, handled by TypeScript
-//! via the contract's pureCircuits). It does NOT generate the nonce r
+//! the challenge hash (that uses Midnight's `persistentHash`, SHA-256,
+//! handled by TypeScript via the contract's pureCircuits). It does NOT
+//! generate the nonce r
 //! (TypeScript generates r and computes R = r*G via pureCircuits to ensure
 //! curve parameter match).
 //!

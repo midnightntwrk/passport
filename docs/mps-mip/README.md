@@ -26,9 +26,13 @@ each independently reviewable, each usable without the others:
    unshielded color) and shielded values; authorisation abstracted to a
    single seam; validated by the stateless-custody and account-custody
    experiments.
-2. **Account and authorisation** (not yet drafted): credential schemes,
-   device lifecycle, revocation epochs, and scoped grants; instantiates
-   the seam.
+2. **Account and authorisation**
+   (`mips/mip-xxxx-account-authorisation.md`): the multi-key device
+   set, lifecycle, and revocation epochs, with the seam instantiated
+   by in-circuit Schnorr verification over JubJub (FROST-compatible,
+   native to the proof system, and separating approval from proving);
+   validated by the redjubjub-wallet experiments. Scoped grants are
+   deferred to a successor extension.
 3. **Recovery paths** (not yet drafted): total-loss recovery behind the
    seam; the prototype realises this with BUSS, and the standard stays
    scheme-agnostic at the contract surface.
