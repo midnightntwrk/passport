@@ -1,0 +1,137 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Contract-to-contract direct shielded transfer — experiment contract.
+//
+// Question under test: can custody contract A pay custody contract B
+// DIRECTLY — A's send circuit emitting a shielded output whose recipient is
+// B's contract address, claimed by B's deposit circuit in the SAME
+// client-composed transaction — on the current stack, without Compact
+// cross-contract calls?
+//
+// The C4 canvas records shielded contract ↔ contract as UNTESTED, plausibly
+// blocked by the same-tx pairing requirement (the SDK gap that blocked
+// Night U2 in contract-custody-feasibility). MIP-0012 section 6.6 forbids
+// direct payment for privacy (the transaction links both contract
+// addresses) and mandates one-hop user-key routing. THIS EXPERIMENT
+// ACCEPTS THE LINKING by explicit decision: the probe is whether the
+// ledger and the toolchain admit the direct transfer at all, and what an
+// observer sees when they do.
+//
+// The custody design is the stateless one validated by
+// stateless-shielded-custody (no QSCI in public state; encrypted inbox for
+// discovery; witness-supplied spends). Both parties A and B are instances
+// of this same contract.
+//
+// No authentication — device auth is proven elsewhere
+// (account-custody-prototype) and would only add variables here.
+// ---------------------------------------------------------------------------
+
+// ── Witness (C7): the wallet-local coin store ───────────────────────────────
+
+witness held_coin(color: Bytes<32>): QualifiedShieldedCoinInfo;
+
+// ── Public ledger state ─────────────────────────────────────────────────────
+
+export ledger round: Uint<64>;
+// Bumped by every circuit; gives tests a cheap post-condition.
+
+export ledger enc_key: Bytes<32>;
+// The account's advertised encryption public key (X25519 in the runner).
+// Depositors encrypt the coin info to this key.
+
+export ledger inbox: Map<Uint<64>, Bytes<160>>;
+export ledger inbox_count: Uint<64>;
+// Encrypted coin-info blobs, append-only, keyed by ordinal. Discovery and
+// recovery channel; opaque to observers.
+
+constructor(encryption_key: Bytes<32>) {
+  round       = 0 as Uint<64>;
+  inbox_count = 0 as Uint<64>;
+  enc_key     = disclose(encryption_key);
+}
+
+circuit bump(): [] {
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}
+
+// ── Deposit / claim ─────────────────────────────────────────────────────────
+
+// Claims a coin addressed to this contract and persists only the encrypted
+// blob. In the wallet-deposit flow the depositor builds the Zswap output in
+// the same transaction. In the DIRECT flow under test, the output is built
+// by contract A's spend_to_contract call in the same composed transaction,
+// and the coin argument is the `sent` coin A's circuit returned (its nonce
+// is the deterministic nonce_evolve of A's input coin, so the composing
+// client knows it before proving).
+export circuit deposit_stateless(coin: ShieldedCoinInfo, blob: Bytes<160>): [] {
+  receiveShielded(disclose(coin));
+  inbox.insert(inbox_count, disclose(blob));
+  inbox_count = ((inbox_count + (1 as Uint<64>)) as Uint<64>);
+  bump();
+}
+
+// Append an encrypted coin-info blob after the fact (change coins, whose
+// nonce only exists once the spend ran).
+export circuit append_backup(blob: Bytes<160>): [] {
+  inbox.insert(inbox_count, disclose(blob));
+  inbox_count = ((inbox_count + (1 as Uint<64>)) as Uint<64>);
+  bump();
+}
+
+// ── Spend to a user key (the one-hop leg; also P3's B-side spend) ───────────
+
+export circuit spend_stateless(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  const result = sendShielded(
+    disclose(coin),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  bump();
+  if (disclose(result.change.is_some)) {
+    return some<ShieldedCoinInfo>(disclose(result.change.value));
+  }
+  return none<ShieldedCoinInfo>();
+}
+
+// ── Spend to a CONTRACT (the design under test) ─────────────────────────────
+
+// Sends `amount` of `color` to another contract's address. Returns
+// [sent, change]:
+//   - `sent` is the recipient's coin (stdlib SendResult.sent). Its nonce is
+//     nonce_evolve(input.nonce), deterministic, so the composing client can
+//     also precompute it; returning it makes the pairing explicit and
+//     testable. The recipient contract must claim exactly this coin
+//     (receiveShielded) in the same transaction, per the ledger's
+//     contract-recipient rule.
+//   - `change` is this contract's own surviving change coin (live and
+//     self-owned as sendShielded emitted it; see stateless-shielded-custody
+//     W3 and OpenZeppelin/compact-contracts#661).
+//
+// The target address is disclosed by construction: the output's recipient
+// is a cleartext contract address in the Zswap offer. That is the accepted
+// linking cost this experiment measures (P3).
+export circuit spend_to_contract(
+  target:    ContractAddress,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  const result = sendShielded(
+    disclose(coin),
+    right<ZswapCoinPublicKey, ContractAddress>(disclose(target)),
+    disclose(amount),
+  );
+  bump();
+  if (disclose(result.change.is_some)) {
+    return [disclose(result.sent), some<ShieldedCoinInfo>(disclose(result.change.value))];
+  }
+  return [disclose(result.sent), none<ShieldedCoinInfo>()];
+}

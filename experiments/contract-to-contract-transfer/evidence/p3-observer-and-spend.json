@@ -1,0 +1,80 @@
+{
+  "testId": "P3",
+  "name": "observer-and-spend",
+  "description": "Observer audit of the composed tx + B-side spend of the received coin",
+  "verdict": "PASS",
+  "note": "B spent the directly-received coin (tx 0068a01f069578eb3bf1873acc9cf892776594705d4aa0bf5487d36d898e8456ef). Observer surface: both contract addresses VISIBLE together (the accepted linking, as predicted); value/color/nonce hidden.",
+  "details": {
+    "composedTxId": "007c827b539afd00153f624c1f380d510cbad7d8cbc40562d32b48007fae415ecc",
+    "observer": {
+      "surfaces": {
+        "contractAddressA": true,
+        "contractAddressB": true,
+        "transferColor": false,
+        "sentNonce": false,
+        "transferValueLE16": false
+      },
+      "soupBytes": 93175,
+      "txSummary": {
+        "id": 72,
+        "hash": "b101635a0345696f5dcda9e916e7ed364b1dae5b20994710d8c82f2f39e67819",
+        "raw": "6d69646e696768743a7472616e73616374696f6e5b76395d287369676e617475…(57840)",
+        "startIndex": 46,
+        "endIndex": 48,
+        "identifiers": [
+          "00737dc074c2415294c1dc07aaae782b561b138e9bca7d3e144ae18ed974851783",
+          "00a52a9fd1beb1c26148f7f6c96547f8cf78b0613e36e938cc026765df97576b0b",
+          "00822d4c3ee8b6889e88de9b435e615fd93c37343983cc4d2e50e92f77f694a237",
+          "00124ac8d9d0db0f8f8d6ebff492a9ddeaf133d11f456a8a06156cb15e1541a415",
+          "0095b905690bddc51b54c0d98c2a07d70610324568257d32da64ebe54f83e75dec",
+          "007c827b539afd00153f624c1f380d510cbad7d8cbc40562d32b48007fae415ecc"
+        ],
+        "transactionResult": {
+          "status": "SUCCESS"
+        },
+        "contractActions": [
+          {
+            "address": "ad7b33b400e3aa7a70e4eeab0b321ac6685fe8087514de3a6dac23b6defaf1c4",
+            "state": "6d69646e696768743a636f6e74726163742d73746174655b76365d3ab4009060…(17338)",
+            "entryPoint": "deposit_stateless"
+          },
+          {
+            "address": "ca11b869ad78e76d92bcc7ae6c576b62b1d7ffb8e0466ac626531d3c470df2bf",
+            "state": "6d69646e696768743a636f6e74726163742d73746174655b76365d3abc000802…(17354)",
+            "entryPoint": "spend_to_contract"
+          }
+        ]
+      }
+    },
+    "decryptedInbox": {
+      "value": "150",
+      "colorMatches": true
+    },
+    "mtCandidates": [
+      "46",
+      "47"
+    ],
+    "txPosition": {
+      "start": 46,
+      "end": 48,
+      "status": "SUCCESS"
+    },
+    "spendAttempts": [
+      {
+        "mtIndex": "46",
+        "outcome": "failed: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/pr"
+      },
+      {
+        "mtIndex": "47",
+        "outcome": "ACCEPTED tx=0068a01f069578eb3bf1873acc9cf892776594705d4aa0bf5487d36d898e8456ef"
+      }
+    ],
+    "spendTx": "0068a01f069578eb3bf1873acc9cf892776594705d4aa0bf5487d36d898e8456ef"
+  },
+  "ranAt": "2026-07-16T15:16:55.464Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

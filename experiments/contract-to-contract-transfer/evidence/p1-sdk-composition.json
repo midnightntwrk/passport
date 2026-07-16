@@ -1,0 +1,115 @@
+{
+  "testId": "P1",
+  "name": "sdk-composition",
+  "description": "Composition surfaces (build-without-submit + Transaction.merge) and the un-composed direct-send control",
+  "verdict": "PASS",
+  "note": "Build candidates: createCallTxOptions, createCircuitCallTxInterface, createCircuitMaintenanceTxInterface, createCircuitMaintenanceTxInterfaces, createContractMaintenanceTxInterface, createUnprovenCallTx, createUnprovenCallTxFromInitialStates, createUnprovenDeployTx, createUnprovenDeployTxFromVerifierKeys; merge present. Control accepted=false.",
+  "details": {
+    "contractsSurface": [
+      "CallTxFailedError",
+      "DeployTxFailedError",
+      "IncompleteCallTxPrivateStateConfig",
+      "InsertVerifierKeyTxFailedError",
+      "RemoveVerifierKeyTxFailedError",
+      "ReplaceMaintenanceAuthorityTxFailedError",
+      "TxFailedError",
+      "createCallTxOptions",
+      "createCircuitCallTxInterface",
+      "createCircuitMaintenanceTxInterface",
+      "createCircuitMaintenanceTxInterfaces",
+      "createContractMaintenanceTxInterface",
+      "createUnprovenCallTx",
+      "createUnprovenCallTxFromInitialStates",
+      "createUnprovenDeployTx",
+      "createUnprovenDeployTxFromVerifierKeys",
+      "submitCallTx",
+      "submitCallTxAsync",
+      "submitDeployTx",
+      "submitInsertVerifierKeyTx",
+      "submitRemoveVerifierKeyTx",
+      "submitReplaceAuthorityTx",
+      "submitTx",
+      "submitTxAsync"
+    ],
+    "buildCandidates": [
+      "createCallTxOptions",
+      "createCircuitCallTxInterface",
+      "createCircuitMaintenanceTxInterface",
+      "createCircuitMaintenanceTxInterfaces",
+      "createContractMaintenanceTxInterface",
+      "createUnprovenCallTx",
+      "createUnprovenCallTxFromInitialStates",
+      "createUnprovenDeployTx",
+      "createUnprovenDeployTxFromVerifierKeys"
+    ],
+    "transactionProto": [
+      "constructor",
+      "__destroy_into_raw",
+      "free",
+      "addIntent",
+      "imbalances",
+      "mockProve",
+      "identifiers",
+      "intents",
+      "wellFormed",
+      "eraseProofs",
+      "fallibleOffer",
+      "addZswapOffer",
+      "eraseSignatures",
+      "feesWithMargin",
+      "guaranteedOffer",
+      "transactionHash",
+      "bindingRandomness",
+      "bind",
+      "cost",
+      "fees",
+      "merge",
+      "prove",
+      "rewards",
+      "addCalls",
+      "serialize",
+      "toString"
+    ],
+    "transactionStatics": [
+      "length",
+      "name",
+      "prototype",
+      "__wrap",
+      "fromParts",
+      "deserialize",
+      "fromRewards",
+      "fromPartsRandomized"
+    ],
+    "hasMerge": true,
+    "custodyA": "2bca956c9163beb0c8e387dd75d14948d219b58868873c6911bf698ffb496b12",
+    "custodyB": "b95bbebcbea98651b256fa46b2b9d8d5821660643c5dd2c7f63e4128ff5c9188",
+    "fundedColor": "3c95840d512511d3c81d098fd57aa7a33c8aca8bae3b619d18d276411f7397fc",
+    "control": {
+      "accepted": false,
+      "error": {
+        "name": "Error",
+        "message": "Unexpected error submitting scoped transaction '<unnamed>': (FiberFailure) SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@midnight-ntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {\n  [cause]: SubmissionError: Transaction submission failed\n      at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@midnight-ntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:86:27\n      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {\n    [cause]: RpcError: 1010: Invalid Transaction: Custom error: 186\n        at checkError (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@polkadot/rpc-provider/coder/index.js:19:15)\n        at RpcCoder.decodeResponse (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@polkadot/rpc-provider/coder/index.js:35:9)\n        at #onSocketMessageResult (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@polkadot/rpc-provider/ws/index.js:429:40)\n        at #onSocketMessage (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@polkadot/rpc-provider/ws/index.js:418:42)\n        at [nodejs.internal.kHybridDispatch] (node:internal/event_target:843:20)\n        at WebSocket.dispatchEvent (node:internal/event_target:776:26)\n        at fireEvent (node:internal/deps/undici/undici:11883:14)\n        at websocketMessageReceived (node:internal/deps/undici/undici:11905:7)\n        at ByteParser.run (node:internal/deps/undici/undici:12573:19)\n        at ByteParser._write (node:internal/deps/undici/undici:12466:14)\n  }\n}",
+        "stack": "Error: Unexpected error submitting scoped transaction '<unnamed>': (FiberFailure) SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@midnight-ntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {\n  [cause]: SubmissionError: Transaction submission failed\n      at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@midnight-ntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:86:27\n      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {\n    [cause]: RpcError: 1010: Invalid Transaction: Custom error: 186\n        at checkError (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@polkadot/rpc-provider/coder/index.js:19:15)",
+        "causeChain": [
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "Unexpected error submitting scoped transaction '<unnamed>': (FiberFailure) SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@midnight-ntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/effect/src/internal/fiberRuntime.ts:918:14) {\n  [cause]: SubmissionError: Transaction submission failed\n      at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@midnight-ntwrk/wallet-sdk-node-client/dist/effect/PolkadotNodeClient.js:86:27\n      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {\n    [cause]: RpcError: 1010: Invalid Transaction: Custom error: 186\n        at checkError (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@polkadot/rpc-provider/coder/index.js:19:15)\n        at RpcCoder.decodeResponse (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@polkadot/rpc-provider/coder/index.js:35:9)\n        at #onSocketMessageResult (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@polkadot/rpc-provider/ws/index.js:429:40)\n        at #onSocketMessage (file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/contract-to-contract-transfer/node_modules/@polkadot/rpc-provider/ws/index.js:418:42)\n        at [nodejs.internal.kHybridDispatch] (node:internal/event_target:843:20)\n        at WebSocket.dispatchEvent (node:internal/event_target:776:26)\n        at fireEvent (node:internal/deps/undici/undici:11883:14)\n        at websocketMessageReceived (node:internal/deps/undici/undici:11905:7)\n        at ByteParser.run (node:internal/deps/undici/undici:12573:19)\n        at ByteParser._write (node:internal/deps/undici/undici:12466:14)\n  }\n}"
+          },
+          {
+            "name": "(FiberFailure) SubmissionError",
+            "tag": null,
+            "message": "Transaction submission error"
+          }
+        ]
+      },
+      "note": "Expected rejection: the un-composed direct send fails. Stage and error recorded verbatim as the baseline P2 must beat."
+    }
+  },
+  "ranAt": "2026-07-16T14:48:54.112Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

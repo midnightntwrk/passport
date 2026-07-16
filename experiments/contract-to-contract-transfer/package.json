@@ -1,0 +1,44 @@
+{
+  "name": "contract-to-contract-transfer",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Empirical probe: can custody contract A pay custody contract B directly, in one client-composed two-call transaction, on the current stack? Accepts the A-B linking; measures it.",
+  "scripts": {
+    "compile": "compact compile contracts/c2c.compact contracts/managed/c2c && compact compile contracts/faucet.compact contracts/managed/faucet",
+    "build": "tsc",
+    "test:p1": "tsx src/tests/p1-sdk-composition.ts",
+    "test:p2": "tsx src/tests/p2-composed-transfer.ts",
+    "test:p3": "tsx src/tests/p3-observer-and-spend.ts",
+    "compose-findings": "tsx src/compose-findings.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-js": "^2.0.0",
+    "@midnight-ntwrk/compact-runtime": "^0.16.0",
+    "@midnight-ntwrk/ledger-v8": "^8.1.0",
+    "@midnight-ntwrk/midnight-js-contracts": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-network-id": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-types": "^4.1.1",
+    "@midnight-ntwrk/wallet-api": "^5.0.0",
+    "@midnight-ntwrk/wallet-sdk-address-format": "^3.1.1",
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": "^4.0.0",
+    "@midnight-ntwrk/wallet-sdk-facade": "^4.0.1",
+    "@midnight-ntwrk/wallet-sdk-hd": "^3.0.2",
+    "@midnight-ntwrk/wallet-sdk-shielded": "^3.0.0",
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "^3.0.0",
+    "@midnight-ntwrk/zswap": "^4.0.0",
+    "bip39": "^3.1.0",
+    "rxjs": "^7.8.2",
+    "ws": "^8.19.0"
+  }
+}

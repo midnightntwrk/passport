@@ -1,0 +1,16 @@
+{
+  "composedTxId": "007c827b539afd00153f624c1f380d510cbad7d8cbc40562d32b48007fae415ecc",
+  "custodyA": "ca11b869ad78e76d92bcc7ae6c576b62b1d7ffb8e0466ac626531d3c470df2bf",
+  "custodyB": "ad7b33b400e3aa7a70e4eeab0b321ac6685fe8087514de3a6dac23b6defaf1c4",
+  "color": "5d0063d70548f926d3e2a6c3833a0ec8007f56d6d7da72a910d0aecf4fe2d743",
+  "sent": {
+    "nonce": "27b65c291a7ff773b89bd2f53a970a4b04b33c5b95c155e96e89d817d4620900",
+    "color": "5d0063d70548f926d3e2a6c3833a0ec8007f56d6d7da72a910d0aecf4fe2d743",
+    "value": "150"
+  },
+  "encKeysB": {
+    "publicKeyHex": "ae4c1879684a0eb5dcb6e651dc71b790b792e37d2439411f5137ac67b339fc58",
+    "secretKeyHex": "8000789e10181ed724bf7938f710d47f9385fd09a591430e5bd8bc0e48cc7975"
+  },
+  "writtenAt": "2026-07-16T15:15:54.841Z"
+}
