@@ -16,7 +16,7 @@
 
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 
-import { ledger, pureCircuits, type Ledger, type ShieldedCoin, type QualifiedCoin } from './contract.js';
+import { ledger, pureCircuits, type Ledger, type ShieldedCoin, type QualifiedCoin, type JubjubPoint } from './contract.js';
 import {
   emptyCoinStore,
   withCoin,
@@ -106,6 +106,29 @@ export class CustodyAccount {
     initialDevice: Device,
     encKeys: EncKeyPair,
   ): Promise<CustodyAccount> {
+    const dormant = await CustodyAccount.deployDormant(providers, compiledContract, initialDevice, encKeys);
+    await dormant.activate(initialDevice.pk, dormant.salt);
+    return dormant.finish();
+  }
+
+  /**
+   * Deploy without activating (MIP-0013 §3 bootstrap). The account is
+   * dormant — empty device set, boot commitment stored — until
+   * `activate` installs the initial entry; `finish` then wraps the
+   * handle. Split out so the bootstrap conformance probes (test 10) can
+   * exercise the pre-activation faults.
+   */
+  static async deployDormant(
+    providers: any,
+    compiledContract: any,
+    initialDevice: Device,
+    encKeys: EncKeyPair,
+  ): Promise<{
+    address: string;
+    salt: Uint8Array;
+    activate: (pk: typeof initialDevice.pk, salt: Uint8Array) => Promise<unknown>;
+    finish: () => CustodyAccount;
+  }> {
     const privateStateId = freshPrivateStateId();
     const initialPrivateState = emptyCoinStore(encKeys.secretKey);
     // kernel.self() is not available in the constructor, so the initial
@@ -126,10 +149,22 @@ export class CustodyAccount {
     // deployContract does not persist initialPrivateState on every provider
     // version; seed it explicitly so witnesses see it (c2c experiment note).
     await providers.privateStateProvider.set(privateStateId, initialPrivateState);
-    await submitWithDustRetry('activate_initial_device', () => (deployed as any).callTx.activate_initial_device(initialDevice.pk, salt));
-    const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, deployed);
-    account.counters.set(pkKey(initialDevice.pk), 0n);
-    return account;
+    return {
+      address,
+      salt,
+      activate: (pk, s) =>
+        submitWithDustRetry('activate_initial_device', () => (deployed as any).callTx.activate_initial_device(pk, s)),
+      finish: () => {
+        const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, deployed);
+        account.counters.set(pkKey(initialDevice.pk), 0n);
+        return account;
+      },
+    };
+  }
+
+  /** Low-level activation call against a live account (bootstrap probes). */
+  activateInitialDevice(pk: JubjubPoint, salt: Uint8Array): Promise<unknown> {
+    return submitWithDustRetry('activate_initial_device', () => this.handle.callTx.activate_initial_device(pk, salt));
   }
 
   static async connect(

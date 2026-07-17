@@ -1,5 +1,5 @@
-// MIP-0013 conformance — tests 1 (happy path), 2 (rejection matrix), and
-// 5 (deposit independence).
+// MIP-0013 conformance — tests 1 (happy path), 2 (rejection matrix),
+// 5 (deposit independence), and 10 (bootstrap).
 //
 //   1. A gated call with a valid signature from an active device executes;
 //      auth_nonce and round advance (AUTH-1, AUTH-2).
@@ -11,14 +11,22 @@
 //      bumps device_epoch yet).
 //   3. A permissionless deposit lands between signing and submission; the
 //      pending authorisation still executes (AUTH-8).
+//   4. Bootstrap (§3): a second activation aborts; activation with
+//      arguments not matching the boot commitment aborts; the committed
+//      (pk, salt) activates and installs the entry at epoch 0, counter 0.
 //
 // Funding uses the unshielded surface (Night from the genesis wallet), so
 // the suite exercises withdraw_unshielded as its gated call.
 
+import { randomBytes } from 'node:crypto';
+
 import { runScenario, step, waitForLedger, sleep } from './runner.js';
 import { writeEvidence, serialiseError } from './evidence.js';
 import { standardSetup, expectAbort } from './flow.js';
+import { compiledAccountContract } from '../node/setup.js';
 import { userAddressBytes } from '../node/wallet.js';
+import { CustodyAccount } from '../wallet/account.js';
+import { generateEncKeyPair } from '../wallet/inbox.js';
 import { challenges, Device, type Authorisation } from '../wallet/signer.js';
 
 const NIGHT = new Uint8Array(32); // the all-zero color
@@ -173,12 +181,53 @@ await runScenario('auth-conformance', async () => {
   );
   console.log('  ✓ deposit did not invalidate the pending authorisation (AUTH-8)');
 
+  // ── Test 10: bootstrap (MIP-0013 §3) ──────────────────────────────────────
+  //
+  // The active account rejects a second activation, and a dormant account
+  // rejects activations whose arguments do not match the boot commitment;
+  // the committed (pk, salt) then activates and installs the entry at
+  // epoch 0, use counter 0. The wrong-commitment probes need a dormant
+  // account: on an active one assert(!booted) fires first and would mask
+  // the commitment check.
+
+  step('test 10: bootstrap — double activation and wrong commitment abort');
+  const bootstrap: Record<string, string> = {};
+
+  bootstrap.secondActivation = await expectAbort('second activation on an active account', () =>
+    s.account.activateInitialDevice(s.device.pk, randomBytes(32)));
+
+  const device2 = Device.generate();
+  const dormant = await CustodyAccount.deployDormant(
+    s.ctx.providers, compiledAccountContract(), device2, generateEncKeyPair(),
+  );
+  console.log(`  dormant account @ ${dormant.address}`);
+
+  const wrongSalt = randomBytes(32);
+  bootstrap.wrongSalt = await expectAbort('activation with a salt not matching the commitment', () =>
+    dormant.activate(device2.pk, wrongSalt));
+  bootstrap.wrongKey = await expectAbort('activation with a substituted device key', () =>
+    dormant.activate(Device.generate().pk, dormant.salt));
+
+  await dormant.activate(device2.pk, dormant.salt);
+  const account2 = dormant.finish();
+  const booted = await waitForLedger(
+    () => account2.ledgerState(),
+    'dormant account activated with the committed (pk, salt)',
+    (l) => l.booted === true && l.device_count === 1n,
+  );
+  const entry0 = device2.entryAt(account2.addressBytes, booted.device_epoch, 0n);
+  if (!booted.devices.member(entry0)) {
+    throw new Error('activation did not install the entry at epoch 0, use counter 0');
+  }
+  console.log('  ✓ committed (pk, salt) activated; entry at epoch 0, counter 0 installed');
+  details.bootstrap = bootstrap;
+
   writeEvidence({
-    testId: 'AUTH-1-2-5',
+    testId: 'AUTH-1-2-5-10',
     name: 'auth-conformance',
-    description: 'MIP-0013 happy path, rejection matrix, deposit independence',
+    description: 'MIP-0013 happy path, rejection matrix, deposit independence, bootstrap',
     verdict: 'PASS',
-    note: 'Gated call executes with a valid device signature; every single-fault variant aborts with no state change; a permissionless deposit between signing and submission does not invalidate the pending authorisation.',
+    note: 'Gated call executes with a valid device signature; every single-fault variant aborts with no state change; a permissionless deposit between signing and submission does not invalidate the pending authorisation; double activation and commitment-mismatched activation abort, and the committed (pk, salt) installs the initial entry.',
     details,
   });
 });

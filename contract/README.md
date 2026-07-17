@@ -57,7 +57,7 @@ Each node suite writes a JSON evidence file under `evidence/`.
 | Suite | MIP-0012 Testing | MIP-0013 Testing | Invariants exercised |
 |---|---|---|---|
 | `unit-offline` | — (client halves of §5.2–5.3, §6.4) | — | AUTH-3, AUTH-9, AUTH-10 at the hash level; S10 non-vacuity |
-| `auth-conformance` | — | 1, 2, 5 | AUTH-1, AUTH-2, AUTH-3, AUTH-8, AUTH-9 (wrong-counter fault), INV-7 |
+| `auth-conformance` | — | 1, 2, 5, 10 | AUTH-1, AUTH-2, AUTH-3, AUTH-8, AUTH-9 (wrong-counter fault), INV-7, §3 bootstrap |
 | `auth-lifecycle` | — | 6, 9 | AUTH-4, AUTH-5, AUTH-7, AUTH-9 (entry roll observed) |
 | `auth-replay` | — | 3, 4 | AUTH-3 (address and circuit binding) |
 | `auth-crossimpl` + `crossimpl-offline` | — | 7 | AUTH-4 (approval/proving separation) |
@@ -103,8 +103,13 @@ To be folded back into the MIP texts:
    real entry at use counter 0 and burns the commitment. Deterministic in
    the committed key (no front-running); the fresh per-account salt keeps
    pre-activation state free of cross-account-stable device values. The
-   MIP needs either this bootstrap pattern or a toolchain guarantee that
-   the constructor sees the final address.
+   deploy-time entry is unimplementable in principle, not merely on the
+   current toolchain: the contract address is derived from the deploy
+   transaction's content, so no deploy-time code can know it. Proposed
+   upstream as
+   [midnight-improvement-proposals#250](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/250),
+   which makes this bootstrap normative and adds conformance test 10
+   (exercised by the auth-conformance suite).
 3. **MIP-0012 §6.3 direct-transfer return.** The contract-recipient
    circuit must return the **sent** coin as well as the change: the
    composing client needs its description (the deterministic nonce
