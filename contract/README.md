@@ -133,5 +133,7 @@ To be folded back into the MIP texts:
 - The signer needs only the contract's exported pure circuits (or an
   independent `persistentHash` implementation — see `signer-rs/`); proof
   generation consumes the signature and never the device key (AUTH-4).
-- `signer-rs` depends on the ledger workspace clone at
-  `../../tmp/midnight-ledger` for the field-aligned encoding crates.
+- `signer-rs` uses the published ledger crates (`midnight-base-crypto`,
+  `midnight-transient-crypto`, `midnight-curves`) for the field-aligned
+  encoding and curve arithmetic; it is self-contained and builds with a
+  plain `cargo build`.

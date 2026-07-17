@@ -6,11 +6,11 @@ license = "Apache-2.0"
 description = "Independent Rust signer for the MIP-0013 account authorisation scheme (conformance test 7). No Midnight TypeScript, WASM, or npm dependency."
 
 [dependencies]
-# Midnight ledger crates (path deps from the workspace's ledger clone) —
-# used ONLY for the field-aligned binary encoding (fab) and the persistent
-# hash, i.e. the fixed public definition of the challenge function.
-midnight-base-crypto = { path = "../../tmp/midnight-ledger/base-crypto" }
-midnight-transient-crypto = { path = "../../tmp/midnight-ledger/transient-crypto" }
+# Midnight ledger crates — used ONLY for the field-aligned binary encoding
+# (fab) and the persistent hash, i.e. the fixed public definition of the
+# challenge function.
+midnight-base-crypto = "1.0.0"
+midnight-transient-crypto = "2.1.0"
 
 # Curve arithmetic (JubJub over BLS12-381, the ledger's own curve crate).
 midnight-curves = "0.2.0"
