@@ -3,20 +3,20 @@
   "name": "auth-crossimpl",
   "description": "MIP-0013 cross-implementation signing: Rust approver, TypeScript prover",
   "verdict": "PASS",
-  "txHash": "00c1d1b2ee7b72c4d540e02fc495af30bf2f89139060fde8b11aebbfc39b376317",
+  "txHash": "00a4e01d128d49bf0d66f04dfb1734752525e00c4c0210650d11388f540ddcbdd6",
   "note": "A withdrawal authorised by the independent Rust signer (ledger crates only, no Midnight TS stack) was accepted by the deployed reference contract; the device key never left the Rust process (AUTH-4).",
   "details": {
-    "account": "a554909a45e22d97ce6e65367db3764222dc14472e707c82f65a258deaf55ddf",
+    "account": "ae742fb608da49981bff7b8d6e988181d5140433d469e12d6287f5c09140827d",
     "signer": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/contract/signer-rs/target/debug/account-custody-signer",
     "rustPk": {
-      "x": "0x2eb59981f68723290f1665ec94b3a609e62e229252e4c2debced973677531152",
-      "y": "0x72c29747370ca644739011cbfef67fb0aaee54a11aa9862e1db1be45b3bcacc6"
+      "x": "0x31ce41dfda1818fc110707299a1ce1142e9130c11a49d0394eafef97f2c00dc6",
+      "y": "0x1276ee1d9c830e95f1f20166a29f5f916cfc2f6011f9ec2516c7d0766defea06"
     },
-    "grindAttempts": 4,
-    "challenge": "742ff73ae468dd82c1e1ecea9b5c1a1a2670ddcf3ec5c24b92c3510dd90dea0a",
-    "withdrawTx": "00c1d1b2ee7b72c4d540e02fc495af30bf2f89139060fde8b11aebbfc39b376317"
+    "grindAttempts": 5,
+    "challenge": "ee70de75ce149db0c5dc5c0bef5f3b246b1c8c9b8a80a3e17858293c172f4501",
+    "withdrawTx": "00a4e01d128d49bf0d66f04dfb1734752525e00c4c0210650d11388f540ddcbdd6"
   },
-  "ranAt": "2026-07-17T13:01:38.669Z",
+  "ranAt": "2026-07-17T15:59:50.687Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

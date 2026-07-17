@@ -161,7 +161,10 @@ To be folded back into the MIP texts:
   `NotNormalized`). A rejected submission changes no state, so the client
   retries with the same authorisation (`submitWithDustRetry`). On an aged
   local chain the lag grows unboundedly; reset the localnet when suites
-  start failing at submission.
+  start failing at submission. A stopped stack ages the same way: dust
+  decays against wall-clock time, and on resume the node rejects the
+  wallet's transactions with `Malformed(BalanceCheckOverspend)` (custom
+  error 138) — same remedy, reset the chain.
 - **Zero-effect calls can hang the wallet SDK**: a circuit call that
   changes no public state has been observed to never resolve its
   finalisation watch. Avoid on-chain calls for pure derivations; compute

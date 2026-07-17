@@ -47,11 +47,12 @@ import CompactStandardLibrary;
 //       §8, which awaits the recovery-paths MIP — no recovery circuit is
 //       exposed here yet.
 //
-// Deviation from the MIP text, to be folded back as an erratum:
-//   - Every per-circuit tag "midnight:account:auth:v1:<circuit-name>"
-//     exceeds 32 bytes, so this implementation uniformly takes the hashed
-//     arm of §5.1's "zero-padded or hashed to 32 bytes":
-//     DST = persistentHash of the tag string zero-padded to 64 bytes.
+// DST construction (§5.1 as amended by midnight-improvement-proposals#249):
+//   every per-circuit DST is derived unconditionally as
+//   persistentHash<[Bytes<64>]> of the ASCII tag zero-padded to 64 bytes,
+//   regardless of the tag's length. The original "zero-padded or hashed to
+//   32 bytes" wording specified neither the arm selection nor the hash
+//   construction; #249 codifies the derivation used here.
 //
 // Exported pure circuits mirror every challenge construction so that
 // signers (TypeScript, Rust, HSM profiles) can reproduce the exact
@@ -112,16 +113,17 @@ export ledger auth_nonce: Uint<64>;
 
 export ledger boot: Bytes<32>;
 export ledger booted: Boolean;
-// Deploy-time bootstrap. MIP-0013 §3 deploys the account with the initial
-// device's address-bound entry already in the set, but kernel.self()
-// evaluates to the ZERO address inside a constructor on the current
-// toolchain, so that entry cannot be computed at deploy time (an
-// implementability finding to fold back into the MIP). Instead the
-// constructor stores a salted boot commitment H(DST_BOOT, salt, pk); the
-// permissionless activate_initial_device circuit recomputes it, inserts
-// the real entry at use counter 0, and burns the commitment. Only the
-// committed key can activate (no race); the salt is fresh per account, so
-// pre-activation state carries no cross-account-stable device value.
+// Deploy-time bootstrap (MIP-0013 §3 as amended by
+// midnight-improvement-proposals#250). The initial device's address-bound
+// entry cannot be computed at deploy time in principle: the contract
+// address is derived from the deploy transaction's content, so no
+// deploy-time code can know it, and kernel.self() evaluates to the ZERO
+// address inside a constructor. The constructor therefore stores a salted
+// boot commitment H(DST_BOOT, salt, pk); the permissionless
+// activate_initial_device circuit recomputes it, inserts the real entry at
+// use counter 0, and burns the commitment. Only the committed key can
+// activate (no race); the salt is fresh per account, so pre-activation
+// state carries no cross-account-stable device value.
 
 // ── Constructor ─────────────────────────────────────────────────────────────
 //

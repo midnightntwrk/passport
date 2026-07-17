@@ -5,10 +5,10 @@
   "verdict": "PASS",
   "note": "One-hop: no transaction in the flow names both accounts. Direct: one composed transaction pairs the contract-recipient spend with the payee claim; both addresses visible by design, no coin material; the received coin is discoverable and spendable.",
   "details": {
-    "accountA": "89e6fe7e190cd07b91c736eb0de69b4854ff82445e6134458ed158305f3389a1",
-    "accountB": "601e80751bd8978770eea4331c7fb573a0ffa0e6de96d71fe7e8a452c383f8de",
-    "hop1Tx": "00a50b93f136ce97ea8b907ccbcb2141bbbbe19aaf3ace6a87cfcac569feefaa4e",
-    "hop2Tx": "004f6cfc623ce44fed4673b49a51ba0e66ab423c47ff5dbb21df8356edd98fe09d",
+    "accountA": "275bdd749ad04c234b5b2f0d60bd1c9d79b33a1dbcdd2a814fbb03fd38cf20bc",
+    "accountB": "86bbf19f47aa3c18995e6b7cec7ddfc54dd6788ba5e291633301654e7acd1871",
+    "hop1Tx": "00c1d0f9e12c63ca76e7b921fed34ea1955083c24c0feac4cc43e84a2c3100a413",
+    "hop2Tx": "00800d7d79b0a27cec585dd52bfbdeed90e18eedc190b00c3de49910a7d00ae4d9",
     "oneHopAudit": {
       "hop1": {
         "a": true,
@@ -22,13 +22,13 @@
     "composeAttempts": [
       {
         "mtIndex": "40",
-        "outcome": "accepted: 00d4b00c6ba85c628f868e883eb7c613681e287f9188d2a0b4488512c34a3574c9"
+        "outcome": "accepted: 00422ea2d646f63905c7c10d90dfafa7726dfd9cae3e43fcb7d2ff5e324278a49e"
       }
     ],
-    "composedTxId": "00d4b00c6ba85c628f868e883eb7c613681e287f9188d2a0b4488512c34a3574c9",
+    "composedTxId": "00422ea2d646f63905c7c10d90dfafa7726dfd9cae3e43fcb7d2ff5e324278a49e",
     "sent": {
       "value": "150",
-      "nonce": "35d387d7839c4d6d…"
+      "nonce": "d5e91d9fe48b1652…"
     },
     "directAudit": {
       "link": {
@@ -91,16 +91,12 @@
       },
       {
         "mtIndex": "43",
-        "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error:"
-      },
-      {
-        "mtIndex": "44",
-        "outcome": "accepted: 00c787abd71945430123a27bb6d66d58d74711cee52ce8e214b70d5e11699dbd4a"
+        "outcome": "accepted: 003c6bacf92a45d501d8009508b2bd7e21218683264249b237c2991982b16e7921"
       }
     ],
-    "onwardSpendTx": "00c787abd71945430123a27bb6d66d58d74711cee52ce8e214b70d5e11699dbd4a"
+    "onwardSpendTx": "003c6bacf92a45d501d8009508b2bd7e21218683264249b237c2991982b16e7921"
   },
-  "ranAt": "2026-07-17T13:18:37.968Z",
+  "ranAt": "2026-07-17T16:16:50.119Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

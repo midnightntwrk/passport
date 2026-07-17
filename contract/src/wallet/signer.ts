@@ -101,8 +101,12 @@ export class Device {
 
 // ── Per-circuit challenge builders (MIP-0013 §5.1) ──────────────────────────
 //
-// Preimage: [DST_CIRCUIT, self, sig_r, pk, ...args, auth_nonce, grind_nonce]
-// with args in declaration order. Each builder mirrors one gated circuit.
+// Preimage: [DST_CIRCUIT, self, sig_r, pk, ...args, ...witness_values,
+// auth_nonce, grind_nonce] with args in declaration order and the values
+// returned by the circuit's witness invocations pinned after them
+// (AUTH-10) — for the two shielded spends that is the held_coin result,
+// which is why their builders take the qualified coin. Each builder
+// mirrors one gated circuit.
 
 export interface CallContext {
   /** The account's contract address, raw bytes (binds the account, AUTH-3). */

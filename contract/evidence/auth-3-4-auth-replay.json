@@ -5,13 +5,13 @@
   "verdict": "PASS",
   "note": "A signature binds the account address and the per-circuit tag: replay against a second account holding the same device key, and against a sibling circuit with a byte-identical argument list, both abort with no state change.",
   "details": {
-    "accountOne": "3a53f4c1d5792c9f3ca2abbf143a702d28d745158698d072cf12c86af221cc07",
-    "accountTwo": "956fa9208e8fdd2a6900d0a016b921820190e59f473c32f04c8186961216a630",
-    "crossAccountRejection": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 362 char 13: byte vector [120,162,190,222,181,7,31,128,204,87,232,41,135,154,220,24,80,67,179,38,177,254,19,155,55,179,39,132,30,203,98,138] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
-    "controlTx": "00ff515cab05d833625ed3c375e93eb6d9b71f5290fef1c32dda37b877a5b8193f",
-    "crossCircuitRejection": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_shielded_to_contract'"
+    "accountOne": "96a17de47e57899d46ce3a511a5cd251d24da5e48beb88b8ccaf6cb8656843fe",
+    "accountTwo": "f21ab36c3a2078510f77f09d8e354f184b42ccbee8d367c9c216258542e30833",
+    "crossAccountRejection": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 362 char 13: byte vector [71,20,168,123,154,49,99,253,142,208,64,125,19,55,11,80,116,86,59,23,232,207,40,168,136,0,83,120,82,197,136,211] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
+    "controlTx": "00970f19e8b9d7e92eeb72a567bd596affdd644c88c27e9f161718972e69844b13",
+    "crossCircuitRejection": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 362 char 13: byte vector [118,133,12,119,214,129,95,159,38,223,160,36,102,215,253,113,243,72,20,249,233,56,108,241,128,176,206,152,247,45,110,133] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type"
   },
-  "ranAt": "2026-07-17T12:59:07.096Z",
+  "ranAt": "2026-07-17T15:57:24.442Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

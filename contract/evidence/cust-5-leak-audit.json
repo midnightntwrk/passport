@@ -5,32 +5,32 @@
   "verdict": "PASS",
   "note": "Identical lifecycles through both patterns: the public-map control leaks nonce/color/value into observer surfaces (scanner validated); the conforming stateless path shows zero coin artefacts (INV-2).",
   "details": {
-    "account": "236cb66ba22623ab1d29656b4d88bdc3fa4b418407f1d4f5628fac5a5f5ba33d",
-    "control": "75080245889d74a30209bb6f6590200507491569746dd2a901edb7517ecef30e",
+    "account": "b343a5e38f90a1d375c7cb1a2ef6d7f8a04b29cd099dbacd145a71dd55e1f79f",
+    "control": "d7c0a1960bb5fb838506f7b56782d733c453df4142f798543d08b1b66ae57612",
     "controlTxs": {
-      "deposit": "00be1f8761ef86c8d233c2360c2e40725dcb7c0ea6be1da284e85ff10822f24824",
-      "spend": "00cf9d24de53a2b757100f33e6630c2075af30c983a77e7efe68135fb9f18513e5"
+      "deposit": "00ace6c6434e957c9d842b62dce3c9c62b307aa2e6d0ef209ce9071ca47ed3c229",
+      "spend": "00e3ab63eee16cb367c5837db2e3c9ea42a80d9f6c3f0fe46f30e7db19aa347ce7"
     },
     "controlLeaks": {
-      "tx:00be1f8761…:raw": {
+      "tx:00ace6c643…:raw": {
         "nonce": true,
         "color": true,
         "valueBE": false,
         "valueLE": false
       },
-      "tx:00be1f8761…:contractActions": {
+      "tx:00ace6c643…:contractActions": {
         "nonce": true,
         "color": true,
         "valueBE": false,
         "valueLE": false
       },
-      "tx:00cf9d24de…:raw": {
+      "tx:00e3ab63ee…:raw": {
         "nonce": true,
         "color": true,
         "valueBE": false,
         "valueLE": false
       },
-      "tx:00cf9d24de…:contractActions": {
+      "tx:00e3ab63ee…:contractActions": {
         "nonce": false,
         "color": true,
         "valueBE": false,
@@ -44,43 +44,43 @@
       }
     },
     "conformingTxs": {
-      "deposit": "001d33e16484fab6fcc2b64290acf6387c0846da1cb98dafef783d5ab972f44b1d",
-      "spend": "000fa605518dcd91dbf816afae41750141a54ad852d21f08e02eeb2d08b8189e21",
-      "backfill": "00945efe4e05a6839ba08e3b9fd1f7d192688a4c90ff1c0167a29a32bfdc5cab05"
+      "deposit": "00feeecb5cb860bc70724366a630bc2de78c7598ae9dc501d8c252cb437e4ab01b",
+      "spend": "0033d11e7c47c5f93de064b6aa0ca8cab7331465974d3a85c42203a158978da1c6",
+      "backfill": "00237fffa170c58d3b16a69c2c833c0366996145953aadb903a85fcfd915977615"
     },
     "conformingLeaks": {
       "deposited": {
-        "tx:001d33e164…:raw": {
+        "tx:00feeecb5c…:raw": {
           "nonce": false,
           "color": false,
           "valueBE": false,
           "valueLE": false
         },
-        "tx:001d33e164…:contractActions": {
+        "tx:00feeecb5c…:contractActions": {
           "nonce": false,
           "color": false,
           "valueBE": false,
           "valueLE": false
         },
-        "tx:000fa60551…:raw": {
+        "tx:0033d11e7c…:raw": {
           "nonce": false,
           "color": false,
           "valueBE": false,
           "valueLE": false
         },
-        "tx:000fa60551…:contractActions": {
+        "tx:0033d11e7c…:contractActions": {
           "nonce": false,
           "color": false,
           "valueBE": false,
           "valueLE": false
         },
-        "tx:00945efe4e…:raw": {
+        "tx:00237fffa1…:raw": {
           "nonce": false,
           "color": false,
           "valueBE": false,
           "valueLE": false
         },
-        "tx:00945efe4e…:contractActions": {
+        "tx:00237fffa1…:contractActions": {
           "nonce": false,
           "color": false,
           "valueBE": false,
@@ -94,37 +94,37 @@
         }
       },
       "change": {
-        "tx:001d33e164…:raw": {
+        "tx:00feeecb5c…:raw": {
           "nonce": false,
           "color": false,
           "valueBE": false,
           "valueLE": false
         },
-        "tx:001d33e164…:contractActions": {
+        "tx:00feeecb5c…:contractActions": {
           "nonce": false,
           "color": false,
           "valueBE": false,
           "valueLE": false
         },
-        "tx:000fa60551…:raw": {
+        "tx:0033d11e7c…:raw": {
           "nonce": false,
           "color": false,
           "valueBE": false,
           "valueLE": false
         },
-        "tx:000fa60551…:contractActions": {
+        "tx:0033d11e7c…:contractActions": {
           "nonce": false,
           "color": false,
           "valueBE": false,
           "valueLE": false
         },
-        "tx:00945efe4e…:raw": {
+        "tx:00237fffa1…:raw": {
           "nonce": false,
           "color": false,
           "valueBE": false,
           "valueLE": false
         },
-        "tx:00945efe4e…:contractActions": {
+        "tx:00237fffa1…:contractActions": {
           "nonce": false,
           "color": false,
           "valueBE": false,
@@ -139,7 +139,7 @@
       }
     }
   },
-  "ranAt": "2026-07-17T13:23:51.083Z",
+  "ranAt": "2026-07-17T16:22:03.159Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",
