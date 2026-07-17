@@ -87,9 +87,9 @@ export default function SdkPage() {
       <section className="sdk-boundaries" aria-labelledby="boundaries-title">
         <div className="sdk-section-heading"><p className="sdk-eyebrow">Readiness</p><h2 id="boundaries-title">What the SDK does not pretend to solve.</h2></div>
         <div className="sdk-boundary-grid">
-          <article><span>Live now</span><h3>Wallet surfaces</h3><p>Dynamic exposes the unshielded, shielded and DUST addresses, balance sync, signing and supported transfers.</p></article>
+          <article><span>Live validation</span><h3>Wallet surfaces</h3><p>The demo calls Dynamic for unshielded, shielded and DUST addresses, balance sync, signing and supported transfers. Each capability is passed only after a real wallet result.</p></article>
           <article><span>Live now</span><h3>Private-state encryption</h3><p>Passport encrypts app-owned state with a WebAuthn PRF-derived AES-GCM key in IndexedDB.</p></article>
-          <article><span>Testnet pilot</span><h3>C1 Compact deployment</h3><p>Passport builds a Compact C1 deployment from the Dynamic wallet's shielded public keys, then asks Dynamic to sign and submit it. It stays testnet-only until a real transaction is confirmed on-chain.</p></article>
+          <article><span>Unvalidated pilot</span><h3>C1 Compact deployment</h3><p>Passport builds an unsigned Compact C1 draft and asks the Dynamic embedded wallet to sign and submit it. Support is not claimed until a real deployment is independently confirmed on-chain.</p></article>
           <article><span>Deferred</span><h3>Cloud recovery and Sig settlement</h3><p>Encrypted sync, recovery design and external settlement stay outside this SDK foundation until their security and network dependencies are defined.</p></article>
         </div>
       </section>

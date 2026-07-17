@@ -69,7 +69,21 @@ async function deriveKey(prfOutput: Uint8Array, scope: PassportStateScope): Prom
  * into a non-exportable AES key and is never persisted by this SDK.
  */
 export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider {
-  constructor(private readonly reference: PassportPasskeyReference) {}
+  private readonly sessionKeys = new Map<string, { key: CryptoKey; expiresAt: number }>();
+
+  constructor(
+    private readonly reference: PassportPasskeyReference,
+    private readonly cacheTtlMs = 30_000,
+  ) {}
+
+  /** Clears derived keys after one logical Passport operation. */
+  lock(scope?: PassportStateScope): void {
+    if (!scope) {
+      this.sessionKeys.clear();
+      return;
+    }
+    this.sessionKeys.delete(`${scope.appId}\u0000${scope.accountId}`);
+  }
 
   static async enroll(options: EnrollPassportPasskeyOptions): Promise<PassportPasskeyReference> {
     const navigator = getNavigator();
@@ -120,6 +134,10 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider {
   }
 
   async getKey(scope: PassportStateScope): Promise<CryptoKey> {
+    const scopeKey = `${scope.appId}\u0000${scope.accountId}`;
+    const cached = this.sessionKeys.get(scopeKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.key;
+    if (cached) this.sessionKeys.delete(scopeKey);
     const navigator = getNavigator();
     try {
       const assertion = (await navigator.credentials.get({
@@ -143,7 +161,9 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider {
       if (!result) throw new Error('The authenticator did not return a PRF result.');
       const output = new Uint8Array(result);
       try {
-        return await deriveKey(output, scope);
+        const key = await deriveKey(output, scope);
+        this.sessionKeys.set(scopeKey, { key, expiresAt: Date.now() + this.cacheTtlMs });
+        return key;
       } finally {
         output.fill(0);
       }

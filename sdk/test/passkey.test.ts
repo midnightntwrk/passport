@@ -40,4 +40,34 @@ describe('WebAuthnPrfKeyProvider', () => {
     });
     await expect(provider.getKey(scope)).rejects.toThrow('Passport passkey unlock was cancelled');
   });
+
+  it('reuses a non-exportable key for one operation and locks explicitly', async () => {
+    let assertions = 0;
+    replaceNavigator({
+      credentials: {
+        get: async () => {
+          assertions += 1;
+          return {
+            getClientExtensionResults: () => ({
+              prf: { results: { first: new Uint8Array(32).fill(9).buffer } },
+            }),
+          };
+        },
+      },
+    });
+
+    const provider = new WebAuthnPrfKeyProvider({
+      credentialId: 'AQID',
+      label: 'Midnight Passport',
+    });
+    const first = await provider.getKey(scope);
+    const second = await provider.getKey(scope);
+    provider.lock(scope);
+    const third = await provider.getKey(scope);
+
+    expect(first).toBe(second);
+    expect(third).not.toBe(first);
+    expect(first.extractable).toBe(false);
+    expect(assertions).toBe(2);
+  });
 });

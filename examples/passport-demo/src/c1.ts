@@ -1,10 +1,10 @@
 import type { MidnightWallet, MidnightWalletConnector } from '@dynamic-labs/midnight';
-import { MIDNIGHT_NETWORKS } from '@dynamic-labs/midnight';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { signingKeyFromBip340, type WitnessContext } from '@midnight-ntwrk/compact-runtime';
 import { createUnprovenDeployTx } from '@midnight-ntwrk/midnight-js-contracts';
 import { FetchZkConfigProvider } from '@midnight-ntwrk/midnight-js-fetch-zk-config-provider';
 import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { MidnightBech32m, ShieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 
 import { Contract, pureCircuits, type Ledger, type Witnesses } from '../.generated/passport-c1/contract/index.js';
 
@@ -39,8 +39,27 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function isDynamicTestnet(wallet: MidnightWallet): boolean {
-  return (wallet.connector as MidnightWalletConnector).networkId === MIDNIGHT_NETWORKS.TESTNET;
+function dynamicWaasShieldedKeys(wallet: MidnightWallet): {
+  shieldedCoinPublicKey: string;
+  shieldedEncryptionPublicKey: string;
+} {
+  const connector = wallet.connector as MidnightWalletConnector;
+  if (connector.overrideKey !== 'dynamicwaas') {
+    throw new Error('Passport C1 deployment currently requires a Dynamic embedded Midnight wallet. External Midnight wallets do not expose the compatible custom-transaction signer.');
+  }
+  const encodedAddress = wallet.additionalAddresses.find((address) => address.type === 'midnight_shielded')?.address;
+  if (!encodedAddress) {
+    throw new Error('Dynamic has not returned the shielded address needed for Passport deployment. Refresh the wallet and try again.');
+  }
+  const parsed = MidnightBech32m.parse(encodedAddress);
+  if (parsed.network !== PASSPORT_C1_NETWORK) {
+    throw new Error('Passport C1 pilot deployments are preview-only. Switch the Dynamic Midnight wallet to preview before deploying.');
+  }
+  const decoded = parsed.decode(ShieldedAddress, PASSPORT_C1_NETWORK);
+  return {
+    shieldedCoinPublicKey: decoded.coinPublicKeyString(),
+    shieldedEncryptionPublicKey: decoded.encryptionPublicKeyString(),
+  };
 }
 
 function passportC1Witnesses(): Witnesses<PassportC1PrivateState> {
@@ -85,17 +104,13 @@ export function createPassportC1MaintenanceSigningKey(): string {
  */
 export async function buildPassportC1Deployment(
   wallet: MidnightWallet,
-  deviceSecret: Uint8Array,
+  initialPrivateState: PassportC1PrivateState,
   maintenanceSigningKey: string,
 ): Promise<PassportC1DeploymentDraft> {
-  if (!isDynamicTestnet(wallet)) {
-    throw new Error('Passport C1 pilot deployments are testnet-only. Switch the Dynamic Midnight wallet to testnet before deploying.');
-  }
-  if (deviceSecret.byteLength !== 32) throw new Error('Passport requires a 32-byte device secret.');
+  const deviceSecret = hexToBytes(initialPrivateState.deviceSecretHex);
   if (!maintenanceSigningKey) throw new Error('Passport C1 maintenance authority is unavailable.');
 
-  const connector = wallet.connector as MidnightWalletConnector;
-  const { shieldedCoinPublicKey, shieldedEncryptionPublicKey } = await connector.getShieldedAddresses();
+  const { shieldedCoinPublicKey, shieldedEncryptionPublicKey } = dynamicWaasShieldedKeys(wallet);
   if (!shieldedCoinPublicKey || !shieldedEncryptionPublicKey) {
     throw new Error('Dynamic did not return the shielded public keys needed to prepare Passport deployment. Refresh the Midnight wallet and try again.');
   }
@@ -103,7 +118,6 @@ export async function buildPassportC1Deployment(
   // midnight-js uses a process-wide network id to parse the coin public key.
   // Dynamic maps its testnet wallet to the Midnight "preview" network.
   setNetworkId(PASSPORT_C1_NETWORK);
-  const initialPrivateState: PassportC1PrivateState = { deviceSecretHex: bytesToHex(deviceSecret) };
   const providers = {
     zkConfigProvider: new FetchZkConfigProvider(`${window.location.origin}/zk/passport-c1`, window.fetch.bind(window)),
     walletProvider: {

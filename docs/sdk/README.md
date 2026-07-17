@@ -47,16 +47,19 @@ await findDeployedContract(providers, {
 });
 ```
 
-`PassportStateInjection` returns decrypted state only after an explicit
-WebAuthn user gesture. The app remains the owner of the private-state schema;
-Passport owns storage, scope isolation, and encryption.
+`PassportStateInjection` returns decrypted state after the configured key
+provider unlocks it. The WebAuthn provider requires an explicit user gesture,
+then may reuse its non-exportable key for one logical operation for at most 30
+seconds. Integrations call `lock()` when that operation ends.
 
 ## Security rules
 
 - A WebAuthn PRF output is immediately derived into a non-exportable AES-GCM
-  key. The raw output is zeroed after derivation.
-- IndexedDB contains only versioned ciphertext, IV, timestamp, and a hashed
-  storage key. It does not contain the app/account scope or plaintext state.
+  key. The directly held output buffer is overwritten after derivation on a
+  best-effort basis; JavaScript cannot guarantee complete memory zeroisation.
+- The private-state object store contains only versioned ciphertext, IV,
+  timestamp, and a hashed storage key. The demo's separate public-profile store
+  contains account linkage and public deployment metadata in plaintext.
 - AES-GCM additional authenticated data binds each record to its `appId` and
   `accountId`; copied ciphertext cannot decrypt under another scope.
 - No SDK method exports, logs, syncs, or writes private state to
@@ -76,6 +79,15 @@ flowchart LR
   Join --> Prover["Local witness / proof path"]
 ```
 
-See [Dynamic capability matrix](dynamic-capability-matrix.md), the
-[client-demo runbook](client-demo-runbook.md), the live [validation log](validation-log.md), and the
-[blocker register](blockers.md) before describing an integration as live.
+See the [architecture](architecture.md) and [roadmap](roadmap.md) before
+adding a new SDK module.
+
+## Related docs
+
+- [Architecture](architecture.md)
+- [Implementation roadmap](roadmap.md)
+- [Why Passport cannot currently use only Dynamic](why-passport-needs-a-passkey-with-dynamic.md)
+- [Dynamic capability matrix](dynamic-capability-matrix.md)
+- [Client demo runbook](client-demo-runbook.md)
+- [Live validation log](validation-log.md)
+- [External blockers](blockers.md)

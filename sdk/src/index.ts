@@ -1,5 +1,6 @@
 export { PassportStateInjection, joinWithPassportState } from './injection.js';
 export { WebAuthnPrfKeyProvider } from './passkey.js';
+export { BlockedSigNetworkAdapter } from './signet.js';
 export {
   EncryptedPassportPrivateStateStore,
   IndexedDbPassportEncryptedRecordStore,
@@ -20,3 +21,10 @@ export type {
   PassportStateKeyProvider,
   PassportStateScope,
 } from './types.js';
+export type {
+  SigNetworkAdapter,
+  SigNetworkReadiness,
+  SigNetworkRequirements,
+  SigNetworkSettlementIntent,
+  SigNetworkSettlementResult,
+} from './signet.js';
