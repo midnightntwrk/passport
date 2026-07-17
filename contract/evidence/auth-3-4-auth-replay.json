@@ -5,13 +5,13 @@
   "verdict": "PASS",
   "note": "A signature binds the account address and the per-circuit tag: replay against a second account holding the same device key, and against a sibling circuit with a byte-identical argument list, both abort with no state change.",
   "details": {
-    "accountOne": "c3e942600f242613bc58170383fc94e359ef0ffadd48e7900bd709f27f73bdac",
-    "accountTwo": "54ac70cd8ffcc161ffd5e9f330020df2b490682b095fe7d3b910ec914f49213e",
-    "crossAccountRejection": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 295 char 13: byte vector [73,243,8,58,254,103,246,22,99,83,185,34,202,16,255,86,49,5,123,62,187,238,144,172,240,160,19,254,28,221,175,208] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
-    "controlTx": "00545e838433d3eac1801ace685b8f44391dd77a0ff1ae5f2819caa74e6ec23eee",
-    "crossCircuitRejection": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 295 char 13: byte vector [104,27,27,202,61,227,204,4,101,59,154,1,240,225,202,47,174,0,154,22,11,58,53,109,214,35,2,75,246,36,103,168] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type"
+    "accountOne": "3a53f4c1d5792c9f3ca2abbf143a702d28d745158698d072cf12c86af221cc07",
+    "accountTwo": "956fa9208e8fdd2a6900d0a016b921820190e59f473c32f04c8186961216a630",
+    "crossAccountRejection": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 362 char 13: byte vector [120,162,190,222,181,7,31,128,204,87,232,41,135,154,220,24,80,67,179,38,177,254,19,155,55,179,39,132,30,203,98,138] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
+    "controlTx": "00ff515cab05d833625ed3c375e93eb6d9b71f5290fef1c32dda37b877a5b8193f",
+    "crossCircuitRejection": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_shielded_to_contract'"
   },
-  "ranAt": "2026-07-17T09:39:25.998Z",
+  "ranAt": "2026-07-17T12:59:07.096Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

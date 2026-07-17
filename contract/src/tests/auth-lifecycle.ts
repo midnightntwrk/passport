@@ -9,7 +9,8 @@
 //   9. The proving pipeline's inputs for every gated call are enumerated
 //      and contain no device private key or key share (AUTH-4): the only
 //      witness is held_coin (coin descriptions), and the authorising
-//      material is (pk, R, s, grind_nonce) — the signature, never sk.
+//      material is (pk, use_counter, R, s, grind_nonce) — the signature and
+//      the rolling-entry position, never sk.
 
 import { runScenario, step, waitForLedger } from './runner.js';
 import { writeEvidence } from './evidence.js';
@@ -38,46 +39,48 @@ await runScenario('auth-lifecycle', async () => {
 
   // ── Test 6: lifecycle ─────────────────────────────────────────────────────
 
-  step('test 6a: add_device registers a second device at the current epoch');
+  step('test 6a: add_device inserts the new key\u2019s entry at use counter 0');
   const second = Device.generate();
   const addTx = await s.account.addDevice(s.device, second.pk);
   details.addDeviceTx = addTx.txId;
-  const afterAdd = await waitForLedger(
+  const entry0 = second.entryAt(s.account.addressBytes, 0n, 0n);
+  await waitForLedger(
     () => s.account.ledgerState(),
-    'second device active',
-    (l) => l.devices.member(second.commitment) && l.device_count === 2n,
+    'second device entry present at counter 0',
+    (l) => l.devices.member(entry0) && l.device_count === 2n,
   );
-  if (afterAdd.devices.lookup(second.commitment) !== afterAdd.device_epoch) {
-    throw new Error('new device not registered at the current epoch');
-  }
 
-  step('test 6b: duplicate add of an active device fails');
-  await expectAbort('adding an already-active device', () =>
+  step('test 6b: duplicate add of a device whose entry is present fails');
+  await expectAbort('adding a device whose counter-0 entry is present', () =>
     s.account.addDevice(s.device, second.pk));
 
-  step('test 6c: the new device authorises a withdrawal (1-of-n)');
+  step('test 6c: the new device authorises a withdrawal (1-of-n); its entry rolls');
   const w = await s.account.withdrawUnshielded(second, NIGHT, SPEND, recipient);
   details.secondDeviceWithdrawTx = w.txId;
-  await waitForLedger(
+  const entry1 = second.entryAt(s.account.addressBytes, 0n, 1n);
+  const afterUse = await waitForLedger(
     () => s.account.ledgerState(),
     'second device withdrawal debited',
     (l) => l.unshielded_balances.lookup(NIGHT) === FUND - SPEND,
   );
+  if (afterUse.devices.member(entry0)) throw new Error('consumed entry still present (AUTH-9)');
+  if (!afterUse.devices.member(entry1)) throw new Error('successor entry missing (AUTH-9)');
+  console.log('  \u2713 entry at counter 0 consumed, successor at counter 1 inserted (AUTH-9)');
 
-  step('test 6d: remove the second device from the first; its authority ends');
-  const rm = await s.account.removeDevice(s.device, second.commitment);
+  step('test 6d: remove the second device (by its current entry); its authority ends');
+  const rm = await s.account.removeDevice(s.device, second);
   details.removeDeviceTx = rm.txId;
   await waitForLedger(
     () => s.account.ledgerState(),
     'second device removed',
-    (l) => !l.devices.member(second.commitment) && l.device_count === 1n,
+    (l) => !l.devices.member(entry1) && l.device_count === 1n,
   );
   await expectAbort('removed device attempting a withdrawal', () =>
     s.account.withdrawUnshielded(second, NIGHT, SPEND, recipient));
 
   step('test 6e: the last device cannot be removed (AUTH-5)');
   await expectAbort('last-device removal', () =>
-    s.account.removeDevice(s.device, s.device.commitment));
+    s.account.removeDevice(s.device, s.device));
   details.epochBumpLeg = 'N/A — recovery seam (MIP-0013 §8) awaits the recovery-paths MIP; device_epoch checks exercised at epoch 0';
 
   // ── Test 9: non-exfiltration audit (AUTH-4) ───────────────────────────────
@@ -94,13 +97,13 @@ await runScenario('auth-lifecycle', async () => {
   console.log(`  witnesses consumed by proving: [${witnessNames.join(', ')}] — coin descriptions only`);
 
   // Argument surface: the authorising material of every gated circuit is
-  // (pk, sig_r, sig_s, grind_nonce). sig_s alone is key-derived, and it is
+  // (pk, use_counter, sig_r, sig_s, grind_nonce). sig_s alone is key-derived, and it is
   // a one-call response bound to this challenge: recovering sk from (R, s)
   // is exactly the discrete-log/forgery game. Assert the values passed are
   // in the scalar/point domains and that no argument equals sk.
   const probe = Device.generate();
   const ctx = await s.account.callContext();
-  const auth = probe.sign(challenges.withdrawUnshielded(ctx, probe.pk, NIGHT, 1n, recipient));
+  const auth = probe.sign(challenges.withdrawUnshielded(ctx, probe.pk, NIGHT, 1n, recipient), 0n);
   const provingInputs: Array<[string, string]> = [
     ['pk.x', auth.pk.x.toString(16)],
     ['pk.y', auth.pk.y.toString(16)],

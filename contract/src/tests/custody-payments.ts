@@ -120,8 +120,12 @@ await runScenario('custody-payments', async () => {
     await s.account.putCoin({ ...hop1.change, mtIndex: idx });
 
     const ctxA = await s.account.callContext();
+    // AUTH-10: the challenge covers the exact qualified coin (this
+    // candidate's mt_index included), so each retry is a fresh approval.
+    const heldA = await s.account.heldCoin(coin.color);
     const authA = s.device.sign(
-      challenges.withdrawShieldedToContract(ctxA, s.device.pk, accountB.addressBytes, coin.color, DIRECT),
+      challenges.withdrawShieldedToContract(ctxA, s.device.pk, accountB.addressBytes, coin.color, DIRECT, heldA),
+      await s.account.resolveUseCounter(s.device),
     );
     await pointAt(s.account.address);
     const callA: any = await (createUnprovenCallTx as any)(s.ctx.providers, {
@@ -133,6 +137,7 @@ await runScenario('custody-payments', async () => {
         coin.color,
         DIRECT,
         authA.pk,
+        authA.use_counter,
         authA.sig_r,
         authA.sig_s,
         authA.grind_nonce,
@@ -227,17 +232,36 @@ await runScenario('custody-payments', async () => {
   const walked = inboxWalk(ledgerB2, encKeysB.secretKey);
   const received = walked.find((c) => c.value === DIRECT && bytesToHex(c.nonce) === bytesToHex(sent.nonce));
   if (!received) throw new Error('B’s inbox walk did not recover the direct-transfer coin');
-  const { candidates } = await candidateIndices(composedTxId);
+  // The claim is a grafted intent; probe a widened window in case the
+  // indexer's position attribution does not cover grafted-intent outputs
+  // (candidate retry cannot mis-spend, INV-5).
+  const { candidates, position } = await candidateIndices(composedTxId);
+  const lo = candidates.length ? candidates[0] - 4n : 0n;
+  const hi = (candidates.length ? candidates[candidates.length - 1] : 0n) + 5n;
+  const sweep: bigint[] = [];
+  for (let i = lo < 0n ? 0n : lo; i < hi; i++) sweep.push(i);
+  details.onwardWindow = { reported: candidates.map(String), swept: sweep.map(String), position: { startIndex: position.startIndex, endIndex: position.endIndex } };
   let spendTx: string | null = null;
-  for (const idx of candidates) {
+  let winningIdx: bigint | null = null;
+  const onwardAttempts: Array<Record<string, string>> = [];
+  for (const idx of sweep) {
     await accountB.putCoin({ nonce: received.nonce, color: received.color, value: received.value, mtIndex: idx });
     try {
       const r = await accountB.withdrawShielded(deviceB, userCpk, received.color, received.value);
       spendTx = r.txId;
+      winningIdx = idx;
+      onwardAttempts.push({ mtIndex: idx.toString(), outcome: `accepted: ${r.txId}` });
       break;
-    } catch { /* wrong candidate fails at proving; retry cannot mis-spend (INV-5) */ }
+    } catch (e: any) {
+      onwardAttempts.push({ mtIndex: idx.toString(), outcome: `rejected: ${String(e?.message).slice(0, 100)}` });
+    }
   }
-  if (!spendTx) throw new Error('no candidate index produced an accepted onward spend');
+  details.onwardAttempts = onwardAttempts;
+  if (!spendTx) throw new Error(`no candidate index produced an accepted onward spend: ${JSON.stringify(onwardAttempts)}`);
+  if (winningIdx !== null && !candidates.includes(winningIdx)) {
+    details.indexerGap = `claimed-coin index ${winningIdx} lies OUTSIDE the reported window [${candidates.join(', ')}] — grafted-intent outputs escape position attribution`;
+    console.log(`  ⚠ ${details.indexerGap}`);
+  }
   details.onwardSpendTx = spendTx;
   console.log(`  ✓ onward spend accepted — tx ${spendTx}`);
 

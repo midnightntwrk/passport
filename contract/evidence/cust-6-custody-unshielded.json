@@ -5,12 +5,12 @@
   "verdict": "PASS",
   "note": "Mirror credits and debits conform for Night and a non-native color; over-withdrawal aborts; an unmirrored transfer is held but not credited and cannot be withdrawn through the mirror.",
   "details": {
-    "account": "216322dce8cb34807950ffaf8decb3e208cff6d1051a338bd3cb15382dd9bf54",
-    "nonNativeColor": "b8de1653b42a63fff2963813d26403b8b9ef833031f7d1a1d604712bafc1cba1",
+    "account": "52657b5e8c79f9c27887ae0fd36e2d1f422b6f7639ac01a3ed4151a724a516df",
+    "nonNativeColor": "18c14f74833a61302b1d0b4930e89ad5a8db3955b58d65b5c3234615d3c4818b",
     "unmirroredRejection": "Unexpected error submitting scoped transaction '<unnamed>': (FiberFailure) SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/con",
     "unmirroredOutcome": "rejected by the node: unsolicited unshielded outputs to contracts are refused (claim pairing)"
   },
-  "ranAt": "2026-07-17T10:12:40.978Z",
+  "ranAt": "2026-07-17T13:12:22.847Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

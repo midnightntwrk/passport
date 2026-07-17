@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
+import { rawTokenType, encodeRawTokenType } from '@midnight-ntwrk/ledger-v8';
 
 import * as FaucetModule from '../../contracts/managed/faucet/contract/index.js';
 import * as ControlModule from '../../contracts/managed/control/contract/index.js';
@@ -164,12 +165,12 @@ export async function deployFaucet(walletCtx: WalletContext): Promise<FaucetHand
       idOf(await (deployed as any).callTx.mint_unshielded(domain, amount, { bytes: recipient })),
     mintUnshieldedToContract: async (domain, amount, contractAddr) =>
       idOf(await (deployed as any).callTx.mint_unshielded_to_contract(domain, amount, { bytes: contractAddr })),
-    unshieldedColor: async (domain) => {
-      const r = await (deployed as any).callTx.unshielded_color(domain);
-      for (const v of [r?.private?.result, r?.private?.circuitResult, r?.result]) {
-        if (v instanceof Uint8Array) return v;
-      }
-      throw new Error('unshielded_color: result not found on the call surface');
-    },
+    // Derived client-side: the ledger's token-type derivation over
+    // (domain, faucet address) — the same rawTokenType used for shielded
+    // colors. The on-chain unshielded_color circuit exists as a
+    // cross-check but a zero-effect call is wasteful (and its
+    // finalisation watch has been observed to hang the wallet SDK).
+    unshieldedColor: async (domain) =>
+      encodeRawTokenType(rawTokenType(domain, address)),
   };
 }

@@ -20,7 +20,7 @@
 
 import { randomBytes } from 'node:crypto';
 
-import { pureCircuits, type JubjubPoint } from './contract.js';
+import { pureCircuits, type JubjubPoint, type QualifiedCoin } from './contract.js';
 
 // JubJub prime-order subgroup order r_J (MIP-0013 §2).
 export const JUBJUB_R = BigInt(
@@ -45,6 +45,9 @@ export function bytesToBigIntLE(bytes: Uint8Array): bigint {
 /** The authorising material a gated circuit consumes (MIP-0013 §4). */
 export interface Authorisation {
   pk: JubjubPoint;
+  /** The device's current use counter — the rolling-entry position
+   *  (AUTH-9). Not part of the challenge; bound by entry consumption. */
+  use_counter: bigint;
   sig_r: JubjubPoint;
   sig_s: bigint;
   grind_nonce: bigint;
@@ -68,12 +71,14 @@ export class Device {
     return new Device(randomJubjubScalar());
   }
 
-  get commitment(): Uint8Array {
-    return pureCircuits.derive_device_commitment(this.pk);
+  /** The device's rolling entry at a given account/epoch/counter (§3). */
+  entryAt(contractAddress: Uint8Array, epoch: bigint, counter: bigint): Uint8Array {
+    return pureCircuits.derive_device_entry({ bytes: contractAddress }, this.pk, epoch, counter);
   }
 
-  /** Produce (R, s, grind_nonce) for the call the builder describes. */
-  sign(challenge: ChallengeBuilder): Authorisation {
+  /** Produce (R, s, grind_nonce) for the call the builder describes.
+   *  `useCounter` is carried alongside for the seam's entry consumption. */
+  sign(challenge: ChallengeBuilder, useCounter: bigint): Authorisation {
     const r = randomJubjubScalar();
     const sigR = pureCircuits.compute_public_point(r);
 
@@ -90,7 +95,7 @@ export class Device {
     }
 
     const s = (r + ((c % JUBJUB_R) * (this.sk % JUBJUB_R)) % JUBJUB_R) % JUBJUB_R;
-    return { pk: this.pk, sig_r: sigR, sig_s: s, grind_nonce: grindNonce };
+    return { pk: this.pk, use_counter: useCounter, sig_r: sigR, sig_s: s, grind_nonce: grindNonce };
   }
 }
 
@@ -116,18 +121,21 @@ export const challenges = {
         addr(ctx), sigR, pk, color, amount, { bytes: recipient }, ctx.authNonce, grind,
       ),
 
+  // The witness-consuming circuits bind the held_coin return value into
+  // the challenge (AUTH-10): the approver receives — and signs over — the
+  // exact qualified coin the spend will consume (MIP-0013 §5.3).
   withdrawShielded:
-    (ctx: CallContext, pk: JubjubPoint, recipient: Uint8Array, color: Uint8Array, amount: bigint): ChallengeBuilder =>
+    (ctx: CallContext, pk: JubjubPoint, recipient: Uint8Array, color: Uint8Array, amount: bigint, coin: QualifiedCoin): ChallengeBuilder =>
     (sigR, grind) =>
       pureCircuits.challenge_withdraw_shielded(
-        addr(ctx), sigR, pk, { bytes: recipient }, color, amount, ctx.authNonce, grind,
+        addr(ctx), sigR, pk, { bytes: recipient }, color, amount, coin, ctx.authNonce, grind,
       ),
 
   withdrawShieldedToContract:
-    (ctx: CallContext, pk: JubjubPoint, recipient: Uint8Array, color: Uint8Array, amount: bigint): ChallengeBuilder =>
+    (ctx: CallContext, pk: JubjubPoint, recipient: Uint8Array, color: Uint8Array, amount: bigint, coin: QualifiedCoin): ChallengeBuilder =>
     (sigR, grind) =>
       pureCircuits.challenge_withdraw_shielded_to_contract(
-        addr(ctx), sigR, pk, { bytes: recipient }, color, amount, ctx.authNonce, grind,
+        addr(ctx), sigR, pk, { bytes: recipient }, color, amount, coin, ctx.authNonce, grind,
       ),
 
   appendInbox:

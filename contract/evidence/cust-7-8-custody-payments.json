@@ -5,10 +5,10 @@
   "verdict": "PASS",
   "note": "One-hop: no transaction in the flow names both accounts. Direct: one composed transaction pairs the contract-recipient spend with the payee claim; both addresses visible by design, no coin material; the received coin is discoverable and spendable.",
   "details": {
-    "accountA": "c593bffc01cc9416de6dfc3fa9dc2cf6816043e9d783ff64e458fcce53ea3dd9",
-    "accountB": "39e667924547c00a37a1572f4b4d1727ba16e48f17071a47d684176c17f1a232",
-    "hop1Tx": "008fa6d5edc7bf085a37b5bf3cbf06779bfabddc3d2a6a4a32cc71ab3385dacaab",
-    "hop2Tx": "002f491915d1bc62f45bc62e323f2aa0e12c0bd8d0a124aa78bb0e6e2d81267469",
+    "accountA": "89e6fe7e190cd07b91c736eb0de69b4854ff82445e6134458ed158305f3389a1",
+    "accountB": "601e80751bd8978770eea4331c7fb573a0ffa0e6de96d71fe7e8a452c383f8de",
+    "hop1Tx": "00a50b93f136ce97ea8b907ccbcb2141bbbbe19aaf3ace6a87cfcac569feefaa4e",
+    "hop2Tx": "004f6cfc623ce44fed4673b49a51ba0e66ab423c47ff5dbb21df8356edd98fe09d",
     "oneHopAudit": {
       "hop1": {
         "a": true,
@@ -19,11 +19,17 @@
         "b": true
       }
     },
+    "composeAttempts": [
+      {
+        "mtIndex": "40",
+        "outcome": "accepted: 00d4b00c6ba85c628f868e883eb7c613681e287f9188d2a0b4488512c34a3574c9"
+      }
+    ],
+    "composedTxId": "00d4b00c6ba85c628f868e883eb7c613681e287f9188d2a0b4488512c34a3574c9",
     "sent": {
       "value": "150",
-      "nonce": "b2b01f89c5be22d6…"
+      "nonce": "35d387d7839c4d6d…"
     },
-    "composedTxId": "003d761ede4209733fb2188b42631966ad1d68c28b3b4478830f89192f462d2243",
     "directAudit": {
       "link": {
         "a": true,
@@ -44,9 +50,57 @@
         "valueLE": false
       }
     },
-    "onwardSpendTx": "00dab0bed7e937738a96d0d27a7ef65bead1179e9cadd93bbabe960a7c4a5597ba"
+    "onwardWindow": {
+      "reported": [
+        "43",
+        "44"
+      ],
+      "swept": [
+        "39",
+        "40",
+        "41",
+        "42",
+        "43",
+        "44",
+        "45",
+        "46",
+        "47",
+        "48"
+      ],
+      "position": {
+        "startIndex": 43,
+        "endIndex": 45
+      }
+    },
+    "onwardAttempts": [
+      {
+        "mtIndex": "39",
+        "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing cir"
+      },
+      {
+        "mtIndex": "40",
+        "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': RuntimeError: unreachable"
+      },
+      {
+        "mtIndex": "41",
+        "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': RuntimeError: unreachable"
+      },
+      {
+        "mtIndex": "42",
+        "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error:"
+      },
+      {
+        "mtIndex": "43",
+        "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error:"
+      },
+      {
+        "mtIndex": "44",
+        "outcome": "accepted: 00c787abd71945430123a27bb6d66d58d74711cee52ce8e214b70d5e11699dbd4a"
+      }
+    ],
+    "onwardSpendTx": "00c787abd71945430123a27bb6d66d58d74711cee52ce8e214b70d5e11699dbd4a"
   },
-  "ranAt": "2026-07-17T09:53:44.442Z",
+  "ranAt": "2026-07-17T13:18:37.968Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

@@ -5,20 +5,21 @@
   "verdict": "PASS",
   "note": "Gated call executes with a valid device signature; every single-fault variant aborts with no state change; a permissionless deposit between signing and submission does not invalidate the pending authorisation.",
   "details": {
-    "account": "83cf174e8c95b7e22d9553a6bb0ae43c65128fcf4e28257bfdf9fe852dd4ce11",
-    "happyPathTx": "008807a0ff49557ebc1efbd3d533f2853b12487923be023cc18a6fadd666923d23",
+    "account": "3294d1361b6ec520ddabe3a48a30b9acba41e75ff93a64ccf9fa9c21558de667",
+    "happyPathTx": "007d6eb29b5429a93272cc42d1aa4324ac8d966c758831a8ccd93e7fc7c478878a",
     "rejectionMatrix": {
       "wrongSigS": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
-      "foreignSigR": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
-      "unregisteredPk": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown device",
-      "tamperedArg": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 295 char 13: byte vector [74,253,61,95,122,246,231,145,16,153,199,118,189,134,147,62,138,140,123,81,181,61,212,192,134,91,164,86,233,81,143,233] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
-      "staleNonce": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 295 char 13: byte vector [238,86,110,69,252,255,100,90,255,116,193,41,22,255,189,53,38,107,253,162,31,160,108,201,182,219,209,210,29,147,186,219] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
-      "reusedSignature": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 295 char 13: byte vector [45,113,38,190,52,44,193,252,59,27,125,167,135,17,77,29,225,89,48,57,214,165,184,169,69,178,228,14,6,133,252,206] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type"
+      "foreignSigR": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_unshielded'",
+      "unregisteredPk": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown device entry",
+      "wrongUseCounter": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown device entry",
+      "tamperedArg": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 362 char 13: byte vector [240,192,163,7,112,89,172,193,142,141,155,91,247,39,233,43,141,36,208,163,246,110,113,143,105,192,243,167,101,227,28,232] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
+      "staleNonce": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 362 char 13: byte vector [210,18,163,169,217,77,17,172,233,68,163,41,78,170,120,206,174,54,80,137,189,196,149,2,82,113,111,243,52,173,8,197] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
+      "reusedSignature": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown device entry"
     },
     "staleEpochFault": "N/A — no epoch-bump surface until the recovery-paths MIP instantiates MIP-0013 §8",
-    "depositIndependenceTx": "00d85b4f23e270572be657bdfb2ed20ced61edec731868fd5d397138fe6e796228"
+    "depositIndependenceTx": "00a9dcab58cb59b6818b7662070da725d3d492ff590b9f776d4eaf981430cb27c1"
   },
-  "ranAt": "2026-07-17T09:33:50.174Z",
+  "ranAt": "2026-07-17T12:52:20.756Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

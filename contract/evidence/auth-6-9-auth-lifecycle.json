@@ -5,10 +5,10 @@
   "verdict": "PASS",
   "note": "add_device/remove_device lifecycle conforms (duplicate add rejected, removed device loses authority, last device protected); proving inputs for gated calls carry the signature and never the device key.",
   "details": {
-    "account": "b12e3f286216b8b5d564cb92d593c5355fb4b8703484c5c9cf48c1aa0a5a9e50",
-    "addDeviceTx": "004119bc277ae95c0a010e4ab2bb8a615bcc7f1f27da6bc0d19cc23f1d361d1ab2",
-    "secondDeviceWithdrawTx": "005fba9fd9be84898fd09d03ef86ee27b44ddb1dcc0c5738581612fa1e5ff714a4",
-    "removeDeviceTx": "003ce441ba92e82d8ac5335cbdf29ab2e67090cbf656f4c8c3fa69186167a0a1bf",
+    "account": "c99898eb8f9635b39a86479fc402af02d5c21193217f2ae268308fd7f685a089",
+    "addDeviceTx": "00f96f11c61fe0427b5ad9218a05641300d6734c5b1939d75b18f21480d4955b9a",
+    "secondDeviceWithdrawTx": "0077f1859c63a18ca1ad824938bba6ac6ef263d2a6d35c95ef08c7575dfe627e02",
+    "removeDeviceTx": "00359d15bfd2353ecaa3be0cfb52e635f4c9199933d5de5d933216cc7e80b4b842",
     "epochBumpLeg": "N/A — recovery seam (MIP-0013 §8) awaits the recovery-paths MIP; device_epoch checks exercised at epoch 0",
     "witnessSurface": [
       "held_coin"
@@ -23,7 +23,7 @@
     ],
     "contractWitnessArity": 0
   },
-  "ranAt": "2026-07-17T09:37:08.272Z",
+  "ranAt": "2026-07-17T12:55:07.453Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

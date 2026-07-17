@@ -2,14 +2,21 @@
 // contract (MIP-0012 asset surface + MIP-0013 authorisation seam).
 //
 // Every authorised call follows the same shape: read the live auth_nonce,
+// resolve the device's current use counter (the rolling-entry position,
+// AUTH-9), collect the witness values the call will consume (AUTH-10),
 // build the per-circuit challenge (MIP-0013 §5.1), have the device sign it
-// (§5.3), and pass (pk, R, s, grind_nonce) as the circuit's authorising
-// material. Low-level `*WithAuth` variants accept a pre-built Authorisation
-// so conformance tests can inject faults (wrong s, stale nonce, replays).
+// (§5.3), and pass (pk, use_counter, R, s, grind_nonce) as the circuit's
+// authorising material. Low-level `*WithAuth` variants accept a pre-built
+// Authorisation so conformance tests can inject faults (wrong s, stale
+// nonce, wrong counter, replays).
+//
+// The client tracks a device roster (pk → use counter) per MIP-0013 S11:
+// counters advance on every successful gated call, and an unknown counter
+// is recovered by rescanning ledger membership of candidate entries.
 
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 
-import { ledger, type Ledger, type ShieldedCoin } from './contract.js';
+import { ledger, pureCircuits, type Ledger, type ShieldedCoin, type QualifiedCoin } from './contract.js';
 import {
   emptyCoinStore,
   withCoin,
@@ -34,6 +41,33 @@ export interface DirectSpendOutcome extends SpendOutcome {
   sent: ShieldedCoin;
 }
 
+/** How far the S11 rescan probes for a device's current use counter. */
+const RESCAN_LIMIT = 4096n;
+
+/**
+ * Submit with a dust-race retry. The wallet builds fees from its own dust
+ * state, which lags the chain by a sync cycle; two transactions built in
+ * quick succession can reuse a dust nullifier (DustDoubleSpend) or emit an
+ * empty dust action set (NotNormalized), and the node rejects at
+ * submission. A rejected submission changes no state — the signed
+ * authorisation is still valid — so waiting for the wallet to catch up and
+ * rebuilding is sound.
+ */
+async function submitWithDustRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  const RETRIES = 3;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      const dustRace = /SubmissionError|Invalid Transaction|DustDoubleSpend|NotNormalized/.test(msg);
+      if (!dustRace || attempt >= RETRIES) throw e;
+      console.log(`  (${label}: submission rejected — dust-state race; retrying in 10s)`);
+      await new Promise((r) => setTimeout(r, 10_000));
+    }
+  }
+}
+
 function txId(r: any): string {
   const id = r?.public?.txId ?? r?.public?.transactionHash;
   if (!id) throw new Error('contract call returned without a transaction id');
@@ -55,6 +89,9 @@ function changeOf(r: any): ShieldedCoin | null {
 }
 
 export class CustodyAccount {
+  /** Device roster: pk (hex of x‖y) → current use counter (S11). */
+  private readonly counters = new Map<string, bigint>();
+
   private constructor(
     readonly address: string,
     readonly addressBytes: Uint8Array,
@@ -71,17 +108,28 @@ export class CustodyAccount {
   ): Promise<CustodyAccount> {
     const privateStateId = freshPrivateStateId();
     const initialPrivateState = emptyCoinStore(encKeys.secretKey);
+    // kernel.self() is not available in the constructor, so the initial
+    // entry cannot be inserted at deploy time; the constructor stores a
+    // salted boot commitment and activate_initial_device inserts the real
+    // address-bound entry immediately after (see the contract's `boot`
+    // cell for the full rationale).
+    const salt = new Uint8Array(32);
+    globalThis.crypto.getRandomValues(salt);
+    const boot = pureCircuits.derive_boot_commitment(salt, initialDevice.pk);
     const deployed = await deployContract(providers, {
       compiledContract,
       privateStateId,
       initialPrivateState,
-      args: [initialDevice.pk, encKeys.publicKey],
+      args: [boot, encKeys.publicKey],
     } as any);
     const address = deployed.deployTxData.public.contractAddress;
     // deployContract does not persist initialPrivateState on every provider
     // version; seed it explicitly so witnesses see it (c2c experiment note).
     await providers.privateStateProvider.set(privateStateId, initialPrivateState);
-    return new CustodyAccount(address, addressToBytes(address), providers, privateStateId, deployed);
+    await submitWithDustRetry('activate_initial_device', () => (deployed as any).callTx.activate_initial_device(initialDevice.pk, salt));
+    const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, deployed);
+    account.counters.set(pkKey(initialDevice.pk), 0n);
+    return account;
   }
 
   static async connect(
@@ -114,6 +162,41 @@ export class CustodyAccount {
     return { contractAddress: this.addressBytes, authNonce: l.auth_nonce };
   }
 
+  // ── Device roster (MIP-0013 S11) ──────────────────────────────────────────
+
+  /**
+   * The device's current use counter: the roster value when it still
+   * matches a live entry, else the S11 rescan — probe ledger membership of
+   * the device's entry at candidate counters under the current epoch. The
+   * verification step makes the roster self-healing after out-of-band
+   * calls or desync.
+   */
+  async resolveUseCounter(device: Device): Promise<bigint> {
+    const l = await this.ledgerState();
+    const known = this.counters.get(pkKey(device.pk));
+    if (known !== undefined) {
+      const entry = device.entryAt(this.addressBytes, l.device_epoch, known);
+      if (l.devices.member(entry)) return known;
+    }
+    for (let k = known ?? 0n; k < (known ?? 0n) + RESCAN_LIMIT; k++) {
+      const entry = device.entryAt(this.addressBytes, l.device_epoch, k);
+      if (l.devices.member(entry)) {
+        this.counters.set(pkKey(device.pk), k);
+        return k;
+      }
+    }
+    throw new Error('device entry not found on-ledger (rescan limit reached) — not a registered device?');
+  }
+
+  private advanceCounter(pk: { x: bigint; y: bigint }, used: bigint): void {
+    this.counters.set(pkKey(pk), used + 1n);
+  }
+
+  /** Record a freshly registered device (entry at use counter 0). */
+  registerDevice(pk: { x: bigint; y: bigint }): void {
+    this.counters.set(pkKey(pk), 0n);
+  }
+
   // ── Wallet-local coin store (MIP-0012 §6.5) ───────────────────────────────
 
   async coinStore(): Promise<CoinStorePrivateState> {
@@ -131,15 +214,29 @@ export class CustodyAccount {
     await this.providers.privateStateProvider.set(this.privateStateId, withoutCoin(s, color));
   }
 
+  /** The stored qualified coin for a color — the witness value the spend
+   *  will consume, needed for the AUTH-10 challenge binding. */
+  async heldCoin(color: Uint8Array): Promise<QualifiedCoin> {
+    const s = await this.coinStore();
+    const stored = s.coins[bytesToHex(color)];
+    if (!stored) throw new Error(`no held coin for color ${bytesToHex(color)} in the local store`);
+    return {
+      nonce: hexToBytes(stored.nonceHex),
+      color: hexToBytes(stored.colorHex),
+      value: BigInt(stored.value),
+      mt_index: BigInt(stored.mtIndex),
+    };
+  }
+
   // ── Permissionless surface ────────────────────────────────────────────────
 
   async depositUnshielded(color: Uint8Array, amount: bigint): Promise<TxResult> {
-    const r = await this.handle.callTx.deposit_unshielded(color, amount);
+    const r = await submitWithDustRetry('deposit_unshielded', () => this.handle.callTx.deposit_unshielded(color, amount));
     return { txId: txId(r) };
   }
 
   async depositShielded(coin: ShieldedCoin, entry: Uint8Array): Promise<TxResult> {
-    const r = await this.handle.callTx.deposit_shielded(coin, entry);
+    const r = await submitWithDustRetry('deposit_shielded', () => this.handle.callTx.deposit_shielded(coin, entry));
     return { txId: txId(r) };
   }
 
@@ -152,8 +249,14 @@ export class CustodyAccount {
     recipient: Uint8Array,
   ): Promise<TxResult> {
     const ctx = await this.callContext();
-    const auth = device.sign(challenges.withdrawUnshielded(ctx, device.pk, color, amount, recipient));
-    return this.withdrawUnshieldedWithAuth(color, amount, recipient, auth);
+    const counter = await this.resolveUseCounter(device);
+    const auth = device.sign(
+      challenges.withdrawUnshielded(ctx, device.pk, color, amount, recipient),
+      counter,
+    );
+    const r = await this.withdrawUnshieldedWithAuth(color, amount, recipient, auth);
+    this.advanceCounter(device.pk, counter);
+    return r;
   }
 
   async withdrawShielded(
@@ -163,8 +266,17 @@ export class CustodyAccount {
     amount: bigint,
   ): Promise<SpendOutcome> {
     const ctx = await this.callContext();
-    const auth = device.sign(challenges.withdrawShielded(ctx, device.pk, recipient, color, amount));
-    return this.withdrawShieldedWithAuth(recipient, color, amount, auth);
+    const counter = await this.resolveUseCounter(device);
+    // AUTH-10: the approver signs over the exact qualified coin the spend
+    // will consume, read from the same store the witness serves.
+    const coin = await this.heldCoin(color);
+    const auth = device.sign(
+      challenges.withdrawShielded(ctx, device.pk, recipient, color, amount, coin),
+      counter,
+    );
+    const r = await this.withdrawShieldedWithAuth(recipient, color, amount, auth);
+    this.advanceCounter(device.pk, counter);
+    return r;
   }
 
   async withdrawShieldedToContract(
@@ -174,32 +286,62 @@ export class CustodyAccount {
     amount: bigint,
   ): Promise<DirectSpendOutcome> {
     const ctx = await this.callContext();
-    const auth = device.sign(challenges.withdrawShieldedToContract(ctx, device.pk, recipient, color, amount));
-    return this.withdrawShieldedToContractWithAuth(recipient, color, amount, auth);
+    const counter = await this.resolveUseCounter(device);
+    const coin = await this.heldCoin(color);
+    const auth = device.sign(
+      challenges.withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin),
+      counter,
+    );
+    const r = await this.withdrawShieldedToContractWithAuth(recipient, color, amount, auth);
+    this.advanceCounter(device.pk, counter);
+    return r;
   }
 
   async appendInbox(device: Device, entry: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
-    const auth = device.sign(challenges.appendInbox(ctx, device.pk, entry));
-    return this.appendInboxWithAuth(entry, auth);
+    const counter = await this.resolveUseCounter(device);
+    const auth = device.sign(challenges.appendInbox(ctx, device.pk, entry), counter);
+    const r = await this.appendInboxWithAuth(entry, auth);
+    this.advanceCounter(device.pk, counter);
+    return r;
   }
 
   async rotateEncKey(device: Device, newKey: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
-    const auth = device.sign(challenges.rotateEncKey(ctx, device.pk, newKey));
-    return this.rotateEncKeyWithAuth(newKey, auth);
+    const counter = await this.resolveUseCounter(device);
+    const auth = device.sign(challenges.rotateEncKey(ctx, device.pk, newKey), counter);
+    const r = await this.rotateEncKeyWithAuth(newKey, auth);
+    this.advanceCounter(device.pk, counter);
+    return r;
   }
 
   async addDevice(device: Device, newPk: { x: bigint; y: bigint }): Promise<TxResult> {
     const ctx = await this.callContext();
-    const auth = device.sign(challenges.addDevice(ctx, device.pk, newPk));
-    return this.addDeviceWithAuth(newPk, auth);
+    const counter = await this.resolveUseCounter(device);
+    const auth = device.sign(challenges.addDevice(ctx, device.pk, newPk), counter);
+    const r = await this.addDeviceWithAuth(newPk, auth);
+    this.advanceCounter(device.pk, counter);
+    this.registerDevice(newPk);
+    return r;
   }
 
-  async removeDevice(device: Device, commitment: Uint8Array): Promise<TxResult> {
+  /** Remove another device by its public key: its current entry is
+   *  resolved from the roster or the S11 rescan (MIP-0013 §6). */
+  async removeDevice(device: Device, target: Device): Promise<TxResult> {
+    const l = await this.ledgerState();
+    const targetCounter = await this.resolveUseCounter(target);
+    const entry = target.entryAt(this.addressBytes, l.device_epoch, targetCounter);
+    return this.removeDeviceEntry(device, entry);
+  }
+
+  /** Remove a device by its literal current set element. */
+  async removeDeviceEntry(device: Device, entry: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
-    const auth = device.sign(challenges.removeDevice(ctx, device.pk, commitment));
-    return this.removeDeviceWithAuth(commitment, auth);
+    const counter = await this.resolveUseCounter(device);
+    const auth = device.sign(challenges.removeDevice(ctx, device.pk, entry), counter);
+    const r = await this.removeDeviceEntryWithAuth(entry, auth);
+    this.advanceCounter(device.pk, counter);
+    return r;
   }
 
   // ── Authorised surface (low level: caller supplies the Authorisation) ────
@@ -210,9 +352,9 @@ export class CustodyAccount {
     recipient: Uint8Array,
     a: Authorisation,
   ): Promise<TxResult> {
-    const r = await this.handle.callTx.withdraw_unshielded(
-      color, amount, { bytes: recipient }, a.pk, a.sig_r, a.sig_s, a.grind_nonce,
-    );
+    const r = await submitWithDustRetry('withdraw_unshielded', () => this.handle.callTx.withdraw_unshielded(
+      color, amount, { bytes: recipient }, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce,
+    ));
     return { txId: txId(r) };
   }
 
@@ -222,9 +364,9 @@ export class CustodyAccount {
     amount: bigint,
     a: Authorisation,
   ): Promise<SpendOutcome> {
-    const r = await this.handle.callTx.withdraw_shielded(
-      { bytes: recipient }, color, amount, a.pk, a.sig_r, a.sig_s, a.grind_nonce,
-    );
+    const r = await submitWithDustRetry('withdraw_shielded', () => this.handle.callTx.withdraw_shielded(
+      { bytes: recipient }, color, amount, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce,
+    ));
     return { txId: txId(r), change: changeOf(r) };
   }
 
@@ -234,9 +376,9 @@ export class CustodyAccount {
     amount: bigint,
     a: Authorisation,
   ): Promise<DirectSpendOutcome> {
-    const r = await this.handle.callTx.withdraw_shielded_to_contract(
-      { bytes: recipient }, color, amount, a.pk, a.sig_r, a.sig_s, a.grind_nonce,
-    );
+    const r = await submitWithDustRetry('withdraw_shielded_to_contract', () => this.handle.callTx.withdraw_shielded_to_contract(
+      { bytes: recipient }, color, amount, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce,
+    ));
     const result = circuitResult(r);
     if (!Array.isArray(result) || !result[0]?.nonce) {
       throw new Error('withdraw_shielded_to_contract: [sent, change] result not found on the call surface');
@@ -250,22 +392,22 @@ export class CustodyAccount {
   }
 
   async appendInboxWithAuth(entry: Uint8Array, a: Authorisation): Promise<TxResult> {
-    const r = await this.handle.callTx.append_inbox(entry, a.pk, a.sig_r, a.sig_s, a.grind_nonce);
+    const r = await submitWithDustRetry('append_inbox', () => this.handle.callTx.append_inbox(entry, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
     return { txId: txId(r) };
   }
 
   async rotateEncKeyWithAuth(newKey: Uint8Array, a: Authorisation): Promise<TxResult> {
-    const r = await this.handle.callTx.rotate_enc_key(newKey, a.pk, a.sig_r, a.sig_s, a.grind_nonce);
+    const r = await submitWithDustRetry('rotate_enc_key', () => this.handle.callTx.rotate_enc_key(newKey, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
     return { txId: txId(r) };
   }
 
   async addDeviceWithAuth(newPk: { x: bigint; y: bigint }, a: Authorisation): Promise<TxResult> {
-    const r = await this.handle.callTx.add_device(newPk, a.pk, a.sig_r, a.sig_s, a.grind_nonce);
+    const r = await submitWithDustRetry('add_device', () => this.handle.callTx.add_device(newPk, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
     return { txId: txId(r) };
   }
 
-  async removeDeviceWithAuth(commitment: Uint8Array, a: Authorisation): Promise<TxResult> {
-    const r = await this.handle.callTx.remove_device(commitment, a.pk, a.sig_r, a.sig_s, a.grind_nonce);
+  async removeDeviceEntryWithAuth(entry: Uint8Array, a: Authorisation): Promise<TxResult> {
+    const r = await submitWithDustRetry('remove_device', () => this.handle.callTx.remove_device(entry, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
     return { txId: txId(r) };
   }
 
@@ -273,6 +415,10 @@ export class CustodyAccount {
   get callTx(): any {
     return this.handle.callTx;
   }
+}
+
+function pkKey(pk: { x: bigint; y: bigint }): string {
+  return `${pk.x.toString(16)}:${pk.y.toString(16)}`;
 }
 
 // ContractAddress circuit arguments are { bytes: Bytes<32> }; the hex form

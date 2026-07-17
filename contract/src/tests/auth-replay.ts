@@ -8,12 +8,14 @@
 //      circuit with an identical argument list (AUTH-3: per-circuit tags).
 //      The pair used is withdraw_shielded / withdraw_shielded_to_contract,
 //      whose argument lists are byte-identical ({bytes: 32}, color,
-//      amount). Both rejections happen at the seam, before any witness or
-//      asset is consulted.
+//      amount) and whose witness values (the held coin) are identical too,
+//      so only the per-circuit tag separates the challenges. The account
+//      holds a real coin so the rejection demonstrably happens at the
+//      seam's signature check, not at the witness.
 
 import { runScenario, step, waitForLedger } from './runner.js';
 import { writeEvidence } from './evidence.js';
-import { standardSetup, expectAbort } from './flow.js';
+import { standardSetup, mintToUser, depositAndCapture, expectAbort } from './flow.js';
 import { userAddressBytes } from '../node/wallet.js';
 import { deployAccount } from '../node/setup.js';
 import { challenges, Device } from '../wallet/signer.js';
@@ -48,6 +50,7 @@ await runScenario('auth-replay', async () => {
   const ctxOne = await s.account.callContext();
   const authForOne = s.device.sign(
     challenges.withdrawUnshielded(ctxOne, s.device.pk, NIGHT, SPEND, recipient),
+    await s.account.resolveUseCounter(s.device),
   );
   details.crossAccountRejection = await expectAbort(
     'account two given account one’s signature (AUTH-3, address binding)',
@@ -69,15 +72,22 @@ await runScenario('auth-replay', async () => {
 
   // ── Test 4: cross-circuit replay ──────────────────────────────────────────
 
+  step('test 4: fund a shielded coin so the sibling circuits share witness values');
+  const COLOR_SEED = '0'.repeat(62) + '31';
+  const minted = await mintToUser(s.ctx, s.faucet, COLOR_SEED, SPEND);
+  await depositAndCapture(s.account, s.encKeys, minted);
+
   step('test 4: a withdraw_shielded signature is rejected by withdraw_shielded_to_contract');
   const dest = new Uint8Array(32).fill(3); // 32-byte recipient, identical bytes for both circuits
   const ctx = await s.account.callContext();
+  const heldCoin = await s.account.heldCoin(minted.color);
   const authShielded = s.device.sign(
-    challenges.withdrawShielded(ctx, s.device.pk, dest, NIGHT, SPEND),
+    challenges.withdrawShielded(ctx, s.device.pk, dest, minted.color, SPEND, heldCoin),
+    await s.account.resolveUseCounter(s.device),
   );
   details.crossCircuitRejection = await expectAbort(
-    'sibling circuit with an identical argument list (AUTH-3, per-circuit tags)',
-    () => s.account.withdrawShieldedToContractWithAuth(dest, NIGHT, SPEND, authShielded),
+    'sibling circuit with identical arguments and witness values (AUTH-3, per-circuit tags)',
+    () => s.account.withdrawShieldedToContractWithAuth(dest, minted.color, SPEND, authShielded),
   );
   const oneAfter = await s.account.ledgerState();
   if (oneAfter.auth_nonce !== ctx.authNonce) {

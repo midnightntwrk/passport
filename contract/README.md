@@ -6,8 +6,9 @@ The standardised account custody contract: the reference implementation of
   surface: unshielded mirror, stateless shielded custody, encrypted inbox,
   the change rule, payment modes), and
 - **MIP-0013 — Multi-key Account Authorisation for Custody Contracts** (the
-  seam instantiation: in-circuit JubJub Schnorr, per-circuit challenge
-  binding, device lifecycle, `auth_nonce` freshness),
+  seam instantiation: in-circuit JubJub Schnorr, rolling single-use device
+  entries (AUTH-9), per-circuit challenge binding with witness-value
+  pinning (AUTH-10), device lifecycle, `auth_nonce` freshness),
 
 in one deployment, with the conformance suites both Testing sections
 require. This directory is the standard to build against going forward;
@@ -55,9 +56,9 @@ Each node suite writes a JSON evidence file under `evidence/`.
 
 | Suite | MIP-0012 Testing | MIP-0013 Testing | Invariants exercised |
 |---|---|---|---|
-| `unit-offline` | — (client halves of §5.2–5.3, §6.4) | — | AUTH-3 at the hash level; S10 non-vacuity |
-| `auth-conformance` | — | 1, 2, 5 | AUTH-1, AUTH-2, AUTH-3, AUTH-8, INV-7 |
-| `auth-lifecycle` | — | 6, 9 | AUTH-4, AUTH-5, AUTH-7 |
+| `unit-offline` | — (client halves of §5.2–5.3, §6.4) | — | AUTH-3, AUTH-9, AUTH-10 at the hash level; S10 non-vacuity |
+| `auth-conformance` | — | 1, 2, 5 | AUTH-1, AUTH-2, AUTH-3, AUTH-8, AUTH-9 (wrong-counter fault), INV-7 |
+| `auth-lifecycle` | — | 6, 9 | AUTH-4, AUTH-5, AUTH-7, AUTH-9 (entry roll observed) |
 | `auth-replay` | — | 3, 4 | AUTH-3 (address and circuit binding) |
 | `auth-crossimpl` + `crossimpl-offline` | — | 7 | AUTH-4 (approval/proving separation) |
 | `custody-shielded` | 1, 2, 3 | — | INV-1, INV-2, INV-3, INV-4, INV-5 |
@@ -80,17 +81,24 @@ Not covered here, by design:
 
 To be folded back into the MIP texts:
 
-1. **MIP-0013 §3 device-map key type.** The text declares
-   `devices: Map<Field, Uint<32>>` while defining the commitment as a
-   `persistentHash` output (`Bytes<32>`). A `Bytes<32>` cannot be safely
-   cast to `Field` (no grinding on that path; the range check fails for
-   roughly half of all keys). This implementation keys the map by
-   `Bytes<32>`.
-2. **MIP-0013 §5.1 tag length.** Every per-circuit tag
+1. **MIP-0013 §5.1 tag length.** Every per-circuit tag
    `midnight:account:auth:v1:<circuit-name>` exceeds 32 bytes, so the
    "zero-padded" arm of §5.1 is unreachable; this implementation uniformly
    hashes (DST = `persistentHash` of the tag zero-padded to 64 bytes). The
    spec should state one normative construction.
+2. **MIP-0013 §3 deploy-time entry is unimplementable.** The initial
+   device entry binds `kernel.self()`, but `kernel.self()` evaluates to
+   the zero address inside a constructor on the current toolchain, so the
+   constructor cannot compute the address-bound entry (verified
+   empirically: the deployed entry matched the zero-address derivation).
+   This implementation bootstraps instead: the constructor stores a
+   salted commitment `persistentHash([DST_BOOT, salt, pk])` and the
+   permissionless `activate_initial_device(pk, salt)` circuit inserts the
+   real entry at use counter 0 and burns the commitment. Deterministic in
+   the committed key (no front-running); the fresh per-account salt keeps
+   pre-activation state free of cross-account-stable device values. The
+   MIP needs either this bootstrap pattern or a toolchain guarantee that
+   the constructor sees the final address.
 3. **MIP-0012 §6.3 direct-transfer return.** The contract-recipient
    circuit must return the **sent** coin as well as the change: the
    composing client needs its description (the deterministic nonce
@@ -123,8 +131,29 @@ To be folded back into the MIP texts:
   carry additional commitments (funding change), so single-output
   `mt_index` inference does not hold; clients must implement candidate
   retry (§6.5), which INV-5 makes safe. The client library and suites do.
+- **Wallet dust-state lag**: the wallet SDK builds fees from its own dust
+  view, which lags the chain by a sync cycle; transactions built in quick
+  succession are rejected at submission (`DustDoubleSpend`,
+  `NotNormalized`). A rejected submission changes no state, so the client
+  retries with the same authorisation (`submitWithDustRetry`). On an aged
+  local chain the lag grows unboundedly; reset the localnet when suites
+  start failing at submission.
+- **Zero-effect calls can hang the wallet SDK**: a circuit call that
+  changes no public state has been observed to never resolve its
+  finalisation watch. Avoid on-chain calls for pure derivations; compute
+  them client-side (`rawTokenType` for token colors).
 
 ## Client-library notes
+
+- Clients maintain a device roster (public key → use counter) per
+  MIP-0013 S11: the rolling entry consumed by each call is
+  `persistentHash([DST_DEVICE, self, pk, epoch, use_counter])`, and an
+  unknown or stale counter is recovered by probing ledger membership of
+  candidate entries (`CustodyAccount.resolveUseCounter`).
+- For witness-consuming circuits the approver signs over the exact
+  qualified coin the spend will consume (AUTH-10); the client pipeline
+  hands the witness values to the signer, and a candidate `mt_index`
+  retry therefore re-signs per candidate.
 
 - `UserAddress` circuit arguments are the bech32-decoded **address** bytes
   (the hash the ledger indexes UTXOs by), not the raw signing public key.

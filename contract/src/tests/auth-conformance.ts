@@ -5,7 +5,8 @@
 //      auth_nonce and round advance (AUTH-1, AUTH-2).
 //   2. The same call aborts, with no state change, under each single
 //      fault: wrong sig_s; sig_r for a different challenge; unregistered
-//      pk; tampered argument; stale auth_nonce; reused signature. The
+//      pk; wrong use counter; tampered argument; stale auth_nonce; reused
+//      signature. The
 //      stale-epoch fault is N/A until the recovery seam lands (no circuit
 //      bumps device_epoch yet).
 //   3. A permissionless deposit lands between signing and submission; the
@@ -70,11 +71,12 @@ await runScenario('auth-conformance', async () => {
   step('test 2: rejection matrix (each single fault aborts, no state change)');
   const matrix: Record<string, string> = {};
   const ctxNow = async () => s.account.callContext();
+  const counterNow = async () => s.account.resolveUseCounter(s.device);
 
   // (a) wrong sig_s
   {
     const ctx = await ctxNow();
-    const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient));
+    const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
     const bad: Authorisation = { ...auth, sig_s: (auth.sig_s + 1n) };
     matrix.wrongSigS = await expectAbort('wrong sig_s', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, bad));
@@ -83,7 +85,7 @@ await runScenario('auth-conformance', async () => {
   // (b) sig_r from a different challenge (signed for a different amount)
   {
     const ctx = await ctxNow();
-    const other = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND + 1n, recipient));
+    const other = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND + 1n, recipient), await counterNow());
     matrix.foreignSigR = await expectAbort('signature computed for a different call', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, other));
   }
@@ -92,15 +94,25 @@ await runScenario('auth-conformance', async () => {
   {
     const ctx = await ctxNow();
     const stranger = Device.generate();
-    const auth = stranger.sign(challenges.withdrawUnshielded(ctx, stranger.pk, NIGHT, SPEND, recipient));
+    const auth = stranger.sign(challenges.withdrawUnshielded(ctx, stranger.pk, NIGHT, SPEND, recipient), 0n);
     matrix.unregisteredPk = await expectAbort('unregistered device key', () =>
+      s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, auth));
+  }
+
+  // (c2) wrong use counter: the rolling entry at counter+1 is not in the
+  // set yet, so the seam's membership assert fails (AUTH-9)
+  {
+    const ctx = await ctxNow();
+    const counter = await counterNow();
+    const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), counter + 1n);
+    matrix.wrongUseCounter = await expectAbort('wrong use counter (AUTH-9)', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, auth));
   }
 
   // (d) tampered argument with an otherwise-valid signature
   {
     const ctx = await ctxNow();
-    const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient));
+    const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
     matrix.tamperedArg = await expectAbort('tampered amount under a valid signature (AUTH-3)', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND * 2n, recipient, auth));
   }
@@ -109,7 +121,7 @@ await runScenario('auth-conformance', async () => {
   {
     const ctx = await ctxNow();
     const stale = { ...ctx, authNonce: ctx.authNonce - 1n };
-    const auth = s.device.sign(challenges.withdrawUnshielded(stale, s.device.pk, NIGHT, SPEND, recipient));
+    const auth = s.device.sign(challenges.withdrawUnshielded(stale, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
     matrix.staleNonce = await expectAbort('stale auth_nonce (AUTH-2)', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, auth));
   }
@@ -123,7 +135,7 @@ await runScenario('auth-conformance', async () => {
   // (f) reused signature after a successful call
   {
     const ctx = await ctxNow();
-    const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient));
+    const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
     const ok = await s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, auth);
     console.log(`  first use accepted: ${ok.txId}`);
     await waitForLedger(
@@ -141,7 +153,10 @@ await runScenario('auth-conformance', async () => {
 
   step('test 5: a deposit lands between signing and submission; the authorisation survives');
   const ctx = await s.account.callContext();
-  const pending = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient));
+  const pending = s.device.sign(
+    challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient),
+    await s.account.resolveUseCounter(s.device),
+  );
   // A third party funds the account while our signature is in flight.
   await s.account.depositUnshielded(NIGHT, 777n);
   await waitForLedger(

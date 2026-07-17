@@ -5,19 +5,19 @@
   "verdict": "PASS",
   "note": "Stateless deposit conforms (entry decrypts, no coin material observable, wrong-index probe fails at proving); partial spend + surviving-coin capture + cross-transaction change spend all accepted by the node.",
   "details": {
-    "account": "7538ce8ea4a27f9572b68ddc415ab04ea049a8fab91e7b7e743677e6d6ea11e1",
-    "depositTx": "0092abc0a51e624d265bca10ca9e862e1e1e1941c15b62626b9ac1451a21118dd5",
+    "account": "7f8e0efa65b5e7f22e46695a3b00262cb01a0a6451a55fea423ad0012997c106",
+    "depositTx": "0084b9f8139e712634433bb9be953de86f3a3936440fb52937bd943e911da491dd",
     "mtIndexCandidates": [
-      "52"
+      "31"
     ],
     "depositAudit": {
-      "tx:0092abc0a5…:raw": {
+      "tx:0084b9f813…:raw": {
         "nonce": false,
         "color": false,
         "valueBE": false,
         "valueLE": false
       },
-      "tx:0092abc0a5…:contractActions": {
+      "tx:0084b9f813…:contractActions": {
         "nonce": false,
         "color": false,
         "valueBE": false,
@@ -30,49 +30,49 @@
         "valueLE": false
       }
     },
-    "wrongIndexRejection": "Unexpected error executing scoped transaction '<unnamed>': Error: invalid index into sparse merkle tree: 1052 -- write creating spend proof",
-    "partialSpendTx": "00d7eaaa7ab13d566edde8bda1010a658358657596c5154d89dcbfa26c91acf25f",
+    "wrongIndexRejection": "Unexpected error executing scoped transaction '<unnamed>': Error: invalid index into sparse merkle tree: 1031 -- write creating spend proof",
+    "partialSpendTx": "007ae995f1bc04feb1e4b41ccee0e25c389b7e9ebda676c6f1ff639e076a809e9c",
     "partialSpendAttempts": [
       {
-        "mtIndex": "52",
-        "outcome": "accepted: 00d7eaaa7ab13d566edde8bda1010a658358657596c5154d89dcbfa26c91acf25f"
+        "mtIndex": "31",
+        "outcome": "accepted: 007ae995f1bc04feb1e4b41ccee0e25c389b7e9ebda676c6f1ff639e076a809e9c"
       }
     ],
     "changeCandidates": [
-      "53",
-      "54"
+      "32",
+      "33"
     ],
-    "changeSpendTx": "006671c3e1290e0c865a29402c53217f8cfaf636151a93ebeedac059bba27e5c8a",
+    "changeSpendTx": "00e0dbb2a275dbd52c99ffdb085eab12397f472ffcbb9389e758fdc58478da348a",
     "changeSpendAttempts": [
       {
-        "mtIndex": "53",
+        "mtIndex": "32",
         "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' retur"
       },
       {
-        "mtIndex": "54",
-        "outcome": "accepted: 006671c3e1290e0c865a29402c53217f8cfaf636151a93ebeedac059bba27e5c8a"
+        "mtIndex": "33",
+        "outcome": "accepted: 00e0dbb2a275dbd52c99ffdb085eab12397f472ffcbb9389e758fdc58478da348a"
       }
     ],
     "lifecycleAudit": {
-      "tx:00d7eaaa7a…:raw": {
+      "tx:007ae995f1…:raw": {
         "nonce": false,
         "color": false,
         "valueBE": false,
         "valueLE": false
       },
-      "tx:00d7eaaa7a…:contractActions": {
+      "tx:007ae995f1…:contractActions": {
         "nonce": false,
         "color": false,
         "valueBE": false,
         "valueLE": false
       },
-      "tx:006671c3e1…:raw": {
+      "tx:00e0dbb2a2…:raw": {
         "nonce": false,
         "color": false,
         "valueBE": false,
         "valueLE": false
       },
-      "tx:006671c3e1…:contractActions": {
+      "tx:00e0dbb2a2…:contractActions": {
         "nonce": false,
         "color": false,
         "valueBE": false,
@@ -86,7 +86,7 @@
       }
     }
   },
-  "ranAt": "2026-07-17T10:06:20.213Z",
+  "ranAt": "2026-07-17T13:05:26.164Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

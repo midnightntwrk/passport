@@ -60,8 +60,12 @@ await runScenario('auth-crossimpl', async () => {
   });
   details.grindAttempts = sig.attempts;
   details.challenge = sig.challenge;
+  // The Rust device was registered by add_device, so its rolling entry
+  // sits at use counter 0 (AUTH-9); the counter travels alongside the
+  // signature as authorising material.
   const r = await s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, {
     pk: sig.pk,
+    use_counter: 0n,
     sig_r: sig.sig_r,
     sig_s: sig.sig_s,
     grind_nonce: sig.grind_nonce,

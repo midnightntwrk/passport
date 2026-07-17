@@ -26,16 +26,32 @@ const pointsEqual = (a: { x: bigint; y: bigint }, b: { x: bigint; y: bigint }) =
   a.x === b.x && a.y === b.y;
 
 await runScenario('unit-offline', async () => {
-  step('device keys and commitments (MIP-0013 §1, §3)');
+  step('device keys and rolling entries (MIP-0013 §1, §3, AUTH-9)');
   const device = Device.generate();
   assert(device.sk > 0n && device.sk < JUBJUB_R, 'sk in [1, r_J)');
-  assert(device.commitment.length === 32, 'device commitment is 32 bytes');
-  const again = pureCircuits.derive_device_commitment(device.pk);
-  assert(Buffer.from(device.commitment).equals(Buffer.from(again)), 'commitment deterministic');
+  const accountAddr = new Uint8Array(randomBytes(32));
+  const e0 = device.entryAt(accountAddr, 0n, 0n);
+  assert(e0.length === 32, 'device entry is 32 bytes');
+  assert(
+    Buffer.from(e0).equals(Buffer.from(device.entryAt(accountAddr, 0n, 0n))),
+    'entry deterministic',
+  );
   const other = Device.generate();
   assert(
-    !Buffer.from(device.commitment).equals(Buffer.from(other.commitment)),
-    'distinct keys give distinct commitments',
+    !Buffer.from(e0).equals(Buffer.from(other.entryAt(accountAddr, 0n, 0n))),
+    'distinct keys give distinct entries',
+  );
+  assert(
+    !Buffer.from(e0).equals(Buffer.from(device.entryAt(accountAddr, 0n, 1n))),
+    'the use counter rolls the entry (single-use, AUTH-9)',
+  );
+  assert(
+    !Buffer.from(e0).equals(Buffer.from(device.entryAt(accountAddr, 1n, 0n))),
+    'an epoch bump invalidates every prior entry (AUTH-6)',
+  );
+  assert(
+    !Buffer.from(e0).equals(Buffer.from(device.entryAt(new Uint8Array(randomBytes(32)), 0n, 0n))),
+    'entries for one key are unequal across accounts',
   );
 
   step('signing pipeline: grinding and the Schnorr equation (§5)');
@@ -43,7 +59,7 @@ await runScenario('unit-offline', async () => {
   const color = new Uint8Array(32);
   const recipient = new Uint8Array(randomBytes(32));
   const builder = challenges.withdrawUnshielded(ctx, device.pk, color, 100n, recipient);
-  const auth = device.sign(builder);
+  const auth = device.sign(builder, 0n);
   const h = builder(auth.sig_r, auth.grind_nonce);
   const c = bytesToBigIntLE(h);
   assert(c < JUBJUB_R, 'ground challenge below r_J (§5.2)');
@@ -65,13 +81,27 @@ await runScenario('unit-offline', async () => {
     'equation fails for a tampered challenge',
   );
 
-  step('challenge domain separation (AUTH-3)');
-  const sameArgsOtherCircuit = challenges.withdrawShielded(ctx, device.pk, recipient, color, 100n);
+  step('challenge domain separation (AUTH-3) and witness binding (AUTH-10)');
+  const witnessCoin = { nonce: new Uint8Array(randomBytes(32)), color, value: 100n, mt_index: 7n };
+  const shieldedBuilder = challenges.withdrawShielded(ctx, device.pk, recipient, color, 100n, witnessCoin);
+  const toContractBuilder = challenges.withdrawShieldedToContract(ctx, device.pk, recipient, color, 100n, witnessCoin);
   assert(
-    !Buffer.from(builder(auth.sig_r, auth.grind_nonce)).equals(
-      Buffer.from(sameArgsOtherCircuit(auth.sig_r, auth.grind_nonce)),
+    !Buffer.from(shieldedBuilder(auth.sig_r, auth.grind_nonce)).equals(
+      Buffer.from(toContractBuilder(auth.sig_r, auth.grind_nonce)),
     ),
     'per-circuit tags separate identical argument lists',
+  );
+  const otherCoin = { ...witnessCoin, mt_index: 8n };
+  assert(
+    !Buffer.from(shieldedBuilder(auth.sig_r, auth.grind_nonce)).equals(
+      Buffer.from(
+        challenges.withdrawShielded(ctx, device.pk, recipient, color, 100n, otherCoin)(
+          auth.sig_r,
+          auth.grind_nonce,
+        ),
+      ),
+    ),
+    'the witness values pin the private state (AUTH-10): a different coin, a different challenge',
   );
   const otherAccount: CallContext = { ...ctx, contractAddress: new Uint8Array(randomBytes(32)) };
   assert(
@@ -132,7 +162,7 @@ await runScenario('unit-offline', async () => {
   for (let i = 0; i < 20; i++) {
     const d = Device.generate();
     const b = challenges.appendInbox(ctx, d.pk, entry);
-    const a = d.sign(b);
+    const a = d.sign(b, 0n);
     attempts += Number(a.grind_nonce) + 1;
   }
   console.log(`  grinding: ${(attempts / 20).toFixed(1)} attempts/signature (expect ≈17.5)`);
