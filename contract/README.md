@@ -81,11 +81,17 @@ Not covered here, by design:
 
 To be folded back into the MIP texts:
 
-1. **MIP-0013 §5.1 tag length.** Every per-circuit tag
-   `midnight:account:auth:v1:<circuit-name>` exceeds 32 bytes, so the
-   "zero-padded" arm of §5.1 is unreachable; this implementation uniformly
-   hashes (DST = `persistentHash` of the tag zero-padded to 64 bytes). The
-   spec should state one normative construction.
+1. **MIP-0013 §5.1 DST derivation.** As first published, §5.1 derived
+   the per-circuit DST as the tag "zero-padded or hashed to 32 bytes":
+   the arm selection, the hash function, and the pre-hash encoding were
+   all unspecified, so two conforming implementations could derive
+   different challenges from the same tag. (Every current tag exceeds
+   32 bytes, but a short circuit name such as `send` would make the
+   ambiguity live.) This implementation derives unconditionally:
+   DST = `persistentHash<[Bytes<64>]>` of the tag zero-padded to
+   64 bytes, regardless of length. Proposed upstream as
+   [midnight-improvement-proposals#249](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/249),
+   which codifies exactly this construction.
 2. **MIP-0013 §3 deploy-time entry is unimplementable.** The initial
    device entry binds `kernel.self()`, but `kernel.self()` evaluates to
    the zero address inside a constructor on the current toolchain, so the
