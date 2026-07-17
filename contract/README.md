@@ -123,10 +123,16 @@ To be folded back into the MIP texts:
 ## Ecosystem dependencies observed
 
 - **Indexer contract-transaction enumeration** (MIP-0012 Path to Active):
-  `contractAction(address)` returns a single (latest) action; there is no
-  surface enumerating a contract's transactions. Third-party-deposit
-  discovery works end to end only with the depositor-known transaction
-  id; the conformance suite records this as a PARTIAL verdict.
+  the `contractAction(address, offset)` *query* returns a single action
+  (the latest at or before the offset), but the
+  `contractActions(address, offset)` *subscription* replays the complete
+  per-address action history from any block height (verified against a
+  deployed account: deploy through every call, in order, with entry
+  points and transaction hashes). Path-to-Active discovery is therefore
+  fully supported; a discovering wallet uses the subscription, not the
+  point query. The conformance suite currently exercises the
+  known-transaction-id path only and records its verdict as PARTIAL for
+  that reason, not because the indexer lacks the surface.
 - **Multi-output position windows**: on a busy wallet, deposits and spends
   carry additional commitments (funding change), so single-output
   `mt_index` inference does not hold; clients must implement candidate
