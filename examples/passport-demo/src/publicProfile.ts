@@ -53,3 +53,7 @@ export async function loadDemoProfile(subjectId: string): Promise<DemoPassportPr
 export async function saveDemoProfile(profile: DemoPassportProfile): Promise<void> {
   await request('readwrite', (store) => store.put(profile, profile.subjectId));
 }
+
+export async function deleteDemoProfile(subjectId: string): Promise<void> {
+  await request('readwrite', (store) => store.delete(subjectId));
+}

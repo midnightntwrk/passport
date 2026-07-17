@@ -18,6 +18,7 @@ experiments/dynamic-midnight-sdk-validation/
 /target/
 **/target/
 *.rlib
+/midnight-level-db/
 examples/passport-demo/.generated/
 examples/passport-demo/public/zk/
 
