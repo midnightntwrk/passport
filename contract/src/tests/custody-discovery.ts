@@ -12,9 +12,11 @@
 //      contract-address surface for candidate mt_index values — and spends
 //      the coin with a device signature.
 //
-// The contract-address → transactions lookup is itself under test: it is
-// the indexer dependency MIP-0012's Path to Active records. A missing
-// surface downgrades the verdict to PARTIAL, not a scaffold bug.
+// The contract-address → transactions enumeration is itself under test: it
+// is the indexer dependency MIP-0012's Path to Active records, satisfied by
+// the contractActions subscription (full per-address history replay). The
+// depositor-known txId remains only as a recorded fallback: reaching it
+// downgrades the verdict to PARTIAL, not a scaffold bug.
 
 import { runScenario, step, waitForLedger, sleep } from './runner.js';
 import { writeEvidence, classifySpendError } from './evidence.js';
@@ -22,59 +24,12 @@ import { standardSetup, mintToUser, userCoinPublicKey } from './flow.js';
 import { setupWallet, connectAccount, deployFaucet } from '../node/setup.js';
 import { sealInboxEntry } from '../wallet/inbox.js';
 import { inboxWalk } from '../wallet/discovery.js';
-import { indexerUrl, candidateIndices } from '../wallet/capture.js';
+import { candidateIndices, enumerateContractActions } from '../wallet/capture.js';
 import { emptyCoinStore } from '../wallet/witnesses.js';
 import { bytesToHex } from '../wallet/hex.js';
 
 const COLOR_SEED = '0'.repeat(62) + '51';
 const AMOUNT = 350n;
-
-/** Find transactions touching a contract via the indexer; probe query shapes. */
-async function findContractTxs(address: string): Promise<{ txIds: string[]; probes: Array<Record<string, string>> }> {
-  const probes: Array<Record<string, string>> = [];
-  const shapes: Array<[string, string, Record<string, unknown>]> = [
-    [
-      'contractAction(address)',
-      `query($address: HexEncoded!) {
-         contractAction(address: $address) { address ... on ContractCall { transaction { hash id } } }
-       }`,
-      { address: address.replace(/^0x/, '') },
-    ],
-    [
-      'contractActions(address)',
-      `query($address: HexEncoded!) {
-         contractActions(address: $address) { address transaction { hash id } }
-       }`,
-      { address: address.replace(/^0x/, '') },
-    ],
-  ];
-  const txIds: string[] = [];
-  for (const [name, query, variables] of shapes) {
-    try {
-      const res = await fetch(indexerUrl(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, variables }),
-      });
-      const body: any = await res.json();
-      if (body?.errors?.length) {
-        probes.push({ surface: name, outcome: `GraphQL errors: ${JSON.stringify(body.errors).slice(0, 300)}` });
-        continue;
-      }
-      const data = body?.data?.contractAction ?? body?.data?.contractActions;
-      const actions = Array.isArray(data) ? data : data ? [data] : [];
-      const ids = actions
-        .map((a: any) => a?.transaction?.id ?? a?.transaction?.hash)
-        .filter(Boolean);
-      probes.push({ surface: name, outcome: `ok: ${ids.length} tx(s)` });
-      txIds.push(...ids);
-      if (ids.length) break;
-    } catch (e: any) {
-      probes.push({ surface: name, outcome: `fetch failed: ${e?.message}` });
-    }
-  }
-  return { txIds: [...new Set(txIds)], probes };
-}
 
 await runScenario('custody-discovery', async () => {
   const details: Record<string, unknown> = {};
@@ -119,21 +74,54 @@ await runScenario('custody-discovery', async () => {
   if (!matches) throw new Error('inbox walk did not recover the deposited coin');
   console.log('  ✓ inbox walk recovered the exact coin');
 
+  step('wallet A: enumerate the contract history from its address alone');
   console.log('  waiting 10s for the indexer to settle...');
   await sleep(10_000);
-  const lookup = await findContractTxs(a.account.address);
-  details.contractTxLookup = lookup.probes;
 
   const candidateSets: Array<{ source: string; candidates: bigint[] }> = [];
-  for (const txId of lookup.txIds) {
-    try {
-      const { candidates } = await candidateIndices(txId);
-      if (candidates.length) candidateSets.push({ source: `contract-tx ${txId.slice(0, 12)}…`, candidates });
-    } catch { /* recorded via probes */ }
+  try {
+    const history = await enumerateContractActions(a.account.address);
+    details.enumeratedActions = history.map((h) => ({
+      kind: h.kind,
+      entryPoint: h.entryPoint ?? null,
+      txHash: h.txHash,
+      identifiers: h.identifiers,
+      blockHeight: h.blockHeight,
+      window: h.startIndex != null ? `[${h.startIndex}, ${h.endIndex})` : null,
+    }));
+    console.log(`  contractActions replayed ${history.length} action(s):`);
+    for (const h of history)
+      console.log(`    block ${h.blockHeight}  ${h.kind}${h.entryPoint ? ' ' + h.entryPoint : ''}`);
+
+    // The conformance point: B's depositing transaction is reachable from
+    // the contract address alone, with no off-band channel. The wallet's
+    // txId is a transaction identifier, not the hash; RegularTransaction
+    // carries all identifiers, so match there.
+    const depId = dep.txId.replace(/^0x/, '');
+    const depositSeen = history.some((h) => h.identifiers.includes(depId));
+    details.depositTxEnumerated = depositSeen;
+    if (!depositSeen)
+      throw new Error(`the enumerated history does not contain the deposit tx ${dep.txId}`);
+    console.log('  ✓ the deposit transaction appears in the enumerated history');
+
+    // Newest first: the deposit is the most recent action, so its position
+    // window is tried before the deploy/activation windows (usually empty).
+    for (const h of [...history].reverse()) {
+      const candidates: bigint[] = [];
+      for (let i = h.startIndex ?? 0; i < (h.endIndex ?? 0); i++) candidates.push(BigInt(i));
+      if (candidates.length)
+        candidateSets.push({
+          source: `enumerated ${h.kind}${h.entryPoint ? ' ' + h.entryPoint : ''} @ block ${h.blockHeight}`,
+          candidates,
+        });
+    }
+  } catch (e: any) {
+    details.enumerationError = e?.message ?? String(e);
   }
+
   if (!candidateSets.length) {
     details.discoveryGap =
-      'no indexer surface yielded usable candidates by contract address; ' +
+      'contract-address enumeration yielded no usable candidates; ' +
       'fell back to the depositor-known txId (the Path to Active indexer dependency)';
     const { candidates } = await candidateIndices(dep.txId);
     candidateSets.push({ source: 'fallback: depositor-supplied txId', candidates });
@@ -181,7 +169,7 @@ await runScenario('custody-discovery', async () => {
   details.spendTx = spendTx;
   console.log(`  ✓ spend accepted — tx ${spendTx} (${mtIndexSource})`);
 
-  const cleanDiscovery = !details.discoveryGap;
+  const cleanDiscovery = !details.discoveryGap && details.depositTxEnumerated === true;
   writeEvidence({
     testId: 'CUST-4',
     name: 'custody-discovery',
@@ -189,8 +177,8 @@ await runScenario('custody-discovery', async () => {
     verdict: cleanDiscovery ? 'PASS' : 'PARTIAL',
     txHash: String(details.spendTx),
     note: cleanDiscovery
-      ? 'Full loop with no off-band channel: B deposited against the advertised key; A discovered via the inbox walk and the indexer contract-address surface, then spent with a device signature.'
-      : 'Deposit, inbox walk, and spend all conform, but the contract-address → transactions indexer surface is missing; discovery fell back to the depositor-known txId (the Path to Active dependency).',
+      ? 'Full loop with no off-band channel: B deposited against the advertised key; A replayed the contract history from its address alone (contractActions subscription), recovered the coin via the inbox walk, and spent with a device signature.'
+      : 'Deposit, inbox walk, and spend all conform, but contract-address enumeration did not yield the depositing transaction; discovery fell back to the depositor-known txId (the Path to Active dependency).',
     details,
   });
 });

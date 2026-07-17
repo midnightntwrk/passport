@@ -8,6 +8,8 @@
 // proving time and no transaction is submitted, so retry cannot mis-spend
 // (INV-5).
 
+import WebSocket from 'ws';
+
 export interface TxPosition {
   startIndex?: number;
   endIndex?: number;
@@ -85,4 +87,141 @@ export async function candidateIndices(txId: string): Promise<{ candidates: bigi
   const out: bigint[] = [];
   for (let i = position.startIndex ?? 0; i < (position.endIndex ?? 0); i++) out.push(BigInt(i));
   return { candidates: out, position };
+}
+
+// ── Contract-address → action-history enumeration (MIP-0012 §6.5) ───────────
+//
+// The indexer's contractAction QUERY returns a single action (the latest at
+// or before an offset); enumeration is the contractActions SUBSCRIPTION,
+// which replays the complete per-address history from a block height. The
+// point query supplies the frontier (the latest action), the subscription is
+// replayed from genesis until the frontier arrives, then closed — so a
+// discovering wallet needs nothing but the contract address.
+
+export interface ContractActionRecord {
+  kind: 'ContractDeploy' | 'ContractCall' | 'ContractUpdate';
+  entryPoint?: string;
+  txHash: string;
+  /** Wallet-style transaction identifiers (the SDK's txId encoding). */
+  identifiers: string[];
+  blockHeight: number;
+  /** Zswap commitment-tree window of the carrying transaction. */
+  startIndex?: number;
+  endIndex?: number;
+}
+
+function indexerWsUrl(): string {
+  return process.env.INDEXER_WS_URL ?? indexerUrl().replace(/^http/, 'ws') + '/ws';
+}
+
+const TX_FIELDS = `transaction {
+  hash
+  block { height }
+  ... on RegularTransaction { identifiers zswapStartIndex zswapEndIndex }
+}`;
+
+const ACTION_FIELDS = `
+  __typename
+  ... on ContractDeploy { ${TX_FIELDS} }
+  ... on ContractCall   { entryPoint ${TX_FIELDS} }
+  ... on ContractUpdate { ${TX_FIELDS} }
+`;
+
+/** The latest action at or before the chain tip — the replay frontier. */
+async function latestContractAction(address: string): Promise<ContractActionRecord | null> {
+  const res = await fetch(indexerUrl(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: `query($address: HexEncoded!) { contractAction(address: $address) { ${ACTION_FIELDS} } }`,
+      variables: { address: address.replace(/^0x/, '') },
+    }),
+  });
+  const body: any = await res.json();
+  if (body?.errors?.length) throw new Error(`contractAction query: ${JSON.stringify(body.errors)}`);
+  const a = body?.data?.contractAction;
+  return a ? toRecord(a) : null;
+}
+
+function toRecord(a: any): ContractActionRecord {
+  const t = a.transaction ?? {};
+  return {
+    kind: a.__typename,
+    entryPoint: a.entryPoint ?? undefined,
+    txHash: String(t.hash ?? ''),
+    identifiers: (t.identifiers ?? []).map(String),
+    blockHeight: Number(t.block?.height ?? 0),
+    startIndex: t.zswapStartIndex != null ? Number(t.zswapStartIndex) : undefined,
+    endIndex: t.zswapEndIndex != null ? Number(t.zswapEndIndex) : undefined,
+  };
+}
+
+/**
+ * Replay the full action history of a contract address from genesis, via
+ * the contractActions subscription (graphql-transport-ws). Resolves once
+ * the frontier action has been received (plus a short drain for actions
+ * sharing its transaction); rejects on protocol errors or timeout.
+ */
+export async function enumerateContractActions(
+  address: string,
+  { timeoutMs = 60_000, drainMs = 500 }: { timeoutMs?: number; drainMs?: number } = {},
+): Promise<ContractActionRecord[]> {
+  const frontier = await latestContractAction(address);
+  if (!frontier) return [];
+
+  return await new Promise<ContractActionRecord[]>((resolve, reject) => {
+    const actions: ContractActionRecord[] = [];
+    const ws = new WebSocket(indexerWsUrl(), 'graphql-transport-ws');
+    let drain: NodeJS.Timeout | undefined;
+    const deadline = setTimeout(
+      () => fail(new Error(`contractActions replay timed out after ${timeoutMs}ms (${actions.length} received)`)),
+      timeoutMs,
+    );
+    const finish = (err?: Error) => {
+      clearTimeout(deadline);
+      if (drain) clearTimeout(drain);
+      try { ws.close(); } catch { /* already closed */ }
+      err ? reject(err) : resolve(actions);
+    };
+    const fail = (err: Error) => finish(err);
+
+    ws.on('error', (e) => fail(new Error(`indexer websocket: ${e.message}`)));
+    ws.on('open', () => ws.send(JSON.stringify({ type: 'connection_init' })));
+    ws.on('message', (raw) => {
+      const msg = JSON.parse(String(raw));
+      switch (msg.type) {
+        case 'connection_ack':
+          ws.send(JSON.stringify({
+            id: '1',
+            type: 'subscribe',
+            payload: {
+              query: `subscription($address: HexEncoded!) {
+                contractActions(address: $address, offset: { height: 0 }) { ${ACTION_FIELDS} }
+              }`,
+              variables: { address: address.replace(/^0x/, '') },
+            },
+          }));
+          break;
+        case 'next': {
+          if (msg.payload?.errors?.length) {
+            fail(new Error(`contractActions subscription: ${JSON.stringify(msg.payload.errors)}`));
+            break;
+          }
+          actions.push(toRecord(msg.payload.data.contractActions));
+          // The stream is live and unbounded; stop once the frontier has
+          // been replayed, draining briefly for same-transaction siblings.
+          if (actions.at(-1)!.txHash === frontier.txHash && !drain) {
+            drain = setTimeout(() => finish(), drainMs);
+          }
+          break;
+        }
+        case 'error':
+          fail(new Error(`contractActions subscription: ${JSON.stringify(msg.payload)}`));
+          break;
+        case 'complete':
+          finish();
+          break;
+      }
+    });
+  });
 }

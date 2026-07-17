@@ -2,46 +2,77 @@
   "testId": "CUST-4",
   "name": "custody-discovery",
   "description": "MIP-0012 third-party deposit and discovery (inbox walk + chain data)",
-  "verdict": "PARTIAL",
-  "txHash": "00838af9ff4c14db5c3505b0bb063ee89bb08eccf8e3bea0bbbe2665a8c1160c31",
-  "note": "Deposit, inbox walk, and spend all conform, but the contract-address → transactions indexer surface is missing; discovery fell back to the depositor-known txId (the Path to Active dependency).",
+  "verdict": "PASS",
+  "txHash": "001297b40109d685272c0718fcfb9e4c3f35cccaaa9b5767b7b5fd81360a5e28c1",
+  "note": "Full loop with no off-band channel: B deposited against the advertised key; A replayed the contract history from its address alone (contractActions subscription), recovered the coin via the inbox walk, and spent with a device signature.",
   "details": {
-    "account": "1e9e09e399ebf2ceb75b8f194e72bfe57432cb4c013b53e6fa1f4bfc0bb81157",
-    "mintTx": "008b92dc13bed8b35e6e5b6a1d3576c42c4145788583ac39ca2446a7fe0816a0b6",
-    "advertisedKeyHex": "db871b31ac6b3013e386510086ffdc5b53847be3718e1ad197678ea1dce4586c",
-    "depositTx": "0093650112f746664200dc861f2da9aaa1c75b678e5d6f6ced62f8c137f6b792a6",
+    "account": "15788b0ad2153f678286e4caeda5df924d2435ac60ce475e4d60ae7c352ec34b",
+    "mintTx": "004cd8ee9904c2385e000dea23a73a4b43812cf5791e69bc1ff570694f4a6385f3",
+    "advertisedKeyHex": "2a7a6a0ddc41ecdb25dff95fe02e0a59228858a53fcf6e373d4b295a7d557255",
+    "depositTx": "00a2d154184fd5b9afc6d9765d36caf1440723a22a486a3dcfe933cd683aeed9dc",
     "discoveredCoin": {
-      "colorHex": "e05a4ccb47b3a757f5b18027e7a5150e742fe928a9d6ee13fe9d2bff01b43c42",
+      "colorHex": "1341a9925ee3585c696ade64b6eb8555f8b59931f75f3874655c9e5b05d1745f",
       "value": "350",
       "matches": true
     },
-    "contractTxLookup": [
+    "enumeratedActions": [
       {
-        "surface": "contractAction(address)",
-        "outcome": "ok: 1 tx(s)"
+        "kind": "ContractDeploy",
+        "entryPoint": null,
+        "txHash": "f853282065f6e15ce0c9236a2996ab5d5f2ad1b08c6e2dd13a3b848fad8e0850",
+        "identifiers": [
+          "00fa022d89e755207ec5ff659b13a7987051debfc4fc9112379630706266b43ded",
+          "00682a1d38a88c7fef078ad0feba8869b7091f9acb9f8b227b1a4be66cd96df587"
+        ],
+        "blockHeight": 895,
+        "window": "[57, 57)"
+      },
+      {
+        "kind": "ContractCall",
+        "entryPoint": "activate_initial_device",
+        "txHash": "1fb40b367e37e7ebbb268d4fe7c6e1c4bc96f2eda20eba18ab8d542485ae15bf",
+        "identifiers": [
+          "006f3a8297b13f37ede150b8e2c5027066dda06749e4ec3bf0d16299134e3db5a3",
+          "0018595c19af148901379dc8daa5a694215a2afffa999f7e5664d97172210cc1d9"
+        ],
+        "blockHeight": 898,
+        "window": "[57, 57)"
+      },
+      {
+        "kind": "ContractCall",
+        "entryPoint": "deposit_shielded",
+        "txHash": "89ebfd5e1be59f26c8c35fe31ac5a15693e660dfe36af6252faee7752aa6292d",
+        "identifiers": [
+          "00754065b11198d2e65cb496bd63ac4e873cd005a705f5a6bc66b705afd06632e1",
+          "00c67a47db8084a29f354cb98f1974b5a3b3e8d7bb341895b73efe6a0b9c33fbd4",
+          "0077e6bb3eb22ce4982a0f36939f7f821cf4249093307b3d083488127aa6f4d126",
+          "00a2d154184fd5b9afc6d9765d36caf1440723a22a486a3dcfe933cd683aeed9dc"
+        ],
+        "blockHeight": 915,
+        "window": "[58, 59)"
       }
     ],
-    "discoveryGap": "no indexer surface yielded usable candidates by contract address; fell back to the depositor-known txId (the Path to Active indexer dependency)",
+    "depositTxEnumerated": true,
     "candidateSets": [
       {
-        "source": "fallback: depositor-supplied txId",
+        "source": "enumerated ContractCall deposit_shielded @ block 915",
         "candidates": [
-          "36"
+          "58"
         ]
       }
     ],
     "spendAttempts": [
       {
-        "source": "fallback: depositor-supplied txId",
-        "mtIndex": "36",
+        "source": "enumerated ContractCall deposit_shielded @ block 915",
+        "mtIndex": "58",
         "outcome": "accepted",
-        "txId": "00838af9ff4c14db5c3505b0bb063ee89bb08eccf8e3bea0bbbe2665a8c1160c31"
+        "txId": "001297b40109d685272c0718fcfb9e4c3f35cccaaa9b5767b7b5fd81360a5e28c1"
       }
     ],
-    "mtIndexSource": "fallback: depositor-supplied txId @ index 36",
-    "spendTx": "00838af9ff4c14db5c3505b0bb063ee89bb08eccf8e3bea0bbbe2665a8c1160c31"
+    "mtIndexSource": "enumerated ContractCall deposit_shielded @ block 915 @ index 58",
+    "spendTx": "001297b40109d685272c0718fcfb9e4c3f35cccaaa9b5767b7b5fd81360a5e28c1"
   },
-  "ranAt": "2026-07-17T13:09:08.184Z",
+  "ranAt": "2026-07-17T13:57:20.259Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

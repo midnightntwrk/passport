@@ -130,9 +130,14 @@ To be folded back into the MIP texts:
   deployed account: deploy through every call, in order, with entry
   points and transaction hashes). Path-to-Active discovery is therefore
   fully supported; a discovering wallet uses the subscription, not the
-  point query. The conformance suite currently exercises the
-  known-transaction-id path only and records its verdict as PARTIAL for
-  that reason, not because the indexer lacks the surface.
+  point query (`enumerateContractActions` in the client library). The
+  discovery suite exercises this end to end: the owner replays the
+  history from the contract address alone, matches the depositing
+  transaction by its identifiers (the wallet SDK's txId is a transaction
+  identifier, not the hash), and takes candidate mt_index values from
+  the enumerated transaction's own zswap window. The depositor-known
+  txId remains only as a recorded fallback, which downgrades the verdict
+  to PARTIAL.
 - **Multi-output position windows**: on a busy wallet, deposits and spends
   carry additional commitments (funding change), so single-output
   `mt_index` inference does not hold; clients must implement candidate
