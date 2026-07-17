@@ -1,0 +1,148 @@
+{
+  "testId": "CUST-5",
+  "name": "leak-audit",
+  "description": "MIP-0012 observer leak audit: conforming path vs public-map control",
+  "verdict": "PASS",
+  "note": "Identical lifecycles through both patterns: the public-map control leaks nonce/color/value into observer surfaces (scanner validated); the conforming stateless path shows zero coin artefacts (INV-2).",
+  "details": {
+    "account": "315dbcc3c27bec7afe7d1c53a98bc03149965f06fe32a7d8537418f69ea12e62",
+    "control": "ba30c59eb5d069d4dbcbca0554e8a03d9e1cd82aca31a514c152db5695af31cf",
+    "controlTxs": {
+      "deposit": "00ac02194591267fa49ca403bf09d6e23c86decb2c68521aa356daf5ca3b1487b4",
+      "spend": "0001f363d185ccbd4d9f796855293781f80dd59b9247488e4f817f187574677a59"
+    },
+    "controlLeaks": {
+      "tx:00ac021945…:raw": {
+        "nonce": true,
+        "color": true,
+        "valueBE": false,
+        "valueLE": false
+      },
+      "tx:00ac021945…:contractActions": {
+        "nonce": true,
+        "color": true,
+        "valueBE": false,
+        "valueLE": false
+      },
+      "tx:0001f363d1…:raw": {
+        "nonce": true,
+        "color": true,
+        "valueBE": false,
+        "valueLE": false
+      },
+      "tx:0001f363d1…:contractActions": {
+        "nonce": false,
+        "color": true,
+        "valueBE": false,
+        "valueLE": false
+      },
+      "contractState": {
+        "nonce": false,
+        "color": false,
+        "valueBE": false,
+        "valueLE": false
+      }
+    },
+    "conformingTxs": {
+      "deposit": "009d10bc62b4c93ceadde286017fdf83c43724d7ab6827d2007e4ad340b6a81c2f",
+      "spend": "00fa663fba6aba83785e801d5a53b507f62dd3b586b6b428e9efd3487170548809",
+      "backfill": "00113201cbdde34e709083b3a79b7a1ce2ace7927ec5123d885201cef2c3c241e0"
+    },
+    "conformingLeaks": {
+      "deposited": {
+        "tx:009d10bc62…:raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "tx:009d10bc62…:contractActions": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "tx:00fa663fba…:raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "tx:00fa663fba…:contractActions": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "tx:00113201cb…:raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "tx:00113201cb…:contractActions": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "contractState": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        }
+      },
+      "change": {
+        "tx:009d10bc62…:raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "tx:009d10bc62…:contractActions": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "tx:00fa663fba…:raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "tx:00fa663fba…:contractActions": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "tx:00113201cb…:raw": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "tx:00113201cb…:contractActions": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        },
+        "contractState": {
+          "nonce": false,
+          "color": false,
+          "valueBE": false,
+          "valueLE": false
+        }
+      }
+    }
+  },
+  "ranAt": "2026-07-17T09:58:38.706Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

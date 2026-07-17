@@ -1,0 +1,525 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Midnight account custody contract — reference implementation.
+//
+// Implements, together, the two building blocks of the MPS-0018 keystone:
+//
+//   MIP-0012 (Contract Custody of Midnight-Native Assets)
+//     - unshielded custody with an explicit per-color balance mirror (§5);
+//     - stateless shielded custody: no held coin's description (nonce,
+//       color, value) ever enters public ledger state (§6.1); deposits pair
+//       the protocol coin claim with an encrypted inbox entry (§6.2); spends
+//       take the coin from the `held_coin` witness (§6.3); change follows
+//       the surviving-coin rule (§6.3, R4);
+//     - the InboxEntry v1 container is 192 opaque bytes (§6.4) — all entry
+//       cryptography is client-side, the contract never inspects entries;
+//     - the direct-transfer mode (§6.6): an optional contract-recipient
+//       spend circuit, claimed by the receiving contract's deposit path in
+//       the same client-composed transaction;
+//     - encryption-key lifecycle: exactly one authorised rotation path
+//       (§6.7).
+//
+//   MIP-0013 (Multi-key Account Authorisation for Custody Contracts)
+//     - every asset-releasing circuit is gated by an in-circuit JubJub
+//       Schnorr verification (§4): s·G == R + c·pk against a device key
+//       active in the current epoch;
+//     - the challenge c binds the per-circuit domain-separation tag, the
+//       account address, R, pk, the full argument list, the authorisation
+//       counter, and the grinding nonce (§5.1); signers grind until the
+//       hash's little-endian value falls below the JubJub subgroup order
+//       (§5.2) so the in-circuit `as Field` cast always succeeds;
+//     - a dedicated `auth_nonce` advanced only by gated calls (R4), so
+//       permissionless deposits cannot invalidate a pending authorisation
+//       (AUTH-8);
+//     - device lifecycle: add_device / remove_device with the last-device
+//       rule (AUTH-5); the epoch mechanism (AUTH-6) is present in state,
+//       and its only bump site is the recovery seam of MIP-0013 §8, which
+//       awaits the recovery-paths MIP — no recovery circuit is exposed
+//       here yet.
+//
+// Deviations from the MIP texts, to be folded back as errata:
+//   - MIP-0013 §3 declares `devices: Map<Field, Uint<32>>` while defining
+//     the commitment as a persistentHash output (Bytes<32>). A Bytes<32>
+//     value cannot be safely cast to Field (no grinding on that path; the
+//     range check would fail for roughly half of all keys), so this
+//     implementation keys the device map by Bytes<32>.
+//   - Every per-circuit tag "midnight:account:auth:v1:<circuit-name>"
+//     exceeds 32 bytes, so this implementation uniformly takes the hashed
+//     arm of §5.1's "zero-padded or hashed to 32 bytes":
+//     DST = persistentHash of the tag string zero-padded to 64 bytes.
+//
+// Exported pure circuits mirror every challenge construction so that
+// signers (TypeScript, Rust, HSM profiles) can reproduce the exact
+// field-aligned encoding through the contract's own toolchain; independent
+// implementations reproduce persistentHash bit-exactly instead (MIP-0013
+// §2).
+// ---------------------------------------------------------------------------
+
+// ── Witness (MIP-0012 §6.3): the wallet-local coin store ────────────────────
+//
+// Supplies the qualified description of a held shielded coin at spend time.
+// The description never exists in public ledger state; it enters the proof
+// as private input.
+
+witness held_coin(color: Bytes<32>): QualifiedShieldedCoinInfo;
+
+// ── Public ledger state ─────────────────────────────────────────────────────
+
+// MIP-0012 §3.
+
+export ledger round: Uint<64>;
+// Strictly increased by every state-changing circuit (INV-7).
+
+export ledger enc_key: Bytes<32>;
+// The account encryption public key (X25519). Depositors encrypt coin
+// descriptions to this key. Set at deploy; rotated only via rotate_enc_key.
+
+export ledger inbox: Map<Uint<64>, Bytes<192>>;
+export ledger inbox_count: Uint<64>;
+// Append-only encrypted coin descriptions (InboxEntry v1, MIP-0012 §6.4),
+// keyed by ordinal. Discovery and recovery channel (INV-4).
+
+export ledger unshielded_balances: Map<Bytes<32>, Uint<128>>;
+// Explicit mirror of the contract's unshielded holdings per color; a lower
+// bound on holdings (MIP-0012 §5, INV-8). Night is the all-zero color.
+
+export ledger spec_version: Uint<32>;
+// MIP-0012 §8: feature gate for clients.
+
+// MIP-0013 §3.
+
+export ledger devices: Map<Bytes<32>, Uint<32>>;
+// device commitment -> epoch at registration. Keyed by Bytes<32> (see the
+// erratum note in the header).
+
+export ledger device_epoch: Uint<32>;
+// Bumped only by the future recovery seam (MIP-0013 §8). Entries recorded
+// under an older epoch are inert (AUTH-6).
+
+export ledger device_count: Uint<8>;
+// Devices active in the current epoch. Guards the last-device rule (AUTH-5).
+
+export ledger auth_nonce: Uint<64>;
+// Bumped by every seam-gated call, and only by seam-gated calls (AUTH-2,
+// AUTH-8). Every challenge covers it; a signature authorises at most one
+// executed call.
+
+// ── Constructor ─────────────────────────────────────────────────────────────
+//
+// MIP-0013 §3: deployed with exactly one device commitment at epoch 0,
+// device_count = 1, auth_nonce = 0. The initial device's public key is
+// supplied whole; its commitment is computed in-circuit so client and
+// contract cannot diverge on the derivation.
+
+constructor(initial_device_pk: JubjubPoint, encryption_key: Bytes<32>) {
+  round        = 0 as Uint<64>;
+  enc_key      = disclose(encryption_key);
+  inbox_count  = 0 as Uint<64>;
+  spec_version = 1 as Uint<32>;
+  devices.insert(disclose(derive_device_commitment(initial_device_pk)), 0 as Uint<32>);
+  device_epoch = 0 as Uint<32>;
+  device_count = 1 as Uint<8>;
+  auth_nonce   = 0 as Uint<64>;
+}
+
+// ── Commitments and challenge constructions (MIP-0013 §3, §5) ───────────────
+//
+// All domain-separation tags below are to be registered under the MPS-0027
+// registry once it ratifies (MIP-0012 S6, MIP-0013 Path to Active).
+
+// Device commitment: persistentHash([DST_DEVICE, pk]) with
+// DST_DEVICE = "midnight:account:device:v1" zero-padded to 32 bytes.
+export pure circuit derive_device_commitment(pk: JubjubPoint): Bytes<32> {
+  return persistentHash<[Bytes<32>, JubjubPoint]>(
+    [pad(32, "midnight:account:device:v1"), pk]
+  );
+}
+
+// Scalar-to-point helper: R = r·G, pk = sk·G. Exposed so signers use the
+// contract's own curve arithmetic (generator included) instead of a
+// foreign JubJub library.
+export pure circuit compute_public_point(scalar: Field): JubjubPoint {
+  return ecMulGenerator(scalar);
+}
+
+// Per-circuit challenges (MIP-0013 §5.1). Preimage:
+//   [DST_CIRCUIT, self, sig_r, pk, ...args, auth_nonce, grind_nonce]
+// The gated circuit passes kernel.self() and its live auth_nonce; the
+// signer passes the deployed address and the observed auth_nonce. The
+// signer grinds grind_nonce until the hash, read little-endian, is
+// strictly below the JubJub subgroup order r_J (§5.2).
+
+export pure circuit challenge_withdraw_unshielded(
+  self_addr:   ContractAddress,
+  sig_r:       JubjubPoint,
+  pk:          JubjubPoint,
+  color:       Bytes<32>,
+  amount:      Uint<128>,
+  recipient:   UserAddress,
+  nonce_value: Uint<64>,
+  grind_nonce: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:withdraw_unshielded")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, color, amount, recipient, nonce_value, grind_nonce]
+  );
+}
+
+export pure circuit challenge_withdraw_shielded(
+  self_addr:   ContractAddress,
+  sig_r:       JubjubPoint,
+  pk:          JubjubPoint,
+  recipient:   ZswapCoinPublicKey,
+  color:       Bytes<32>,
+  amount:      Uint<128>,
+  nonce_value: Uint<64>,
+  grind_nonce: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:withdraw_shielded")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, ZswapCoinPublicKey, Bytes<32>, Uint<128>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, recipient, color, amount, nonce_value, grind_nonce]
+  );
+}
+
+export pure circuit challenge_withdraw_shielded_to_contract(
+  self_addr:   ContractAddress,
+  sig_r:       JubjubPoint,
+  pk:          JubjubPoint,
+  recipient:   ContractAddress,
+  color:       Bytes<32>,
+  amount:      Uint<128>,
+  nonce_value: Uint<64>,
+  grind_nonce: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:withdraw_shielded_to_contract")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, ContractAddress, Bytes<32>, Uint<128>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, recipient, color, amount, nonce_value, grind_nonce]
+  );
+}
+
+export pure circuit challenge_append_inbox(
+  self_addr:   ContractAddress,
+  sig_r:       JubjubPoint,
+  pk:          JubjubPoint,
+  entry:       Bytes<192>,
+  nonce_value: Uint<64>,
+  grind_nonce: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:append_inbox")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<192>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, entry, nonce_value, grind_nonce]
+  );
+}
+
+export pure circuit challenge_rotate_enc_key(
+  self_addr:   ContractAddress,
+  sig_r:       JubjubPoint,
+  pk:          JubjubPoint,
+  new_key:     Bytes<32>,
+  nonce_value: Uint<64>,
+  grind_nonce: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:rotate_enc_key")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, new_key, nonce_value, grind_nonce]
+  );
+}
+
+export pure circuit challenge_add_device(
+  self_addr:   ContractAddress,
+  sig_r:       JubjubPoint,
+  pk:          JubjubPoint,
+  new_pk:      JubjubPoint,
+  nonce_value: Uint<64>,
+  grind_nonce: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:add_device")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, JubjubPoint, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, new_pk, nonce_value, grind_nonce]
+  );
+}
+
+export pure circuit challenge_remove_device(
+  self_addr:   ContractAddress,
+  sig_r:       JubjubPoint,
+  pk:          JubjubPoint,
+  commitment:  Bytes<32>,
+  nonce_value: Uint<64>,
+  grind_nonce: Uint<64>,
+): Bytes<32> {
+  const dst = persistentHash<[Bytes<64>]>(
+    [pad(64, "midnight:account:auth:v1:remove_device")]
+  );
+  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>(
+    [dst, self_addr, sig_r, pk, commitment, nonce_value, grind_nonce]
+  );
+}
+
+// ── The authorisation seam (MIP-0012 §4 as instantiated by MIP-0013 §4) ─────
+//
+// One internal seam gates every asset-releasing and state-changing circuit
+// other than deposits (INV-1). Replacing the credential scheme touches this
+// circuit and the challenge constructions only. Order per MIP-0013 §4:
+// membership, challenge (computed by the caller), verification, freshness.
+//
+// The device commitment is disclosed by the ledger lookup itself (MIP-0013
+// S4 bounds the linkability). The signature material (pk, sig_r, sig_s) is
+// witness data of the proof and appears in no public output.
+
+circuit require_authorised(
+  pk:        JubjubPoint,
+  sig_r:     JubjubPoint,
+  sig_s:     Field,
+  challenge: Bytes<32>,
+): [] {
+  const commitment = disclose(derive_device_commitment(pk));
+  assert(devices.member(commitment), "unknown device");
+  assert(devices.lookup(commitment) == device_epoch, "device of revoked epoch");
+  // The signer ground the challenge below the JubJub subgroup order, so the
+  // range-checked cast always succeeds for an honestly produced signature.
+  const c = challenge as Field;
+  assert(
+    ecMulGenerator(sig_s) == ecAdd(sig_r, ecMul(pk, c)),
+    "invalid signature"
+  );
+  auth_nonce = ((auth_nonce + (1 as Uint<64>)) as Uint<64>);
+  bump_round();
+}
+
+circuit bump_round(): [] {
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}
+
+// Unshielded mirror bookkeeping (MIP-0012 §5).
+
+circuit credit_unshielded(color: Bytes<32>, amount: Uint<128>): [] {
+  if (unshielded_balances.member(color)) {
+    unshielded_balances.insert(
+      color,
+      ((unshielded_balances.lookup(color) + amount) as Uint<128>)
+    );
+  } else {
+    unshielded_balances.insert(color, amount);
+  }
+}
+
+circuit debit_unshielded(color: Bytes<32>, amount: Uint<128>): [] {
+  assert(unshielded_balances.member(color), "no balance for color");
+  const bal = unshielded_balances.lookup(color);
+  assert(bal >= amount, "insufficient balance");
+  unshielded_balances.insert(color, ((bal - amount) as Uint<128>));
+}
+
+// ── Unshielded custody (MIP-0012 §5) ────────────────────────────────────────
+
+// Permissionless: anyone may fund the account. Increments round (§4).
+export circuit deposit_unshielded(color: Bytes<32>, amount: Uint<128>): [] {
+  const c = disclose(color);
+  const a = disclose(amount);
+  receiveUnshielded(c, a);
+  credit_unshielded(c, a);
+  bump_round();
+}
+
+// Authorised: checks and debits the mirror, then sends to a user address.
+export circuit withdraw_unshielded(
+  color:       Bytes<32>,
+  amount:      Uint<128>,
+  recipient:   UserAddress,
+  pk:          JubjubPoint,
+  sig_r:       JubjubPoint,
+  sig_s:       Field,
+  grind_nonce: Uint<64>,
+): [] {
+  const challenge = challenge_withdraw_unshielded(
+    kernel.self(), sig_r, pk, color, amount, recipient, auth_nonce, grind_nonce
+  );
+  require_authorised(pk, sig_r, sig_s, challenge);
+  const c = disclose(color);
+  const a = disclose(amount);
+  debit_unshielded(c, a);
+  sendUnshielded(c, a, right<ContractAddress, UserAddress>(disclose(recipient)));
+}
+
+// ── Shielded custody, stateless (MIP-0012 §6) ───────────────────────────────
+
+// Permissionless deposit (§6.2): claims the coin for the contract and
+// appends the depositor-encrypted InboxEntry. The contract cannot verify
+// the correspondence between coin and entry (S3); honest clients detect
+// mismatches at discovery by recomputing the commitment against chain data.
+export circuit deposit_shielded(coin: ShieldedCoinInfo, entry: Bytes<192>): [] {
+  receiveShielded(disclose(coin));
+  inbox.insert(inbox_count, disclose(entry));
+  inbox_count = ((inbox_count + (1 as Uint<64>)) as Uint<64>);
+  bump_round();
+}
+
+// Inbox append without a coin claim (§6.2): change-coin backfill. Gated
+// behind the seam per the MAY of §6.2 (S9 spam defence) — backfill is
+// always performed by the owner's own client, so gating loses nothing.
+export circuit append_inbox(
+  entry:       Bytes<192>,
+  pk:          JubjubPoint,
+  sig_r:       JubjubPoint,
+  sig_s:       Field,
+  grind_nonce: Uint<64>,
+): [] {
+  const challenge = challenge_append_inbox(
+    kernel.self(), sig_r, pk, entry, auth_nonce, grind_nonce
+  );
+  require_authorised(pk, sig_r, sig_s, challenge);
+  inbox.insert(inbox_count, disclose(entry));
+  inbox_count = ((inbox_count + (1 as Uint<64>)) as Uint<64>);
+}
+
+// Authorised spend to a user's Zswap key (§6.3). The coin description
+// enters through the held_coin witness, never from ledger state.
+//
+// Change rule (§6.3, normative): sendShielded already routes change back
+// to the contract as a live, self-owned output — the baseline realisation
+// persists result.change directly, with no re-owning step. The surviving
+// change description is returned to the caller through the transaction's
+// communication commitment (not public); the client re-captures its
+// mt_index and backfills the inbox via append_inbox (INV-4).
+export circuit withdraw_shielded(
+  recipient:   ZswapCoinPublicKey,
+  color:       Bytes<32>,
+  amount:      Uint<128>,
+  pk:          JubjubPoint,
+  sig_r:       JubjubPoint,
+  sig_s:       Field,
+  grind_nonce: Uint<64>,
+): Maybe<ShieldedCoinInfo> {
+  const challenge = challenge_withdraw_shielded(
+    kernel.self(), sig_r, pk, recipient, color, amount, auth_nonce, grind_nonce
+  );
+  require_authorised(pk, sig_r, sig_s, challenge);
+  const coin = held_coin(color);
+  const result = sendShielded(
+    disclose(coin),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  if (disclose(result.change.is_some)) {
+    return some<ShieldedCoinInfo>(disclose(result.change.value));
+  }
+  return none<ShieldedCoinInfo>();
+}
+
+// Authorised contract-recipient spend — the direct-transfer mode of §6.6
+// (linking accepted). The output MUST be claimed by the receiving
+// contract's deposit path in the same client-composed transaction; a
+// contract-addressed output carries that address in cleartext, so a direct
+// payment publishes the pair of accounts. Conforming clients MUST default
+// to one-hop routing and produce this only by deliberate per-payment
+// choice. Onward change handling is identical to the baseline circuit's.
+//
+// Returns [sent, change]: the composing client passes `sent` (the stdlib
+// SendResult.sent coin — its nonce is the deterministic evolution of the
+// input coin's) to the receiving contract's deposit_shielded claim, and
+// persists `change` per the surviving-coin rule. Both travel privately in
+// the communication commitment.
+export circuit withdraw_shielded_to_contract(
+  recipient:   ContractAddress,
+  color:       Bytes<32>,
+  amount:      Uint<128>,
+  pk:          JubjubPoint,
+  sig_r:       JubjubPoint,
+  sig_s:       Field,
+  grind_nonce: Uint<64>,
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const challenge = challenge_withdraw_shielded_to_contract(
+    kernel.self(), sig_r, pk, recipient, color, amount, auth_nonce, grind_nonce
+  );
+  require_authorised(pk, sig_r, sig_s, challenge);
+  const coin = held_coin(color);
+  const result = sendShielded(
+    disclose(coin),
+    right<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  if (disclose(result.change.is_some)) {
+    return [disclose(result.sent), some<ShieldedCoinInfo>(disclose(result.change.value))];
+  }
+  return [disclose(result.sent), none<ShieldedCoinInfo>()];
+}
+
+// ── Encryption-key lifecycle (MIP-0012 §6.7) ────────────────────────────────
+//
+// Exactly one way to change enc_key. After rotation the client SHOULD
+// re-encrypt held-coin descriptions into fresh inbox entries under the new
+// key so the inbox walk succeeds with the new secret alone.
+
+export circuit rotate_enc_key(
+  new_key:     Bytes<32>,
+  pk:          JubjubPoint,
+  sig_r:       JubjubPoint,
+  sig_s:       Field,
+  grind_nonce: Uint<64>,
+): [] {
+  const challenge = challenge_rotate_enc_key(
+    kernel.self(), sig_r, pk, new_key, auth_nonce, grind_nonce
+  );
+  require_authorised(pk, sig_r, sig_s, challenge);
+  enc_key = disclose(new_key);
+}
+
+// ── Device lifecycle (MIP-0013 §6) ──────────────────────────────────────────
+//
+// Any active device is sufficient to authorise (1-of-n at the contract
+// surface); threshold policies live behind a single device entry whose key
+// is a FROST committee's joint key (MIP-0013 §7) — this contract neither
+// knows nor cares.
+
+export circuit add_device(
+  new_pk:      JubjubPoint,
+  pk:          JubjubPoint,
+  sig_r:       JubjubPoint,
+  sig_s:       Field,
+  grind_nonce: Uint<64>,
+): [] {
+  const challenge = challenge_add_device(
+    kernel.self(), sig_r, pk, new_pk, auth_nonce, grind_nonce
+  );
+  require_authorised(pk, sig_r, sig_s, challenge);
+  const commitment = disclose(derive_device_commitment(new_pk));
+  if (devices.member(commitment)) {
+    assert(devices.lookup(commitment) != device_epoch, "device already active");
+  }
+  devices.insert(commitment, device_epoch);
+  device_count = ((device_count + (1 as Uint<8>)) as Uint<8>);
+}
+
+export circuit remove_device(
+  commitment:  Bytes<32>,
+  pk:          JubjubPoint,
+  sig_r:       JubjubPoint,
+  sig_s:       Field,
+  grind_nonce: Uint<64>,
+): [] {
+  const challenge = challenge_remove_device(
+    kernel.self(), sig_r, pk, commitment, auth_nonce, grind_nonce
+  );
+  require_authorised(pk, sig_r, sig_s, challenge);
+  const d = disclose(commitment);
+  assert(device_count > (1 as Uint<8>), "cannot remove last device");
+  assert(devices.member(d), "unknown device");
+  assert(devices.lookup(d) == device_epoch, "device not active");
+  devices.remove(d);
+  device_count = ((device_count - (1 as Uint<8>)) as Uint<8>);
+}

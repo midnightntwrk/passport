@@ -1,0 +1,20 @@
+{
+  "testId": "AUTH-3-4",
+  "name": "auth-replay",
+  "description": "MIP-0013 cross-account and cross-circuit replay rejection",
+  "verdict": "PASS",
+  "note": "A signature binds the account address and the per-circuit tag: replay against a second account holding the same device key, and against a sibling circuit with a byte-identical argument list, both abort with no state change.",
+  "details": {
+    "accountOne": "c3e942600f242613bc58170383fc94e359ef0ffadd48e7900bd709f27f73bdac",
+    "accountTwo": "54ac70cd8ffcc161ffd5e9f330020df2b490682b095fe7d3b910ec914f49213e",
+    "crossAccountRejection": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 295 char 13: byte vector [73,243,8,58,254,103,246,22,99,83,185,34,202,16,255,86,49,5,123,62,187,238,144,172,240,160,19,254,28,221,175,208] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
+    "controlTx": "00545e838433d3eac1801ace685b8f44391dd77a0ff1ae5f2819caa74e6ec23eee",
+    "crossCircuitRejection": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 295 char 13: byte vector [104,27,27,202,61,227,204,4,101,59,154,1,240,225,202,47,174,0,154,22,11,58,53,109,214,35,2,75,246,36,103,168] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type"
+  },
+  "ranAt": "2026-07-17T09:39:25.998Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

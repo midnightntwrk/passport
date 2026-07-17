@@ -1,0 +1,32 @@
+{
+  "testId": "AUTH-6-9",
+  "name": "auth-lifecycle",
+  "description": "MIP-0013 device lifecycle and non-exfiltration audit",
+  "verdict": "PASS",
+  "note": "add_device/remove_device lifecycle conforms (duplicate add rejected, removed device loses authority, last device protected); proving inputs for gated calls carry the signature and never the device key.",
+  "details": {
+    "account": "b12e3f286216b8b5d564cb92d593c5355fb4b8703484c5c9cf48c1aa0a5a9e50",
+    "addDeviceTx": "004119bc277ae95c0a010e4ab2bb8a615bcc7f1f27da6bc0d19cc23f1d361d1ab2",
+    "secondDeviceWithdrawTx": "005fba9fd9be84898fd09d03ef86ee27b44ddb1dcc0c5738581612fa1e5ff714a4",
+    "removeDeviceTx": "003ce441ba92e82d8ac5335cbdf29ab2e67090cbf656f4c8c3fa69186167a0a1bf",
+    "epochBumpLeg": "N/A — recovery seam (MIP-0013 §8) awaits the recovery-paths MIP; device_epoch checks exercised at epoch 0",
+    "witnessSurface": [
+      "held_coin"
+    ],
+    "provingInputs": [
+      "pk.x",
+      "pk.y",
+      "sig_r.x",
+      "sig_r.y",
+      "sig_s",
+      "grind_nonce"
+    ],
+    "contractWitnessArity": 0
+  },
+  "ranAt": "2026-07-17T09:37:08.272Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

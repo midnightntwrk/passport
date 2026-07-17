@@ -1,0 +1,51 @@
+{
+  "name": "midnight-account-custody",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Reference implementation of the Midnight account custody standard: MIP-0012 (contract custody of native assets) + MIP-0013 (multi-key Schnorr account authorisation).",
+  "scripts": {
+    "compile": "compact compile contracts/account.compact contracts/managed/account && compact compile contracts/control.compact contracts/managed/control && compact compile contracts/faucet.compact contracts/managed/faucet",
+    "build": "tsc",
+    "test:unit": "tsx src/tests/unit-offline.ts",
+    "test:crossimpl-offline": "tsx src/tests/crossimpl-offline.ts",
+    "test:auth-crossimpl": "tsx src/tests/auth-crossimpl.ts",
+    "test:auth": "tsx src/tests/auth-conformance.ts",
+    "test:auth-lifecycle": "tsx src/tests/auth-lifecycle.ts",
+    "test:auth-replay": "tsx src/tests/auth-replay.ts",
+    "test:custody-shielded": "tsx src/tests/custody-shielded.ts",
+    "test:custody-discovery": "tsx src/tests/custody-discovery.ts",
+    "test:custody-unshielded": "tsx src/tests/custody-unshielded.ts",
+    "test:custody-payments": "tsx src/tests/custody-payments.ts",
+    "test:leak-audit": "tsx src/tests/leak-audit.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-js": "^2.0.0",
+    "@midnight-ntwrk/compact-runtime": "^0.16.0",
+    "@midnight-ntwrk/ledger-v8": "^8.1.0",
+    "@midnight-ntwrk/midnight-js-contracts": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-network-id": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-types": "^4.1.1",
+    "@midnight-ntwrk/wallet-api": "^5.0.0",
+    "@midnight-ntwrk/wallet-sdk-address-format": "^3.1.1",
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": "^4.0.0",
+    "@midnight-ntwrk/wallet-sdk-facade": "^4.0.1",
+    "@midnight-ntwrk/wallet-sdk-hd": "^3.0.2",
+    "@midnight-ntwrk/wallet-sdk-shielded": "^3.0.0",
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "^3.0.0",
+    "@midnight-ntwrk/zswap": "^4.0.0",
+    "bip39": "^3.1.0",
+    "rxjs": "^7.8.2",
+    "ws": "^8.19.0"
+  }
+}

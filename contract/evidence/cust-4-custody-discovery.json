@@ -1,0 +1,50 @@
+{
+  "testId": "CUST-4",
+  "name": "custody-discovery",
+  "description": "MIP-0012 third-party deposit and discovery (inbox walk + chain data)",
+  "verdict": "PARTIAL",
+  "txHash": "00c4c77965e16df9be1293f8cfdd56385ca275f62f34976d09738a0696b0ff5ea2",
+  "note": "Deposit, inbox walk, and spend all conform, but the contract-address → transactions indexer surface is missing; discovery fell back to the depositor-known txId (the Path to Active dependency).",
+  "details": {
+    "account": "90c3ece486ed7c5a7e2d5f73bff693f267389356aa0676bf08a5dc134266f938",
+    "mintTx": "0033d0a496d7d6b4f5f46c4f9e9285155f6de8f85acd429a1b110405244840c320",
+    "advertisedKeyHex": "b23345590857693b85dbc124761010c0d4b15713962111ac80de477275cb045a",
+    "depositTx": "00a4f9fbf9ccdbee8f25b6835968deb2e09d52b4c97fb00f67ebcfcd9e846ef3ee",
+    "discoveredCoin": {
+      "colorHex": "71d815e5e258a541ef4bc88fc137ff2f39daabcb7408e4764bd85da6a7cd1fdf",
+      "value": "350",
+      "matches": true
+    },
+    "contractTxLookup": [
+      {
+        "surface": "contractAction(address)",
+        "outcome": "ok: 1 tx(s)"
+      }
+    ],
+    "discoveryGap": "no indexer surface yielded usable candidates by contract address; fell back to the depositor-known txId (the Path to Active indexer dependency)",
+    "candidateSets": [
+      {
+        "source": "fallback: depositor-supplied txId",
+        "candidates": [
+          "33"
+        ]
+      }
+    ],
+    "spendAttempts": [
+      {
+        "source": "fallback: depositor-supplied txId",
+        "mtIndex": "33",
+        "outcome": "accepted",
+        "txId": "00c4c77965e16df9be1293f8cfdd56385ca275f62f34976d09738a0696b0ff5ea2"
+      }
+    ],
+    "mtIndexSource": "fallback: depositor-supplied txId @ index 33",
+    "spendTx": "00c4c77965e16df9be1293f8cfdd56385ca275f62f34976d09738a0696b0ff5ea2"
+  },
+  "ranAt": "2026-07-17T09:48:14.168Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

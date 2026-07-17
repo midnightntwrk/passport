@@ -1,0 +1,95 @@
+{
+  "testId": "CUST-1-2-3",
+  "name": "custody-shielded",
+  "description": "MIP-0012 deposit conformance, witness spend, change chain",
+  "verdict": "PASS",
+  "note": "Stateless deposit conforms (entry decrypts, no coin material observable, wrong-index probe fails at proving); partial spend + surviving-coin capture + cross-transaction change spend all accepted by the node.",
+  "details": {
+    "account": "7538ce8ea4a27f9572b68ddc415ab04ea049a8fab91e7b7e743677e6d6ea11e1",
+    "depositTx": "0092abc0a51e624d265bca10ca9e862e1e1e1941c15b62626b9ac1451a21118dd5",
+    "mtIndexCandidates": [
+      "52"
+    ],
+    "depositAudit": {
+      "tx:0092abc0a5…:raw": {
+        "nonce": false,
+        "color": false,
+        "valueBE": false,
+        "valueLE": false
+      },
+      "tx:0092abc0a5…:contractActions": {
+        "nonce": false,
+        "color": false,
+        "valueBE": false,
+        "valueLE": false
+      },
+      "contractState": {
+        "nonce": false,
+        "color": false,
+        "valueBE": false,
+        "valueLE": false
+      }
+    },
+    "wrongIndexRejection": "Unexpected error executing scoped transaction '<unnamed>': Error: invalid index into sparse merkle tree: 1052 -- write creating spend proof",
+    "partialSpendTx": "00d7eaaa7ab13d566edde8bda1010a658358657596c5154d89dcbfa26c91acf25f",
+    "partialSpendAttempts": [
+      {
+        "mtIndex": "52",
+        "outcome": "accepted: 00d7eaaa7ab13d566edde8bda1010a658358657596c5154d89dcbfa26c91acf25f"
+      }
+    ],
+    "changeCandidates": [
+      "53",
+      "54"
+    ],
+    "changeSpendTx": "006671c3e1290e0c865a29402c53217f8cfaf636151a93ebeedac059bba27e5c8a",
+    "changeSpendAttempts": [
+      {
+        "mtIndex": "53",
+        "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' retur"
+      },
+      {
+        "mtIndex": "54",
+        "outcome": "accepted: 006671c3e1290e0c865a29402c53217f8cfaf636151a93ebeedac059bba27e5c8a"
+      }
+    ],
+    "lifecycleAudit": {
+      "tx:00d7eaaa7a…:raw": {
+        "nonce": false,
+        "color": false,
+        "valueBE": false,
+        "valueLE": false
+      },
+      "tx:00d7eaaa7a…:contractActions": {
+        "nonce": false,
+        "color": false,
+        "valueBE": false,
+        "valueLE": false
+      },
+      "tx:006671c3e1…:raw": {
+        "nonce": false,
+        "color": false,
+        "valueBE": false,
+        "valueLE": false
+      },
+      "tx:006671c3e1…:contractActions": {
+        "nonce": false,
+        "color": false,
+        "valueBE": false,
+        "valueLE": false
+      },
+      "contractState": {
+        "nonce": false,
+        "color": false,
+        "valueBE": false,
+        "valueLE": false
+      }
+    }
+  },
+  "ranAt": "2026-07-17T10:06:20.213Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

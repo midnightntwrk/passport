@@ -1,0 +1,25 @@
+{
+  "testId": "AUTH-7",
+  "name": "auth-crossimpl",
+  "description": "MIP-0013 cross-implementation signing: Rust approver, TypeScript prover",
+  "verdict": "PASS",
+  "txHash": "0033483c840586febcbc33a0338745ae7436dfafbf11c9cba363397565f8ec931b",
+  "note": "A withdrawal authorised by the independent Rust signer (ledger crates only, no Midnight TS stack) was accepted by the deployed reference contract; the device key never left the Rust process (AUTH-4).",
+  "details": {
+    "account": "54f4634678f68a24693a799a5a73220a97ebec103d663eeeae3a52e673b7cd83",
+    "signer": "/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/contract/signer-rs/target/debug/account-custody-signer",
+    "rustPk": {
+      "x": "0x2d609b0c3184d0124408ef56cb0aa42fb4bb18c0f9d8c5157799a41146a1da8f",
+      "y": "0x23ca62165ba3b108dfcc3c7637c42134160371b2dcab3dea542fcbbfc11becb2"
+    },
+    "grindAttempts": 14,
+    "challenge": "808b83ff1b7a265f45f1a0aa6f6a0240167eaaabf1166a7c10209775795a2e07",
+    "withdrawTx": "0033483c840586febcbc33a0338745ae7436dfafbf11c9cba363397565f8ec931b"
+  },
+  "ranAt": "2026-07-17T10:08:20.531Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

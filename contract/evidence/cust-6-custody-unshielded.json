@@ -1,0 +1,19 @@
+{
+  "testId": "CUST-6",
+  "name": "custody-unshielded",
+  "description": "MIP-0012 unshielded mirror: deposit/withdraw/over-withdrawal, Night + non-native color, lower-bound semantics",
+  "verdict": "PASS",
+  "note": "Mirror credits and debits conform for Night and a non-native color; over-withdrawal aborts; an unmirrored transfer is held but not credited and cannot be withdrawn through the mirror.",
+  "details": {
+    "account": "216322dce8cb34807950ffaf8decb3e208cff6d1051a338bd3cb15382dd9bf54",
+    "nonNativeColor": "b8de1653b42a63fff2963813d26403b8b9ef833031f7d1a1d604712bafc1cba1",
+    "unmirroredRejection": "Unexpected error submitting scoped transaction '<unnamed>': (FiberFailure) SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/con",
+    "unmirroredOutcome": "rejected by the node: unsolicited unshielded outputs to contracts are refused (claim pairing)"
+  },
+  "ranAt": "2026-07-17T10:12:40.978Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

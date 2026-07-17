@@ -1,0 +1,62 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Test-scaffolding faucet — NOT part of the custody design.
+//
+// Shielded tokens on a fresh localnet can only originate from a contract
+// mint (`mintShieldedToken`), so the integration tests and the demo app use
+// this faucet to hand the user a shielded note that can then be deposited
+// into the account-custody contract. Mirrors the S2 mint_and_send recipe
+// from contract-custody-feasibility.
+// ---------------------------------------------------------------------------
+
+export circuit mint_shielded(
+  color:     Bytes<32>,
+  amount:    Uint<64>,
+  nonce:     Bytes<32>,
+  recipient: ZswapCoinPublicKey,
+): [] {
+  mintShieldedToken(
+    disclose(color),
+    disclose(amount),
+    disclose(nonce),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+  );
+}
+
+// Non-native unshielded color for the MIP-0012 mirror test (test 6): the
+// minted color is the ledger's token-type derivation over (domain, this
+// faucet's address).
+export circuit mint_unshielded(
+  domain:    Bytes<32>,
+  amount:    Uint<64>,
+  recipient: UserAddress,
+): [] {
+  mintUnshieldedToken(
+    disclose(domain),
+    disclose(amount),
+    right<ContractAddress, UserAddress>(disclose(recipient)),
+  );
+}
+
+// Unshielded mint straight to a CONTRACT address — gives the mirror test
+// its unmirrored-transfer leg (tokens held by the custody contract that
+// never passed deposit_unshielded; MIP-0012 §5 lower-bound semantics).
+export circuit mint_unshielded_to_contract(
+  domain:    Bytes<32>,
+  amount:    Uint<64>,
+  recipient: ContractAddress,
+): [] {
+  mintUnshieldedToken(
+    disclose(domain),
+    disclose(amount),
+    left<ContractAddress, UserAddress>(disclose(recipient)),
+  );
+}
+
+// The color a domain mints under, so tests can compute the mirror key.
+export circuit unshielded_color(domain: Bytes<32>): Bytes<32> {
+  return tokenType(disclose(domain), kernel.self());
+}

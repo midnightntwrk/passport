@@ -1,0 +1,27 @@
+{
+  "testId": "AUTH-1-2-5",
+  "name": "auth-conformance",
+  "description": "MIP-0013 happy path, rejection matrix, deposit independence",
+  "verdict": "PASS",
+  "note": "Gated call executes with a valid device signature; every single-fault variant aborts with no state change; a permissionless deposit between signing and submission does not invalidate the pending authorisation.",
+  "details": {
+    "account": "83cf174e8c95b7e22d9553a6bb0ae43c65128fcf4e28257bfdf9fe852dd4ce11",
+    "happyPathTx": "008807a0ff49557ebc1efbd3d533f2853b12487923be023cc18a6fadd666923d23",
+    "rejectionMatrix": {
+      "wrongSigS": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
+      "foreignSigR": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
+      "unregisteredPk": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown device",
+      "tamperedArg": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 295 char 13: byte vector [74,253,61,95,122,246,231,145,16,153,199,118,189,134,147,62,138,140,123,81,181,61,212,192,134,91,164,86,233,81,143,233] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
+      "staleNonce": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 295 char 13: byte vector [238,86,110,69,252,255,100,90,255,116,193,41,22,255,189,53,38,107,253,162,31,160,108,201,182,219,209,210,29,147,186,219] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
+      "reusedSignature": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 295 char 13: byte vector [45,113,38,190,52,44,193,252,59,27,125,167,135,17,77,29,225,89,48,57,214,165,184,169,69,178,228,14,6,133,252,206] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type"
+    },
+    "staleEpochFault": "N/A — no epoch-bump surface until the recovery-paths MIP instantiates MIP-0013 §8",
+    "depositIndependenceTx": "00d85b4f23e270572be657bdfb2ed20ced61edec731868fd5d397138fe6e796228"
+  },
+  "ranAt": "2026-07-17T09:33:50.174Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "testId": "CUST-7-8",
+  "name": "custody-payments",
+  "description": "MIP-0012 one-hop payment (INV-6) and direct transfer (composed tx)",
+  "verdict": "PASS",
+  "note": "One-hop: no transaction in the flow names both accounts. Direct: one composed transaction pairs the contract-recipient spend with the payee claim; both addresses visible by design, no coin material; the received coin is discoverable and spendable.",
+  "details": {
+    "accountA": "c593bffc01cc9416de6dfc3fa9dc2cf6816043e9d783ff64e458fcce53ea3dd9",
+    "accountB": "39e667924547c00a37a1572f4b4d1727ba16e48f17071a47d684176c17f1a232",
+    "hop1Tx": "008fa6d5edc7bf085a37b5bf3cbf06779bfabddc3d2a6a4a32cc71ab3385dacaab",
+    "hop2Tx": "002f491915d1bc62f45bc62e323f2aa0e12c0bd8d0a124aa78bb0e6e2d81267469",
+    "oneHopAudit": {
+      "hop1": {
+        "a": true,
+        "b": false
+      },
+      "hop2": {
+        "a": false,
+        "b": true
+      }
+    },
+    "sent": {
+      "value": "150",
+      "nonce": "b2b01f89c5be22d6…"
+    },
+    "composedTxId": "003d761ede4209733fb2188b42631966ad1d68c28b3b4478830f89192f462d2243",
+    "directAudit": {
+      "link": {
+        "a": true,
+        "b": true
+      }
+    },
+    "directLeaks": {
+      "raw": {
+        "nonce": false,
+        "color": false,
+        "valueBE": false,
+        "valueLE": false
+      },
+      "contractActions": {
+        "nonce": false,
+        "color": false,
+        "valueBE": false,
+        "valueLE": false
+      }
+    },
+    "onwardSpendTx": "00dab0bed7e937738a96d0d27a7ef65bead1179e9cadd93bbabe960a7c4a5597ba"
+  },
+  "ranAt": "2026-07-17T09:53:44.442Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}
