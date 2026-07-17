@@ -104,6 +104,8 @@ To be folded back into the MIP texts:
    composing client needs its description (the deterministic nonce
    evolution) to build the payee's claim in the same transaction. The
    validated signature is `[ShieldedCoinInfo, Maybe<ShieldedCoinInfo>]`.
+   Proposed upstream as
+   [midnight-improvement-proposals#248](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/248).
 4. **Observation, not erratum — the `as Field` cast as first rejector.**
    When a signature does not match the call (tampered argument, stale
    nonce, replay), the recomputed challenge differs from the ground one
