@@ -60,7 +60,7 @@ presents multiple options behind stable interfaces and orchestrates
 whichever a deployment (or user) selects:
 
 - **Managed path (launch)** — wallet management is delegated to a
-  **wallet-infrastructure provider** (Dynamic at launch), which for
+  **wallet-infrastructure provider**, which for
   **Midnight** offers an embedded Midnight wallet (WaaS) or connects an
   extension (1am) and supplies auth (social / email / passkey), unified
   balances, external-wallet connectors, on-ramps, and fee abstraction. In
@@ -162,8 +162,8 @@ Processes the SDK delegates behind provider interfaces:
 | Cross-chain (MCS) | Upstream MCS threshold-Schnorr | — (owned upstream) | [C25] |
 | Private storage / device-sync | Vendor keystore (native) or shared provider (#58) | Local-only (no cross-device sync) | [C16] · §3.6 |
 | Sync / indexing | Hosted indexer | Self-hosted indexer | [C17] |
-| Proving | Managed-provider (bundled) · attested-remote TEE proof server | In-tab WASM prover (small-k circuits) | [C6] · §2.5 |
-| Fees | Sponsor service | User-held DUST | [C24] |
+| Proving | Provider-routed (provider → its proving vendor, proof returned) · direct attested-TEE proof server (prove + broadcast) | In-tab WASM prover (low k) | [C6] · §2.5 |
+| Fees / DUST | Capacity Exchange LP marketplace (§3.11) | User-held DUST | [C24] |
 
 **Custody setup — waves.** At launch the wallet-infrastructure provider
 holds the anchor key in a **TEE / secure enclave** (single enclave-held
@@ -172,128 +172,141 @@ setup — distributed key shares, no single point of assembly — is a
 second-wave feature**; it hardens the managed anchor without changing the
 §2.3 binding to the on-chain Jubjub key, so it is transparent to the ACC
 and to consumers. *On **Midnight** the provider's embedded custody is its
-**WaaS wallet** (`DynamicWaasMidnightConnectors`), which the prototype uses;
+**WaaS wallet** (its embedded-WaaS Midnight connector), which the prototype
+uses;
 an extension (1am) is the alternative. Either way, in the prototype the
 provider is the auth / presence gate over a browser-local device secret, not
 yet the cryptographic ACC anchor — see §2.6.*
 
 ### 2.5 Proving paths
 
-Proof generation ([C6]) is a **Prover seam** the SDK routes across three
-paths spanning a privacy / capability spectrum. What crosses the boundary
-is the proving *preimage*, which embeds the **witness** — the secret / key
-material decrypted under the §2.2 ceremony. Path choice is therefore a
-privacy decision first and a performance decision second. The seam itself
-is the ledger's two-method `ProvingProvider` (`check`, `prove`), so all
-three paths are drop-in behind one interface; the SDK's contribution is the
-routing policy and the attestation check.
+Proof generation ([C6]) is a **Prover seam** the SDK routes. What crosses
+the boundary is the proving *preimage*, which embeds the **witness** — the
+secret / key material decrypted under the §2.2 ceremony. Path choice is
+therefore a privacy decision first and a performance decision second. The
+seam itself is the ledger's two-method `ProvingProvider` (`check`,
+`prove`), so every path is drop-in behind one interface; the SDK's
+contribution is the routing policy and the attestation check.
 
-- **Managed-provider proving (launch, zero-config).** On the managed path
-  (§2.1) proving comes bundled with the wallet-infrastructure provider
-  integration. Trust follows the provider; nothing to stage, no device
-  cost.
-- **In-tab WASM prover (small-k circuits).** The `zkir-v2` prover runs in a
-  Web Worker on the user's device; the witness **never leaves the device**
-  — the strongest privacy posture, and the literal expression of [P8].
-  Bounded by device capability: suited to small-k circuits (the Night,
-  grant, device, and recovery paths — sub-MB keys, seconds), not the
-  large-k shielded path (tens of MB of keys, tens of seconds, memory
-  pressure). Requires one-time per-origin staging of SRS slices and keys.
-  Validated end-to-end in the account-custody prototype.
-- **Attested remote proof server (TEE).** A hosted proof server running in
-  a Trusted Execution Environment. The witness leaves the device, but only
-  into an **attested** enclave over an encrypted channel: the SDK MUST
-  verify remote attestation (enclave measurement + freshness, against a
-  pinned known-good value) **before** any preimage is sent. An unattested
-  "TEE prover" is just a plaintext hosted prover and is not an acceptable
-  path. Carries the large-k circuits the in-tab path cannot, without
-  surrendering witness confidentiality to a plaintext third party.
+**Routing is a k-threshold decision tree**, not a flat menu:
 
-Routing is a policy over (a) custody path, (b) circuit size / k, (c) device
+1. **k low enough → in-tab WASM prover.** The `zkir-v2` prover runs in a
+   Web Worker on the user's device; the witness **never leaves the device**
+   — the strongest privacy posture, and the literal expression of [P8].
+   Suited to the small-k circuits (the Night, grant, device, and recovery
+   paths — sub-MB keys, seconds); requires one-time per-origin staging of
+   SRS slices and keys. Validated end-to-end in the account-custody
+   prototype. The k-threshold is a **measured, configurable** value per
+   device class, not a constant baked into the SDK.
+2. **k too high → remote proving**, two variants:
+   - **2a. Provider-routed.** The wallet-infrastructure provider
+     routes the proving payload to its remote proof-server vendor and
+     returns the **proof**; Passport balances (fees, [C24]) and
+     **broadcasts from Passport** (the §2.6 target flow).
+   - **2b. Direct remote proof server (prove + broadcast).** Passport calls
+     the remote proof server itself; the server proves **and broadcasts the
+     transaction**, and Passport **waits for on-chain confirmation** rather
+     than receiving the proof back. Passport must hand over everything the
+     broadcast needs — which makes fee-balancing order and the fee-payer
+     explicit prerequisites ([C24]: who balances and signs fees before the
+     server submits — Passport pre-balancing, or a sponsor at the server).
+
+**Attestation (both remote variants).** The witness leaves the device in 2a
+and 2b — and in 2b the server additionally sees the full transaction. The
+remote prover MUST run in a TEE and the SDK MUST verify remote attestation
+(enclave measurement + freshness, against a pinned known-good value)
+**before** any preimage is sent. An unattested "TEE prover" is just a
+plaintext hosted prover and is not an acceptable path. For 2a the same
+requirement applies transitively to the provider's vendor — pin down what
+that vendor attests to (§2.6).
+
+Routing inputs remain (a) custody path, (b) circuit k, (c) device
 capability, and (d) privacy posture, with a fallback ladder (in-tab →
-attested-remote on capability failure). The prover actually used MUST be
-surfaced truthfully to the user ("proved in this browser" / "proved in an
-attested enclave" / "proved by the provider") — proof provenance is a
-user-facing guarantee, not a diagnostic.
+remote on capability failure). The prover actually used MUST be surfaced
+truthfully to the user ("proved in this browser" / "proved in an attested
+enclave" / "proved by the provider") — and in 2b, that the transaction was
+**submitted by the proof server** — proof provenance is a user-facing
+guarantee, not a diagnostic.
 
 ### 2.6 The managed path in detail
 
 The decentralised path is specified surface by surface below; this is its
 managed counterpart, grounded in the launch provider's actual Midnight
-integration (Dynamic, `@dynamic-labs/midnight`).
+integration.
 
 **Finding — the managed flow executes real ACC contract calls, with the
 provider as the auth / presence layer over the ACC (not the contract-call
-signer).** Grounded in the prototype's Dynamic flow (branch
+signer).** Grounded in the prototype's managed flow (branch
 `demo/mn-passport-dynamic-flow`, `experiments/account-custody-prototype`).
-Dynamic offers Midnight through *both* extension connectors
-(`MidnightWalletConnectors`, e.g. 1am) and an **embedded WaaS wallet**
-(`DynamicWaasMidnightConnectors`); the prototype uses the embedded WaaS
-path. In it, Dynamic supplies social-login auth, the embedded Midnight
+The provider offers Midnight through *both* extension connectors (e.g.
+1am) and an **embedded WaaS wallet**; the prototype uses the embedded WaaS
+path. In it, the provider supplies social-login auth, the embedded Midnight
 wallet (addresses / balances / keys), and a `signMessage` **presence
 gesture**. The ACC **device secret** (the hash-preimage witness) is gated by
-that Dynamic login, and ACC contract calls — deploy, deposit, grants,
+that provider login, and ACC contract calls — deploy, deposit, grants,
 recover — then run through **midnight-js exactly as on the decentralised
 path**, balanced and submitted by the demo's genesis fee wallet (a C24
-shortcut) — **Dynamic is not in the contract-call path at all**. So the
+shortcut) — **the provider is not in the contract-call path at all**. So the
 managed path needs only `signMessage` to *authorise* the ACC (the device
 secret does the in-circuit auth); it never asks the provider to sign the
 contract call. What it leaves unproven is who **balances and submits** the
 contract transaction in production — see the reconciliation gap below.
 
-| Surface | Managed path (Dynamic) |
+| Surface | Managed path (launch provider) |
 |---|---|
-| Onboarding | Dynamic auth (social / email / passkey) via `DynamicContextProvider`; embedded Midnight wallet via `DynamicWaasMidnightConnectors` (or an extension via `MidnightWalletConnectors`). |
-| Custody / signing | ACC device secret gated by the Dynamic login (a `signMessage` gesture); ACC contract calls run via midnight-js. The provider authenticates and holds the embedded wallet; it does **not** sign the contract calls. |
+| Onboarding | Provider auth (social / email / passkey) via its app context; embedded Midnight wallet via its embedded-WaaS connector (or an extension via its wallet connectors). |
+| Custody / signing | ACC device secret gated by the provider login (a `signMessage` gesture); ACC contract calls run via midnight-js. The provider authenticates and holds the embedded wallet; it does **not** sign the contract calls. |
 | Addresses | Unshielded `wallet.address`; shielded / DUST via `additionalAddresses`; `getShieldedAddresses()` → coin + encryption public keys. |
 | Assets | `getBalances()` / `getShieldedBalance()` / …; `sendBalance({toAddress, amount})`, pool-routed (no cross-pool transfers). |
-| Proving | Provider routes to a remote prover vendor (§2.5 managed path). |
-| Ceremony | Dynamic's `signMessage` / passkey gate (§2.2). |
-| External wallets / on-ramps | Dynamic connectors (§3.10 managed variant). |
+| Proving | Provider routes to its remote proving vendor (§2.5 path 2a). |
+| Ceremony | The provider's `signMessage` / passkey gate (§2.2). |
+| External wallets / on-ramps | Provider connectors (§3.10 managed variant). |
 
 **Reconciliation with the ACC — ACC-centric and demonstrated, with one
 caveat.** The managed flow produces a real ACC with device-secret auth and
 the full contract-call set, so the managed path *is* ACC-centric — one
 account model, progressive decentralisation preserved. *Authorisation* is
-settled: it is the device secret, not a provider signature, so Dynamic never
-signs the contract call. **But fee-payment and submission are a separate
-question the demo dodges:** the contract transaction is balanced and
-submitted by the **genesis wallet** (C24 out of scope), *not* by Dynamic. So
-whether the managed (Dynamic) wallet can itself **balance and submit an
-arbitrary ACC contract transaction** — beyond `sendBalance` transfers — is
-**not proven** and is a verify item ([C24]: in production the managed wallet
-or a sponsor must pay DUST and submit).
+settled: it is the device secret, not a provider signature, so the provider
+never signs the contract call. **But fee-payment and submission are a
+separate question the demo dodges:** the contract transaction is balanced
+and submitted by the **genesis wallet** (C24 out of scope), *not* by the
+provider. So whether the managed (provider-held) wallet can itself
+**balance and submit an arbitrary ACC contract transaction** — beyond
+`sendBalance` transfers — is **not proven** and is a verify item ([C24]: in
+production the managed wallet or a sponsor must pay DUST and submit).
 
 *Remaining gap (the prototype is demo-grade here).* Its device secret is a
-**random, browser-local** value merely *gated* by the Dynamic login — not
-cryptographically derived from or bound to the Dynamic key, and not portable
+**random, browser-local** value merely *gated* by the provider login — not
+cryptographically derived from or bound to the provider's key, and not
+portable
 (cross-browser reconnect deliberately fails). The v1 target is the true §2.3
 binding: the managed key cryptographically anchors the ACC authoriser so it
 is portable and recoverable, not just an auth gate over a local secret.
 
-**Target managed proving + submit flow (Dynamic remote proof server,
-forthcoming).** Dynamic is working towards incorporating a remote proof
-server. Once it lands, the managed path splits cleanly along the existing
-seams — no redesign:
+**Target managed proving + submit flow (provider remote proof server,
+forthcoming).** The provider is working towards incorporating a remote
+proof server. Once it lands, the managed path splits cleanly along the
+existing seams — no redesign:
 
 1. **Build** — Passport builds the unproven ACC contract call and holds the
    witness (device secret + private inputs).
-2. **Prove** — offloaded to Dynamic's remote proof server
-   (`adapter-prover-remote`, §2.5) → returns the proof.
-3. **Balance / fees** — Dynamic's embedded wallet (or a sponsor) adds DUST
-   fee inputs and signs ([C24]).
+2. **Prove** — offloaded to the provider's remote proof server
+   (`adapter-prover-remote`, §2.5 path 2a) → returns the proof.
+3. **Balance / fees** — the provider's embedded wallet (or a sponsor) adds
+   DUST fee inputs and signs ([C24]).
 4. **Broadcast** — Passport submits the assembled, proven, balanced
    transaction to the node (a trivial submit provider).
 
 The managed path then reduces to **Passport = build + orchestrate +
-broadcast; Dynamic = prove (+ fee-pay)**. Two caveats travel with it:
+broadcast; provider = prove (+ fee-pay)**. Two caveats travel with it:
 
 - **Privacy / attestation.** The proving payload embeds the witness, so
-  remote proving sends the witness to Dynamic's prover. This preserves
+  remote proving sends the witness to the provider's prover. This preserves
   privacy only if that prover is an **attested TEE** (§2.5); a plain hosted
-  prover is provider-trust. Pin down which Dynamic's remote proof server is.
+  prover is provider-trust. Pin down which the provider's remote proof
+  server is.
 - **Fees are not proving.** A proof server proves; it does not pay DUST.
-  "Just broadcast" holds only once Dynamic's wallet (or a sponsor) has
+  "Just broadcast" holds only once the provider's wallet (or a sponsor) has
   balanced and fee-paid the transaction ([C24]).
 
 ## 3. Functional surfaces
@@ -499,6 +512,76 @@ peer, fund / bridge from its Cardano side, and bind its Cardano identity.
 The `adapter-wallet-connect` client (architecture §4.2) feeds all three:
 binding → signer / §2.3, funding → [C25], coexistence → the §3.9 surface.
 Which mode(s) ship first is a v1 delivery-scope question.
+
+### 3.11 DUST sponsorship — Capacity Exchange
+
+Fees on Midnight are paid in DUST, which is non-transferable — the
+zero-DUST user is the [C24] problem. **Capacity Exchange** is the
+ecosystem's answer: a DUST-sponsorship marketplace in which liquidity
+providers (LPs), running open-source servers, sell DUST capacity so a user
+holding zero DUST can still transact. The SDK MUST support it as the
+sponsored fill of the **Fee seam** (`adapter-fee-capacity-exchange`), with
+user-held DUST as the provider-free default.
+
+**Flow (current upstream design — explicitly pre-launch, not the final
+launch workflow):**
+
+1. A dApp action requires DUST the user does not hold.
+2. The SDK requests quotes from LPs — **pure API, no on-chain transaction**
+   (upstream flags this as critical for launch usability).
+3. LPs return quotes: "I'll sponsor X DUST if you pay Y in token Z."
+4. The user selects a quote.
+5. The LP returns a **partial Midnight transaction**: an intent supplying
+   the DUST, plus an intent encoding the payment the LP expects (e.g. a
+   zSwap offer / payment leg).
+6. The SDK attaches the user's own dApp intent, supplies the input funds so
+   the transaction balances, and submits — ceremony-gated (§2.2), since the
+   composed transaction spends the user's token Z.
+
+This is intent composition on the ledger's `Intent` primitive — [C24]
+already names `dust_actions` as the protocol primitive, and the abstraction
+Passport presents over intents is the [C22] workstream. Steps 2–4 are
+off-chain; nothing touches the chain until the user commits.
+
+**Adapter requirements** (tracking the upstream "Sponsor" spec, in
+progress):
+
+- **One-method surface** — a dApp (or Passport flow) calls one method and
+  reliably gets a sponsored transaction back.
+- **Quote lifecycle** — expiry, replay protection, and handling for users
+  who abandon after selecting a quote.
+- **Token filtering** — only offer payment tokens the user actually holds
+  (needs the balance surface).
+- **LP preferences / whitelists** — which LPs to solicit and trust;
+  substitutable per [P8]. Upstream's fast-follow is a wallet-native API
+  where preferences make the UX mostly invisible — that wallet-native
+  surface is Passport's natural home.
+- **Quote-request privacy** — a quote request discloses spend-intent
+  metadata (amount class, payment token) to every solicited LP before any
+  commitment; solicit the minimum set per the whitelist.
+- **Packaging** — upstream ships a JS SDK plus an optional React
+  quote-selection component; the adapter wraps the upstream SDK, and the
+  official UI may consume or re-brand the selection component (upstream's
+  success criterion is that integrators can brand and customise copy).
+
+**Limits and phases:**
+
+- Capacity Exchange solves zero-DUST for a user who holds *some* payable
+  token. The fully-empty user at onboarding (ACC deploy + name claim,
+  §3.1) still needs a sponsor / faucet answer — [C24] remains open for that
+  case.
+- **Bridge-assisted payment** (multisig-operated bridge; in principle any
+  bridge) is upstream work-in-progress and composes with §3.10's
+  fund / bridge mode.
+- **Phase 2 (upstream roadmap):** wallet-native sponsor transactions and
+  preference management, and **passive LP leasing via auction** — a user
+  deposits "DUST rights" into a contract, active LPs bid, and the user
+  earns the bid proceeds. For Passport that is a future *earn* surface over
+  the user's DUST rights; out of v1 scope, noted so the Fee seam does not
+  preclude it.
+- Interplay with §2.5 path 2b: a sponsored partial transaction is one
+  candidate answer to "who balances and fee-pays before a prove+broadcast
+  server submits".
 
 ## 4. Reference implementations (UI / App)
 

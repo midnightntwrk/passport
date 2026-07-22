@@ -121,7 +121,7 @@ default is always present (§2.1, [P8]):
 | Seam | Adapters | Req |
 |---|---|---|
 | Signer / custody | managed anchor · local in-circuit Jubjub · interim hash-preimage | §2.1, §2.3 |
-| Prover (router) | in-tab wasm · attested-TEE remote · provider-routed | §2.5 |
+| Prover (router) | in-tab wasm (low k) · provider-routed (proof returned, Passport broadcasts) · direct attested-TEE (prove + broadcast) | §2.5 |
 | Storage / sync | vendor keystore (native) · shared provider #58 · local-only | §3.6 |
 | Indexer / view-key | hosted · self-hosted | §3.6 |
 | Recovery | guardians + paper key | §3.4 |
@@ -129,6 +129,31 @@ default is always present (§2.1, [P8]):
 | Agent / OWS | OWS policy engine + credential | §3.8 |
 | dApp-connection | C23 wallet side | §3.2 |
 | External wallet connect (client) | EIP-6963/1193 · Solana Wallet Standard · CIP-30 · Midnight connector | §3.10 |
+| Fee / DUST sponsorship | user-held DUST · Capacity Exchange LP marketplace | §3.11, [C24] |
+
+#### 4.2.1 The prover router (§2.5)
+
+The one seam with real routing logic, so it is drawn out. The routing input
+is the circuit's **k** (against a measured, per-device-class threshold);
+the split below k is a **trust** choice, and the two remote variants differ
+in **who broadcasts**:
+
+```mermaid
+flowchart TB
+  CMD["proving request (preimage embeds witness)"] --> K{"k ≤ device threshold?"}
+  K -- yes --> WASM["1 · in-tab WASM prover (Web Worker)\nwitness never leaves the device"]
+  K -- no --> R{"remote variant"}
+  R --> PROV["2a · provider-routed\nwallet-infra provider → its proving vendor\nproof returned → Passport balances + broadcasts"]
+  R --> TEE["2b · direct attested-TEE proof server\nattestation verified BEFORE preimage sent\nserver proves AND broadcasts → Passport awaits confirmation"]
+  WASM -. "capability failure (OOM / timeout / params)" .-> R
+```
+
+Rules carried by the router (all normative in §2.5): attestation is
+verified **before** any preimage leaves the device on both remote variants
+(transitively including the provider's vendor on 2a); in 2b the fee-payer /
+balancing order is an explicit prerequisite ([C24]); and proof provenance —
+where it was proved *and who submitted it* — is surfaced truthfully to the
+user as a first-class pipeline event (§4.3).
 
 ### 4.3 Command + state surface
 - **Reads:** an observable projection of ACC state + session (devices,
@@ -206,9 +231,11 @@ the provider-free default always ships.
   behind the same interface until Schnorr lands (§2.3).
 - **`adapter-prover-wasm`** — the in-tab wasm prover (lifted from the prototype
   worker) for small-k circuits (§2.5).
-- **`adapter-prover-remote`** — the remote-proving client: provider-routed and
-  attested-TEE paths, verifying remote attestation **before** sending any
-  preimage (§2.5).
+- **`adapter-prover-remote`** — the remote-proving client for high-k
+  circuits, two modes (§2.5): **provider-routed** (proof returned; Passport
+  balances and broadcasts) and **direct attested-TEE** (the server proves
+  *and broadcasts*; Passport awaits confirmation). Verifies remote
+  attestation **before** sending any preimage in both modes.
 - **`adapter-storage-vendor`** — native vendor-keystore sync adapter (§3.6).
 - **`adapter-storage-shared`** — the shared private-storage provider (#58)
   adapter; also the source for dApp witness provisioning (§3.9).
@@ -223,6 +250,12 @@ the provider-free default always ships.
   connecting *out* to external wallets (Lace, 1am, Gero, MetaMask, Rabby,
   Phantom), one adapter per standard (§3.10). The opposite direction to
   `adapter-dapp-connection`; foreign-curve wallets attach via the §2.3 binding.
+- **`adapter-fee-capacity-exchange`** — the Fee seam's sponsored fill
+  (§3.11): wraps the upstream Capacity Exchange SDK — LP quote requests
+  (pure API, off-chain), quote selection, composition of the LP's partial
+  transaction (DUST intent + payment leg) with the user's dApp intent, and
+  quote expiry / replay / abandonment handling. User-held DUST remains the
+  provider-free default in core.
 
 **dApp side**
 
@@ -370,7 +403,7 @@ sequenceDiagram
   Kernel->>Kernel: decrypt witness (ephemeral)
   Kernel->>Cmd: unproven tx + witness handle
   Cmd->>Prover: prove(preimage)
-  Note over Prover: route — in-tab wasm / attested TEE / provider
+  Note over Prover: route by k — in-tab wasm | provider-routed | attested-TEE (2b: server broadcasts)
   Prover-->>Cmd: proof
   Cmd->>Chain: submit
   Chain-->>Cmd: confirmed
@@ -399,6 +432,8 @@ policy-engine check against a standing grant instead of a human ceremony
 | DID (§3.7) | DID seam |
 | Agents / OWS (§3.8) | Agent seam (OWS `ChainSigner`/policy over the grant primitive) |
 | dApp connector (§3.9) | `@midnight-ntwrk/mn-passport-connect` package |
+| External wallets (§3.10) | `adapter-wallet-connect` + §2.3 binding (kernel) |
+| DUST sponsorship (§3.11) | Fee seam (`adapter-fee-capacity-exchange`); the balance stage of the command pipeline |
 
 ## 7. What we lift from the prototype (quarry, not refactor)
 
@@ -434,8 +469,10 @@ single swap-point where hash-preimage gives way to Jubjub Schnorr and the
 3. **v1 seam scope [open].** *Lean:* real at v1 — signer (managed +
    interim local), prover (wasm + provider-routed; TEE next), storage
    (local + vendor-native; #58 as it lands), indexer, dApp-connection,
-   agent/OWS. Interface-stubbed at v1 — fee/sponsor ([C24]), full recovery
-   helper ([C15]), cross-chain ([C25]).
+   agent/OWS. Interface-stubbed at v1 — full recovery helper ([C15]),
+   cross-chain ([C25]). Fee/sponsor ([C24]) was stub-leaning, but §3.11
+   (Capacity Exchange) is now a named requirement — whether
+   `adapter-fee-capacity-exchange` is real at v1 tracks the upstream launch.
 4. **Agent seam [open].** *Lean:* **implement** an OWS-compatible
    `ChainSigner`/policy surface over the grant primitive (grant authoriser
    = the OWS-managed key) rather than **consume** `ows-core`'s key/vault
