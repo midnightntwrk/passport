@@ -4,8 +4,13 @@ import { rawTokenType, encodeRawTokenType } from '@midnight-ntwrk/ledger-v8';
 
 import { randomBytes32, hexToBytes32, hexToBytes, bytesToHex } from '../../../src/wallet/hex.js';
 
-import { getFaucet } from '../lib/midnight.js';
-import { userAddressBytes, coinPublicKeyBytes } from '../lib/providers.js';
+import { getFaucet, runPassportTransaction } from '../lib/midnight.js';
+import {
+  userAddressBytes,
+  coinPublicKeyBytes,
+  dynamicCoinPublicKeyBytes,
+  dynamicUserAddressBytes,
+} from '../lib/providers.js';
 import { ViewHeader, Panel, ActionButton, Mono, Chip } from '../ui.js';
 import type { AppContext } from '../App.js';
 
@@ -52,7 +57,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
             {nights.length === 0 && (
               <tr>
                 <td className="dim" colSpan={2}>
-                  no Night held by the MN Passport custody account yet — deposit from the fee wallet below
+                  no Night held by the MN Passport custody account yet
                 </td>
               </tr>
             )}
@@ -73,7 +78,17 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
             busyLabel="depositing…"
             task={{ label: 'Depositing Night into MN Passport custody', circuit: 'deposit_night' }}
             onRun={async () => {
-              const r = await account.depositNight(nightColor, BigInt(depositAmt));
+              const amount = BigInt(depositAmt);
+              const { result: r } = await runPassportTransaction(
+                mid,
+                {
+                  contractAddress: account.address,
+                  circuit: 'deposit_night',
+                  summary: `Deposit ${amount} NIGHT into MN Passport`,
+                  arguments: { amount: amount.toString() },
+                },
+                () => account.depositNight(nightColor, amount),
+              );
               log(`deposit_night ${depositAmt} → tx ${r.txId}`);
               await ctx.refreshLedger();
               return r.txId;
@@ -87,10 +102,23 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
             kind="ghost"
             task={{ label: 'Withdrawing Night to the user wallet', circuit: 'withdraw_night' }}
             onRun={async () => {
-              const r = await account.withdrawNight(
-                nightColor,
-                BigInt(withdrawAmt),
-                userAddressBytes(mid.walletCtx),
+              const amount = BigInt(withdrawAmt);
+              const recipient =
+                mid.dynamicWallet
+                  ? dynamicUserAddressBytes(mid.dynamicWallet)
+                  : userAddressBytes(mid.walletCtx!);
+              const { result: r } = await runPassportTransaction(
+                mid,
+                {
+                  contractAddress: account.address,
+                  circuit: 'withdraw_night',
+                  summary: `Withdraw ${amount} NIGHT from MN Passport`,
+                  arguments: {
+                    amount: amount.toString(),
+                    recipient: mid.dynamicWallet?.address ?? 'local demo wallet',
+                  },
+                },
+                () => account.withdrawNight(nightColor, amount, recipient),
               );
               log(`withdraw_night ${withdrawAmt} → tx ${r.txId}`);
               await ctx.refreshLedger();
@@ -117,7 +145,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
             {coins.length === 0 && (
               <tr>
                 <td className="dim" colSpan={3}>
-                  no shielded coins held by the MN Passport custody account yet — mint from the faucet below
+                  no shielded coins held by the MN Passport custody account yet
                 </td>
               </tr>
             )}
@@ -139,11 +167,24 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
                     kind="ghost"
                     task={{ label: 'Withdrawing shielded coins', circuit: 'withdraw_shielded' }}
                     onRun={async () => {
-                      const state: any = await firstValueFrom(mid.walletCtx.wallet.state());
-                      const r = await account.withdrawShielded(
-                        coinPublicKeyBytes(state),
-                        color,
-                        BigInt(shieldedWithdrawAmt),
+                      const recipient = mid.dynamicWallet
+                        ? await dynamicCoinPublicKeyBytes(mid.dynamicWallet)
+                        : coinPublicKeyBytes(
+                            await firstValueFrom(mid.walletCtx!.wallet.state()),
+                          );
+                      const amount = BigInt(shieldedWithdrawAmt);
+                      const { result: r } = await runPassportTransaction(
+                        mid,
+                        {
+                          contractAddress: account.address,
+                          circuit: 'withdraw_shielded',
+                          summary: `Withdraw ${amount} shielded tokens from MN Passport`,
+                          arguments: {
+                            amount: amount.toString(),
+                            tokenType: bytesToHex(color),
+                          },
+                        },
+                        () => account.withdrawShielded(recipient, color, amount),
                       );
                       log(`withdraw_shielded ${shieldedWithdrawAmt} → tx ${r.txId}`);
                       await ctx.refreshLedger();
@@ -157,7 +198,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
         </table>
       </Panel>
 
-      <Panel
+      {mid.mode === 'local' && <Panel
         title="Faucet — localnet scaffolding"
         sub="Mints shielded test tokens to the fee wallet so they can be deposited; not part of production custody."
         tone="scaffold"
@@ -181,7 +222,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
             task={{ label: 'Minting shielded test tokens', circuit: 'mint_shielded' }}
             onRun={async () => {
               const faucet = await getFaucet(mid, faucetAddr.trim());
-              const state: any = await firstValueFrom(mid.walletCtx.wallet.state());
+              const state: any = await firstValueFrom(mid.walletCtx!.wallet.state());
               const nonce = randomBytes32();
               const r = await faucet.callTx.mint_shielded(
                 FAUCET_DOMESTIC_COLOR,
@@ -232,7 +273,7 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
             />
           </div>
         ))}
-      </Panel>
+      </Panel>}
     </>
   );
 }

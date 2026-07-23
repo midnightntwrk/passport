@@ -1,7 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import type { AppContext } from '../App.js';
+import {
+  fingerprintDynamicSignature,
+  type DynamicTransactionReceipt,
+} from '../../../src/wallet/dynamic-transaction.js';
 import { beginTask, completeTask, failTask } from '../lib/txTracker.js';
+import { runPassportTransaction } from '../lib/midnight.js';
+import { DynamicTransactionConfirmationError } from '../lib/providers.js';
 import {
   loadAliasForAccount,
   normalizeAlias,
@@ -69,6 +75,7 @@ interface Position {
   earned: number;
   deposited: number;
   txId: string;
+  approvalSignatureFingerprint?: string;
 }
 
 const fmtUsd = (value: number | string) => {
@@ -105,6 +112,7 @@ export function FoundationsFlowView({
   const [txStatusText, setTxStatusText] = useState('Awaiting signature in wallet...');
   const [txConfirms, setTxConfirms] = useState(0);
   const [txId, setTxId] = useState('');
+  const [txReceipt, setTxReceipt] = useState<DynamicTransactionReceipt | null>(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [dynamicState, setDynamicState] = useState<DynamicMidnightState | null>(null);
@@ -174,32 +182,75 @@ export function FoundationsFlowView({
     setScene(2);
   }
 
-  async function depositFromLocalWallet() {
+  async function depositWithConnectedWallet() {
     setShowSource(false);
     setShowTx(true);
     setScene(3);
     setError('');
     setTxId('');
+    setTxReceipt(null);
     setTxConfirms(0);
     setTxStatus('confirming');
-    setTxStatusText('Requesting Dynamic wallet authorization...');
+    setTxStatusText('Building the exact C1 deposit transaction...');
     beginTask('Depositing Night into the MN Passport vault', 'deposit_night');
     try {
-      await ctx.dynamicWallet?.signMessage(
-        `MN Passport deposit authorization\nAmount: ${amount} USDC\nAccount: ${ctx.session.accountAddress}`,
-      );
-      setTxStatusText('Depositing through the MN Passport custody account...');
+      if (!ctx.dynamicWallet) {
+        throw new Error('Dynamic Midnight wallet is not connected.');
+      }
       const depositValue = BigInt(Math.max(1, Math.floor(Number(amount))));
-      const result = await ctx.account.depositNight(ctx.nightColor, depositValue);
-      const id = result.txId;
+      setTxStatusText(
+        'Dynamic is finalizing the C1 payload; the readable approval will cover the exact broadcast bytes...',
+      );
+      const submission = await runPassportTransaction(
+        ctx.mid,
+        {
+          contractAddress: ctx.session.accountAddress,
+          circuit: 'deposit_night',
+          summary: `Deposit ${depositValue} NIGHT into MN Passport`,
+          arguments: {
+            amount: depositValue.toString(),
+            tokenType: Array.from(ctx.nightColor)
+              .map((byte) => byte.toString(16).padStart(2, '0'))
+              .join(''),
+          },
+        },
+        () => ctx.account.depositNight(ctx.nightColor, depositValue),
+      );
+      const receipt = submission.receipt;
+      if (ctx.mid.dynamicTransactions && !receipt) {
+        throw new Error('Dynamic did not return the C1 transaction receipt.');
+      }
+      const id = receipt?.txHash ?? submission.result.txId;
+      setTxReceipt(receipt);
       setTxId(id);
       setTxConfirms(12);
       setTxStatus('confirmed');
-      setTxStatusText('Deposited into your MN Passport custody account');
-      ctx.log(`passport deposit ${amount} -> tx ${id}`);
+      setTxStatusText(
+        receipt
+          ? 'Dynamic finalized and broadcast the C1 deposit transaction'
+          : 'The local demo wallet broadcast the C1 deposit transaction',
+      );
+      ctx.log(
+        receipt
+          ? `Dynamic C1 deposit ${depositValue} NIGHT -> tx ${id}; approval ${receipt.approvalSignatureFingerprint.slice(0, 16)}...`
+          : `local C1 deposit ${depositValue} NIGHT -> tx ${id}`,
+      );
       await ctx.refreshLedger();
       completeTask(id);
     } catch (e: any) {
+      if (e instanceof DynamicTransactionConfirmationError) {
+        setTxReceipt(e.receipt);
+        setTxId(e.receipt.txHash);
+        setTxStatus('confirming');
+        setTxStatusText(
+          `Dynamic broadcast ${e.receipt.txHash}; indexer confirmation is still pending. Do not resubmit this deposit.`,
+        );
+        failTask(`broadcast ${e.receipt.txHash}; confirmation pending`);
+        ctx.log(
+          `Dynamic broadcast ${e.receipt.txHash}; confirmation pending — do not resubmit`,
+        );
+        return;
+      }
       const message = String(e?.message ?? e);
       setTxStatus('error');
       setTxStatusText(message);
@@ -249,9 +300,13 @@ export function FoundationsFlowView({
     setBusy('deploy');
     setError('');
     try {
-      await ctx.dynamicWallet?.signMessage(
+      if (!ctx.dynamicWallet) throw new Error('Dynamic Midnight wallet is not connected.');
+      const approvalSignature = await ctx.dynamicWallet.signMessage(
         `MN Passport deploy capital\nNight ID: ${nightHandle}.night\nAmount: ${amount} USDC\nPool: ${activePool.name} ${activePool.serif}`,
       );
+      if (!approvalSignature) throw new Error('Dynamic did not return a position approval signature.');
+      const approvalSignatureFingerprint =
+        await fingerprintDynamicSignature(approvalSignature);
       await new Promise((resolve) => setTimeout(resolve, 900));
       setPositions((current) => [
         ...current,
@@ -262,9 +317,12 @@ export function FoundationsFlowView({
           earned: 0,
           deposited: Date.now(),
           txId,
+          approvalSignatureFingerprint,
         },
       ]);
-      ctx.log(`passport position opened: ${fmtUsd(amount)} -> ${activePool.name} ${activePool.serif}`);
+      ctx.log(
+        `passport position approved ${approvalSignatureFingerprint.slice(0, 16)}...: ${fmtUsd(amount)} -> ${activePool.name} ${activePool.serif}`,
+      );
       setShowSuccess(true);
     } catch (e: any) {
       setError(String(e?.message ?? e));
@@ -305,7 +363,13 @@ export function FoundationsFlowView({
 
       <div className="nf-stage">
         <div className="nf-stage-inner">
-          {scene === 0 && <SceneYield onPick={pickPool} ledgerNightTotal={ledgerNightTotal} />}
+          {scene === 0 && (
+            <SceneYield
+              onPick={pickPool}
+              ledgerNightTotal={ledgerNightTotal}
+              network={ctx.mid.networkId}
+            />
+          )}
           {scene === 4 && (
             <SceneNightId
               handle={nightHandle}
@@ -328,7 +392,12 @@ export function FoundationsFlowView({
             />
           )}
           {scene === 6 && (
-            <SceneDashboard handle={nightHandle} positions={positions} onNew={startNew} />
+            <SceneDashboard
+              handle={nightHandle}
+              positions={positions}
+              network={ctx.mid.networkId}
+              onNew={startNew}
+            />
           )}
         </div>
       </div>
@@ -355,15 +424,17 @@ export function FoundationsFlowView({
             setShowSource(false);
             setScene(0);
           }}
-          onContinue={depositFromLocalWallet}
+          onContinue={depositWithConnectedWallet}
         />
       )}
 
       {showTx && (
-        <TxModal
-          amount={amount}
-          txId={txId}
-          confirms={txConfirms}
+          <TxModal
+            amount={amount}
+            txId={txId}
+            receipt={txReceipt}
+            dynamic={Boolean(ctx.mid.dynamicTransactions)}
+            confirms={txConfirms}
           status={txStatus}
           statusText={txStatusText}
           onClose={() => setShowTx(false)}
@@ -478,9 +549,11 @@ function Rail({ scene }: { scene: Scene }) {
 function SceneYield({
   onPick,
   ledgerNightTotal,
+  network,
 }: {
   onPick: (p: PoolKey) => void;
   ledgerNightTotal: bigint;
+  network: string;
 }) {
   return (
     <div className="nf-scene">
@@ -491,7 +564,7 @@ function SceneYield({
         </h1>
         <p className="nf-sub-text">
           Choose a pool, source funds through your MN Passport custody account, bind a Night ID, and
-          deploy capital. The deposit step is a real Midnight localnet custody transaction.
+          deploy capital. The deposit step is a real Midnight {network} custody transaction.
         </p>
       </div>
 
@@ -643,9 +716,9 @@ function SourceModal(props: {
         <ModalHead title="Step 02 · Source funds" onClose={props.onClose} />
         <div className="nf-modal-body">
           <p className="nf-small-copy">
-            Bridging <b>{fmtUsd(props.amount)}</b> USDC after Dynamic Midnight wallet
-            authorization. The MN Passport custody account receives the localnet deposit and the
-            Dynamic wallet surfaces remain visible below.
+            Preparing a <b>{props.amount} NIGHT</b> C1 deposit from the connected Dynamic Midnight
+            wallet. Passport proves the Compact call; Dynamic finalizes it, then an exact-byte
+            approval gates broadcast.
           </p>
           <div className="nf-witem selected nf-dynamic-wallet">
             <div className="nf-wicon">D</div>
@@ -656,12 +729,12 @@ function SourceModal(props: {
               <div className="nf-waddr">@dynamic-labs/midnight · DynamicWaasMidnightConnectors</div>
             </div>
             <div className="nf-wbal">
-              <div className="nf-wbal-lbl">Authorize</div>
+              <div className="nf-wbal-lbl">Finalize + submit</div>
             </div>
           </div>
           <DynamicConnectorPanel state={props.dynamicState} error={props.dynamicError} />
           <button className="nf-btn" onClick={props.onContinue}>
-            Sign with Dynamic and deposit {'->'}
+            Finalize and approve C1 deposit {'->'}
           </button>
         </div>
       </div>
@@ -778,6 +851,8 @@ function BalanceCell(props: { label: string; symbol: string; value: string; deta
 function TxModal(props: {
   amount: string;
   txId: string;
+  receipt: DynamicTransactionReceipt | null;
+  dynamic: boolean;
   confirms: number;
   status: TxStatus;
   statusText: string;
@@ -795,11 +870,33 @@ function TxModal(props: {
             <TxNode label="To" name="Night vault" active={props.status === 'confirmed'} />
           </div>
           <div className="nf-tx-rows">
-            <TxRow k="Amount" v={`${fmtUsd(props.amount)} USDC`} />
-            <TxRow k="Bridge" v="MN Passport custody · localnet" />
+            <TxRow k="Amount" v={`${props.amount} NIGHT`} />
+            <TxRow k="Circuit" v="deposit_night · C1 custody" />
+            <TxRow
+              k="Wallet finalizer"
+              v={props.dynamic ? 'Dynamic Midnight MPC' : 'Disposable localnet wallet'}
+            />
             <TxRow k="Tx hash" v={props.txId || '-'} mono />
+            <TxRow
+              k="Approved unbound digest"
+              v={props.receipt?.unboundTransactionDigest ?? '-'}
+              mono
+            />
+            <TxRow
+              k="Finalized transaction digest"
+              v={props.receipt?.finalizedTransactionDigest ?? '-'}
+              mono
+            />
+            <TxRow
+              k="Approval receipt"
+              v={props.receipt?.approvalSignatureFingerprint ?? '-'}
+              mono
+            />
             <TxRow k="Confirmations" v={`${props.confirms} / 12`} />
-            <TxRow k="Network fee" v="sponsored in local demo" />
+            <TxRow
+              k="Submission"
+              v={props.dynamic ? 'Dynamic submitTransaction' : 'Local wallet submitTransaction'}
+            />
           </div>
           <div className={`nf-tx-status ${props.status}`}>{props.statusText}</div>
           <button className="nf-btn" disabled={props.status !== 'confirmed'} onClick={props.onContinue}>
@@ -927,10 +1024,12 @@ function SceneDeploy(props: {
 function SceneDashboard({
   handle,
   positions,
+  network,
   onNew,
 }: {
   handle: string;
   positions: Position[];
+  network: string;
   onNew: () => void;
 }) {
   const total = positions.reduce((sum, p) => sum + p.amount, 0);
@@ -948,7 +1047,7 @@ function SceneDashboard({
             </div>
             <div className="nf-dash-sub">
               <span>MN Passport verified</span>
-              <span className="nf-verified-pill">localnet</span>
+              <span className="nf-verified-pill">{network}</span>
             </div>
           </div>
         </div>

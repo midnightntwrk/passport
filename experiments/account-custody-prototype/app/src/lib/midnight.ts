@@ -1,19 +1,28 @@
-// Lazily-initialised Midnight context shared by the whole app:
-// genesis fee wallet (synced), providers for the account and faucet
-// contracts, and the faucet handle.
+// Lazily initialized Midnight context shared by the app. The default context
+// uses Dynamic on Preview; the explicit local demo boots the disposable
+// genesis wallet and faucet providers.
 
 import { firstValueFrom } from 'rxjs';
 import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
+import type { MidnightWallet } from '@dynamic-labs/midnight';
 
 import {
   createWallet,
   createProviders,
+  createDynamicProviders,
   awaitSync,
   compiledFaucetContract,
   compiledIdentityRegistryContract,
+  configureDynamicNetwork,
+  configureLocalNetwork,
+  dynamicWalletNetwork,
+  DynamicTransactionCoordinator,
+  type DynamicTransactionResult,
+  type PassportNetworkId,
   type WalletContext,
   GENESIS_SEED,
 } from './providers.js';
+import type { DynamicTransactionIntent } from '../../../src/wallet/dynamic-transaction.js';
 import {
   IdentityRegistry,
   type IdentityRegistration,
@@ -23,7 +32,11 @@ declare const __FAUCET_ADDRESS__: string;
 declare const __IDENTITY_REGISTRY_ADDRESS__: string;
 
 export interface Midnight {
-  walletCtx: WalletContext;
+  mode: 'local' | 'dynamic';
+  networkId: PassportNetworkId;
+  walletCtx: WalletContext | null;
+  dynamicWallet: MidnightWallet | null;
+  dynamicTransactions: DynamicTransactionCoordinator | null;
   accountProviders: any;
   faucetProviders: any;
   identityRegistryProviders: any;
@@ -33,13 +46,28 @@ export interface Midnight {
 }
 
 let booted: Promise<Midnight> | null = null;
+let bootedWalletKey = '';
 
-export function getMidnight(): Promise<Midnight> {
-  if (!booted) booted = init();
+export function getMidnight(dynamicWallet: MidnightWallet): Promise<Midnight> {
+  const localMode = new URLSearchParams(window.location.search).get('demoMode') === 'local';
+  const networkKey = localMode ? 'undeployed' : dynamicWalletNetwork(dynamicWallet);
+  const walletKey = `${localMode ? 'local' : 'dynamic'}:${networkKey}:${
+    dynamicWallet.id || dynamicWallet.address
+  }`;
+  if (!booted || bootedWalletKey !== walletKey) {
+    faucetHandle = null;
+    identityRegistryHandle = null;
+    bootedWalletKey = walletKey;
+    booted = (localMode ? initLocal() : initDynamic(dynamicWallet)).catch((error) => {
+      if (bootedWalletKey === walletKey) booted = null;
+      throw error;
+    });
+  }
   return booted;
 }
 
-async function init(): Promise<Midnight> {
+async function initLocal(): Promise<Midnight> {
+  configureLocalNetwork();
   const walletCtx = await createWallet(GENESIS_SEED);
   const state = await awaitSync(walletCtx);
 
@@ -54,7 +82,11 @@ async function init(): Promise<Midnight> {
   const identityRegistryProviders = await createProviders(walletCtx, 'identity_registry');
 
   return {
+    mode: 'local',
+    networkId: 'undeployed',
     walletCtx,
+    dynamicWallet: null,
+    dynamicTransactions: null,
     accountProviders,
     faucetProviders,
     identityRegistryProviders,
@@ -64,7 +96,44 @@ async function init(): Promise<Midnight> {
   };
 }
 
+async function initDynamic(dynamicWallet: MidnightWallet): Promise<Midnight> {
+  const networkId = configureDynamicNetwork(dynamicWallet);
+  const dynamicTransactions = new DynamicTransactionCoordinator(networkId);
+  const [accountProviders, faucetProviders, identityRegistryProviders] = await Promise.all([
+    createDynamicProviders(dynamicWallet, 'account', dynamicTransactions),
+    createDynamicProviders(dynamicWallet, 'faucet', dynamicTransactions),
+    createDynamicProviders(dynamicWallet, 'identity_registry', dynamicTransactions),
+  ]);
+
+  return {
+    mode: 'dynamic',
+    networkId,
+    walletCtx: null,
+    dynamicWallet,
+    dynamicTransactions,
+    accountProviders,
+    faucetProviders,
+    identityRegistryProviders,
+    nightColorHex: '00'.repeat(32),
+    faucetAddress: '',
+    identityRegistryAddress: '',
+  };
+}
+
+export async function runPassportTransaction<T>(
+  mid: Midnight,
+  intent: Omit<DynamicTransactionIntent, 'network'>,
+  action: () => Promise<T>,
+): Promise<{ result: T; receipt: DynamicTransactionResult<T>['receipt'] | null }> {
+  if (!mid.dynamicTransactions) {
+    return { result: await action(), receipt: null };
+  }
+  return mid.dynamicTransactions.run(intent, action);
+}
+
 export async function walletState(mid: Midnight): Promise<any> {
+  if (mid.dynamicWallet) return mid.dynamicWallet.getBalances();
+  if (!mid.walletCtx) throw new Error('No Midnight wallet is available.');
   return firstValueFrom(mid.walletCtx.wallet.state());
 }
 
@@ -86,6 +155,32 @@ let identityRegistryHandle: IdentityRegistry | null = null;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function waitForNetwork(mid: Midnight): Promise<void> {
+  if (mid.walletCtx) {
+    await awaitSync(mid.walletCtx);
+    return;
+  }
+  await sleep(2_000);
+}
+
+async function deployIdentityRegistry(mid: Midnight): Promise<IdentityRegistry> {
+  const { result } = await runPassportTransaction(
+    mid,
+    {
+      contractAddress: 'new identity registry',
+      circuit: 'deploy identity_registry',
+      summary: 'Deploy the MN Passport identity registry',
+      arguments: {},
+    },
+    () =>
+      IdentityRegistry.deploy(
+        mid.identityRegistryProviders,
+        compiledIdentityRegistryContract(),
+      ),
+  );
+  return result;
+}
+
 export async function getIdentityRegistry(mid: Midnight): Promise<IdentityRegistry> {
   if (identityRegistryHandle) return identityRegistryHandle;
   if (mid.identityRegistryAddress) {
@@ -97,10 +192,7 @@ export async function getIdentityRegistry(mid: Midnight): Promise<IdentityRegist
     return identityRegistryHandle;
   }
 
-  identityRegistryHandle = await IdentityRegistry.deploy(
-    mid.identityRegistryProviders,
-    compiledIdentityRegistryContract(),
-  );
+  identityRegistryHandle = await deployIdentityRegistry(mid);
   mid.identityRegistryAddress = identityRegistryHandle.address;
   return identityRegistryHandle;
 }
@@ -116,13 +208,9 @@ async function reconnectIdentityRegistry(mid: Midnight): Promise<IdentityRegistr
 }
 
 async function deployFreshIdentityRegistry(mid: Midnight): Promise<IdentityRegistry> {
-  identityRegistryHandle = await IdentityRegistry.deploy(
-    mid.identityRegistryProviders,
-    compiledIdentityRegistryContract(),
-  );
+  identityRegistryHandle = await deployIdentityRegistry(mid);
   mid.identityRegistryAddress = identityRegistryHandle.address;
-  await sleep(2_000);
-  await awaitSync(mid.walletCtx);
+  await waitForNetwork(mid);
   return reconnectIdentityRegistry(mid);
 }
 
@@ -154,12 +242,25 @@ export async function registerIdentity(
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const activeRegistry = attempt === 0 ? await reconnectIdentityRegistry(mid) : registry;
-      return await activeRegistry.register(handle, accountAddress);
+      const { result } = await runPassportTransaction(
+        mid,
+        {
+          contractAddress: activeRegistry.address,
+          circuit: 'register_identity',
+          summary: `Register ${handle}.night to the MN Passport custody account`,
+          arguments: {
+            accountAddress,
+            handle: `${handle}.night`,
+          },
+        },
+        () => activeRegistry.register(handle, accountAddress),
+      );
+      return result;
     } catch (e) {
       lastError = e;
       if (attempt === 2) break;
       await sleep(3_000 + attempt * 2_000);
-      await awaitSync(mid.walletCtx);
+      await waitForNetwork(mid);
       registry = await reconnectIdentityRegistry(mid);
       const landed = await registry.accountFor(handle);
       if (landed && landed !== accountAddress.toLowerCase()) {

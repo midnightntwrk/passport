@@ -1,13 +1,17 @@
 import { WalletAddressType } from '@dynamic-labs/sdk-api-core';
+import {
+  MIDNIGHT_NATIVE_SHIELDED_TOKEN_TYPE,
+  MIDNIGHT_NATIVE_TOKEN_TYPE,
+} from '@dynamic-labs/midnight';
 
 import type { AppContext } from '../App.js';
+import { dynamicShieldedKeys } from './providers.js';
 
 export const DYNAMIC_MIDNIGHT_IMPORT =
   'import { DynamicWaasMidnightConnectors } from "@dynamic-labs/midnight";';
 
-export const UNSHIELDED_NIGHT_TOKEN_KEY =
-  '0000000000000000000000000000000000000000000000000000000000000000';
-export const SHIELDED_NIGHT_TOKEN_KEY = '488bcd...';
+export const UNSHIELDED_NIGHT_TOKEN_KEY = MIDNIGHT_NATIVE_TOKEN_TYPE;
+export const SHIELDED_NIGHT_TOKEN_KEY = MIDNIGHT_NATIVE_SHIELDED_TOKEN_TYPE;
 
 export interface DynamicAddressSurfaces {
   unshieldedAddress: string;
@@ -50,18 +54,6 @@ function sumRecord(record?: Record<string, bigint>): bigint {
   return Object.values(record).reduce((sum, value) => sum + value, 0n);
 }
 
-function publicKeyParts(publicKey?: string): {
-  shieldedCoinPublicKey: string;
-  shieldedEncryptionPublicKey: string;
-} {
-  if (!publicKey) return { shieldedCoinPublicKey: '', shieldedEncryptionPublicKey: '' };
-  const half = Math.floor(publicKey.length / 2);
-  return {
-    shieldedCoinPublicKey: publicKey.slice(0, half),
-    shieldedEncryptionPublicKey: publicKey.slice(half),
-  };
-}
-
 export async function loadDynamicMidnightState(ctx: AppContext): Promise<DynamicMidnightState> {
   const wallet = ctx.dynamicWallet;
   if (!wallet) throw new Error('Dynamic Midnight wallet is not connected');
@@ -72,7 +64,7 @@ export async function loadDynamicMidnightState(ctx: AppContext): Promise<Dynamic
   const dust = wallet.additionalAddresses.find(
     (address) => address.type === WalletAddressType.MidnightDust,
   );
-  const keyParts = publicKeyParts(shielded?.publicKey);
+  const shieldedKeys = await dynamicShieldedKeys(wallet);
 
   const formatted = await wallet.getFormattedBalances().catch(() => null);
   const raw = await wallet.getBalances().catch(() => null);
@@ -82,8 +74,8 @@ export async function loadDynamicMidnightState(ctx: AppContext): Promise<Dynamic
     addresses: {
       unshieldedAddress: wallet.address,
       shieldedAddress: shielded?.address ?? '',
-      shieldedCoinPublicKey: keyParts.shieldedCoinPublicKey,
-      shieldedEncryptionPublicKey: keyParts.shieldedEncryptionPublicKey,
+      shieldedCoinPublicKey: shieldedKeys?.shieldedCoinPublicKey ?? '',
+      shieldedEncryptionPublicKey: shieldedKeys?.shieldedEncryptionPublicKey ?? '',
       dustAddress: dust?.address ?? '',
     },
     balances: {

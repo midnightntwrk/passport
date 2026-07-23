@@ -6,6 +6,7 @@ import { randomBytes32 } from '../../../src/wallet/hex.js';
 import { recoveryCommitment, deviceCommitment } from '../../../src/wallet/contract.js';
 
 import { createPasskey, deriveDeviceSecret, deriveDevModeSecret } from '../lib/passkey.js';
+import { runPassportTransaction } from '../lib/midnight.js';
 import type { Session } from '../lib/session.js';
 import { ViewHeader, Panel, ActionButton, Chip, StatTile } from '../ui.js';
 import type { AppContext } from '../App.js';
@@ -99,19 +100,35 @@ export function RecoveryPanel(props: {
 
             let newDeviceSecret: Uint8Array;
             let newSession: Session;
+            const recoveredSession = {
+              accountAddress: session.accountAddress,
+              networkId: session.networkId,
+              alias: session.alias,
+              identityRegistryAddress: session.identityRegistryAddress,
+              identityRegistrationTxId: session.identityRegistrationTxId,
+            };
             if (devMode) {
               if (!passphrase) throw new Error('enter a new dev-mode passphrase');
               newDeviceSecret = await deriveDevModeSecret(passphrase);
-              newSession = { accountAddress: session.accountAddress, devMode: true };
+              newSession = { ...recoveredSession, devMode: true };
             } else {
               const ref = await createPasskey('recovered-device');
               newDeviceSecret = await deriveDeviceSecret(ref);
-              newSession = { accountAddress: session.accountAddress, passkey: ref };
+              newSession = { ...recoveredSession, passkey: ref };
             }
 
             const newRecoverySecret = randomBytes32();
             const recoverer = await ctx.reconnect({ recoverySecret: secret });
-            const r = await recoverer.recover(newDeviceSecret, newRecoverySecret);
+            const { result: r } = await runPassportTransaction(
+              ctx.mid,
+              {
+                contractAddress: session.accountAddress,
+                circuit: 'recover',
+                summary: 'Recover MN Passport and rotate every device and grant',
+                arguments: { account: session.accountAddress },
+              },
+              () => recoverer.recover(newDeviceSecret, newRecoverySecret),
+            );
             log(`recover → tx ${r.txId} — old devices and grants are now dead.`);
 
             const account = await ctx.reconnect({ deviceSecret: newDeviceSecret });

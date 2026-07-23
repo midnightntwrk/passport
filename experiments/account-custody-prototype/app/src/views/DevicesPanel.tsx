@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 
 import { createPasskey, deriveDeviceSecret, deriveDevModeSecret } from '../lib/passkey.js';
+import { runPassportTransaction } from '../lib/midnight.js';
 import { ViewHeader, Panel, ActionButton, Mono, Chip } from '../ui.js';
 import type { AppContext } from '../App.js';
 
@@ -46,7 +47,16 @@ export function DevicesPanel({ ctx }: { ctx: AppContext }) {
                   disabled={active.length <= 1}
                   task={{ label: 'Removing the device', circuit: 'remove_device' }}
                   onRun={async () => {
-                    const r = await account.removeDeviceByCommitment(commitment);
+                    const { result: r } = await runPassportTransaction(
+                      ctx.mid,
+                      {
+                        contractAddress: account.address,
+                        circuit: 'remove_device',
+                        summary: 'Remove a device from the MN Passport account',
+                        arguments: { deviceCommitment: commitment.toString(16) },
+                      },
+                      () => account.removeDeviceByCommitment(commitment),
+                    );
                     log(`remove_device → tx ${r.txId}`);
                     await ctx.refreshLedger();
                     return r.txId;
@@ -75,7 +85,16 @@ export function DevicesPanel({ ctx }: { ctx: AppContext }) {
             onRun={async () => {
               const ref = await createPasskey(`device-${Date.now() % 10_000}`);
               const secret = await deriveDeviceSecret(ref);
-              const r = await account.addDevice(secret);
+              const { result: r } = await runPassportTransaction(
+                ctx.mid,
+                {
+                  contractAddress: account.address,
+                  circuit: 'add_device',
+                  summary: `Add passkey device ${ref.label} to MN Passport`,
+                  arguments: { deviceLabel: ref.label },
+                },
+                () => account.addDevice(secret),
+              );
               log(`add_device (passkey ${ref.label}) → tx ${r.txId}`);
               await ctx.refreshLedger();
               return r.txId;
@@ -99,7 +118,16 @@ export function DevicesPanel({ ctx }: { ctx: AppContext }) {
             task={{ label: 'Registering a new device', circuit: 'add_device' }}
             onRun={async () => {
               const secret = await deriveDevModeSecret(devPassphrase);
-              const r = await account.addDevice(secret);
+              const { result: r } = await runPassportTransaction(
+                ctx.mid,
+                {
+                  contractAddress: account.address,
+                  circuit: 'add_device',
+                  summary: 'Add a development device to MN Passport',
+                  arguments: { deviceType: 'development passphrase' },
+                },
+                () => account.addDevice(secret),
+              );
               log(`add_device (dev mode) → tx ${r.txId}`);
               setDevPassphrase('');
               await ctx.refreshLedger();

@@ -6,7 +6,11 @@ import { deviceCommitment } from '../../../src/wallet/contract.js';
 import { bytesToHex, hexToBytes32, randomBytes32 } from '../../../src/wallet/hex.js';
 
 import type { Midnight } from '../lib/midnight.js';
-import { accountForIdentity, registerIdentity } from '../lib/midnight.js';
+import {
+  accountForIdentity,
+  registerIdentity,
+  runPassportTransaction,
+} from '../lib/midnight.js';
 import { compiledAccountContract } from '../lib/providers.js';
 import { deriveDeviceSecret, deriveDevModeSecret } from '../lib/passkey.js';
 import {
@@ -24,7 +28,9 @@ const DYNAMIC_SECRET_KEY = 'passport-demo-dynamic-wallet-secrets';
 interface DynamicSecretRecord {
   walletKey: string;
   walletAddress: string;
+  networkId: string;
   secretHex: string;
+  approvalSignatureFingerprint?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,23 +48,35 @@ function loadDynamicSecrets(): DynamicSecretRecord[] {
   }
 }
 
-function loadDynamicSecret(wallet: MidnightWallet): DynamicSecretRecord | null {
+function loadDynamicSecret(
+  wallet: MidnightWallet,
+  networkId: string,
+): DynamicSecretRecord | null {
   const key = dynamicWalletKey(wallet);
   return (
     loadDynamicSecrets().find(
-      (record) => record.walletKey === key || record.walletAddress === wallet.address,
+      (record) =>
+        record.networkId === networkId &&
+        (record.walletKey === key || record.walletAddress === wallet.address),
     ) ?? null
   );
 }
 
-function saveDynamicSecret(wallet: MidnightWallet, secret: Uint8Array): DynamicSecretRecord {
+function saveDynamicSecret(
+  wallet: MidnightWallet,
+  networkId: string,
+  secret: Uint8Array,
+  approvalSignatureFingerprint: string,
+): DynamicSecretRecord {
   const now = new Date().toISOString();
   const key = dynamicWalletKey(wallet);
-  const existing = loadDynamicSecret(wallet);
+  const existing = loadDynamicSecret(wallet, networkId);
   const record: DynamicSecretRecord = {
     walletKey: key,
     walletAddress: wallet.address,
+    networkId,
     secretHex: bytesToHex(secret),
+    approvalSignatureFingerprint,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
@@ -66,7 +84,9 @@ function saveDynamicSecret(wallet: MidnightWallet, secret: Uint8Array): DynamicS
     DYNAMIC_SECRET_KEY,
     JSON.stringify([
       ...loadDynamicSecrets().filter(
-        (item) => item.walletKey !== key && item.walletAddress !== wallet.address,
+        (item) =>
+          item.networkId !== networkId ||
+          (item.walletKey !== key && item.walletAddress !== wallet.address),
       ),
       record,
     ]),
@@ -83,15 +103,18 @@ function usesLocalDemoSecret(): boolean {
 }
 
 /** Resolves to true iff a contract exists at `address` on the current chain.
-    Guards against connecting to a session from a reset localnet — that
+    Guards against connecting to a session from a reset or changed network — that
     connect would otherwise wait forever for indexer state that never comes. */
 async function contractExists(mid: Midnight, address: string): Promise<boolean> {
   try {
     const state = await mid.accountProviders.publicDataProvider.queryContractState(address);
     return state != null;
-  } catch {
-    // Indexer hiccup — do not block the unlock attempt on it.
-    return true;
+  } catch (error) {
+    throw new Error(
+      `Could not verify the account contract on ${mid.networkId}: ${String(
+        (error as Error)?.message ?? error,
+      )}`,
+    );
   }
 }
 
@@ -115,14 +138,22 @@ export function OnboardView(props: {
     setLabel((current) => (current === 'alice' || current === 'bubbles' ? props.dynamicIdentity : current));
   }, [props.dynamicIdentity]);
 
-  // Proactively check that the remembered account still exists — a reset
-  // localnet keeps the browser session but loses the contract.
+  // Proactively check that the remembered account still exists. Browser
+  // sessions survive a localnet reset or a network change.
   useEffect(() => {
     if (!session) return;
+    if (session.networkId && session.networkId !== mid.networkId) {
+      setSessionStale(true);
+      return;
+    }
     let stop = false;
-    contractExists(mid, session.accountAddress).then((exists) => {
-      if (!stop && !exists) setSessionStale(true);
-    });
+    contractExists(mid, session.accountAddress)
+      .then((exists) => {
+        if (!stop) setSessionStale(!exists);
+      })
+      .catch((verificationError) => {
+        if (!stop) setError(String(verificationError?.message ?? verificationError));
+      });
     return () => {
       stop = true;
     };
@@ -136,29 +167,26 @@ export function OnboardView(props: {
       log('local demo mode: deriving the device secret in this browser…');
       return { secret: await deriveDevModeSecret(LOCAL_DEMO_SECRET), session: { devMode: true } };
     }
-    const storedDynamicSecret = loadDynamicSecret(props.dynamicWallet);
+    const storedDynamicSecret = loadDynamicSecret(props.dynamicWallet, mid.networkId);
     if (storedDynamicSecret) {
-      log(`using saved Dynamic wallet authorization for ${alias}.night...`);
+      log(`using the saved Passport device state for ${alias}.night...`);
       return {
         secret: hexToBytes32(storedDynamicSecret.secretHex),
         session: {
           dynamicWalletId: storedDynamicSecret.walletKey,
           dynamicWalletAddress: storedDynamicSecret.walletAddress,
+          networkId: mid.networkId,
         },
       };
     }
-    log(`requesting Dynamic wallet signature for ${alias}.night account creation...`);
-    await props.dynamicWallet.signMessage(
-      `MN Passport account creation\nNight ID: ${alias}.night\nWallet: ${props.dynamicWallet.address}`,
-    );
+    log(`creating Passport device state for ${alias}.night...`);
     const secret = randomBytes32();
-    const record = saveDynamicSecret(props.dynamicWallet, secret);
-    log(`Dynamic wallet authorization saved for ${alias}.night.`);
     return {
       secret,
       session: {
-        dynamicWalletId: record.walletKey,
-        dynamicWalletAddress: record.walletAddress,
+        dynamicWalletId: dynamicWalletKey(props.dynamicWallet),
+        dynamicWalletAddress: props.dynamicWallet.address,
+        networkId: mid.networkId,
       },
     };
   };
@@ -166,13 +194,10 @@ export function OnboardView(props: {
   const deviceSecretForSession = async (currentSession: Session): Promise<Uint8Array> => {
     if (currentSession.devMode) return deriveDevModeSecret(LOCAL_DEMO_SECRET);
     if (currentSession.dynamicWalletAddress || currentSession.dynamicWalletId) {
-      const storedDynamicSecret = loadDynamicSecret(props.dynamicWallet);
+      const storedDynamicSecret = loadDynamicSecret(props.dynamicWallet, mid.networkId);
       if (!storedDynamicSecret) {
-        await props.dynamicWallet.signMessage(
-          `MN Passport account unlock\nAccount: ${currentSession.accountAddress}\nWallet: ${props.dynamicWallet.address}`,
-        );
         throw new Error(
-          'Dynamic wallet authorization is present, but the local demo device secret is missing for this browser. Create a new demo account or restore on the original browser profile.',
+          'The Dynamic wallet is connected, but this browser does not contain the prototype Passport device state. Restore it on the original browser profile or create a new prototype account.',
         );
       }
       return hexToBytes32(storedDynamicSecret.secretHex);
@@ -201,9 +226,8 @@ export function OnboardView(props: {
               <div className="caveat">
                 <Chip tone="warn">not on this chain</Chip>
                 <p>
-                  No contract exists at this address on the current localnet — the chain was
-                  probably reset since this account was created. Forget this account below and
-                  create a new one.
+                  No contract exists at this address on the current {mid.networkId} network.
+                  Switch back to the account's network or forget this account and create a new one.
                 </p>
               </div>
             )}
@@ -216,7 +240,7 @@ export function OnboardView(props: {
                 setError(null);
                 if (!(await contractExists(mid, session.accountAddress))) {
                   throw new Error(
-                    'account contract not found on this chain — the localnet was reset; forget this account and onboard again',
+                    'account contract not found on the current network; switch networks or forget this account and onboard again',
                   );
                 }
                 const secret = await deviceSecretForSession(session);
@@ -327,12 +351,44 @@ export function OnboardView(props: {
               }
               const { secret, session: partial } = await deviceSecretForOnboarding(alias);
               const recoverySecret = randomBytes32();
-              log('deploying the MN Passport custody contract…');
-              const account = await PassportAccount.deploy(
-                mid.accountProviders,
-                compiledAccountContract(),
-                { deviceSecret: secret, recoverySecret },
+              log(
+                mid.dynamicTransactions
+                  ? 'proving the account constructor; Dynamic will finalize it, request exact-byte approval, and broadcast it…'
+                  : 'deploying the MN Passport custody contract…',
               );
+              const deployment = await runPassportTransaction(
+                mid,
+                {
+                  contractAddress: 'new MN Passport custody account',
+                  circuit: 'deploy account',
+                  summary: `Deploy the MN Passport custody account for ${alias}.night`,
+                  arguments: {
+                    nightId: `${alias}.night`,
+                    wallet: props.dynamicWallet.address,
+                  },
+                },
+                () =>
+                  PassportAccount.deploy(
+                    mid.accountProviders,
+                    compiledAccountContract(),
+                    { deviceSecret: secret, recoverySecret },
+                  ),
+              );
+              const account = deployment.result;
+              if (!localDemoMode) {
+                if (!deployment.receipt) {
+                  throw new Error('Dynamic deployed the account without returning an approval receipt.');
+                }
+                saveDynamicSecret(
+                  props.dynamicWallet,
+                  mid.networkId,
+                  secret,
+                  deployment.receipt.approvalSignatureFingerprint,
+                );
+                log(
+                  `Dynamic broadcast ${deployment.receipt.txHash}; approval ${deployment.receipt.approvalSignatureFingerprint.slice(0, 16)}...`,
+                );
+              }
               log(`account deployed @ ${account.address}`);
               log(`registering ${alias}.night on the identity registry...`);
               const identity = await registerIdentity(mid, alias, account.address);
@@ -399,8 +455,9 @@ export function OnboardView(props: {
                 const secret = localDemoMode
                   ? await deriveDevModeSecret(LOCAL_DEMO_SECRET)
                   : await deviceSecretForSession({
-                      accountAddress: address.trim(),
-                      dynamicWalletId: dynamicWalletKey(props.dynamicWallet),
+                  accountAddress: address.trim(),
+                  networkId: mid.networkId,
+                  dynamicWalletId: dynamicWalletKey(props.dynamicWallet),
                       dynamicWalletAddress: props.dynamicWallet.address,
                     });
                 const account = await PassportAccount.connect(
@@ -413,6 +470,7 @@ export function OnboardView(props: {
                 props.onConnected(
                   {
                     accountAddress: address.trim(),
+                    networkId: mid.networkId,
                     devMode: localDemoMode || undefined,
                     dynamicWalletId: localDemoMode ? undefined : dynamicWalletKey(props.dynamicWallet),
                     dynamicWalletAddress: localDemoMode ? undefined : props.dynamicWallet.address,

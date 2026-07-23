@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 
 import { hexToBytes, bytesToHex, randomBytes32 } from '../../../src/wallet/hex.js';
 
-import { userAddressBytes } from '../lib/providers.js';
+import { dynamicUserAddressBytes, userAddressBytes } from '../lib/providers.js';
+import { runPassportTransaction } from '../lib/midnight.js';
 import { ViewHeader, Panel, ActionButton, Mono, Chip, CapBar } from '../ui.js';
 import type { AppContext } from '../App.js';
 
@@ -55,7 +56,16 @@ export function GrantsPanel({ ctx }: { ctx: AppContext }) {
                     kind="danger"
                     task={{ label: 'Revoking the grant', circuit: 'revoke_grant' }}
                     onRun={async () => {
-                      const r = await account.revokeGrantByCommitment(commitment);
+                      const { result: r } = await runPassportTransaction(
+                        mid,
+                        {
+                          contractAddress: account.address,
+                          circuit: 'revoke_grant',
+                          summary: 'Revoke a scoped MN Passport permission',
+                          arguments: { grantCommitment: commitment.toString(16) },
+                        },
+                        () => account.revokeGrantByCommitment(commitment),
+                      );
                       log(`revoke_grant → tx ${r.txId}`);
                       await ctx.refreshLedger();
                       return r.txId;
@@ -78,7 +88,16 @@ export function GrantsPanel({ ctx }: { ctx: AppContext }) {
             task={{ label: 'Issuing a scoped grant', circuit: 'add_grant' }}
             onRun={async () => {
               const grantSecret = randomBytes32();
-              const r = await account.addGrant(grantSecret, nightColor, BigInt(cap));
+              const { result: r } = await runPassportTransaction(
+                mid,
+                {
+                  contractAddress: account.address,
+                  circuit: 'add_grant',
+                  summary: `Issue a scoped MN Passport grant capped at ${cap} NIGHT`,
+                  arguments: { cap, token: 'NIGHT' },
+                },
+                () => account.addGrant(grantSecret, nightColor, BigInt(cap)),
+              );
               setIssuedSecret(bytesToHex(grantSecret));
               log(`add_grant cap=${cap} → tx ${r.txId}`);
               await ctx.refreshLedger();
@@ -121,10 +140,22 @@ export function GrantsPanel({ ctx }: { ctx: AppContext }) {
               // A separate connection holding ONLY the grant secret — exactly
               // what a dApp backend would hold.
               const dapp = await ctx.reconnect({ grantSecret: hexToBytes(dappSecret.trim()) });
-              const r = await dapp.grantWithdrawNight(
-                nightColor,
-                BigInt(dappAmount),
-                userAddressBytes(mid.walletCtx),
+              const { result: r } = await runPassportTransaction(
+                mid,
+                {
+                  contractAddress: account.address,
+                  circuit: 'grant_withdraw_night',
+                  summary: `Spend ${dappAmount} NIGHT through a scoped grant`,
+                  arguments: { amount: dappAmount, token: 'NIGHT' },
+                },
+                () =>
+                  dapp.grantWithdrawNight(
+                    nightColor,
+                    BigInt(dappAmount),
+                    mid.dynamicWallet
+                      ? dynamicUserAddressBytes(mid.dynamicWallet)
+                      : userAddressBytes(mid.walletCtx!),
+                  ),
               );
               log(`grant_withdraw_night ${dappAmount} → tx ${r.txId}`);
               await ctx.refreshLedger();

@@ -135,6 +135,8 @@ const NAV: { id: ViewId; label: string; icon: React.ReactNode }[] = [
 export default function App() {
   const { primaryWallet, user, handleLogOut } = useDynamicContext();
   const userWallets = useUserWallets();
+  const localDemoMode =
+    new URLSearchParams(window.location.search).get('demoMode') === 'local';
   const [mid, setMid] = useState<Midnight | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [session, setSessionState] = useState<Session | null>(() => loadSession());
@@ -144,6 +146,7 @@ export default function App() {
   const [deviceCommitment, setDeviceCommitment] = useState<string | null>(null);
   const [nav, setNav] = useState<ViewId>('flow');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [walletRevision, setWalletRevision] = useState(0);
   const [explain, setExplain] = useState(() => localStorage.getItem('passport-explain') !== '0');
 
   const dynamicWallet = useMemo(() => {
@@ -167,6 +170,18 @@ export default function App() {
     return normalizeDynamicHandle(candidate);
   }, [user]);
 
+  const dynamicWalletKey = dynamicWallet
+    ? `${dynamicWallet.id || 'wallet'}:${dynamicWallet.address}:${walletRevision}`
+    : '';
+
+  useEffect(() => {
+    if (!dynamicWallet) return;
+    const connector = dynamicWallet.connector as any;
+    const handleChainChange = () => setWalletRevision((revision) => revision + 1);
+    connector.on?.('chainChange', handleChainChange);
+    return () => connector.off?.('chainChange', handleChainChange);
+  }, [dynamicWallet]);
+
   // Hover explainers: a body attribute the CSS and the tooltip listen to.
   useEffect(() => {
     document.body.dataset.explain = explain ? '1' : '0';
@@ -183,27 +198,50 @@ export default function App() {
     console.log(`[passport] ${msg}`);
   }, []);
 
-  // Boot the Midnight context only after Dynamic has produced a Midnight wallet.
-  // Otherwise the login screen spams localnet websocket retries while Dynamic is
-  // still creating or recovering the embedded wallet.
+  // Boot the matching Midnight provider stack only after Dynamic has produced
+  // the embedded wallet and selected its network.
   useEffect(() => {
-    if (!dynamicWallet || mid) return;
+    if (!dynamicWallet) {
+      setMid(null);
+      return;
+    }
 
-    log('connecting to localnet (syncing fee wallet)…');
-    getMidnight()
+    let cancelled = false;
+    setMid(null);
+    setBootError(null);
+    log(
+      localDemoMode
+        ? 'connecting to localnet (syncing disposable fee wallet)…'
+        : 'connecting Passport providers to the Dynamic Midnight network…',
+    );
+    getMidnight(dynamicWallet)
       .then((m) => {
+        if (cancelled) return;
         setMid(m);
-        log('localnet connected — fee wallet synced.');
+        log(
+          m.mode === 'local'
+            ? 'localnet connected — disposable fee wallet synced.'
+            : `Dynamic ${m.networkId} C1 adapter ready — live wallet approval will validate finalization and broadcast.`,
+        );
         if (BROWSER_PROVER) {
           log(
             'browser proving enabled — ALL proofs (contract circuits, zswap, dust) are computed in this tab; no proof server.',
+          );
+        } else if (m.mode === 'dynamic') {
+          log(
+            `Compact contract proofs use the ${m.networkId} proof service; the experimental Dynamic adapter validates the finalized payload before submission.`,
           );
         } else {
           log('local proof server enabled — reliable mode for the end-to-end demo.');
         }
       })
-      .catch((e) => setBootError(String(e?.message ?? e)));
-  }, [dynamicWallet, log, mid]);
+      .catch((e) => {
+        if (!cancelled) setBootError(String(e?.message ?? e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dynamicWalletKey, localDemoMode, log]);
 
   const setSession = useCallback((s: Session) => {
     saveSession(s);
@@ -290,12 +328,21 @@ export default function App() {
       <div className="stage stage-center">
         <BrandMark large />
         <div className="panel boot-card">
-          <h2 className="eyebrow">Cannot reach the localnet</h2>
+          <h2 className="eyebrow">
+            {localDemoMode ? 'Cannot reach the localnet' : 'Cannot start Dynamic Midnight'}
+          </h2>
           <p className="error">{bootError}</p>
-          <p className="hint">
-            Start it with <code>cd infra && docker compose -f docker-compose.yml -f
-            docker-compose.macos.yml up -d --wait</code> and reload.
-          </p>
+          {localDemoMode ? (
+            <p className="hint">
+              Start it with <code>cd infra && docker compose -f docker-compose.yml -f
+              docker-compose.macos.yml up -d --wait</code> and reload.
+            </p>
+          ) : (
+            <p className="hint">
+              Confirm Midnight Testnet is enabled for the Dynamic environment, then reconnect the
+              embedded wallet.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -348,7 +395,13 @@ export default function App() {
       <div className="stage stage-center">
         <BrandMark large />
         <div className="boot-card">
-          <Busy label="Connecting to the localnet and syncing the fee wallet…" />
+          <Busy
+            label={
+              localDemoMode
+                ? 'Connecting to the localnet and syncing the fee wallet…'
+                : 'Connecting Passport to the Dynamic Midnight network…'
+            }
+          />
           <div className="dynamic-wallet-ready">
             <p className="eyebrow">Dynamic Midnight wallet ready</p>
             <div className="dynamic-wallet-row">
@@ -450,6 +503,7 @@ export default function App() {
           setDrawerOpen(false);
         }}
         round={ledger ? String(ledger.round) : '…'}
+        network={mid.networkId}
         onDisconnect={resetSession}
       />
       <div className="main">
@@ -581,9 +635,15 @@ function PassportDynamicShowcase() {
 }
 
 function ProverChip() {
+  const localDemo =
+    new URLSearchParams(window.location.search).get('demoMode') === 'local';
   return (
     <Chip tone={BROWSER_PROVER ? 'info' : 'muted'}>
-      {BROWSER_PROVER ? 'prover · this device' : 'prover · local server'}
+      {BROWSER_PROVER
+        ? 'prover · this device'
+        : localDemo
+          ? 'prover · local server'
+          : 'prover · network service'}
     </Chip>
   );
 }
@@ -608,6 +668,7 @@ function Sidebar(props: {
   counts: Partial<Record<ViewId, number>>;
   onView: (v: ViewId) => void;
   round: string;
+  network: string;
   onDisconnect: () => void;
 }) {
   return (
@@ -635,7 +696,7 @@ function Sidebar(props: {
             className="side-net x"
             data-x="Live connection to the Midnight network. Every balance and status in this app is read from chain state, not from a database; there is no server of ours behind it (P8)."
           >
-            localnet · round <span className="side-round">{props.round}</span>
+            {props.network} · round <span className="side-round">{props.round}</span>
           </span>
           <button className="linkish" onClick={props.onDisconnect}>
             disconnect

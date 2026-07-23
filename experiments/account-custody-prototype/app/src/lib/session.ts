@@ -8,6 +8,7 @@ import type { PasskeyRef } from './passkey.js';
 
 export interface Session {
   accountAddress: string;
+  networkId?: string;
   alias?: string;
   identityRegistryAddress?: string;
   identityRegistrationTxId?: string;
