@@ -21,6 +21,27 @@ Validate the C1 draft builder without a network submission:
 npm run test:c1 --workspace passport-demo
 ```
 
+Validate the installable production build, manifest, icon set, service-worker
+registration source, and offline network boundary:
+
+```sh
+npm run test:pwa
+```
+
+The service worker is registered in production builds. To exercise it during a
+development-only browser session, set `VITE_ENABLE_PWA_DEV=true`; otherwise use
+`npm run build --workspace passport-demo` followed by
+`npm run preview --workspace passport-demo`.
+
+The cached offline surface is deliberately limited to the static Passport
+shell. Dynamic authentication, wallet synchronization, proof generation, and
+transaction submission are never cached, queued, or presented as available
+offline.
+
+The demo pins `@dynamic-labs/midnight` and `@dynamic-labs/sdk-react-core` to
+the audited stable `4.93.1` release. See the PWA feasibility report for the
+current upstream dependency-audit and Compact-proof blockers.
+
 ## Dynamic dashboard prerequisites
 
 1. Enable Midnight under **Chains & Networks**.

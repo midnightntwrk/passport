@@ -1,11 +1,12 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { DynamicContextProvider } from '@dynamic-labs/sdk-react-core';
-import { MidnightWalletConnectors } from '@dynamic-labs/midnight';
+import { DynamicWaasMidnightConnectors } from '@dynamic-labs/midnight';
 import '@fontsource/space-grotesk/700.css';
 
 import PassportDemo from './App.js';
 import SdkPage from './SdkPage.js';
+import { PassportPwaShell } from './pwa.js';
 import './styles.css';
 
 const environmentId = import.meta.env.VITE_DYNAMIC_ENVIRONMENT_ID;
@@ -32,21 +33,23 @@ if (!import.meta.env.DEV || window.location.origin === requiredDevelopmentOrigin
 
   root.render(
     <React.StrictMode>
-      {isSdkPage ? <SdkPage /> : environmentId ? (
-        <DynamicContextProvider
-          settings={{
-            environmentId,
-          walletConnectors: [MidnightWalletConnectors],
-            appName: 'Midnight Passport',
-            social: { strategy: 'popup' },
-            socialProvidersFilter: (providers) => providers.filter((provider) => provider === 'discord'),
-          }}
-        >
-          <PassportDemo />
-        </DynamicContextProvider>
-      ) : (
-        <MissingEnvironment />
-      )}
+      <PassportPwaShell>
+        {isSdkPage ? <SdkPage /> : environmentId ? (
+          <DynamicContextProvider
+            settings={{
+              environmentId,
+              walletConnectors: [DynamicWaasMidnightConnectors],
+              appName: 'Midnight Passport',
+              social: { strategy: 'popup' },
+              socialProvidersFilter: (providers) => providers.filter((provider) => provider === 'discord'),
+            }}
+          >
+            <PassportDemo />
+          </DynamicContextProvider>
+        ) : (
+          <MissingEnvironment />
+        )}
+      </PassportPwaShell>
     </React.StrictMode>,
   );
 }

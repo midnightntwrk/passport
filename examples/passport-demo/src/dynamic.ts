@@ -20,6 +20,8 @@ const MIDNIGHT_SHIELDED = 'midnight_shielded';
 const MIDNIGHT_DUST = 'midnight_dust';
 const ADDRESS_TIMEOUT_MS = 7_500;
 const BALANCE_TIMEOUT_MS = 15_000;
+const SIGN_TIMEOUT_MS = 180_000;
+const SUBMIT_TIMEOUT_MS = 90_000;
 
 function addressFromWallet(wallet: MidnightWallet, type: string): string | null {
   return wallet.additionalAddresses.find((address) => address.type === type)?.address ?? null;
@@ -39,6 +41,35 @@ function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs: number)
       },
     );
   });
+}
+
+/**
+ * Runs Dynamic's real WaaS/MPC transaction finalization. The returned value is
+ * the serialized FinalizedTransaction produced by Dynamic, never a local mock.
+ */
+export async function signDynamicTransaction(wallet: MidnightWallet, serializedTransaction: string): Promise<string> {
+  const connector = wallet.connector as MidnightWalletConnector;
+  if (connector.overrideKey !== 'dynamicwaas') {
+    throw new Error('A Dynamic embedded Midnight wallet is required for MPC signing.');
+  }
+  return withTimeout(
+    wallet.signTransaction(serializedTransaction),
+    'Dynamic MPC signing and Midnight proof generation',
+    SIGN_TIMEOUT_MS,
+  );
+}
+
+/** Broadcasts a Dynamic-finalized transaction and requires a real chain hash. */
+export async function submitDynamicTransaction(wallet: MidnightWallet, finalizedTransaction: string): Promise<{ txHash: string }> {
+  const submitted = await withTimeout(
+    wallet.submitTransaction(finalizedTransaction),
+    'Dynamic Midnight broadcast',
+    SUBMIT_TIMEOUT_MS,
+  );
+  if (!submitted?.txHash) {
+    throw new Error('Dynamic completed the broadcast call without returning a Midnight transaction hash.');
+  }
+  return submitted;
 }
 
 async function optional<T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T | null> {

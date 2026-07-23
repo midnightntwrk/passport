@@ -36,6 +36,8 @@ import {
   initialDynamicSurfaceState,
   refreshDynamicAddresses,
   refreshDynamicBalances,
+  signDynamicTransaction,
+  submitDynamicTransaction,
   type DynamicSurfaceState,
 } from './dynamic.js';
 import {
@@ -43,6 +45,7 @@ import {
   createPassportC1MaintenanceSigningKey,
   type PassportC1DeploymentDraft,
 } from './c1.js';
+import { requestPassportStoragePersistence } from './pwa.js';
 import { deleteDemoProfile, loadDemoProfile, saveDemoProfile, type DemoPassportProfile } from './publicProfile.js';
 
 type ActivityStatus = 'pending' | 'complete' | 'blocked' | 'error';
@@ -77,12 +80,14 @@ interface PassportC1PrivateRecord {
   network: 'preview';
   artifact: 'passport-c1-pilot-v1';
   preparedAt: string;
+  serializedTransaction?: string;
+  finalizedTransaction?: string;
 }
 
 interface PassportDemoState {
   deviceSecret: Uint8Array;
   createdAt: string;
-  schema: 1 | 2;
+  schema: 1 | 2 | 3;
   c1?: PassportC1PrivateRecord;
 }
 
@@ -492,6 +497,7 @@ export default function PassportDemo() {
     try {
       await vault(passkey).save<PassportDemoState>(scope, state);
       await saveDemoProfile(nextProfile);
+      await requestPassportStoragePersistence();
       setProfile(nextProfile);
       setProfileStatus('ready');
       return { profile: nextProfile, state };
@@ -657,15 +663,14 @@ export default function PassportDemo() {
         status: 'pending',
         source: 'wallet',
       });
-      const signedTransaction = await midnightWallet.signTransaction(draft.serializedTransaction);
+      const signedTransaction = await signDynamicTransaction(midnightWallet, draft.serializedTransaction);
       updateActivity(activityEntry.id, {
         label: 'Transaction signed and proved',
         detail: 'The embedded wallet completed authorization and proof.',
         status: 'pending',
         source: 'wallet',
       });
-      const submitted = await midnightWallet.submitTransaction(signedTransaction);
-      if (!submitted?.txHash) throw new Error('Dynamic completed the submission call without returning a transaction hash.');
+      const submitted = await submitDynamicTransaction(midnightWallet, signedTransaction);
       updateActivity(activityEntry.id, {
         label: `${labelPrefix} transfer submitted`,
         detail: `${transferReview.amount} atomic NIGHT to ${compactAddress(transferReview.recipient)}. Awaiting network confirmation.`,
@@ -736,13 +741,26 @@ export default function PassportDemo() {
       }
 
       const maintenanceSigningKey = privateState.c1?.maintenanceSigningKey ?? createPassportC1MaintenanceSigningKey();
-      setDeploymentPhase('Building C1 contract');
-      const initialPrivateState = {
-        deviceSecretHex: bytesToHex(privateState.deviceSecret),
-      };
-      const draft: PassportC1DeploymentDraft = await buildPassportC1Deployment(midnightWallet, initialPrivateState, maintenanceSigningKey);
-      if (privateState.c1 && privateState.c1.address !== draft.contractAddress) {
-        throw new Error('Stored Passport C1 state does not match the deployment transaction. Refusing to sign a different contract.');
+      let draft: PassportC1DeploymentDraft;
+      if (privateState.c1?.serializedTransaction) {
+        setDeploymentPhase('Restoring C1 draft');
+        draft = {
+          artifact: privateState.c1.artifact,
+          network: privateState.c1.network,
+          contractAddress: privateState.c1.address,
+          privateStateId: privateState.c1.privateStateId,
+          maintenanceSigningKey: privateState.c1.maintenanceSigningKey,
+          serializedTransaction: privateState.c1.serializedTransaction,
+        };
+      } else {
+        setDeploymentPhase('Building C1 contract');
+        const initialPrivateState = {
+          deviceSecretHex: bytesToHex(privateState.deviceSecret),
+        };
+        draft = await buildPassportC1Deployment(midnightWallet, initialPrivateState, maintenanceSigningKey);
+        if (privateState.c1 && privateState.c1.address !== draft.contractAddress) {
+          throw new Error('Stored Passport C1 state does not match the deployment transaction. Reset the unfinished setup before creating another draft.');
+        }
       }
 
       // Persist the maintenance authority before Dynamic signs. If the browser
@@ -754,12 +772,26 @@ export default function PassportDemo() {
         network: draft.network,
         artifact: draft.artifact,
         preparedAt: new Date().toISOString(),
+        serializedTransaction: draft.serializedTransaction,
+        finalizedTransaction: privateState.c1?.finalizedTransaction,
       };
       await vault(activeProfile.passkey).save<PassportDemoState>(scope, {
         ...privateState,
-        schema: 2,
+        schema: 3,
         c1: privateC1,
       });
+      const preparedProfile: DemoPassportProfile = {
+        ...activeProfile,
+        passportPreparation: {
+          address: draft.contractAddress,
+          preparedAt: privateC1.preparedAt,
+          network: draft.network,
+          artifact: draft.artifact,
+        },
+      };
+      await saveDemoProfile(preparedProfile);
+      setProfile(preparedProfile);
+      activeProfile = preparedProfile;
       addActivity({
         label: 'Passport C1 prepared',
         detail: `Contract ${compactAddress(draft.contractAddress)} built for Dynamic testnet signing.`,
@@ -767,21 +799,36 @@ export default function PassportDemo() {
         source: 'local',
       });
 
-      setDeploymentPhase('Waiting for Dynamic approval');
-      const signedTransaction = await midnightWallet.signTransaction(draft.serializedTransaction);
-      addActivity({
-        label: 'Passport C1 signed and proved',
-        detail: 'Dynamic completed the embedded wallet authorization and proof.',
-        status: 'pending',
-        source: 'wallet',
-      });
+      let signedTransaction = privateC1.finalizedTransaction;
+      if (!signedTransaction) {
+        setDeploymentPhase('Dynamic MPC signing & proving');
+        signedTransaction = await signDynamicTransaction(midnightWallet, draft.serializedTransaction);
+        await vault(activeProfile.passkey).save<PassportDemoState>(scope, {
+          ...privateState,
+          schema: 3,
+          c1: { ...privateC1, finalizedTransaction: signedTransaction },
+        });
+        addActivity({
+          label: 'Passport C1 signed and proved',
+          detail: 'Dynamic MPC returned a finalized Midnight transaction.',
+          status: 'pending',
+          source: 'wallet',
+        });
+      } else {
+        addActivity({
+          label: 'Passport C1 signature restored',
+          detail: 'Reusing the encrypted Dynamic-finalized transaction for broadcast.',
+          status: 'pending',
+          source: 'wallet',
+        });
+      }
       setDeploymentPhase('Submitting to Midnight');
-      const submitted = await midnightWallet.submitTransaction(signedTransaction);
-      if (!submitted?.txHash) throw new Error('Dynamic completed Passport submission without returning a transaction hash.');
+      const submitted = await submitDynamicTransaction(midnightWallet, signedTransaction);
 
       const deployedAt = new Date().toISOString();
       const nextProfile: DemoPassportProfile = {
         ...activeProfile,
+        passportPreparation: undefined,
         passportContract: {
           address: draft.contractAddress,
           deployedAt,
@@ -802,7 +849,10 @@ export default function PassportDemo() {
       });
       await refreshWallet();
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : String(cause);
+      const rawMessage = cause instanceof Error ? cause.message : String(cause);
+      const message = /timed out/i.test(rawMessage)
+        ? `${rawMessage} Your encrypted C1 transaction is safe; press Resume deployment to continue from the last completed stage.`
+        : rawMessage;
       setError(message);
       addActivity({ label: 'Passport deployment', detail: message, status: 'error', source: 'wallet' });
     } finally {
@@ -836,14 +886,15 @@ export default function PassportDemo() {
   const signInReady = sdkHasLoaded && !dynamicInitializationBlocked;
   const passportAction = profile ? 'Unlock local key' : 'Create key only';
   const passportContract = profile?.passportContract ?? null;
+  const passportPreparation = profile?.passportPreparation ?? null;
   const passportIsDeployed = passportContract?.status === 'submitted' || passportContract?.status === 'confirmed';
   const passportIsConfirmed = passportContract?.status === 'confirmed';
   const passportWalletCompatible = midnightWallet ? connectorKey(midnightWallet) === 'dynamicwaas' : false;
-  const canResetLocalPassport = Boolean(profile && !passportContract && error && /encrypted|unlock|passkey|private state/i.test(error));
+  const canResetLocalPassport = Boolean(profile && !passportContract && error && /encrypted|unlock|passkey|private state|stored passport c1 state/i.test(error));
   const passportDeploymentLabel = passportIsDeployed
     ? passportIsConfirmed ? 'Passport active' : 'Deployment submitted'
     : !passportWalletCompatible && midnightWallet ? 'Embedded wallet required'
-      : busyAction === 'passport-deploy' ? deploymentPhase ?? 'Deploying Passport' : profile ? 'Deploy Passport' : 'Set up & deploy';
+      : busyAction === 'passport-deploy' ? deploymentPhase ?? 'Deploying Passport' : passportPreparation ? 'Resume deployment' : profile ? 'Deploy Passport' : 'Set up & deploy';
   const connectedUserName = labelForUser(user);
   const permissionState = !midnightWallet
     ? 'Midnight wallet not provisioned'
@@ -851,7 +902,9 @@ export default function PassportDemo() {
       ? 'Passport contract connected'
       : passportIsDeployed
         ? 'Passport deployment submitted'
-      : 'Deploy Passport to manage permissions';
+        : passportPreparation
+          ? 'Passport deployment prepared'
+          : 'Deploy Passport to manage permissions';
   const beginSignIn = () => {
     if (signInReady) setShowAuthFlow(true);
   };
@@ -947,7 +1000,7 @@ export default function PassportDemo() {
             <div className="workspace-brand"><img src="/midnight-wordmark.svg" alt="Midnight" /><span /> <strong>Passport</strong></div>
             <nav className="workspace-tabs" aria-label="Passport sections">
               <button className={workspaceTab === 'assets' ? 'active' : ''} onClick={() => setWorkspaceTab('assets')}>Assets</button>
-              <button className={workspaceTab === 'permissions' ? 'active' : ''} onClick={() => setWorkspaceTab('permissions')} disabled={!passportIsDeployed}>Permissions</button>
+              <button className={workspaceTab === 'permissions' ? 'active' : ''} onClick={() => setWorkspaceTab('permissions')}>Permissions</button>
             </nav>
             <div className="workspace-controls">
               <a className="workspace-sdk-link" href="/sdk">SDK</a>
@@ -961,7 +1014,7 @@ export default function PassportDemo() {
           <main className="workspace-main">
             <section className="account-strip">
               <img className="passport-control-atlas" src="/passport-control-atlas.png" alt="" aria-hidden="true" />
-              <div className="passport-contract-copy"><p>Passport activation</p><h2>{passportIsConfirmed ? 'Passport is active.' : passportIsDeployed ? 'Deployment submitted.' : profileStatus === 'loading' ? 'Checking this browser.' : profile ? 'Ready to deploy.' : midnightWallet ? 'Create your Passport.' : 'Preparing your wallet.'}</h2><small>{passportIsDeployed ? `C1 ${compactAddress(passportContract?.address ?? '')} · ${passportIsConfirmed ? 'confirmed on Midnight' : 'awaiting testnet confirmation'}` : profileStatus === 'loading' ? 'Looking for encrypted Passport state linked to this Dynamic account.' : profile ? 'Your encrypted device authority is ready. Dynamic will be asked to approve and submit the C1 contract.' : 'One protected device authority unlocks your account-management contract.'}</small></div>
+              <div className="passport-contract-copy"><p>Passport activation</p><h2>{passportIsConfirmed ? 'Passport is active.' : passportIsDeployed ? 'Deployment submitted.' : passportPreparation ? 'Ready to resume.' : profileStatus === 'loading' ? 'Checking this browser.' : profile ? 'Ready to deploy.' : midnightWallet ? 'Create your Passport.' : 'Preparing your wallet.'}</h2><small>{passportIsDeployed ? `C1 ${compactAddress(passportContract?.address ?? '')} · ${passportIsConfirmed ? 'confirmed on Midnight' : 'awaiting testnet confirmation'}` : passportPreparation ? `C1 ${compactAddress(passportPreparation.address)} is secured locally. Resume Dynamic signing and broadcast.` : profileStatus === 'loading' ? 'Looking for encrypted Passport state linked to this Dynamic account.' : profile ? 'Your encrypted device authority is ready. Dynamic will sign, prove, and submit the C1 transaction.' : 'One protected device authority unlocks your account-management contract.'}</small></div>
               <div className="passport-action-stack">
                 <div className="passport-command">
                   <button className="deploy-button" onClick={requestPassportDeployment} disabled={!midnightWallet || !passportWalletCompatible || Boolean(busyAction) || passportIsDeployed || profileStatus === 'loading' || profileStatus === 'idle'}>
@@ -982,7 +1035,7 @@ export default function PassportDemo() {
               <div className="activation-rail" aria-label="Passport activation progress">
                 <ActivationStep number="01" label="Dynamic wallet" detail={midnightWallet ? 'Midnight connected' : 'Provisioning wallet'} state={walletActivationState} />
                 <ActivationStep number="02" label="Passport key" detail={profile ? 'Private state protected' : deploymentPhase === 'Creating Passport key' ? 'Waiting for browser approval' : 'Required for C1'} state={keyActivationState} />
-                <ActivationStep number="03" label="C1 contract" detail={passportIsConfirmed ? 'Active on Midnight' : passportIsDeployed ? 'Submitted to testnet' : !passportWalletCompatible && midnightWallet ? 'Dynamic embedded wallet required' : deploymentPhase ?? 'Ready after key setup'} state={contractActivationState} />
+                <ActivationStep number="03" label="C1 contract" detail={passportIsConfirmed ? 'Active on Midnight' : passportIsDeployed ? 'Submitted to testnet' : !passportWalletCompatible && midnightWallet ? 'Dynamic embedded wallet required' : deploymentPhase ?? (passportPreparation ? 'Draft ready to resume' : 'Ready after key setup')} state={contractActivationState} />
               </div>
             </section>
 
@@ -1027,8 +1080,8 @@ export default function PassportDemo() {
             ) : (
               <section className="permissions-view">
                 <div className="permissions-heading"><div><p>Account management contract</p><h1>Permissions.</h1></div><span>C1</span></div>
-                <div className="permission-empty"><span>—</span><div><h2>{permissionState}</h2><p>{passportIsConfirmed ? 'C1 permission reads and writes are the next testnet validation step.' : passportIsDeployed ? 'The deployment has a real transaction hash. Wait for testnet finality before changing contract permissions.' : 'Deploy the Passport account-management contract before permissions become available. This interface does not invent or simulate grants.'}</p></div></div>
-                <div className="permission-capabilities"><div><Fingerprint size={17} /><span>Passport key</span><strong>{profile ? 'Local key ready' : 'Required at deploy'}</strong></div><div><WalletCards size={17} /><span>Midnight wallet</span><strong>{midnightWallet ? 'Connected' : 'Awaiting wallet'}</strong></div><div><LockKeyhole size={17} /><span>Contract grants</span><strong>{passportIsConfirmed ? 'Ready for validation' : passportIsDeployed ? 'Awaiting finality' : 'Deployment required'}</strong></div></div>
+                <div className="permission-empty"><span>—</span><div><h2>{permissionState}</h2><p>{passportIsConfirmed ? 'C1 permission reads and writes are the next testnet validation step.' : passportIsDeployed ? 'The deployment has a real transaction hash. Wait for testnet finality before changing contract permissions.' : passportPreparation ? `C1 ${compactAddress(passportPreparation.address)} is encrypted locally and ready for Dynamic MPC signing or broadcast retry.` : 'Deploy the Passport account-management contract before permissions become available. This interface does not invent or simulate grants.'}</p></div></div>
+                <div className="permission-capabilities"><div><Fingerprint size={17} /><span>Passport key</span><strong>{profile ? 'Local key ready' : 'Required at deploy'}</strong></div><div><WalletCards size={17} /><span>Midnight wallet</span><strong>{midnightWallet ? 'Connected' : 'Awaiting wallet'}</strong></div><div><LockKeyhole size={17} /><span>Contract grants</span><strong>{passportIsConfirmed ? 'Ready for validation' : passportIsDeployed ? 'Awaiting finality' : passportPreparation ? 'Signing required' : 'Deployment required'}</strong></div></div>
               </section>
             )}
 

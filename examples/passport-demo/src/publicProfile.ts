@@ -7,6 +7,13 @@ export interface DemoPassportProfile {
   subjectId: string;
   passkey: PassportPasskeyReference;
   createdAt: string;
+  /** Public retry metadata. The transaction itself remains encrypted. */
+  passportPreparation?: {
+    address: string;
+    preparedAt: string;
+    network: 'preview';
+    artifact: 'passport-c1-pilot-v1';
+  };
   /** Set only after Dynamic returns a real transaction hash for a C1 deployment. */
   passportContract?: {
     address: string;

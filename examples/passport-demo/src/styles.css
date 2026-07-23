@@ -46,6 +46,52 @@ button:focus-visible, input:focus-visible { outline: 2px solid #fff; outline-off
 
 .modal-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .78); }.transaction-modal { width: min(530px, 100%); padding: 27px; color: #0b0b0b; background: #f5f5f3; box-shadow: 0 24px 80px rgba(0, 0, 0, .55); }.modal-heading { justify-content: space-between; }.modal-heading h2 { margin: 0; font-size: 26px; }.transaction-modal dl { display: grid; gap: 15px; margin: 26px 0; }.transaction-modal dl div { display: grid; grid-template-columns: 125px 1fr; gap: 15px; }.transaction-modal dt { color: #777; font-size: 12px; font-weight: 760; }.transaction-modal dd { margin: 0; overflow-wrap: anywhere; font-size: 13px; }.transaction-modal code { font-size: 12px; }.modal-copy { width: 100%; }
 .spin { animation: spin 1s linear infinite; }
+.pwa-offline-bar {
+  position: fixed;
+  z-index: 110;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  width: min(calc(100% - 32px), 720px);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 9px 14px;
+  border: 1px solid #f5f5f3;
+  color: #f5f5f3;
+  background: #0a0a0a;
+  box-shadow: 5px 5px 0 rgba(245, 245, 243, .34);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1.35;
+  text-align: center;
+  transform: translateX(-50%);
+}
+.pwa-actions {
+  position: fixed;
+  z-index: 105;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pwa-action {
+  min-height: 39px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid #f5f5f3;
+  color: #f5f5f3;
+  background: #0a0a0a;
+  box-shadow: 4px 4px 0 rgba(245, 245, 243, .3);
+  font-size: 11px;
+  font-weight: 780;
+}
+.pwa-action:hover:not(:disabled) { color: #0a0a0a; background: #f5f5f3; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes activation-pulse { 50% { opacity: .25; transform: scale(.72); } }
 @keyframes fee-sync { to { background-position: -220% 0; } }
@@ -55,6 +101,15 @@ button:focus-visible, input:focus-visible { outline: 2px solid #fff; outline-off
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
 @media (max-width: 860px) { .portal-bar, .portal-copy { width: min(100% - 48px, 1320px); }.portal-art { background-position: 74% center; clip-path: polygon(52% 0, 100% 0, 100% 100%, 10% 100%); }.workspace-bar { grid-template-columns: 1fr auto; }.workspace-tabs { order: 3; grid-column: 1 / -1; min-height: 38px; }.workspace-controls { grid-column: 2; grid-row: 1; }.workspace-main, .workspace-error { width: min(100% - 48px, 1280px); }.transfer-controls { grid-template-columns: 1fr 1fr; }.send-button { min-height: 40px; }.asset-heading { align-items: start; flex-direction: column; }.asset-actions { justify-content: flex-start; }.wallets-heading { align-items: start; flex-direction: column; }.permission-capabilities { grid-template-columns: 1fr; }.permission-capabilities > div { border-top: 1px solid #c7c7c3; border-left: 0; }.permission-capabilities > div:first-child { border-top: 0; } }
 @media (max-width: 560px) { .portal-bar { height: 64px; }.portal-brand img { width: 104px; }.portal-copy { padding-top: 118px; }.portal-copy h1 { font-size: 50px; line-height: .84; }.portal-cta { width: 100%; justify-content: space-between; margin-top: 48px; }.portal-art { background-position: 61% center; clip-path: inset(45% 0 0 0); opacity: .88; }.workspace-bar { min-height: 66px; padding: 0 20px; gap: 14px; }.workspace-brand img { width: 86px; }.workspace-status { display: none; }.workspace-tabs { gap: 18px; }.workspace-main, .workspace-error { width: min(100% - 32px, 1280px); }.account-strip { min-height: 178px; align-items: flex-start; flex-direction: column; justify-content: center; }.passport-action-stack { width: 100%; grid-template-columns: minmax(0, 1fr) 36px; }.deploy-button, .key-option-button { width: 100%; }.asset-heading { min-height: 183px; padding: 52px 0 27px; }.asset-heading h1, .permissions-heading h1 { font-size: 38px; }.address-surfaces, .asset-grid { grid-template-columns: 1fr; }.address-surface, .asset-tile { min-height: 128px; border-top: 1px solid #c6c6c1; border-left: 0; }.address-surface:first-child, .asset-tile:first-child { border-top: 0; }.wallets-section { margin-top: 55px; }.wallet-row { grid-template-columns: 36px minmax(0, 1fr) 36px; gap: 10px; }.wallet-row code { display: none; }.wallet-network-icon { width: 28px; height: 28px; }.transfer-drawer { margin-top: 20px; padding: 17px; }.transfer-controls { grid-template-columns: 1fr; }.permissions-view { padding-top: 52px; }.permissions-heading { min-height: 132px; }.permission-empty { min-height: 252px; grid-template-columns: 52px 1fr; gap: 14px; }.permission-empty > span { font-size: 58px; }.permission-empty h2 { font-size: 21px; }.activity-section { margin-top: 55px; }.activity-row time, .activity-row .status-pill { display: none; }.transaction-modal { padding: 22px; }.transaction-modal dl div { grid-template-columns: 1fr; gap: 4px; } }
+@media (max-width: 560px) {
+  .pwa-offline-bar { top: max(8px, env(safe-area-inset-top)); font-size: 11px; }
+  .pwa-actions {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: max(12px, env(safe-area-inset-left));
+  }
+  .pwa-action { flex: 1; }
+}
 
 /* Passport activation and address picker */
 .workspace-sdk-link { color: #111; font-size: 12px; font-weight: 780; text-decoration: none; }
@@ -230,7 +285,15 @@ button:focus-visible, input:focus-visible { outline: 2px solid #fff; outline-off
   .sdk-hero-copy { padding: 14px 10px 14px 0; background: #e9e9e5; }
   .sdk-hero h1 { font-size: 50px; }
   .sdk-hero-copy > p:last-child { font-size: 13px; }
-  .sdk-hero-proof { bottom: 28px; left: 24px; }
+  .sdk-hero-proof {
+    position: absolute;
+    right: auto;
+    bottom: 28px;
+    left: 24px;
+    align-self: auto;
+    margin: 0;
+    padding: 0;
+  }
   .sdk-architecture, .sdk-boundaries { padding: 66px 0; }
   .sdk-architecture-grid, .sdk-boundary-grid { grid-template-columns: 1fr; margin-top: 36px; }
   .sdk-architecture-step, .sdk-architecture-step:nth-child(-n+2), .sdk-boundary-grid article, .sdk-boundary-grid article:nth-child(-n+2) { min-height: 0; border-top: 1px solid #c3c3be; border-left: 0; }

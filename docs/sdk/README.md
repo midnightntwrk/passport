@@ -89,5 +89,6 @@ adding a new SDK module.
 - [Why Passport cannot currently use only Dynamic](why-passport-needs-a-passkey-with-dynamic.md)
 - [Dynamic capability matrix](dynamic-capability-matrix.md)
 - [Client demo runbook](client-demo-runbook.md)
+- [PWA feasibility report](pwa-feasibility-report.md)
 - [Live validation log](validation-log.md)
 - [External blockers](blockers.md)
