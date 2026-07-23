@@ -17,6 +17,7 @@ in [DECISIONS.md](./DECISIONS.md).
 | `contracts/account.compact` | The per-account custody contract (11 circuits). |
 | `contracts/identity_registry.compact` | Shared demo registry binding a Night ID handle to the deployed Passport account contract. |
 | `contracts/faucet.compact` | Test scaffolding: shielded-token origin for localnet. |
+| `src/integrations/midnames/` | Adapter for the pinned Midnames Preview contract. |
 | `src/wallet/` | Platform-neutral client core: contract bindings, witnesses (C7), Shamir 2-of-3, `PassportAccount` API. |
 | `src/node/` | Node-side wiring: funding wallet, providers, deploy helpers. |
 | `src/tests/` | Localnet integration scenarios (see below). |
@@ -34,6 +35,7 @@ in [DECISIONS.md](./DECISIONS.md).
 ./run-all.sh            # localnet up + compile + unit tests + all scenarios
 ./run-all.sh --fresh    # reset chain state first
 ./run-all.sh --tests night,grants
+npm run demo:midnames     # clean chain + issue #100 acceptance flow
 ```
 
 ## Step by step
@@ -55,7 +57,27 @@ npm run test:lifecycle           # Night: deposit/withdraw, rogue-device reject,
 npm run test:grants              # grant issue/spend/cap/revoke
 npm run test:shielded            # faucet mint → deposit → partial withdraw (change path)
 npm run test:recovery            # share reconstruction → recover → old device locked out
+npm run test:midnames            # requires running localnet; alias → external shielded deposit
 ```
+
+## Midnames integration
+
+The issue #100 path uses the real Midnames Preview contract rather than the
+prototype `identity_registry.compact` contract. It deploys `.night`, claims
+`alice.night` for a newly deployed Passport AAC, resolves the alias from a
+second wallet, and calls the AAC `deposit_shielded` circuit with a shielded
+token owned by that second wallet.
+
+The complete clean-chain demo is:
+
+```sh
+npm run demo:midnames
+```
+
+The runner prints every landed transaction ID and writes a local,
+git-ignored `midnames-deployment.json` evidence record. See
+[MIDNAMES-INTEGRATION.md](./MIDNAMES-INTEGRATION.md) for the architecture,
+version pin, and validation details.
 
 ## Demo app
 

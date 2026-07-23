@@ -8,14 +8,17 @@
     "compile": "compact compile contracts/account.compact contracts/managed/account && compact compile contracts/faucet.compact contracts/managed/faucet && compact compile contracts/identity_registry.compact contracts/managed/identity_registry",
     "build": "tsc",
     "demo": "node scripts/demo-local.mjs",
+    "demo:midnames": "./run-all.sh --fresh --tests=midnames",
     "demo:e2e": "node app/scripts/e2e-devmode.mjs http://127.0.0.1:5173/",
+    "midnames:prepare": "node scripts/prepare-midnames-preview.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "deploy": "tsx src/tests/deploy.ts",
     "test:lifecycle": "tsx src/tests/lifecycle-night.ts",
     "test:shielded": "tsx src/tests/lifecycle-shielded.ts",
     "test:grants": "tsx src/tests/lifecycle-grants.ts",
-    "test:recovery": "tsx src/tests/lifecycle-recovery.ts"
+    "test:recovery": "tsx src/tests/lifecycle-recovery.ts",
+    "test:midnames": "npm run midnames:prepare && tsx src/tests/lifecycle-midnames.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -25,6 +28,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@midnight-ntwrk/compact-js": "2.5.1",
     "@midnight-ntwrk/compact-runtime": "^0.16.0",
     "@midnight-ntwrk/ledger-v8": "^8.0.3",
     "@midnight-ntwrk/midnight-js-contracts": "^4.0.4",

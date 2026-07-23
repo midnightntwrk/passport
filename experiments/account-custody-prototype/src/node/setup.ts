@@ -5,7 +5,10 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
-import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
+import {
+  deployContract,
+  withContractScopedTransaction,
+} from '@midnight-ntwrk/midnight-js-contracts';
 
 import * as FaucetModule from '../../contracts/managed/faucet/contract/index.js';
 import { Contract as IdentityRegistryContract, IdentityRegistry } from '../wallet/identity.js';
@@ -105,6 +108,7 @@ export interface FaucetHandle {
     amount: bigint,
     nonce: Uint8Array,
     recipientCoinPublicKey: Uint8Array,
+    recipientEncryptionPublicKey?: string,
   ) => Promise<string>;
 }
 
@@ -119,10 +123,37 @@ export async function deployFaucet(walletCtx: WalletContext): Promise<FaucetHand
   return {
     address,
     providers,
-    mint: async (color, amount, nonce, recipientCoinPublicKey) => {
-      const r = await (deployed as any).callTx.mint_shielded(color, amount, nonce, {
-        bytes: recipientCoinPublicKey,
-      });
+    mint: async (
+      color,
+      amount,
+      nonce,
+      recipientCoinPublicKey,
+      recipientEncryptionPublicKey,
+    ) => {
+      const recipient = { bytes: recipientCoinPublicKey };
+      if (recipientEncryptionPublicKey) {
+        const recipientCoinPublicKeyHex = Buffer.from(recipientCoinPublicKey).toString('hex');
+        const r = await withContractScopedTransaction(
+          providers,
+          async (txContext) => {
+            await (deployed as any).callTx.mint_shielded(
+              txContext,
+              color,
+              amount,
+              nonce,
+              recipient,
+            );
+          },
+          {
+            additionalCoinEncPublicKeyMappings: new Map([
+              [recipientCoinPublicKeyHex, recipientEncryptionPublicKey],
+            ]),
+          },
+        );
+        return r.public.txId;
+      }
+
+      const r = await (deployed as any).callTx.mint_shielded(color, amount, nonce, recipient);
       return r?.public?.txId ?? r?.public?.transactionHash;
     },
   };

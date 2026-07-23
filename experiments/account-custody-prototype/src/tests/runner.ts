@@ -14,9 +14,10 @@ export async function runScenario(name: string, fn: () => Promise<void>): Promis
     console.log(`\n◆ ${name}: FAIL — ${e?.message ?? e}`);
     code = 1;
   }
-  // Wallet/indexer subscriptions keep the event loop alive; force exit the
-  // same way contract-custody-feasibility's runner does.
-  setTimeout(() => process.exit(code), 100).unref();
+  process.exitCode = code;
+  // Wallet/indexer subscriptions can keep the event loop alive. Keep this
+  // timer referenced so a failed scenario cannot accidentally exit with 0.
+  setTimeout(() => process.exit(code), 100);
 }
 
 export function step(label: string): void {

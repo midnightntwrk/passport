@@ -100,7 +100,11 @@ export async function createWallet(seed: string) {
   const dustSecretKey = ledger.DustSecretKey.fromSeed(keys[Roles.Dust]);
   const unshieldedKeystore = createKeystore(keys[Roles.NightExternal], networkId);
 
-  const feeBlocksMargin = Number(process.env.FEE_BLOCKS_MARGIN ?? '100');
+  // A large margin can make a fresh localnet wallet construct transactions
+  // whose projected DUST spend exceeds the few blocks of DUST accrued so far.
+  // Shared networks may override this; five blocks matches the upstream
+  // Midnames localnet harness.
+  const feeBlocksMargin = Number(process.env.FEE_BLOCKS_MARGIN ?? '5');
 
   const configuration = {
     networkId,
