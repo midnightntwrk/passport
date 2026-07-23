@@ -15,6 +15,7 @@ import {
   compiledIdentityRegistryContract,
   configureDynamicNetwork,
   configureLocalNetwork,
+  dynamicMidnightProofProvider,
   dynamicWalletNetwork,
   DynamicTransactionCoordinator,
   type DynamicTransactionResult,
@@ -98,7 +99,11 @@ async function initLocal(): Promise<Midnight> {
 
 async function initDynamic(dynamicWallet: MidnightWallet): Promise<Midnight> {
   const networkId = configureDynamicNetwork(dynamicWallet);
-  const dynamicTransactions = new DynamicTransactionCoordinator(networkId);
+  const proofProvider = dynamicMidnightProofProvider(dynamicWallet);
+  const dynamicTransactions = new DynamicTransactionCoordinator(
+    networkId,
+    proofProvider,
+  );
   const [accountProviders, faucetProviders, identityRegistryProviders] = await Promise.all([
     createDynamicProviders(dynamicWallet, 'account', dynamicTransactions),
     createDynamicProviders(dynamicWallet, 'faucet', dynamicTransactions),

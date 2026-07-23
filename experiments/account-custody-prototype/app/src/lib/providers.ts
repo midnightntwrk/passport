@@ -6,6 +6,7 @@
 import * as Rx from 'rxjs';
 
 import type { MidnightWallet } from '@dynamic-labs/midnight';
+import dynamicMidnightPackage from '@dynamic-labs/midnight/package.json';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { FetchZkConfigProvider } from '@midnight-ntwrk/midnight-js-fetch-zk-config-provider';
@@ -29,7 +30,12 @@ import {
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 
 import {
+  createDynamicMidnightProofProvider,
+  DYNAMIC_MIDNIGHT_PROOF_CAPABILITY_METHOD,
+  DYNAMIC_MIDNIGHT_PROOF_METHOD,
+  requireDynamicMidnightProofCapability,
   submitDynamicTransaction,
+  type DynamicMidnightProofProvider,
   type DynamicTransactionIntent,
   type DynamicTransactionReceipt,
 } from '../../../src/wallet/dynamic-transaction.js';
@@ -229,7 +235,10 @@ export class DynamicTransactionCoordinator {
   private activeIntent: DynamicTransactionIntent | null = null;
   private receipt: DynamicTransactionReceipt | null = null;
 
-  constructor(readonly network: 'preview' | 'mainnet') {}
+  constructor(
+    readonly network: 'preview' | 'mainnet',
+    readonly proofProvider: DynamicMidnightProofProvider,
+  ) {}
 
   async run<T>(
     intent: Omit<DynamicTransactionIntent, 'network'>,
@@ -242,6 +251,9 @@ export class DynamicTransactionCoordinator {
     this.activeIntent = { ...intent, network: this.network };
     this.receipt = null;
     try {
+      // Fail before Compact proving or witness handling when Dynamic cannot
+      // balance an arbitrary call-proved UnboundTransaction.
+      await requireDynamicMidnightProofCapability(this.proofProvider);
       const result = await action();
       if (!this.receipt) {
         throw new Error('The Compact operation completed without a Dynamic transaction receipt.');
@@ -376,6 +388,31 @@ export async function dynamicShieldedKeys(
     dynamicShieldedKeyCache.delete(wallet);
     throw error;
   }
+}
+
+function hasDynamicProofContract(candidate: unknown): boolean {
+  if (
+    (typeof candidate !== 'object' || candidate === null) &&
+    typeof candidate !== 'function'
+  ) {
+    return false;
+  }
+  const value = candidate as Record<string, unknown>;
+  return (
+    typeof value[DYNAMIC_MIDNIGHT_PROOF_CAPABILITY_METHOD] === 'function' &&
+    typeof value[DYNAMIC_MIDNIGHT_PROOF_METHOD] === 'function'
+  );
+}
+
+export function dynamicMidnightProofProvider(
+  wallet: MidnightWallet,
+): DynamicMidnightProofProvider {
+  const connector = wallet.connector as unknown;
+  const candidate = hasDynamicProofContract(wallet) ? wallet : connector;
+  return createDynamicMidnightProofProvider(candidate, {
+    packageName: '@dynamic-labs/midnight',
+    packageVersion: dynamicMidnightPackage.version,
+  });
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -523,7 +560,9 @@ export async function createDynamicProviders(
       }
 
       const receipt = await submitDynamicTransaction({
-        wallet,
+        authorizer: wallet,
+        proofProvider: coordinator.proofProvider,
+        broadcaster: wallet,
         serializedTransaction: envelope.serializedTransaction,
         intent: coordinator.currentIntent(contractName),
         assertNetwork: () => {

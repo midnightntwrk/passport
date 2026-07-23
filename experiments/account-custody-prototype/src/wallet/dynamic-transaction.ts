@@ -1,13 +1,83 @@
-export interface DynamicTransactionSigner {
+export const DYNAMIC_MIDNIGHT_PROOF_PROTOCOL =
+  'dynamic-midnight-compact-proof-v1' as const;
+export const DYNAMIC_MIDNIGHT_PROOF_CAPABILITY_METHOD =
+  'getMidnightProofCapabilities' as const;
+export const DYNAMIC_MIDNIGHT_PROOF_METHOD =
+  'proveMidnightTransaction' as const;
+
+export type DynamicMidnightProofOperation = 'balance-and-finalize';
+
+export interface DynamicTransactionAuthorizer {
   readonly address: string;
   signMessage(message: string): Promise<string | undefined>;
-  signTransaction(serializedTransaction: string): Promise<string>;
+}
+
+export interface DynamicTransactionBroadcaster {
   submitTransaction(
     finalizedTransaction: string,
   ): Promise<void | { txHash: string; balanceAfter?: string }>;
   revertTransaction?(
     serializedTransaction: string,
   ): Promise<unknown>;
+}
+
+export interface DynamicMidnightProofProviderMetadata {
+  readonly packageName: string;
+  readonly packageVersion: string;
+}
+
+export interface DynamicMidnightProofCapabilityAvailable
+  extends DynamicMidnightProofProviderMetadata {
+  readonly status: 'available';
+  readonly protocol: typeof DYNAMIC_MIDNIGHT_PROOF_PROTOCOL;
+  readonly operations: readonly DynamicMidnightProofOperation[];
+  readonly inputTransaction: 'unbound';
+  readonly outputTransaction: 'finalized';
+  readonly callerBroadcasts: true;
+}
+
+export type DynamicMidnightProofBlockCode =
+  | 'DYNAMIC_MIDNIGHT_COMPACT_PROOF_API_UNAVAILABLE'
+  | 'DYNAMIC_MIDNIGHT_COMPACT_PROOF_API_INCOMPATIBLE'
+  | 'DYNAMIC_MIDNIGHT_COMPACT_PROOF_CAPABILITY_PROBE_FAILED';
+
+export interface DynamicMidnightProofCapabilityBlocked
+  extends DynamicMidnightProofProviderMetadata {
+  readonly status: 'externally_blocked';
+  readonly code: DynamicMidnightProofBlockCode;
+  readonly missingMethods: readonly string[];
+  readonly reason: string;
+}
+
+export type DynamicMidnightProofCapability =
+  | DynamicMidnightProofCapabilityAvailable
+  | DynamicMidnightProofCapabilityBlocked;
+
+export interface DynamicMidnightProofRequest {
+  readonly protocol: typeof DYNAMIC_MIDNIGHT_PROOF_PROTOCOL;
+  readonly operation: DynamicMidnightProofOperation;
+  readonly network: string;
+  readonly walletAddress: string;
+  readonly serializedTransaction: string;
+  readonly inputTransactionDigest: string;
+  readonly intent: DynamicTransactionIntent;
+}
+
+export interface DynamicMidnightProofResult {
+  readonly protocol: typeof DYNAMIC_MIDNIGHT_PROOF_PROTOCOL;
+  readonly operation: DynamicMidnightProofOperation;
+  readonly inputTransactionDigest: string;
+  readonly finalizedTransaction: string;
+}
+
+export interface DynamicMidnightProofProvider {
+  probe(): Promise<DynamicMidnightProofCapability>;
+  prove(request: DynamicMidnightProofRequest): Promise<DynamicMidnightProofResult>;
+}
+
+export interface DynamicMidnightProofApi {
+  getMidnightProofCapabilities(): Promise<unknown>;
+  proveMidnightTransaction(request: DynamicMidnightProofRequest): Promise<unknown>;
 }
 
 export interface DynamicTransactionIntent {
@@ -27,10 +97,14 @@ export interface DynamicTransactionReceipt {
   readonly approvalSignatureFingerprint: string;
   readonly approvedAt: string;
   readonly expiresAt: string;
+  readonly proofProtocol: typeof DYNAMIC_MIDNIGHT_PROOF_PROTOCOL;
+  readonly proofOperation: DynamicMidnightProofOperation;
 }
 
 export interface SubmitDynamicTransactionOptions {
-  readonly wallet: DynamicTransactionSigner;
+  readonly authorizer: DynamicTransactionAuthorizer;
+  readonly proofProvider: DynamicMidnightProofProvider;
+  readonly broadcaster: DynamicTransactionBroadcaster;
   readonly serializedTransaction: string;
   readonly intent: DynamicTransactionIntent;
   readonly now?: Date;
@@ -44,6 +118,188 @@ export interface SubmitDynamicTransactionOptions {
 }
 
 const DEFAULT_APPROVAL_TTL_MS = 5 * 60 * 1_000;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function functionAt(
+  value: unknown,
+  key: string,
+): ((...args: any[]) => Promise<unknown>) | undefined {
+  if (!isRecord(value) && typeof value !== 'function') return undefined;
+  const member = (value as Record<string, unknown>)[key];
+  return typeof member === 'function'
+    ? (member as (...args: any[]) => Promise<unknown>).bind(value)
+    : undefined;
+}
+
+function blockedCapability(
+  metadata: DynamicMidnightProofProviderMetadata,
+  code: DynamicMidnightProofBlockCode,
+  missingMethods: readonly string[],
+  reason: string,
+): DynamicMidnightProofCapabilityBlocked {
+  return {
+    ...metadata,
+    status: 'externally_blocked',
+    code,
+    missingMethods,
+    reason,
+  };
+}
+
+function parseAvailableCapability(
+  value: unknown,
+  metadata: DynamicMidnightProofProviderMetadata,
+): DynamicMidnightProofCapabilityAvailable | null {
+  if (!isRecord(value)) return null;
+  const operations = Array.isArray(value.operations)
+    ? value.operations.filter(
+        (operation): operation is DynamicMidnightProofOperation =>
+          operation === 'balance-and-finalize',
+      )
+    : [];
+  if (
+    value.protocol !== DYNAMIC_MIDNIGHT_PROOF_PROTOCOL ||
+    !operations.includes('balance-and-finalize') ||
+    value.inputTransaction !== 'unbound' ||
+    value.outputTransaction !== 'finalized' ||
+    value.callerBroadcasts !== true
+  ) {
+    return null;
+  }
+  return {
+    ...metadata,
+    status: 'available',
+    protocol: DYNAMIC_MIDNIGHT_PROOF_PROTOCOL,
+    operations,
+    inputTransaction: 'unbound',
+    outputTransaction: 'finalized',
+    callerBroadcasts: true,
+  };
+}
+
+export class DynamicMidnightProofCapabilityError extends Error {
+  constructor(readonly result: DynamicMidnightProofCapabilityBlocked) {
+    super(
+      `Dynamic Compact proof generation is externally blocked (${result.code}). ${result.reason}`,
+    );
+    this.name = 'DynamicMidnightProofCapabilityError';
+  }
+}
+
+/**
+ * Adapts the versioned Compact proof contract expected from Dynamic.
+ *
+ * The existing transfer-only signTransaction method is deliberately not used
+ * as a fallback. Dynamic 4.93.1 documents that method for an UnprovenTransaction
+ * produced by createTransferTransaction, while Midnight.js hands a C1 wallet
+ * provider an already call-proved UnboundTransaction.
+ */
+export function createDynamicMidnightProofProvider(
+  candidate: unknown,
+  metadata: DynamicMidnightProofProviderMetadata,
+): DynamicMidnightProofProvider {
+  const getCapabilities = functionAt(
+    candidate,
+    DYNAMIC_MIDNIGHT_PROOF_CAPABILITY_METHOD,
+  );
+  const proveMidnightTransaction = functionAt(
+    candidate,
+    DYNAMIC_MIDNIGHT_PROOF_METHOD,
+  );
+  let capabilityPromise: Promise<DynamicMidnightProofCapability> | null = null;
+
+  const probe = async (): Promise<DynamicMidnightProofCapability> => {
+    if (capabilityPromise) return capabilityPromise;
+    capabilityPromise = (async () => {
+      const missingMethods = [
+        !getCapabilities ? DYNAMIC_MIDNIGHT_PROOF_CAPABILITY_METHOD : null,
+        !proveMidnightTransaction ? DYNAMIC_MIDNIGHT_PROOF_METHOD : null,
+      ].filter(
+        (
+          method,
+        ): method is
+          | typeof DYNAMIC_MIDNIGHT_PROOF_CAPABILITY_METHOD
+          | typeof DYNAMIC_MIDNIGHT_PROOF_METHOD => method !== null,
+      );
+      if (missingMethods.length > 0) {
+        return blockedCapability(
+          metadata,
+          'DYNAMIC_MIDNIGHT_COMPACT_PROOF_API_UNAVAILABLE',
+          missingMethods,
+          `${metadata.packageName}@${metadata.packageVersion} exposes the transfer builder flow, but not the required UnboundTransaction balance-proof contract.`,
+        );
+      }
+
+      try {
+        const advertised = await getCapabilities!();
+        const available = parseAvailableCapability(advertised, metadata);
+        return (
+          available ??
+          blockedCapability(
+            metadata,
+            'DYNAMIC_MIDNIGHT_COMPACT_PROOF_API_INCOMPATIBLE',
+            [],
+            `The advertised API does not support ${DYNAMIC_MIDNIGHT_PROOF_PROTOCOL} balance-and-finalize from an UnboundTransaction to a caller-broadcast FinalizedTransaction.`,
+          )
+        );
+      } catch (error) {
+        return blockedCapability(
+          metadata,
+          'DYNAMIC_MIDNIGHT_COMPACT_PROOF_CAPABILITY_PROBE_FAILED',
+          [],
+          `The Dynamic capability probe failed: ${String(
+            (error as Error)?.message ?? error,
+          )}`,
+        );
+      }
+    })();
+    return capabilityPromise;
+  };
+
+  return {
+    probe,
+    async prove(request) {
+      const capability = await probe();
+      if (capability.status !== 'available') {
+        throw new DynamicMidnightProofCapabilityError(capability);
+      }
+
+      const response = await proveMidnightTransaction!(request);
+      if (
+        !isRecord(response) ||
+        response.protocol !== DYNAMIC_MIDNIGHT_PROOF_PROTOCOL ||
+        response.operation !== request.operation ||
+        response.inputTransactionDigest !== request.inputTransactionDigest ||
+        typeof response.finalizedTransaction !== 'string' ||
+        response.finalizedTransaction.length === 0
+      ) {
+        throw new Error(
+          'Dynamic returned an invalid Compact proof response; refusing to approve or broadcast it.',
+        );
+      }
+
+      return {
+        protocol: DYNAMIC_MIDNIGHT_PROOF_PROTOCOL,
+        operation: request.operation,
+        inputTransactionDigest: request.inputTransactionDigest,
+        finalizedTransaction: response.finalizedTransaction,
+      };
+    },
+  };
+}
+
+export async function requireDynamicMidnightProofCapability(
+  provider: DynamicMidnightProofProvider,
+): Promise<DynamicMidnightProofCapabilityAvailable> {
+  const capability = await provider.probe();
+  if (capability.status !== 'available') {
+    throw new DynamicMidnightProofCapabilityError(capability);
+  }
+  return capability;
+}
 
 function base64ToBytes(value: string): Uint8Array {
   const normalized = value.replace(/\s+/g, '');
@@ -84,6 +340,8 @@ function randomNonce(): string {
 export function buildDynamicApprovalMessage(
   intent: DynamicTransactionIntent,
   walletAddress: string,
+  proofProtocol: typeof DYNAMIC_MIDNIGHT_PROOF_PROTOCOL,
+  proofOperation: DynamicMidnightProofOperation,
   unboundTransactionDigest: string,
   finalizedTransactionDigest: string,
   approvedAt: string,
@@ -103,6 +361,8 @@ export function buildDynamicApprovalMessage(
     `Circuit: ${intent.circuit}`,
     `Summary: ${intent.summary}`,
     ...argumentLines,
+    `Proof protocol: ${proofProtocol}`,
+    `Proof operation: ${proofOperation}`,
     `Unbound transaction SHA-256: ${unboundTransactionDigest}`,
     `Finalized transaction SHA-256: ${finalizedTransactionDigest}`,
     `Approved at: ${approvedAt}`,
@@ -114,10 +374,11 @@ export function buildDynamicApprovalMessage(
 /**
  * Runs the complete Dynamic transaction boundary.
  *
- * signTransaction performs the Midnight wallet finalization. signMessage then
- * creates a human-readable approval receipt bound to both the original C1
- * transaction and those exact finalized bytes. Broadcast cannot happen unless
- * that approval succeeds.
+ * The versioned proof provider balances and finalizes the already call-proved
+ * C1 transaction without returning wallet secrets. signMessage then creates a
+ * human-readable approval receipt bound to both the original C1 transaction
+ * and those exact finalized bytes. The broadcaster receives exactly those
+ * approved bytes, and cannot run unless approval succeeds.
  */
 export async function submitDynamicTransaction(
   options: SubmitDynamicTransactionOptions,
@@ -129,16 +390,24 @@ export async function submitDynamicTransaction(
   );
 
   await options.assertNetwork?.();
-  const finalizedTransaction = await options.wallet.signTransaction(
-    options.serializedTransaction,
-  );
+  await requireDynamicMidnightProofCapability(options.proofProvider);
+  const proofResult = await options.proofProvider.prove({
+    protocol: DYNAMIC_MIDNIGHT_PROOF_PROTOCOL,
+    operation: 'balance-and-finalize',
+    network: options.intent.network,
+    walletAddress: options.authorizer.address,
+    serializedTransaction: options.serializedTransaction,
+    inputTransactionDigest: unboundTransactionDigest,
+    intent: options.intent,
+  });
+  const finalizedTransaction = proofResult.finalizedTransaction;
   if (!finalizedTransaction) {
-    throw new Error('Dynamic did not return a finalized Midnight transaction.');
+    throw new Error('Dynamic did not return a finalized Compact transaction.');
   }
 
   const abandonFinalizedTransaction = async () => {
     try {
-      await options.wallet.revertTransaction?.(finalizedTransaction);
+      await options.broadcaster.revertTransaction?.(finalizedTransaction);
     } catch {
       // Preserve the original pre-submission error.
     }
@@ -169,14 +438,17 @@ export async function submitDynamicTransaction(
 
     approvalMessage = buildDynamicApprovalMessage(
       options.intent,
-      options.wallet.address,
+      options.authorizer.address,
+      proofResult.protocol,
+      proofResult.operation,
       unboundTransactionDigest,
       finalizedTransactionDigest,
       approvedAt,
       expiresAt.toISOString(),
       options.nonce ?? randomNonce(),
     );
-    approvalSignature = (await options.wallet.signMessage(approvalMessage)) ?? '';
+    approvalSignature =
+      (await options.authorizer.signMessage(approvalMessage)) ?? '';
     if (!approvalSignature) {
       throw new Error('Dynamic did not return the C1 approval signature.');
     }
@@ -195,7 +467,8 @@ export async function submitDynamicTransaction(
   // A submission exception is intentionally not followed by revertTransaction.
   // A timeout can happen after broadcast; releasing the reservation before
   // reconciling the tx hash can desynchronize the wallet from the chain.
-  const submitted = await options.wallet.submitTransaction(finalizedTransaction);
+  const submitted =
+    await options.broadcaster.submitTransaction(finalizedTransaction);
   if (!submitted || !submitted.txHash) {
     throw new Error('Dynamic submitted the transaction without returning a transaction hash.');
   }
@@ -209,5 +482,7 @@ export async function submitDynamicTransaction(
     approvalSignatureFingerprint,
     approvedAt,
     expiresAt: expiresAt.toISOString(),
+    proofProtocol: proofResult.protocol,
+    proofOperation: proofResult.operation,
   };
 }

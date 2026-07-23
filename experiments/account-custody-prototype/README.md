@@ -112,16 +112,18 @@ import { MidnightWalletConnectors } from "@dynamic-labs/midnight";
 The UI surfaces the three wallet address surfaces and keeps unshielded,
 shielded, and DUST balances separate.
 
-Compact transactions follow one explicit authority path:
+Compact transactions follow one explicit, capability-gated authority path:
 
-1. Passport builds the C1 deploy or call and proves the Compact circuit.
-2. Those bytes are passed to `MidnightWallet.signTransaction` for wallet
-   finalization.
-3. A readable Dynamic `signMessage` approval is bound to the SHA-256 digests
-   of both the proved C1 transaction and the exact finalized result.
-4. Only that approved finalized result is passed to
-   `MidnightWallet.submitTransaction`.
-5. The returned transaction hash and approval fingerprint are shown in the
+1. The demo requires Dynamic's versioned Compact proof capability before C1
+   witness handling or proving starts.
+2. Passport builds the C1 call proof and sends the serialized
+   `UnboundTransaction` to the typed Dynamic proof provider.
+3. Dynamic returns a balanced `FinalizedTransaction` without returning wallet
+   secret material.
+4. A readable Dynamic `signMessage` approval is bound to the SHA-256 digests
+   of both the unbound C1 transaction and the exact finalized result.
+5. Only those approved finalized bytes are passed to the broadcaster.
+6. The returned transaction hash and approval fingerprint are shown in the
    transaction receipt.
 
 The approval signature is never treated as the transaction signature, and
@@ -129,13 +131,16 @@ there is no hidden fallback to the disposable local wallet. Dynamic rejection
 fails the operation visibly. Use `?demoMode=local` only when intentionally
 running the isolated localnet flow.
 
-This adapter is intentionally experimental. Midnight.js hands the wallet an
-already-proved `UnboundTransaction`, while Dynamic 4.93.1 documents embedded
+This adapter is intentionally experimental and currently **externally
+blocked**. Midnight.js hands the wallet an already call-proved
+`UnboundTransaction`, while Dynamic 4.93.1 documents embedded
 `signTransaction` for the transfer builder's unsigned `UnprovenTransaction`.
-The app validates that Dynamic returns a real `FinalizedTransaction` before
-broadcast, but the `UnboundTransaction` input still needs a live Preview test
-and an explicit support statement from Dynamic. A passing mocked unit test is
-not treated as proof of that backend compatibility.
+The demo will not send a C1 transaction into that incompatible API. It requires
+the explicit `getMidnightProofCapabilities` and `proveMidnightTransaction`
+contract described in
+[DYNAMIC-COMPACT-PROOF-UNBLOCK.md](./DYNAMIC-COMPACT-PROOF-UNBLOCK.md).
+A passing contract test proves the adapter behavior, not availability in
+Dynamic's hosted backend.
 
 ## Caveats (prototype, not production)
 
