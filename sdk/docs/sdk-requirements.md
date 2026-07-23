@@ -449,6 +449,10 @@ dApp can rely on Passport — the other end of the same [C23] protocol
   user's Passport profile supplies witness values when the dApp's
   `witness.ts` runs for a contract execution (the shared private-storage
   provider, midnightntwrk/passport#58, over [C16]).
+- **Transfer assets to a Passport account** — pay a Passport user via the
+  §3.12 deposit mechanism (resolve the recipient → connect to their ACC →
+  call the deposit circuit). The one connector function that is a direct
+  chain interaction rather than a C23 message.
 
 **Security framing of witness provisioning (normative).** Passport-supplied
 private state MUST be **scoped, consented, and ceremony-gated**: a dApp
@@ -501,7 +505,8 @@ than one:
   beyond ECDSA to any foreign scheme (secp256k1, Ed25519).
 - **Fund / bridge** — use the connected wallet to fund the account or move
   assets across chains ([C25] / MCS). Applies to the foreign-chain wallets
-  (MetaMask, Phantom, and the Cardano side of Lace / Gero).
+  (MetaMask, Phantom, and the Cardano side of Lace / Gero). Midnight-side
+  funding lands through the §3.12 deposit mechanism.
 - **Coexist / discover** — the Midnight-native wallets (Lace, 1am, Gero) are
   peer wallets; Passport is discoverable alongside them through the same
   connector standard (the §3.9 wallet side) and may import from or hand off
@@ -582,6 +587,52 @@ progress):
 - Interplay with §2.5 path 2b: a sponsored partial transaction is one
   candidate answer to "who balances and fee-pays before a prove+broadcast
   server submits".
+
+### 3.12 Asset transfers into a Passport account (deposit mechanism)
+
+Because of how the ACC is structured ([C1]/[C4] contract custody), **a
+Passport account is not payable by a plain transfer to an address** —
+funding it is a **contract call**. The SDK MUST expose, and ecosystem
+wallets and dApps MUST support, the following mechanism to send assets to
+a Passport user:
+
+1. **Resolve the recipient** — `alice.passport.night` → the user's ACC
+   contract address, via the name service ([C2]).
+2. **Connect to the user's ACC contract** — using the versioned contract
+   bindings and ZK assets (§8.2 artefact; the sender needs the deposit
+   circuit's assets to prove the call).
+3. **Call the deposit circuit** — `deposit_night` for unshielded assets,
+   `deposit_shielded` for shielded coins; the function routes by asset
+   type. Deposits are **permissionless by ACC design** — anyone may fund
+   an account; no grant, no recipient ceremony, no recipient interaction.
+
+Properties and consequences:
+
+- **The sender pays.** The deposit is the *sender's* transaction: their
+  wallet proves, balances, fee-pays (their own DUST or §3.11 sponsorship),
+  and submits. The recipient does nothing and need not be online.
+- **Heavier than a plain transfer.** A deposit is a proven contract call —
+  the sending wallet must fetch the ACC deposit-circuit assets and generate
+  a proof. This is standard contract-call support, but wallets that only
+  implement address-to-address transfers cannot pay a Passport account —
+  which is exactly why this mechanism is normative in the custody MIP and
+  an ecosystem-adoption requirement, not an SDK-internal detail.
+- **Never present the raw ACC address as a payment address.** Assets sent
+  to the contract address *outside* the deposit circuit are held but
+  unaccounted (they bypass the ACC's balance bookkeeping — a known
+  prototype blind spot). UIs and integrations MUST surface the Passport
+  name / deposit flow, not a copyable contract address.
+- **Who must implement it:** the dApp connector (§3.9) exposes it as a
+  one-call function for dApps (checkout, payouts, refunds); external
+  wallets (§3.10) support it natively so their users can pay
+  `alice.passport.night`; Passport itself uses the same mechanism for
+  Passport→Passport transfers.
+
+Packaging note: the deposit function is a direct chain interaction, not a
+C23 wallet message — it rides the typed contract bindings
+(`mn-passport-contract`), not the kernel. Surfacing it through the dApp
+connector does not breach the "connector never links the core" rule (§3.9):
+the contract package is a foundation dependency, not the custody core.
 
 ## 4. Reference implementations (UI / App)
 

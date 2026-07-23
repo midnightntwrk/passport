@@ -168,8 +168,9 @@ user as a first-class pipeline event (§4.3).
 
 Dependency rule: everything points **inward** to `@midnight-ntwrk/mn-passport-core`'s
 interfaces; nothing points outward. `@midnight-ntwrk/mn-passport-connect` links neither the
-core nor any adapter — only shared protocol types — so a dApp can never
-pull the kernel into its bundle.
+core nor any adapter — only the shared protocol types and the contract
+bindings (for §3.12 deposits) — so a dApp can never pull the kernel into
+its bundle.
 
 **Foundation**
 
@@ -262,9 +263,13 @@ the provider-free default always ships.
 - **`@midnight-ntwrk/mn-passport-connect`** — the **thin** connector a third-party developer
   installs (§3.9). Implements the dApp end of C23 over `@midnight-ntwrk/mn-passport-protocol`:
   Sign-In-with-Passport, scoped-grant requests, and requesting
-  Passport-provisioned witnesses. Minimal footprint, own threat model;
-  talks C23 *to* the wallet across a trust boundary and **must not link
-  `@midnight-ntwrk/mn-passport-core`** or any adapter.
+  Passport-provisioned witnesses. Also exposes the **deposit function**
+  (§3.12: resolve name → connect to the recipient's ACC → call the deposit
+  circuit) — the one direct chain interaction, riding
+  `mn-passport-contract` rather than the C23 channel. Minimal footprint,
+  own threat model; talks C23 *to* the wallet across a trust boundary and
+  **must not link `@midnight-ntwrk/mn-passport-core`** or any adapter
+  (`mn-passport-contract` is a foundation dependency, permitted).
 
 ```mermaid
 flowchart LR
@@ -284,9 +289,11 @@ flowchart LR
   NODE --> CORE
   NODE --> CAPS
   CONNECT --> PROTO
+  CONNECT --> CONTRACT
 ```
 *Arrows read "depends on". `@midnight-ntwrk/mn-passport-connect` reaches only
-`@midnight-ntwrk/mn-passport-protocol` — never the core or an adapter.*
+`@midnight-ntwrk/mn-passport-protocol` and `@midnight-ntwrk/mn-passport-contract`
+(deposit bindings, §3.12) — never the core or an adapter.*
 
 ### 4.5 Private storage and backup
 
@@ -434,6 +441,7 @@ policy-engine check against a standing grant instead of a human ceremony
 | dApp connector (§3.9) | `@midnight-ntwrk/mn-passport-connect` package |
 | External wallets (§3.10) | `adapter-wallet-connect` + §2.3 binding (kernel) |
 | DUST sponsorship (§3.11) | Fee seam (`adapter-fee-capacity-exchange`); the balance stage of the command pipeline |
+| Deposit mechanism (§3.12) | `mn-passport-contract` deposit bindings, surfaced via `mn-passport-connect` (dApps) and expected of ecosystem wallets |
 
 ## 7. What we lift from the prototype (quarry, not refactor)
 
