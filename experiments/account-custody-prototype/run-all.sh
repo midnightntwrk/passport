@@ -24,7 +24,7 @@ for arg in "${@:-}"; do
   esac
 done
 
-ALL_TESTS=(night grants shielded recovery)
+ALL_TESTS=(night grants shielded recovery midnames)
 if [[ -n "$TESTS" ]]; then
   IFS=',' read -r -a SELECTED <<< "$TESTS"
 else
@@ -36,6 +36,13 @@ check_cmd docker
 check_cmd node
 check_cmd openssl
 check_cmd compact
+check_cmd curl
+for t in "${SELECTED[@]}"; do
+  if [[ "$t" == "midnames" ]]; then
+    check_cmd bun
+    break
+  fi
+done
 
 # ── infra/.env ──────────────────────────────────────────────────────────────
 
@@ -59,6 +66,14 @@ npm install --silent
 echo "Compiling Compact contracts..."
 npm run compile
 
+for t in "${SELECTED[@]}"; do
+  if [[ "$t" == "midnames" ]]; then
+    echo "Preparing pinned Midnames Preview contracts..."
+    npm run midnames:prepare
+    break
+  fi
+done
+
 # ── Compose ─────────────────────────────────────────────────────────────────
 
 COMPOSE_FILES="-f $INFRA_DIR/docker-compose.yml"
@@ -72,7 +87,42 @@ if $FRESH; then
 fi
 
 echo "Starting localnet..."
-docker compose $COMPOSE_FILES up -d --wait
+docker compose $COMPOSE_FILES up -d
+
+wait_for_http() {
+  local label="$1"
+  local url="$2"
+  for _ in {1..60}; do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      echo "$label is ready."
+      return
+    fi
+    sleep 2
+  done
+  echo "ERROR: $label did not become ready: $url"
+  exit 1
+}
+
+wait_for_http "Midnight node" "http://127.0.0.1:9944/health"
+wait_for_http "Proof server" "http://127.0.0.1:6300"
+sleep 6
+docker compose $COMPOSE_FILES up -d indexer
+INDEXER_READY=false
+for _ in {1..60}; do
+  if curl -fsS \
+    -H "Content-Type: application/json" \
+    -d '{"query":"{__typename}"}' \
+    "http://127.0.0.1:8088/api/v4/graphql" >/dev/null 2>&1; then
+    echo "Indexer is ready."
+    INDEXER_READY=true
+    break
+  fi
+  sleep 2
+done
+if [[ "$INDEXER_READY" != "true" ]]; then
+  echo "ERROR: Indexer did not become ready."
+  exit 1
+fi
 
 # ── Unit tests ──────────────────────────────────────────────────────────────
 
