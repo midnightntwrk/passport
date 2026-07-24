@@ -164,7 +164,7 @@ Processes the SDK delegates behind provider interfaces:
 | Cross-chain (MCS) | Upstream MCS threshold-Schnorr | — (owned upstream) | [C25] |
 | Private storage / device-sync | Vendor keystore (native) or shared provider (#58) | Local-only (no cross-device sync) | [C16] · §3.6 |
 | Sync / indexing | Hosted indexer | Self-hosted indexer | [C17] |
-| Proving | Provider-routed (provider → its proving vendor, proof returned) · direct attested-TEE proof server (prove + broadcast) | In-tab WASM prover (low k) | [C6] · §2.5 |
+| Proving | Provider-routed (provider → its proving vendor, proof returned) · direct TEE proof server, encrypt-to-enclave (prove + broadcast) | In-tab WASM prover (low k) | [C6] · §2.5 |
 | Fees / DUST | Capacity Exchange LP marketplace (§3.11) | User-held DUST | [C24] |
 
 **Custody setup — waves.** At launch the wallet-infrastructure provider
@@ -188,7 +188,8 @@ secret / key material decrypted under the §2.2 ceremony. Path choice is
 therefore a privacy decision first and a performance decision second. The
 seam itself is the ledger's two-method `ProvingProvider` (`check`,
 `prove`), so every path is drop-in behind one interface; the SDK's
-contribution is the routing policy and the attestation check.
+contribution is the routing policy and, on the remote paths, encrypting the
+preimage to the prover's enclave.
 
 **Routing is a k-threshold decision tree**, not a flat menu:
 
@@ -213,19 +214,29 @@ contribution is the routing policy and the attestation check.
      explicit prerequisites ([C24]: who balances and signs fees before the
      server submits — Passport pre-balancing, or a sponsor at the server).
 
-**Attestation (both remote variants).** The witness leaves the device in 2a
-and 2b — and in 2b the server additionally sees the full transaction. The
-remote prover MUST run in a TEE and the SDK MUST verify remote attestation
-(enclave measurement + freshness, against a pinned known-good value)
-**before** any preimage is sent. An unattested "TEE prover" is just a
-plaintext hosted prover and is not an acceptable path. For 2a the same
-requirement applies transitively to the provider's vendor — pin down what
-that vendor attests to (§2.6).
+**Confidentiality to the enclave (both remote variants).** The witness
+leaves the device in 2a and 2b — and in 2b the server additionally sees the
+full transaction — so it must reach the prover **encrypted to the enclave**.
+That encryption is the SDK's job: it seals the preimage to the remote
+prover's **enclave public key** before it leaves the device, so the server
+operator (outside the enclave) sees only ciphertext and only code running
+inside the enclave can decrypt and prove.
+
+**The SDK does not perform remote attestation.** Verifying enclave
+measurements, freshness, and vendor-specific quotes is deliberately out of
+scope — too heavy for the SDK. Establishing that the enclave key genuinely
+belongs to a real TEE running trusted code is the **provider's / upstream's
+responsibility**; the SDK consumes a trusted enclave key from that layer
+(for 2a, from the provider's proving vendor — §2.6). *Residual risk
+(accepted; security register):* confidentiality then rests on the
+**provenance of that enclave key** — a non-enclave key substituted upstream
+would defeat the encryption. That trust is delegated by design, not
+verified in the SDK.
 
 Routing inputs remain (a) custody path, (b) circuit k, (c) device
 capability, and (d) privacy posture, with a fallback ladder (in-tab →
 remote on capability failure). The prover actually used MUST be surfaced
-truthfully to the user ("proved in this browser" / "proved in an attested
+truthfully to the user ("proved in this browser" / "proved in a remote
 enclave" / "proved by the provider") — and in 2b, that the transaction was
 **submitted by the proof server** — proof provenance is a user-facing
 guarantee, not a diagnostic.
@@ -302,11 +313,13 @@ existing seams — no redesign:
 The managed path then reduces to **Passport = build + orchestrate +
 broadcast; provider = prove (+ fee-pay)**. Two caveats travel with it:
 
-- **Privacy / attestation.** The proving payload embeds the witness, so
-  remote proving sends the witness to the provider's prover. This preserves
-  privacy only if that prover is an **attested TEE** (§2.5); a plain hosted
-  prover is provider-trust. Pin down which the provider's remote proof
-  server is.
+- **Privacy / enclave encryption.** The proving payload embeds the witness,
+  so remote proving sends it to the provider's prover **encrypted to the
+  prover's enclave key** (§2.5) — that encryption is the SDK's job.
+  Attestation that the enclave is genuine is the **provider's**
+  responsibility, not the SDK's; confidentiality then rests on the
+  provenance of the enclave key (accepted residual risk). Pin down the
+  provider's enclave-key provisioning.
 - **Fees are not proving.** A proof server proves; it does not pay DUST.
   "Just broadcast" holds only once the provider's wallet (or a sponsor) has
   balanced and fee-paid the transaction ([C24]).

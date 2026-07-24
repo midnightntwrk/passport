@@ -49,7 +49,7 @@ flowchart TB
 
   CONNECT -. "C23 protocol" .-> KERNEL
   SEAMS --> ADAPT["Platform adapters: browser, node"]
-  ADAPT --> EXT["External: wallet-infra provider, attested TEE prover, vendor keystore, indexer"]
+  ADAPT --> EXT["External: wallet-infra provider, TEE prover (enclave), vendor keystore, indexer"]
   KERNEL --> CHAIN["Midnight chain / ACC"]
 ```
 
@@ -113,7 +113,7 @@ The only code that ever holds decrypted secrets. Owns:
 - the **grant registry** — which principals may act, at what scope.
 
 Invariant: secrets leave the kernel only as (a) an in-circuit witness to a
-local prover, (b) an attested preimage to a TEE prover, or (c) ciphertext
+local prover, (b) an enclave-encrypted preimage to a TEE prover, or (c) ciphertext
 to storage/sync. Never in plaintext to an adapter, a dApp, or an agent.
 
 ### 4.2 Seams (adapters in the full model)
@@ -123,7 +123,7 @@ default is always present (§2.1, [P8]):
 | Seam | Adapters | Req |
 |---|---|---|
 | Signer / custody | managed anchor · local in-circuit Jubjub · interim hash-preimage | §2.1, §2.3 |
-| Prover (router) | in-tab wasm (low k) · provider-routed (proof returned, Passport broadcasts) · direct attested-TEE (prove + broadcast) | §2.5 |
+| Prover (router) | in-tab wasm (low k) · provider-routed (proof returned, Passport broadcasts) · direct TEE, encrypt-to-enclave (prove + broadcast) | §2.5 |
 | Storage / sync | vendor keystore (native) · shared provider #58 · local-only | §3.6 |
 | Indexer / view-key | hosted · self-hosted | §3.6 |
 | Recovery | guardians + paper key | §3.4 |
@@ -146,16 +146,18 @@ flowchart TB
   K -- yes --> WASM["1 · in-tab WASM prover (Web Worker)\nwitness never leaves the device"]
   K -- no --> R{"remote variant"}
   R --> PROV["2a · provider-routed\nwallet-infra provider → its proving vendor\nproof returned → Passport balances + broadcasts"]
-  R --> TEE["2b · direct attested-TEE proof server\nattestation verified BEFORE preimage sent\nserver proves AND broadcasts → Passport awaits confirmation"]
+  R --> TEE["2b · direct TEE proof server\npreimage encrypted to enclave key BEFORE send\nserver proves AND broadcasts → Passport awaits confirmation"]
   WASM -. "capability failure (OOM / timeout / params)" .-> R
 ```
 
-Rules carried by the router (all normative in §2.5): attestation is
-verified **before** any preimage leaves the device on both remote variants
-(transitively including the provider's vendor on 2a); in 2b the fee-payer /
-balancing order is an explicit prerequisite ([C24]); and proof provenance —
-where it was proved *and who submitted it* — is surfaced truthfully to the
-user as a first-class pipeline event (§4.3).
+Rules carried by the router (all normative in §2.5): the preimage is
+**encrypted to the prover's enclave key before it leaves the device** on
+both remote variants — the SDK does *not* verify enclave attestation
+(that is the provider's / upstream's responsibility; the SDK trusts the
+enclave key it is given); in 2b the fee-payer / balancing order is an
+explicit prerequisite ([C24]); and proof provenance — where it was proved
+*and who submitted it* — is surfaced truthfully to the user as a
+first-class pipeline event (§4.3).
 
 ### 4.3 Command + state surface
 - **Reads:** an observable projection of ACC state + session (devices,
@@ -236,9 +238,10 @@ the provider-free default always ships.
   worker) for small-k circuits (§2.5).
 - **`adapter-prover-remote`** — the remote-proving client for high-k
   circuits, two modes (§2.5): **provider-routed** (proof returned; Passport
-  balances and broadcasts) and **direct attested-TEE** (the server proves
-  *and broadcasts*; Passport awaits confirmation). Verifies remote
-  attestation **before** sending any preimage in both modes.
+  balances and broadcasts) and **direct TEE** (the server proves *and
+  broadcasts*; Passport awaits confirmation). **Encrypts the preimage to
+  the prover's enclave key before sending** in both modes; enclave
+  attestation is the provider's responsibility, not the adapter's.
 - **`adapter-storage-vendor`** — native vendor-keystore sync adapter (§3.6).
 - **`adapter-storage-shared`** — the shared private-storage provider (#58)
   adapter; also the source for dApp witness provisioning (§3.9).
@@ -617,7 +620,7 @@ flowchart TB
   end
   subgraph ANCHORS["External trust anchors"]
     DYN["Wallet-infra provider — provider trust"]
-    TEE["TEE prover — remote attestation"]
+    TEE["TEE prover — provider-attested; SDK encrypts to its enclave key"]
     VK["Vendor keystore — platform E2E"]
     IDX["Indexer — sees view-key data"]
   end
@@ -625,12 +628,13 @@ flowchart TB
   CAPS -->|"ciphertext, proofs, scoped ops"| ANCHORS
   DAPP -->|"C23: consented, scoped"| KERNEL
   AGENT -->|"policy-gated grant ops"| KERNEL
-  CAPS -->|"attested preimage only"| TEE
+  CAPS -->|"enclave-encrypted preimage only"| TEE
 ```
 
 Each external anchor carries **one explicit trust assumption**: the
 wallet-infra provider is provider-trust; the remote prover is acceptable
-*only* under verified remote attestation (§2.5); the vendor keystore is
+because the preimage is encrypted to its enclave key (§2.5) — the provider
+attests the enclave, the SDK does not; the vendor keystore is
 platform E2E and must not also hold the envelope key (§3.6); the indexer
 sees whatever the view-key discloses ([C17]).
 
@@ -651,7 +655,7 @@ sequenceDiagram
   Kernel->>Kernel: decrypt witness (ephemeral)
   Kernel->>Cmd: unproven tx + witness handle
   Cmd->>Prover: prove(preimage)
-  Note over Prover: route by k — in-tab wasm | provider-routed | attested-TEE (2b: server broadcasts)
+  Note over Prover: route by k — in-tab wasm | provider-routed | TEE encrypt-to-enclave (2b: server broadcasts)
   Prover-->>Cmd: proof
   Cmd->>Chain: submit
   Chain-->>Cmd: confirmed

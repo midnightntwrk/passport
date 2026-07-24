@@ -72,7 +72,7 @@ existing tooling it leans on (we wire, we do not reinvent).
 requirements + architecture: seam/adapter structure, package-dependency rules
 (`connect` never links `core`; deposits ride `contract` — arch §4.4), the
 normative MUSTs (ceremony gate §2.2, deposit-not-address §3.12,
-attestation-before-preimage §2.5), naming, and the two version axes. Its
+encrypt-preimage-to-enclave §2.5), naming, and the two version axes. Its
 checklist is *derived from* `sdk/docs`. Consulted at plan time so the plan
 aligns; enforced at review time so the code does.
 
