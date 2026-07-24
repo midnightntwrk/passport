@@ -236,11 +236,30 @@ verified in the SDK.
 
 Routing inputs remain (a) custody path, (b) circuit k, (c) device
 capability, and (d) privacy posture, with a fallback ladder (in-tab →
-remote on capability failure). The prover actually used MUST be surfaced
-truthfully to the user ("proved in this browser" / "proved in a remote
-enclave" / "proved by the provider") — and in 2b, that the transaction was
-**submitted by the proof server** — proof provenance is a user-facing
-guarantee, not a diagnostic.
+remote), which is **consent-gated, not silent** (see below). The prover
+actually used MUST be surfaced truthfully to the user ("proved in this
+browser" / "proved in a remote enclave" / "proved by the provider") — and
+in 2b, that the transaction was **submitted by the proof server** — proof
+provenance is a user-facing guarantee, not a diagnostic.
+
+**Privacy-downgrade consent (in-tab → remote).** In-tab proving keeps the
+witness on the device; any remote path (2a / 2b) sends it off-device
+(enclave-encrypted, but off-device, and under provider / enclave trust).
+Moving a user from in-tab to a remote prover is therefore a **privacy
+downgrade** and MUST NOT happen silently:
+
+- The SDK MUST capture **explicit, manual user confirmation** before the
+  first switch to a remote prover — including when the fallback ladder
+  would otherwise auto-fall-back on a capability failure (OOM / timeout /
+  missing params). A capability failure *proposes* the switch; it never
+  performs it unattended. The transaction pauses until the user chooses.
+- The confirmation MUST state plainly what changes: the witness leaves the
+  device to the (provider's) enclave, and the trust shifts from
+  "no one but you" to "the provider / enclave".
+- Once a remote prover is active, the SDK MUST **persistently remind** the
+  user of the setup — a standing indicator, not a one-time toast — so the
+  reduced-privacy posture is never silently forgotten, and MUST keep
+  reverting to in-tab (where the device supports it) one tap away.
 
 ### 2.6 The managed path in detail
 

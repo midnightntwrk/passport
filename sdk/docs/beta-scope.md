@@ -45,7 +45,11 @@ regardless of circuit size. The SDK encrypts the witness to that prover's
 enclave (§2.5); the provider returns the proof. The same provider path also
 **sponsors the DUST fees** — including the account-setup transactions (item
 1) — so beta needs no separate fee/sponsor mechanism (Capacity Exchange,
-§3.11, stays out of beta).
+§3.11, stays out of beta). Because beta proves remotely by default (there
+is no in-tab option yet), there is no in-tab → remote switch to consent to;
+instead the reduced-privacy posture (the witness goes to the provider's
+enclave) is disclosed at onboarding and shown as a standing reminder, per
+§2.5.
 
 **(4) dApp connect — sign-in + profile read only** — the connector (§3.9)
 implements **Sign-In-with-Passport** and returns the user's **profile: the

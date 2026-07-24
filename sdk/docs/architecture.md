@@ -148,7 +148,7 @@ flowchart TB
   K -- no --> R{"remote variant"}
   R --> PROV["2a · provider-routed\nwallet-infra provider → its proving vendor\nproof returned → Passport balances + broadcasts"]
   R --> TEE["2b · direct TEE proof server\npreimage encrypted to enclave key BEFORE send\nserver proves AND broadcasts → Passport awaits confirmation"]
-  WASM -. "capability failure (OOM / timeout / params)" .-> R
+  WASM -. "capability failure → PROPOSE remote (manual consent)" .-> R
 ```
 
 Rules carried by the router (all normative in §2.5): the preimage is
@@ -156,9 +156,13 @@ Rules carried by the router (all normative in §2.5): the preimage is
 both remote variants — the SDK does *not* verify enclave attestation
 (that is the provider's / upstream's responsibility; the SDK trusts the
 enclave key it is given); in 2b the fee-payer / balancing order is an
-explicit prerequisite ([C24]); and proof provenance — where it was proved
+explicit prerequisite ([C24]); proof provenance — where it was proved
 *and who submitted it* — is surfaced truthfully to the user as a
-first-class pipeline event (§4.3).
+first-class pipeline event (§4.3); and **the in-tab → remote fallback is
+consent-gated** — a capability failure *proposes* the remote prover and the
+transaction pauses for explicit user confirmation (moving off-device is a
+privacy downgrade, §2.5), after which the SDK shows a standing reminder that
+remote proving is active.
 
 ### 4.3 Command + state surface
 - **Reads:** an observable projection of ACC state + session (devices,
