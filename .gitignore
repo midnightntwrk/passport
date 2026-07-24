@@ -36,3 +36,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Local, not shared
+.midnight-expert/
