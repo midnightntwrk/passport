@@ -356,6 +356,242 @@ backup exists** — which is why its backup is mandatory, not a floor.
 Provider compromise ≠ disclosure (ciphertext only); device theft ≠
 disclosure (needs the ceremony).
 
+### 4.6 Library composition — container view and worked examples
+
+§4.4's graph shows *dependency edges*; this shows the same packages as a
+**layered stack** (what sits on what), then works through concrete tasks so
+the composition is visible.
+
+> **Illustrative API.** The snippets below are indicative shapes to show
+> which library does what and how they compose — signatures are **not**
+> fixed and will be set when the packages are specced.
+
+**Container view.** Top tier calls down; nothing calls up. An adapter fills
+a `core` seam; `connect` is deliberately off to the side, reaching only the
+foundation packages (never `core`).
+
+```mermaid
+flowchart TB
+  subgraph T0["Consumers"]
+    UI["Official UI · CLI"]
+    AGENT["AI agent runtime"]
+    DAPP["Partner dApp"]
+  end
+  subgraph T1["Entry libraries"]
+    CORE["mn-passport-core — kernel + flows + seams (wallet / agent side)"]
+    CONNECT["mn-passport-connect — thin (dApp side)"]
+  end
+  subgraph T2["Adapters — fill core's seams"]
+    SIGN["adapter-signer-*"]
+    PROVE["adapter-prover-*"]
+    STORE["adapter-storage-*"]
+    FEE["adapter-fee-capacity-exchange"]
+    AGT["adapter-agent-ows"]
+    WC["adapter-wallet-connect"]
+  end
+  subgraph T3["Foundation"]
+    CONTRACT["mn-passport-contract — typed ACC bindings"]
+    PROTO["mn-passport-protocol — C23 types"]
+  end
+  subgraph T4["External / ecosystem"]
+    MJS["midnight-js + ledger"]
+    WASM["zkir-v2 wasm"]
+    PROV["wallet-infra provider · remote prover"]
+    DCA["dapp-connector-api"]
+  end
+  CHAIN["Midnight chain / the user's ACC"]
+
+  UI --> CORE
+  AGENT --> CORE
+  DAPP --> CONNECT
+  CORE --> T2
+  CORE --> CONTRACT
+  CORE --> PROTO
+  CONNECT --> PROTO
+  CONNECT --> CONTRACT
+  CONNECT -. "C23 over the wire" .-> CORE
+  SIGN --> PROV
+  PROVE --> WASM
+  PROVE --> PROV
+  FEE --> PROV
+  WC --> DCA
+  CORE --> MJS
+  CONTRACT --> MJS
+  MJS --> CHAIN
+```
+
+#### Example 1 — Onboarding (wallet side): deploy the ACC, claim the name
+
+Libraries: `core` (orchestrates the flow + ceremony), `adapter-signer-local`
+(device authoriser), `adapter-prover-wasm` (proof), `mn-passport-contract`
+(ACC bindings, under `core`).
+
+```ts
+import { Passport }      from '@midnight-ntwrk/mn-passport-core';
+import { passkeySigner } from '@midnight-ntwrk/mn-passport-adapter-signer-local';
+import { wasmProver }    from '@midnight-ntwrk/mn-passport-adapter-prover-wasm';
+
+const passport = await Passport.create({
+  signer: passkeySigner(),   // WebAuthn PRF → in-circuit Jubjub (§2.1 decentralised)
+  prover: wasmProver(),      // in-tab, low-k (§2.5)
+  // storage / indexer / fees: provider-free defaults unless overridden
+});
+
+const account = await passport.onboard({ name: 'alice' });  // → alice.passport.night
+```
+
+Who did what: `core` runs the single onboarding ceremony; `signer` derives
+the device authoriser; `prover` proves the deploy in-tab; `mn-passport-contract`
+(inside `core`) shapes the ACC `deploy` call; `core` then claims the name via
+the C2 name service. **Progressive decentralisation is one line:** swap
+`signer: providerSigner(providerWallet)` (§2.6) for the managed path —
+same flow, same ACC.
+
+#### Example 2 — dApp side: sign in + request a scoped grant (two-sided split)
+
+Libraries: `mn-passport-connect` + `mn-passport-protocol` on the dApp side;
+they meet the user's `core` (`adapter-dapp-connection`) only over C23.
+
+```ts
+// in a partner dApp — installs ONLY the thin connector, never core
+import { connectPassport } from '@midnight-ntwrk/mn-passport-connect';
+
+const session = await connectPassport.signIn();        // Sign-In-with-Passport (C23); no keys cross
+const grant   = await connectPassport.requestGrant({   // scoped grant (C10/C11)
+  operation: 'withdraw', token: NIGHT, cap: 100n,
+});
+```
+
+Who did what: `connect` speaks the dApp end of C23 using `protocol` types; the
+user's `core` (wallet side) shows the consent ceremony (§2.2) and writes the
+grant to the ACC, which enforces it on-chain (C12). `connect` and `core` share
+no code — only the `protocol` contract over the wire.
+
+#### Example 3 — Pay a Passport account: the deposit (§3.12), `connect` + `contract`, no `core`
+
+Libraries: `mn-passport-connect` (exposes the deposit function),
+`mn-passport-contract` (deposit-circuit bindings + ZK assets).
+
+```ts
+import { depositTo } from '@midnight-ntwrk/mn-passport-connect';
+
+// resolve alice.passport.night → her ACC, call the deposit circuit;
+// proven, balanced and fee-paid by the SENDER's own wallet
+const { txId } = await depositTo('alice.passport.night', { token: NIGHT, amount: 25n });
+```
+
+Who did what: `connect` resolves the name (C2) and drives the deposit;
+`mn-passport-contract` supplies the deposit-circuit bindings. `core` is **not**
+imported — this is the live proof of the "connector links `protocol` +
+`contract`, never the kernel" rule (§4.4).
+
+#### Example 4 — Zero-DUST (sponsored) contract call: adapter composition in the pipeline
+
+Libraries: `core` (build + authorise + submit), `adapter-fee-capacity-exchange`
+(sponsor), `adapter-prover-*` (proof).
+
+```ts
+import { Passport }            from '@midnight-ntwrk/mn-passport-core';
+import { capacityExchangeFees } from '@midnight-ntwrk/mn-passport-adapter-fee-capacity-exchange';
+
+const passport = await Passport.create({ /* signer, prover, */ fees: capacityExchangeFees() });
+
+// user holds zero DUST — the fee adapter fetches LP quotes (pure API),
+// composes the sponsor's DUST-supplying partial tx, then the call proceeds
+await passport.account.grantWithdraw({ token: NIGHT, amount: 10n, to: recipient });
+```
+
+Who did what: `core` builds and authorises the call (device-secret witness,
+ceremony); `adapter-fee-capacity-exchange` fetches LP quotes and composes the
+partial transaction (§3.11); `adapter-prover-*` proves it; `core` balances with
+the sponsor leg and submits. Same `grantWithdraw` call whether fees come from
+the user's DUST or a sponsor — the adapter is invisible to the flow.
+
+#### Example 5 — The `protocol` library: one wire-contract, both sides type-checked
+
+`protocol` has **no runtime** — it is *only* the shared message types both
+ends of the C23 conversation compile against. That is exactly why it is hard
+to picture: you never call it, you import types from it. Concretely, a grant
+request:
+
+```ts
+// ── @midnight-ntwrk/mn-passport-protocol ──  types + constants only, zero logic
+export const PROTOCOL_VERSION = 1;
+export interface GrantRequest {
+  version:   typeof PROTOCOL_VERSION;
+  operation: 'withdraw' | 'transfer';
+  token:     TokenId;
+  cap:       bigint;
+  expiresAt: number;
+}
+export interface GrantResponse { granted: boolean; grantId?: string }
+```
+
+```ts
+// ── dApp side (mn-passport-connect) BUILDS the request ──
+import { PROTOCOL_VERSION, type GrantRequest } from '@midnight-ntwrk/mn-passport-protocol';
+
+const req: GrantRequest = {                 // ← type-checked against the shared shape
+  version: PROTOCOL_VERSION,
+  operation: 'withdraw', token: NIGHT, cap: 100n,
+  expiresAt: Date.now() + 3_600_000,
+};
+transport.send(req);                        // over the wire (postMessage / EIP-6963 channel)
+```
+
+```ts
+// ── wallet side (inside mn-passport-core) HANDLES it ──
+import { type GrantRequest, type GrantResponse } from '@midnight-ntwrk/mn-passport-protocol';
+
+async function onGrantRequest(msg: GrantRequest): Promise<GrantResponse> {
+  // msg is the SAME type the dApp built — validate, ceremony-gate (§2.2), write to the ACC
+}
+```
+
+Why it earns its own library — the part a diagram can't show:
+
+- **Both sides import `GrantRequest` from `protocol`; neither imports the
+  other.** Change the shape in `protocol` (say `cap` becomes
+  `{ token; amount }`) and **typecheck breaks on the dApp builder and the
+  wallet handler at the same time** — they cannot silently drift apart. That
+  lockstep *is* the job.
+- **It is what lets `connect` stay `core`-free.** The only thing the thin
+  dApp package and the wallet share is these types. If they lived in `core`,
+  `connect` would have to depend on `core` — dragging the kernel into every
+  dApp bundle (§4.4). A logic-free shared package is what makes the trust
+  boundary enforceable rather than aspirational.
+- **No logic means no trust surface.** `protocol` ships types plus constants
+  (version, error codes, topic names) and nothing executable — importing it
+  on either side adds a *contract*, not attack surface.
+
+Mental model: it is the `.proto` / OpenAPI schema of the wallet↔dApp
+conversation — the shared definition two independent parties agree on, owned
+by neither. (Per §4.4 it likely *extends* Midnight's `dapp-connector-api`
+types with the Passport-specific messages, and may ship as a module rather
+than a standalone package at v1.)
+
+**Two version axes — do not conflate them.** `protocol` versioning is *not*
+the SDK↔contract compatibility; they are independent:
+
+| Axis | Between | Owned by |
+|---|---|---|
+| **Wire** | the dApp's connector and the user's wallet (off-chain C23 messages) | `mn-passport-protocol` (`PROTOCOL_VERSION`) |
+| **Binding** | the SDK's contract bindings and the deployed ACC (on-chain circuit shape) | `mn-passport-contract` (§8.2 compatibility contract) |
+
+A dApp built last quarter (`connect@1.2`, protocol v1) can hit a
+freshly-updated wallet (`core@1.9`, protocol v2) — the *wire* axis, which
+`protocol` negotiates because the two parties upgrade independently.
+Separately, that wallet's SDK 1.54 carries `mn-passport-contract` bindings
+for on-chain ACC v1.20 and guards the match at connect time (§8.2) — the
+*binding* axis. "Contract v1.20 with SDK 1.54" is the binding axis;
+`protocol` never sees it.
+
+Across the five: (1) wallet-side orchestration with adapters injected, (2) the
+cross-boundary two-sided split, (3) a thin-package chain call that never touches
+`core`, (4) adapter composition inside the write pipeline, and (5) the shared
+wire-contract that keeps the two sides of the split in lockstep without either
+depending on the other.
+
 ## 5. Security architecture
 
 The user's concern with the prototype was security; this is the layer that
