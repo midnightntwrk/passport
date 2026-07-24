@@ -245,8 +245,9 @@ the provider-free default always ships.
 - **`adapter-recovery`** — guardian + paper-key total-loss recovery
   (§3.4, [C14]/[C15]).
 - **`adapter-did`** — `did:midnight` create / resolve (§3.7).
-- **`adapter-agent-ows`** — the OWS-compatible `ChainSigner` / policy surface
-  over the grant primitive (§3.8).
+- **`adapter-agent-ows`** — wraps WingRiders' `ows-core` (its Midnight
+  plugin) and maps OWS agent access onto Passport scoped grants; the agent's
+  "key" is a grant authoriser on the ACC, never the account key (§3.8).
 - **`adapter-dapp-connection`** — the wallet side of C23: answers discovery,
   Sign-In-with-Passport, and scoped-grant requests (§3.2).
 - **`adapter-wallet-connect`** — the wallet-connector **client**: Passport
@@ -331,10 +332,12 @@ such as staged ZK params). It holds only **ciphertext**: each entry is
 data key is wrapped by a **ceremony-derived** key (passkey PRF, or password
 KDF); plaintext and the wrapping key materialise only transiently inside
 the kernel after a §2.2 ceremony. So device theft or an IndexedDB read
-(XSS, extracted backup) yields ciphertext only — and the wrapping key MUST
-be independent of any channel the backup also uses (the §3.6 lock-and-key
-rule: passkey PRF that syncs to the same vendor cloud as the ciphertext
-hands the vendor lock and key together).
+(XSS, extracted backup) yields ciphertext only. **Decided:** the wrapping
+key is the **passkey (PRF)**, falling back to a **password (KDF)** on
+devices without passkey/PRF support (§2.2). Residual lock+key risk — passkey
+and ciphertext in the same vendor cloud — is mitigated by routing the backup
+copy through the portable #58 provider rather than the vendor keystore
+(§3.6); any remaining exposure is an accepted risk in the security register.
 
 **3. Backup — mandatory and redundant for the irreplaceable tier.**
 IndexedDB is an evictable cache that mobile browsers do not replicate across
@@ -675,7 +678,7 @@ policy-engine check against a standing grant instead of a human ceremony
 | Multi-device (§3.5) | Kernel grant registry + signer seam |
 | Storage / sync (§3.6) | Storage/sync seam + kernel envelope |
 | DID (§3.7) | DID seam |
-| Agents / OWS (§3.8) | Agent seam (OWS `ChainSigner`/policy over the grant primitive) |
+| Agents / OWS (§3.8) | `adapter-agent-ows` wrapping WingRiders `ows-core`, mapped to ACC scoped grants |
 | dApp connector (§3.9) | `@midnight-ntwrk/mn-passport-connect` package |
 | External wallets (§3.10) | `adapter-wallet-connect` + §2.3 binding (kernel) |
 | DUST sponsorship (§3.11) | Fee seam (`adapter-fee-capacity-exchange`); the balance stage of the command pipeline |
@@ -719,10 +722,14 @@ single swap-point where hash-preimage gives way to Jubjub Schnorr and the
    cross-chain ([C25]). Fee/sponsor ([C24]) was stub-leaning, but §3.11
    (Capacity Exchange) is now a named requirement — whether
    `adapter-fee-capacity-exchange` is real at v1 tracks the upstream launch.
-4. **Agent seam [open].** *Lean:* **implement** an OWS-compatible
-   `ChainSigner`/policy surface over the grant primitive (grant authoriser
-   = the OWS-managed key) rather than **consume** `ows-core`'s key/vault
-   model, keeping the ACC the seat of truth.
+4. **Agent seam — decided: consume WingRiders `ows-core`.** Adopt
+   `ows-core` (its Midnight plugin) as the OWS implementation rather than
+   reimplement it; `adapter-agent-ows` wraps it and maps OWS agent access
+   onto Passport **scoped grants** (§3.8). Reconciliation with
+   contract-custody: the "key" OWS manages for an agent is a **grant
+   authoriser** on the ACC (a lesser, scoped, revocable key), so the ACC
+   stays the seat of authority and the agent never holds the account key.
+   `ows-core` is tracked as an upstream dependency (currency + cooldown).
 5. **Mobile web storage & persistence [open question — verify].** The UI
    targets mobile browser / installed PWA. Current-knowledge findings (to
    re-verify against current iOS/Android): there is **no arbitrary

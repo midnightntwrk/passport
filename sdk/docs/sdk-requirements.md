@@ -383,13 +383,17 @@ shared chain-derived view"). Four normative rules:
   re-derivable is never synced: the device authoriser key is re-derived
   from the passkey PRF (§2.1) and chain-visible state is rebuilt from the
   view-key / indexer ([C17]). This is what keeps the blob at a few KB.
-- **Encrypt before sync, under a key the sync channel does not hold.** The
-  blob is sealed under the ceremony envelope (§2.2) before it leaves the
-  device; the transport sees ciphertext only. Critically, the envelope key
-  MUST be independent of any secret that channel already holds — if the
-  passkey both derives the envelope key *and* syncs through the same vendor
-  account, the vendor holds lock and key together and the end-to-end
-  property collapses.
+- **Encrypt before sync.** The blob is sealed under the **ceremony
+  envelope** (§2.2) before it leaves the device. **Decided: the envelope
+  key is the passkey (PRF); on devices without passkey/PRF support it falls
+  back to a password (KDF).** The transport sees ciphertext only. Residual
+  risk: the passkey syncs through the user's vendor account, so backing the
+  ciphertext up to that *same* vendor cloud would hand the vendor lock and
+  key together. **Mitigation:** route the backup copy through the portable
+  #58 shared provider (Passport-mediated), not the vendor keystore, so the
+  vendor holding the passkey never also holds the ciphertext. Where the
+  native vendor-keystore backup path is used regardless, the residual
+  lock+key exposure is an accepted risk (security register).
 - **Vendor keystore is one adapter, not the mechanism.** Device-vendor sync
   (Apple Keychain synchronizable items / iCloud Keychain; Android Block
   Store or Keystore-backed backup) is attractive — no Passport-operated
@@ -431,6 +435,45 @@ the reference implementation of the **`did:midnight`** method ([C3]):
 Open (tracked in [C3]): the exact relationship between
 `alice.passport.night`, the ACC address, and the `did:midnight` identifier
 — alias vs distinct-layer.
+
+### 3.8 Agent access and management (OWS)
+
+The SDK is the entry point for AI agents the user provisions and manages
+from their Passport account, aligned with the **Open Wallet Standard
+(OWS)** — the standard for local wallet storage, delegated agent access,
+and policy-gated signing (agents act **without ever seeing a plaintext
+key**, gated by a pre-signing policy engine).
+
+**Decided: adopt WingRiders' `ows-core` as the OWS implementation** (its
+Midnight plugin) rather than reimplement OWS. Passport's
+`adapter-agent-ows` **wraps `ows-core`** and maps the OWS agent model onto
+Passport's own authority model:
+
+- An agent the user provisions **is an OWS credential bound to a scoped
+  grant on the ACC** ([C10]/[C11]). `ows-core` supplies the agent-facing
+  surface and the pre-signing policy engine; Passport's **scoped grants are
+  the on-chain authority**, enforced by the ACC ([C12]). Issue, scope,
+  monitor, and revoke through the grant lifecycle — the same primitive that
+  backs dApp connections, for a non-human principal.
+- **Two enforcement layers:** the OWS policy engine gates the operation
+  client-side *before* key use; the ACC verifier rejects out-of-scope
+  operations on-chain regardless of the client.
+- **Keys / witness never reach the agent or its LLM context.** The agent
+  holds a policy-gated handle to a **grant authoriser** — a lesser, scoped,
+  revocable key — never the device/account key. This is the reconciliation
+  between `ows-core`'s key/vault model and ACC contract-custody: the "key"
+  OWS manages for an agent is a Passport grant authoriser, not the ACC key,
+  so the ACC stays the seat of authority.
+- **Presence vs delegation.** The §2.2 per-transaction ceremony is the
+  *human-presence* gate; an autonomous agent cannot perform it — that is
+  the point of delegation. The agent path substitutes **policy-gated
+  authority within a scoped grant** for human presence: the grant is issued
+  once under a ceremony, and the OWS policy engine plus on-chain scope bound
+  every subsequent agent action. This is the one exception to the
+  per-transaction ceremony rule.
+- Relates to [C26] (AI agent skills); OWS ships an MCP server that consumes
+  this surface and runs in a Node context (no passkey ceremony — hence
+  policy-gated). `ows-core` is consumed as an upstream dependency.
 
 ### 3.9 dApp connector (developer-facing)
 
