@@ -3,8 +3,9 @@
 > **Scope of this document.** High-level requirements and design
 > principles — the *what* and *why* of the SDK. Detailed component specs,
 > architecture, and diagrams live in sibling docs under `sdk/docs/`:
-> [`architecture.md`](./architecture.md) (the *how*) and
-> [`development-workflow.md`](./development-workflow.md) (how we build it).
+> [`architecture.md`](./architecture.md) (the *how*),
+> [`development-workflow.md`](./development-workflow.md) (how we build it),
+> and [`beta-scope.md`](./beta-scope.md) (the reduced first version).
 
 > **Status:** draft · 2026/07/17
 > **Audience:** Passport prototype team, Midnight Foundation, partner wallet

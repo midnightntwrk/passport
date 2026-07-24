@@ -3,9 +3,10 @@
 > **Status:** draft · 2026/07/20
 > **Companion to:** [`sdk-requirements.md`](./sdk-requirements.md) (the
 > *what/why*) and [`development-workflow.md`](./development-workflow.md)
-> (how we build it). Requirement references (§) point to the requirements
-> doc; component references (`[C…]`) and promises (`[P…]`) point to
-> [`../../docs/plans`](../../docs/plans).
+> (how we build it); the reduced first cut is
+> [`beta-scope.md`](./beta-scope.md). Requirement references (§) point to the
+> requirements doc; component references (`[C…]`) and promises (`[P…]`) point
+> to [`../../docs/plans`](../../docs/plans).
 > **Purpose:** lay out candidate architectures for the SDK, recommend one,
 > and map every requirement onto it. Decisions still open are marked
 > **[open]** with a stated lean.
