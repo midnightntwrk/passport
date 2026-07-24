@@ -16,7 +16,7 @@ build alone is not live proof.
 | Unshielded transfer | Explicit `createTransferTransaction` -> `signTransaction` -> `submitTransaction` with `type: 'unshielded'` | Confirmed transaction hash | Funded wallet/DUST required |
 | Shielded transfer | Explicit `createTransferTransaction` -> `signTransaction` -> `submitTransaction` with `type: 'shielded'` | Confirmed transaction hash | Funded wallet/DUST required |
 | Pending cleanup | `wallet.revertAllPending()` | Abandoned transfer can be reverted | Funded wallet/DUST required |
-| Passport C1 testnet deployment | Passport builds a real unsigned Compact deployment from the Dynamic wallet's shielded public keys, then calls `signTransaction` and `submitTransaction` | User-authorized Dynamic signer result, returned transaction hash, and on-chain contract verification | Ready for live testnet validation |
+| Passport C1 testnet deployment | Passport builds a real Compact deployment draft, then requires `getMidnightProofCapabilities()` and `proveMidnightTransaction()` before exact-byte approval and submission | Compatible capability response, bound approval receipt, returned transaction hash, and on-chain contract verification | Externally blocked in Dynamic 4.93.1 |
 
 ## Required dashboard setup
 
@@ -29,6 +29,6 @@ The application must report the exact failed operation and environment rather
 than converting an unavailable wallet or rate-limit response into an empty
 wallet state.
 
-The C1 integration is deliberately testnet-only. Its current pilot contract
-owns device membership and permission records, not custody, recovery, aliasing,
-or cross-contract settlement.
+The transfer-only `signTransaction` method is never used as a fallback for C1,
+and a Dynamic message signature is never treated as a Compact proof. The C1
+preview integration is deliberately testnet-only.

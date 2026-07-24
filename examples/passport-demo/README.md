@@ -1,16 +1,19 @@
 # Midnight Passport demo
 
-This is a testnet-only Passport client pilot. It combines the supported Dynamic
-embedded Midnight-wallet flow with a narrow Passport C1 account-management
-contract and Passport's encrypted private-state boundary.
+This Passport client combines the supported Dynamic embedded Midnight-wallet
+flow with a narrow Passport C1 account-management contract and Passport's
+encrypted private-state boundary. It has a real disposable-localnet mode for
+the complete contract flow and a fail-closed Dynamic Preview capability probe.
 
 ```sh
 npm install
 npm run demo
 ```
 
-Open `http://localhost:5175`. The configured Sandbox environment authorizes
-this exact local origin; do not substitute `127.0.0.1` during live testing.
+Open `http://localhost:5175/?demoMode=local` for the complete local contract
+flow, or `http://localhost:5175` for Dynamic Preview validation. The configured
+Sandbox environment authorizes this exact local origin; do not substitute
+`127.0.0.1` during live testing.
 
 Set `VITE_DYNAMIC_ENVIRONMENT_ID` in `examples/passport-demo/.env.local` before
 starting the demo. The file is local-only and ignored by Git.
@@ -60,19 +63,25 @@ current upstream dependency-audit and Compact-proof blockers.
 - Passport private state is encrypted in IndexedDB using an AES-GCM key derived
   from a WebAuthn PRF output. The decrypted state exists only during the
   explicit unlock operation.
-- **Deploy Passport** builds a real Compact C1 deployment from the connected
-  wallet's shielded public keys, asks Dynamic to sign and prove the unsigned
-  transaction, then submits it through Dynamic. A Passport profile is recorded
-  only when Dynamic returns a real transaction hash.
-- The C1 pilot is intentionally narrow: initial device membership and
-  permission records only. It has no asset custody, recovery shares, wallet
-  seed, fixture wallet, alias claim, or Sig.Network route.
+- In `demoMode=local`, **Deploy Passport** submits the real C1 contract through
+  the isolated fixture fee wallet, registers its Night ID, and enables
+  unshielded NIGHT custody, shielded test-note custody, and scoped permission
+  transactions. Each completed action exposes its returned localnet hash.
+- On Dynamic Preview, **Deploy Passport** builds the real Compact draft but
+  submits only if the connector exposes an explicit arbitrary-Compact proof
+  capability. Dynamic 4.93.1 currently fails this capability check before
+  proving; transfer-only `signTransaction` and detached message signatures are
+  never used as fallbacks.
+- The local C1 fixture wallet cannot be selected outside `?demoMode=local`.
+  Sig.Network remains behind the typed five-stage readiness boundary until its
+  runtime and deployment dependencies are compatible.
 
 ## Validation boundary
 
-- The C1 draft is compiled and tested locally. The remote Dynamic sign/prove/
-  submit step is only marked passed after a user-authorized testnet deployment
-  returns a transaction hash and is independently confirmed on-chain.
+- The C1 draft is compiled and tested locally. The remote Dynamic
+  prove/approve/submit step is only marked passed after a user-authorized
+  testnet deployment returns a transaction hash and is independently confirmed
+  on-chain.
 - Mainnet deployment is hard-blocked in code. This pilot must remain on the
   Dynamic Midnight testnet until the artifact, fee model, recovery design, and
   operational review are approved.

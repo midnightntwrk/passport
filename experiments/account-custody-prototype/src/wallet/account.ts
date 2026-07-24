@@ -37,6 +37,7 @@ export class PassportAccount {
     readonly address: string,
     readonly providers: any,
     private readonly handle: any,
+    readonly deploymentTxId?: string,
   ) {}
 
   /**
@@ -67,7 +68,12 @@ export class PassportAccount {
       ],
     } as any);
     const address = deployed.deployTxData.public.contractAddress;
-    return new PassportAccount(address, providers, deployed);
+    const deploymentPublic = deployed.deployTxData.public as {
+      txId?: string;
+      transactionHash?: string;
+    };
+    const deploymentTxId = deploymentPublic.txId ?? deploymentPublic.transactionHash ?? address;
+    return new PassportAccount(address, providers, deployed, String(deploymentTxId));
   }
 
   /**

@@ -45,7 +45,7 @@ function dynamicWaasShieldedKeys(wallet: MidnightWallet): {
 } {
   const connector = wallet.connector as MidnightWalletConnector;
   if (connector.overrideKey !== 'dynamicwaas') {
-    throw new Error('Passport C1 deployment currently requires a Dynamic embedded Midnight wallet. External Midnight wallets do not expose the compatible custom-transaction signer.');
+    throw new Error('Passport C1 deployment currently requires a Dynamic embedded Midnight wallet. External Midnight wallets do not expose the required arbitrary Compact proof capability.');
   }
   const encodedAddress = wallet.additionalAddresses.find((address) => address.type === 'midnight_shielded')?.address;
   if (!encodedAddress) {

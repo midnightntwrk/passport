@@ -25,6 +25,7 @@ validation, and reliable foreground-only handling of long proof operations.
 | Offline behavior | Implemented | Navigation falls back to a dedicated offline screen. Auth, wallet sync, proofs, and transactions are explicitly network-only and are never queued. |
 | Install/update UX | Implemented | Chromium install prompt is exposed when available; a waiting worker requires an explicit update action. iOS relies on system Add to Home Screen. |
 | Private state | Existing and tested | AES-GCM envelope in IndexedDB; PRF-derived non-exportable key and plaintext exist in memory only. |
+| Separate-app profile request | Implemented | A second origin opens Passport, requests an allowlisted field set with a nonce, receives explicit user consent, and gets only the approved public DTO through an exact-origin `postMessage` response. |
 | Storage durability | Partially implemented | Passport key setup requests `navigator.storage.persist()`. Browser approval is not guaranteed and explicit site-data deletion still wins. |
 | Dynamic C1 deployment | Externally blocked | Dynamic's public Midnight API supports wallet transfers, but does not currently expose the arbitrary Compact `UnboundTransaction` proof/finalization boundary required by Passport C1. See issue #101. |
 | Dependency audit | Externally blocked | `npm audit --omit=dev` on Dynamic 4.93.1 reports 20 transitive production-tree advisories (14 moderate, 6 high). npm only offers forced Dynamic downgrades that predate the required WaaS integration. |
@@ -71,6 +72,29 @@ and [`StorageManager.persist()`](https://developer.mozilla.org/en-US/docs/Web/AP
 
 **Production gate:** define a recovery and encrypted-backup design before the
 PWA can be the only client. Recovery must not depend on plaintext witness export.
+
+### Separate-application profile sharing
+
+Another web origin cannot read Passport IndexedDB or local storage directly.
+The prototype therefore uses a user-mediated opener protocol:
+
+1. the external app opens Passport and waits for a ready message;
+2. it sends an allowlisted field request with a request ID and nonce;
+3. Passport validates the exact `event.source`, records the requesting origin,
+   and shows field-level consent;
+4. Passport returns only the approved public DTO to that exact origin.
+
+The protocol never shares the Dynamic subject ID, passkey credential reference,
+PRF material, encrypted envelope, decrypted witness, or grant secret. The
+reference consumer is `examples/passport-profile-client`; the protocol schemas
+and parsers live in `sdk/src/profile.ts`.
+
+This works while both applications are open, including from cached shells. It
+does not bypass browser origin isolation and it is not the private-storage
+provider feature. Production still requires request expiry, one-time nonce
+tracking across reloads, a reviewed relying-party allowlist, and browser E2E
+coverage for denial, popup closure, malformed input, replay, and hostile
+origins.
 
 ### WebAuthn, PRF, and passkeys
 

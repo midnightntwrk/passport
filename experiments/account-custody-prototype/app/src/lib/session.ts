@@ -1,8 +1,7 @@
-// LocalStorage persistence of the user's demo session. Passkey sessions
-// re-derive the device secret from WebAuthn PRF. Dynamic sessions remember
-// the demo device secret in a separate wallet-keyed local record after the
-// user authorizes creation with the Dynamic Midnight wallet. The recovery
-// secret only ever exists transiently (and as on-chain shares — TODO(PVSS)).
+// LocalStorage persistence of non-secret demo session metadata. Passport
+// sessions re-derive the device secret from WebAuthn PRF; neither the PRF
+// result nor any recovery secret is written here. Dynamic wallet ids are
+// correlation metadata only and never act as Passport contract authority.
 
 import type { PasskeyRef } from './passkey.js';
 

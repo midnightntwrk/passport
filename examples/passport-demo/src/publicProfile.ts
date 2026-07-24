@@ -19,9 +19,12 @@ export interface DemoPassportProfile {
     address: string;
     deployedAt: string;
     txHash: string;
-    network: 'preview';
+    network: 'preview' | 'undeployed';
     status: 'submitted' | 'confirmed';
-    artifact: 'passport-c1-pilot-v1';
+    artifact: 'passport-c1-pilot-v1' | 'account-custody-prototype-v1';
+    identityRegistryAddress?: string;
+    identityTxHash?: string;
+    alias?: string;
   };
 }
 

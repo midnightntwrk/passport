@@ -13,10 +13,12 @@ import {
   LoaderCircle,
   LogOut,
   LockKeyhole,
+  Plus,
   RefreshCw,
   RotateCcw,
   Send,
   ShieldCheck,
+  ShieldOff,
   Sparkles,
   WalletCards,
   X,
@@ -36,8 +38,9 @@ import {
   initialDynamicSurfaceState,
   refreshDynamicAddresses,
   refreshDynamicBalances,
-  signDynamicTransaction,
-  submitDynamicTransaction,
+  authorizeAndSubmitDynamicCompactTransaction,
+  signDynamicTransferTransaction,
+  submitDynamicTransferTransaction,
   type DynamicSurfaceState,
 } from './dynamic.js';
 import {
@@ -45,15 +48,51 @@ import {
   createPassportC1MaintenanceSigningKey,
   type PassportC1DeploymentDraft,
 } from './c1.js';
+import {
+  LOCAL_C1_ARTIFACT,
+  LOCAL_C1_NETWORK,
+  LocalCustodyPendingError,
+  addLocalPassportPermission,
+  depositLocalPassportNight,
+  deployLocalPassportContract,
+  loadLocalPassportCustody,
+  loadLocalPassportPermissions,
+  localPassportGrantCommitment,
+  localPassportMode,
+  mintAndDepositLocalPassportShielded,
+  registerLocalPassportIdentity,
+  revokeLocalPassportPermission,
+  withdrawLocalPassportNight,
+  withdrawLocalPassportShielded,
+  type LocalPassportCustody,
+  type LocalPassportPermission,
+} from './localC1.js';
 import { requestPassportStoragePersistence } from './pwa.js';
 import { deleteDemoProfile, loadDemoProfile, saveDemoProfile, type DemoPassportProfile } from './publicProfile.js';
+import { PassportProfileConsent } from './profileConsent.js';
 
 type ActivityStatus = 'pending' | 'complete' | 'blocked' | 'error';
 type TransferPool = 'unshielded' | 'shielded';
-type WorkspaceTab = 'assets' | 'permissions';
+type WorkspaceTab = 'assets' | 'permissions' | 'connections';
 type AddressKind = 'unshielded' | 'shielded' | 'dust';
 type ActivationState = 'waiting' | 'ready' | 'active' | 'complete';
-type BusyAction = 'passport-key' | 'passport-unlock' | 'message' | 'dust' | 'transfer' | 'recovery' | 'passport-deploy';
+type BusyAction =
+  | 'passport-key'
+  | 'passport-unlock'
+  | 'message'
+  | 'dust'
+  | 'transfer'
+  | 'recovery'
+  | 'passport-deploy'
+  | 'identity-register'
+  | 'permission-read'
+  | 'permission-add'
+  | 'permission-revoke'
+  | 'custody-read'
+  | 'custody-night-deposit'
+  | 'custody-night-withdraw'
+  | 'custody-shielded-deposit'
+  | 'custody-shielded-withdraw';
 type ProfileStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
 type ActivitySource = 'local' | 'wallet' | 'chain';
 
@@ -81,15 +120,25 @@ interface PassportC1PrivateRecord {
   artifact: 'passport-c1-pilot-v1';
   preparedAt: string;
   serializedTransaction?: string;
-  finalizedTransaction?: string;
+}
+
+interface PassportPermissionPrivateRecord {
+  commitment: string;
+  label: string;
+  grantSecret: Uint8Array;
+  createdAt: string;
 }
 
 interface PassportDemoState {
   deviceSecret: Uint8Array;
+  recoverySecret?: Uint8Array;
   createdAt: string;
-  schema: 1 | 2 | 3;
+  schema: 1 | 2 | 3 | 4;
   c1?: PassportC1PrivateRecord;
+  permissions?: PassportPermissionPrivateRecord[];
 }
+
+type DisplayPermission = LocalPassportPermission & { label: string };
 
 const APP_ID = 'org.midnight.passport.demo';
 const MIDNIGHT_EXPLORER_URL = 'https://explorer.preview.midnight.network';
@@ -104,6 +153,13 @@ function bytesToHex(bytes: Uint8Array): string {
   let hex = '';
   for (const byte of bytes) hex += byte.toString(16).padStart(2, '0');
   return hex;
+}
+
+function positiveAtomicAmount(value: string, label: string): bigint {
+  if (!/^\d+$/.test(value) || BigInt(value) <= 0n) {
+    throw new Error(`${label} must be a positive atomic amount.`);
+  }
+  return BigInt(value);
 }
 
 function subjectFor(wallet: MidnightWallet | null, user: unknown): string {
@@ -307,9 +363,11 @@ function AddressPickerModal({ choices, onClose }: { choices: AddressChoice[]; on
 }
 
 function PassportSetupModal({
+  localMode,
   onContinue,
   onClose,
 }: {
+  localMode: boolean;
   onContinue: () => void;
   onClose: () => void;
 }) {
@@ -317,10 +375,10 @@ function PassportSetupModal({
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <div className="transaction-modal passport-setup-modal" role="dialog" aria-modal="true" aria-label="Set up Passport before deployment" onMouseDown={(event) => event.stopPropagation()}>
         <div className="modal-heading"><div><p>Passport setup</p><h2>One key, then deploy.</h2></div><IconButton label="Close Passport setup" onClick={onClose}><X size={16} /></IconButton></div>
-        <p className="passport-setup-intro">Passport needs one private device witness to operate the C1 contract after deployment. It is encrypted locally with a browser passkey before Dynamic signs the transaction.</p>
+        <p className="passport-setup-intro">Passport needs one private device witness to operate the C1 contract after deployment. It is encrypted locally with a browser passkey before the deployment transaction is built.</p>
         <ol className="passport-setup-steps">
           <li><span>01</span><div><strong>Save a Passport key</strong><small>Your browser or device passkey manager will ask you to create and confirm this key. It protects encrypted Passport state; it is not a Dynamic wallet key.</small></div></li>
-          <li><span>02</span><div><strong>Request C1 deployment</strong><small>The demo asks Dynamic to sign, prove, and submit the testnet draft. It is successful only after a transaction is confirmed on Midnight.</small></div></li>
+          <li><span>02</span><div><strong>Request C1 deployment</strong><small>{localMode ? 'The disposable localnet fee wallet proves and submits the real account-custody contract. Dynamic remains the login and wallet-surface provider.' : 'The preview path requires Dynamic to prove and finalize the Compact transaction before Passport can submit it.'}</small></div></li>
         </ol>
         <p className="passport-setup-note">Without the Passport key, the deployed C1 would not have a safe private-state unlock path. No wallet seed or Dynamic private key is stored by Passport.</p>
         <div className="passport-setup-actions"><button className="modal-copy" onClick={onContinue}><Fingerprint size={16} /> Set up &amp; deploy Passport</button><button className="modal-secondary" onClick={onClose}>Not now</button></div>
@@ -341,6 +399,15 @@ export default function PassportDemo() {
     return midnightWallets.find((candidate) => connectorKey(candidate) === 'dynamicwaas') ?? midnightWallets[0];
   }, [allWallets]);
   const midnightWallet = wallet ?? null;
+  const localMode = useMemo(localPassportMode, []);
+  const profileClientUrl = useMemo(() => {
+    const url = new URL(window.location.href);
+    url.port = '5176';
+    url.pathname = '/';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  }, []);
   const subjectId = subjectFor(midnightWallet, user);
   const scope = useMemo(() => ({ appId: APP_ID, accountId: subjectId }), [subjectId]);
   const [profile, setProfile] = useState<DemoPassportProfile | null>(null);
@@ -363,6 +430,13 @@ export default function PassportDemo() {
   const [showPassportSetup, setShowPassportSetup] = useState(false);
   const [transferReview, setTransferReview] = useState<TransferReview | null>(null);
   const [deploymentPhase, setDeploymentPhase] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<DisplayPermission[]>([]);
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
+  const [permissionLabel, setPermissionLabel] = useState('Connected app');
+  const [permissionCap, setPermissionCap] = useState('1000000');
+  const [custody, setCustody] = useState<LocalPassportCustody | null>(null);
+  const [nightCustodyAmount, setNightCustodyAmount] = useState('1000');
+  const [shieldedCustodyAmount, setShieldedCustodyAmount] = useState('500');
   const passportKeyProviders = useRef(new Map<string, WebAuthnPrfKeyProvider>());
 
   const addActivity = useCallback((entry: Omit<ActivityEntry, 'id' | 'createdAt'>) => {
@@ -405,11 +479,17 @@ export default function PassportDemo() {
       setProfile(null);
       setProfileStatus('idle');
       setDustRetryCount(0);
+      setPermissions([]);
+      setPermissionsLoaded(false);
+      setCustody(null);
       return;
     }
     let current = true;
     setProfile(null);
     setProfileStatus('loading');
+    setPermissions([]);
+    setPermissionsLoaded(false);
+    setCustody(null);
     void refreshWallet();
     void loadDemoProfile(subjectId).then((storedProfile) => {
       if (!current) return;
@@ -491,8 +571,9 @@ export default function PassportDemo() {
     };
     const state: PassportDemoState = {
       deviceSecret: newDeviceSecret(),
+      recoverySecret: newDeviceSecret(),
       createdAt: new Date().toISOString(),
-      schema: 2,
+      schema: 4,
     };
     try {
       await vault(passkey).save<PassportDemoState>(scope, state);
@@ -528,7 +609,7 @@ export default function PassportDemo() {
       initialPrivateState: {
         deviceSecret: new Uint8Array(),
         createdAt: '',
-        schema: 2,
+        schema: 4,
       } satisfies PassportDemoState,
     });
     if (injection.source !== 'stored') {
@@ -663,14 +744,14 @@ export default function PassportDemo() {
         status: 'pending',
         source: 'wallet',
       });
-      const signedTransaction = await signDynamicTransaction(midnightWallet, draft.serializedTransaction);
+      const signedTransaction = await signDynamicTransferTransaction(midnightWallet, draft.serializedTransaction);
       updateActivity(activityEntry.id, {
         label: 'Transaction signed and proved',
         detail: 'The embedded wallet completed authorization and proof.',
         status: 'pending',
         source: 'wallet',
       });
-      const submitted = await submitDynamicTransaction(midnightWallet, signedTransaction);
+      const submitted = await submitDynamicTransferTransaction(midnightWallet, signedTransaction);
       updateActivity(activityEntry.id, {
         label: `${labelPrefix} transfer submitted`,
         detail: `${transferReview.amount} atomic NIGHT to ${compactAddress(transferReview.recipient)}. Awaiting network confirmation.`,
@@ -740,6 +821,88 @@ export default function PassportDemo() {
         addActivity({ label: 'Passport key enrolled', detail: 'Primary device state is encrypted in this browser.', status: 'complete', source: 'local' });
       }
 
+      if (localMode) {
+        let recoverySecret = privateState.recoverySecret;
+        if (!(recoverySecret instanceof Uint8Array) || recoverySecret.byteLength !== 32) {
+          recoverySecret = newDeviceSecret();
+          privateState = { ...privateState, recoverySecret, schema: 4 };
+          await vault(activeProfile.passkey).save<PassportDemoState>(scope, privateState);
+        }
+        setDeploymentPhase('Deploying localnet C1');
+        const localDeployment = await deployLocalPassportContract(
+          midnightWallet,
+          privateState.deviceSecret,
+          recoverySecret,
+        );
+        const deployedAt = new Date().toISOString();
+        const deployedProfile: DemoPassportProfile = {
+          ...activeProfile,
+          passportPreparation: undefined,
+          passportContract: {
+            address: localDeployment.address,
+            deployedAt,
+            txHash: localDeployment.txHash,
+            network: LOCAL_C1_NETWORK,
+            status: 'confirmed',
+            artifact: LOCAL_C1_ARTIFACT,
+          },
+        };
+        // Persist the C1 address before the separate alias transaction. A
+        // registry failure must never orphan a successfully deployed account.
+        await saveDemoProfile(deployedProfile);
+        setProfile(deployedProfile);
+        setPermissions([]);
+        setPermissionsLoaded(true);
+        setCustody({ unshielded: [], shielded: [] });
+        addActivity({
+          label: 'Passport C1 deployed',
+          detail: `${compactAddress(localDeployment.address)} is active on the disposable localnet.`,
+          status: 'complete',
+          source: 'chain',
+          txHash: localDeployment.txHash,
+        });
+
+        setDeploymentPhase('Registering Night ID');
+        try {
+          const identity = await registerLocalPassportIdentity(
+            midnightWallet,
+            localDeployment.address,
+            labelForUser(user),
+          );
+          const completeProfile: DemoPassportProfile = {
+            ...deployedProfile,
+            passportContract: {
+              ...deployedProfile.passportContract!,
+              identityRegistryAddress: identity.identityRegistryAddress,
+              identityTxHash: identity.identityTxHash,
+              alias: identity.alias,
+            },
+          };
+          await saveDemoProfile(completeProfile);
+          setProfile(completeProfile);
+          addActivity({
+            label: 'Night ID registered',
+            detail: `${identity.alias}.night resolves to ${compactAddress(localDeployment.address)}.`,
+            status: 'complete',
+            source: 'chain',
+            txHash:
+              identity.identityTxHash === 'already-registered'
+                ? undefined
+                : identity.identityTxHash,
+          });
+        } catch (cause) {
+          const message = cause instanceof Error ? cause.message : String(cause);
+          setError(`Passport is deployed. Night ID registration is still pending: ${message}`);
+          addActivity({
+            label: 'Night ID registration',
+            detail: message,
+            status: 'error',
+            source: 'chain',
+          });
+        }
+        return;
+      }
+
       const maintenanceSigningKey = privateState.c1?.maintenanceSigningKey ?? createPassportC1MaintenanceSigningKey();
       let draft: PassportC1DeploymentDraft;
       if (privateState.c1?.serializedTransaction) {
@@ -763,8 +926,8 @@ export default function PassportDemo() {
         }
       }
 
-      // Persist the maintenance authority before Dynamic signs. If the browser
-      // closes after signing, the same Passport state can still recover this C1.
+      // Persist the maintenance authority before requesting Dynamic proof
+      // capability. The same Passport state can rebuild an interrupted draft.
       const privateC1: PassportC1PrivateRecord = {
         address: draft.contractAddress,
         privateStateId: draft.privateStateId,
@@ -773,11 +936,10 @@ export default function PassportDemo() {
         artifact: draft.artifact,
         preparedAt: new Date().toISOString(),
         serializedTransaction: draft.serializedTransaction,
-        finalizedTransaction: privateState.c1?.finalizedTransaction,
       };
       await vault(activeProfile.passkey).save<PassportDemoState>(scope, {
         ...privateState,
-        schema: 3,
+        schema: 4,
         c1: privateC1,
       });
       const preparedProfile: DemoPassportProfile = {
@@ -794,36 +956,32 @@ export default function PassportDemo() {
       activeProfile = preparedProfile;
       addActivity({
         label: 'Passport C1 prepared',
-        detail: `Contract ${compactAddress(draft.contractAddress)} built for Dynamic testnet signing.`,
+        detail: `Contract ${compactAddress(draft.contractAddress)} built for the Dynamic Compact proof capability.`,
         status: 'pending',
         source: 'local',
       });
 
-      let signedTransaction = privateC1.finalizedTransaction;
-      if (!signedTransaction) {
-        setDeploymentPhase('Dynamic MPC signing & proving');
-        signedTransaction = await signDynamicTransaction(midnightWallet, draft.serializedTransaction);
-        await vault(activeProfile.passkey).save<PassportDemoState>(scope, {
-          ...privateState,
-          schema: 3,
-          c1: { ...privateC1, finalizedTransaction: signedTransaction },
-        });
-        addActivity({
-          label: 'Passport C1 signed and proved',
-          detail: 'Dynamic MPC returned a finalized Midnight transaction.',
-          status: 'pending',
-          source: 'wallet',
-        });
-      } else {
-        addActivity({
-          label: 'Passport C1 signature restored',
-          detail: 'Reusing the encrypted Dynamic-finalized transaction for broadcast.',
-          status: 'pending',
-          source: 'wallet',
-        });
-      }
-      setDeploymentPhase('Submitting to Midnight');
-      const submitted = await submitDynamicTransaction(midnightWallet, signedTransaction);
+      setDeploymentPhase('Checking Dynamic Compact proof support');
+      const submitted = await authorizeAndSubmitDynamicCompactTransaction(
+        midnightWallet,
+        draft.serializedTransaction,
+        {
+          contractAddress: draft.contractAddress,
+          circuit: 'deploy passport_c1',
+          summary: 'Deploy the Passport account-management contract',
+          arguments: {
+            artifact: draft.artifact,
+            privateStateId: draft.privateStateId,
+          },
+        },
+      );
+      addActivity({
+        label: 'Passport C1 approved and broadcast',
+        detail: `Dynamic approval ${submitted.approvalSignatureFingerprint.slice(0, 12)}… is bound to the finalized transaction.`,
+        status: 'pending',
+        source: 'wallet',
+        txHash: submitted.txHash,
+      });
 
       const deployedAt = new Date().toISOString();
       const nextProfile: DemoPassportProfile = {
@@ -864,10 +1022,446 @@ export default function PassportDemo() {
     }
   };
 
+  const completeLocalIdentityRegistration = async () => {
+    if (!user || !midnightWallet || !profile?.passportContract || !localMode) return;
+    const activeProfile = profile;
+    const activeContract = profile.passportContract;
+    setBusyAction('identity-register');
+    setError(null);
+    try {
+      const identity = await registerLocalPassportIdentity(
+        midnightWallet,
+        activeContract.address,
+        labelForUser(user),
+      );
+      const nextProfile: DemoPassportProfile = {
+        ...activeProfile,
+        passportContract: {
+          ...activeContract,
+          identityRegistryAddress: identity.identityRegistryAddress,
+          identityTxHash: identity.identityTxHash,
+          alias: identity.alias,
+        },
+      };
+      await saveDemoProfile(nextProfile);
+      setProfile(nextProfile);
+      addActivity({
+        label: 'Night ID registered',
+        detail: `${identity.alias}.night resolves to ${compactAddress(activeContract.address)}.`,
+        status: 'complete',
+        source: 'chain',
+        txHash:
+          identity.identityTxHash === 'already-registered'
+            ? undefined
+            : identity.identityTxHash,
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(`Passport remains active, but Night ID registration failed: ${message}`);
+      addActivity({
+        label: 'Night ID registration',
+        detail: message,
+        status: 'error',
+        source: 'chain',
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const localCustodyProfile = (): DemoPassportProfile | null => {
+    if (
+      !midnightWallet ||
+      !profile?.passportContract ||
+      !localMode ||
+      profile.passportContract.network !== LOCAL_C1_NETWORK ||
+      profile.passportContract.status !== 'confirmed'
+    ) {
+      setError('Deploy a confirmed Passport on the disposable localnet before using C1 custody.');
+      return null;
+    }
+    return profile;
+  };
+
+  const refreshPassportCustody = async () => {
+    const activeProfile = localCustodyProfile();
+    if (!midnightWallet || !activeProfile?.passportContract) return;
+    setBusyAction('custody-read');
+    setError(null);
+    try {
+      const next = await loadLocalPassportCustody(
+        midnightWallet,
+        activeProfile.passportContract.address,
+      );
+      setCustody(next);
+      addActivity({
+        label: 'C1 custody loaded',
+        detail: `${next.unshielded.length} unshielded and ${next.shielded.length} shielded token types read from the contract ledger.`,
+        status: 'complete',
+        source: 'chain',
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      addActivity({ label: 'C1 custody read', detail: message, status: 'error', source: 'chain' });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const depositPassportNight = async () => {
+    const activeProfile = localCustodyProfile();
+    if (!midnightWallet || !activeProfile?.passportContract) return;
+    let depositAmount: bigint;
+    try {
+      depositAmount = positiveAtomicAmount(nightCustodyAmount, 'NIGHT deposit');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      return;
+    }
+    setBusyAction('custody-night-deposit');
+    setError(null);
+    try {
+      const result = await depositLocalPassportNight(
+        midnightWallet,
+        activeProfile.passportContract.address,
+        depositAmount,
+      );
+      setCustody(result.custody);
+      addActivity({
+        label: 'NIGHT deposited into C1',
+        detail: `${depositAmount} atomic NIGHT is now held by the Passport custody contract.`,
+        status: 'complete',
+        source: 'chain',
+        txHash: result.txHash,
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      if (cause instanceof LocalCustodyPendingError) {
+        if (cause.custody) setCustody(cause.custody);
+        addActivity({
+          label: 'C1 NIGHT deposit submitted',
+          detail: message,
+          status: 'pending',
+          source: 'chain',
+          txHash: cause.txHash,
+        });
+      } else {
+        addActivity({ label: 'C1 NIGHT deposit', detail: message, status: 'error', source: 'chain' });
+      }
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const withdrawPassportNight = async () => {
+    const activeProfile = localCustodyProfile();
+    if (!midnightWallet || !activeProfile?.passportContract) return;
+    let withdrawAmount: bigint;
+    try {
+      withdrawAmount = positiveAtomicAmount(nightCustodyAmount, 'NIGHT withdrawal');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      return;
+    }
+    setBusyAction('custody-night-withdraw');
+    setError(null);
+    try {
+      const privateState = await loadPassportState(activeProfile);
+      const result = await withdrawLocalPassportNight(
+        midnightWallet,
+        activeProfile.passportContract.address,
+        privateState.deviceSecret,
+        withdrawAmount,
+      );
+      setCustody(result.custody);
+      addActivity({
+        label: 'NIGHT withdrawn from C1',
+        detail: `${withdrawAmount} atomic NIGHT returned to the disposable localnet wallet.`,
+        status: 'complete',
+        source: 'chain',
+        txHash: result.txHash,
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      if (cause instanceof LocalCustodyPendingError) {
+        if (cause.custody) setCustody(cause.custody);
+        addActivity({
+          label: 'C1 NIGHT withdrawal submitted',
+          detail: message,
+          status: 'pending',
+          source: 'chain',
+          txHash: cause.txHash,
+        });
+      } else {
+        addActivity({ label: 'C1 NIGHT withdrawal', detail: message, status: 'error', source: 'chain' });
+      }
+    } finally {
+      passportKeyProviders.current.get(activeProfile.passkey.credentialId)?.lock(scope);
+      setBusyAction(null);
+    }
+  };
+
+  const depositPassportShielded = async () => {
+    const activeProfile = localCustodyProfile();
+    if (!midnightWallet || !activeProfile?.passportContract) return;
+    let depositAmount: bigint;
+    try {
+      depositAmount = positiveAtomicAmount(shieldedCustodyAmount, 'Shielded deposit');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      return;
+    }
+    setBusyAction('custody-shielded-deposit');
+    setError(null);
+    const pending = addActivity({
+      label: 'Shielded C1 deposit',
+      detail: 'Minting the local test note, waiting for wallet sync, then depositing the real note.',
+      status: 'pending',
+      source: 'chain',
+    });
+    try {
+      const result = await mintAndDepositLocalPassportShielded(
+        midnightWallet,
+        activeProfile.passportContract.address,
+        depositAmount,
+      );
+      setCustody(result.custody);
+      updateActivity(pending.id, {
+        detail: `${depositAmount} shielded units deposited after mint ${compactAddress(result.mintTxHash)}.`,
+        status: 'complete',
+        txHash: result.depositTxHash,
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      if (cause instanceof LocalCustodyPendingError) {
+        if (cause.custody) setCustody(cause.custody);
+        updateActivity(pending.id, {
+          detail: message,
+          status: 'pending',
+          txHash: cause.txHash,
+        });
+      } else {
+        updateActivity(pending.id, { detail: message, status: 'error' });
+      }
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const withdrawPassportShielded = async (color: string, available: string) => {
+    const activeProfile = localCustodyProfile();
+    if (!midnightWallet || !activeProfile?.passportContract) return;
+    let withdrawAmount: bigint;
+    try {
+      withdrawAmount = positiveAtomicAmount(shieldedCustodyAmount, 'Shielded withdrawal');
+      if (withdrawAmount > BigInt(available)) {
+        throw new Error('The Passport contract does not hold enough shielded value.');
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      return;
+    }
+    setBusyAction('custody-shielded-withdraw');
+    setError(null);
+    try {
+      const privateState = await loadPassportState(activeProfile);
+      const result = await withdrawLocalPassportShielded(
+        midnightWallet,
+        activeProfile.passportContract.address,
+        privateState.deviceSecret,
+        color,
+        withdrawAmount,
+      );
+      setCustody(result.custody);
+      addActivity({
+        label: 'Shielded value withdrawn from C1',
+        detail: `${withdrawAmount} shielded units returned to the disposable localnet wallet.`,
+        status: 'complete',
+        source: 'chain',
+        txHash: result.txHash,
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      if (cause instanceof LocalCustodyPendingError) {
+        if (cause.custody) setCustody(cause.custody);
+        addActivity({
+          label: 'C1 shielded withdrawal submitted',
+          detail: message,
+          status: 'pending',
+          source: 'chain',
+          txHash: cause.txHash,
+        });
+      } else {
+        addActivity({ label: 'C1 shielded withdrawal', detail: message, status: 'error', source: 'chain' });
+      }
+    } finally {
+      passportKeyProviders.current.get(activeProfile.passkey.credentialId)?.lock(scope);
+      setBusyAction(null);
+    }
+  };
+
+  const labelPermissions = (
+    records: LocalPassportPermission[],
+    privateRecords: PassportPermissionPrivateRecord[] = [],
+  ): DisplayPermission[] =>
+    records.map((record) => ({
+      ...record,
+      label:
+        privateRecords.find((candidate) => candidate.commitment === record.commitment)?.label ??
+        `Grant ${record.commitment.slice(0, 8)}`,
+    }));
+
+  const refreshPassportPermissions = async () => {
+    if (!midnightWallet || !profile?.passportContract) return;
+    if (!localMode || profile.passportContract.network !== LOCAL_C1_NETWORK) {
+      setError('Dynamic can expose the wallet, but its current SDK cannot prove an arbitrary Passport C1 permission circuit. This path remains disabled instead of simulating a grant.');
+      return;
+    }
+    setBusyAction('permission-read');
+    setError(null);
+    try {
+      const privateState = await loadPassportState(profile);
+      const records = await loadLocalPassportPermissions(
+        midnightWallet,
+        profile.passportContract.address,
+        privateState.deviceSecret,
+      );
+      setPermissions(labelPermissions(records, privateState.permissions));
+      setPermissionsLoaded(true);
+      addActivity({
+        label: 'C1 permissions loaded',
+        detail: `${records.filter((record) => record.active).length} active grant${records.filter((record) => record.active).length === 1 ? '' : 's'} read from the account contract.`,
+        status: 'complete',
+        source: 'chain',
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      addActivity({ label: 'C1 permission read', detail: message, status: 'error', source: 'chain' });
+    } finally {
+      passportKeyProviders.current.get(profile.passkey.credentialId)?.lock(scope);
+      setBusyAction(null);
+    }
+  };
+
+  const addPassportPermission = async () => {
+    if (!midnightWallet || !profile?.passportContract) return;
+    if (!localMode || profile.passportContract.network !== LOCAL_C1_NETWORK) {
+      setError('C1 grant writes require the local validated adapter until Dynamic exposes arbitrary Compact proof finalization.');
+      return;
+    }
+    const label = permissionLabel.trim();
+    if (!label) {
+      setError('Name the app or device that will receive this permission.');
+      return;
+    }
+    if (!/^\d+$/.test(permissionCap) || BigInt(permissionCap) <= 0n) {
+      setError('The NIGHT cap must be a positive atomic amount.');
+      return;
+    }
+    setBusyAction('permission-add');
+    setError(null);
+    let preparedCommitment: string | null = null;
+    try {
+      const privateState = await loadPassportState(profile);
+      const grantSecret = newDeviceSecret();
+      preparedCommitment = localPassportGrantCommitment(grantSecret);
+      const privateRecord: PassportPermissionPrivateRecord = {
+        commitment: preparedCommitment,
+        label,
+        grantSecret,
+        createdAt: new Date().toISOString(),
+      };
+      const nextPrivateRecords = [
+        ...(privateState.permissions ?? []).filter(
+          (record) => record.commitment !== preparedCommitment,
+        ),
+        privateRecord,
+      ];
+      // Persist the grant authority before its on-chain write. If the browser
+      // closes after submission, Passport can still label and use the grant.
+      await vault(profile.passkey).save<PassportDemoState>(scope, {
+        ...privateState,
+        permissions: nextPrivateRecords,
+      });
+      const result = await addLocalPassportPermission(
+        midnightWallet,
+        profile.passportContract.address,
+        privateState.deviceSecret,
+        grantSecret,
+        BigInt(permissionCap),
+      );
+      if (result.commitment !== preparedCommitment) {
+        throw new Error('The submitted permission commitment does not match encrypted Passport state.');
+      }
+      setPermissions(labelPermissions(result.permissions, nextPrivateRecords));
+      setPermissionsLoaded(true);
+      setPermissionLabel('Connected app');
+      addActivity({
+        label: 'C1 permission issued',
+        detail: `Grant ${compactAddress(preparedCommitment)} is active with a ${permissionCap} atomic NIGHT cap. Its secret remains encrypted in Passport pending a C23 handoff.`,
+        status: 'complete',
+        source: 'chain',
+        txHash: result.txHash,
+      });
+    } catch (cause) {
+      const baseMessage = cause instanceof Error ? cause.message : String(cause);
+      const message = preparedCommitment
+        ? `${baseMessage} Grant ${compactAddress(preparedCommitment)} remains encrypted locally; read the contract before retrying.`
+        : baseMessage;
+      setError(message);
+      addActivity({ label: 'C1 permission issue', detail: message, status: 'error', source: 'chain' });
+    } finally {
+      passportKeyProviders.current.get(profile.passkey.credentialId)?.lock(scope);
+      setBusyAction(null);
+    }
+  };
+
+  const revokePassportPermission = async (permission: DisplayPermission) => {
+    if (!midnightWallet || !profile?.passportContract || !permission.active) return;
+    if (!localMode || profile.passportContract.network !== LOCAL_C1_NETWORK) return;
+    setBusyAction('permission-revoke');
+    setError(null);
+    try {
+      const privateState = await loadPassportState(profile);
+      const result = await revokeLocalPassportPermission(
+        midnightWallet,
+        profile.passportContract.address,
+        privateState.deviceSecret,
+        permission.commitment,
+      );
+      setPermissions(labelPermissions(result.permissions, privateState.permissions));
+      setPermissionsLoaded(true);
+      addActivity({
+        label: 'C1 permission revoked',
+        detail: `${permission.label}'s grant is revoked and can no longer authorize a custody spend.`,
+        status: 'complete',
+        source: 'chain',
+        txHash: result.txHash,
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      addActivity({ label: 'C1 permission revocation', detail: message, status: 'error', source: 'chain' });
+    } finally {
+      passportKeyProviders.current.get(profile.passkey.credentialId)?.lock(scope);
+      setBusyAction(null);
+    }
+  };
+
   const requestPassportDeployment = () => {
-    if (!midnightWallet || busyAction || passportIsDeployed) return;
+    if (!midnightWallet || busyAction || (passportIsDeployed && !passportNeedsIdentity)) return;
+    if (passportNeedsIdentity) {
+      void completeLocalIdentityRegistration();
+      return;
+    }
     if (!passportWalletCompatible) {
-      setError('Passport C1 deployment requires the Dynamic embedded Midnight wallet. The connected external wallet does not expose the compatible custom-transaction signer.');
+      setError('Passport C1 deployment requires the Dynamic embedded Midnight wallet and its explicit arbitrary Compact proof capability.');
       return;
     }
     if (profileStatus === 'loading' || profileStatus === 'idle') {
@@ -889,22 +1483,47 @@ export default function PassportDemo() {
   const passportPreparation = profile?.passportPreparation ?? null;
   const passportIsDeployed = passportContract?.status === 'submitted' || passportContract?.status === 'confirmed';
   const passportIsConfirmed = passportContract?.status === 'confirmed';
-  const passportWalletCompatible = midnightWallet ? connectorKey(midnightWallet) === 'dynamicwaas' : false;
+  const passportNeedsIdentity = Boolean(
+    localMode &&
+    passportIsConfirmed &&
+    passportContract &&
+    !passportContract.alias,
+  );
+  const passportWalletCompatible = midnightWallet
+    ? localMode || connectorKey(midnightWallet) === 'dynamicwaas'
+    : false;
   const canResetLocalPassport = Boolean(profile && !passportContract && error && /encrypted|unlock|passkey|private state|stored passport c1 state/i.test(error));
   const passportDeploymentLabel = passportIsDeployed
-    ? passportIsConfirmed ? 'Passport active' : 'Deployment submitted'
+    ? passportNeedsIdentity
+      ? busyAction === 'identity-register' ? 'Registering Night ID' : 'Register Night ID'
+      : passportIsConfirmed ? 'Passport active' : 'Deployment submitted'
     : !passportWalletCompatible && midnightWallet ? 'Embedded wallet required'
       : busyAction === 'passport-deploy' ? deploymentPhase ?? 'Deploying Passport' : passportPreparation ? 'Resume deployment' : profile ? 'Deploy Passport' : 'Set up & deploy';
   const connectedUserName = labelForUser(user);
   const permissionState = !midnightWallet
     ? 'Midnight wallet not provisioned'
     : passportIsConfirmed
-      ? 'Passport contract connected'
+      ? localMode ? 'Passport contract connected' : 'Dynamic C1 proof capability required'
       : passportIsDeployed
         ? 'Passport deployment submitted'
         : passportPreparation
           ? 'Passport deployment prepared'
           : 'Deploy Passport to manage permissions';
+  const localPermissionReady = Boolean(
+    localMode &&
+    midnightWallet &&
+    profile &&
+    passportContract?.status === 'confirmed' &&
+    passportContract.network === LOCAL_C1_NETWORK,
+  );
+  const activePermissionCount = permissions.filter((permission) => permission.active).length;
+  const custodyNightTotal = custody
+    ? custody.unshielded.reduce((total, balance) => total + BigInt(balance.value), 0n).toString()
+    : '—';
+  const custodyShieldedTotal = custody
+    ? custody.shielded.reduce((total, balance) => total + BigInt(balance.value), 0n).toString()
+    : '—';
+  const custodyBusy = busyAction?.startsWith('custody-') ?? false;
   const beginSignIn = () => {
     if (signInReady) setShowAuthFlow(true);
   };
@@ -930,6 +1549,8 @@ export default function PassportDemo() {
     setRecipient('');
     setAmount('');
     setWorkspaceTab('assets');
+    setPermissions([]);
+    setPermissionsLoaded(false);
     await handleLogOut();
   };
   const addressesPending = walletSyncing || !surfaces || surfaces.addressStatus === 'loading';
@@ -1001,6 +1622,7 @@ export default function PassportDemo() {
             <nav className="workspace-tabs" aria-label="Passport sections">
               <button className={workspaceTab === 'assets' ? 'active' : ''} onClick={() => setWorkspaceTab('assets')}>Assets</button>
               <button className={workspaceTab === 'permissions' ? 'active' : ''} onClick={() => setWorkspaceTab('permissions')}>Permissions</button>
+              <button className={workspaceTab === 'connections' ? 'active' : ''} onClick={() => setWorkspaceTab('connections')}>Connections</button>
             </nav>
             <div className="workspace-controls">
               <a className="workspace-sdk-link" href="/sdk">SDK</a>
@@ -1014,13 +1636,13 @@ export default function PassportDemo() {
           <main className="workspace-main">
             <section className="account-strip">
               <img className="passport-control-atlas" src="/passport-control-atlas.png" alt="" aria-hidden="true" />
-              <div className="passport-contract-copy"><p>Passport activation</p><h2>{passportIsConfirmed ? 'Passport is active.' : passportIsDeployed ? 'Deployment submitted.' : passportPreparation ? 'Ready to resume.' : profileStatus === 'loading' ? 'Checking this browser.' : profile ? 'Ready to deploy.' : midnightWallet ? 'Create your Passport.' : 'Preparing your wallet.'}</h2><small>{passportIsDeployed ? `C1 ${compactAddress(passportContract?.address ?? '')} · ${passportIsConfirmed ? 'confirmed on Midnight' : 'awaiting testnet confirmation'}` : passportPreparation ? `C1 ${compactAddress(passportPreparation.address)} is secured locally. Resume Dynamic signing and broadcast.` : profileStatus === 'loading' ? 'Looking for encrypted Passport state linked to this Dynamic account.' : profile ? 'Your encrypted device authority is ready. Dynamic will sign, prove, and submit the C1 transaction.' : 'One protected device authority unlocks your account-management contract.'}</small></div>
+              <div className="passport-contract-copy"><p>Passport activation</p><h2>{passportIsConfirmed ? 'Passport is active.' : passportIsDeployed ? 'Deployment submitted.' : passportPreparation ? 'Ready to resume.' : profileStatus === 'loading' ? 'Checking this browser.' : profile ? 'Ready to deploy.' : midnightWallet ? 'Create your Passport.' : 'Preparing your wallet.'}</h2><small>{passportIsDeployed ? `C1 ${compactAddress(passportContract?.address ?? '')} · ${passportIsConfirmed ? `confirmed on ${passportContract?.network === 'undeployed' ? 'Midnight localnet' : 'Midnight'}` : 'awaiting testnet confirmation'}` : passportPreparation ? `C1 ${compactAddress(passportPreparation.address)} is secured locally. Resume the Dynamic capability check and exact-byte approval.` : profileStatus === 'loading' ? 'Looking for encrypted Passport state linked to this Dynamic account.' : profile ? localMode ? 'Your encrypted device authority is ready. The isolated localnet adapter will deploy the real custody contract.' : 'Your encrypted device authority is ready. Preview deployment waits for Dynamic Compact proof support.' : 'One protected device authority unlocks your account-management contract.'}</small></div>
               <div className="passport-action-stack">
                 <div className="passport-command">
-                  <button className="deploy-button" onClick={requestPassportDeployment} disabled={!midnightWallet || !passportWalletCompatible || Boolean(busyAction) || passportIsDeployed || profileStatus === 'loading' || profileStatus === 'idle'}>
+                  <button className="deploy-button" onClick={requestPassportDeployment} disabled={!midnightWallet || !passportWalletCompatible || Boolean(busyAction) || (passportIsDeployed && !passportNeedsIdentity) || profileStatus === 'loading' || profileStatus === 'idle'}>
                     {busyAction === 'passport-deploy' ? <LoaderCircle className="spin" size={16} /> : <Box size={16} />}{passportDeploymentLabel}
                   </button>
-                  <ActionHelp label="What does Passport deployment do?"><strong>Testnet pilot</strong><span>{profile ? 'Builds an unsigned C1 draft from the embedded wallet’s shielded address, then asks Dynamic to sign, prove, and submit it.' : 'First, you set up a local Passport key that protects the C1 device witness. The demo then requests Dynamic approval for the testnet draft.'}</span></ActionHelp>
+                  <ActionHelp label="What does Passport deployment do?"><strong>{localMode ? 'Localnet contract' : 'Testnet pilot'}</strong><span>{localMode ? 'Deploys the actual account-custody contract with an isolated fixture fee wallet. Your passkey-protected private witness remains the withdrawal and permission authority; deposits are permissionless.' : profile ? 'Builds an unsigned C1 draft from the embedded wallet’s shielded address, then requires Dynamic Compact proof support to finalize it.' : 'First, you set up a local Passport key that protects the C1 device witness. The preview draft then waits for Dynamic proof support.'}</span></ActionHelp>
                 </div>
                 <div className="passport-command">
                   <span className="passport-secondary-label">Optional device action</span>
@@ -1035,7 +1657,7 @@ export default function PassportDemo() {
               <div className="activation-rail" aria-label="Passport activation progress">
                 <ActivationStep number="01" label="Dynamic wallet" detail={midnightWallet ? 'Midnight connected' : 'Provisioning wallet'} state={walletActivationState} />
                 <ActivationStep number="02" label="Passport key" detail={profile ? 'Private state protected' : deploymentPhase === 'Creating Passport key' ? 'Waiting for browser approval' : 'Required for C1'} state={keyActivationState} />
-                <ActivationStep number="03" label="C1 contract" detail={passportIsConfirmed ? 'Active on Midnight' : passportIsDeployed ? 'Submitted to testnet' : !passportWalletCompatible && midnightWallet ? 'Dynamic embedded wallet required' : deploymentPhase ?? (passportPreparation ? 'Draft ready to resume' : 'Ready after key setup')} state={contractActivationState} />
+                <ActivationStep number="03" label="C1 contract" detail={passportIsConfirmed ? `Active on ${passportContract?.network === 'undeployed' ? 'localnet' : 'Midnight'}` : passportIsDeployed ? 'Submitted to testnet' : !passportWalletCompatible && midnightWallet ? 'Dynamic embedded wallet required' : deploymentPhase ?? (passportPreparation ? 'Draft ready to resume' : localMode ? 'Local adapter ready after key setup' : 'Waiting for Dynamic proof support')} state={contractActivationState} />
               </div>
             </section>
 
@@ -1075,13 +1697,156 @@ export default function PassportDemo() {
                   <AssetTile label="DUST" value={dustBalance} detail={surfaces?.dustSyncing ? 'Synchronizing fee state' : 'Fee balance'} icon={<Sparkles size={19} />} syncing={surfaces?.dustSyncing} />
                   <AssetTile label="Shielded assets" value={shieldedAssets} detail="Token types with balance" icon={<LockKeyhole size={19} />} />
                 </section>
+
+                {localPermissionReady && (
+                  <section className="custody-console" aria-label="Passport C1 custody">
+                    <div className="custody-heading">
+                      <div>
+                        <p>Account custody contract</p>
+                        <h2>Move assets through C1.</h2>
+                      </div>
+                      <button className="tool-button" onClick={() => void refreshPassportCustody()} disabled={Boolean(busyAction)}>
+                        {busyAction === 'custody-read' ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}
+                        Read ledger
+                      </button>
+                    </div>
+                    <div className="custody-grid">
+                      <article className="custody-pool">
+                        <header>
+                          <span className="custody-icon unshielded"><WalletCards size={18} /></span>
+                          <div><small>Contract-held</small><strong>Unshielded NIGHT</strong></div>
+                          <b>{custodyNightTotal}</b>
+                        </header>
+                        <label>
+                          Atomic amount
+                          <input inputMode="numeric" value={nightCustodyAmount} onChange={(event) => setNightCustodyAmount(event.target.value)} />
+                        </label>
+                        <div className="custody-actions">
+                          <button onClick={() => void depositPassportNight()} disabled={Boolean(busyAction)}>
+                            {busyAction === 'custody-night-deposit' ? <LoaderCircle className="spin" size={15} /> : <ArrowUpRight size={15} />}
+                            Deposit
+                          </button>
+                          <button className="secondary" onClick={() => void withdrawPassportNight()} disabled={Boolean(busyAction) || custodyNightTotal === '0' || custodyNightTotal === '—'}>
+                            {busyAction === 'custody-night-withdraw' ? <LoaderCircle className="spin" size={15} /> : <ArrowUpRight size={15} />}
+                            Withdraw
+                          </button>
+                        </div>
+                      </article>
+
+                      <article className="custody-pool">
+                        <header>
+                          <span className="custody-icon shielded"><LockKeyhole size={18} /></span>
+                          <div><small>Contract-held</small><strong>Shielded assets</strong></div>
+                          <b>{custodyShieldedTotal}</b>
+                        </header>
+                        <label>
+                          Atomic amount
+                          <input inputMode="numeric" value={shieldedCustodyAmount} onChange={(event) => setShieldedCustodyAmount(event.target.value)} />
+                        </label>
+                        <div className="custody-actions">
+                          <button onClick={() => void depositPassportShielded()} disabled={Boolean(busyAction)}>
+                            {busyAction === 'custody-shielded-deposit' ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}
+                            {busyAction === 'custody-shielded-deposit' ? 'Minting & depositing' : 'Mint test note & deposit'}
+                          </button>
+                        </div>
+                        {custody?.shielded.map((balance) => (
+                          <div className="custody-token" key={balance.color}>
+                            <code>{compactAddress(balance.color)}</code>
+                            <strong>{balance.value}</strong>
+                            <IconButton
+                              label={`Withdraw ${compactAddress(balance.color)}`}
+                              onClick={() => void withdrawPassportShielded(balance.color, balance.value)}
+                              disabled={Boolean(busyAction)}
+                            >
+                              {busyAction === 'custody-shielded-withdraw' ? <LoaderCircle className="spin" size={14} /> : <Send size={14} />}
+                            </IconButton>
+                          </div>
+                        ))}
+                      </article>
+                    </div>
+                    <div className="custody-boundary">
+                      <ShieldCheck size={15} />
+                      <span>Real disposable-localnet circuits. Deposits are permissionless; withdrawals unlock the Passport key. Every completion returns a chain hash.</span>
+                      {custodyBusy && <LoaderCircle className="spin" size={15} />}
+                    </div>
+                  </section>
+                )}
                 {surfaces?.balanceError && <div className="balance-state"><CircleAlert size={16} /> Balance sync is unavailable. Your address surfaces remain available.</div>}
               </>
-            ) : (
+            ) : workspaceTab === 'permissions' ? (
               <section className="permissions-view">
-                <div className="permissions-heading"><div><p>Account management contract</p><h1>Permissions.</h1></div><span>C1</span></div>
-                <div className="permission-empty"><span>—</span><div><h2>{permissionState}</h2><p>{passportIsConfirmed ? 'C1 permission reads and writes are the next testnet validation step.' : passportIsDeployed ? 'The deployment has a real transaction hash. Wait for testnet finality before changing contract permissions.' : passportPreparation ? `C1 ${compactAddress(passportPreparation.address)} is encrypted locally and ready for Dynamic MPC signing or broadcast retry.` : 'Deploy the Passport account-management contract before permissions become available. This interface does not invent or simulate grants.'}</p></div></div>
+                <div className="permissions-heading">
+                  <div><p>Account management contract</p><h1>Permissions.</h1></div>
+                  <div className="permissions-heading-actions">
+                    {localPermissionReady && (
+                      <button className="tool-button" onClick={() => void refreshPassportPermissions()} disabled={Boolean(busyAction)}>
+                        {busyAction === 'permission-read' ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}
+                        Read contract
+                      </button>
+                    )}
+                    <span>C1</span>
+                  </div>
+                </div>
+                {localPermissionReady ? (
+                  <>
+                    <div className="permission-overview">
+                      <div className="permission-count"><strong>{permissionsLoaded ? activePermissionCount : '—'}</strong><span>active grants</span></div>
+                      <div>
+                        <h2>{permissionsLoaded ? activePermissionCount ? 'Scoped access is active.' : 'No apps have access yet.' : 'Read the contract to continue.'}</h2>
+                        <p>Every grant is written by the C1 account-management contract. Issuing or revoking access asks for your Passport passkey and produces a Midnight localnet transaction. Grant secrets remain encrypted in Passport until a C23 handoff is approved.</p>
+                      </div>
+                    </div>
+                    <div className="permission-composer">
+                      <label>App or device<input value={permissionLabel} onChange={(event) => setPermissionLabel(event.target.value)} placeholder="Atlas app" /></label>
+                      <label>NIGHT cap (atomic)<input inputMode="numeric" value={permissionCap} onChange={(event) => setPermissionCap(event.target.value)} placeholder="1000000" /></label>
+                      <button className="send-button" onClick={() => void addPassportPermission()} disabled={Boolean(busyAction)}>
+                        {busyAction === 'permission-add' ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />}
+                        Issue permission
+                      </button>
+                    </div>
+                    {permissionsLoaded && (
+                      <div className="permission-list" aria-label="Contract permissions">
+                        {permissions.length === 0 ? (
+                          <div className="permission-list-empty">No grants are recorded by this Passport contract.</div>
+                        ) : permissions.map((permission) => (
+                          <div className={`permission-row ${permission.active ? '' : 'is-revoked'}`} key={permission.commitment}>
+                            <span className="permission-mark"><LockKeyhole size={17} /></span>
+                            <span className="permission-identity"><strong>{permission.label}</strong><code>{compactAddress(permission.commitment)}</code></span>
+                            <span className="permission-usage"><small>NIGHT allowance</small><strong>{permission.spent} / {permission.cap}</strong></span>
+                            <span className={`status-pill ${permission.active ? 'complete' : 'blocked'}`}>{permission.active ? 'active' : 'revoked'}</span>
+                            <IconButton label={`Revoke ${permission.label}`} onClick={() => void revokePassportPermission(permission)} disabled={!permission.active || Boolean(busyAction)}>
+                              {busyAction === 'permission-revoke' && permission.active ? <LoaderCircle className="spin" size={16} /> : <ShieldOff size={16} />}
+                            </IconButton>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="permission-empty"><span>—</span><div><h2>{permissionState}</h2><p>{passportIsConfirmed ? 'The deployed preview contract cannot accept permission writes until Dynamic exposes a supported proof-and-finalization API for arbitrary Compact circuits. This demo does not substitute a discarded message signature.' : passportIsDeployed ? 'The deployment has a real transaction hash. Wait for testnet finality before changing contract permissions.' : passportPreparation ? `C1 ${compactAddress(passportPreparation.address)} is encrypted locally and ready for the Dynamic Compact proof capability check.` : 'Deploy the Passport account-management contract before permissions become available. This interface does not invent or simulate grants.'}</p></div></div>
+                )}
                 <div className="permission-capabilities"><div><Fingerprint size={17} /><span>Passport key</span><strong>{profile ? 'Local key ready' : 'Required at deploy'}</strong></div><div><WalletCards size={17} /><span>Midnight wallet</span><strong>{midnightWallet ? 'Connected' : 'Awaiting wallet'}</strong></div><div><LockKeyhole size={17} /><span>Contract grants</span><strong>{passportIsConfirmed ? 'Ready for validation' : passportIsDeployed ? 'Awaiting finality' : passportPreparation ? 'Signing required' : 'Deployment required'}</strong></div></div>
+              </section>
+            ) : (
+              <section className="connections-view">
+                <div className="permissions-heading"><div><p>Passport connections</p><h1>Connected worlds.</h1></div><span>C23</span></div>
+                <div className="connection-list">
+                  <article className="connection-row">
+                    <span className="connection-index">01</span>
+                    <div><p>External application</p><h2>Atlas profile request</h2><small>A separate web origin requests only the profile fields you choose. Passport verifies the opener, origin, request ID, and nonce before showing consent.</small></div>
+                    <span className="status-pill complete">ready</span>
+                    <a className="tool-button" href={profileClientUrl} target="_blank" rel="noreferrer">Open Atlas <ArrowUpRight size={15} /></a>
+                  </article>
+                  <article className="connection-row">
+                    <span className="connection-index">02</span>
+                    <div><p>Cross-chain settlement</p><h2>Sig.Network adapter</h2><small>The SDK enforces the five real stages: request, MPC signature, EVM broadcast, execution attestation, and Midnight claim. The route stays disabled until Passport moves from Ledger v8 to Sig’s Ledger v9 stack and receives deployment configuration.</small></div>
+                    <span className="status-pill blocked">version gate</span>
+                    <a className="tool-button" href="/sdk">View boundary <ArrowUpRight size={15} /></a>
+                  </article>
+                </div>
+                <div className="connection-stages" aria-label="Sig.Network settlement stages">
+                  {['Request', 'MPC signature', 'EVM broadcast', 'Attestation', 'Shielded claim'].map((stage, index) => <div key={stage}><span>0{index + 1}</span><strong>{stage}</strong></div>)}
+                </div>
               </section>
             )}
 
@@ -1096,7 +1861,24 @@ export default function PassportDemo() {
       {selectedTx && <TransactionModal entry={selectedTx} onClose={() => setSelectedTx(null)} />}
       {showAddressPicker && <AddressPickerModal choices={addressChoices} onClose={() => setShowAddressPicker(false)} />}
       {transferReview && <TransferReviewModal review={transferReview} onCancel={() => setTransferReview(null)} onSubmit={() => void submitTransfer()} busy={busyAction === 'transfer'} />}
-      {showPassportSetup && <PassportSetupModal onClose={() => setShowPassportSetup(false)} onContinue={() => { setShowPassportSetup(false); void deployPassport(); }} />}
+      {showPassportSetup && <PassportSetupModal localMode={localMode} onClose={() => setShowPassportSetup(false)} onContinue={() => { setShowPassportSetup(false); void deployPassport(); }} />}
+      <PassportProfileConsent
+        displayName={user ? connectedUserName : null}
+        passportContract={
+          passportContract
+            ? { address: passportContract.address, network: passportContract.network }
+            : null
+        }
+        midnightAddresses={
+          surfaces?.unshieldedAddress
+            ? {
+                unshielded: surfaces.unshieldedAddress,
+                ...(surfaces.shieldedAddress ? { shielded: surfaces.shieldedAddress } : {}),
+                ...(surfaces.dustAddress ? { dust: surfaces.dustAddress } : {}),
+              }
+            : null
+        }
+      />
     </div>
   );
 }

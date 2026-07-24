@@ -90,5 +90,6 @@ adding a new SDK module.
 - [Dynamic capability matrix](dynamic-capability-matrix.md)
 - [Client demo runbook](client-demo-runbook.md)
 - [PWA feasibility report](pwa-feasibility-report.md)
+- [Sig.Network integration boundary](signet-integration.md)
 - [Live validation log](validation-log.md)
 - [External blockers](blockers.md)

@@ -13,7 +13,7 @@
 
 const PRF_SALT = new TextEncoder().encode('midnight:passport:prf:device:v0');
 
-const RP_NAME = 'MN Passport Foundations';
+const RP_NAME = 'Midnight Passport';
 
 export interface PasskeyRef {
   credentialIdB64: string;
@@ -35,7 +35,10 @@ function rpEntity(): PublicKeyCredentialRpEntity {
 function explainPasskeyError(error: unknown): string {
   const message = String((error as { message?: unknown })?.message ?? error);
   if (/invalid domain|relying party|rp id|security/i.test(message)) {
-    return 'Passkeys need a valid local domain. Open the demo at http://localhost:5173/ and try again.';
+    return `Passkeys need a valid secure origin. Open this demo on ${window.location.origin.replace(
+      '127.0.0.1',
+      'localhost',
+    )} and try again.`;
   }
   return message;
 }

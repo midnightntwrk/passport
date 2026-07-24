@@ -89,8 +89,8 @@ export default function SdkPage() {
         <div className="sdk-boundary-grid">
           <article><span>Live validation</span><h3>Wallet surfaces</h3><p>The demo calls Dynamic for unshielded, shielded and DUST addresses, balance sync, signing and supported transfers. Each capability is passed only after a real wallet result.</p></article>
           <article><span>Live now</span><h3>Private-state encryption</h3><p>Passport encrypts app-owned state with a WebAuthn PRF-derived AES-GCM key in IndexedDB.</p></article>
-          <article><span>Unvalidated pilot</span><h3>C1 Compact deployment</h3><p>Passport builds an unsigned Compact C1 draft and asks the Dynamic embedded wallet to sign and submit it. Support is not claimed until a real deployment is independently confirmed on-chain.</p></article>
-          <article><span>Deferred</span><h3>Cloud recovery and Sig settlement</h3><p>Encrypted sync, recovery design and external settlement stay outside this SDK foundation until their security and network dependencies are defined.</p></article>
+          <article><span>Validated localnet</span><h3>C1 and permissions</h3><p>The isolated demo deploys the real custody contract, registers its Night ID, and writes scoped grants with Passport witnesses. Dynamic preview remains gated on arbitrary Compact proof support.</p></article>
+          <article><span>Version gated</span><h3>Sig.Network settlement</h3><p>The typed adapter requires request, MPC signature, EVM broadcast, attestation and claim evidence. Sig targets Ledger v9; this C1 prototype must move from Ledger v8 before the route can execute.</p></article>
         </div>
       </section>
     </main>

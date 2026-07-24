@@ -3,7 +3,7 @@
 // genesis wallet and faucet providers.
 
 import { firstValueFrom } from 'rxjs';
-import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
+import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import type { MidnightWallet } from '@dynamic-labs/midnight';
 
 import {
@@ -154,6 +154,35 @@ export async function getFaucet(mid: Midnight, address: string): Promise<any> {
   });
   faucetHandle = { address, handle };
   return handle;
+}
+
+export async function getOrDeployLocalFaucet(mid: Midnight): Promise<any> {
+  if (mid.mode !== 'local') {
+    throw new Error('The disposable faucet is available only on the isolated localnet.');
+  }
+  if (mid.faucetAddress) {
+    try {
+      const state = await mid.faucetProviders.publicDataProvider.queryContractState(
+        mid.faucetAddress,
+      );
+      if (state) return getFaucet(mid, mid.faucetAddress);
+    } catch {
+      // A localnet reset can leave a stale deployment file. Fall through and
+      // create a faucet on the active disposable chain.
+    }
+    mid.faucetAddress = '';
+    faucetHandle = null;
+  }
+
+  const deployed = await deployContract(mid.faucetProviders, {
+    compiledContract: compiledFaucetContract(),
+    privateStateId: 'passport-demo-faucet',
+    initialPrivateState: {},
+  } as any);
+  const address = String(deployed.deployTxData.public.contractAddress);
+  mid.faucetAddress = address;
+  faucetHandle = { address, handle: deployed };
+  return deployed;
 }
 
 let identityRegistryHandle: IdentityRegistry | null = null;

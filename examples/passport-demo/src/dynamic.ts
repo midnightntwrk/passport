@@ -1,4 +1,12 @@
 import type { MidnightWallet, MidnightWalletConnector } from '@dynamic-labs/midnight';
+import { MidnightBech32m } from '@midnight-ntwrk/wallet-sdk-address-format';
+
+import {
+  createDynamicMidnightProofProvider,
+  submitDynamicTransaction as submitAuthorizedCompactTransaction,
+  type DynamicTransactionIntent,
+  type DynamicTransactionReceipt,
+} from '../../../experiments/account-custody-prototype/src/wallet/dynamic-transaction.js';
 
 type AddressStatus = 'loading' | 'ready' | 'partial';
 type BalanceStatus = 'loading' | 'ready' | 'syncing' | 'unavailable';
@@ -43,11 +51,8 @@ function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs: number)
   });
 }
 
-/**
- * Runs Dynamic's real WaaS/MPC transaction finalization. The returned value is
- * the serialized FinalizedTransaction produced by Dynamic, never a local mock.
- */
-export async function signDynamicTransaction(wallet: MidnightWallet, serializedTransaction: string): Promise<string> {
+/** Finalizes a transaction produced by Dynamic's supported wallet transfer builder. */
+export async function signDynamicTransferTransaction(wallet: MidnightWallet, serializedTransaction: string): Promise<string> {
   const connector = wallet.connector as MidnightWalletConnector;
   if (connector.overrideKey !== 'dynamicwaas') {
     throw new Error('A Dynamic embedded Midnight wallet is required for MPC signing.');
@@ -60,7 +65,7 @@ export async function signDynamicTransaction(wallet: MidnightWallet, serializedT
 }
 
 /** Broadcasts a Dynamic-finalized transaction and requires a real chain hash. */
-export async function submitDynamicTransaction(wallet: MidnightWallet, finalizedTransaction: string): Promise<{ txHash: string }> {
+export async function submitDynamicTransferTransaction(wallet: MidnightWallet, finalizedTransaction: string): Promise<{ txHash: string }> {
   const submitted = await withTimeout(
     wallet.submitTransaction(finalizedTransaction),
     'Dynamic Midnight broadcast',
@@ -70,6 +75,52 @@ export async function submitDynamicTransaction(wallet: MidnightWallet, finalized
     throw new Error('Dynamic completed the broadcast call without returning a Midnight transaction hash.');
   }
   return submitted;
+}
+
+/**
+ * Proves, approves, and broadcasts an arbitrary call-proved Compact
+ * transaction only through Dynamic's explicit capability contract.
+ *
+ * Dynamic's transfer-only signTransaction API is intentionally not a
+ * fallback. The approval signature is retained in the returned receipt and is
+ * bound to both the input and finalized transaction digests.
+ */
+export async function authorizeAndSubmitDynamicCompactTransaction(
+  wallet: MidnightWallet,
+  serializedTransaction: string,
+  intent: Omit<DynamicTransactionIntent, 'network'>,
+): Promise<DynamicTransactionReceipt> {
+  const connector = wallet.connector as MidnightWalletConnector;
+  if (connector.overrideKey !== 'dynamicwaas') {
+    throw new Error('A Dynamic embedded Midnight wallet is required for Compact transaction approval.');
+  }
+  const network = MidnightBech32m.parse(wallet.address).network;
+  if (network !== 'preview') {
+    throw new Error('Passport C1 pilot deployments are preview-only.');
+  }
+  const proofProvider = createDynamicMidnightProofProvider(connector, {
+    packageName: '@dynamic-labs/midnight',
+    packageVersion: '4.93.1',
+  });
+
+  return submitAuthorizedCompactTransaction({
+    authorizer: {
+      address: wallet.address,
+      signMessage: (message) => wallet.signMessage(message),
+    },
+    proofProvider,
+    broadcaster: {
+      submitTransaction: (transaction) => wallet.submitTransaction(transaction),
+      revertTransaction: (transaction) => wallet.revertTransaction(transaction),
+    },
+    serializedTransaction,
+    intent: { ...intent, network },
+    assertNetwork: () => {
+      if (MidnightBech32m.parse(wallet.address).network !== network) {
+        throw new Error('The Dynamic Midnight network changed during C1 approval.');
+      }
+    },
+  });
 }
 
 async function optional<T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T | null> {

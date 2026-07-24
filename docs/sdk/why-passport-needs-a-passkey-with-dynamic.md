@@ -2,14 +2,17 @@
 
 ## Short answer
 
-Dynamic can create the embedded Midnight wallet and exposes transaction signing
-and submission methods. This demo has **not yet confirmed** that Dynamic can
-prove and submit an arbitrary Passport C1 deployment on-chain. Dynamic also does
-not provide Passport with documented secure storage for the private C1 witness.
+Dynamic can create the embedded Midnight wallet and exposes signing and
+submission for wallet-native transfers. Dynamic 4.93.1 does **not** expose the
+proof-and-finalization capability required for an arbitrary Passport C1
+`UnboundTransaction`. Dynamic also does not provide Passport with documented
+secure storage for the private C1 witness.
 
 The demo's Passport passkey does not replace Dynamic and does not sign the
-Midnight transaction. It unlocks the encrypted private witness. The demo then
-asks Dynamic to sign and submit; that custom-contract path remains a live test.
+Midnight transaction. It unlocks the encrypted private witness. The preview
+demo probes for an explicit Dynamic Compact proof capability and fails before
+proving when that capability is absent. It never falls back to a detached
+message signature or the transfer-only signer.
 
 ## The two separate authorities
 
@@ -17,7 +20,7 @@ asks Dynamic to sign and submit; that custom-contract path remains a live test.
 |---|---|
 | Create the embedded Midnight wallet | Dynamic |
 | Expose unshielded, shielded, and DUST addresses | Dynamic |
-| Attempt custom C1 signing/proving/submission | Dynamic connector; live validation pending |
+| Prove/finalize arbitrary C1 transactions | Dynamic connector; externally blocked in 4.93.1 |
 | Create the Passport C1 device witness | Passport |
 | Encrypt and unlock that private witness | Passport passkey |
 | Record device membership and permission state | Passport C1 pilot contract |
@@ -34,8 +37,11 @@ but it must never be written to plaintext browser storage.
 3. A WebAuthn PRF passkey derives a non-exportable encryption key.
 4. Passport encrypts the device secret in IndexedDB.
 5. Passport builds the C1 deployment using the secret's public commitment.
-6. The demo asks Dynamic to sign, prove, and submit that deployment transaction.
-7. Later C1 operations unlock the encrypted witness with the Passport passkey.
+6. The demo requires Dynamic to advertise and execute a versioned
+   `UnboundTransaction -> FinalizedTransaction` proof capability.
+7. A human-readable Dynamic signature is bound to both transaction digests,
+   then those exact finalized bytes are broadcast.
+8. Later C1 operations unlock the encrypted witness with the Passport passkey.
 
 The demo therefore needs a private-state key provider. WebAuthn PRF is the
 current provider; it is an architectural choice, not a universal SDK requirement.
@@ -53,10 +59,11 @@ message signing, transfer construction, `signTransaction`, and
 - authorizing C1 device and permission operations independently of wallet
   transfers.
 
-Dynamic's `signTransaction` is also documented as the proving/signing step in
-its transfer flow. Our custom C1 deployment uses the generic serialized
-transaction method, but arbitrary Compact deployment support must still be
-validated live before it can be called supported production behavior.
+Dynamic's `signTransaction` is documented for the
+`createTransferTransaction` flow. Passport does not pass its C1 draft to that
+method. The adapter requires the explicit capability names
+`getMidnightProofCapabilities()` and `proveMidnightTransaction()` and returns
+`DYNAMIC_MIDNIGHT_COMPACT_PROOF_API_UNAVAILABLE` when they are absent.
 
 ## Can we remove the passkey?
 
@@ -114,8 +121,8 @@ custodian for the C1 witness.
 
 ## Current conclusion
 
-We do not yet have live evidence that Dynamic supports arbitrary Compact
-deployment transactions. Even if that transaction path succeeds, Dynamic alone
+The installed Dynamic release does not support the arbitrary Compact proof
+boundary required by Passport C1. Even after Dynamic adds it, Dynamic alone
 does not make the current Passport C1 usable afterward because its device and
 permission circuits require private witness state that Dynamic does not manage.
 

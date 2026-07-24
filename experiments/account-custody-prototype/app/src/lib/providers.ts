@@ -592,7 +592,7 @@ export async function createDynamicProviders(
 
 export function compiledAccountContract() {
   return CompiledContract.make('account', Contract as any).pipe(
-    CompiledContract.withWitnesses(makeWitnesses() as any),
+    CompiledContract.withWitnesses(makeWitnesses() as never),
     CompiledContract.withCompiledFileAssets('/zk/account'),
   );
 }
