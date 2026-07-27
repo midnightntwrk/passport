@@ -3,6 +3,7 @@ dist/
 contracts/managed/
 midnight-level-db/
 infra/.env
+app/.env.local
 deployment.json
 faucet-deployment.json
 identity-registry-deployment.json

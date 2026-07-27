@@ -1,7 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import type { AppContext } from '../App.js';
+import { bytesToHex } from '../../../src/wallet/hex.js';
 import { beginTask, completeTask, failTask } from '../lib/txTracker.js';
+import {
+  approveWithDynamicWallet,
+  dynamicNetwork,
+  isDynamicApprovalLive,
+  probeDynamicCompactSupport,
+  type DynamicApproval,
+  type DynamicCompactSupport,
+} from '../lib/dynamicTransactions.js';
 import {
   loadAliasForAccount,
   normalizeAlias,
@@ -12,6 +21,7 @@ import {
   loadDynamicMidnightState,
   type DynamicMidnightState,
 } from '../lib/dynamicMidnight.js';
+import { getSigNetworkReadiness, type SigNetworkReadiness } from '../lib/sigNetwork.js';
 
 type Scene = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 type PoolKey = 'retail' | 'accredited';
@@ -53,13 +63,13 @@ const POOLS: Record<
 };
 
 const STEPS = [
-  'Choose pool',
+  'Choose route',
   'Set amount',
-  'Source funds',
-  'Bridge transaction',
+  'Verify wallet',
+  'Custody transaction',
   'Verify Night ID',
-  'Deploy capital',
-  'Manage positions',
+  'Record custody',
+  'Activity',
 ];
 
 interface Position {
@@ -69,6 +79,8 @@ interface Position {
   earned: number;
   deposited: number;
   txId: string;
+  /** SHA-256 of the Dynamic signature that approved opening this position. */
+  approvalFingerprint?: string;
 }
 
 const fmtUsd = (value: number | string) => {
@@ -105,6 +117,7 @@ export function FoundationsFlowView({
   const [txStatusText, setTxStatusText] = useState('Awaiting signature in wallet...');
   const [txConfirms, setTxConfirms] = useState(0);
   const [txId, setTxId] = useState('');
+  const [approval, setApproval] = useState<DynamicApproval | null>(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [dynamicState, setDynamicState] = useState<DynamicMidnightState | null>(null);
@@ -158,6 +171,11 @@ export function FoundationsFlowView({
     [ctx.ledger],
   );
   const activePool = POOLS[pool];
+  const sigNetwork = useMemo(() => getSigNetworkReadiness(), []);
+  const compactSupport = useMemo<DynamicCompactSupport | null>(
+    () => (ctx.dynamicWallet ? probeDynamicCompactSupport(ctx.dynamicWallet) : null),
+    [ctx.dynamicWallet],
+  );
   const currentStep = positions.length > 0 && scene === 6 ? 6 : scene;
 
   function pickPool(nextPool: PoolKey) {
@@ -174,29 +192,57 @@ export function FoundationsFlowView({
     setScene(2);
   }
 
-  async function depositFromLocalWallet() {
+  async function depositIntoCustody() {
     setShowSource(false);
     setShowTx(true);
     setScene(3);
     setError('');
     setTxId('');
+    setApproval(null);
     setTxConfirms(0);
     setTxStatus('confirming');
-    setTxStatusText('Requesting Dynamic wallet authorization...');
+    setTxStatusText('Waiting for the Dynamic wallet to approve this exact deposit...');
     beginTask('Depositing Night into the MN Passport vault', 'deposit_night');
     try {
-      await ctx.dynamicWallet?.signMessage(
-        `MN Passport deposit authorization\nAmount: ${amount} USDC\nAccount: ${ctx.session.accountAddress}`,
-      );
-      setTxStatusText('Depositing through the MN Passport custody account...');
+      const wallet = ctx.dynamicWallet;
+      if (!wallet) throw new Error('Dynamic Midnight wallet is not connected.');
       const depositValue = BigInt(Math.max(1, Math.floor(Number(amount))));
+
+      // The approval commits to the contract, the circuit, and the arguments
+      // below. Nothing is broadcast unless it comes back signed and live.
+      const receipt = await approveWithDynamicWallet(wallet, {
+        contractAddress: ctx.session.accountAddress,
+        circuit: 'deposit_night',
+        summary: `Deposit ${depositValue} NIGHT into the MN Passport custody account`,
+        arguments: {
+          amount: depositValue.toString(),
+          tokenType: bytesToHex(ctx.nightColor),
+        },
+      });
+      setApproval(receipt);
+      ctx.log(
+        `Dynamic approval ${receipt.fingerprint.slice(0, 16)}... signed by ${receipt.walletAddress.slice(0, 16)}... for deposit_night ${depositValue}`,
+      );
+
+      // Dynamic can sign and prove its own transfer drafts, but it cannot yet
+      // balance a call-proved Compact transaction, so the approved circuit
+      // call is broadcast by the Passport devnet wallet. See DECISIONS.md.
+      const support = probeDynamicCompactSupport(wallet);
+      setTxStatusText(
+        `${support.reason} Broadcasting the approved deposit with the Passport devnet wallet...`,
+      );
+      if (!isDynamicApprovalLive(receipt)) {
+        throw new Error('The Dynamic approval expired before the deposit was broadcast.');
+      }
       const result = await ctx.account.depositNight(ctx.nightColor, depositValue);
       const id = result.txId;
       setTxId(id);
       setTxConfirms(12);
       setTxStatus('confirmed');
       setTxStatusText('Deposited into your MN Passport custody account');
-      ctx.log(`passport deposit ${amount} -> tx ${id}`);
+      ctx.log(
+        `passport deposit ${depositValue} -> tx ${id} under approval ${receipt.fingerprint.slice(0, 16)}...`,
+      );
       await ctx.refreshLedger();
       completeTask(id);
     } catch (e: any) {
@@ -249,10 +295,21 @@ export function FoundationsFlowView({
     setBusy('deploy');
     setError('');
     try {
-      await ctx.dynamicWallet?.signMessage(
-        `MN Passport deploy capital\nNight ID: ${nightHandle}.night\nAmount: ${amount} USDC\nPool: ${activePool.name} ${activePool.serif}`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, 900));
+      const wallet = ctx.dynamicWallet;
+      if (!wallet) throw new Error('Dynamic Midnight wallet is not connected.');
+      // The pool allocation is an off-chain intent, so a signed approval is
+      // the whole authorisation — it is kept with the position, not dropped.
+      const receipt = await approveWithDynamicWallet(wallet, {
+        contractAddress: ctx.session.accountAddress,
+        circuit: 'deploy_capital',
+        summary: `Deploy ${fmtUsd(amount)} into ${activePool.name} ${activePool.serif}`,
+        arguments: {
+          amount: String(amount),
+          custodyTx: txId || 'none',
+          nightId: `${nightHandle}.night`,
+          pool: `${activePool.name} ${activePool.serif}`,
+        },
+      });
       setPositions((current) => [
         ...current,
         {
@@ -262,9 +319,12 @@ export function FoundationsFlowView({
           earned: 0,
           deposited: Date.now(),
           txId,
+          approvalFingerprint: receipt.fingerprint,
         },
       ]);
-      ctx.log(`passport position opened: ${fmtUsd(amount)} -> ${activePool.name} ${activePool.serif}`);
+      ctx.log(
+        `passport position opened under approval ${receipt.fingerprint.slice(0, 16)}...: ${fmtUsd(amount)} -> ${activePool.name} ${activePool.serif}`,
+      );
       setShowSuccess(true);
     } catch (e: any) {
       setError(String(e?.message ?? e));
@@ -305,7 +365,14 @@ export function FoundationsFlowView({
 
       <div className="nf-stage">
         <div className="nf-stage-inner">
-          {scene === 0 && <SceneYield onPick={pickPool} ledgerNightTotal={ledgerNightTotal} />}
+          {scene === 0 && (
+            <SceneYield
+              onPick={pickPool}
+              ledgerNightTotal={ledgerNightTotal}
+              identityReady={Boolean(ctx.session.identityRegistrationTxId)}
+              sigNetwork={sigNetwork}
+            />
+          )}
           {scene === 4 && (
             <SceneNightId
               handle={nightHandle}
@@ -351,11 +418,14 @@ export function FoundationsFlowView({
           amount={amount}
           dynamicState={dynamicState}
           dynamicError={dynamicError}
+          sigNetwork={sigNetwork}
+          compactSupport={compactSupport}
+          walletNetwork={ctx.dynamicWallet ? dynamicNetwork(ctx.dynamicWallet) : 'not connected'}
           onClose={() => {
             setShowSource(false);
             setScene(0);
           }}
-          onContinue={depositFromLocalWallet}
+          onContinue={depositIntoCustody}
         />
       )}
 
@@ -363,6 +433,7 @@ export function FoundationsFlowView({
         <TxModal
           amount={amount}
           txId={txId}
+          approval={approval}
           confirms={txConfirms}
           status={txStatus}
           statusText={txStatusText}
@@ -385,15 +456,7 @@ export function FoundationsFlowView({
 
 export function FoundationsLogo() {
   return (
-    <svg viewBox="0 0 789.37 789.37" role="img" aria-label="MN Passport" width="100%" height="100%">
-      <path
-        d="m394.69,0C176.71,0,0,176.71,0,394.69s176.71,394.69,394.69,394.69,394.69-176.71,394.69-394.69S612.67,0,394.69,0Zm0,716.6c-177.5,0-321.91-144.41-321.91-321.91S217.18,72.78,394.69,72.78s321.91,144.41,321.91,321.91-144.41,321.91-321.91,321.91Z"
-        fill="currentColor"
-      />
-      <rect x="357.64" y="357.64" width="74.09" height="74.09" fill="currentColor" />
-      <rect x="357.64" y="240.66" width="74.09" height="74.09" fill="currentColor" />
-      <rect x="357.64" y="123.69" width="74.09" height="74.09" fill="currentColor" />
-    </svg>
+    <img src="/midnight-symbol.svg" alt="Midnight" />
   );
 }
 
@@ -411,24 +474,19 @@ function Topbar(props: {
   return (
     <div className="nf-top">
       <div className="nf-brand">
-        <div className="nf-mark">
-          <FoundationsLogo />
-        </div>
-        <div className="nf-word">
-          <span className="night">MN</span>
-          <span className="fi">Passport</span>
-        </div>
+        <img className="nf-wordmark" src="/midnight-logo.svg" alt="Midnight" />
+        <span className="nf-product-name">Passport</span>
       </div>
       <div className="nf-tabs">
         <button className={`nf-tab ${!dashboard ? 'active' : ''}`} onClick={props.onEarn}>
-          Earn
+          Passport flow
         </button>
         <button
           className={`nf-tab ${dashboard ? 'active' : ''}`}
           onClick={props.onDashboard}
           disabled={!props.hasPositions}
         >
-          Dashboard
+          Activity
         </button>
       </div>
       <div className="nf-top-right">
@@ -478,33 +536,54 @@ function Rail({ scene }: { scene: Scene }) {
 function SceneYield({
   onPick,
   ledgerNightTotal,
+  identityReady,
+  sigNetwork,
 }: {
   onPick: (p: PoolKey) => void;
   ledgerNightTotal: bigint;
+  identityReady: boolean;
+  sigNetwork: SigNetworkReadiness;
 }) {
   return (
     <div className="nf-scene">
       <div className="nf-scene-head">
-        <div className="nf-eyebrow">MN Passport foundations</div>
+        <div className="nf-eyebrow">MN Passport</div>
         <h1 className="nf-title">
-          Earn yield, <span className="serif">privately.</span>
+          Move assets with <span className="serif">verifiable custody.</span>
         </h1>
         <p className="nf-sub-text">
-          Choose a pool, source funds through your MN Passport custody account, bind a Night ID, and
-          deploy capital. The deposit step is a real Midnight localnet custody transaction.
+          Your Passport identity, custody account, and transaction record stay separate from the
+          asset route. The localnet route below performs a real Midnight custody transaction.
         </p>
       </div>
 
       <div className="nf-market">
-        <MarketCell label="Total value locked" value="$296.8M" delta="+2.4%" />
-        <MarketCell label="Custody balance" value={`${ledgerNightTotal} Night`} />
-        <MarketCell label="Active depositors" value="14,892" />
-        <MarketCell label="Yield distributed" value="$8.4M" />
+        <MarketCell label="Custody balance" value={`${ledgerNightTotal} NIGHT`} />
+        <MarketCell label="Night ID" value={identityReady ? 'Registered' : 'Pending'} />
+        <MarketCell label="Passport network" value="Midnight localnet" />
+        <MarketCell label="Sig route" value={sigNetwork.configured ? 'Configured' : 'Awaiting endpoints'} />
       </div>
 
-      <div className="nf-pools">
-        <PoolCard poolKey="retail" onClick={() => onPick('retail')} />
-        <PoolCard poolKey="accredited" onClick={() => onPick('accredited')} />
+      <div className="nf-route-grid">
+        <button className="nf-route-card active" onClick={() => onPick('retail')}>
+          <span className="nf-route-index">01</span>
+          <span className="nf-route-copy">
+            <strong>Midnight custody</strong>
+            <span>Deposit NIGHT into the Passport custody contract on the localnet.</span>
+          </span>
+          <span className="nf-route-state">Live demo</span>
+          <span className="nf-route-arrow">{'->'}</span>
+        </button>
+        <div className="nf-route-card sig">
+          <span className="nf-route-index">02</span>
+          <span className="nf-route-copy">
+            <strong>Sig.Network ERC20 route</strong>
+            <span>Midnight request, MPC signing, Sepolia execution, then shielded USDC claim.</span>
+          </span>
+          <span className={`nf-route-state ${sigNetwork.configured ? 'ready' : ''}`}>
+            {sigNetwork.configured ? 'Configured' : 'Needs deployment'}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -601,7 +680,7 @@ function DepositModal(props: {
           </div>
           <div className="nf-amt">
             <input value={props.amount} onChange={(e) => props.onAmount(e.target.value)} type="number" autoFocus />
-            <span className="nf-amt-cur">USDC</span>
+            <span className="nf-amt-cur">NIGHT</span>
           </div>
           <div className="nf-quick">
             {presets.map((n) => (
@@ -617,7 +696,7 @@ function DepositModal(props: {
                 {isRetail ? 'Retail tier - open access' : 'Accredited tier - verification required'}
               </div>
               <div className="nf-banner-desc">
-                Local demo deposits the matching amount of Night into your MN Passport custody account.
+                This route submits a real `deposit_night` transaction to your MN Passport custody account.
               </div>
             </div>
           </div>
@@ -634,18 +713,20 @@ function SourceModal(props: {
   amount: string;
   dynamicState: DynamicMidnightState | null;
   dynamicError: string;
+  sigNetwork: SigNetworkReadiness;
+  compactSupport: DynamicCompactSupport | null;
+  walletNetwork: string;
   onClose: () => void;
   onContinue: () => void;
 }) {
   return (
     <div className="nf-mb" onClick={props.onClose}>
       <div className="nf-modal nf-source-modal" onClick={(e) => e.stopPropagation()}>
-        <ModalHead title="Step 02 · Source funds" onClose={props.onClose} />
+        <ModalHead title="Step 02 · Verify custody route" onClose={props.onClose} />
         <div className="nf-modal-body">
           <p className="nf-small-copy">
-            Bridging <b>{fmtUsd(props.amount)}</b> USDC after Dynamic Midnight wallet
-            authorization. The MN Passport custody account receives the localnet deposit and the
-            Dynamic wallet surfaces remain visible below.
+            The active route deposits <b>{props.amount} NIGHT</b> into the MN Passport custody
+            contract. Dynamic provides the Midnight wallet surfaces used to authorize the action.
           </p>
           <div className="nf-witem selected nf-dynamic-wallet">
             <div className="nf-wicon">D</div>
@@ -660,11 +741,72 @@ function SourceModal(props: {
             </div>
           </div>
           <DynamicConnectorPanel state={props.dynamicState} error={props.dynamicError} />
+          <DynamicRoutePanel
+            compactSupport={props.compactSupport}
+            walletNetwork={props.walletNetwork}
+          />
+          <SigNetworkPanel readiness={props.sigNetwork} />
           <button className="nf-btn" onClick={props.onContinue}>
-            Sign with Dynamic and deposit {'->'}
+            Sign with Dynamic and deposit NIGHT {'->'}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Says plainly which Dynamic API does what on this route, so the demo never
+    implies Dynamic broadcast a contract call it cannot balance yet. */
+function DynamicRoutePanel({
+  compactSupport,
+  walletNetwork,
+}: {
+  compactSupport: DynamicCompactSupport | null;
+  walletNetwork: string;
+}) {
+  return (
+    <div className="nf-dynamic-panel">
+      <div className="nf-dynamic-head">
+        <span>Transaction route</span>
+        <span className={compactSupport?.available ? 'good' : 'bad'}>
+          {compactSupport?.available
+            ? 'Dynamic balance-and-prove available'
+            : 'Compact call broadcast locally'}
+        </span>
+      </div>
+      <div className="nf-surface-list">
+        <SurfaceRow
+          method="wallet.signMessage"
+          label="Approves this exact deposit — contract, circuit, amount, token, expiry"
+          value={`Dynamic embedded wallet on ${walletNetwork}`}
+        />
+        <SurfaceRow
+          method="account.depositNight"
+          label="Broadcasts the approved C1 call"
+          value="Passport devnet wallet"
+        />
+      </div>
+      {compactSupport && <div className="nf-dynamic-note">{compactSupport.reason}</div>}
+    </div>
+  );
+}
+
+function SigNetworkPanel({ readiness }: { readiness: SigNetworkReadiness }) {
+  return (
+    <div className="nf-sig-panel">
+      <div className="nf-sig-head">
+        <span>Sig.Network ERC20 vault</span>
+        <span className={readiness.configured ? 'good' : 'bad'}>
+          {readiness.configured ? 'configuration detected' : 'not connected'}
+        </span>
+      </div>
+      <p>
+        Midnight request {'->'} MPC ECDSA signing {'->'} Sepolia ERC20 execution {'->'} Schnorr
+        verified shielded USDC claim.
+      </p>
+      {!readiness.configured && (
+        <div className="nf-sig-missing">Missing: {readiness.missing.join(' · ')}</div>
+      )}
     </div>
   );
 }
@@ -778,6 +920,7 @@ function BalanceCell(props: { label: string; symbol: string; value: string; deta
 function TxModal(props: {
   amount: string;
   txId: string;
+  approval: DynamicApproval | null;
   confirms: number;
   status: TxStatus;
   statusText: string;
@@ -787,19 +930,28 @@ function TxModal(props: {
   return (
     <div className="nf-mb">
       <div className="nf-modal">
-        <ModalHead title="Step 03 · Bridge transaction" onClose={props.onClose} />
+        <ModalHead title="Step 03 · Passport custody transaction" onClose={props.onClose} />
         <div className="nf-modal-body">
           <div className="nf-tx-flow">
-            <TxNode label="From" name="MN Passport wallet" active />
+            <TxNode label="From" name="Localnet fee wallet" active />
             <div className={`nf-tx-arr ${props.status === 'confirmed' ? '' : 'flowing'}`} />
-            <TxNode label="To" name="Night vault" active={props.status === 'confirmed'} />
+            <TxNode label="To" name="MN Passport custody" active={props.status === 'confirmed'} />
           </div>
           <div className="nf-tx-rows">
-            <TxRow k="Amount" v={`${fmtUsd(props.amount)} USDC`} />
-            <TxRow k="Bridge" v="MN Passport custody · localnet" />
+            <TxRow k="Asset" v={`${props.amount} NIGHT`} />
+            <TxRow k="Network" v="Midnight localnet" />
             <TxRow k="Tx hash" v={props.txId || '-'} mono />
             <TxRow k="Confirmations" v={`${props.confirms} / 12`} />
-            <TxRow k="Network fee" v="sponsored in local demo" />
+            <TxRow k="Fee wallet" v="local demo funding wallet" />
+            <TxRow
+              k="Dynamic approval"
+              v={props.approval ? `${props.approval.fingerprint.slice(0, 24)}...` : 'not signed yet'}
+              mono
+            />
+            <TxRow
+              k="Approval expires"
+              v={props.approval ? props.approval.expiresAt : '-'}
+            />
           </div>
           <div className={`nf-tx-status ${props.status}`}>{props.statusText}</div>
           <button className="nf-btn" disabled={props.status !== 'confirmed'} onClick={props.onContinue}>
@@ -980,7 +1132,16 @@ function SceneDashboard({
             <div>{POOLS[p.pool].tier}</div>
             <div>{fmtUsd(p.amount)}</div>
             <div className="nf-pos-earned">{fmtUsdDec(p.earned)}</div>
-            <div className="nf-pos-status active">Active</div>
+            <div
+              className="nf-pos-status active"
+              title={
+                p.approvalFingerprint
+                  ? `Dynamic approval ${p.approvalFingerprint}`
+                  : 'Opened before approvals were recorded'
+              }
+            >
+              Active
+            </div>
             <div className="nf-pos-action">
               <button>Manage</button>
             </div>

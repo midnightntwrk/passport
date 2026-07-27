@@ -2975,6 +2975,29 @@ body[data-explain='1'] .x {
 .nf-mark {
   width: 32px;
   height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.nf-mark img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.nf-wordmark {
+  display: block;
+  width: 104px;
+  height: auto;
+}
+
+.nf-product-name {
+  border-left: 1px solid var(--line-1);
+  color: var(--text-1);
+  font: 600 14px/1 var(--font-mono);
+  letter-spacing: 0.06em;
+  padding-left: 13px;
+  text-transform: uppercase;
 }
 
 .nf-word {
@@ -3290,6 +3313,90 @@ body[data-explain='1'] .x {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
+}
+
+.nf-route-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.nf-route-card {
+  min-height: 160px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 16px;
+  border: 1px solid var(--line-1);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  color: var(--text-0);
+  padding: 22px;
+  text-align: left;
+}
+
+button.nf-route-card {
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+button.nf-route-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
+}
+
+.nf-route-card.active {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--line-1));
+}
+
+.nf-route-card.sig {
+  background: color-mix(in srgb, var(--bg-elev) 86%, #eaf0ff);
+}
+
+.nf-route-index {
+  color: var(--accent);
+  font: 700 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+.nf-route-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.nf-route-copy strong {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.nf-route-copy span {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.nf-route-state {
+  border: 1px solid var(--line-1);
+  border-radius: 6px;
+  color: var(--text-2);
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.09em;
+  padding: 6px 7px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.nf-route-state.ready {
+  border-color: color-mix(in srgb, var(--green) 36%, var(--line-1));
+  color: var(--green);
+}
+
+.nf-route-arrow {
+  grid-column: 2 / -1;
+  color: var(--accent);
+  font: 600 18px/1 var(--font-mono);
 }
 
 .nf-pool {
@@ -3863,6 +3970,47 @@ body[data-explain='1'] .x {
 
 .nf-dynamic-error {
   color: var(--danger);
+}
+
+.nf-sig-panel {
+  margin-top: 12px;
+  border: 1px solid var(--line-1);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-1) 82%, #edf1ff);
+  padding: 14px;
+}
+
+.nf-sig-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-0);
+  font: 700 10px/1.2 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.nf-sig-head .good {
+  color: var(--green);
+}
+
+.nf-sig-head .bad,
+.nf-sig-missing {
+  color: var(--danger);
+}
+
+.nf-sig-panel p,
+.nf-sig-missing {
+  margin: 10px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.nf-sig-missing {
+  border-top: 1px solid var(--line-1);
+  padding-top: 10px;
 }
 
 .nf-surface-list {
@@ -4455,6 +4603,7 @@ body[data-explain='1'] .x {
 
   .nf-market,
   .nf-pools,
+  .nf-route-grid,
   .nf-id-setup,
   .nf-dash-stats {
     grid-template-columns: 1fr;

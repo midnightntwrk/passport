@@ -7,7 +7,9 @@ Night and shielded assets (C4), scoped grants (C10/C11), and total-loss
 recovery from on-chain 2-of-3 shares (C14, PVSS placeholder).
 
 Decisions made (and deliberately deferred) by this iteration are recorded
-in [DECISIONS.md](./DECISIONS.md).
+in [DECISIONS.md](./DECISIONS.md). What the Dynamic embedded wallet signs,
+what it broadcasts, and what it still cannot do is written up in
+[DYNAMIC-SIGNING.md](./DYNAMIC-SIGNING.md).
 
 ## Layout
 
@@ -72,8 +74,11 @@ proof server, and serves the zk artefacts — no CORS in the way).
 - **Create your passport** — creates a passkey, derives the device secret
   from the WebAuthn PRF output, deploys your account contract, and splits a
   fresh recovery secret 2-of-3 into on-chain shares. It then registers the
-  selected Night ID on the Passport identity registry contract and stores the
-  registry tx in the local session.
+  selected Night ID on the configured, shared Passport identity registry
+  contract. `register_identity(handle, account)` writes the normalized handle
+  and deployed custody-account address to the registry ledger. The alias is
+  rejected if already claimed, and the app stores the registry address and
+  registration transaction in the local session.
 - **Assets** — deposit and withdraw Night; mint shielded tokens from the
   faucet, deposit the note, withdraw with change.
 - **Devices** — register additional passkeys, remove devices (the contract
@@ -113,6 +118,21 @@ The source step surfaces the three address APIs that a Midnight dApp needs:
 It also shows balances as three separate objects: unshielded NIGHT, shielded
 NIGHT, and DUST. Social-auth embedded Midnight wallets are intentionally shown
 as pending rollout; today the supported end-to-end path is the 1am connector.
+
+## Sig.Network ERC20 route
+
+The Passport demo keeps the working localnet custody deposit separate from the
+Sig.Network cross-chain protocol. Sig's verified E2E flow is:
+
+```text
+Midnight vault request -> MPC ECDSA signing -> Sepolia ERC20 execution
+-> MPC Schnorr response -> shielded USDC claim on Midnight
+```
+
+The browser does not simulate that route. To surface a real deployed Sig
+environment, copy `app/.env.example` to `app/.env.local` and provide the
+deployed Midnight vault address, MPC WebSocket endpoint, and Sepolia RPC URL.
+No private keys, wallet seeds, or MPC secrets belong in the browser config.
 
 ## Caveats (prototype, not production)
 

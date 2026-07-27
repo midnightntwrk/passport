@@ -159,8 +159,40 @@ never persisted (the demo deliberately leaves C16 wallet-local-storage
 unexercised). A dev-mode passphrase fallback (SHA-256) exists for
 environments without PRF-capable authenticators.
 
+## Dynamic wallet signing boundary (demo app)
+
+**`signMessage` is an authorisation receipt, not a transaction.** The demo
+requests one signature over a canonical message that names the contract,
+the circuit, every argument, an approval time, an expiry, and a nonce
+(`src/wallet/dynamic-approval.ts`). The signature is retained,
+fingerprinted (SHA-256), logged, displayed, and persisted with whatever it
+authorised; a missing, empty, rejected, or expired approval aborts the
+action. An awaited-and-discarded signature authorises nothing and is
+treated as a defect.
+
+**Value transfers use Dynamic's supported three-step flow.**
+`createTransferTransaction` → `signTransaction` (MPC signing plus Midnight
+proof generation) → `submitTransaction`, requiring a real transaction hash
+back (`app/src/lib/dynamicTransactions.ts`). A failure before broadcast
+reverts the draft to release its reserved UTXOs; a failure during broadcast
+deliberately does not, because a timeout can land after the transaction is
+already on chain.
+
+**Compact circuit calls are broadcast by the Passport devnet wallet.**
+Executing a circuit is neither of the above: the call-proved transaction
+still has to be balanced and finalised against DUST. `@dynamic-labs/midnight`
+4.91.6 exposes no endpoint for that, and the transfer-only `signTransaction`
+is not a substitute — it consumes the draft `createTransferTransaction`
+builds. `probeDynamicCompactSupport` checks for
+`getMidnightProofCapabilities` and `proveMidnightTransaction`, reports the
+gap in the UI, and will flag the day a Dynamic release ships them.
+
 ## Known gaps and privacy notes
 
+- **Dynamic cannot yet execute a C1 call.** Until Dynamic integrates
+  balance-and-prove, the embedded wallet authorises custody calls and the
+  devnet wallet broadcasts them. The demo states this on the route panel
+  rather than implying Dynamic signed the chain transaction.
 - **Device-commitment linkability.** Each authorised call discloses the
   calling device's commitment (it is the ledger-map key), linking calls by
   device. A Merkle membership proof would hide it; deferred (C12-adjacent).

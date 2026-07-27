@@ -9,6 +9,7 @@ import type { Midnight } from '../lib/midnight.js';
 import { accountForIdentity, registerIdentity } from '../lib/midnight.js';
 import { compiledAccountContract } from '../lib/providers.js';
 import { deriveDeviceSecret, deriveDevModeSecret } from '../lib/passkey.js';
+import { approveWithDynamicWallet, type DynamicApproval } from '../lib/dynamicTransactions.js';
 import {
   loadPasskeyForAlias,
   normalizeAlias,
@@ -25,6 +26,9 @@ interface DynamicSecretRecord {
   walletKey: string;
   walletAddress: string;
   secretHex: string;
+  /** SHA-256 of the Dynamic signature that authorised creating this secret. */
+  approvalFingerprint?: string;
+  approvedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -51,7 +55,11 @@ function loadDynamicSecret(wallet: MidnightWallet): DynamicSecretRecord | null {
   );
 }
 
-function saveDynamicSecret(wallet: MidnightWallet, secret: Uint8Array): DynamicSecretRecord {
+function saveDynamicSecret(
+  wallet: MidnightWallet,
+  secret: Uint8Array,
+  approval: DynamicApproval,
+): DynamicSecretRecord {
   const now = new Date().toISOString();
   const key = dynamicWalletKey(wallet);
   const existing = loadDynamicSecret(wallet);
@@ -59,6 +67,8 @@ function saveDynamicSecret(wallet: MidnightWallet, secret: Uint8Array): DynamicS
     walletKey: key,
     walletAddress: wallet.address,
     secretHex: bytesToHex(secret),
+    approvalFingerprint: approval.fingerprint,
+    approvedAt: approval.approvedAt,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
@@ -148,12 +158,21 @@ export function OnboardView(props: {
       };
     }
     log(`requesting Dynamic wallet signature for ${alias}.night account creation...`);
-    await props.dynamicWallet.signMessage(
-      `MN Passport account creation\nNight ID: ${alias}.night\nWallet: ${props.dynamicWallet.address}`,
-    );
+    // The signature authorises minting this browser's device secret. It is
+    // kept — the record below is what proves the wallet approved it — but it
+    // is never used as key material: Dynamic signs through MPC and does not
+    // promise a deterministic signature over the same message.
+    const approval = await approveWithDynamicWallet(props.dynamicWallet, {
+      contractAddress: 'pending-deployment',
+      circuit: 'create_account',
+      summary: `Create the MN Passport custody account for ${alias}.night`,
+      arguments: { nightId: `${alias}.night` },
+    });
     const secret = randomBytes32();
-    const record = saveDynamicSecret(props.dynamicWallet, secret);
-    log(`Dynamic wallet authorization saved for ${alias}.night.`);
+    const record = saveDynamicSecret(props.dynamicWallet, secret, approval);
+    log(
+      `Dynamic wallet authorization ${approval.fingerprint.slice(0, 16)}... saved for ${alias}.night.`,
+    );
     return {
       secret,
       session: {
@@ -168,9 +187,8 @@ export function OnboardView(props: {
     if (currentSession.dynamicWalletAddress || currentSession.dynamicWalletId) {
       const storedDynamicSecret = loadDynamicSecret(props.dynamicWallet);
       if (!storedDynamicSecret) {
-        await props.dynamicWallet.signMessage(
-          `MN Passport account unlock\nAccount: ${currentSession.accountAddress}\nWallet: ${props.dynamicWallet.address}`,
-        );
+        // No signature is requested here: the secret is missing from this
+        // browser, so no approval could unlock the account anyway.
         throw new Error(
           'Dynamic wallet authorization is present, but the local demo device secret is missing for this browser. Create a new demo account or restore on the original browser profile.',
         );

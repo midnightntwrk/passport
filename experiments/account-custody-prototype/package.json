@@ -15,7 +15,8 @@
     "test:lifecycle": "tsx src/tests/lifecycle-night.ts",
     "test:shielded": "tsx src/tests/lifecycle-shielded.ts",
     "test:grants": "tsx src/tests/lifecycle-grants.ts",
-    "test:recovery": "tsx src/tests/lifecycle-recovery.ts"
+    "test:recovery": "tsx src/tests/lifecycle-recovery.ts",
+    "test:identity": "tsx src/tests/identity-registry.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

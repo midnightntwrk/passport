@@ -5,6 +5,7 @@ import { rawTokenType, encodeRawTokenType } from '@midnight-ntwrk/ledger-v8';
 import { randomBytes32, hexToBytes32, hexToBytes, bytesToHex } from '../../../src/wallet/hex.js';
 
 import { getFaucet } from '../lib/midnight.js';
+import { dynamicNetwork, transferWithDynamicWallet } from '../lib/dynamicTransactions.js';
 import { userAddressBytes, coinPublicKeyBytes } from '../lib/providers.js';
 import { ViewHeader, Panel, ActionButton, Mono, Chip } from '../ui.js';
 import type { AppContext } from '../App.js';
@@ -99,6 +100,8 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
           />
         </div>
       </Panel>
+
+      <DynamicTransferPanel ctx={ctx} />
 
       <Panel
         title="Shielded — MN Passport custody"
@@ -234,5 +237,63 @@ export function WalletPanel({ ctx }: { ctx: AppContext }) {
         ))}
       </Panel>
     </>
+  );
+}
+
+/**
+ * Dynamic's supported value-transfer path, end to end and unmocked. This moves
+ * NIGHT the embedded wallet actually holds, on the Dynamic wallet's own
+ * network — it is not the localnet the custody contract lives on, and it is
+ * deliberately not dressed up as a custody call.
+ */
+function DynamicTransferPanel({ ctx }: { ctx: AppContext }) {
+  const [recipient, setRecipient] = useState('');
+  const [amount, setAmount] = useState('1');
+  const [error, setError] = useState('');
+  const wallet = ctx.dynamicWallet;
+
+  if (!wallet) return null;
+  const network = dynamicNetwork(wallet);
+
+  return (
+    <Panel
+      title="Dynamic embedded wallet — NIGHT transfer"
+      sub={`createTransferTransaction → signTransaction → submitTransaction, on the wallet's own network (${network}).`}
+      x="Dynamic can build, MPC-sign, prove, and broadcast its own transfers. It cannot yet balance a Compact contract call, which is why custody circuits are broadcast by the devnet wallet — see DYNAMIC-SIGNING.md."
+    >
+      <div className="row">
+        <Mono v={wallet.address} short />
+        <Chip tone={network === 'unknown' ? 'warn' : undefined}>{network}</Chip>
+      </div>
+      <div className="row controls">
+        <input
+          value={recipient}
+          onChange={(e) => setRecipient(e.target.value)}
+          placeholder="recipient unshielded address"
+          size={32}
+        />
+        <input value={amount} onChange={(e) => setAmount(e.target.value)} size={8} />
+        <ActionButton
+          label="Send NIGHT"
+          busyLabel="signing and broadcasting…"
+          disabled={!recipient.trim() || !/^\d+$/.test(amount.trim())}
+          task={{ label: 'Transferring NIGHT from the Dynamic wallet', circuit: 'transfer' }}
+          onError={setError}
+          onRun={async () => {
+            setError('');
+            const receipt = await transferWithDynamicWallet(wallet, [
+              {
+                type: 'unshielded',
+                recipientAddress: recipient.trim(),
+                amount: amount.trim(),
+              },
+            ]);
+            ctx.log(`Dynamic transfer ${amount.trim()} NIGHT → tx ${receipt.txHash}`);
+            return receipt.txHash;
+          }}
+        />
+      </div>
+      {error && <p className="error">{error}</p>}
+    </Panel>
   );
 }

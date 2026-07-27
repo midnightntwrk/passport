@@ -88,20 +88,14 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function getIdentityRegistry(mid: Midnight): Promise<IdentityRegistry> {
   if (identityRegistryHandle) return identityRegistryHandle;
-  if (mid.identityRegistryAddress) {
-    identityRegistryHandle = await IdentityRegistry.connect(
-      mid.identityRegistryProviders,
-      compiledIdentityRegistryContract(),
-      mid.identityRegistryAddress,
-    );
-    return identityRegistryHandle;
+  if (!mid.identityRegistryAddress) {
+    throw new Error('Identity registry is not configured. Deploy the local demo contracts first.');
   }
-
-  identityRegistryHandle = await IdentityRegistry.deploy(
+  identityRegistryHandle = await IdentityRegistry.connect(
     mid.identityRegistryProviders,
     compiledIdentityRegistryContract(),
+    mid.identityRegistryAddress,
   );
-  mid.identityRegistryAddress = identityRegistryHandle.address;
   return identityRegistryHandle;
 }
 
@@ -115,28 +109,13 @@ async function reconnectIdentityRegistry(mid: Midnight): Promise<IdentityRegistr
   return identityRegistryHandle;
 }
 
-async function deployFreshIdentityRegistry(mid: Midnight): Promise<IdentityRegistry> {
-  identityRegistryHandle = await IdentityRegistry.deploy(
-    mid.identityRegistryProviders,
-    compiledIdentityRegistryContract(),
-  );
-  mid.identityRegistryAddress = identityRegistryHandle.address;
-  await sleep(2_000);
-  await awaitSync(mid.walletCtx);
-  return reconnectIdentityRegistry(mid);
-}
-
 export async function registerIdentity(
   mid: Midnight,
   handle: string,
   accountAddress: string,
 ): Promise<IdentityRegistration> {
   let registry = await getIdentityRegistry(mid);
-  try {
-    await registry.ledgerState();
-  } catch {
-    registry = await deployFreshIdentityRegistry(mid);
-  }
+  await registry.ledgerState();
   const existingAccount = await registry.accountFor(handle);
   if (existingAccount && existingAccount !== accountAddress.toLowerCase()) {
     throw new Error(`${handle}.night is already registered; choose a different Night ID`);
@@ -179,11 +158,6 @@ export async function registerIdentity(
 }
 
 export async function accountForIdentity(mid: Midnight, handle: string): Promise<string | null> {
-  let registry = await getIdentityRegistry(mid);
-  try {
-    await registry.ledgerState();
-  } catch {
-    registry = await deployFreshIdentityRegistry(mid);
-  }
+  const registry = await getIdentityRegistry(mid);
   return registry.accountFor(handle);
 }

@@ -11,9 +11,9 @@ import CompactStandardLibrary;
 // a domain-separated hash so later versions can swap the visible handle format
 // without changing the map surface.
 //
-// Prototype trade-off: this demo registry permits an existing handle to be
-// re-registered to a new account. Production would gate updates through
-// account ownership proofs and name-policy rules.
+// A handle is claimed once. Transfers or recovery-driven rebinding need a
+// separate, ownership-authorised circuit; they must never be an accidental
+// side effect of registration.
 // ---------------------------------------------------------------------------
 
 struct IdentityRecord {
@@ -38,6 +38,7 @@ constructor() {
 
 export circuit register_identity(handle: Bytes<32>, account: Bytes<32>): [] {
   const key = disclose(derive_identity_key(handle));
+  assert(!identities.member(key), "Night ID already registered");
   registration_count = ((registration_count + (1 as Uint<64>)) as Uint<64>);
   identities.insert(key, IdentityRecord {
     handle:       disclose(handle),
