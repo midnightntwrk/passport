@@ -23,7 +23,9 @@ Integrated against `midnames/sdk`, pinned to revision `83f8422b0b39113d5c14aa8ad
 | The AAC claims an alias through Midnames | `alice.night` is registered to the deployed account-custody contract, then resolved again from an unrelated wallet to prove the binding is readable by third parties. |
 | An external account deposits a shielded token using the alias, calling the deposit circuit | A second funded wallet mints a shielded token, resolves `alice.night`, and calls `deposit_shielded` on the resolved address. The scenario then waits for the AAC ledger to actually hold the coins before passing. |
 
-Run it with `npm run test:midnames` (requires the localnet, `bun`, and `compact`). Each run writes `midnames-deployment.json` with the transaction IDs.
+Re-run end to end on 2026/07/27 to confirm it still passes: `.night` TLD at `0bc43835dd2d8f40…`, `alice.night` registered to AAC `8a41ec09c6353ae3…` (tx `00281d1157ba4303…`), external resolution verified, shielded deposit by alias in tx `00bd1c8436f857a9…`, and the AAC ledger confirmed holding the 500 units. Result: `lifecycle-midnames: PASS`.
+
+Run it with `npm run test:midnames` (requires the localnet, `bun`, and `compact`). `midnames:prepare` clones and builds the pinned Midnames contracts into `.cache/`, so no manual checkout is needed. Each run writes `midnames-deployment.json` with the addresses and transaction IDs.
 
 **Caveat:** exercised on localnet only. Preview requires network access we do not yet have.
 
