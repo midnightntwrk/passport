@@ -72,11 +72,16 @@ for a signature it cannot use.
 
 Dynamic cannot balance and finalise an arbitrary call-proved Compact
 transaction, so the custody circuit call is broadcast by the Passport devnet
-wallet, with the Dynamic approval bound to it. Unblocking needs a Dynamic
-release that accepts a call-proved transaction, returns it balanced and
-finalised, and leaves the broadcast to the caller. `probeDynamicCompactSupport`
-already looks for exactly that contract, so the demo will report the day it
-lands.
+wallet, with the Dynamic approval bound to it. No Dynamic signature reaches the
+chain for a custody call: the transaction is signed by the demo wallet's
+unshielded keystore during balancing (`app/src/lib/providers.ts`).
+
+Unblocking needs a Dynamic release that accepts a call-proved transaction,
+returns it balanced and finalised, and leaves the broadcast to the caller.
+`probeDynamicCompactSupport` already looks for exactly that contract, so the
+demo will report the day it lands. The full API contract, behavioural
+requirements, and the one experiment worth running first are written up in
+[`docs/reports/2026-07-27-dynamic-transaction-signing.md`](../../docs/reports/2026-07-27-dynamic-transaction-signing.md).
 
 The private-state secret still comes from the passkey, not from Dynamic. Both
 are needed regardless: the approval authorises the call, the passkey-derived

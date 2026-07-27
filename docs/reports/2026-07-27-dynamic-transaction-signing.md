@@ -131,25 +131,122 @@ The deposit modal names, on screen, which wallet signs (Dynamic, via
 
 ---
 
-## Still blocked upstream
+## What signs what today
 
-Dynamic cannot balance and finalise an arbitrary call-proved Compact
-transaction, so the custody circuit call is broadcast by the Passport devnet
-wallet with the Dynamic approval bound to it.
+To be unambiguous, because "signing" means three different things in this
+flow and only one of them is a transaction signature:
 
-**What a Dynamic release would need to expose**, matching Hector's description
-of the flow — the client sends the call-proved transaction, Dynamic routes it
-to BCW, returns it balanced and finalised, and the caller broadcasts:
+| Layer | Who does it | On chain? |
+|---|---|---|
+| Approval of the intent | Dynamic `signMessage` | No. Client-side receipt; the chain never sees it. |
+| In-circuit device authorisation | Passkey-derived secret, as a witness (hash preimage) | As a proof, not a signature. |
+| **Transaction signature, balancing, and fees** | **The localnet demo wallet** (`app/src/lib/providers.ts` — `unshieldedKeystore.signData` applied to the balancing recipe) | Yes. |
 
-- `getMidnightProofCapabilities()` — advertises the contract.
-- `proveMidnightTransaction({ serializedTransaction, … })` — returns the
-  finalised transaction, caller broadcasts.
+**No Dynamic signature appears on chain for a custody call.** The one place
+Dynamic genuinely signs and broadcasts is the NIGHT transfer panel, which is a
+value transfer on Dynamic's own network, not a contract call.
 
-`probeDynamicCompactSupport` already looks for exactly these two methods,
-reports what is missing in the UI and the log, and will flag the day they
-appear. The transfer-only `signTransaction` is deliberately **not** treated as
-a fallback: it consumes the draft that `createTransferTransaction` builds, not
-a contract call.
+---
+
+## What Dynamic needs to ship
+
+Dynamic cannot balance and finalise a call-proved Compact transaction, so the
+custody circuit call is broadcast by the Passport devnet wallet with the
+Dynamic approval bound to it. This section is the request, in enough detail to
+hand to Dynamic directly.
+
+### Where the handoff sits
+
+| Step | Who owns it | Why |
+|---|---|---|
+| 1. Run the Compact runtime, produce the transcript | Passport client | Needs the circuit and the private-state witnesses. |
+| 2. Generate the call proof | Passport proof server | Needs the circuit's proving key. |
+| 3. **Balance and finalise against DUST, and sign** | **Dynamic — missing** | Needs the wallet's UTXOs, DUST, and keys, which only Dynamic holds. |
+| 4. Broadcast | Either; we prefer the caller | Lets us bind the user's approval to the exact broadcast bytes. |
+
+Steps 1 and 2 cannot move to Dynamic and do not need to: Dynamic never sees
+the circuit, the witnesses, or the private state. Step 3 cannot stay with us,
+because the wallet's keys, UTXOs, and DUST live inside Dynamic's MPC
+infrastructure. That single step is the whole blocker.
+
+### The API contract we are asking for
+
+```ts
+// Advertises the capability, so a client can detect it rather than guess.
+getMidnightProofCapabilities(): Promise<{
+  protocol: 'dynamic-midnight-compact-proof-v1'
+  operations: ['balance-and-finalize']
+  inputTransaction: 'unbound'      // a call-proved Compact transaction
+  outputTransaction: 'finalized'   // ready to broadcast
+  callerBroadcasts: true
+  networks: string[]               // e.g. ['preview']
+}>
+
+// Balances and finalises a transaction Dynamic did not build.
+proveMidnightTransaction(request: {
+  protocol: 'dynamic-midnight-compact-proof-v1'
+  operation: 'balance-and-finalize'
+  network: string
+  walletAddress: string
+  serializedTransaction: string    // base64 call-proved UnboundTransaction
+  inputTransactionDigest: string   // SHA-256, so the response ties back to it
+  intent: {                        // for Dynamic's own approval UI
+    contractAddress: string
+    circuit: string
+    summary: string
+    arguments: Record<string, string>
+  }
+}): Promise<{
+  protocol: 'dynamic-midnight-compact-proof-v1'
+  operation: 'balance-and-finalize'
+  inputTransactionDigest: string   // echoed, must match the request
+  finalizedTransaction: string     // base64, caller broadcasts
+}>
+```
+
+### Behavioural requirements
+
+1. **No wallet secrets leave Dynamic.** The client sends a transaction and
+   receives a transaction. Nothing else.
+2. **The call proof must survive untouched** — the finalised transaction still
+   has to verify against our circuit's verifier key.
+3. **Echo the input digest**, so the user's approval can be bound to the exact
+   bytes that get broadcast. Passport already signs an approval covering both
+   the input and the finalised digest.
+4. **Reserved inputs must be revertable.** A finalised-but-never-broadcast
+   transaction must not strand UTXOs; `revertTransaction` already exists and
+   should accept this output.
+5. **Network-scoped, and mismatches rejected** rather than silently resolved.
+   Today `signTransaction` resolves `chainId` by name internally, which is
+   invisible to the caller.
+6. **DUST failures must be distinguishable.** Insufficient DUST should be its
+   own error, never an unbalanced transaction returned as success.
+7. **Respect the transaction's TTL**, or state the TTL Dynamic applies.
+8. **Distinguishable error codes** for at least: unsupported operation,
+   insufficient DUST, network mismatch, expired TTL, and user rejection.
+
+`callerBroadcasts: false` with a returned `txHash` would also be workable if
+Dynamic would rather own the broadcast, but caller-broadcast is preferable —
+it lets us bind the approval and reconcile indexer confirmation ourselves.
+
+### The open question worth testing first
+
+`connector.signTransaction(serializedTransaction)` forwards an arbitrary
+base64 string to Dynamic's iframe wallet client; the SDK layer does not
+structurally restrict it to drafts produced by `createTransferTransaction`.
+Whether Dynamic's backend will balance and finalise a *call-proved* transaction
+or reject it is untested. Feeding one Passport deposit transaction into it on
+preview, with a DUST-funded wallet, either unblocks this immediately or
+produces a concrete error to put in front of Dynamic. That test needs a
+Dynamic wallet with DUST on preview and takes minutes.
+
+### Detection is already wired
+
+`probeDynamicCompactSupport` looks for exactly `getMidnightProofCapabilities`
+and `proveMidnightTransaction`, reports what is missing in the UI and the log,
+and will flag the release that adds them. The transfer-only `signTransaction`
+is deliberately **not** treated as a fallback: it consumes the draft that
+`createTransferTransaction` builds, not a contract call.
 
 ### Passkeys are still needed regardless
 
@@ -196,10 +293,15 @@ the design rationale sits in that experiment's `DECISIONS.md`.
 
 ## Asks
 
-1. **Dynamic:** confirmation of the balance-and-prove endpoint shape above, and
-   a timeline for the BCW integration.
-2. **Stagenet access** for the team's GitHub handles, so this can be exercised
+1. **Dynamic:** confirmation of the API contract in "What Dynamic needs to
+   ship" above, and a timeline for the BCW integration. Passport is ready to
+   consume it the day it exists — detection is already in the code.
+2. **One experiment, before any of that:** push a call-proved Passport
+   transaction through the existing `signTransaction` on preview and record
+   what comes back. It either unblocks this now or gives Dynamic a concrete
+   failure to work from.
+3. **Stagenet access** for the team's GitHub handles, so this can be exercised
    somewhere other than the localnet.
-3. **Review of the approval message format** before it hardens — it is
+4. **Review of the approval message format** before it hardens — it is
    versioned (`Version: 1`), so changing it later is a deliberate bump rather
    than a silent break.
