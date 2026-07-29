@@ -44,7 +44,7 @@ but it must never be written to plaintext browser storage.
 8. Later C1 operations unlock the encrypted witness with the Passport passkey.
 
 The demo therefore needs a private-state key provider. WebAuthn PRF is the
-current provider; it is an architectural choice, not a universal SDK requirement.
+current provider; it is an architectural choice, not a universal requirement.
 
 ## Why Dynamic alone is insufficient today
 
@@ -139,8 +139,8 @@ The clean current boundary is:
 - C1 deployment adapter:
   `examples/passport-demo/src/c1.ts`
 - Encrypted Passport storage:
-  `sdk/src/store.ts`
+  `demo-backend/src/privateState.ts`
 - WebAuthn PRF key provider:
-  `sdk/src/passkey.ts`
+  `demo-backend/src/passkey.ts`
 - Dynamic capability matrix:
-  `docs/sdk/dynamic-capability-matrix.md`
+  `docs/demo/dynamic-capability-matrix.md`

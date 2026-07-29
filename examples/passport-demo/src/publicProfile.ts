@@ -1,4 +1,4 @@
-import type { PassportPasskeyReference } from '@midnight-ntwrk/passport-sdk';
+import type { PassportPasskeyReference } from './backend.js';
 
 const DATABASE = 'midnight-passport';
 const STORE = 'public-profile';

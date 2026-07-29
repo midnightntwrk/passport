@@ -31,7 +31,7 @@ import {
   IndexedDbPassportEncryptedRecordStore,
   PassportStateInjection,
   WebAuthnPrfKeyProvider,
-} from '@midnight-ntwrk/passport-sdk';
+} from './backend.js';
 
 import {
   compactAddress,
@@ -1319,7 +1319,7 @@ export default function PassportDemo() {
   const refreshPassportPermissions = async () => {
     if (!midnightWallet || !profile?.passportContract) return;
     if (!localMode || profile.passportContract.network !== LOCAL_C1_NETWORK) {
-      setError('Dynamic can expose the wallet, but its current SDK cannot prove an arbitrary Passport C1 permission circuit. This path remains disabled instead of simulating a grant.');
+      setError('Dynamic 4.93.1 can expose the wallet, but it cannot yet prove an arbitrary Passport C1 permission circuit (Compact proof capability missing). This path remains disabled instead of simulating a grant.');
       return;
     }
     setBusyAction('permission-read');
@@ -1625,7 +1625,6 @@ export default function PassportDemo() {
               <button className={workspaceTab === 'connections' ? 'active' : ''} onClick={() => setWorkspaceTab('connections')}>Connections</button>
             </nav>
             <div className="workspace-controls">
-              <a className="workspace-sdk-link" href="/sdk">SDK</a>
               <span className={`workspace-status ${dynamicReady ? 'online' : ''}`}><i /> {connectedUserName}</span>
               <IconButton label="Sign out" onClick={() => void signOutPassport()}><LogOut size={16} /></IconButton>
             </div>
@@ -1837,15 +1836,6 @@ export default function PassportDemo() {
                     <span className="status-pill complete">ready</span>
                     <a className="tool-button" href={profileClientUrl} target="_blank" rel="noreferrer">Open Atlas <ArrowUpRight size={15} /></a>
                   </article>
-                  <article className="connection-row">
-                    <span className="connection-index">02</span>
-                    <div><p>Cross-chain settlement</p><h2>Sig.Network adapter</h2><small>The SDK enforces the five real stages: request, MPC signature, EVM broadcast, execution attestation, and Midnight claim. The route stays disabled until Passport moves from Ledger v8 to Sig’s Ledger v9 stack and receives deployment configuration.</small></div>
-                    <span className="status-pill blocked">version gate</span>
-                    <a className="tool-button" href="/sdk">View boundary <ArrowUpRight size={15} /></a>
-                  </article>
-                </div>
-                <div className="connection-stages" aria-label="Sig.Network settlement stages">
-                  {['Request', 'MPC signature', 'EVM broadcast', 'Attestation', 'Shielded claim'].map((stage, index) => <div key={stage}><span>0{index + 1}</span><strong>{stage}</strong></div>)}
                 </div>
               </section>
             )}

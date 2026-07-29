@@ -7,7 +7,7 @@ import {
   parsePassportProfileReady,
   parsePassportProfileRequest,
   parsePassportProfileResponse,
-} from '../src/profile.js';
+} from '../src/profileProtocol.js';
 
 describe('Passport profile exchange', () => {
   it('accepts a nonce-bound allowlisted request', () => {

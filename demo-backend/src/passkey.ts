@@ -66,7 +66,7 @@ async function deriveKey(prfOutput: Uint8Array, scope: PassportStateScope): Prom
 
 /**
  * Browser-only WebAuthn PRF adapter. The PRF output is immediately turned
- * into a non-exportable AES key and is never persisted by this SDK.
+ * into a non-exportable AES key and is never persisted by this module.
  */
 export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider {
   private readonly sessionKeys = new Map<string, { key: CryptoKey; expiresAt: number }>();

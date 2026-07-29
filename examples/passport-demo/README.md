@@ -4,6 +4,8 @@ This Passport client combines the supported Dynamic embedded Midnight-wallet
 flow with a narrow Passport C1 account-management contract and Passport's
 encrypted private-state boundary. It has a real disposable-localnet mode for
 the complete contract flow and a fail-closed Dynamic Preview capability probe.
+Read [`WHAT-THIS-IS.md`](../../WHAT-THIS-IS.md) for what this demo is, and is
+not.
 
 ```sh
 npm install
@@ -73,8 +75,6 @@ current upstream dependency-audit and Compact-proof blockers.
   proving; transfer-only `signTransaction` and detached message signatures are
   never used as fallbacks.
 - The local C1 fixture wallet cannot be selected outside `?demoMode=local`.
-  Sig.Network remains behind the typed five-stage readiness boundary until its
-  runtime and deployment dependencies are compatible.
 
 ## Validation boundary
 
@@ -88,5 +88,3 @@ current upstream dependency-audit and Compact-proof blockers.
 - A Dynamic message signature is not presented as a Compact C1 transaction.
 - The account-custody and Night-ID registry remain in
   `experiments/account-custody-prototype/`; they are not production APIs.
-- Sig.Network requires its deployed vault, MPC endpoint, and Sepolia setup.
-  The demo does not simulate that route.

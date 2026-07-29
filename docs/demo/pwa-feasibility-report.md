@@ -29,7 +29,7 @@ validation, and reliable foreground-only handling of long proof operations.
 | Storage durability | Partially implemented | Passport key setup requests `navigator.storage.persist()`. Browser approval is not guaranteed and explicit site-data deletion still wins. |
 | Dynamic C1 deployment | Externally blocked | Dynamic's public Midnight API supports wallet transfers, but does not currently expose the arbitrary Compact `UnboundTransaction` proof/finalization boundary required by Passport C1. See issue #101. |
 | Dependency audit | Externally blocked | `npm audit --omit=dev` on Dynamic 4.93.1 reports 20 transitive production-tree advisories (14 moderate, 6 high). npm only offers forced Dynamic downgrades that predate the required WaaS integration. |
-| Automated checks | Passed locally | SDK unit tests, C1 draft test, production build, and `check:pwa` manifest/service-worker boundary checks. |
+| Automated checks | Passed locally | Demo-backend unit tests, C1 draft test, production build, and `check:pwa` manifest/service-worker boundary checks. |
 | Mobile payload | Needs optimization | Current build emits a 5.86 MB JavaScript chunk (954 KB gzip), 10.42 MB ledger WASM (4.68 MB gzip), and 1.40 MB runtime WASM (411 KB gzip). |
 | Physical devices | Not yet executed | iPhone/iPad, Android, and desktop Safari/Firefox matrices remain release-gate tests. |
 
@@ -57,7 +57,7 @@ and [Safari 18 WebAuthn PRF](https://webkit.org/blog/15865/webkit-features-in-sa
 
 ### IndexedDB and encrypted state
 
-The SDK stores only a versioned AES-GCM envelope. Authenticated encryption is
+The demo backend stores only a versioned AES-GCM envelope. Authenticated encryption is
 scoped by Passport `appId` and account identity. The PRF output is immediately
 converted to a non-exportable AES key; decrypted witnesses and key material are
 not written to `localStorage`, Cache Storage, or the service worker.
@@ -87,7 +87,7 @@ The prototype therefore uses a user-mediated opener protocol:
 The protocol never shares the Dynamic subject ID, passkey credential reference,
 PRF material, encrypted envelope, decrypted witness, or grant secret. The
 reference consumer is `examples/passport-profile-client`; the protocol schemas
-and parsers live in `sdk/src/profile.ts`.
+and parsers live in `demo-backend/src/profileProtocol.ts`.
 
 This works while both applications are open, including from cached shells. It
 does not bypass browser origin isolation and it is not the private-storage
@@ -99,7 +99,7 @@ origins.
 ### WebAuthn, PRF, and passkeys
 
 WebAuthn requires HTTPS and binds credentials to the relying-party domain. The
-SDK requests the Level 3 `prf` extension and fails closed when registration does
+demo backend requests the Level 3 `prf` extension and fails closed when registration does
 not return `prf.enabled` or unlock does not return a PRF result. The PRF is
 appropriate for deriving an encryption key, which is an explicit use case in
 the [WebAuthn PRF definition](https://www.w3.org/TR/webauthn-3/#sctn-prf-extension).
@@ -171,7 +171,7 @@ the complete proving stack. They are cached only after the page requests them.
 Mobile cold start, memory pressure, and update bandwidth are still material
 risks.
 
-**Production gate:** split the SDK/portal route from contract/proving modules,
+**Production gate:** split the portal route from contract/proving modules,
 lazy-load proving WASM at the operation boundary, and measure cold/warm startup
 and peak memory on representative low- and mid-range phones.
 

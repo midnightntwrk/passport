@@ -9,13 +9,12 @@ export {
   parsePassportProfileReady,
   parsePassportProfileRequest,
   parsePassportProfileResponse,
-} from './profile.js';
-export { BlockedSigNetworkAdapter, SigNetworkProtocolAdapter } from './signet.js';
+} from './profileProtocol.js';
 export {
   EncryptedPassportPrivateStateStore,
   IndexedDbPassportEncryptedRecordStore,
   MemoryPassportEncryptedRecordStore,
-} from './store.js';
+} from './privateState.js';
 export type {
   EnrollPassportPasskeyOptions,
   PassportPasskeyReference,
@@ -32,23 +31,9 @@ export type {
   PassportStateScope,
 } from './types.js';
 export type {
-  SigNetworkAdapter,
-  SigNetworkBroadcastResult,
-  SigNetworkClaimResult,
-  SigNetworkDepositDriver,
-  SigNetworkDepositRequest,
-  SigNetworkReadiness,
-  SigNetworkRequirements,
-  SigNetworkSignedTransaction,
-  SigNetworkStage,
-  SigNetworkStageEvidence,
-  SigNetworkSettlementIntent,
-  SigNetworkSettlementResult,
-} from './signet.js';
-export type {
   PassportProfileField,
   PassportProfileMessage,
   PassportProfileReady,
   PassportProfileRequest,
   PassportProfileResponse,
-} from './profile.js';
+} from './profileProtocol.js';

@@ -7,7 +7,7 @@
 output/
 
 # Local demo sandboxes and generated chain state
-demo/
+/demo/
 experiments/dynamic-midnight-sdk-validation/
 
 # Build artefacts

@@ -1,7 +1,7 @@
 {
-  "name": "@midnight-ntwrk/passport-sdk",
+  "name": "passport-demo-backend",
   "version": "0.1.0",
-  "description": "Secure private-state storage and injection primitives for Midnight Passport integrations.",
+  "description": "Demo backend with connectors: private-state storage, passkey, and profile-protocol primitives for the Midnight Passport demo.",
   "type": "module",
   "private": true,
   "main": "./dist/index.js",
@@ -16,6 +16,7 @@
     "dist"
   ],
   "scripts": {
+    "prepare": "tsc -p tsconfig.json",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest"

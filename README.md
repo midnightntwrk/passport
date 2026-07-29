@@ -7,14 +7,16 @@ Midnight Passport is the user-facing identity and wallet layer for the Midnight 
 
 This repository holds the plan, the research that backs it, the reference material we build from, and the early experiments that de-risk the cryptographic foundations. The prototype codebase tracking the plan lives in a separate repository.
 
+Before reading anything about the demo, read [`WHAT-THIS-IS.md`](WHAT-THIS-IS.md) — the demo is preview/testnet only, not mainnet, not the final product, not audited, and real rather than mocked.
+
 The first implementation surface now lives alongside the architecture:
 
-- [`sdk/`](sdk/) is the clean Passport private-state SDK foundation.
 - [`examples/passport-demo/`](examples/passport-demo/) is the client-facing Dynamic + Passport capability demo.
-- [`experiments/account-custody-prototype/`](experiments/account-custody-prototype/) remains a localnet prototype and is not a production SDK dependency.
+- [`demo-backend/`](demo-backend/) is the demo backend with connectors — the private, file-linked engine behind the demo, a prototype for testing integrations.
+- [`experiments/account-custody-prototype/`](experiments/account-custody-prototype/) remains a localnet prototype and is not a production dependency.
 
-See [`docs/sdk/README.md`](docs/sdk/README.md) for the integration guide and
-[`docs/sdk/validation-log.md`](docs/sdk/validation-log.md) for the recorded
+See [`docs/demo/README.md`](docs/demo/README.md) for what the demo is and
+[`docs/demo/validation-log.md`](docs/demo/validation-log.md) for the recorded
 validation status.
 
 ## What to read first
@@ -30,7 +32,7 @@ validation status.
 
 ```
 passport/
-├── sdk/                         Typed Passport SDK foundation
+├── demo-backend/                Demo backend with connectors
 ├── examples/passport-demo/       Dynamic wallet and Passport client demo
 ├── site/                        Static web artefacts deployed to GitHub Pages
 │   ├── index.html               Landing page and unified entry point

@@ -15,7 +15,7 @@ import {
   parsePassportProfileResponse,
   type PassportProfileField,
   type PassportProfileResponse,
-} from '@midnight-ntwrk/passport-sdk';
+} from 'passport-demo-backend';
 
 import './styles.css';
 

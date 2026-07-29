@@ -7,7 +7,7 @@ import {
   type PassportProfileField,
   type PassportProfileRequest,
   type PassportProfileResponse,
-} from '@midnight-ntwrk/passport-sdk';
+} from './backend.js';
 
 interface ProfileConsentProps {
   displayName: string | null;

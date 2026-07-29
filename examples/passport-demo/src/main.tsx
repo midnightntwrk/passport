@@ -5,7 +5,6 @@ import { DynamicWaasMidnightConnectors } from '@dynamic-labs/midnight';
 import '@fontsource/space-grotesk/700.css';
 
 import PassportDemo from './App.js';
-import SdkPage from './SdkPage.js';
 import { PassportPwaShell } from './pwa.js';
 import './styles.css';
 
@@ -29,12 +28,11 @@ function MissingEnvironment() {
 
 if (!import.meta.env.DEV || window.location.origin === requiredDevelopmentOrigin) {
   const root = createRoot(document.getElementById('root')!);
-  const isSdkPage = window.location.pathname.replace(/\/+$/, '') === '/sdk';
 
   root.render(
     <React.StrictMode>
       <PassportPwaShell>
-        {isSdkPage ? <SdkPage /> : environmentId ? (
+        {environmentId ? (
           <DynamicContextProvider
             settings={{
               environmentId,

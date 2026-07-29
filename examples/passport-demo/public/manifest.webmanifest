@@ -56,18 +56,6 @@
           "type": "image/png"
         }
       ]
-    },
-    {
-      "name": "Passport SDK",
-      "short_name": "SDK",
-      "url": "/sdk",
-      "icons": [
-        {
-          "src": "/icons/passport-192.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
     }
   ]
 }

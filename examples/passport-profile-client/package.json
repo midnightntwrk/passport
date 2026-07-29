@@ -9,8 +9,8 @@
     "preview": "vite preview --host localhost"
   },
   "dependencies": {
-    "@midnight-ntwrk/passport-sdk": "file:../../sdk",
     "lucide-react": "^0.468.0",
+    "passport-demo-backend": "file:../../demo-backend",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

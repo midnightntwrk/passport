@@ -58,16 +58,13 @@ node, indexer, proof server, and fixture fee wallet from
 10. Open Connections, launch Atlas on port `5176`, request selected public
    profile fields, approve them in Passport, and verify that no passkey
    reference or private state crosses the origin boundary.
-11. Show the Sig.Network five-stage boundary. Do not call it executable until
-    Passport C1 is on the Ledger-v9/ZKIR-v3 runtime and real Sig deployment
-    configuration is supplied.
 
 ## Result language
 
 - **Passed:** an actual API call completed and a wallet result/transaction hash
   was observed.
 - **Blocked:** the dependency is absent (for example, Dynamic private-key
-  exports, a funded wallet, a custom-circuit bridge, or Sig deployment data).
+  exports, a funded wallet, or a custom-circuit bridge).
 - **Failed:** the API call ran and returned an error. Preserve the error text
   and environment; do not replace it with a generic success screen.
 
