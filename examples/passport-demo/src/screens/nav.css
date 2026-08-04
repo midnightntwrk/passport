@@ -1,0 +1,48 @@
+/* Bottom navigation — prefix "mnnav-". Strict black-and-white Midnight direction. */
+
+.mnnav {
+  position: fixed;
+  z-index: 100;
+  right: 0;
+  bottom: max(0px, env(safe-area-inset-bottom));
+  left: 0;
+  width: min(100% - 40px, 520px);
+  height: 76px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid #0a0a0a;
+  background: #f5f5f3;
+  box-shadow: 0 -10px 30px rgba(3, 3, 3, .55);
+}
+
+.mnnav-tab {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 0;
+  border-left: 1px solid #c7c7c3;
+  border-radius: 0;
+  color: #0a0a0a;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.mnnav-tab:first-child { border-left: 0; }
+.mnnav-tab:hover:not(.mnnav-tab-active) { background: #e2e2de; }
+
+/* Active tab inverts to the solid ink block. */
+.mnnav-tab-active {
+  color: #f5f5f3;
+  background: #0a0a0a;
+}
+
+@media (max-width: 400px) {
+  .mnnav { width: calc(100% - 24px); }
+  .mnnav-tab { letter-spacing: .08em; }
+}

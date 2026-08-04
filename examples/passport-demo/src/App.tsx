@@ -19,6 +19,7 @@ import {
   Send,
   ShieldCheck,
   ShieldOff,
+  Smartphone,
   Sparkles,
   WalletCards,
   X,
@@ -70,6 +71,11 @@ import {
 import { requestPassportStoragePersistence } from './pwa.js';
 import { deleteDemoProfile, loadDemoProfile, saveDemoProfile, type DemoPassportProfile } from './publicProfile.js';
 import { PassportProfileConsent } from './profileConsent.js';
+import OnboardingScreen from './screens/Onboarding.js';
+import HomeScreen from './screens/Home.js';
+import AppsScreen from './screens/Apps.js';
+import PassportNav, { type MobileTab } from './screens/Nav.js';
+import { fetchRecentTransactions, type RecentTransaction } from './lib/indexerTx.js';
 
 type ActivityStatus = 'pending' | 'complete' | 'blocked' | 'error';
 type TransferPool = 'unshielded' | 'shielded';
@@ -95,6 +101,10 @@ type BusyAction =
   | 'custody-shielded-withdraw';
 type ProfileStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
 type ActivitySource = 'local' | 'wallet' | 'chain';
+/** The mobile-first Passport, or the original desktop portal and workspace. */
+type Experience = 'mobile' | 'classic';
+type OnboardingIntent = 'create' | 'signin';
+type TransactionsStatus = 'loading' | 'ready' | 'empty' | 'unavailable';
 
 interface ActivityEntry {
   id: string;
@@ -142,6 +152,40 @@ type DisplayPermission = LocalPassportPermission & { label: string };
 
 const APP_ID = 'org.midnight.passport.demo';
 const MIDNIGHT_EXPLORER_URL = 'https://explorer.preview.midnight.network';
+/** Preview indexer. `fetchRecentTransactions` derives its own WebSocket URL from this. */
+const MIDNIGHT_INDEXER_URL =
+  import.meta.env.VITE_INDEXER_URL ?? 'https://indexer.preview.midnight.network/api/v4/graphql';
+const EXPERIENCE_STORAGE_KEY = 'passport-experience';
+
+function storedExperience(): Experience {
+  try {
+    return window.localStorage.getItem(EXPERIENCE_STORAGE_KEY) === 'classic' ? 'classic' : 'mobile';
+  } catch {
+    // Private browsing can deny localStorage entirely; the mobile default stands.
+    return 'mobile';
+  }
+}
+
+/**
+ * Reads a human-scale formatted amount. Both the DUST balance and its cap come
+ * from `getFormattedBalances()`, so group separators are the only noise to
+ * strip — no Specks conversion belongs here.
+ */
+function parseFormattedAmount(value: string | null): number | null {
+  if (value === null) return null;
+  const cleaned = value.replace(/[^0-9.]/g, '');
+  if (!cleaned) return null;
+  const parsed = Number.parseFloat(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** DUST charge as a 0-100 percentage, or null when either side is unknown. */
+function dustFillPercentFrom(balance: string | null, cap: string | null): number | null {
+  const heldValue = parseFormattedAmount(balance);
+  const capValue = parseFormattedAmount(cap);
+  if (heldValue === null || capValue === null || capValue <= 0) return null;
+  return Math.max(0, Math.min(100, (heldValue / capValue) * 100));
+}
 
 function newDeviceSecret(): Uint8Array {
   const value = new Uint8Array(32);
@@ -388,7 +432,7 @@ function PassportSetupModal({
 }
 
 export default function PassportDemo() {
-  const { handleLogOut, primaryWallet, sdkHasLoaded, setShowAuthFlow, user } = useDynamicContext();
+  const { handleLogOut, primaryWallet, sdkHasLoaded, setShowAuthFlow, showAuthFlow, user } = useDynamicContext();
   const connectedWallets = useUserWallets();
   const allWallets = useMemo(() => {
     const candidates = primaryWallet ? [primaryWallet, ...connectedWallets] : connectedWallets;
@@ -437,7 +481,18 @@ export default function PassportDemo() {
   const [custody, setCustody] = useState<LocalPassportCustody | null>(null);
   const [nightCustodyAmount, setNightCustodyAmount] = useState('1000');
   const [shieldedCustodyAmount, setShieldedCustodyAmount] = useState('500');
+  const [experience, setExperience] = useState<Experience>(storedExperience);
+  const [mobileTab, setMobileTab] = useState<MobileTab>('home');
+  const [onboardingStep, setOnboardingStep] = useState<'welcome' | 'choose'>('welcome');
+  const [onboardingIntent, setOnboardingIntent] = useState<OnboardingIntent | null>(null);
+  const [onboardingBusyLabel, setOnboardingBusyLabel] = useState<string | null>(null);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const [transactions, setTransactions] = useState<RecentTransaction[]>([]);
+  const [transactionsStatus, setTransactionsStatus] = useState<TransactionsStatus>('loading');
   const passportKeyProviders = useRef(new Map<string, WebAuthnPrfKeyProvider>());
+  const onboardingRunning = useRef(false);
+  const authFlowWasOpen = useRef(false);
+  const transactionsRequest = useRef(0);
 
   const addActivity = useCallback((entry: Omit<ActivityEntry, 'id' | 'createdAt'>) => {
     const value = { ...entry, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
@@ -533,6 +588,51 @@ export default function PassportDemo() {
     const timer = window.setTimeout(() => setPortalVisible(false), 720);
     return () => window.clearTimeout(timer);
   }, [user]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(EXPERIENCE_STORAGE_KEY, experience);
+    } catch {
+      // The chosen experience simply will not survive a reload here.
+    }
+  }, [experience]);
+
+  const unshieldedAddress = surfaces?.unshieldedAddress ?? midnightWallet?.address ?? null;
+
+  const refreshTransactions = useCallback(async () => {
+    if (!unshieldedAddress) {
+      setTransactions([]);
+      setTransactionsStatus('loading');
+      return;
+    }
+    const token = transactionsRequest.current + 1;
+    transactionsRequest.current = token;
+    setTransactionsStatus('loading');
+    try {
+      const result = await fetchRecentTransactions(MIDNIGHT_INDEXER_URL, { unshieldedAddress });
+      if (token !== transactionsRequest.current) return;
+      if (result.scope !== 'address') {
+        // A chain-scoped result is a sample of everybody's recent blocks, not
+        // this account's history: its rows may belong to anyone, and an empty
+        // walk proves nothing. The per-address view is simply unavailable.
+        setTransactions([]);
+        setTransactionsStatus('unavailable');
+        return;
+      }
+      setTransactions(result.rows);
+      setTransactionsStatus(result.rows.length > 0 ? 'ready' : 'empty');
+    } catch {
+      // fetchRecentTransactions only ever throws IndexerUnavailableError.
+      if (token !== transactionsRequest.current) return;
+      setTransactions([]);
+      setTransactionsStatus('unavailable');
+    }
+  }, [unshieldedAddress]);
+
+  useEffect(() => {
+    if (experience !== 'mobile' || !unshieldedAddress) return;
+    void refreshTransactions();
+  }, [experience, refreshTransactions, unshieldedAddress]);
 
   const vault = useCallback(
     (passkey: DemoPassportProfile['passkey']) => {
@@ -638,6 +738,95 @@ export default function PassportDemo() {
       setBusyAction(null);
     }
   };
+
+  // A dismissed Dynamic sign-in window must not strand the onboarding screen in
+  // its working stage. The short grace period lets a successful sign-in settle
+  // before the intent is abandoned.
+  useEffect(() => {
+    if (showAuthFlow) {
+      authFlowWasOpen.current = true;
+      return;
+    }
+    if (!authFlowWasOpen.current || !onboardingIntent || user) return;
+    const timer = window.setTimeout(() => {
+      authFlowWasOpen.current = false;
+      setOnboardingIntent(null);
+      setOnboardingBusyLabel(null);
+      setOnboardingStep('choose');
+      setOnboardingError('Sign-in was not completed. Choose how you would like to continue.');
+    }, 1_500);
+    return () => window.clearTimeout(timer);
+  }, [onboardingIntent, showAuthFlow, user]);
+
+  // Sequences a mobile onboarding intent behind Dynamic authentication: the
+  // passkey ceremony can only start once a user and an embedded Midnight wallet
+  // exist and the stored-profile lookup has settled. The ref guard keeps a
+  // single ceremony in flight while React re-runs this effect.
+  useEffect(() => {
+    if (!onboardingIntent || onboardingRunning.current) return;
+    if (!user || !midnightWallet) return;
+    if (profileStatus === 'loading' || profileStatus === 'idle') return;
+    onboardingRunning.current = true;
+    void (async () => {
+      try {
+        if (onboardingIntent === 'create') {
+          setOnboardingBusyLabel('Creating your Passport passkey');
+          await createPassportKey();
+          addActivity({
+            label: 'Passport key enrolled',
+            detail: 'Private state encrypted in this browser.',
+            status: 'complete',
+            source: 'local',
+          });
+        } else {
+          const activeProfile = profile ?? (await loadDemoProfile(subjectId));
+          if (!activeProfile) {
+            throw new Error('No Passport key is enrolled in this browser yet. Create one to continue.');
+          }
+          setOnboardingBusyLabel('Unlocking your Passport with this device');
+          try {
+            await loadPassportState(activeProfile);
+          } finally {
+            passportKeyProviders.current.get(activeProfile.passkey.credentialId)?.lock(scope);
+          }
+          setProfile(activeProfile);
+          setProfileStatus('ready');
+          addActivity({
+            label: 'Passport key unlocked',
+            detail: 'Passkey authorization completed locally.',
+            status: 'complete',
+            source: 'local',
+          });
+        }
+        setOnboardingError(null);
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        setOnboardingError(message);
+        setOnboardingStep('choose');
+        addActivity({
+          label: onboardingIntent === 'create' ? 'Passport key' : 'Passport unlock',
+          detail: message,
+          status: 'error',
+          source: 'local',
+        });
+      } finally {
+        setOnboardingIntent(null);
+        setOnboardingBusyLabel(null);
+        onboardingRunning.current = false;
+      }
+    })();
+  }, [
+    addActivity,
+    createPassportKey,
+    loadPassportState,
+    midnightWallet,
+    onboardingIntent,
+    profile,
+    profileStatus,
+    scope,
+    subjectId,
+    user,
+  ]);
 
   const resetLocalPassport = async () => {
     if (!profile || profile.passportContract) {
@@ -1551,6 +1740,17 @@ export default function PassportDemo() {
     setWorkspaceTab('assets');
     setPermissions([]);
     setPermissionsLoaded(false);
+    setMobileTab('home');
+    // Classic is a signed-in workspace choice. Leaving it pinned would strand
+    // the next visitor there, across reloads, with no way back.
+    setExperience('mobile');
+    setOnboardingStep('welcome');
+    setOnboardingIntent(null);
+    setOnboardingBusyLabel(null);
+    setOnboardingError(null);
+    transactionsRequest.current += 1;
+    setTransactions([]);
+    setTransactionsStatus('loading');
     await handleLogOut();
   };
   const addressesPending = walletSyncing || !surfaces || surfaces.addressStatus === 'loading';
@@ -1594,6 +1794,215 @@ export default function PassportDemo() {
     },
   ];
 
+  /* ---------------------------------------------------------------------- */
+  /* Mobile experience                                                      */
+  /* ---------------------------------------------------------------------- */
+
+  // A Passport key is only genuinely enrolled once the stored-profile lookup
+  // has resolved, and that lookup needs the subject id derived from the Dynamic
+  // account — so this is honestly false before authentication.
+  const passportEnrolled = profileStatus === 'ready' && Boolean(profile);
+  const showOnboarding =
+    !user || !passportEnrolled || onboardingIntent !== null || onboardingError !== null;
+  const onboardingStage: 'welcome' | 'choose' | 'working' = onboardingIntent ? 'working' : onboardingStep;
+  const onboardingLabel =
+    onboardingBusyLabel ??
+    (!user
+      ? 'Waiting for the Dynamic sign-in window'
+      : !midnightWallet
+        ? 'Provisioning your Midnight wallet'
+        : 'Preparing Passport');
+
+  const startOnboarding = (intent: OnboardingIntent) => {
+    setOnboardingError(null);
+    if (!user) {
+      if (!signInReady) {
+        setOnboardingError(
+          dynamicInitializationBlocked
+            ? 'Dynamic did not finish loading. Reload this page and try again.'
+            : 'Passport is still preparing sign-in. Try again in a moment.',
+        );
+        return;
+      }
+      setOnboardingIntent(intent);
+      beginSignIn();
+      return;
+    }
+    setOnboardingIntent(intent);
+  };
+
+  // Transactions confirmed in this session are already known locally; the
+  // indexer may not have caught up yet, so session rows lead the feed.
+  const sessionTransactions: RecentTransaction[] = activity
+    .filter((entry): entry is ActivityEntry & { txHash: string } => Boolean(entry.txHash))
+    .map((entry) => ({
+      hash: entry.txHash,
+      timestamp: entry.createdAt,
+      involvesUser: true,
+      kind: entry.label,
+    }));
+  const mergedTransactions: RecentTransaction[] = [];
+  const seenTransactionHashes = new Set<string>();
+  for (const row of [...sessionTransactions, ...transactions]) {
+    if (seenTransactionHashes.has(row.hash)) continue;
+    seenTransactionHashes.add(row.hash);
+    mergedTransactions.push(row);
+  }
+  // The indexer's own status is handed to HomeScreen untouched: session rows
+  // must never mask an unavailable indexer, and the screen decides how to show
+  // rows and a status notice together.
+  const mobileTransactionsStatus: TransactionsStatus = transactionsStatus;
+
+  const openTransactionByHash = (hash: string) => {
+    const known = activity.find((entry) => entry.txHash === hash);
+    if (known) {
+      setSelectedTx(known);
+      return;
+    }
+    const row = mergedTransactions.find((candidate) => candidate.hash === hash);
+    const status: ActivityStatus =
+      row?.applyStage === 'SUCCESS'
+        ? 'complete'
+        : row?.applyStage === 'FAILURE'
+          ? 'error'
+          : row?.applyStage === 'PARTIAL_SUCCESS'
+            // Finalised, but only partly applied — never still in flight.
+            ? 'blocked'
+            : 'pending';
+    setSelectedTx({
+      id: hash,
+      label: row?.kind ?? 'Midnight transaction',
+      detail:
+        typeof row?.blockHeight === 'number'
+          ? `Read from the Midnight indexer in block ${row.blockHeight}.`
+          : 'Read from the Midnight indexer.',
+      status,
+      source: 'chain',
+      txHash: hash,
+      createdAt: row?.timestamp ?? new Date().toISOString(),
+    });
+  };
+
+  const copyAddressOfKind = (kind: AddressKind) => {
+    const choice = addressChoices.find((candidate) => candidate.kind === kind);
+    if (!choice?.address) return;
+    void copyText(choice.address).catch((cause) => {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    });
+  };
+
+  const refreshMobile = () => {
+    void refreshWallet();
+    void refreshTransactions();
+  };
+
+  const appsProfile = user
+    ? {
+        displayName: connectedUserName,
+        // The network travels with the address: a localnet deployment must not
+        // be shared with a dApp as though it lived on preview.
+        passportContract: profile?.passportContract
+          ? {
+              address: profile.passportContract.address,
+              network: profile.passportContract.network,
+            }
+          : null,
+        midnightAddresses: {
+          unshielded: surfaces?.unshieldedAddress ?? midnightWallet?.address ?? null,
+          shielded: surfaces?.shieldedAddress ?? null,
+          dust: surfaces?.dustAddress ?? null,
+        },
+      }
+    : null;
+
+  const overlays = (
+    <>
+      {selectedTx && <TransactionModal entry={selectedTx} onClose={() => setSelectedTx(null)} />}
+      {showAddressPicker && <AddressPickerModal choices={addressChoices} onClose={() => setShowAddressPicker(false)} />}
+      {transferReview && <TransferReviewModal review={transferReview} onCancel={() => setTransferReview(null)} onSubmit={() => void submitTransfer()} busy={busyAction === 'transfer'} />}
+      {showPassportSetup && <PassportSetupModal localMode={localMode} onClose={() => setShowPassportSetup(false)} onContinue={() => { setShowPassportSetup(false); void deployPassport(); }} />}
+      <PassportProfileConsent
+        displayName={user ? connectedUserName : null}
+        passportContract={
+          passportContract
+            ? { address: passportContract.address, network: passportContract.network }
+            : null
+        }
+        midnightAddresses={
+          surfaces?.unshieldedAddress
+            ? {
+                unshielded: surfaces.unshieldedAddress,
+                ...(surfaces.shieldedAddress ? { shielded: surfaces.shieldedAddress } : {}),
+                ...(surfaces.dustAddress ? { dust: surfaces.dustAddress } : {}),
+              }
+            : null
+        }
+      />
+    </>
+  );
+
+  if (experience === 'mobile') {
+    return (
+      <div className="passport-experience is-mobile">
+        {showOnboarding ? (
+          <OnboardingScreen
+            stage={onboardingStage}
+            busyLabel={onboardingLabel}
+            error={onboardingError}
+            hasExistingPassport={passportEnrolled}
+            onGetStarted={() => setOnboardingStep('choose')}
+            onCreatePasskey={() => startOnboarding('create')}
+            onSignInPasskey={() => startOnboarding('signin')}
+            onDismissError={() => setOnboardingError(null)}
+            onOpenClassic={() => setExperience('classic')}
+          />
+        ) : (
+          <>
+            {mobileTab === 'home' ? (
+              <HomeScreen
+                displayName={connectedUserName}
+                unshieldedBalance={surfaces?.unshieldedBalance ?? null}
+                shieldedTokenCount={surfaces?.shieldedTokenCount ?? null}
+                dustBalance={surfaces?.dustBalance ?? null}
+                dustCap={surfaces?.dustCap ?? null}
+                dustFillPercent={dustFillPercentFrom(surfaces?.dustBalance ?? null, surfaces?.dustCap ?? null)}
+                dustSyncing={surfaces?.dustSyncing ?? false}
+                balanceStatus={surfaces?.balanceStatus ?? 'loading'}
+                unshieldedAddress={surfaces?.unshieldedAddress ?? midnightWallet?.address ?? null}
+                shieldedAddress={surfaces?.shieldedAddress ?? null}
+                dustAddress={surfaces?.dustAddress ?? null}
+                transactions={mergedTransactions}
+                transactionsStatus={mobileTransactionsStatus}
+                error={error}
+                onDismissError={() => setError(null)}
+                onRefresh={refreshMobile}
+                onCopyAddress={copyAddressOfKind}
+                onOpenTransaction={openTransactionByHash}
+                onRegisterDust={() => void registerDust()}
+                onOpenClassic={() => setExperience('classic')}
+                onSignOut={() => void signOutPassport()}
+              />
+            ) : (
+              <AppsScreen
+                profile={appsProfile}
+                onProfileShared={(appName, fields) =>
+                  addActivity({
+                    label: 'Profile shared',
+                    detail: `${appName} received ${fields.join(', ')}.`,
+                    status: 'complete',
+                    source: 'local',
+                  })
+                }
+              />
+            )}
+            <PassportNav active={mobileTab} onSelect={setMobileTab} />
+          </>
+        )}
+        {overlays}
+      </div>
+    );
+  }
+
   return (
     <div className={`passport-experience ${user ? 'is-authenticated' : ''}`}>
       {portalVisible && (
@@ -1626,6 +2035,7 @@ export default function PassportDemo() {
             </nav>
             <div className="workspace-controls">
               <span className={`workspace-status ${dynamicReady ? 'online' : ''}`}><i /> {connectedUserName}</span>
+              <button className="tool-button" onClick={() => setExperience('mobile')}><Smartphone size={16} /> Mobile view</button>
               <IconButton label="Sign out" onClick={() => void signOutPassport()}><LogOut size={16} /></IconButton>
             </div>
           </header>
@@ -1848,27 +2258,7 @@ export default function PassportDemo() {
         </section>
       )}
 
-      {selectedTx && <TransactionModal entry={selectedTx} onClose={() => setSelectedTx(null)} />}
-      {showAddressPicker && <AddressPickerModal choices={addressChoices} onClose={() => setShowAddressPicker(false)} />}
-      {transferReview && <TransferReviewModal review={transferReview} onCancel={() => setTransferReview(null)} onSubmit={() => void submitTransfer()} busy={busyAction === 'transfer'} />}
-      {showPassportSetup && <PassportSetupModal localMode={localMode} onClose={() => setShowPassportSetup(false)} onContinue={() => { setShowPassportSetup(false); void deployPassport(); }} />}
-      <PassportProfileConsent
-        displayName={user ? connectedUserName : null}
-        passportContract={
-          passportContract
-            ? { address: passportContract.address, network: passportContract.network }
-            : null
-        }
-        midnightAddresses={
-          surfaces?.unshieldedAddress
-            ? {
-                unshielded: surfaces.unshieldedAddress,
-                ...(surfaces.shieldedAddress ? { shielded: surfaces.shieldedAddress } : {}),
-                ...(surfaces.dustAddress ? { dust: surfaces.dustAddress } : {}),
-              }
-            : null
-        }
-      />
+      {overlays}
     </div>
   );
 }

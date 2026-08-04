@@ -104,7 +104,8 @@ includes(sourceWorker, "self.addEventListener('install'", 'service worker instal
 includes(sourceWorker, "self.addEventListener('activate'", 'service worker activation handler');
 includes(sourceWorker, "self.addEventListener('fetch'", 'service worker fetch handler');
 includes(sourceWorker, "self.addEventListener('message'", 'service worker update handler');
-includes(sourceWorker, "const CACHE_VERSION = '2026-07-23-1'", 'service worker caches are release-versioned');
+includes(sourceWorker, "const CACHE_VERSION = '2026-08-04-1'", 'service worker caches are release-versioned');
+includes(sourceWorker, "'/passport-portal-monochrome.png'", 'onboarding hero art is a precached shell asset');
 includes(sourceWorker, "url.origin !== self.location.origin", 'cross-origin requests bypass caches');
 includes(sourceWorker, "url.pathname.startsWith('/api/')", 'same-origin API requests bypass caches');
 includes(sourceWorker, "request.mode === 'navigate'", 'navigation strategy is explicit');

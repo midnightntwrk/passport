@@ -1,0 +1,539 @@
+/* Apps screen and in-Passport app browser — prefix "mnapps-".
+   Strict black-and-white Midnight direction: no radii, hard offset shadows,
+   1px hairlines, mobile-first at ~390px. */
+
+/* ---------------------------------------------------------------- list view */
+
+.mnapps-screen {
+  min-height: 100svh;
+  color: #0b0b0b;
+  background: #f5f5f3;
+  padding:
+    max(18px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+    calc(76px + max(18px, env(safe-area-inset-bottom))) max(20px, env(safe-area-inset-left));
+  animation: mnapps-in .35s ease-out both;
+}
+
+.mnapps-head { padding: 14px 0 22px; border-bottom: 1px solid #c7c7c3; }
+.mnapps-kicker {
+  margin: 0 0 14px;
+  color: #777;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.mnapps-title {
+  margin: 0;
+  color: #0a0a0a;
+  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  font-size: clamp(46px, 14vw, 66px);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: .88;
+}
+.mnapps-lede {
+  max-width: 420px;
+  margin: 16px 0 0;
+  color: #626262;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Search */
+.mnapps-search {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 0 13px;
+  border: 1px solid #c7c7c3;
+  color: #777;
+  background: #fff;
+}
+.mnapps-search:focus-within { border-color: #111; color: #111; }
+.mnapps-search input {
+  min-width: 0;
+  height: 44px;
+  border: 0;
+  border-radius: 0;
+  color: #0b0b0b;
+  background: transparent;
+  font-size: 14px;
+}
+.mnapps-search input:focus { outline: none; }
+.mnapps-search input::placeholder { color: #8a8a86; }
+.mnapps-search input::-webkit-search-cancel-button { display: none; }
+.mnapps-search-clear {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #c7c7c3;
+  border-radius: 0;
+  color: #111;
+  background: transparent;
+}
+.mnapps-search-clear:hover { background: #e2e2de; }
+
+/* Status rows */
+.mnapps-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 16px 0 0;
+  padding: 12px 13px;
+  border: 1px solid #c7c7c3;
+  color: #626262;
+  background: #ececea;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mnapps-status-stale { flex-wrap: wrap; border-color: #111; color: #111; }
+.mnapps-status-stale span { flex: 1 1 190px; }
+.mnapps-retry {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid #111;
+  border-radius: 0;
+  color: #111;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 740;
+}
+.mnapps-retry:hover { background: #e2e2de; }
+
+/* Sections and cards */
+.mnapps-section { margin-top: 30px; }
+.mnapps-section-label {
+  margin: 0 0 12px;
+  color: #777;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.mnapps-list { display: grid; gap: 10px; }
+
+.mnapps-card {
+  width: 100%;
+  min-height: 84px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid #c7c7c3;
+  border-radius: 0;
+  color: #0b0b0b;
+  background: #fff;
+  text-align: left;
+}
+.mnapps-card:hover { border-color: #111; box-shadow: 4px 4px 0 #111; }
+.mnapps-card-copy { min-width: 0; display: grid; gap: 5px; }
+.mnapps-card-copy strong { font-size: 14px; font-weight: 760; }
+.mnapps-card-copy small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #626262;
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.mnapps-card-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.mnapps-card-arrow { justify-self: end; color: #777; }
+.mnapps-card:hover .mnapps-card-arrow { color: #111; }
+
+.mnapps-pill,
+.mnapps-tag {
+  padding: 3px 7px;
+  border: 1px solid #bcbcb7;
+  color: #626262;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.mnapps-tag { border-color: #111; color: #fff; background: #111; }
+
+/* App icon — registry icons are forced to greyscale to hold the direction. */
+.mnapps-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  overflow: hidden;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #111;
+  background: #fff;
+}
+.mnapps-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: grayscale(1) contrast(1.08);
+}
+.mnapps-icon-letter {
+  color: #fff;
+  background: #111;
+  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.mnapps-empty {
+  margin: 26px 0 0;
+  padding: 22px 16px;
+  border: 1px solid #c7c7c3;
+  color: #626262;
+  background: #ececea;
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.mnapps-note {
+  max-width: 460px;
+  margin: 34px 0 0;
+  padding: 14px 16px;
+  border-left: 3px solid #111;
+  color: #626262;
+  background: #e9e9e4;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* ------------------------------------------------------------ app browser */
+
+.mnapps-browser {
+  position: fixed;
+  z-index: 130;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  background: #050505;
+  animation: mnapps-in .22s ease-out both;
+}
+
+.mnapps-chrome {
+  display: grid;
+  grid-template-columns: 40px 30px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 11px;
+  padding:
+    calc(9px + env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 9px
+    max(10px, env(safe-area-inset-left));
+  border-bottom: 1px solid rgba(255, 255, 255, .26);
+  background: #0a0a0a;
+}
+.mnapps-chrome-button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .4);
+  border-radius: 0;
+  color: #fff;
+  background: transparent;
+}
+.mnapps-chrome-button:hover { color: #0a0a0a; background: #fff; }
+.mnapps-icon-chrome { width: 30px; height: 30px; border-color: rgba(255, 255, 255, .55); }
+.mnapps-icon-chrome.mnapps-icon-letter {
+  color: #0a0a0a;
+  background: #fff;
+  font-size: 13px;
+}
+.mnapps-chrome-copy { min-width: 0; display: grid; gap: 2px; }
+.mnapps-chrome-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 740;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mnapps-chrome-copy code {
+  overflow: hidden;
+  color: #777;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mnapps-frame-wrap { position: relative; flex: 1; min-height: 0; background: #f5f5f3; }
+.mnapps-frame { width: 100%; height: 100%; border: 0; display: block; }
+
+.mnapps-frame-invalid {
+  height: 100%;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 12px;
+  padding: 28px 24px;
+  color: #111;
+  background: #f5f5f3;
+}
+.mnapps-frame-invalid p { max-width: 340px; margin: 0; font-size: 13px; line-height: 1.55; }
+
+.mnapps-frame-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #626262;
+  background: #f5f5f3;
+  font-size: 12px;
+  font-weight: 680;
+}
+.mnapps-spinner { animation: mnapps-spin 1s linear infinite; }
+
+.mnapps-hint {
+  position: absolute;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  left: max(14px, env(safe-area-inset-left));
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid #f5f5f3;
+  color: #f5f5f3;
+  background: #0a0a0a;
+  box-shadow: 4px 4px 0 rgba(245, 245, 243, .3);
+}
+.mnapps-hint p { grid-column: 2 / -1; margin: 0; font-size: 12px; line-height: 1.45; }
+.mnapps-hint-open {
+  grid-column: 3;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid #f5f5f3;
+  border-radius: 0;
+  color: #0a0a0a;
+  background: #f5f5f3;
+  font-size: 11px;
+  font-weight: 780;
+}
+.mnapps-hint-open:hover { color: #f5f5f3; background: #0a0a0a; }
+.mnapps-hint-dismiss {
+  grid-column: 4;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(245, 245, 243, .5);
+  border-radius: 0;
+  color: #f5f5f3;
+  background: transparent;
+}
+.mnapps-hint-dismiss:hover:not(:disabled) { color: #0a0a0a; background: #f5f5f3; }
+
+/* ----------------------------------------------------------- consent sheet */
+
+.mnapps-sheet-backdrop {
+  position: fixed;
+  z-index: 140;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  padding: 0;
+  background: rgba(0, 0, 0, .72);
+  animation: mnapps-in .2s ease-out both;
+}
+.mnapps-sheet {
+  width: 100%;
+  max-height: 92svh;
+  overflow-y: auto;
+  padding:
+    22px max(20px, env(safe-area-inset-right))
+    calc(22px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  border-top: 1px solid #111;
+  color: #111;
+  background: #f8f8f6;
+  animation: mnapps-sheet-in .28s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.mnapps-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #d9d9d4;
+}
+.mnapps-sheet-head p {
+  margin: 0;
+  color: #666;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.mnapps-sheet-head h2 {
+  margin: 5px 0 0;
+  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: .95;
+}
+.mnapps-sheet-mark {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #111;
+  color: #fff;
+  background: #111;
+}
+
+.mnapps-sheet-origin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  color: #3d3d3d;
+}
+.mnapps-sheet-origin code {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.mnapps-sheet-origin small {
+  padding: 3px 7px;
+  border: 1px solid #bcbcb7;
+  color: #626262;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.mnapps-sheet-copy { margin: 16px 0 0; font-size: 13px; line-height: 1.55; }
+
+.mnapps-sheet-fields {
+  display: grid;
+  margin: 14px 0 0;
+  padding: 0;
+  border-top: 1px solid #d9d9d4;
+  list-style: none;
+}
+.mnapps-sheet-fields li { border-bottom: 1px solid #d9d9d4; }
+.mnapps-field {
+  width: 100%;
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border: 0;
+  border-radius: 0;
+  color: #111;
+  background: transparent;
+  text-align: left;
+}
+.mnapps-field-box {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #111;
+  color: transparent;
+  background: #fff;
+}
+.mnapps-field-box-on { color: #fff; background: #111; }
+.mnapps-field-copy { min-width: 0; display: grid; gap: 4px; }
+.mnapps-field-copy strong { font-size: 13px; font-weight: 740; }
+.mnapps-field-copy small { color: #626262; font-size: 12px; line-height: 1.45; }
+
+.mnapps-sheet-boundary {
+  margin: 18px 0 0;
+  padding: 13px 15px;
+  border-left: 3px solid #111;
+  color: #505050;
+  background: #e9e9e4;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.mnapps-sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+.mnapps-button-ghost,
+.mnapps-button-solid,
+.mnapps-sheet-done {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid #111;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 760;
+}
+.mnapps-button-ghost { color: #111; background: transparent; }
+.mnapps-button-ghost:hover:not(:disabled) { background: #e2e2de; }
+.mnapps-button-solid,
+.mnapps-sheet-done { color: #fff; background: #111; }
+.mnapps-button-solid:hover:not(:disabled),
+.mnapps-sheet-done:hover { color: #111; background: #fff; }
+
+.mnapps-sheet-outcome {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  padding-top: 20px;
+}
+.mnapps-sheet-outcome p {
+  margin: 2px 0 0;
+  color: #505050;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.mnapps-sheet-done { grid-column: 1 / -1; margin-top: 6px; }
+
+/* ---------------------------------------------------------------- motion */
+
+@keyframes mnapps-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mnapps-spin { to { transform: rotate(360deg); } }
+@keyframes mnapps-sheet-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mnapps-screen,
+  .mnapps-browser,
+  .mnapps-sheet-backdrop,
+  .mnapps-sheet { animation: none; }
+  .mnapps-spinner { animation-duration: 2.4s; }
+}
+
+@media (min-width: 700px) {
+  .mnapps-screen { padding-right: max(32px, env(safe-area-inset-right)); padding-left: max(32px, env(safe-area-inset-left)); }
+  .mnapps-head,
+  .mnapps-search,
+  .mnapps-section,
+  .mnapps-status,
+  .mnapps-empty,
+  .mnapps-note { max-width: 620px; }
+  .mnapps-sheet-backdrop { place-items: center; padding: 24px; }
+  .mnapps-sheet {
+    width: min(520px, 100%);
+    padding: 26px;
+    border: 1px solid #111;
+    box-shadow: 6px 6px 0 #111;
+  }
+}

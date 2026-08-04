@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'midnight-passport-';
 // Bump this value for every released service-worker shell.
-const CACHE_VERSION = '2026-07-23-1';
+const CACHE_VERSION = '2026-08-04-1';
 const SHELL_CACHE = `${CACHE_PREFIX}shell-${CACHE_VERSION}`;
 const STATIC_CACHE = `${CACHE_PREFIX}static-${CACHE_VERSION}`;
 
@@ -11,6 +11,8 @@ const SHELL_ASSETS = [
   '/manifest.webmanifest',
   '/midnight-symbol.svg',
   '/midnight-wordmark.svg',
+  // Hero art for the onboarding screen, which is now the default first view.
+  '/passport-portal-monochrome.png',
   '/icons/passport-192.png',
   '/icons/passport-512.png',
   '/icons/passport-maskable-512.png',

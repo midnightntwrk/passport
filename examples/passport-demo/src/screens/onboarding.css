@@ -1,0 +1,256 @@
+/* Onboarding screen — prefix "mnob-". Strict black-and-white Midnight direction. */
+
+.mnob-screen {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #fff;
+  background: #030303;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  animation: mnob-in .45s ease-out both;
+}
+
+/* Hero art — monochrome portal, anchored to the lower half, fading into the ink. */
+.mnob-art {
+  position: absolute;
+  inset: 0;
+  background-color: #030303;
+  background-image: url('/passport-portal-monochrome.png');
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  background-size: cover;
+  clip-path: inset(38% 0 0 0);
+  opacity: .5;
+  pointer-events: none;
+}
+.mnob-art::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(180deg, #030303 30%, rgba(3, 3, 3, .55) 62%, rgba(3, 3, 3, .82) 100%);
+}
+
+.mnob-bar {
+  position: relative;
+  z-index: 1;
+  width: min(100% - 48px, 520px);
+  min-height: 64px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .26);
+}
+.mnob-wordmark {
+  width: 104px;
+  height: auto;
+  filter: invert(1) grayscale(1) contrast(2);
+}
+.mnob-bar-label {
+  margin-left: auto;
+  color: #777;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.mnob-body {
+  position: relative;
+  z-index: 1;
+  width: min(100% - 48px, 520px);
+  margin: 0 auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-top: clamp(44px, 9svh, 96px);
+  padding-bottom: 28px;
+}
+
+.mnob-kicker {
+  margin: 0 0 16px;
+  color: #777;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.mnob-title {
+  margin: 0;
+  display: grid;
+  color: #fff;
+  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  font-size: clamp(52px, 15vw, 84px);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: .85;
+  text-shadow: 0 2px 0 #030303;
+}
+.mnob-title span { display: block; }
+.mnob-lede {
+  max-width: 400px;
+  margin: 20px 0 0;
+  color: #bcbcb7;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Inline error banner */
+.mnob-error {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 26px;
+  padding: 10px 12px;
+  border: 1px solid #f5f5f3;
+  color: #f5f5f3;
+  background: #0a0a0a;
+  box-shadow: 4px 4px 0 rgba(245, 245, 243, .3);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.mnob-error-copy { flex: 1; overflow-wrap: anywhere; }
+.mnob-error-dismiss {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(245, 245, 243, .5);
+  border-radius: 0;
+  color: #f5f5f3;
+  background: transparent;
+}
+.mnob-error-dismiss:hover:not(:disabled) { color: #0a0a0a; background: #f5f5f3; }
+
+/* Stages */
+.mnob-stage { margin-top: auto; padding-top: 40px; animation: mnob-stage-in .35s ease-out both; }
+
+/* Welcome — single CTA, echoes .portal-cta */
+.mnob-primary {
+  width: 100%;
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 13px;
+  padding: 0 20px;
+  border: 1px solid #fff;
+  border-radius: 0;
+  color: #090909;
+  background: #fff;
+  box-shadow: 6px 6px 0 rgba(245, 245, 243, .3);
+  font-size: 14px;
+  font-weight: 780;
+}
+.mnob-primary:hover:not(:disabled) { color: #fff; background: #111; }
+
+/* Choose — two passkey routes */
+.mnob-choose-label {
+  margin: 0 0 12px;
+  color: #777;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.mnob-choices { display: grid; gap: 10px; }
+.mnob-choice {
+  width: 100%;
+  min-height: 74px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, .55);
+  border-radius: 0;
+  color: #fff;
+  background: transparent;
+  text-align: left;
+}
+.mnob-choice:hover:not(:disabled) { border-color: #fff; background: #111; }
+.mnob-choice-lead {
+  border-color: #fff;
+  color: #090909;
+  background: #fff;
+  box-shadow: 6px 6px 0 rgba(245, 245, 243, .3);
+}
+.mnob-choice-lead:hover:not(:disabled) { color: #fff; background: #111; }
+.mnob-choice-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid currentColor;
+}
+.mnob-choice-copy { min-width: 0; display: grid; gap: 4px; }
+.mnob-choice-copy strong { font-size: 14px; font-weight: 780; }
+.mnob-choice-copy small { color: #777; font-size: 12px; line-height: 1.4; }
+.mnob-choice-lead .mnob-choice-copy small { color: #626262; }
+.mnob-choice-lead:hover:not(:disabled) .mnob-choice-copy small,
+.mnob-choice:hover:not(:disabled) .mnob-choice-copy small { color: #bcbcb7; }
+.mnob-choice-arrow { justify-self: end; }
+
+/* Working — busy state */
+.mnob-working {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, .55);
+  color: #fff;
+  background: #0a0a0a;
+  font-size: 13px;
+  font-weight: 680;
+}
+.mnob-working-spinner { flex: 0 0 auto; animation: mnob-spin 1s linear infinite; }
+.mnob-working-copy { overflow-wrap: anywhere; }
+.mnob-working-hint { margin: 12px 0 0; color: #777; font-size: 12px; line-height: 1.5; }
+
+.mnob-foot {
+  position: relative;
+  z-index: 1;
+  width: min(100% - 48px, 520px);
+  min-height: 46px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, .26);
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
+  color: #777;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.mnob-foot-link {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid #777;
+  border-radius: 0;
+  color: #c7c7c3;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+}
+.mnob-foot-link:hover { color: #f5f5f3; border-bottom-color: #f5f5f3; }
+
+@keyframes mnob-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mnob-stage-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes mnob-spin { to { transform: rotate(360deg); } }
+
+@media (min-width: 700px) {
+  .mnob-bar, .mnob-body, .mnob-foot { width: min(100% - 64px, 560px); }
+  .mnob-art { clip-path: inset(30% 0 0 0); }
+  .mnob-primary { width: auto; min-width: 280px; }
+}

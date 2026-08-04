@@ -18,6 +18,12 @@ export interface DynamicSurfaceState {
   unshieldedBalance: string | null;
   shieldedTokenCount: number | null;
   dustBalance: string | null;
+  /**
+   * Formatted DUST generation cap, on the same human scale as `dustBalance`.
+   * `null` means the wallet did not report one — never substitute a zero here,
+   * because a zero cap reads as a real, empty allowance.
+   */
+  dustCap: string | null;
   dustSyncing: boolean;
   addressStatus: AddressStatus;
   balanceStatus: BalanceStatus;
@@ -141,6 +147,7 @@ export function initialDynamicSurfaceState(wallet: MidnightWallet): DynamicSurfa
     unshieldedBalance: null,
     shieldedTokenCount: null,
     dustBalance: null,
+    dustCap: null,
     dustSyncing: false,
     addressStatus: shieldedAddress && dustAddress ? 'ready' : 'loading',
     balanceStatus: 'loading',
@@ -172,7 +179,7 @@ export async function refreshDynamicAddresses(wallet: MidnightWallet): Promise<P
   };
 }
 
-export async function refreshDynamicBalances(wallet: MidnightWallet): Promise<Pick<DynamicSurfaceState, 'unshieldedBalance' | 'shieldedTokenCount' | 'dustBalance' | 'dustSyncing' | 'balanceStatus' | 'balanceError'>> {
+export async function refreshDynamicBalances(wallet: MidnightWallet): Promise<Pick<DynamicSurfaceState, 'unshieldedBalance' | 'shieldedTokenCount' | 'dustBalance' | 'dustCap' | 'dustSyncing' | 'balanceStatus' | 'balanceError'>> {
   try {
     const formatted = await withTimeout(wallet.getFormattedBalances(), 'Midnight balance sync', BALANCE_TIMEOUT_MS);
     return {
@@ -180,6 +187,8 @@ export async function refreshDynamicBalances(wallet: MidnightWallet): Promise<Pi
       unshieldedBalance: formatted.unshieldedBalance ?? '0',
       shieldedTokenCount: formatted.shieldedTokenCount ?? 0,
       dustBalance: formatted.dustBalance?.balance ?? '0',
+      // An absent cap is unknown, not zero, so it stays null.
+      dustCap: formatted.dustBalance?.cap ?? null,
       dustSyncing: formatted.dustSyncing === true,
       balanceStatus: formatted.dustSyncing ? 'syncing' : 'ready',
       balanceError: null,
@@ -190,6 +199,7 @@ export async function refreshDynamicBalances(wallet: MidnightWallet): Promise<Pi
       unshieldedBalance: null,
       shieldedTokenCount: null,
       dustBalance: null,
+      dustCap: null,
       dustSyncing: false,
       balanceStatus: 'unavailable',
       balanceError: message,
