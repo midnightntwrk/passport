@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Droplets,
   Check,
   Copy,
   ExternalLink,
@@ -253,6 +254,20 @@ export default function HomeScreen(props: HomeScreenProps) {
         <img className="mnhome-wordmark" src="/midnight-wordmark.svg" alt="Midnight" />
         <div className="mnhome-bar-actions">
           <NetworkSwitcher network={network} onSelect={onSelectNetwork} />
+          {network !== 'mainnet' ? (
+            /* Test-NIGHT faucet for the selected network. Mainnet has no
+               faucet, so the button honestly disappears there. */
+            <a
+              className="mnhome-icon-button mnhome-faucet"
+              href={`https://faucet.${network}.midnight.network`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Open the ${network} faucet to get test NIGHT`}
+              title="Get test NIGHT"
+            >
+              <Droplets size={15} aria-hidden="true" />
+            </a>
+          ) : null}
           <button
             type="button"
             className="mnhome-address-pill"

@@ -616,3 +616,10 @@
 @media (min-width: 560px) {
   .mnhome-addr-scrim { align-items: center; }
 }
+
+/* The faucet control is an anchor wearing the icon-button clothes. */
+a.mnhome-icon-button {
+  display: inline-grid;
+  place-items: center;
+  text-decoration: none;
+}
