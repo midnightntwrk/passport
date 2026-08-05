@@ -623,3 +623,32 @@ a.mnhome-icon-button {
   place-items: center;
   text-decoration: none;
 }
+
+/* Address modal footer: the caveat and the faucet action share the row on
+   wider phones and stack on narrow ones. The faucet moved here from the top
+   bar — it funds the address the user just copied, and the bar was crowded. */
+.mnhome-addr-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+.mnhome-addr-foot .mnhome-addr-note { margin: 0; flex: 1 1 200px; }
+.mnhome-addr-faucet {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: var(--mn-hairline) solid var(--mn-accent);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-accent-ink);
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mnhome-addr-faucet:hover { background: var(--mn-accent-soft); }

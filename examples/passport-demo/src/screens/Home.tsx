@@ -259,20 +259,6 @@ export default function HomeScreen(props: HomeScreenProps) {
         <img className="mnhome-wordmark" src="/midnight-wordmark.svg" alt="Midnight" />
         <div className="mnhome-bar-actions">
           <NetworkSwitcher network={network} onSelect={onSelectNetwork} />
-          {network !== 'mainnet' ? (
-            /* Test-NIGHT faucet for the selected network. Mainnet has no
-               faucet, so the button honestly disappears there. */
-            <a
-              className="mnhome-icon-button mnhome-faucet"
-              href={`https://faucet.${network}.midnight.network`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Open the ${network} faucet to get test NIGHT`}
-              title="Get test NIGHT"
-            >
-              <Droplets size={15} aria-hidden="true" />
-            </a>
-          ) : null}
           <button
             type="button"
             className="mnhome-address-pill"
@@ -500,9 +486,27 @@ export default function HomeScreen(props: HomeScreenProps) {
                       </li>
                     ))}
                   </ul>
-                  <p className="mnhome-addr-note">
-                    Public receiving addresses — never the keys behind them.
-                  </p>
+                  <div className="mnhome-addr-foot">
+                    <p className="mnhome-addr-note">
+                      Public receiving addresses — never the keys behind them.
+                    </p>
+                    {network !== 'mainnet' ? (
+                      /* The faucet lives here, beside the address it funds.
+                         Mainnet has no faucet, so the button honestly
+                         disappears there. */
+                      <a
+                        className="mnhome-addr-faucet"
+                        href={`https://faucet.${network}.midnight.network`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Open the ${network} faucet to get test NIGHT`}
+                      >
+                        <Droplets size={14} aria-hidden="true" />
+                        <span>Get test NIGHT</span>
+                        <ExternalLink size={12} aria-hidden="true" />
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
               </div>,
               document.body,
