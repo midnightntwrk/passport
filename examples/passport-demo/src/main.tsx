@@ -61,4 +61,19 @@ if (!import.meta.env.DEV || window.location.origin === requiredDevelopmentOrigin
       </PassportPwaShell>
     </React.StrictMode>,
   );
+
+  // Retire the inline splash from index.html once React has painted, keeping
+  // it on screen for at least 500ms so a fast load reads as a deliberate beat
+  // rather than a flash. The element is removed after its opacity transition.
+  const splash = document.getElementById('mn-splash');
+  if (splash) {
+    const shownAt = (window as { __mnSplashShownAt?: number }).__mnSplashShownAt ?? Date.now();
+    const remaining = Math.max(0, 500 - (Date.now() - shownAt));
+    window.setTimeout(() => {
+      requestAnimationFrame(() => {
+        splash.classList.add('mn-splash-done');
+        window.setTimeout(() => splash.remove(), 400);
+      });
+    }, remaining);
+  }
 }
