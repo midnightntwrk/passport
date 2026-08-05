@@ -29,6 +29,7 @@ export type {
   PassportStateInjectionResult,
   PassportStateKeyProvider,
   PassportStateScope,
+  PassportWalletSeedProvider,
 } from './types.js';
 export type {
   PassportProfileField,

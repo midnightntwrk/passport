@@ -1,0 +1,267 @@
+/* Passport mobile — design tokens.
+   =================================================================
+   The single source of truth for every surface, text, border, and
+   shadow value used by the mobile Passport screens (Home, Apps,
+   Onboarding, and the bottom navigation). Those four sheets consume
+   these custom properties and declare no colour values of their own.
+
+   Palette — strictly monochrome: blacks, whites, and neutral greys.
+   No hues, ever.
+   Geometry — border-radius stays 0 everywhere.
+   Shadows  — hard offsets only, never blurred.
+
+   Themes
+   ------
+   Light is the default. Dark is applied when the document element
+   carries [data-theme="dark"], and is also honoured from the
+   operating system when no explicit choice has been recorded (that
+   is, when no data-theme attribute is present at all). See
+   ../lib/theme.ts, which writes the attribute and persists the
+   preference under the localStorage key 'passport-theme'.
+
+   Scope
+   -----
+   The legacy global sheet (../styles.css, the classic desktop view)
+   is deliberately NOT governed by these tokens and is left alone.
+   The only rules below that reach outside the token declarations are
+   the short "bridge" section at the end, which is scoped to the
+   mobile screen roots. */
+
+/* ---------------------------------------------------------------- */
+/* Theme-independent                                                 */
+/* ---------------------------------------------------------------- */
+
+:root {
+  /* Type */
+  --mn-font-display: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mn-font-body: Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mn-font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* Every figure that can be compared column-to-column or that updates in
+     place — balances, percentages, block heights — sets this. */
+  --mn-numeric: tabular-nums lining-nums;
+
+  /* Geometry */
+  --mn-radius: 0;
+  --mn-hairline: 1px;
+  --mn-nav-height: 76px;
+
+  /* Fixed "ink" scale ------------------------------------------------
+     Values that stay dark in BOTH themes. Onboarding is a deliberate
+     full-bleed dark hero in light mode as well as dark mode: it is the
+     pre-authentication brand moment, it carries the monochrome portal
+     art, and it must not flip to a light card layout half way through
+     the sign-in. It therefore consumes ONLY --mn-ink-*, so its darkness
+     is an explicit decision rather than an accident of the theme. */
+  --mn-ink-page: #080808;
+  --mn-ink-card: #141414;
+  --mn-ink-raised: #1e1e1e;
+  --mn-ink-text: #f7f7f7;
+  --mn-ink-text-secondary: #b8b8b8;
+  --mn-ink-text-muted: #7d7d7d;
+  --mn-ink-border-hairline: #2c2c2c;
+  --mn-ink-border-medium: #4a4a4a;
+  --mn-ink-border-strong: #f7f7f7;
+  --mn-ink-surface-inverted: #ffffff;
+  --mn-ink-text-inverted: #0a0a0a;
+  --mn-ink-hover: rgba(247, 247, 247, .09);
+  --mn-ink-shadow-colour: rgba(247, 247, 247, .26);
+  --mn-ink-shadow-sm: 4px 4px 0 var(--mn-ink-shadow-colour);
+  --mn-ink-shadow-md: 6px 6px 0 var(--mn-ink-shadow-colour);
+  --mn-ink-scrim: rgba(8, 8, 8, .84);
+  /* Stops for the hero-art fade on Onboarding — the same ink at partial
+     opacity, kept here so the screen sheet holds no colour values. */
+  --mn-ink-fade-mid: rgba(8, 8, 8, .55);
+  --mn-ink-fade-end: rgba(8, 8, 8, .82);
+  /* The wordmark ships as #0a0a0a artwork; on ink it is always inverted. */
+  --mn-ink-wordmark-filter: invert(1) grayscale(1) contrast(2);
+}
+
+/* ---------------------------------------------------------------- */
+/* Light — the default                                               */
+/* ---------------------------------------------------------------- */
+
+:root,
+:root[data-theme="light"] {
+  --mn-color-scheme: light;
+
+  /* Surfaces, lowest to highest. Higher always means lighter, which is
+     what gives the screens a value hierarchy instead of one flat sheet
+     separated only by hairlines. */
+  --mn-surface-sunken: #dcdcdc;
+  --mn-surface-page: #e9e9e9;
+  --mn-surface-card: #f5f5f5;
+  --mn-surface-raised: #ffffff;
+  --mn-surface-inverted: #101010;
+  --mn-surface-skeleton: #d4d4d4;
+
+  /* Transient washes for pointer state — never a new colour, only a
+     shift in value. */
+  --mn-surface-hover: rgba(16, 16, 16, .06);
+  --mn-surface-active: rgba(16, 16, 16, .11);
+  --mn-scrim: rgba(16, 16, 16, .55);
+
+  /* Text */
+  --mn-text-primary: #101010;
+  --mn-text-secondary: #464646;
+  /* 5.0:1 against --mn-surface-page, so the 10–11px uppercase labels that use
+     it still clear AA at small sizes. */
+  --mn-text-muted: #626262;
+  --mn-text-inverted: #f7f7f7;
+  --mn-text-inverted-muted: #a8a8a8;
+
+  /* Borders */
+  --mn-border-hairline: #cfcfcf;
+  --mn-border-medium: #ababab;
+  --mn-border-strong: #101010;
+
+  /* Shadows — hard offsets, never blurred. */
+  --mn-shadow-colour: rgba(16, 16, 16, .22);
+  --mn-shadow-sm: 3px 3px 0 var(--mn-shadow-colour);
+  --mn-shadow-md: 5px 5px 0 var(--mn-shadow-colour);
+  --mn-shadow-lg: 8px 8px 0 var(--mn-shadow-colour);
+  /* Full-strength offset, used where the element must read as the loudest
+     thing on screen. */
+  --mn-shadow-ink: 5px 5px 0 var(--mn-border-strong);
+
+  /* Focus. styles.css sets a global white focus ring for the classic
+     dark view; the bridge at the foot of this file re-points it at a
+     ring that is visible on whichever surface the mobile screens use. */
+  --mn-focus-ring: #101010;
+
+  /* Media. The wordmark artwork is #0a0a0a, so on light it needs no
+     inversion — only a nudge to hold the strict monochrome direction. */
+  --mn-wordmark-filter: grayscale(1) contrast(1.15);
+  --mn-app-icon-filter: grayscale(1) contrast(1.08);
+}
+
+/* ---------------------------------------------------------------- */
+/* Dark — explicit                                                   */
+/* ---------------------------------------------------------------- */
+
+:root[data-theme="dark"] {
+  --mn-color-scheme: dark;
+
+  --mn-surface-sunken: #050505;
+  --mn-surface-page: #0a0a0a;
+  --mn-surface-card: #171717;
+  --mn-surface-raised: #212121;
+  --mn-surface-inverted: #f2f2f2;
+  --mn-surface-skeleton: #2b2b2b;
+
+  --mn-surface-hover: rgba(244, 244, 244, .08);
+  --mn-surface-active: rgba(244, 244, 244, .14);
+  --mn-scrim: rgba(5, 5, 5, .82);
+
+  --mn-text-primary: #f4f4f4;
+  --mn-text-secondary: #b5b5b5;
+  --mn-text-muted: #8a8a8a;
+  --mn-text-inverted: #0a0a0a;
+  --mn-text-inverted-muted: #4c4c4c;
+
+  --mn-border-hairline: #2e2e2e;
+  --mn-border-medium: #4a4a4a;
+  --mn-border-strong: #f4f4f4;
+
+  --mn-shadow-colour: rgba(244, 244, 244, .24);
+  --mn-shadow-sm: 3px 3px 0 var(--mn-shadow-colour);
+  --mn-shadow-md: 5px 5px 0 var(--mn-shadow-colour);
+  --mn-shadow-lg: 8px 8px 0 var(--mn-shadow-colour);
+  --mn-shadow-ink: 5px 5px 0 var(--mn-border-strong);
+
+  --mn-focus-ring: #f4f4f4;
+
+  --mn-wordmark-filter: invert(1) grayscale(1) contrast(2);
+  --mn-app-icon-filter: grayscale(1) contrast(1.08);
+}
+
+/* ---------------------------------------------------------------- */
+/* Dark — inherited from the operating system                        */
+/* ---------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  /* Only when nothing explicit has been recorded. theme.ts removes the
+     attribute entirely for the 'system' preference, which is what lets
+     this block win. */
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --mn-color-scheme: dark;
+
+    --mn-surface-sunken: #050505;
+    --mn-surface-page: #0a0a0a;
+    --mn-surface-card: #171717;
+    --mn-surface-raised: #212121;
+    --mn-surface-inverted: #f2f2f2;
+    --mn-surface-skeleton: #2b2b2b;
+
+    --mn-surface-hover: rgba(244, 244, 244, .08);
+    --mn-surface-active: rgba(244, 244, 244, .14);
+    --mn-scrim: rgba(5, 5, 5, .82);
+
+    --mn-text-primary: #f4f4f4;
+    --mn-text-secondary: #b5b5b5;
+    --mn-text-muted: #8a8a8a;
+    --mn-text-inverted: #0a0a0a;
+    --mn-text-inverted-muted: #4c4c4c;
+
+    --mn-border-hairline: #2e2e2e;
+    --mn-border-medium: #4a4a4a;
+    --mn-border-strong: #f4f4f4;
+
+    --mn-shadow-colour: rgba(244, 244, 244, .24);
+    --mn-shadow-sm: 3px 3px 0 var(--mn-shadow-colour);
+    --mn-shadow-md: 5px 5px 0 var(--mn-shadow-colour);
+    --mn-shadow-lg: 8px 8px 0 var(--mn-shadow-colour);
+    --mn-shadow-ink: 5px 5px 0 var(--mn-border-strong);
+
+    --mn-focus-ring: #f4f4f4;
+
+    --mn-wordmark-filter: invert(1) grayscale(1) contrast(2);
+    --mn-app-icon-filter: grayscale(1) contrast(1.08);
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Bridge                                                            */
+/* ---------------------------------------------------------------- */
+
+/* The mobile screens mount inside a document whose <body> is still
+   painted by the legacy sheet. These two rules hand the page value back
+   to the token system wherever a mobile screen is on screen, so overscroll
+   and the area behind a short screen match the surface the screen uses.
+   :has() carries the whole selector, so nothing here touches the classic
+   view, which never renders these roots. */
+body:has(.mnhome-screen),
+body:has(.mnapps-screen) {
+  background: var(--mn-surface-page);
+}
+body:has(.mnob-screen) {
+  background: var(--mn-ink-page);
+}
+
+/* The mobile screens mount inside `.passport-experience.is-mobile`, whose
+   legacy background is a fixed near-black. Hand that wrapper to the token
+   system as well, or a dark band shows through in light mode wherever a
+   screen is shorter than the wrapper. The classic wrapper is
+   `.passport-experience` WITHOUT `.is-mobile`, and is not matched here. */
+.passport-experience.is-mobile {
+  background: var(--mn-surface-page);
+}
+.passport-experience.is-mobile:has(.mnob-screen) {
+  background: var(--mn-ink-page);
+}
+
+/* styles.css sets `outline: 2px solid #fff` globally, which disappears on
+   a light surface. Re-point it per theme, scoped to the mobile roots. */
+.mnhome-screen :focus-visible,
+.mnapps-screen :focus-visible,
+.mnapps-browser :focus-visible,
+.mnapps-sheet-backdrop :focus-visible,
+.mnnav :focus-visible,
+.mnthemetoggle :focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 3px;
+}
+.mnob-screen :focus-visible {
+  outline: 2px solid var(--mn-ink-border-strong);
+  outline-offset: 3px;
+}

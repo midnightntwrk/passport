@@ -14,6 +14,19 @@ export interface PassportStateKeyProvider {
   getKey(scope: PassportStateScope): Promise<CryptoKey>;
 }
 
+/**
+ * Yields raw seed material for an on-device Midnight wallet.
+ *
+ * Kept separate from {@link PassportStateKeyProvider} on purpose: that
+ * interface never lets key bytes escape, whereas a wallet seed must, because
+ * the Midnight wallet SDK derives its HD tree from bytes. Implementations MUST
+ * domain-separate this output from the private-state encryption key.
+ */
+export interface PassportWalletSeedProvider {
+  /** Returns exactly 32 bytes. May prompt the user; call from a user gesture. */
+  deriveWalletSeed(scope: PassportStateScope): Promise<Uint8Array>;
+}
+
 export interface PassportEncryptedRecordStore {
   get(key: string): Promise<PassportEncryptedEnvelope | null>;
   set(key: string, value: PassportEncryptedEnvelope): Promise<void>;

@@ -15,6 +15,7 @@ import {
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 
 import type { RecentTransaction } from '../lib/indexerTx'
+import ThemeToggle from './ThemeToggle.js'
 import './home.css'
 
 export interface HomeScreenProps {
@@ -42,6 +43,14 @@ export interface HomeScreenProps {
   onCopyAddress: (kind: 'unshielded' | 'shielded' | 'dust') => void
   onOpenTransaction: (hash: string) => void
   onRegisterDust: () => void
+  /**
+   * Set when DUST registration genuinely cannot run for the active wallet.
+   * The control is disabled and this sentence is shown in its place — the
+   * button is never left live to fail silently.
+   */
+  registerDustDisabledReason?: string | null
+  /** Replaces the footer line, so the screen names where its figures came from. */
+  walletSourceNote?: string | null
   onOpenClassic: () => void
   onSignOut: () => void
 }
@@ -111,6 +120,8 @@ export default function HomeScreen(props: HomeScreenProps) {
     onCopyAddress,
     onOpenTransaction,
     onRegisterDust,
+    registerDustDisabledReason,
+    walletSourceNote,
     onOpenClassic,
     onSignOut,
   } = props
@@ -152,6 +163,7 @@ export default function HomeScreen(props: HomeScreenProps) {
       <header className="mnhome-bar">
         <img className="mnhome-wordmark" src="/midnight-wordmark.svg" alt="Midnight" />
         <div className="mnhome-bar-actions">
+          <ThemeToggle size="sm" />
           <button
             type="button"
             className="mnhome-icon-button"
@@ -251,10 +263,20 @@ export default function HomeScreen(props: HomeScreenProps) {
                 {dustSyncing ? ' · charging' : ''}
               </p>
               {needsDustRegistration ? (
-                <button type="button" className="mnhome-ghost" onClick={onRegisterDust}>
-                  <Plus size={13} aria-hidden="true" />
-                  <span>Register DUST</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="mnhome-ghost"
+                    onClick={onRegisterDust}
+                    disabled={Boolean(registerDustDisabledReason)}
+                  >
+                    <Plus size={13} aria-hidden="true" />
+                    <span>Register DUST</span>
+                  </button>
+                  {registerDustDisabledReason ? (
+                    <p className="mnhome-dust-note">{registerDustDisabledReason}</p>
+                  ) : null}
+                </>
               ) : null}
             </div>
           </article>
@@ -383,7 +405,10 @@ export default function HomeScreen(props: HomeScreenProps) {
 
         <p className="mnhome-foot">
           <Zap size={12} aria-hidden="true" />
-          <span>Midnight preview · balances and history read live from the indexer</span>
+          <span>
+            {walletSourceNote ??
+              'Midnight preview · balances and history read live from the indexer'}
+          </span>
         </p>
       </div>
     </section>

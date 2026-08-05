@@ -1,0 +1,48 @@
+@import './tokens.css';
+
+/* Theme toggle — prefix "mnthemetoggle-".
+   A three-segment control sized to sit beside the 34px icon buttons in the
+   Home top bar. Same rules as everything else: no radii, hairline borders,
+   monochrome, and the selected segment is the only inverted block. */
+
+.mnthemetoggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  height: 34px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  color: var(--mn-text-primary);
+  background: transparent;
+  font-family: var(--mn-font-body);
+}
+
+.mnthemetoggle-option {
+  width: 32px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-left: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.mnthemetoggle-option:first-child { border-left: 0; }
+.mnthemetoggle-option:hover:not(.mnthemetoggle-option-on) {
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-hover);
+}
+.mnthemetoggle-option-on {
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+}
+
+/* Compact variant for tight bars. */
+.mnthemetoggle-sm { height: 28px; }
+.mnthemetoggle-sm .mnthemetoggle-option { width: 26px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnthemetoggle-option { transition: none; }
+}

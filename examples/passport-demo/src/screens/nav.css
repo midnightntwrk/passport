@@ -1,19 +1,35 @@
-/* Bottom navigation — prefix "mnnav-". Strict black-and-white Midnight direction. */
+@import './tokens.css';
+
+/* Bottom navigation — prefix "mnnav-".
+   Strict monochrome Midnight direction: no radii, hard offset shadows,
+   1px hairlines.
+
+   The bar shares the surface system of the screen it sits on: it is a card
+   raised off the page, not a light slab dropped under a dark screen. The
+   active tab is the only inverted block on the bar, so it is unambiguously
+   the loudest thing in it; inactive tabs sit back at muted weight. */
 
 .mnnav {
   position: fixed;
   z-index: 100;
   right: 0;
-  bottom: max(0px, env(safe-area-inset-bottom));
+  /* Clearance for the hard offset below, so the bar reads as a card lifted
+     off the page rather than a slab welded to the viewport edge. */
+  bottom: max(8px, env(safe-area-inset-bottom));
   left: 0;
   width: min(100% - 40px, 520px);
-  height: 76px;
+  height: var(--mn-nav-height);
   margin: 0 auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  border: 1px solid #0a0a0a;
-  background: #f5f5f3;
-  box-shadow: 0 -10px 30px rgba(3, 3, 3, .55);
+  border: var(--mn-hairline) solid var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
+  /* Hard offset, never blurred — the bar lifts off the page rather than
+     glowing above it. */
+  box-shadow: var(--mn-shadow-sm);
 }
 
 .mnnav-tab {
@@ -24,22 +40,32 @@
   gap: 7px;
   padding: 0 12px;
   border: 0;
-  border-left: 1px solid #c7c7c3;
-  border-radius: 0;
-  color: #0a0a0a;
+  border-left: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  /* Inactive: quiet. Muted text on the bar's own surface. */
+  color: var(--mn-text-muted);
   background: transparent;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: .12em;
   text-transform: uppercase;
+  transition: background .15s ease, color .15s ease;
 }
 .mnnav-tab:first-child { border-left: 0; }
-.mnnav-tab:hover:not(.mnnav-tab-active) { background: #e2e2de; }
+.mnnav-tab:hover:not(.mnnav-tab-active) {
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-hover);
+}
 
-/* Active tab inverts to the solid ink block. */
+/* Active: the solid ink block, at full weight. */
 .mnnav-tab-active {
-  color: #f5f5f3;
-  background: #0a0a0a;
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  font-weight: 800;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mnnav-tab { transition: none; }
 }
 
 @media (max-width: 400px) {

@@ -76,6 +76,10 @@ import HomeScreen from './screens/Home.js';
 import AppsScreen from './screens/Apps.js';
 import PassportNav, { type MobileTab } from './screens/Nav.js';
 import { fetchRecentTransactions, type RecentTransaction } from './lib/indexerTx.js';
+// The local wallet drags the whole Midnight wallet SDK in with it. It is loaded
+// on demand, from the passkey routes only, so a Dynamic-only session never pays
+// for it. Types are erased at build time and cost nothing here.
+import type { LocalMidnightWallet, LocalWalletSurfaces } from './lib/localWallet.js';
 
 type ActivityStatus = 'pending' | 'complete' | 'blocked' | 'error';
 type TransferPool = 'unshielded' | 'shielded';
@@ -103,7 +107,16 @@ type ProfileStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
 type ActivitySource = 'local' | 'wallet' | 'chain';
 /** The mobile-first Passport, or the original desktop portal and workspace. */
 type Experience = 'mobile' | 'classic';
-type OnboardingIntent = 'create' | 'signin';
+/**
+ * Which wallet backs the session.
+ *
+ * `local` is the passkey-derived, in-browser Midnight wallet built by
+ * `lib/localWallet.ts`; Dynamic is never contacted on that route. `dynamic` is
+ * the hosted account and its embedded Midnight wallet.
+ */
+type WalletMode = 'local' | 'dynamic';
+type OnboardingIntent = 'local-create' | 'local-signin' | 'dynamic';
+type LocalWalletStatus = 'idle' | 'opening' | 'ready' | 'error';
 type TransactionsStatus = 'loading' | 'ready' | 'empty' | 'unavailable';
 
 interface ActivityEntry {
@@ -156,6 +169,19 @@ const MIDNIGHT_EXPLORER_URL = 'https://explorer.preview.midnight.network';
 const MIDNIGHT_INDEXER_URL =
   import.meta.env.VITE_INDEXER_URL ?? 'https://indexer.preview.midnight.network/api/v4/graphql';
 const EXPERIENCE_STORAGE_KEY = 'passport-experience';
+const WALLET_MODE_STORAGE_KEY = 'passport-wallet-mode';
+
+/**
+ * Account identifier for the passkey-only Passport.
+ *
+ * The Dynamic route takes its subject from the hosted account. The passkey
+ * route has no such issuer, so it uses this fixed identifier: the encrypted
+ * private state, the stored profile, and the wallet-seed derivation info all
+ * hang off it, which is what makes "Sign in" find the same wallet again. One
+ * local Passport per browser profile — deliberately, for the demo.
+ */
+const LOCAL_ACCOUNT_ID = 'passport-local-device';
+const LOCAL_SCOPE = { appId: APP_ID, accountId: LOCAL_ACCOUNT_ID };
 
 function storedExperience(): Experience {
   try {
@@ -163,6 +189,16 @@ function storedExperience(): Experience {
   } catch {
     // Private browsing can deny localStorage entirely; the mobile default stands.
     return 'mobile';
+  }
+}
+
+function storedWalletMode(): WalletMode | null {
+  try {
+    const value = window.localStorage.getItem(WALLET_MODE_STORAGE_KEY);
+    return value === 'local' || value === 'dynamic' ? value : null;
+  } catch {
+    // See storedExperience. The choice simply will not survive a reload.
+    return null;
   }
 }
 
@@ -185,6 +221,29 @@ function dustFillPercentFrom(balance: string | null, cap: string | null): number
   const capValue = parseFormattedAmount(cap);
   if (heldValue === null || capValue === null || capValue <= 0) return null;
   return Math.max(0, Math.min(100, (heldValue / capValue) * 100));
+}
+
+/**
+ * The addresses of a freshly opened local wallet, before its first balance
+ * read. Deliberately mirrors `initialDynamicSurfaceState`: every balance is
+ * `null` — unknown — and never a fabricated zero.
+ */
+function initialLocalSurfaceState(wallet: LocalMidnightWallet): LocalWalletSurfaces {
+  return {
+    unshieldedAddress: wallet.unshieldedAddress,
+    shieldedAddress: wallet.shieldedAddress,
+    dustAddress: wallet.dustAddress,
+    unshieldedBalance: null,
+    shieldedTokenCount: null,
+    dustBalance: null,
+    dustCap: null,
+    dustSyncing: false,
+    // All three addresses come out of local key derivation, so they are either
+    // all present or the wallet failed to open at all.
+    addressStatus: 'ready',
+    balanceStatus: 'loading',
+    balanceError: null,
+  };
 }
 
 function newDeviceSecret(): Uint8Array {
@@ -452,7 +511,10 @@ export default function PassportDemo() {
     url.hash = '';
     return url.toString();
   }, []);
-  const subjectId = subjectFor(midnightWallet, user);
+  const [walletMode, setWalletMode] = useState<WalletMode | null>(storedWalletMode);
+  // The passkey route owns its own subject, so the encrypted state it writes is
+  // never confused with a Dynamic account's.
+  const subjectId = walletMode === 'local' ? LOCAL_ACCOUNT_ID : subjectFor(midnightWallet, user);
   const scope = useMemo(() => ({ appId: APP_ID, accountId: subjectId }), [subjectId]);
   const [profile, setProfile] = useState<DemoPassportProfile | null>(null);
   const [profileStatus, setProfileStatus] = useState<ProfileStatus>('idle');
@@ -483,16 +545,34 @@ export default function PassportDemo() {
   const [shieldedCustodyAmount, setShieldedCustodyAmount] = useState('500');
   const [experience, setExperience] = useState<Experience>(storedExperience);
   const [mobileTab, setMobileTab] = useState<MobileTab>('home');
-  const [onboardingStep, setOnboardingStep] = useState<'welcome' | 'choose'>('welcome');
+  // A returning visitor whose wallet source is remembered has already met the
+  // welcome panel; send them straight to the three options.
+  const [onboardingStep, setOnboardingStep] = useState<'welcome' | 'choose'>(() =>
+    storedWalletMode() ? 'choose' : 'welcome',
+  );
   const [onboardingIntent, setOnboardingIntent] = useState<OnboardingIntent | null>(null);
   const [onboardingBusyLabel, setOnboardingBusyLabel] = useState<string | null>(null);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<RecentTransaction[]>([]);
   const [transactionsStatus, setTransactionsStatus] = useState<TransactionsStatus>('loading');
+  const [localSurfaces, setLocalSurfaces] = useState<LocalWalletSurfaces | null>(null);
+  const [localWalletStatus, setLocalWalletStatus] = useState<LocalWalletStatus>('idle');
+  const [localWalletNetworkId, setLocalWalletNetworkId] = useState<string | null>(null);
+  const [localDustRetryCount, setLocalDustRetryCount] = useState(0);
+  /**
+   * Whether a passkey Passport is already enrolled in this browser. `null`
+   * while the lookup is still running — which is not the same as "no", so the
+   * Sign in option stays live until we actually know.
+   */
+  const [localPassportKnown, setLocalPassportKnown] = useState<boolean | null>(null);
   const passportKeyProviders = useRef(new Map<string, WebAuthnPrfKeyProvider>());
   const onboardingRunning = useRef(false);
   const authFlowWasOpen = useRef(false);
   const transactionsRequest = useRef(0);
+  // The live handle is held in a ref, not in state: it is an object with a
+  // socket behind it, and every consumer wants the current one rather than a
+  // render-scoped snapshot.
+  const localWalletRef = useRef<LocalMidnightWallet | null>(null);
 
   const addActivity = useCallback((entry: Omit<ActivityEntry, 'id' | 'createdAt'>) => {
     const value = { ...entry, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
@@ -529,6 +609,10 @@ export default function PassportDemo() {
   }, [midnightWallet]);
 
   useEffect(() => {
+    // In passkey mode the local route owns `profile` and `profileStatus`
+    // outright. Letting this effect run would clear the profile it has just
+    // written, because there is no Dynamic wallet to key off.
+    if (walletMode === 'local') return;
     if (!midnightWallet) {
       setSurfaces(null);
       setProfile(null);
@@ -558,7 +642,7 @@ export default function PassportDemo() {
     return () => {
       current = false;
     };
-  }, [midnightWallet, refreshWallet, subjectId]);
+  }, [midnightWallet, refreshWallet, subjectId, walletMode]);
 
   useEffect(() => {
     if (!midnightWallet || !surfaces?.dustSyncing || dustRetryCount >= 3) return;
@@ -597,7 +681,60 @@ export default function PassportDemo() {
     }
   }, [experience]);
 
-  const unshieldedAddress = surfaces?.unshieldedAddress ?? midnightWallet?.address ?? null;
+  // The chosen wallet source survives a reload; signing out clears it.
+  useEffect(() => {
+    try {
+      if (walletMode) window.localStorage.setItem(WALLET_MODE_STORAGE_KEY, walletMode);
+      else window.localStorage.removeItem(WALLET_MODE_STORAGE_KEY);
+    } catch {
+      // See the experience effect above.
+    }
+  }, [walletMode]);
+
+  // Does this browser already hold a passkey Passport? Answered once, before
+  // any sign-in, so onboarding can order and enable its options honestly.
+  useEffect(() => {
+    let current = true;
+    void loadDemoProfile(LOCAL_ACCOUNT_ID)
+      .then((stored) => {
+        if (current) setLocalPassportKnown(Boolean(stored));
+      })
+      .catch(() => {
+        // Storage is unreadable. Offering "Sign in" and letting it fail with a
+        // real message beats claiming no passkey exists.
+        if (current) setLocalPassportKnown(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  // A local wallet holds live indexer and relay sockets. Close it when the app
+  // goes away rather than leaking them into the next page.
+  useEffect(
+    () => () => {
+      const handle = localWalletRef.current;
+      localWalletRef.current = null;
+      if (handle) void handle.close().catch(() => undefined);
+    },
+    [],
+  );
+
+  /**
+   * The one surfaces object every shared consumer reads — Home, the address
+   * picker, the Apps profile, the dApp consent bridge, and the recent
+   * transaction lookup.
+   *
+   * `LocalWalletSurfaces` is field-for-field `DynamicSurfaceState` (see the
+   * note at the top of `lib/localWallet.ts`), so neither side is reshaped and
+   * the loading / ready / partial / unavailable semantics — including the
+   * distinction between a real `'0'` and an unknown `null` — carry across
+   * unchanged.
+   */
+  const activeSurfaces: DynamicSurfaceState | null =
+    walletMode === 'local' ? localSurfaces : surfaces;
+
+  const unshieldedAddress = activeSurfaces?.unshieldedAddress ?? midnightWallet?.address ?? null;
 
   const refreshTransactions = useCallback(async () => {
     if (!unshieldedAddress) {
@@ -634,19 +771,22 @@ export default function PassportDemo() {
     void refreshTransactions();
   }, [experience, refreshTransactions, unshieldedAddress]);
 
+  const keyProviderFor = useCallback((passkey: DemoPassportProfile['passkey']) => {
+    let keyProvider = passportKeyProviders.current.get(passkey.credentialId);
+    if (!keyProvider) {
+      keyProvider = new WebAuthnPrfKeyProvider(passkey);
+      passportKeyProviders.current.set(passkey.credentialId, keyProvider);
+    }
+    return keyProvider;
+  }, []);
+
   const vault = useCallback(
-    (passkey: DemoPassportProfile['passkey']) => {
-      let keyProvider = passportKeyProviders.current.get(passkey.credentialId);
-      if (!keyProvider) {
-        keyProvider = new WebAuthnPrfKeyProvider(passkey);
-        passportKeyProviders.current.set(passkey.credentialId, keyProvider);
-      }
-      return new EncryptedPassportPrivateStateStore(
+    (passkey: DemoPassportProfile['passkey']) =>
+      new EncryptedPassportPrivateStateStore(
         new IndexedDbPassportEncryptedRecordStore(),
-        keyProvider,
-      );
-    },
-    [],
+        keyProviderFor(passkey),
+      ),
+    [keyProviderFor],
   );
 
   const createPassportKey = async (keepUnlocked = false): Promise<{ profile: DemoPassportProfile; state: PassportDemoState }> => {
@@ -702,10 +842,13 @@ export default function PassportDemo() {
     }
   };
 
-  const loadPassportState = async (activeProfile: DemoPassportProfile): Promise<PassportDemoState> => {
+  const loadPassportState = async (
+    activeProfile: DemoPassportProfile,
+    stateScope = scope,
+  ): Promise<PassportDemoState> => {
     const injection = await PassportStateInjection({
       store: vault(activeProfile.passkey),
-      scope,
+      scope: stateScope,
       initialPrivateState: {
         deviceSecret: new Uint8Array(),
         createdAt: '',
@@ -739,6 +882,178 @@ export default function PassportDemo() {
     }
   };
 
+  /* ---------------------------------------------------------------------- */
+  /* Passkey-only wallet                                                     */
+  /*                                                                          */
+  /* Nothing below this banner touches Dynamic. The passkey is enrolled or    */
+  /* asserted, its PRF output is turned into a 32-byte Midnight seed, and the */
+  /* wallet is built in this tab by lib/localWallet.ts.                       */
+  /* ---------------------------------------------------------------------- */
+
+  const closeLocalWallet = useCallback(async () => {
+    const handle = localWalletRef.current;
+    localWalletRef.current = null;
+    if (!handle) return;
+    try {
+      await handle.close();
+    } catch {
+      // Closing is best-effort; a failed teardown must not block a new wallet.
+    }
+  }, []);
+
+  const refreshLocalBalances = useCallback(async () => {
+    const handle = localWalletRef.current;
+    if (!handle) return;
+    setLocalSurfaces((current) =>
+      current ? { ...current, balanceStatus: 'loading', balanceError: null } : current,
+    );
+    // `getBalances` never throws: a failure arrives as balanceStatus
+    // 'unavailable' plus a balanceError, which Home already knows how to show.
+    const balances = await handle.getBalances();
+    if (localWalletRef.current !== handle) return;
+    setLocalSurfaces((current) => ({
+      ...(current ?? initialLocalSurfaceState(handle)),
+      ...balances,
+    }));
+  }, []);
+
+  /** Derives the seed, builds the wallet, and publishes its address surfaces. */
+  const openLocalWallet = useCallback(
+    async (passkey: DemoPassportProfile['passkey']) => {
+      const { createLocalMidnightWallet, deriveWalletSeed } = await import('./lib/localWallet.js');
+      setLocalWalletStatus('opening');
+      setOnboardingBusyLabel('Deriving your Midnight wallet from this passkey');
+      const seed = await deriveWalletSeed(keyProviderFor(passkey), LOCAL_SCOPE);
+      let wallet: LocalMidnightWallet;
+      try {
+        setOnboardingBusyLabel('Opening your Midnight wallet');
+        wallet = await createLocalMidnightWallet(seed);
+      } finally {
+        // The seed's only job is done. Nothing retains it past this point.
+        seed.fill(0);
+      }
+      await closeLocalWallet();
+      localWalletRef.current = wallet;
+      setLocalWalletNetworkId(wallet.network.networkId);
+      // Addresses are known immediately; balances are still unknown, and say so.
+      setLocalSurfaces(initialLocalSurfaceState(wallet));
+      setLocalDustRetryCount(0);
+      setLocalWalletStatus('ready');
+      // The first balance read waits on indexer sync, so it runs behind the
+      // screen rather than holding onboarding open.
+      void refreshLocalBalances();
+    },
+    [closeLocalWallet, keyProviderFor, refreshLocalBalances],
+  );
+
+  const createLocalPassportProfile = async (): Promise<DemoPassportProfile> => {
+    const existing = await loadDemoProfile(LOCAL_ACCOUNT_ID);
+    if (existing) {
+      setLocalPassportKnown(true);
+      throw new Error(
+        'This browser already holds a Passport passkey. Choose Sign in to reopen its wallet.',
+      );
+    }
+    setOnboardingBusyLabel('Creating your Passport passkey');
+    const passkey = await WebAuthnPrfKeyProvider.enroll({
+      label: 'Midnight Passport',
+      userId: LOCAL_ACCOUNT_ID,
+    });
+    const nextProfile: DemoPassportProfile = {
+      subjectId: LOCAL_ACCOUNT_ID,
+      passkey,
+      createdAt: new Date().toISOString(),
+    };
+    const state: PassportDemoState = {
+      deviceSecret: newDeviceSecret(),
+      recoverySecret: newDeviceSecret(),
+      createdAt: new Date().toISOString(),
+      schema: 4,
+    };
+    setOnboardingBusyLabel('Encrypting your Passport state on this device');
+    await vault(passkey).save<PassportDemoState>(LOCAL_SCOPE, state);
+    await saveDemoProfile(nextProfile);
+    await requestPassportStoragePersistence();
+    setProfile(nextProfile);
+    setProfileStatus('ready');
+    setLocalPassportKnown(true);
+    return nextProfile;
+  };
+
+  const unlockLocalPassportProfile = async (): Promise<DemoPassportProfile> => {
+    const existing = await loadDemoProfile(LOCAL_ACCOUNT_ID);
+    if (!existing) {
+      setLocalPassportKnown(false);
+      throw new Error(
+        'No Passport passkey is enrolled in this browser yet. Choose Create passkey to make one.',
+      );
+    }
+    setOnboardingBusyLabel('Unlocking your Passport with this device');
+    // Decrypting the stored state is the proof the passkey is the right one;
+    // it also fails loudly if the record was written by a different device.
+    await loadPassportState(existing, LOCAL_SCOPE);
+    setProfile(existing);
+    setProfileStatus('ready');
+    setLocalPassportKnown(true);
+    return existing;
+  };
+
+  const runLocalOnboarding = async (intent: 'create' | 'signin') => {
+    if (onboardingRunning.current) return;
+    onboardingRunning.current = true;
+    setOnboardingError(null);
+    setError(null);
+    setWalletMode('local');
+    setOnboardingIntent(intent === 'create' ? 'local-create' : 'local-signin');
+    setOnboardingBusyLabel(
+      intent === 'create' ? 'Creating your Passport passkey' : 'Unlocking your Passport',
+    );
+    let activeProfile: DemoPassportProfile | null = null;
+    try {
+      activeProfile =
+        intent === 'create' ? await createLocalPassportProfile() : await unlockLocalPassportProfile();
+      await openLocalWallet(activeProfile.passkey);
+      setOnboardingError(null);
+      addActivity({
+        label: intent === 'create' ? 'Passport passkey enrolled' : 'Passport passkey unlocked',
+        detail: 'On-device Midnight wallet derived from this passkey. Dynamic was not involved.',
+        status: 'complete',
+        source: 'local',
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setLocalWalletStatus('error');
+      setOnboardingError(message);
+      setOnboardingStep('choose');
+      addActivity({
+        label: intent === 'create' ? 'Passport passkey' : 'Passport unlock',
+        detail: message,
+        status: 'error',
+        source: 'local',
+      });
+    } finally {
+      // The state key is cached for 30s inside the provider; drop it now that
+      // the wallet is open. The wallet seed was never cached at all.
+      if (activeProfile) {
+        passportKeyProviders.current.get(activeProfile.passkey.credentialId)?.lock(LOCAL_SCOPE);
+      }
+      setOnboardingIntent(null);
+      setOnboardingBusyLabel(null);
+      onboardingRunning.current = false;
+    }
+  };
+
+  // DUST state arrives after the indexer has walked far enough. Retry a few
+  // times so the battery settles without the user pressing anything.
+  useEffect(() => {
+    if (walletMode !== 'local' || !localSurfaces?.dustSyncing || localDustRetryCount >= 3) return;
+    const timer = window.setTimeout(() => {
+      setLocalDustRetryCount((current) => current + 1);
+      void refreshLocalBalances();
+    }, 10_000);
+    return () => window.clearTimeout(timer);
+  }, [localDustRetryCount, localSurfaces?.dustSyncing, refreshLocalBalances, walletMode]);
+
   // A dismissed Dynamic sign-in window must not strand the onboarding screen in
   // its working stage. The short grace period lets a successful sign-in settle
   // before the intent is abandoned.
@@ -747,7 +1062,7 @@ export default function PassportDemo() {
       authFlowWasOpen.current = true;
       return;
     }
-    if (!authFlowWasOpen.current || !onboardingIntent || user) return;
+    if (!authFlowWasOpen.current || onboardingIntent !== 'dynamic' || user) return;
     const timer = window.setTimeout(() => {
       authFlowWasOpen.current = false;
       setOnboardingIntent(null);
@@ -758,31 +1073,22 @@ export default function PassportDemo() {
     return () => window.clearTimeout(timer);
   }, [onboardingIntent, showAuthFlow, user]);
 
-  // Sequences a mobile onboarding intent behind Dynamic authentication: the
+  // Sequences the Dynamic onboarding intent behind Dynamic authentication: the
   // passkey ceremony can only start once a user and an embedded Midnight wallet
   // exist and the stored-profile lookup has settled. The ref guard keeps a
-  // single ceremony in flight while React re-runs this effect.
+  // single ceremony in flight while React re-runs this effect. The two passkey
+  // routes never reach here — they run straight from their click handler.
   useEffect(() => {
-    if (!onboardingIntent || onboardingRunning.current) return;
+    if (onboardingIntent !== 'dynamic' || onboardingRunning.current) return;
     if (!user || !midnightWallet) return;
     if (profileStatus === 'loading' || profileStatus === 'idle') return;
     onboardingRunning.current = true;
     void (async () => {
       try {
-        if (onboardingIntent === 'create') {
-          setOnboardingBusyLabel('Creating your Passport passkey');
-          await createPassportKey();
-          addActivity({
-            label: 'Passport key enrolled',
-            detail: 'Private state encrypted in this browser.',
-            status: 'complete',
-            source: 'local',
-          });
-        } else {
-          const activeProfile = profile ?? (await loadDemoProfile(subjectId));
-          if (!activeProfile) {
-            throw new Error('No Passport key is enrolled in this browser yet. Create one to continue.');
-          }
+        // One "Continue with Dynamic" button covers both cases, so the stored
+        // profile decides: unlock an existing Passport key, or enrol one.
+        const activeProfile = profile ?? (await loadDemoProfile(subjectId));
+        if (activeProfile) {
           setOnboardingBusyLabel('Unlocking your Passport with this device');
           try {
             await loadPassportState(activeProfile);
@@ -797,6 +1103,15 @@ export default function PassportDemo() {
             status: 'complete',
             source: 'local',
           });
+        } else {
+          setOnboardingBusyLabel('Creating your Passport passkey');
+          await createPassportKey();
+          addActivity({
+            label: 'Passport key enrolled',
+            detail: 'Private state encrypted in this browser.',
+            status: 'complete',
+            source: 'local',
+          });
         }
         setOnboardingError(null);
       } catch (cause) {
@@ -804,7 +1119,7 @@ export default function PassportDemo() {
         setOnboardingError(message);
         setOnboardingStep('choose');
         addActivity({
-          label: onboardingIntent === 'create' ? 'Passport key' : 'Passport unlock',
+          label: 'Passport key',
           detail: message,
           status: 'error',
           source: 'local',
@@ -870,6 +1185,14 @@ export default function PassportDemo() {
   };
 
   const registerDust = async () => {
+    if (walletMode === 'local') {
+      // The Home control is already disabled for this; belt and braces, so no
+      // future caller can quietly reach a wallet that cannot sign.
+      setError(
+        'DUST registration submits a NIGHT transaction. The on-device wallet cannot sign or submit one in this demo yet.',
+      );
+      return;
+    }
     if (!midnightWallet) return;
     setBusyAction('dust');
     setError(null);
@@ -1724,6 +2047,13 @@ export default function PassportDemo() {
     if (dynamicInitializationBlocked) window.location.reload();
   };
   const signOutPassport = async () => {
+    const hadDynamicSession = Boolean(user);
+    await closeLocalWallet();
+    setWalletMode(null);
+    setLocalSurfaces(null);
+    setLocalWalletStatus('idle');
+    setLocalWalletNetworkId(null);
+    setLocalDustRetryCount(0);
     passportKeyProviders.current.clear();
     setProfile(null);
     setProfileStatus('idle');
@@ -1751,7 +2081,9 @@ export default function PassportDemo() {
     transactionsRequest.current += 1;
     setTransactions([]);
     setTransactionsStatus('loading');
-    await handleLogOut();
+    // A passkey session never authenticated with Dynamic; there is nothing on
+    // that side to log out of, and calling it would be a request we never made.
+    if (hadDynamicSession) await handleLogOut();
   };
   const addressesPending = walletSyncing || !surfaces || surfaces.addressStatus === 'loading';
   const balancesLoading = !surfaces || surfaces.balanceStatus === 'loading';
@@ -1777,19 +2109,19 @@ export default function PassportDemo() {
     {
       kind: 'unshielded',
       label: 'Midnight address',
-      address: surfaces?.unshieldedAddress ?? midnightWallet?.address ?? null,
+      address: activeSurfaces?.unshieldedAddress ?? midnightWallet?.address ?? null,
       detail: 'Public, unshielded NIGHT and incoming transfers',
     },
     {
       kind: 'shielded',
       label: 'Shielded address',
-      address: surfaces?.shieldedAddress ?? null,
+      address: activeSurfaces?.shieldedAddress ?? null,
       detail: 'Private assets and shielded transfers',
     },
     {
       kind: 'dust',
       label: 'DUST address',
-      address: surfaces?.dustAddress ?? null,
+      address: activeSurfaces?.dustAddress ?? null,
       detail: 'DUST fee-generation surface',
     },
   ];
@@ -1802,19 +2134,48 @@ export default function PassportDemo() {
   // has resolved, and that lookup needs the subject id derived from the Dynamic
   // account — so this is honestly false before authentication.
   const passportEnrolled = profileStatus === 'ready' && Boolean(profile);
+  /**
+   * A passkey session is live only while a wallet is actually open. The wallet
+   * is derived from a PRF assertion and is deliberately not persisted, so a
+   * reload genuinely has no wallet until the user re-asserts the passkey. The
+   * remembered mode makes that one tap ("Sign in", offered first) rather than a
+   * fresh enrolment.
+   */
+  const localSessionActive = localWalletStatus === 'ready' && localSurfaces !== null;
+  const dynamicSessionActive = Boolean(user) && passportEnrolled;
+  const sessionActive = localSessionActive || dynamicSessionActive;
   const showOnboarding =
-    !user || !passportEnrolled || onboardingIntent !== null || onboardingError !== null;
+    !sessionActive || onboardingIntent !== null || onboardingError !== null;
   const onboardingStage: 'welcome' | 'choose' | 'working' = onboardingIntent ? 'working' : onboardingStep;
   const onboardingLabel =
     onboardingBusyLabel ??
-    (!user
-      ? 'Waiting for the Dynamic sign-in window'
-      : !midnightWallet
-        ? 'Provisioning your Midnight wallet'
-        : 'Preparing Passport');
+    (onboardingIntent === 'dynamic'
+      ? !user
+        ? 'Waiting for the Dynamic sign-in window'
+        : !midnightWallet
+          ? 'Provisioning your Midnight wallet'
+          : 'Preparing Passport'
+      : 'Follow the passkey prompt on this device');
+  /** Only ever set when Sign in genuinely has nothing to assert against. */
+  const signInUnavailableReason =
+    localPassportKnown === false
+      ? 'No Passport passkey is enrolled in this browser yet.'
+      : null;
+  const dynamicUnavailableReason = signInReady
+    ? null
+    : dynamicInitializationBlocked
+      ? 'Dynamic did not finish loading. Reload this page to try again.'
+      : 'Dynamic is still starting up.';
 
-  const startOnboarding = (intent: OnboardingIntent) => {
+  /** Passkey route. Dynamic is not loaded, called, or waited on. */
+  const startPasskeyOnboarding = (intent: 'create' | 'signin') => {
+    void runLocalOnboarding(intent);
+  };
+
+  /** The unchanged hosted route: Dynamic sign-in, then the Passport key. */
+  const startDynamicOnboarding = () => {
     setOnboardingError(null);
+    setWalletMode('dynamic');
     if (!user) {
       if (!signInReady) {
         setOnboardingError(
@@ -1824,11 +2185,11 @@ export default function PassportDemo() {
         );
         return;
       }
-      setOnboardingIntent(intent);
+      setOnboardingIntent('dynamic');
       beginSignIn();
       return;
     }
-    setOnboardingIntent(intent);
+    setOnboardingIntent('dynamic');
   };
 
   // Transactions confirmed in this session are already known locally; the
@@ -1892,13 +2253,41 @@ export default function PassportDemo() {
   };
 
   const refreshMobile = () => {
-    void refreshWallet();
+    if (walletMode === 'local') void refreshLocalBalances();
+    else void refreshWallet();
     void refreshTransactions();
   };
 
-  const appsProfile = user
+  /** How this Passport is named on screen — hosted account, or this device. */
+  const sessionDisplayName = localSessionActive ? 'Passport on this device' : connectedUserName;
+
+  /**
+   * The classic workspace is the Dynamic-hosted view and renders its sign-in
+   * portal without a Dynamic account. Sending a passkey session there would
+   * strand it, so the option explains itself rather than dead-ending.
+   */
+  const openClassicExperience = () => {
+    if (localSessionActive) {
+      setError(
+        'The full dashboard is the Dynamic-hosted workspace. Sign out, then choose "Continue with Dynamic" to open it.',
+      );
+      return;
+    }
+    setExperience('classic');
+  };
+
+  /**
+   * What the local wallet genuinely cannot do yet. `null` on the Dynamic route,
+   * where the embedded wallet does sign and submit.
+   */
+  const localWalletWriteLimitation =
+    walletMode === 'local'
+      ? 'The on-device wallet reads balances and history only. Signing, sending, and contract calls are not wired up in this demo yet.'
+      : null;
+
+  const appsProfile = sessionActive
     ? {
-        displayName: connectedUserName,
+        displayName: sessionDisplayName,
         // The network travels with the address: a localnet deployment must not
         // be shared with a dApp as though it lived on preview.
         passportContract: profile?.passportContract
@@ -1908,9 +2297,9 @@ export default function PassportDemo() {
             }
           : null,
         midnightAddresses: {
-          unshielded: surfaces?.unshieldedAddress ?? midnightWallet?.address ?? null,
-          shielded: surfaces?.shieldedAddress ?? null,
-          dust: surfaces?.dustAddress ?? null,
+          unshielded: activeSurfaces?.unshieldedAddress ?? midnightWallet?.address ?? null,
+          shielded: activeSurfaces?.shieldedAddress ?? null,
+          dust: activeSurfaces?.dustAddress ?? null,
         },
       }
     : null;
@@ -1922,18 +2311,18 @@ export default function PassportDemo() {
       {transferReview && <TransferReviewModal review={transferReview} onCancel={() => setTransferReview(null)} onSubmit={() => void submitTransfer()} busy={busyAction === 'transfer'} />}
       {showPassportSetup && <PassportSetupModal localMode={localMode} onClose={() => setShowPassportSetup(false)} onContinue={() => { setShowPassportSetup(false); void deployPassport(); }} />}
       <PassportProfileConsent
-        displayName={user ? connectedUserName : null}
+        displayName={sessionActive ? sessionDisplayName : null}
         passportContract={
           passportContract
             ? { address: passportContract.address, network: passportContract.network }
             : null
         }
         midnightAddresses={
-          surfaces?.unshieldedAddress
+          activeSurfaces?.unshieldedAddress
             ? {
-                unshielded: surfaces.unshieldedAddress,
-                ...(surfaces.shieldedAddress ? { shielded: surfaces.shieldedAddress } : {}),
-                ...(surfaces.dustAddress ? { dust: surfaces.dustAddress } : {}),
+                unshielded: activeSurfaces.unshieldedAddress,
+                ...(activeSurfaces.shieldedAddress ? { shielded: activeSurfaces.shieldedAddress } : {}),
+                ...(activeSurfaces.dustAddress ? { dust: activeSurfaces.dustAddress } : {}),
               }
             : null
         }
@@ -1949,10 +2338,13 @@ export default function PassportDemo() {
             stage={onboardingStage}
             busyLabel={onboardingLabel}
             error={onboardingError}
-            hasExistingPassport={passportEnrolled}
+            hasExistingPassport={localPassportKnown === true}
+            signInUnavailableReason={signInUnavailableReason}
+            dynamicUnavailableReason={dynamicUnavailableReason}
             onGetStarted={() => setOnboardingStep('choose')}
-            onCreatePasskey={() => startOnboarding('create')}
-            onSignInPasskey={() => startOnboarding('signin')}
+            onCreatePasskey={() => startPasskeyOnboarding('create')}
+            onSignInPasskey={() => startPasskeyOnboarding('signin')}
+            onContinueWithDynamic={startDynamicOnboarding}
             onDismissError={() => setOnboardingError(null)}
             onOpenClassic={() => setExperience('classic')}
           />
@@ -1960,17 +2352,17 @@ export default function PassportDemo() {
           <>
             {mobileTab === 'home' ? (
               <HomeScreen
-                displayName={connectedUserName}
-                unshieldedBalance={surfaces?.unshieldedBalance ?? null}
-                shieldedTokenCount={surfaces?.shieldedTokenCount ?? null}
-                dustBalance={surfaces?.dustBalance ?? null}
-                dustCap={surfaces?.dustCap ?? null}
-                dustFillPercent={dustFillPercentFrom(surfaces?.dustBalance ?? null, surfaces?.dustCap ?? null)}
-                dustSyncing={surfaces?.dustSyncing ?? false}
-                balanceStatus={surfaces?.balanceStatus ?? 'loading'}
-                unshieldedAddress={surfaces?.unshieldedAddress ?? midnightWallet?.address ?? null}
-                shieldedAddress={surfaces?.shieldedAddress ?? null}
-                dustAddress={surfaces?.dustAddress ?? null}
+                displayName={sessionDisplayName}
+                unshieldedBalance={activeSurfaces?.unshieldedBalance ?? null}
+                shieldedTokenCount={activeSurfaces?.shieldedTokenCount ?? null}
+                dustBalance={activeSurfaces?.dustBalance ?? null}
+                dustCap={activeSurfaces?.dustCap ?? null}
+                dustFillPercent={dustFillPercentFrom(activeSurfaces?.dustBalance ?? null, activeSurfaces?.dustCap ?? null)}
+                dustSyncing={activeSurfaces?.dustSyncing ?? false}
+                balanceStatus={activeSurfaces?.balanceStatus ?? 'loading'}
+                unshieldedAddress={activeSurfaces?.unshieldedAddress ?? midnightWallet?.address ?? null}
+                shieldedAddress={activeSurfaces?.shieldedAddress ?? null}
+                dustAddress={activeSurfaces?.dustAddress ?? null}
                 transactions={mergedTransactions}
                 transactionsStatus={mobileTransactionsStatus}
                 error={error}
@@ -1979,7 +2371,16 @@ export default function PassportDemo() {
                 onCopyAddress={copyAddressOfKind}
                 onOpenTransaction={openTransactionByHash}
                 onRegisterDust={() => void registerDust()}
-                onOpenClassic={() => setExperience('classic')}
+                /* DUST registration submits a real NIGHT transaction. The
+                   local wallet cannot sign one here yet, so the control is
+                   disabled and says why instead of failing at the tap. */
+                registerDustDisabledReason={localWalletWriteLimitation}
+                walletSourceNote={
+                  walletMode === 'local'
+                    ? `On-device wallet · ${localWalletNetworkId ?? 'preview'} · derived from your passkey. Read-only for now: balances and history come from the indexer, and nothing here can sign or send.`
+                    : null
+                }
+                onOpenClassic={openClassicExperience}
                 onSignOut={() => void signOutPassport()}
               />
             ) : (

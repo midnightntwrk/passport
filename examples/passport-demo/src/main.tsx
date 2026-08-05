@@ -4,9 +4,20 @@ import { DynamicContextProvider } from '@dynamic-labs/sdk-react-core';
 import { DynamicWaasMidnightConnectors } from '@dynamic-labs/midnight';
 import '@fontsource/space-grotesk/700.css';
 
+// Theme first, and before anything renders. The blocking snippet in index.html
+// has already written `data-theme` ahead of first paint, so this call is
+// idempotent — it exists so the module (and its system-preference listener) is
+// live before React mounts, whatever index.html happens to carry.
+import { initTheme } from './lib/theme.js';
 import PassportDemo from './App.js';
 import { PassportPwaShell } from './pwa.js';
+// The mobile screens' token contract. Each screen sheet imports it too; the
+// bundler emits it once. Importing it here keeps the tokens present even when
+// no screen sheet has been reached yet.
+import './screens/tokens.css';
 import './styles.css';
+
+initTheme();
 
 const environmentId = import.meta.env.VITE_DYNAMIC_ENVIRONMENT_ID;
 const requiredDevelopmentOrigin = 'http://localhost:5175';

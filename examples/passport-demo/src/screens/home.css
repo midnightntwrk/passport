@@ -1,12 +1,23 @@
-/* Home screen — prefix "mnhome-". Strict black-and-white Midnight direction. */
+@import './tokens.css';
+
+/* Home screen — prefix "mnhome-".
+   Strict monochrome Midnight direction: no radii, hard offset shadows,
+   1px hairlines, mobile-first at ~390px.
+
+   Every colour on this screen comes from tokens.css. The screen builds its
+   hierarchy out of four real surface values — page, card, raised, sunken —
+   rather than out of hairlines alone, so it reads the same way in light and
+   in dark. */
 
 .mnhome-screen {
   position: relative;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
-  color: #fff;
-  background: #030303;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
   padding-top: env(safe-area-inset-top);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
@@ -25,13 +36,13 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, .26);
-  background: #030303;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-strong);
+  background: var(--mn-surface-page);
 }
 .mnhome-wordmark {
   width: 96px;
   height: auto;
-  filter: invert(1) grayscale(1) contrast(2);
+  filter: var(--mn-wordmark-filter);
 }
 .mnhome-bar-actions {
   margin-left: auto;
@@ -46,14 +57,18 @@
   flex: 0 0 auto;
   place-items: center;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, .4);
-  border-radius: 0;
-  color: #fff;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
   background: transparent;
   cursor: pointer;
   transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
-.mnhome-icon-button:hover:not(:disabled) { border-color: #fff; color: #0a0a0a; background: #fff; }
+.mnhome-icon-button:hover:not(:disabled) {
+  border-color: var(--mn-border-strong);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+}
 .mnhome-icon-button:disabled { opacity: .42; cursor: default; }
 
 /* --- Body ---------------------------------------------------------------- */
@@ -67,12 +82,12 @@
   gap: 18px;
   padding-top: 24px;
   /* The bottom nav belongs to the integrator — leave room for it. */
-  padding-bottom: calc(76px + 24px + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--mn-nav-height) + 24px + env(safe-area-inset-bottom));
 }
 
 .mnhome-micro {
   margin: 0;
-  color: #777;
+  color: var(--mn-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .14em;
@@ -80,7 +95,7 @@
 }
 .mnhome-kicker {
   margin: 0 0 8px;
-  color: #777;
+  color: var(--mn-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .14em;
@@ -90,11 +105,12 @@
 .mnhome-identity { min-width: 0; }
 .mnhome-name {
   margin: 0;
-  color: #fff;
-  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
-  font-size: clamp(34px, 10vw, 48px);
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  font-size: clamp(32px, 9.4vw, 46px);
   font-weight: 700;
-  line-height: .9;
+  letter-spacing: -.02em;
+  line-height: .92;
   overflow-wrap: anywhere;
 }
 
@@ -107,35 +123,54 @@
 }
 
 .mnhome-card {
+  /* Container so the balance can be sized against the card it has to fit
+     inside, not against the viewport. See .mnhome-card-value. */
+  container-type: inline-size;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 14px;
-  border: 1px solid rgba(255, 255, 255, .3);
-  background: #0a0a0a;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
 }
 .mnhome-card-head {
   display: flex;
   align-items: center;
   gap: 7px;
   margin: 0;
-  color: #777;
+  color: var(--mn-text-muted);
 }
 .mnhome-card-value {
   margin: 0;
-  color: #fff;
-  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
-  font-size: 26px;
+  min-width: 0;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  /* A balance is one number. It never breaks across lines: it shrinks to fit
+     the card, and only if it still cannot fit does it truncate with an
+     ellipsis. Tabular figures keep the digits on a fixed grid so the value
+     does not jitter as it refreshes. */
+  font-size: clamp(16px, 4.6vw, 24px);
+  font-size: clamp(15px, 14cqi, 26px);
+  font-variant-numeric: var(--mn-numeric);
   font-weight: 700;
-  line-height: .95;
-  overflow-wrap: anywhere;
+  letter-spacing: -.015em;
+  /* Loose enough that `overflow: hidden` never clips a comma's tail. */
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.mnhome-card-value-muted { color: #777; font-size: 18px; }
+.mnhome-card-value-muted {
+  color: var(--mn-text-muted);
+  font-size: 17px;
+  font-size: clamp(14px, 9cqi, 18px);
+}
 .mnhome-card-unit {
   margin: 0;
   min-height: 15px;
-  color: #626262;
+  color: var(--mn-text-secondary);
   font-size: 11px;
   letter-spacing: .06em;
   text-transform: uppercase;
@@ -144,14 +179,16 @@
 /* --- DUST battery -------------------------------------------------------- */
 
 .mnhome-dust {
+  container-type: inline-size;
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   padding: 14px;
-  border: 1px solid rgba(255, 255, 255, .3);
-  background: #0a0a0a;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
 }
 
 .mnhome-battery {
@@ -166,12 +203,12 @@
 }
 .mnhome-battery-track {
   fill: none;
-  stroke: rgba(255, 255, 255, .2);
+  stroke: var(--mn-border-medium);
   stroke-width: 6;
 }
 .mnhome-battery-fill {
   fill: none;
-  stroke: #fff;
+  stroke: var(--mn-text-primary);
   stroke-width: 6;
   stroke-linecap: butt;
   transition: stroke-dasharray .5s ease;
@@ -181,9 +218,10 @@
   inset: 0;
   display: grid;
   place-items: center;
-  color: #fff;
-  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
   font-size: 18px;
+  font-variant-numeric: var(--mn-numeric);
   font-weight: 700;
 }
 .mnhome-battery-charging .mnhome-battery-fill { animation: mnhome-charge 1.6s ease-in-out infinite; }
@@ -197,25 +235,39 @@
 }
 .mnhome-dust-balance {
   margin: 0;
-  color: #fff;
-  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
-  font-size: 22px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  font-size: clamp(16px, 4.8vw, 22px);
+  font-size: clamp(16px, 8cqi, 22px);
+  font-variant-numeric: var(--mn-numeric);
   font-weight: 700;
-  line-height: .95;
-  overflow-wrap: anywhere;
+  letter-spacing: -.015em;
+  line-height: 1.2;
+  /* Applies to the anonymous flex item holding the figure, so the number
+     itself can never break; the unit wraps to its own line instead. */
+  white-space: nowrap;
 }
-.mnhome-dust-balance-muted { color: #777; font-size: 17px; }
+.mnhome-dust-balance-muted {
+  color: var(--mn-text-muted);
+  font-size: 17px;
+  font-size: clamp(15px, 6.5cqi, 17px);
+}
 .mnhome-dust-balance span {
-  margin-left: 5px;
-  color: #777;
+  color: var(--mn-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .1em;
 }
 .mnhome-dust-cap {
   margin: 0;
-  color: #626262;
+  color: var(--mn-text-secondary);
   font-size: 12px;
+  font-variant-numeric: var(--mn-numeric);
   line-height: 1.4;
 }
 
@@ -227,17 +279,29 @@
   gap: 7px;
   margin-top: 4px;
   padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, .55);
-  border-radius: 0;
-  color: #fff;
+  border: var(--mn-hairline) solid var(--mn-border-strong);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
   background: transparent;
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
   transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
-.mnhome-ghost:hover:not(:disabled) { border-color: #fff; color: #0a0a0a; background: #f5f5f3; }
+.mnhome-ghost:hover:not(:disabled) {
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+}
 .mnhome-ghost:disabled { opacity: .42; cursor: default; }
+
+/* Why a disabled control is disabled. Always paired with the control itself,
+   never used to hide it. */
+.mnhome-dust-note {
+  margin: 0;
+  color: var(--mn-text-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
 
 /* --- Notices ------------------------------------------------------------- */
 
@@ -247,10 +311,10 @@
   gap: 9px;
   margin: 0;
   padding: 10px 12px;
-  border: 1px solid #f5f5f3;
-  color: #f5f5f3;
-  background: #0a0a0a;
-  box-shadow: 4px 4px 0 rgba(245, 245, 243, .3);
+  border: var(--mn-hairline) solid var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -264,7 +328,8 @@
   gap: 0;
   margin: 0;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, .3);
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  background: var(--mn-surface-card);
   list-style: none;
 }
 .mnhome-address {
@@ -274,11 +339,11 @@
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, .18);
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
 }
 .mnhome-address:last-child { border-bottom: 0; }
 .mnhome-address-label {
-  color: #777;
+  color: var(--mn-text-muted);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: .12em;
@@ -286,8 +351,8 @@
 }
 .mnhome-address-value {
   min-width: 0;
-  color: #bcbcb7;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color: var(--mn-text-secondary);
+  font-family: var(--mn-font-mono);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -299,8 +364,8 @@
 .mnhome-panel {
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(255, 255, 255, .3);
-  background: #050505;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  background: var(--mn-surface-card);
 }
 .mnhome-panel-head {
   min-height: 44px;
@@ -308,7 +373,9 @@
   align-items: center;
   gap: 10px;
   padding: 0 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, .26);
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+  /* Recessed strip: the header sits a step below the rows it labels. */
+  background: var(--mn-surface-sunken);
 }
 .mnhome-panel-refresh {
   margin-left: auto;
@@ -317,9 +384,9 @@
   align-items: center;
   gap: 6px;
   padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, .4);
-  border-radius: 0;
-  color: #fff;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
   background: transparent;
   cursor: pointer;
   font-size: 11px;
@@ -328,7 +395,11 @@
   text-transform: uppercase;
   transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
-.mnhome-panel-refresh:hover:not(:disabled) { border-color: #fff; color: #0a0a0a; background: #f5f5f3; }
+.mnhome-panel-refresh:hover:not(:disabled) {
+  border-color: var(--mn-border-strong);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+}
 .mnhome-panel-refresh:disabled { opacity: .42; cursor: default; }
 
 .mnhome-rows {
@@ -336,7 +407,7 @@
   padding: 0;
   list-style: none;
 }
-.mnhome-rows > li { border-bottom: 1px solid rgba(255, 255, 255, .16); }
+.mnhome-rows > li { border-bottom: var(--mn-hairline) solid var(--mn-border-hairline); }
 .mnhome-rows > li:last-child { border-bottom: 0; }
 
 .mnhome-row {
@@ -349,15 +420,16 @@
   padding: 11px 12px;
   border: 0;
   border-left: 3px solid transparent;
-  border-radius: 0;
-  color: #fff;
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
   background: transparent;
   cursor: pointer;
   text-align: left;
   transition: background .15s ease;
 }
-.mnhome-row:hover { background: #111; }
-.mnhome-row-mine { border-left-color: #fff; }
+.mnhome-row:hover { background: var(--mn-surface-hover); }
+/* The user's own transactions carry a full-strength rule. */
+.mnhome-row-mine { border-left-color: var(--mn-border-strong); }
 
 .mnhome-row-top {
   display: flex;
@@ -366,43 +438,48 @@
 }
 .mnhome-row-hash {
   min-width: 0;
-  color: #f5f5f3;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-mono);
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mnhome-row-arrow { margin-left: auto; flex: 0 0 auto; color: #777; }
-.mnhome-row:hover .mnhome-row-arrow { color: #fff; }
+.mnhome-row-arrow { margin-left: auto; flex: 0 0 auto; color: var(--mn-text-muted); }
+.mnhome-row:hover .mnhome-row-arrow { color: var(--mn-text-primary); }
 
 .mnhome-row-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 7px;
-  color: #777;
+  color: var(--mn-text-muted);
   font-size: 11px;
 }
 .mnhome-pill {
   display: inline-flex;
   align-items: center;
   padding: 2px 7px;
-  border: 1px solid #f5f5f3;
-  color: #0a0a0a;
-  background: #f5f5f3;
+  border: var(--mn-hairline) solid var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: .1em;
   text-transform: uppercase;
   white-space: nowrap;
 }
-.mnhome-pill-hollow { color: #f5f5f3; background: transparent; }
-.mnhome-row-block {
-  color: #626262;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+.mnhome-pill-hollow {
+  border-color: var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  background: transparent;
 }
-.mnhome-row-when { color: #626262; }
+.mnhome-row-block {
+  color: var(--mn-text-secondary);
+  font-family: var(--mn-font-mono);
+  font-variant-numeric: var(--mn-numeric);
+}
+.mnhome-row-when { color: var(--mn-text-secondary); font-variant-numeric: var(--mn-numeric); }
 
 /* Skeletons */
 .mnhome-row-skeleton {
@@ -430,8 +507,8 @@
 .mnhome-skeleton {
   display: block;
   height: 10px;
-  border: 1px solid rgba(255, 255, 255, .16);
-  background: rgba(255, 255, 255, .07);
+  border: 0;
+  background: var(--mn-surface-skeleton);
   animation: mnhome-pulse 1.3s ease-in-out infinite;
 }
 .mnhome-skeleton-hash { width: 62%; }
@@ -445,7 +522,7 @@
   gap: 10px;
   margin: 0;
   padding: 26px 14px;
-  color: #777;
+  color: var(--mn-text-muted);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -454,7 +531,7 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  color: #f5f5f3;
+  color: var(--mn-text-primary);
   font-weight: 700;
 }
 
@@ -468,24 +545,29 @@
   justify-content: space-between;
   gap: 12px;
   padding: 0 18px;
-  border: 1px solid #fff;
-  border-radius: 0;
-  color: #090909;
-  background: #fff;
-  box-shadow: 6px 6px 0 rgba(245, 245, 243, .3);
+  border: var(--mn-hairline) solid var(--mn-surface-inverted);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  box-shadow: var(--mn-shadow-md);
   cursor: pointer;
   font-size: 14px;
   font-weight: 780;
-  transition: background .15s ease, color .15s ease;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
 }
-.mnhome-classic:hover:not(:disabled) { color: #fff; background: #111; }
+.mnhome-classic:hover:not(:disabled) {
+  border-color: var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-ink);
+}
 
 .mnhome-foot {
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 0;
-  color: #626262;
+  color: var(--mn-text-muted);
   font-size: 11px;
   letter-spacing: .04em;
   line-height: 1.5;
@@ -514,4 +596,11 @@
   .mnhome-dust { grid-column: auto; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; }
   .mnhome-battery { width: 76px; height: 76px; }
   .mnhome-classic { width: auto; min-width: 280px; }
+  /* Viewport-unit fallback only: the container-query rule already holds the
+     number inside its card, but browsers without container queries would
+     otherwise scale the figure off the viewport at this width. */
+  .mnhome-card-value:not(.mnhome-card-value-muted) {
+    font-size: clamp(16px, 3.4vw, 22px);
+    font-size: clamp(15px, 14cqi, 26px);
+  }
 }

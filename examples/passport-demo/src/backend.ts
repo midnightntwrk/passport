@@ -17,4 +17,6 @@ export type {
   PassportProfileField,
   PassportProfileRequest,
   PassportProfileResponse,
+  PassportStateScope,
+  PassportWalletSeedProvider,
 } from 'passport-demo-backend';

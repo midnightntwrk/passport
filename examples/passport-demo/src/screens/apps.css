@@ -1,23 +1,31 @@
+@import './tokens.css';
+
 /* Apps screen and in-Passport app browser — prefix "mnapps-".
-   Strict black-and-white Midnight direction: no radii, hard offset shadows,
-   1px hairlines, mobile-first at ~390px. */
+   Strict monochrome Midnight direction: no radii, hard offset shadows,
+   1px hairlines, mobile-first at ~390px.
+
+   Apps shares the Home screen's surface system exactly — same page value,
+   same card and raised values, same hairlines — so moving between the two
+   tabs is a change of content, not a change of theme. */
 
 /* ---------------------------------------------------------------- list view */
 
 .mnapps-screen {
   min-height: 100svh;
-  color: #0b0b0b;
-  background: #f5f5f3;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
   padding:
     max(18px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
-    calc(76px + max(18px, env(safe-area-inset-bottom))) max(20px, env(safe-area-inset-left));
+    calc(var(--mn-nav-height) + max(18px, env(safe-area-inset-bottom))) max(20px, env(safe-area-inset-left));
   animation: mnapps-in .35s ease-out both;
 }
 
-.mnapps-head { padding: 14px 0 22px; border-bottom: 1px solid #c7c7c3; }
+.mnapps-head { padding: 14px 0 22px; border-bottom: var(--mn-hairline) solid var(--mn-border-strong); }
 .mnapps-kicker {
   margin: 0 0 14px;
-  color: #777;
+  color: var(--mn-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .14em;
@@ -25,17 +33,17 @@
 }
 .mnapps-title {
   margin: 0;
-  color: #0a0a0a;
-  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
-  font-size: clamp(46px, 14vw, 66px);
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  font-size: clamp(44px, 13vw, 62px);
   font-weight: 700;
-  letter-spacing: 0;
+  letter-spacing: -.02em;
   line-height: .88;
 }
 .mnapps-lede {
   max-width: 420px;
   margin: 16px 0 0;
-  color: #626262;
+  color: var(--mn-text-secondary);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -49,34 +57,35 @@
   gap: 10px;
   margin-top: 20px;
   padding: 0 13px;
-  border: 1px solid #c7c7c3;
-  color: #777;
-  background: #fff;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  color: var(--mn-text-muted);
+  background: var(--mn-surface-raised);
 }
-.mnapps-search:focus-within { border-color: #111; color: #111; }
+.mnapps-search:focus-within { border-color: var(--mn-border-strong); color: var(--mn-text-primary); }
 .mnapps-search input {
   min-width: 0;
   height: 44px;
   border: 0;
-  border-radius: 0;
-  color: #0b0b0b;
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
   background: transparent;
+  font-family: inherit;
   font-size: 14px;
 }
 .mnapps-search input:focus { outline: none; }
-.mnapps-search input::placeholder { color: #8a8a86; }
+.mnapps-search input::placeholder { color: var(--mn-text-muted); }
 .mnapps-search input::-webkit-search-cancel-button { display: none; }
 .mnapps-search-clear {
   width: 28px;
   height: 28px;
   display: grid;
   place-items: center;
-  border: 1px solid #c7c7c3;
-  border-radius: 0;
-  color: #111;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
   background: transparent;
 }
-.mnapps-search-clear:hover { background: #e2e2de; }
+.mnapps-search-clear:hover { background: var(--mn-surface-hover); }
 
 /* Status rows */
 .mnapps-status {
@@ -85,13 +94,19 @@
   gap: 9px;
   margin: 16px 0 0;
   padding: 12px 13px;
-  border: 1px solid #c7c7c3;
-  color: #626262;
-  background: #ececea;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-card);
   font-size: 12px;
   line-height: 1.5;
 }
-.mnapps-status-stale { flex-wrap: wrap; border-color: #111; color: #111; }
+.mnapps-status-stale {
+  flex-wrap: wrap;
+  border-color: var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
+}
 .mnapps-status-stale span { flex: 1 1 190px; }
 .mnapps-retry {
   min-height: 34px;
@@ -99,20 +114,20 @@
   align-items: center;
   gap: 7px;
   padding: 0 12px;
-  border: 1px solid #111;
-  border-radius: 0;
-  color: #111;
+  border: var(--mn-hairline) solid var(--mn-border-strong);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
   background: transparent;
   font-size: 12px;
   font-weight: 740;
 }
-.mnapps-retry:hover { background: #e2e2de; }
+.mnapps-retry:hover { color: var(--mn-text-inverted); background: var(--mn-surface-inverted); }
 
 /* Sections and cards */
 .mnapps-section { margin-top: 30px; }
 .mnapps-section-label {
   margin: 0 0 12px;
-  color: #777;
+  color: var(--mn-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .14em;
@@ -128,40 +143,45 @@
   align-items: center;
   gap: 14px;
   padding: 14px;
-  border: 1px solid #c7c7c3;
-  border-radius: 0;
-  color: #0b0b0b;
-  background: #fff;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
   text-align: left;
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
-.mnapps-card:hover { border-color: #111; box-shadow: 4px 4px 0 #111; }
+.mnapps-card:hover { border-color: var(--mn-border-strong); box-shadow: var(--mn-shadow-ink); }
 .mnapps-card-copy { min-width: 0; display: grid; gap: 5px; }
 .mnapps-card-copy strong { font-size: 14px; font-weight: 760; }
 .mnapps-card-copy small {
   display: -webkit-box;
   overflow: hidden;
-  color: #626262;
+  color: var(--mn-text-secondary);
   font-size: 12px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 .mnapps-card-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
-.mnapps-card-arrow { justify-self: end; color: #777; }
-.mnapps-card:hover .mnapps-card-arrow { color: #111; }
+.mnapps-card-arrow { justify-self: end; color: var(--mn-text-muted); }
+.mnapps-card:hover .mnapps-card-arrow { color: var(--mn-text-primary); }
 
 .mnapps-pill,
 .mnapps-tag {
   padding: 3px 7px;
-  border: 1px solid #bcbcb7;
-  color: #626262;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  color: var(--mn-text-secondary);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: .1em;
   line-height: 1.4;
   text-transform: uppercase;
 }
-.mnapps-tag { border-color: #111; color: #fff; background: #111; }
+.mnapps-tag {
+  border-color: var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+}
 
 /* App icon — registry icons are forced to greyscale to hold the direction. */
 .mnapps-icon {
@@ -171,19 +191,19 @@
   overflow: hidden;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid #111;
-  background: #fff;
+  border: var(--mn-hairline) solid var(--mn-border-strong);
+  background: var(--mn-surface-raised);
 }
 .mnapps-icon img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: grayscale(1) contrast(1.08);
+  filter: var(--mn-app-icon-filter);
 }
 .mnapps-icon-letter {
-  color: #fff;
-  background: #111;
-  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  font-family: var(--mn-font-display);
   font-size: 19px;
   font-weight: 700;
 }
@@ -191,9 +211,9 @@
 .mnapps-empty {
   margin: 26px 0 0;
   padding: 22px 16px;
-  border: 1px solid #c7c7c3;
-  color: #626262;
-  background: #ececea;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-card);
   font-size: 13px;
   line-height: 1.55;
   text-align: center;
@@ -203,23 +223,28 @@
   max-width: 460px;
   margin: 34px 0 0;
   padding: 14px 16px;
-  border-left: 3px solid #111;
-  color: #626262;
-  background: #e9e9e4;
+  border-left: 3px solid var(--mn-border-strong);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-card);
   font-size: 12px;
   line-height: 1.55;
 }
 
 /* ------------------------------------------------------------ app browser */
 
+/* The browser chrome is Passport's own frame around third-party content, so
+   it stays on the theme's surfaces rather than a fixed dark bar — the user
+   should never lose track of which app they are in. */
 .mnapps-browser {
   position: fixed;
   z-index: 130;
   inset: 0;
   display: flex;
   flex-direction: column;
-  color: #fff;
-  background: #050505;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
   animation: mnapps-in .22s ease-out both;
 }
 
@@ -231,26 +256,22 @@
   padding:
     calc(9px + env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 9px
     max(10px, env(safe-area-inset-left));
-  border-bottom: 1px solid rgba(255, 255, 255, .26);
-  background: #0a0a0a;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-strong);
+  background: var(--mn-surface-card);
 }
 .mnapps-chrome-button {
   width: 40px;
   height: 40px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, .4);
-  border-radius: 0;
-  color: #fff;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
   background: transparent;
 }
-.mnapps-chrome-button:hover { color: #0a0a0a; background: #fff; }
-.mnapps-icon-chrome { width: 30px; height: 30px; border-color: rgba(255, 255, 255, .55); }
-.mnapps-icon-chrome.mnapps-icon-letter {
-  color: #0a0a0a;
-  background: #fff;
-  font-size: 13px;
-}
+.mnapps-chrome-button:hover { color: var(--mn-text-inverted); background: var(--mn-surface-inverted); }
+.mnapps-icon-chrome { width: 30px; height: 30px; }
+.mnapps-icon-chrome.mnapps-icon-letter { font-size: 13px; }
 .mnapps-chrome-copy { min-width: 0; display: grid; gap: 2px; }
 .mnapps-chrome-copy strong {
   overflow: hidden;
@@ -261,14 +282,14 @@
 }
 .mnapps-chrome-copy code {
   overflow: hidden;
-  color: #777;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--mn-text-muted);
+  font-family: var(--mn-font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.mnapps-frame-wrap { position: relative; flex: 1; min-height: 0; background: #f5f5f3; }
+.mnapps-frame-wrap { position: relative; flex: 1; min-height: 0; background: var(--mn-surface-sunken); }
 .mnapps-frame { width: 100%; height: 100%; border: 0; display: block; }
 
 .mnapps-frame-invalid {
@@ -278,8 +299,8 @@
   justify-items: start;
   gap: 12px;
   padding: 28px 24px;
-  color: #111;
-  background: #f5f5f3;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
 }
 .mnapps-frame-invalid p { max-width: 340px; margin: 0; font-size: 13px; line-height: 1.55; }
 
@@ -290,8 +311,8 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: #626262;
-  background: #f5f5f3;
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-page);
   font-size: 12px;
   font-weight: 680;
 }
@@ -307,36 +328,40 @@
   align-items: center;
   gap: 10px;
   padding: 12px 13px;
-  border: 1px solid #f5f5f3;
-  color: #f5f5f3;
-  background: #0a0a0a;
-  box-shadow: 4px 4px 0 rgba(245, 245, 243, .3);
+  border: var(--mn-hairline) solid var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
 }
 .mnapps-hint p { grid-column: 2 / -1; margin: 0; font-size: 12px; line-height: 1.45; }
 .mnapps-hint-open {
   grid-column: 3;
   min-height: 32px;
   padding: 0 11px;
-  border: 1px solid #f5f5f3;
-  border-radius: 0;
-  color: #0a0a0a;
-  background: #f5f5f3;
+  border: var(--mn-hairline) solid var(--mn-surface-inverted);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
   font-size: 11px;
   font-weight: 780;
 }
-.mnapps-hint-open:hover { color: #f5f5f3; background: #0a0a0a; }
+.mnapps-hint-open:hover {
+  border-color: var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  background: transparent;
+}
 .mnapps-hint-dismiss {
   grid-column: 4;
   width: 32px;
   height: 32px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(245, 245, 243, .5);
-  border-radius: 0;
-  color: #f5f5f3;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
   background: transparent;
 }
-.mnapps-hint-dismiss:hover:not(:disabled) { color: #0a0a0a; background: #f5f5f3; }
+.mnapps-hint-dismiss:hover:not(:disabled) { color: var(--mn-text-inverted); background: var(--mn-surface-inverted); }
 
 /* ----------------------------------------------------------- consent sheet */
 
@@ -347,7 +372,7 @@
   display: grid;
   align-items: end;
   padding: 0;
-  background: rgba(0, 0, 0, .72);
+  background: var(--mn-scrim);
   animation: mnapps-in .2s ease-out both;
 }
 .mnapps-sheet {
@@ -357,9 +382,11 @@
   padding:
     22px max(20px, env(safe-area-inset-right))
     calc(22px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
-  border-top: 1px solid #111;
-  color: #111;
-  background: #f8f8f6;
+  border-top: var(--mn-hairline) solid var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
   animation: mnapps-sheet-in .28s cubic-bezier(.16, 1, .3, 1) both;
 }
 
@@ -368,11 +395,11 @@
   align-items: center;
   gap: 13px;
   padding-bottom: 18px;
-  border-bottom: 1px solid #d9d9d4;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
 }
 .mnapps-sheet-head p {
   margin: 0;
-  color: #666;
+  color: var(--mn-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .13em;
@@ -380,9 +407,10 @@
 }
 .mnapps-sheet-head h2 {
   margin: 5px 0 0;
-  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--mn-font-display);
   font-size: 22px;
   font-weight: 700;
+  letter-spacing: -.02em;
   line-height: .95;
 }
 .mnapps-sheet-mark {
@@ -391,9 +419,9 @@
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid #111;
-  color: #fff;
-  background: #111;
+  border: var(--mn-hairline) solid var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
 }
 
 .mnapps-sheet-origin {
@@ -402,17 +430,17 @@
   align-items: center;
   gap: 8px;
   margin: 16px 0 0;
-  color: #3d3d3d;
+  color: var(--mn-text-secondary);
 }
 .mnapps-sheet-origin code {
   overflow-wrap: anywhere;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--mn-font-mono);
   font-size: 12px;
 }
 .mnapps-sheet-origin small {
   padding: 3px 7px;
-  border: 1px solid #bcbcb7;
-  color: #626262;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  color: var(--mn-text-secondary);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: .1em;
@@ -424,10 +452,10 @@
   display: grid;
   margin: 14px 0 0;
   padding: 0;
-  border-top: 1px solid #d9d9d4;
+  border-top: var(--mn-hairline) solid var(--mn-border-hairline);
   list-style: none;
 }
-.mnapps-sheet-fields li { border-bottom: 1px solid #d9d9d4; }
+.mnapps-sheet-fields li { border-bottom: var(--mn-hairline) solid var(--mn-border-hairline); }
 .mnapps-field {
   width: 100%;
   min-height: 66px;
@@ -437,8 +465,8 @@
   gap: 12px;
   padding: 12px 0;
   border: 0;
-  border-radius: 0;
-  color: #111;
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
   background: transparent;
   text-align: left;
 }
@@ -447,21 +475,21 @@
   height: 22px;
   display: grid;
   place-items: center;
-  border: 1px solid #111;
+  border: var(--mn-hairline) solid var(--mn-border-strong);
   color: transparent;
-  background: #fff;
+  background: transparent;
 }
-.mnapps-field-box-on { color: #fff; background: #111; }
+.mnapps-field-box-on { color: var(--mn-text-inverted); background: var(--mn-surface-inverted); }
 .mnapps-field-copy { min-width: 0; display: grid; gap: 4px; }
 .mnapps-field-copy strong { font-size: 13px; font-weight: 740; }
-.mnapps-field-copy small { color: #626262; font-size: 12px; line-height: 1.45; }
+.mnapps-field-copy small { color: var(--mn-text-secondary); font-size: 12px; line-height: 1.45; }
 
 .mnapps-sheet-boundary {
   margin: 18px 0 0;
   padding: 13px 15px;
-  border-left: 3px solid #111;
-  color: #505050;
-  background: #e9e9e4;
+  border-left: 3px solid var(--mn-border-strong);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-card);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -476,17 +504,25 @@
   justify-content: center;
   gap: 8px;
   padding: 0 14px;
-  border: 1px solid #111;
-  border-radius: 0;
+  border: var(--mn-hairline) solid var(--mn-border-strong);
+  border-radius: var(--mn-radius);
   font-size: 13px;
   font-weight: 760;
 }
-.mnapps-button-ghost { color: #111; background: transparent; }
-.mnapps-button-ghost:hover:not(:disabled) { background: #e2e2de; }
+.mnapps-button-ghost { color: var(--mn-text-primary); background: transparent; }
+.mnapps-button-ghost:hover:not(:disabled) { background: var(--mn-surface-hover); }
 .mnapps-button-solid,
-.mnapps-sheet-done { color: #fff; background: #111; }
+.mnapps-sheet-done {
+  border-color: var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+}
 .mnapps-button-solid:hover:not(:disabled),
-.mnapps-sheet-done:hover { color: #111; background: #fff; }
+.mnapps-sheet-done:hover {
+  border-color: var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  background: transparent;
+}
 
 .mnapps-sheet-outcome {
   display: grid;
@@ -497,7 +533,7 @@
 }
 .mnapps-sheet-outcome p {
   margin: 2px 0 0;
-  color: #505050;
+  color: var(--mn-text-secondary);
   font-size: 13px;
   line-height: 1.55;
   overflow-wrap: anywhere;
@@ -533,7 +569,7 @@
   .mnapps-sheet {
     width: min(520px, 100%);
     padding: 26px;
-    border: 1px solid #111;
-    box-shadow: 6px 6px 0 #111;
+    border: var(--mn-hairline) solid var(--mn-border-strong);
+    box-shadow: var(--mn-shadow-ink);
   }
 }

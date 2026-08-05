@@ -1,4 +1,16 @@
-/* Onboarding screen — prefix "mnob-". Strict black-and-white Midnight direction. */
+@import './tokens.css';
+
+/* Onboarding screen — prefix "mnob-".
+   Strict monochrome Midnight direction: no radii, hard offset shadows,
+   1px hairlines.
+
+   This screen is deliberately a full-bleed dark hero in BOTH themes. It is
+   the pre-authentication brand moment, it carries the monochrome portal
+   artwork, and flipping it to a light card layout would break the one image
+   the product leads with. That decision is expressed by consuming ONLY the
+   fixed --mn-ink-* scale from tokens.css: the darkness is a choice, not a
+   theme that happened to be inherited. Every screen after sign-in follows
+   the user's theme. */
 
 .mnob-screen {
   position: relative;
@@ -6,8 +18,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  color: #fff;
-  background: #030303;
+  color: var(--mn-ink-text);
+  background: var(--mn-ink-page);
+  color-scheme: dark;
+  font-family: var(--mn-font-body);
   padding-top: env(safe-area-inset-top);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
@@ -18,7 +32,7 @@
 .mnob-art {
   position: absolute;
   inset: 0;
-  background-color: #030303;
+  background-color: var(--mn-ink-page);
   background-image: url('/passport-portal-monochrome.png');
   background-repeat: no-repeat;
   background-position: center bottom;
@@ -31,7 +45,12 @@
   position: absolute;
   inset: 0;
   content: "";
-  background: linear-gradient(180deg, #030303 30%, rgba(3, 3, 3, .55) 62%, rgba(3, 3, 3, .82) 100%);
+  background: linear-gradient(
+    180deg,
+    var(--mn-ink-page) 30%,
+    var(--mn-ink-fade-mid) 62%,
+    var(--mn-ink-fade-end) 100%
+  );
 }
 
 .mnob-bar {
@@ -43,16 +62,16 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, .26);
+  border-bottom: var(--mn-hairline) solid var(--mn-ink-border-medium);
 }
 .mnob-wordmark {
   width: 104px;
   height: auto;
-  filter: invert(1) grayscale(1) contrast(2);
+  filter: var(--mn-ink-wordmark-filter);
 }
 .mnob-bar-label {
   margin-left: auto;
-  color: #777;
+  color: var(--mn-ink-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .14em;
@@ -73,7 +92,7 @@
 
 .mnob-kicker {
   margin: 0 0 16px;
-  color: #777;
+  color: var(--mn-ink-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .14em;
@@ -82,19 +101,19 @@
 .mnob-title {
   margin: 0;
   display: grid;
-  color: #fff;
-  font-family: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
-  font-size: clamp(52px, 15vw, 84px);
+  color: var(--mn-ink-text);
+  font-family: var(--mn-font-display);
+  font-size: clamp(50px, 14.5vw, 82px);
   font-weight: 700;
-  letter-spacing: 0;
+  letter-spacing: -.02em;
   line-height: .85;
-  text-shadow: 0 2px 0 #030303;
+  text-shadow: 0 2px 0 var(--mn-ink-page);
 }
 .mnob-title span { display: block; }
 .mnob-lede {
   max-width: 400px;
   margin: 20px 0 0;
-  color: #bcbcb7;
+  color: var(--mn-ink-text-secondary);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -107,10 +126,10 @@
   gap: 10px;
   margin-top: 26px;
   padding: 10px 12px;
-  border: 1px solid #f5f5f3;
-  color: #f5f5f3;
-  background: #0a0a0a;
-  box-shadow: 4px 4px 0 rgba(245, 245, 243, .3);
+  border: var(--mn-hairline) solid var(--mn-ink-border-strong);
+  color: var(--mn-ink-text);
+  background: var(--mn-ink-card);
+  box-shadow: var(--mn-ink-shadow-sm);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -121,12 +140,15 @@
   display: inline-grid;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgba(245, 245, 243, .5);
-  border-radius: 0;
-  color: #f5f5f3;
+  border: var(--mn-hairline) solid var(--mn-ink-border-medium);
+  border-radius: var(--mn-radius);
+  color: var(--mn-ink-text);
   background: transparent;
 }
-.mnob-error-dismiss:hover:not(:disabled) { color: #0a0a0a; background: #f5f5f3; }
+.mnob-error-dismiss:hover:not(:disabled) {
+  color: var(--mn-ink-text-inverted);
+  background: var(--mn-ink-surface-inverted);
+}
 
 /* Stages */
 .mnob-stage { margin-top: auto; padding-top: 40px; animation: mnob-stage-in .35s ease-out both; }
@@ -140,26 +162,35 @@
   justify-content: space-between;
   gap: 13px;
   padding: 0 20px;
-  border: 1px solid #fff;
-  border-radius: 0;
-  color: #090909;
-  background: #fff;
-  box-shadow: 6px 6px 0 rgba(245, 245, 243, .3);
+  border: var(--mn-hairline) solid var(--mn-ink-surface-inverted);
+  border-radius: var(--mn-radius);
+  color: var(--mn-ink-text-inverted);
+  background: var(--mn-ink-surface-inverted);
+  box-shadow: var(--mn-ink-shadow-md);
   font-size: 14px;
   font-weight: 780;
+  transition: background .15s ease, color .15s ease;
 }
-.mnob-primary:hover:not(:disabled) { color: #fff; background: #111; }
+.mnob-primary:hover:not(:disabled) {
+  color: var(--mn-ink-text);
+  background: var(--mn-ink-raised);
+}
 
-/* Choose — two passkey routes */
-.mnob-choose-label {
+/* Choose — two passkey routes, then a deliberately quieter Dynamic route.
+   The visual weight ranking is: lead passkey choice (inverted block, hard
+   shadow) > second passkey choice (card) > Dynamic (transparent, hairline
+   only). Nothing above .mnob-alt touches Dynamic. */
+.mnob-choose-label,
+.mnob-alt-label {
   margin: 0 0 12px;
-  color: #777;
+  color: var(--mn-ink-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .14em;
   text-transform: uppercase;
 }
 .mnob-choices { display: grid; gap: 10px; }
+.mnob-choice-slot { display: grid; gap: 6px; }
 .mnob-choice {
   width: 100%;
   min-height: 74px;
@@ -168,34 +199,80 @@
   align-items: center;
   gap: 13px;
   padding: 14px 16px;
-  border: 1px solid rgba(255, 255, 255, .55);
-  border-radius: 0;
-  color: #fff;
-  background: transparent;
+  border: var(--mn-hairline) solid var(--mn-ink-border-medium);
+  border-radius: var(--mn-radius);
+  color: var(--mn-ink-text);
+  background: var(--mn-ink-card);
   text-align: left;
+  transition: background .15s ease, border-color .15s ease;
 }
-.mnob-choice:hover:not(:disabled) { border-color: #fff; background: #111; }
+.mnob-choice:hover:not(:disabled) {
+  border-color: var(--mn-ink-border-strong);
+  background: var(--mn-ink-raised);
+}
 .mnob-choice-lead {
-  border-color: #fff;
-  color: #090909;
-  background: #fff;
-  box-shadow: 6px 6px 0 rgba(245, 245, 243, .3);
+  border-color: var(--mn-ink-surface-inverted);
+  color: var(--mn-ink-text-inverted);
+  background: var(--mn-ink-surface-inverted);
+  box-shadow: var(--mn-ink-shadow-md);
 }
-.mnob-choice-lead:hover:not(:disabled) { color: #fff; background: #111; }
+.mnob-choice-lead:hover:not(:disabled) {
+  color: var(--mn-ink-text);
+  background: var(--mn-ink-raised);
+}
 .mnob-choice-icon {
   width: 40px;
   height: 40px;
   display: grid;
   place-items: center;
-  border: 1px solid currentColor;
+  border: var(--mn-hairline) solid currentColor;
 }
 .mnob-choice-copy { min-width: 0; display: grid; gap: 4px; }
 .mnob-choice-copy strong { font-size: 14px; font-weight: 780; }
-.mnob-choice-copy small { color: #777; font-size: 12px; line-height: 1.4; }
-.mnob-choice-lead .mnob-choice-copy small { color: #626262; }
-.mnob-choice-lead:hover:not(:disabled) .mnob-choice-copy small,
-.mnob-choice:hover:not(:disabled) .mnob-choice-copy small { color: #bcbcb7; }
+.mnob-choice-copy small { color: var(--mn-ink-text-muted); font-size: 12px; line-height: 1.4; }
+.mnob-choice-lead .mnob-choice-copy small { color: var(--mn-ink-text-inverted); opacity: .68; }
+.mnob-choice-lead:hover:not(:disabled) .mnob-choice-copy small {
+  color: var(--mn-ink-text-secondary);
+  opacity: 1;
+}
+.mnob-choice:hover:not(:disabled) .mnob-choice-copy small { color: var(--mn-ink-text-secondary); }
 .mnob-choice-arrow { justify-self: end; }
+
+/* A route that genuinely cannot run right now. It stays visible and stays
+   labelled, with .mnob-choice-note carrying the reason, rather than being
+   hidden or silently failing after a prompt. */
+.mnob-choice:disabled {
+  opacity: .48;
+  cursor: default;
+  box-shadow: none;
+}
+.mnob-choice-note {
+  margin: 0;
+  padding-left: 2px;
+  color: var(--mn-ink-text-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* Alternative route — Dynamic. Separated by a rule and set flat, so it never
+   competes with the two passkey options above it. */
+.mnob-alt {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: var(--mn-hairline) solid var(--mn-ink-border-hairline);
+}
+.mnob-choice-quiet {
+  min-height: 62px;
+  border-color: var(--mn-ink-border-hairline);
+  background: transparent;
+  box-shadow: none;
+}
+.mnob-choice-quiet .mnob-choice-copy strong { font-weight: 640; }
+.mnob-choice-quiet .mnob-choice-icon { border-color: var(--mn-ink-border-hairline); }
+.mnob-choice-quiet:hover:not(:disabled) {
+  border-color: var(--mn-ink-border-medium);
+  background: var(--mn-ink-card);
+}
 
 /* Working — busy state */
 .mnob-working {
@@ -204,15 +281,15 @@
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  border: 1px solid rgba(255, 255, 255, .55);
-  color: #fff;
-  background: #0a0a0a;
+  border: var(--mn-hairline) solid var(--mn-ink-border-medium);
+  color: var(--mn-ink-text);
+  background: var(--mn-ink-card);
   font-size: 13px;
   font-weight: 680;
 }
 .mnob-working-spinner { flex: 0 0 auto; animation: mnob-spin 1s linear infinite; }
 .mnob-working-copy { overflow-wrap: anywhere; }
-.mnob-working-hint { margin: 12px 0 0; color: #777; font-size: 12px; line-height: 1.5; }
+.mnob-working-hint { margin: 12px 0 0; color: var(--mn-ink-text-muted); font-size: 12px; line-height: 1.5; }
 
 .mnob-foot {
   position: relative;
@@ -222,9 +299,9 @@
   margin: 0 auto;
   display: flex;
   align-items: center;
-  border-top: 1px solid rgba(255, 255, 255, .26);
+  border-top: var(--mn-hairline) solid var(--mn-ink-border-hairline);
   padding-bottom: max(6px, env(safe-area-inset-bottom));
-  color: #777;
+  color: var(--mn-ink-text-muted);
   font-size: 11px;
   letter-spacing: .04em;
 }
@@ -232,15 +309,18 @@
   margin-left: auto;
   padding: 0;
   border: 0;
-  border-bottom: 1px solid #777;
-  border-radius: 0;
-  color: #c7c7c3;
+  border-bottom: var(--mn-hairline) solid var(--mn-ink-text-muted);
+  border-radius: var(--mn-radius);
+  color: var(--mn-ink-text-secondary);
   background: transparent;
   cursor: pointer;
   font: inherit;
   letter-spacing: inherit;
 }
-.mnob-foot-link:hover { color: #f5f5f3; border-bottom-color: #f5f5f3; }
+.mnob-foot-link:hover {
+  color: var(--mn-ink-text);
+  border-bottom-color: var(--mn-ink-text);
+}
 
 @keyframes mnob-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes mnob-stage-in {
@@ -248,6 +328,14 @@
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes mnob-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnob-screen,
+  .mnob-stage { animation: none; }
+  .mnob-working-spinner { animation-duration: 2.4s; }
+  .mnob-primary,
+  .mnob-choice { transition: none; }
+}
 
 @media (min-width: 700px) {
   .mnob-bar, .mnob-body, .mnob-foot { width: min(100% - 64px, 560px); }
