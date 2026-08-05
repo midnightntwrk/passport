@@ -179,6 +179,15 @@
 }
 .mnapps-list { display: grid; gap: 10px; }
 
+/* Category folders — the iOS-style AppFolder previews sit two-up on a phone
+   and top-align, so a folder with a taller neighbour never stretches. */
+.mnapps-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 24px 12px;
+}
+
 /* Featured takes a soft accent wash so the shelf reads as curated without
    shouting — the cards inside stay on their normal raised surface. */
 .mnapps-section[aria-labelledby='mnapps-featured'] {

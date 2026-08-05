@@ -7,6 +7,7 @@ import {
   type RegistryCategory,
 } from '../lib/registry.js'
 import AppBrowser, { AppIcon } from './AppBrowser.js'
+import AppFolder from './AppFolder.js'
 import ThemeToggle from './ThemeToggle.js'
 import './apps.css'
 
@@ -41,12 +42,13 @@ const CATEGORY_ORDER: readonly RegistryCategory[] = [
   'other',
 ]
 
+/** Folder titles — title-cased, one word each so the folder label stays tidy. */
 const CATEGORY_LABELS: Record<RegistryCategory, string> = {
   defi: 'DeFi',
   gaming: 'Gaming',
   identity: 'Identity',
   tools: 'Tools',
-  other: 'Everything else',
+  other: 'Other',
 }
 
 function matches(app: RegistryApp, query: string): boolean {
@@ -309,22 +311,20 @@ export default function AppsScreen(props: AppsScreenProps) {
           </section>
         ) : null}
 
-        {grouped.map((group) => (
-          <section
-            className="mnapps-section"
-            key={group.category}
-            aria-labelledby={`mnapps-${group.category}`}
-          >
-            <h2 className="mnapps-section-label" id={`mnapps-${group.category}`}>
-              {CATEGORY_LABELS[group.category]}
-            </h2>
-            <div className="mnapps-list">
-              {group.apps.map((app) => (
-                <AppCard key={app.id} app={app} onOpen={() => setOpenApp(app)} />
+        {grouped.length > 0 ? (
+          <section className="mnapps-section" aria-label="Apps by category">
+            <div className="mnapps-folder-grid">
+              {grouped.map((group) => (
+                <AppFolder
+                  key={group.category}
+                  title={CATEGORY_LABELS[group.category]}
+                  apps={group.apps}
+                  onOpenApp={(app) => setOpenApp(app)}
+                />
               ))}
             </div>
           </section>
-        ))}
+        ) : null}
 
         {empty ? (
           <p className="mnapps-empty">

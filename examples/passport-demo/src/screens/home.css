@@ -554,7 +554,7 @@
   }
 }
 
-/* Sync gauge: while the wallet walks the chain the ring fills with the live
-   sync percentage in the muted tone; the accent blue stays reserved for a
-   real DUST charge. */
-.mnhome-battery-fill-sync { stroke: var(--mn-text-muted); }
+/* Sync gauge and DUST charge are now the animated SyncRing component
+   (sync-ring.css); its own sheet sizes it at 96px, so fit it to the 92px
+   battery slot here. The static ring above remains for the word states. */
+.mnhome-battery .mnsync-ring { width: 100%; height: 100%; }

@@ -16,6 +16,7 @@ import {
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 
 import { FeaturedApps, type AppsScreenProps } from './Apps.js'
+import SyncRing from './SyncRing.js'
 import ThemeToggle from './ThemeToggle.js'
 import './home.css'
 
@@ -277,22 +278,32 @@ export default function HomeScreen(props: HomeScreenProps) {
 
           <article className="mnhome-dust">
             <div className={`mnhome-battery${dustSyncing ? ' mnhome-battery-charging' : ''}`}>
-              <svg viewBox="0 0 80 80" role="img" aria-label={ringAriaLabel}>
-                <circle className="mnhome-battery-track" cx="40" cy="40" r={RING_RADIUS} />
-                <circle
-                  className={`mnhome-battery-fill${showSyncGauge ? ' mnhome-battery-fill-sync' : ''}`}
-                  cx="40"
-                  cy="40"
-                  r={RING_RADIUS}
-                  strokeDasharray={ringDash}
-                  strokeDashoffset="0"
-                />
-              </svg>
-              <span
-                className={`mnhome-battery-value${fill === null && !showSyncGauge ? ' mnhome-battery-value-label' : ''}`}
-              >
-                {ringLabel}
-              </span>
+              {fill !== null ? (
+                /* A real DUST charge — the accent-blue animated ring. */
+                <SyncRing percent={fill} tone="charge" label={ringAriaLabel} />
+              ) : showSyncGauge && syncPercent != null ? (
+                /* Live chain-walk progress — the muted animated gauge. */
+                <SyncRing percent={syncPercent} tone="sync" label={ringAriaLabel} />
+              ) : (
+                /* Word states — Syncing / Unknown / No charge — keep the
+                   static ring; there is no numeral to animate towards. */
+                <>
+                  <svg viewBox="0 0 80 80" role="img" aria-label={ringAriaLabel}>
+                    <circle className="mnhome-battery-track" cx="40" cy="40" r={RING_RADIUS} />
+                    <circle
+                      className="mnhome-battery-fill"
+                      cx="40"
+                      cy="40"
+                      r={RING_RADIUS}
+                      strokeDasharray={ringDash}
+                      strokeDashoffset="0"
+                    />
+                  </svg>
+                  <span className="mnhome-battery-value mnhome-battery-value-label">
+                    {ringLabel}
+                  </span>
+                </>
+              )}
             </div>
 
             <div className="mnhome-dust-copy">

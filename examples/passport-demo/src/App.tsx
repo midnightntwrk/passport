@@ -83,6 +83,7 @@ import OnboardingScreen from './screens/Onboarding.js';
 import HomeScreen from './screens/Home.js';
 import AppsScreen from './screens/Apps.js';
 import PassportNav, { type MobileTab } from './screens/Nav.js';
+import PassportToasts, { pushToast } from './screens/ToastStack.js';
 import { fetchRecentTransactions, type RecentTransaction } from './lib/indexerTx.js';
 // The local wallet drags the whole Midnight wallet SDK in with it. It is loaded
 // on demand, from the passkey routes only, so a Dynamic-only session never pays
@@ -1132,6 +1133,11 @@ export default function PassportDemo() {
         setLocalSurfaces(initialLocalSurfaceState(wallet));
         setLocalDustRetryCount(0);
         setLocalWalletStatus('ready');
+        pushToast({
+          tone: 'info',
+          title: 'Welcome back',
+          body: 'Session restored on this device.',
+        });
         void refreshLocalBalances();
         // The profile is public metadata; restoring it keeps the display
         // side of the session (and the enrolled-passkey answer) in step.
@@ -1242,6 +1248,13 @@ export default function PassportDemo() {
         status: 'complete',
         source: 'local',
       });
+      if (intent === 'create') {
+        pushToast({
+          tone: 'success',
+          title: 'Passport created',
+          body: 'Your passkey now holds a Midnight wallet.',
+        });
+      }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setLocalWalletStatus('error');
@@ -1279,6 +1292,7 @@ export default function PassportDemo() {
       setLocalSyncPercent(progress.percent);
       if (progress.synced && !wasSynced) {
         wasSynced = true;
+        pushToast({ tone: 'success', title: 'Wallet synced' });
         void refreshLocalBalances();
       }
     });
@@ -1493,6 +1507,9 @@ export default function PassportDemo() {
         source: result.txId ? 'chain' : 'wallet',
         txHash: result.txId,
       });
+      if (result.status !== 'no_utxos') {
+        pushToast({ tone: 'success', title: 'DUST registration submitted' });
+      }
       await refreshWallet();
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
@@ -2655,15 +2672,33 @@ export default function PassportDemo() {
   const copyAddressOfKind = (kind: AddressKind) => {
     const choice = addressChoices.find((candidate) => candidate.kind === kind);
     if (!choice?.address) return;
-    void copyText(choice.address).catch((cause) => {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    });
+    void copyText(choice.address).then(
+      () => pushToast({ tone: 'success', title: 'Address copied' }),
+      (cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      },
+    );
   };
 
   const refreshMobile = () => {
     if (walletMode === 'local') void refreshLocalBalances();
     else void refreshWallet();
     void refreshTransactions();
+  };
+
+  /** Shared by Home's embedded apps grid and the Apps tab: feed plus toast. */
+  const handleProfileShared = (appName: string, fields: string[]) => {
+    addActivity({
+      label: 'Profile shared',
+      detail: `${appName} received ${fields.join(', ')}.`,
+      status: 'complete',
+      source: 'local',
+    });
+    pushToast({
+      tone: 'success',
+      title: `${appName} connected`,
+      body: `${fields.length} profile ${fields.length === 1 ? 'field' : 'fields'} shared.`,
+    });
   };
 
   /** How this Passport is named on screen — hosted account, or this device. */
@@ -2784,35 +2819,19 @@ export default function PassportDemo() {
                     : null
                 }
                 appsProfile={appsProfile}
-                onProfileShared={(appName, fields) =>
-                  addActivity({
-                    label: 'Profile shared',
-                    detail: `${appName} received ${fields.join(', ')}.`,
-                    status: 'complete',
-                    source: 'local',
-                  })
-                }
+                onProfileShared={handleProfileShared}
                 supportUrl={(import.meta.env.VITE_TELEGRAM_URL as string | undefined) ?? null}
                 onOpenClassic={openClassicExperience}
                 onSignOut={() => void signOutPassport()}
               />
             ) : (
-              <AppsScreen
-                profile={appsProfile}
-                onProfileShared={(appName, fields) =>
-                  addActivity({
-                    label: 'Profile shared',
-                    detail: `${appName} received ${fields.join(', ')}.`,
-                    status: 'complete',
-                    source: 'local',
-                  })
-                }
-              />
+              <AppsScreen profile={appsProfile} onProfileShared={handleProfileShared} />
             )}
             <PassportNav active={mobileTab} onSelect={setMobileTab} />
           </>
         )}
         {overlays}
+        <PassportToasts />
       </div>
     );
   }

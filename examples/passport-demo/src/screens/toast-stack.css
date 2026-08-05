@@ -1,0 +1,81 @@
+@import './tokens.css';
+
+/* Stacked toasts — prefix "mntoast-". Token-driven, both themes. The stack
+   floats above the bottom nav (z-index 100) and the PWA actions (105), below
+   the consent sheet (120). */
+
+.mntoast-viewport {
+  position: fixed;
+  bottom: calc(var(--mn-nav-height) + max(16px, env(safe-area-inset-bottom)) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(22rem, calc(100vw - 2rem));
+  z-index: 118;
+  pointer-events: none;
+  perspective: 800px;
+}
+
+.mntoast {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-lg);
+  transform-origin: center bottom;
+  pointer-events: auto;
+  will-change: transform, opacity;
+}
+
+.mntoast-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: var(--mn-radius-pill);
+}
+.mntoast-success .mntoast-icon { color: var(--mn-accent-ink); background: var(--mn-accent-soft); }
+.mntoast-error .mntoast-icon { color: var(--mn-text-primary); background: var(--mn-surface-sunken); }
+.mntoast-info .mntoast-icon { color: var(--mn-text-secondary); background: var(--mn-surface-card); }
+
+.mntoast-content { flex: 1; min-width: 0; }
+
+.mntoast-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.mntoast-body {
+  display: -webkit-box;
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--mn-text-muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.mntoast-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.mntoast-close:hover { color: var(--mn-text-primary); background: var(--mn-surface-hover); }
