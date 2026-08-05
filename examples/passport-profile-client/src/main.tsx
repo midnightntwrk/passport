@@ -87,6 +87,12 @@ function App() {
         parentHandshake.current = { requestId: ready.requestId, nonce: ready.nonce };
         setState('idle');
         setDetail('Passport is present. Choose fields and connect.');
+        // Acknowledge so Passport stops re-broadcasting ready and clears its
+        // slow-frame hint; unknown types are dropped silently by its parsers.
+        window.parent.postMessage(
+          { protocol: PASSPORT_PROFILE_PROTOCOL, type: 'passport.profile.hello' },
+          PASSPORT_ORIGIN,
+        );
         return;
       }
 

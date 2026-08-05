@@ -243,6 +243,28 @@ export default function AppBrowser(props: AppBrowserProps) {
     target.postMessage(createPassportProfileReady(requestId, nonce), origin)
   }, [origin])
 
+  /* The single load-time ready is race-prone: with async module scripts the
+     frame's load event can fire before the app inside has attached its
+     message listener, and a one-shot ready is then lost forever — the app
+     reports "Passport has not completed the handshake". Re-broadcast the SAME
+     requestId/nonce (idempotent for the app) until the frame says anything
+     back, capped so apps that never speak the protocol are not pestered. */
+  useEffect(() => {
+    if (!loaded || !origin || frameSpoke) return undefined
+    let attempts = 0
+    const timer = window.setInterval(() => {
+      const target = frameRef.current?.contentWindow
+      const issued = handshake.current
+      attempts += 1
+      if (!target || !issued || attempts > 40) {
+        window.clearInterval(timer)
+        return
+      }
+      target.postMessage(createPassportProfileReady(issued.requestId, issued.nonce), origin)
+    }, 800)
+    return () => window.clearInterval(timer)
+  }, [loaded, origin, frameSpoke])
+
   const openExternally = useCallback(() => {
     if (!origin) return
     window.open(app.url, '_blank', 'noopener,noreferrer')

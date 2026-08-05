@@ -29,10 +29,6 @@ export default function SyncRing({ percent, tone, label }: SyncRingProps) {
   const rounded = useTransform(() => Math.round(progress.get()))
   const pathLength = useTransform(progress, [0, 100], [0, 1])
   const strokeLinecap = useTransform(() => (pathLength.get() === 0 ? 'none' : 'round'))
-  // The numeral resolves out of a blur as the walk completes; fully crisp by 60%.
-  const filter = useTransform(progress, [0, 60], ['blur(6px)', 'blur(0px)'])
-  const scale = useTransform(progress, [0, 100], [0.72, 1])
-  const opacity = useTransform(progress, [0, 100], [0.6, 1])
 
   useEffect(() => {
     const clamped = Math.max(0, Math.min(100, percent))
@@ -68,9 +64,14 @@ export default function SyncRing({ percent, tone, label }: SyncRingProps) {
         />
       </svg>
       <div className="mnsync-value-box">
+        {/* The blur is a mount-in flourish only — the reference tied it to
+            progress, which left the numeral illegible while a slow chain walk
+            sat at low percentages. It must be readable at any percent. */}
         <motion.div
           className="mnsync-value"
-          style={{ filter, scale, opacity, willChange: 'filter, transform, opacity' }}
+          initial={{ opacity: 0, scale: 0.85, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
         >
           <motion.span>{rounded}</motion.span>
           <span className="mnsync-unit">%</span>

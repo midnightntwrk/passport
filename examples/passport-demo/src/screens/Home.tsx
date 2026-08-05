@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   Check,
-  ChevronDown,
   Copy,
   ExternalLink,
   Layers,
@@ -13,7 +12,8 @@ import {
   X,
   Zap,
 } from 'lucide-react'
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 import { FeaturedApps, type AppsScreenProps } from './Apps.js'
 import SyncRing from './SyncRing.js'
@@ -122,7 +122,17 @@ export default function HomeScreen(props: HomeScreenProps) {
   const [copied, setCopied] = useState<AddressKind | null>(null)
   /* Addresses are a power-user surface: collapsed by default behind the
      disclosure below, per the 2026/08/05 declutter decision. */
-  const [showAddresses, setShowAddresses] = useState(false)
+  const [addressesOpen, setAddressesOpen] = useState(false)
+
+  // Escape closes the address modal, mirroring the scrim click.
+  useEffect(() => {
+    if (!addressesOpen) return undefined
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAddressesOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [addressesOpen])
 
   const handleCopy = useCallback(
     (kind: AddressKind) => {
@@ -209,6 +219,19 @@ export default function HomeScreen(props: HomeScreenProps) {
       <header className="mnhome-bar">
         <img className="mnhome-wordmark" src="/midnight-wordmark.svg" alt="Midnight" />
         <div className="mnhome-bar-actions">
+          <button
+            type="button"
+            className="mnhome-address-pill"
+            onClick={() => setAddressesOpen(true)}
+            aria-haspopup="dialog"
+            aria-label="Show your Midnight addresses"
+            title="Your addresses"
+          >
+            <Wallet size={14} aria-hidden="true" />
+            <code>
+              {unshieldedAddress ? `${unshieldedAddress.slice(0, 9)}…${unshieldedAddress.slice(-4)}` : 'Addresses'}
+            </code>
+          </button>
           {/* Standard 34px size, matching the icon buttons beside it. */}
           <ThemeToggle />
           <button
@@ -350,42 +373,58 @@ export default function HomeScreen(props: HomeScreenProps) {
             registry, cards, and in-Passport browser as the Apps tab. */}
         <FeaturedApps profile={appsProfile} onProfileShared={onProfileShared} />
 
-        <div className="mnhome-address-block">
-          <button
-            type="button"
-            className="mnhome-disclosure"
-            aria-expanded={showAddresses}
-            onClick={() => setShowAddresses((visible) => !visible)}
-          >
-            <span>{showAddresses ? 'Hide addresses' : 'Show addresses'}</span>
-            <ChevronDown
-              className={`mnhome-disclosure-chevron${showAddresses ? ' mnhome-disclosure-chevron-open' : ''}`}
-              size={15}
-              aria-hidden="true"
-            />
-          </button>
-          {showAddresses ? (
-            <ul className="mnhome-addresses">
-              {addressRows.map((row) => (
-                <li key={row.kind} className="mnhome-address">
-                  <span className="mnhome-address-label">{row.label}</span>
-                  <code className="mnhome-address-value">
-                    {row.value ? truncateHash(row.value) : 'Not available'}
-                  </code>
-                  <button
-                    type="button"
-                    className="mnhome-icon-button"
-                    onClick={() => handleCopy(row.kind)}
-                    disabled={!row.value}
-                    aria-label={`Copy ${row.label.toLowerCase()} address`}
-                  >
-                    {copied === row.kind ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+        {addressesOpen
+          ? createPortal(
+              <div
+                className="mnhome-addr-scrim"
+                onClick={() => setAddressesOpen(false)}
+                role="presentation"
+              >
+                <div
+                  className="mnhome-addr-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Your Midnight addresses"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="mnhome-addr-head">
+                    <p className="mnhome-micro">Your addresses</p>
+                    <button
+                      type="button"
+                      className="mnhome-icon-button"
+                      onClick={() => setAddressesOpen(false)}
+                      aria-label="Close"
+                    >
+                      <X size={15} aria-hidden="true" />
+                    </button>
+                  </div>
+                  <ul className="mnhome-addresses">
+                    {addressRows.map((row) => (
+                      <li key={row.kind} className="mnhome-address">
+                        <span className="mnhome-address-label">{row.label}</span>
+                        <code className="mnhome-address-value">
+                          {row.value ? truncateHash(row.value) : 'Not available'}
+                        </code>
+                        <button
+                          type="button"
+                          className="mnhome-icon-button"
+                          onClick={() => handleCopy(row.kind)}
+                          disabled={!row.value}
+                          aria-label={`Copy ${row.label.toLowerCase()} address`}
+                        >
+                          {copied === row.kind ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mnhome-addr-note">
+                    Public receiving addresses — never the keys behind them.
+                  </p>
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
 
         <button type="button" className="mnhome-classic" onClick={onOpenClassic}>
           <span>Open full dashboard</span>

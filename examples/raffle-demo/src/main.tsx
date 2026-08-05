@@ -116,6 +116,13 @@ function App() {
         parentHandshake.current = { requestId: ready.requestId, nonce: ready.nonce };
         setState('hero');
         setDetail('Passport is present. Connect to claim.');
+        // Acknowledge so Passport stops re-broadcasting ready and clears its
+        // slow-frame hint. Unknown types are silently dropped by its parsers;
+        // any message from this frame counts as the app having spoken.
+        window.parent.postMessage(
+          { protocol: PASSPORT_PROFILE_PROTOCOL, type: 'passport.profile.hello' },
+          PASSPORT_ORIGIN,
+        );
         return;
       }
 

@@ -558,3 +558,61 @@
    (sync-ring.css); its own sheet sizes it at 96px, so fit it to the 92px
    battery slot here. The static ring above remains for the word states. */
 .mnhome-battery .mnsync-ring { width: 100%; height: 100%; }
+
+/* Address pill in the top bar + the modal it opens. The old inline
+   disclosure block is gone — the addresses live in a dialog now. */
+.mnhome-address-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-card);
+  cursor: pointer;
+}
+.mnhome-address-pill:hover { background: var(--mn-surface-hover); }
+.mnhome-address-pill code {
+  font-family: var(--mn-font-mono);
+  font-size: 11.5px;
+  letter-spacing: -0.01em;
+}
+
+.mnhome-addr-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 119;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 20px;
+  background: var(--mn-scrim);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.mnhome-addr-modal {
+  width: min(100%, 420px);
+  margin-bottom: max(8px, env(safe-area-inset-bottom));
+  padding: 18px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-lg);
+}
+.mnhome-addr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.mnhome-addr-note {
+  margin: 12px 0 0;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+@media (min-width: 560px) {
+  .mnhome-addr-scrim { align-items: center; }
+}
