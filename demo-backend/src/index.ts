@@ -25,6 +25,8 @@ export {
   MemoryPassportEncryptedRecordStore,
 } from './privateState.js';
 export type {
+  DiscoverPassportPasskeyOptions,
+  DiscoveredPassportPasskey,
   EnrollPassportPasskeyOptions,
   PassportPasskeyReference,
 } from './passkey.js';

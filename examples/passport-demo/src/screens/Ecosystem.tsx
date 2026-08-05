@@ -1,4 +1,4 @@
-import { ArrowRight, ExternalLink, Sparkles, Tag } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, ExternalLink, Loader2, Sparkles, Tag } from 'lucide-react'
 
 import type { AliasRecord } from '../identity/aliasStore.js'
 import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
@@ -29,6 +29,28 @@ export interface EcosystemProps {
   onContinue?: () => void
   /** Offered when no name is held on this network. */
   onClaimName?: () => void
+  /**
+   * Re-runs the REAL claim path for a queued name — availability re-check,
+   * funds re-check, then the two on-chain transactions. Rendered only on
+   * queued records; omit (with no disabled reason) to hide the action.
+   */
+  onRegisterNow?: () => void
+  /**
+   * When set, "Register now" renders disabled with this sentence beneath it —
+   * the honest reason the claim cannot run right now (wrong network, no
+   * session, wallet still syncing).
+   */
+  registerNowDisabledReason?: string | null
+  /** True while the re-run claim is in flight. */
+  registerNowBusy?: boolean
+  /** Live claim phase while the re-run is in flight. */
+  registerNowPhase?: 'deploying-resolver' | 'registering' | 'confirming' | null
+}
+
+const REGISTER_PHASE_LABELS: Record<'deploying-resolver' | 'registering' | 'confirming', string> = {
+  'deploying-resolver': 'Deploying resolver…',
+  registering: 'Registering on-chain…',
+  confirming: 'Confirming…',
 }
 
 function shortHash(value: string): string {
@@ -49,7 +71,17 @@ function formatDate(iso: string): string {
 }
 
 export function EcosystemIdentity(props: EcosystemProps) {
-  const { network, record, incentives, variant = 'card', onClaimName } = props
+  const {
+    network,
+    record,
+    incentives,
+    variant = 'card',
+    onClaimName,
+    onRegisterNow,
+    registerNowDisabledReason,
+    registerNowBusy,
+    registerNowPhase,
+  } = props
   const embedded = variant === 'card'
 
   return (
@@ -86,6 +118,29 @@ export function EcosystemIdentity(props: EcosystemProps) {
 
         {record && record.status !== 'registered' ? (
           <p className="mnid-reason">{record.queuedReason}</p>
+        ) : null}
+
+        {record?.status === 'queued' && (onRegisterNow || registerNowDisabledReason) ? (
+          <div className="mnid-panel-actions mnid-register-row">
+            <button
+              type="button"
+              className="mnid-register"
+              onClick={onRegisterNow}
+              disabled={Boolean(registerNowBusy || registerNowDisabledReason || !onRegisterNow)}
+            >
+              {registerNowBusy ? (
+                <Loader2 className="mnid-register-spinner" size={14} aria-hidden="true" />
+              ) : (
+                <ArrowUpRight size={14} aria-hidden="true" />
+              )}
+              {registerNowBusy
+                ? REGISTER_PHASE_LABELS[registerNowPhase ?? 'deploying-resolver']
+                : 'Register now'}
+            </button>
+            {registerNowDisabledReason ? (
+              <p className="mnid-reason mnid-register-reason">{registerNowDisabledReason}</p>
+            ) : null}
+          </div>
         ) : null}
 
         {!record && onClaimName ? (

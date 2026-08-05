@@ -602,6 +602,38 @@ async function compiledLeafContract(ownerSecretHex: string) {
 }
 
 /**
+ * Re-checks, WITHOUT any passkey prompt, whether this wallet can pay for
+ * `alias` right now: NIGHT >= {@link aliasCostAtomicNight} and a non-zero DUST
+ * balance for the fee. The same checks {@link claimAlias} enforces, exposed
+ * separately so a re-run can fail closed with the honest reason before asking
+ * the user to touch their authenticator.
+ */
+export async function checkAliasClaimFunds(
+  wallet: LocalMidnightWallet,
+  alias: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const label = normalizePassportAlias(alias);
+  const cost = aliasCostAtomicNight(label);
+  const state = await currentWalletState(wallet);
+  const night = state.unshielded.balances[String(nativeToken().raw)] ?? 0n;
+  if (night < cost) {
+    return {
+      ok: false,
+      reason: `Registering ${aliasDomain(label)} costs ${formatNight(cost)} NIGHT, and this wallet holds ${formatNight(night)}. Top up from the preview faucet, then try again.`,
+    };
+  }
+  const dust = state.dust.balance(new Date());
+  if (dust <= 0n) {
+    return {
+      ok: false,
+      reason:
+        'This wallet has no DUST, so it cannot pay the transaction fee yet. DUST accrues while NIGHT is held.',
+    };
+  }
+  return { ok: true };
+}
+
+/**
  * Claims `alias` as `<alias>.night` for this Passport's unshielded address.
  *
  * Preview only, and deliberately so: the demo wallet's keys, DUST, and proof

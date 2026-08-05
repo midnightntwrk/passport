@@ -41,6 +41,11 @@ export interface HomeScreenProps {
     record: AliasRecord | null
     incentives: PassportIncentiveRecord[]
     onClaimName?: () => void
+    /** Re-runs the real claim for a queued name. See EcosystemProps. */
+    onRegisterNow?: () => void
+    registerNowDisabledReason?: string | null
+    registerNowBusy?: boolean
+    registerNowPhase?: 'deploying-resolver' | 'registering' | 'confirming' | null
   } | null
   /** Formatted NIGHT. `null` means unknown, `'0'` means a real zero. */
   unshieldedBalance: string | null
@@ -433,6 +438,10 @@ export default function HomeScreen(props: HomeScreenProps) {
             incentives={identity.incentives}
             variant="card"
             onClaimName={identity.onClaimName}
+            onRegisterNow={identity.onRegisterNow}
+            registerNowDisabledReason={identity.registerNowDisabledReason}
+            registerNowBusy={identity.registerNowBusy}
+            registerNowPhase={identity.registerNowPhase}
           />
         ) : null}
 

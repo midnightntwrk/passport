@@ -421,6 +421,35 @@
   line-height: 1.6;
 }
 
+/* "Register now" on a queued name — the one accent action on the card. */
+.mnid-register-row { align-items: center; }
+.mnid-register {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-accent-text);
+  background: var(--mn-accent);
+  font-family: var(--mn-font-body);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .16s ease, opacity .16s ease;
+}
+.mnid-register:hover:not(:disabled) { background: var(--mn-accent-hover); }
+.mnid-register:disabled { opacity: .45; cursor: not-allowed; }
+.mnid-register-spinner { animation: mnid-spin 1s linear infinite; }
+@keyframes mnid-spin { to { transform: rotate(360deg); } }
+/* The reason a disabled action cannot run sits beneath it, full width. */
+.mnid-register-reason { flex-basis: 100%; margin: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .mnid-register-spinner { animation-duration: 2.4s; }
+  .mnid-register { transition: none; }
+}
+
 .mnid-txs {
   margin: 14px 0 0;
   padding: 0;

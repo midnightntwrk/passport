@@ -167,6 +167,24 @@
   line-height: 1.5;
 }
 
+/* Quiet secondary path beneath the hint: sign in with a passkey the
+   platform picker offers, rather than the one this browser remembers. */
+.mnob-alt {
+  margin-top: 14px;
+  padding: 8px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--mn-text-muted);
+  font-family: var(--mn-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color .15s ease;
+}
+.mnob-alt:hover { color: var(--mn-text-primary); }
+
 /* Working — busy state */
 .mnob-working {
   min-height: 56px;

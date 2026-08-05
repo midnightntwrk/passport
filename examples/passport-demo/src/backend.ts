@@ -16,6 +16,7 @@ export {
   parsePassportTxRequest,
 } from 'passport-demo-backend';
 export type {
+  DiscoveredPassportPasskey,
   PassportIncentiveReport,
   PassportPasskeyReference,
   PassportProfileField,

@@ -30,6 +30,13 @@ export interface OnboardingProps {
    * passkey otherwise. No Dynamic involvement on this route.
    */
   onContinue: () => void
+  /**
+   * Quiet secondary path: a DISCOVERABLE WebAuthn assertion with no
+   * allow-list, so the platform shows its own picker of resident passkeys.
+   * Whichever credential the user picks signs in to its own profile, or has
+   * one created and bound to it if none exists here yet.
+   */
+  onUseDifferentPasskey?: () => void
   onDismissError?: () => void
   /** Escape hatch to the classic dashboard, kept reachable before sign-in. */
   onOpenClassic?: () => void
@@ -42,6 +49,7 @@ export default function OnboardingScreen(props: OnboardingProps) {
     error,
     hasExistingPassport,
     onContinue,
+    onUseDifferentPasskey,
     onDismissError,
     onOpenClassic,
   } = props
@@ -106,6 +114,15 @@ export default function OnboardingScreen(props: OnboardingProps) {
               <ArrowRight size={17} strokeWidth={2.2} aria-hidden="true" />
             </button>
             <p className="mnob-hint">{continueHint}</p>
+            {onUseDifferentPasskey ? (
+              <button
+                type="button"
+                className="mnob-alt"
+                onClick={onUseDifferentPasskey}
+              >
+                Use a different passkey
+              </button>
+            ) : null}
           </div>
         ) : null}
 

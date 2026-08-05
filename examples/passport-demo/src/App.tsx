@@ -77,7 +77,17 @@ import {
   type LocalPassportPermission,
 } from './localC1.js';
 import { requestPassportStoragePersistence } from './pwa.js';
-import { deleteDemoProfile, loadDemoProfile, saveDemoProfile, type DemoPassportProfile } from './publicProfile.js';
+import {
+  deleteDemoProfile,
+  listLocalProfiles,
+  loadDemoProfile,
+  loadLocalProfileByCredential,
+  localCredentialAccountId,
+  localProfileId,
+  migrateLegacyLocalProfile,
+  saveDemoProfile,
+  type DemoPassportProfile,
+} from './publicProfile.js';
 import { PassportProfileConsent } from './profileConsent.js';
 import OnboardingScreen from './screens/Onboarding.js';
 import HomeScreen from './screens/Home.js';
@@ -204,16 +214,67 @@ const EXPERIENCE_STORAGE_KEY = 'passport-experience';
 const WALLET_MODE_STORAGE_KEY = 'passport-wallet-mode';
 
 /**
- * Account identifier for the passkey-only Passport.
+ * LEGACY account identifier for the passkey-only Passport.
  *
  * The Dynamic route takes its subject from the hosted account. The passkey
- * route has no such issuer, so it uses this fixed identifier: the encrypted
- * private state, the stored profile, and the wallet-seed derivation info all
- * hang off it, which is what makes "Sign in" find the same wallet again. One
- * local Passport per browser profile — deliberately, for the demo.
+ * route has no such issuer, so it originally used this one fixed identifier —
+ * one local Passport per browser. Since 2026/08/05 local profiles are keyed
+ * per passkey credential (see `publicProfile.ts`): the migrated legacy record
+ * KEEPS this accountId so its encrypted private state and derived wallet
+ * addresses are unchanged, while new multi-passkey profiles derive under
+ * `localCredentialAccountId(credentialId)` so no two credentials' stored
+ * state can collide. Every local flow reads its scope from the profile via
+ * {@link localScopeFor}.
  */
 const LOCAL_ACCOUNT_ID = 'passport-local-device';
 const LOCAL_SCOPE = { appId: APP_ID, accountId: LOCAL_ACCOUNT_ID };
+
+/** The private-state and wallet-seed scope a local profile derives under. */
+function localScopeFor(profile: DemoPassportProfile): { appId: string; accountId: string } {
+  return { appId: APP_ID, accountId: profile.accountId ?? LOCAL_ACCOUNT_ID };
+}
+
+/**
+ * Which passkey signed in last, so the one-button Continue path targets the
+ * profile the user most recently used when several exist. Best-effort.
+ */
+const LAST_PASSKEY_STORAGE_KEY = 'passport-last-passkey';
+
+function storedLastPasskey(): string | null {
+  try {
+    return window.localStorage.getItem(LAST_PASSKEY_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeLastPasskey(credentialId: string): void {
+  try {
+    window.localStorage.setItem(LAST_PASSKEY_STORAGE_KEY, credentialId);
+  } catch {
+    // The preference simply will not survive a reload.
+  }
+}
+
+/**
+ * The profile the one-button Continue path signs in to: the last-used
+ * passkey's profile when it still exists, otherwise the only profile, or the
+ * most recently created. Runs the legacy migration first, so a pre-2026/08/05
+ * record is credential-keyed before anything matches against it. Null when
+ * this browser holds no local Passport at all.
+ */
+async function resolveDefaultLocalProfile(): Promise<DemoPassportProfile | null> {
+  const migrated = await migrateLegacyLocalProfile().catch(() => null);
+  const profiles = await listLocalProfiles().catch(() => (migrated ? [migrated] : []));
+  if (profiles.length === 0) return migrated;
+  if (profiles.length === 1) return profiles[0];
+  const last = storedLastPasskey();
+  const lastProfile = last
+    ? profiles.find((candidate) => candidate.passkey.credentialId === last)
+    : undefined;
+  if (lastProfile) return lastProfile;
+  return [...profiles].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+}
 
 /**
  * The Midnames owner secret's derivation scope.
@@ -265,7 +326,22 @@ interface PersistedWalletSession {
   iv: Uint8Array;
   ciphertext: ArrayBuffer;
   createdAt: string;
+  /**
+   * Which passkey credential this session belongs to, so a restore signs back
+   * in to the right profile when several exist. Absent on records written
+   * before multi-passkey profiles; those belong to the migrated legacy record.
+   */
+  credentialId?: string;
+  /** The scope accountId the seed was derived under. Absent = legacy scope. */
+  accountId?: string;
 }
+
+/**
+ * The one live session record. Sessions were previously keyed per scope; the
+ * restore path still reads the legacy key so an existing signed-in session
+ * survives this build, and sign-out clears both.
+ */
+const ACTIVE_SESSION_KEY = 'active-session';
 
 function openSessionDatabase(): Promise<IDBDatabase> {
   if (!globalThis.indexedDB) {
@@ -306,6 +382,7 @@ function sessionRecordKey(scope: { appId: string; accountId: string }): string {
 async function persistWalletSession(
   scope: { appId: string; accountId: string },
   seed: Uint8Array,
+  credentialId: string | null,
 ): Promise<void> {
   const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, [
     'encrypt',
@@ -322,25 +399,36 @@ async function persistWalletSession(
     iv,
     ciphertext,
     createdAt: new Date().toISOString(),
+    ...(credentialId ? { credentialId } : {}),
+    accountId: scope.accountId,
   };
-  await sessionRequest('readwrite', (store) => store.put(record, sessionRecordKey(scope)));
+  await sessionRequest('readwrite', (store) => store.put(record, ACTIVE_SESSION_KEY));
+}
+
+interface RestoredWalletSession {
+  seed: Uint8Array;
+  /** Null on a record written before sessions recorded their credential. */
+  credentialId: string | null;
+  accountId: string;
 }
 
 /**
- * Silently unwraps a persisted session's wallet seed, or returns null when no
- * usable session exists. Never throws and never prompts: the whole point of
- * the stopgap is that the reload path involves no passkey ceremony. The
- * caller owns the returned bytes and must zero them after use.
+ * Silently unwraps the persisted session, or returns null when no usable
+ * session exists. Never throws and never prompts: the whole point of the
+ * stopgap is that the reload path involves no passkey ceremony. The caller
+ * owns the returned seed bytes and must zero them after use. Reads the
+ * pre-multi-passkey per-scope key as a fallback so an existing session is not
+ * orphaned by this build.
  */
-async function loadPersistedWalletSeed(scope: {
-  appId: string;
-  accountId: string;
-}): Promise<Uint8Array | null> {
+async function loadPersistedWalletSession(): Promise<RestoredWalletSession | null> {
   try {
-    const record = await sessionRequest<PersistedWalletSession | undefined>(
-      'readonly',
-      (store) => store.get(sessionRecordKey(scope)),
-    );
+    const record =
+      (await sessionRequest<PersistedWalletSession | undefined>('readonly', (store) =>
+        store.get(ACTIVE_SESSION_KEY),
+      )) ??
+      (await sessionRequest<PersistedWalletSession | undefined>('readonly', (store) =>
+        store.get(sessionRecordKey(LOCAL_SCOPE)),
+      ));
     if (!record?.key || !record.iv || !record.ciphertext) return null;
     const plain = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: record.iv as BufferSource },
@@ -348,19 +436,22 @@ async function loadPersistedWalletSeed(scope: {
       record.ciphertext,
     );
     const seed = new Uint8Array(plain);
-    return seed.byteLength === 32 ? seed : null;
+    if (seed.byteLength !== 32) return null;
+    return {
+      seed,
+      credentialId: record.credentialId ?? null,
+      accountId: record.accountId ?? LOCAL_ACCOUNT_ID,
+    };
   } catch {
     return null;
   }
 }
 
-/** Removes the persisted session. Best-effort; never throws. */
-async function clearPersistedWalletSession(scope: {
-  appId: string;
-  accountId: string;
-}): Promise<void> {
+/** Removes the persisted session — current and legacy keys. Best-effort; never throws. */
+async function clearPersistedWalletSession(): Promise<void> {
   try {
-    await sessionRequest('readwrite', (store) => store.delete(sessionRecordKey(scope)));
+    await sessionRequest('readwrite', (store) => store.delete(ACTIVE_SESSION_KEY));
+    await sessionRequest('readwrite', (store) => store.delete(sessionRecordKey(LOCAL_SCOPE)));
   } catch {
     // Storage may be unavailable; there is then nothing persisted to clear.
   }
@@ -760,6 +851,8 @@ export default function PassportDemo() {
   const [identityStep, setIdentityStep] = useState<IdentityStep>(null);
   const [claimPhase, setClaimPhase] = useState<AliasClaimProgress['phase'] | null>(null);
   const [aliasError, setAliasError] = useState<string | null>(null);
+  /** True while a queued name's "Register now" re-run is in flight. */
+  const [registerNowBusy, setRegisterNowBusy] = useState(false);
   /** The pending per-network reclaim conflict, when the target says "taken". */
   const [reclaim, setReclaim] = useState<{ target: PassportNetwork; alias: string } | null>(null);
   const [reclaimBusy, setReclaimBusy] = useState(false);
@@ -898,9 +991,10 @@ export default function PassportDemo() {
 
   // Does this browser already hold a passkey Passport? Answered once, before
   // any sign-in, so onboarding can order and enable its options honestly.
+  // Also runs the one-time legacy-profile migration to per-credential keys.
   useEffect(() => {
     let current = true;
-    void loadDemoProfile(LOCAL_ACCOUNT_ID)
+    void resolveDefaultLocalProfile()
       .then((stored) => {
         if (current) setLocalPassportKnown(Boolean(stored));
       })
@@ -1122,18 +1216,23 @@ export default function PassportDemo() {
     }));
   }, []);
 
-  /** Derives the seed, builds the wallet, and publishes its address surfaces. */
-  const openLocalWallet = useCallback(
-    async (passkey: DemoPassportProfile['passkey']) => {
-      const { createLocalMidnightWallet, deriveWalletSeed } = await import('./lib/localWallet.js');
+  /**
+   * Builds the wallet from an already-derived seed and publishes its address
+   * surfaces. Owns the seed: it is zeroed here whatever happens.
+   */
+  const openLocalWalletWithSeed = useCallback(
+    async (
+      seed: Uint8Array,
+      scope: { appId: string; accountId: string },
+      credentialId: string | null,
+    ) => {
+      const { createLocalMidnightWallet } = await import('./lib/localWallet.js');
       setLocalWalletStatus('opening');
-      setOnboardingBusyLabel('Deriving your Midnight wallet from this passkey');
-      const seed = await deriveWalletSeed(keyProviderFor(passkey), LOCAL_SCOPE);
       // §2.2 stopgap (see the banner near LOCAL_SCOPE): persist the wrapped
       // seed so a reload silently reopens this session without a passkey
       // prompt. Best-effort — a storage failure never blocks the live session.
       try {
-        await persistWalletSession(LOCAL_SCOPE, seed);
+        await persistWalletSession(scope, seed, credentialId);
       } catch {
         // No persisted session, then; the next reload asks for the passkey.
       }
@@ -1156,7 +1255,20 @@ export default function PassportDemo() {
       // screen rather than holding onboarding open.
       void refreshLocalBalances();
     },
-    [closeLocalWallet, keyProviderFor, refreshLocalBalances],
+    [closeLocalWallet, refreshLocalBalances],
+  );
+
+  /** Derives the seed under the profile's own scope, then opens the wallet. */
+  const openLocalWallet = useCallback(
+    async (activeProfile: DemoPassportProfile) => {
+      const { deriveWalletSeed } = await import('./lib/localWallet.js');
+      setLocalWalletStatus('opening');
+      setOnboardingBusyLabel('Deriving your Midnight wallet from this passkey');
+      const scope = localScopeFor(activeProfile);
+      const seed = await deriveWalletSeed(keyProviderFor(activeProfile.passkey), scope);
+      await openLocalWalletWithSeed(seed, scope, activeProfile.passkey.credentialId);
+    },
+    [keyProviderFor, openLocalWalletWithSeed],
   );
 
   // §2.2 session-stopgap restore: if a persisted session exists, unwrap the
@@ -1170,8 +1282,9 @@ export default function PassportDemo() {
     void (async () => {
       // A wallet is already open — nothing to restore over.
       if (localWalletRef.current) return;
-      const seed = await loadPersistedWalletSeed(LOCAL_SCOPE);
-      if (!seed) return;
+      const restored = await loadPersistedWalletSession();
+      if (!restored) return;
+      const seed = restored.seed;
       if (cancelled) {
         seed.fill(0);
         return;
@@ -1205,7 +1318,11 @@ export default function PassportDemo() {
         void refreshLocalBalances();
         // The profile is public metadata; restoring it keeps the display
         // side of the session (and the enrolled-passkey answer) in step.
-        const stored = await loadDemoProfile(LOCAL_ACCOUNT_ID).catch(() => null);
+        // Sessions record their credential; ones written before that belong
+        // to the migrated legacy record.
+        const stored = restored.credentialId
+          ? await loadLocalProfileByCredential(restored.credentialId).catch(() => null)
+          : await migrateLegacyLocalProfile().catch(() => null);
         if (!cancelled && stored) {
           setProfile(stored);
           setProfileStatus('ready');
@@ -1226,7 +1343,7 @@ export default function PassportDemo() {
   }, [closeLocalWallet, refreshLocalBalances]);
 
   const createLocalPassportProfile = async (): Promise<DemoPassportProfile> => {
-    const existing = await loadDemoProfile(LOCAL_ACCOUNT_ID);
+    const existing = await resolveDefaultLocalProfile();
     if (existing) {
       setLocalPassportKnown(true);
       throw new Error(
@@ -1238,9 +1355,14 @@ export default function PassportDemo() {
       label: 'Midnight Passport',
       userId: LOCAL_ACCOUNT_ID,
     });
+    // New profiles bind to their credential: per-credential storage key and
+    // per-credential scope, so a second passkey can never collide with this
+    // one's encrypted state.
+    const accountId = localCredentialAccountId(passkey.credentialId);
     const nextProfile: DemoPassportProfile = {
-      subjectId: LOCAL_ACCOUNT_ID,
+      subjectId: localProfileId(passkey.credentialId),
       passkey,
+      accountId,
       createdAt: new Date().toISOString(),
     };
     const state: PassportDemoState = {
@@ -1250,7 +1372,7 @@ export default function PassportDemo() {
       schema: 4,
     };
     setOnboardingBusyLabel('Encrypting your Passport state on this device');
-    await vault(passkey).save<PassportDemoState>(LOCAL_SCOPE, state);
+    await vault(passkey).save<PassportDemoState>({ appId: APP_ID, accountId }, state);
     await saveDemoProfile(nextProfile);
     await requestPassportStoragePersistence();
     setProfile(nextProfile);
@@ -1260,7 +1382,7 @@ export default function PassportDemo() {
   };
 
   const unlockLocalPassportProfile = async (): Promise<DemoPassportProfile> => {
-    const existing = await loadDemoProfile(LOCAL_ACCOUNT_ID);
+    const existing = await resolveDefaultLocalProfile();
     if (!existing) {
       setLocalPassportKnown(false);
       throw new Error(
@@ -1270,7 +1392,7 @@ export default function PassportDemo() {
     setOnboardingBusyLabel('Unlocking your Passport with this device');
     // Decrypting the stored state is the proof the passkey is the right one;
     // it also fails loudly if the record was written by a different device.
-    await loadPassportState(existing, LOCAL_SCOPE);
+    await loadPassportState(existing, localScopeFor(existing));
     setProfile(existing);
     setProfileStatus('ready');
     setLocalPassportKnown(true);
@@ -1295,7 +1417,7 @@ export default function PassportDemo() {
     let activeProfile: DemoPassportProfile | null = null;
     try {
       if (requested === 'auto') {
-        const existing = await loadDemoProfile(LOCAL_ACCOUNT_ID).catch(() => null);
+        const existing = await resolveDefaultLocalProfile().catch(() => null);
         intent = existing ? 'signin' : 'create';
       }
       setOnboardingIntent(intent === 'create' ? 'local-create' : 'local-signin');
@@ -1304,7 +1426,8 @@ export default function PassportDemo() {
       );
       activeProfile =
         intent === 'create' ? await createLocalPassportProfile() : await unlockLocalPassportProfile();
-      await openLocalWallet(activeProfile.passkey);
+      await openLocalWallet(activeProfile);
+      storeLastPasskey(activeProfile.passkey.credentialId);
       setOnboardingError(null);
       addActivity({
         label: intent === 'create' ? 'Passport passkey enrolled' : 'Passport passkey unlocked',
@@ -1333,7 +1456,121 @@ export default function PassportDemo() {
       // The state key is cached for 30s inside the provider; drop it now that
       // the wallet is open. The wallet seed was never cached at all.
       if (activeProfile) {
-        passportKeyProviders.current.get(activeProfile.passkey.credentialId)?.lock(LOCAL_SCOPE);
+        passportKeyProviders.current
+          .get(activeProfile.passkey.credentialId)
+          ?.lock(localScopeFor(activeProfile));
+      }
+      setOnboardingIntent(null);
+      setOnboardingBusyLabel(null);
+      onboardingRunning.current = false;
+    }
+  };
+
+  /**
+   * "Use a different passkey" — one DISCOVERABLE assertion with no
+   * allow-list, so the platform offers its own picker of resident passkeys
+   * for this origin. Whichever credential answers: an existing profile bound
+   * to it is signed in; a credential with no profile here gets one created
+   * and bound to it — no enrolment, because the credential already exists.
+   * Enrolment remains only on the true first-time create path.
+   */
+  const runDiscoverableSignIn = async () => {
+    if (onboardingRunning.current) return;
+    onboardingRunning.current = true;
+    setOnboardingError(null);
+    setError(null);
+    setWalletMode('local');
+    setOnboardingIntent('local-signin');
+    setOnboardingBusyLabel('Choose a passkey on this device');
+    let discovered: import('./backend.js').DiscoveredPassportPasskey | null = null;
+    let activeProfile: DemoPassportProfile | null = null;
+    try {
+      // Credential-key the legacy record first, so an existing single-profile
+      // browser matches its own passkey below.
+      await migrateLegacyLocalProfile().catch(() => null);
+      discovered = await WebAuthnPrfKeyProvider.discover();
+      const known = await loadLocalProfileByCredential(discovered.credentialId).catch(() => null);
+      if (known) {
+        activeProfile = known;
+        setOnboardingBusyLabel('Unlocking your Passport');
+        const scope = localScopeFor(known);
+        // Same PRF output, same HKDF constants as the targeted path — the
+        // one assertion already made is enough to derive this profile's seed.
+        const seed = await discovered.deriveWalletSeed(scope);
+        setProfile(known);
+        setProfileStatus('ready');
+        setLocalPassportKnown(true);
+        await openLocalWalletWithSeed(seed, scope, known.passkey.credentialId);
+        addActivity({
+          label: 'Passport passkey unlocked',
+          detail: 'Signed in with a passkey chosen from the device picker.',
+          status: 'complete',
+          source: 'local',
+        });
+      } else {
+        setOnboardingBusyLabel('Creating a Passport for this passkey');
+        const accountId = localCredentialAccountId(discovered.credentialId);
+        const scope = { appId: APP_ID, accountId };
+        const hostname = window.location?.hostname;
+        const nextProfile: DemoPassportProfile = {
+          subjectId: localProfileId(discovered.credentialId),
+          passkey: {
+            credentialId: discovered.credentialId,
+            label: 'Midnight Passport',
+            ...(hostname ? { rpId: hostname } : {}),
+          },
+          accountId,
+          createdAt: new Date().toISOString(),
+        };
+        const state: PassportDemoState = {
+          deviceSecret: newDeviceSecret(),
+          recoverySecret: newDeviceSecret(),
+          createdAt: new Date().toISOString(),
+          schema: 4,
+        };
+        // Encrypt the initial private state with a key derived from the SAME
+        // assertion — no second passkey prompt, and byte-identical to what
+        // the targeted provider would derive for this scope.
+        const oneShotDiscovered = discovered;
+        const oneShotVault = new EncryptedPassportPrivateStateStore(
+          new IndexedDbPassportEncryptedRecordStore(),
+          { getKey: (keyScope) => oneShotDiscovered.deriveStateKey(keyScope) },
+        );
+        await oneShotVault.save<PassportDemoState>(scope, state);
+        await saveDemoProfile(nextProfile);
+        await requestPassportStoragePersistence();
+        activeProfile = nextProfile;
+        setProfile(nextProfile);
+        setProfileStatus('ready');
+        setLocalPassportKnown(true);
+        const seed = await discovered.deriveWalletSeed(scope);
+        await openLocalWalletWithSeed(seed, scope, discovered.credentialId);
+        addActivity({
+          label: 'Passport bound to passkey',
+          detail:
+            'A chosen passkey with no Passport here now holds its own profile and on-device wallet.',
+          status: 'complete',
+          source: 'local',
+        });
+        pushToast({
+          tone: 'success',
+          title: 'Passport created',
+          body: 'This passkey now holds its own Midnight wallet.',
+        });
+      }
+      storeLastPasskey(discovered.credentialId);
+      setOnboardingError(null);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setLocalWalletStatus('error');
+      setOnboardingError(message);
+      addActivity({ label: 'Passkey sign-in', detail: message, status: 'error', source: 'local' });
+    } finally {
+      discovered?.dispose();
+      if (activeProfile) {
+        passportKeyProviders.current
+          .get(activeProfile.passkey.credentialId)
+          ?.lock(localScopeFor(activeProfile));
       }
       setOnboardingIntent(null);
       setOnboardingBusyLabel(null);
@@ -1528,6 +1765,122 @@ export default function PassportDemo() {
     },
     [claimAliasOnPreview, localWalletNetworkId, queueAlias],
   );
+
+  /**
+   * "Register now" on a queued name — the REAL claim path re-run on demand.
+   *
+   * Order matters, and every early exit leaves the record queued with a FRESH
+   * `queuedReason`: (1) the live TLD is re-probed — the name may have been
+   * taken since, in which case the existing alternative-picker opens; (2) the
+   * funds are re-checked without any passkey prompt; (3) only then does the
+   * real `claimAlias` run, with the same progress phases as onboarding.
+   * Success upgrades the record to `registered` with both real transaction
+   * ids. Failures are surfaced inline on the card, never as a toast.
+   */
+  const registerQueuedAlias = useCallback(async (): Promise<void> => {
+    if (registerNowBusy) return;
+    const record = loadAliasRecords()[selectedNetwork];
+    if (!record || record.status === 'registered') return;
+    const handle = localWalletRef.current;
+    const activeProfile = profile;
+    if (!handle || !activeProfile) return; // The card disables the action first.
+    setRegisterNowBusy(true);
+    setAliasError(null);
+    const requeue = (reason: string) =>
+      saveAliasRecord({
+        ...record,
+        status: 'queued',
+        queuedReason: reason,
+        updatedAt: new Date().toISOString(),
+      });
+    try {
+      const { checkAliasAvailability, checkAliasClaimFunds, claimAlias } = await import(
+        './identity/midnames.js'
+      );
+      // (1) The name may have been taken while it sat in the queue.
+      const availability = await checkAliasAvailability('preview', record.alias, { fresh: true });
+      if (availability.status === 'unreachable') {
+        requeue(
+          `The preview .night registry could not be reached, so ${record.domain} is still not on chain: ${availability.detail}`,
+        );
+        return;
+      }
+      if (availability.status === 'taken') {
+        requeue(
+          `${record.domain} was registered by someone else while it was queued here. Pick an alternative name to register instead.`,
+        );
+        setReclaimError(null);
+        setReclaim({ target: 'preview', alias: record.alias });
+        return;
+      }
+      // (2) Funds, before any passkey prompt.
+      const funds = await checkAliasClaimFunds(handle, record.alias);
+      if (!funds.ok) {
+        requeue(funds.reason);
+        return;
+      }
+      // (3) The same two real transactions the onboarding claim runs.
+      setClaimPhase('deploying-resolver');
+      const { deriveWalletSeed } = await import('./lib/localWallet.js');
+      const ownerSecret = await deriveWalletSeed(
+        keyProviderFor(activeProfile.passkey),
+        MIDNAMES_OWNER_SCOPE,
+      );
+      let result;
+      try {
+        result = await claimAlias(handle, ownerSecret, record.alias, (progress) =>
+          setClaimPhase(progress.phase),
+        );
+      } finally {
+        ownerSecret.fill(0);
+        passportKeyProviders.current
+          .get(activeProfile.passkey.credentialId)
+          ?.lock(MIDNAMES_OWNER_SCOPE);
+      }
+      saveAliasRecord({
+        alias: result.alias,
+        domain: result.domain,
+        network: result.network,
+        status: 'registered',
+        resolverAddress: result.resolverAddress,
+        resolverDeployTxId: result.resolverDeployTxId,
+        registerTxId: result.registerTxId,
+        registryConfirmed: result.registryConfirmed,
+        updatedAt: result.claimedAt,
+      });
+      addActivity({
+        label: 'Midnight name registered',
+        detail: `${result.domain} now resolves to this Passport on preview.`,
+        status: 'complete',
+        source: 'chain',
+        txHash: result.registerTxId,
+      });
+      pushToast({
+        tone: 'success',
+        title: 'Name registered on-chain',
+        body: result.registryConfirmed
+          ? `${result.domain} is confirmed by the registry.`
+          : `${result.domain} was submitted — the registry has not reported it yet.`,
+      });
+      void refreshLocalBalances();
+    } catch (cause) {
+      // A real failure from the claim itself: keep the record queued with the
+      // fresh reason, shown inline where the queued pill already is. No
+      // failure toast — the card says everything.
+      const message = cause instanceof Error ? cause.message : String(cause);
+      const detail = (cause as { detail?: string })?.detail;
+      requeue(detail ? `${message} (${detail})` : message);
+      addActivity({
+        label: 'Midnight name',
+        detail: detail ? `${message} — ${detail}` : message,
+        status: 'error',
+        source: 'chain',
+      });
+    } finally {
+      setClaimPhase(null);
+      setRegisterNowBusy(false);
+    }
+  }, [addActivity, keyProviderFor, profile, refreshLocalBalances, registerNowBusy, selectedNetwork]);
 
   /**
    * Network switch. The passkey and the wallet session are untouched — no
@@ -2761,7 +3114,7 @@ export default function PassportDemo() {
     const hadDynamicSession = Boolean(user);
     // Sign-out is the boundary of the §2.2 session stopgap: the wrapped seed
     // and its wrapping key are removed before anything else is torn down.
-    await clearPersistedWalletSession(LOCAL_SCOPE);
+    await clearPersistedWalletSession();
     await closeLocalWallet();
     setWalletMode(null);
     setLocalSurfaces(null);
@@ -3117,6 +3470,35 @@ export default function PassportDemo() {
    */
   const activeAliasRecord = aliasRecords[selectedNetwork] ?? null;
   const aliasLabel = activeAliasRecord?.alias ?? null;
+  /**
+   * Why "Register now" cannot run right now, or null when it can. The demo
+   * wallet genuinely signs on preview only; a missing or still-syncing
+   * session cannot pay or prove; each case renders the action disabled with
+   * its honest sentence instead of leaving a live button to fail.
+   */
+  const walletStillSyncing =
+    localSessionActive &&
+    ((activeSurfaces?.balanceStatus ?? 'loading') === 'loading' ||
+      (localSyncPercent !== null && localSyncPercent < 100));
+  const registerNowDisabledReason =
+    activeAliasRecord?.status === 'queued'
+      ? selectedNetwork !== 'preview'
+        ? `Passport's wallet signs and submits on preview only today, so ${activeAliasRecord.domain} cannot be registered on ${NETWORK_LABELS[selectedNetwork]} from here.`
+        : !localSessionActive
+          ? 'Sign in with your passkey to open the wallet before registering this name.'
+          : localWalletNetworkId !== 'preview'
+            ? `This wallet session runs on ${localWalletNetworkId ?? 'an unknown network'}; names register on preview only.`
+            : walletStillSyncing
+              ? 'The wallet is still syncing. Registration opens once the sync completes.'
+              : null
+      : null;
+  /** Everything the identity card needs to re-run a queued claim honestly. */
+  const registerNowProps = {
+    onRegisterNow: () => void registerQueuedAlias(),
+    registerNowDisabledReason,
+    registerNowBusy,
+    registerNowPhase: claimPhase,
+  };
   const homeIdentity = {
     record: activeAliasRecord,
     incentives,
@@ -3124,6 +3506,7 @@ export default function PassportDemo() {
       setAliasError(null);
       setIdentityStep('alias');
     },
+    ...registerNowProps,
   };
   /** Queue from the claim screen, then carry on through the steps. */
   const queueFromClaimScreen = async (alias: string, reason: string) => {
@@ -3216,6 +3599,7 @@ export default function PassportDemo() {
             error={onboardingError}
             hasExistingPassport={localPassportKnown}
             onContinue={() => startPasskeyOnboarding('auto')}
+            onUseDifferentPasskey={() => void runDiscoverableSignIn()}
             onDismissError={() => setOnboardingError(null)}
             onOpenClassic={() => setExperience('classic')}
           />
@@ -3259,6 +3643,7 @@ export default function PassportDemo() {
               setAliasError(null);
               setIdentityStep('alias');
             }}
+            {...registerNowProps}
           />
         ) : (
           <>

@@ -30,6 +30,31 @@ export interface EnrollPassportPasskeyOptions {
   existingCredentialId?: string;
 }
 
+export interface DiscoverPassportPasskeyOptions {
+  /** Relying-party id. Defaults to the current hostname, matching enrolment. */
+  rpId?: string;
+}
+
+/**
+ * The outcome of one discoverable assertion: which resident credential the
+ * user picked, plus one-shot derivations over that assertion's PRF output.
+ *
+ * The PRF bytes are retained privately until {@link dispose} is called, so a
+ * caller can look the credential up first and only then choose the derivation
+ * scope — without a second passkey prompt. Callers MUST call `dispose()` when
+ * finished; every derivation after that throws.
+ */
+export interface DiscoveredPassportPasskey {
+  /** Base64 of the answering credential's rawId — the same encoding `enroll` returns. */
+  credentialId: string;
+  /** Same bytes {@link WebAuthnPrfKeyProvider.deriveWalletSeed} would produce for `scope`. */
+  deriveWalletSeed(scope: PassportStateScope): Promise<Uint8Array>;
+  /** Same key {@link WebAuthnPrfKeyProvider.getKey} would derive for `scope` (uncached). */
+  deriveStateKey(scope: PassportStateScope): Promise<CryptoKey>;
+  /** Zeroes and releases the retained PRF output. */
+  dispose(): void;
+}
+
 function getNavigator(): Navigator {
   if (!globalThis.navigator?.credentials) {
     throw new Error('WebAuthn is unavailable in this environment.');
@@ -175,6 +200,62 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
         );
       }
       return { credentialId: toBase64(new Uint8Array(credential.rawId)), label: options.label, rpId };
+    } catch (error) {
+      throw new Error(errorMessage(error));
+    }
+  }
+
+  /**
+   * Runs ONE discoverable assertion — no `allowCredentials` at all — so the
+   * platform shows its own account picker of resident passkeys for this rpId,
+   * and reports which credential answered.
+   *
+   * The PRF evaluation is byte-for-byte the targeted path's: the same
+   * {@link PRF_SALT}, and the same HKDF salts and info strings via
+   * {@link deriveKey} and {@link deriveWalletSeedBytes}. A credential
+   * therefore derives identical material whichever path asserted it. The
+   * targeted {@link getKey} / {@link deriveWalletSeed} path remains the
+   * default fast path when the credential is already known.
+   */
+  static async discover(
+    options: DiscoverPassportPasskeyOptions = {},
+  ): Promise<DiscoveredPassportPasskey> {
+    const navigator = getNavigator();
+    const rpId = options.rpId ?? globalThis.location?.hostname;
+    try {
+      const assertion = (await navigator.credentials.get({
+        publicKey: {
+          challenge: asArrayBuffer(randomChallenge()),
+          // Deliberately NO allowCredentials: an empty allow-list is what
+          // makes the authenticator offer every resident credential for this
+          // rpId instead of demanding one we name in advance.
+          userVerification: 'required',
+          extensions: {
+            prf: { eval: { first: asArrayBuffer(PRF_SALT) } },
+          } as AuthenticationExtensionsClientInputs,
+          ...(rpId ? { rpId } : {}),
+        },
+      })) as PublicKeyCredential | null;
+      if (!assertion) throw new Error('Passport passkey selection was cancelled.');
+      const extension = assertion.getClientExtensionResults() as AuthenticationExtensionsClientOutputs & {
+        prf?: { results?: { first?: ArrayBuffer } };
+      };
+      const result = extension.prf?.results?.first;
+      if (!result) throw new Error('The authenticator did not return a PRF result.');
+      let output: Uint8Array | null = new Uint8Array(result);
+      const take = (): Uint8Array => {
+        if (!output) throw new Error('This discovered passkey has already been disposed.');
+        return output;
+      };
+      return {
+        credentialId: toBase64(new Uint8Array(assertion.rawId)),
+        deriveWalletSeed: async (scope) => deriveWalletSeedBytes(take(), scope),
+        deriveStateKey: async (scope) => deriveKey(take(), scope),
+        dispose: () => {
+          output?.fill(0);
+          output = null;
+        },
+      };
     } catch (error) {
       throw new Error(errorMessage(error));
     }
