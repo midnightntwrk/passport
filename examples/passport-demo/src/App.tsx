@@ -45,10 +45,18 @@ import {
   type DynamicSurfaceState,
 } from './dynamic.js';
 import {
+  PASSPORT_C1_ARTIFACT,
+  PASSPORT_C1_NETWORK,
   buildPassportC1Deployment,
   createPassportC1MaintenanceSigningKey,
   type PassportC1DeploymentDraft,
 } from './c1.js';
+import {
+  DynamicSubmissionPendingError,
+  confirmDynamicSubmission,
+  deployPassportC1ViaDynamic,
+  dynamicSupportsContractSettlement,
+} from './lib/dynamicContract.js';
 import {
   LOCAL_C1_ARTIFACT,
   LOCAL_C1_NETWORK,
@@ -566,6 +574,10 @@ export default function PassportDemo() {
    */
   const [localPassportKnown, setLocalPassportKnown] = useState<boolean | null>(null);
   const passportKeyProviders = useRef(new Map<string, WebAuthnPrfKeyProvider>());
+  // Submission identifier whose inclusion poll is currently running, shared
+  // between the inline deploy flow and the resume effect below so a reload
+  // mid-poll neither double-polls nor strands the profile at 'submitted'.
+  const confirmingSubmission = useRef<string | null>(null);
   const onboardingRunning = useRef(false);
   const authFlowWasOpen = useRef(false);
   const transactionsRequest = useRef(0);
@@ -1078,6 +1090,51 @@ export default function PassportDemo() {
   // exist and the stored-profile lookup has settled. The ref guard keeps a
   // single ceremony in flight while React re-runs this effect. The two passkey
   // routes never reach here — they run straight from their click handler.
+  // Resume inclusion confirmation for a deploy left at 'submitted' — a
+  // reload or a lapsed poll window otherwise strands the profile holding the
+  // submission identifier with nothing ever completing it.
+  useEffect(() => {
+    const contract = profile?.passportContract;
+    if (!contract || contract.status !== 'submitted') return;
+    if (contract.network !== PASSPORT_C1_NETWORK) return;
+    const identifier = contract.txHash;
+    if (!identifier || confirmingSubmission.current === identifier) return;
+    confirmingSubmission.current = identifier;
+    const resumedProfile = profile;
+    void (async () => {
+      try {
+        const confirmation = await confirmDynamicSubmission(identifier);
+        if (confirmation.applyStatus === 'FAILURE') {
+          const failedProfile: DemoPassportProfile = { ...resumedProfile, passportContract: undefined };
+          await saveDemoProfile(failedProfile);
+          setProfile(failedProfile);
+          setError(`Midnight included transaction ${confirmation.txHash} but applied it as FAILURE; the Passport contract was not created.`);
+          return;
+        }
+        const confirmedProfile: DemoPassportProfile = {
+          ...resumedProfile,
+          passportContract: { ...contract, txHash: confirmation.txHash, status: 'confirmed' },
+        };
+        await saveDemoProfile(confirmedProfile);
+        setProfile(confirmedProfile);
+        addActivity({
+          label: 'Passport C1 deployed',
+          detail: `${compactAddress(confirmation.deployAddress ?? contract.address)} is live on Midnight preview.`,
+          status: 'complete',
+          source: 'chain',
+          txHash: confirmation.txHash,
+        });
+      } catch (cause) {
+        // Pending or unreachable: stay honestly at 'submitted'; the guard is
+        // released so a later profile change or reload polls again.
+        confirmingSubmission.current = null;
+        if (!(cause instanceof DynamicSubmissionPendingError)) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
+      }
+    })();
+  }, [profile, addActivity]);
+
   useEffect(() => {
     if (onboardingIntent !== 'dynamic' || onboardingRunning.current) return;
     if (!user || !midnightWallet) return;
@@ -1412,6 +1469,127 @@ export default function PassportDemo() {
             source: 'chain',
           });
         }
+        return;
+      }
+
+      if (dynamicSupportsContractSettlement(midnightWallet)) {
+        // Dynamic 4.96.0+ settlement: the embedded wallet balances, pays the
+        // DUST fee, MPC-signs, and submits via getWalletProvider(). Any C1
+        // draft persisted by the pre-4.96 fail-closed path was never
+        // broadcast, so the fresh deployment below simply replaces it.
+        const maintenanceSigningKey = privateState.c1?.maintenanceSigningKey ?? createPassportC1MaintenanceSigningKey();
+        const coldSyncEntry = addActivity({
+          label: 'Dynamic wallet provider requested',
+          detail: 'The embedded wallet fully cold-syncs on its first contract settlement — this first call can take over a minute with no visible progress.',
+          status: 'pending',
+          source: 'wallet',
+        });
+        const deployment = await deployPassportC1ViaDynamic(
+          midnightWallet,
+          { deviceSecretHex: bytesToHex(privateState.deviceSecret) },
+          maintenanceSigningKey,
+          {
+            onPhase: (phase) => {
+              if (phase === 'connecting-wallet-provider') {
+                setDeploymentPhase('Connecting Dynamic wallet — first sync can take over a minute');
+              } else {
+                updateActivity(coldSyncEntry.id, {
+                  label: 'Dynamic wallet provider ready',
+                  detail: 'The embedded wallet exposed its contract settlement provider.',
+                  status: 'complete',
+                });
+                setDeploymentPhase('Building, balancing & signing C1');
+              }
+            },
+          },
+        );
+        updateActivity(coldSyncEntry.id, {
+          label: 'Dynamic wallet provider ready',
+          detail: 'The embedded wallet exposed its contract settlement provider.',
+          status: 'complete',
+        });
+
+        const privateC1: PassportC1PrivateRecord = {
+          address: deployment.contractAddress,
+          privateStateId: deployment.privateStateId,
+          maintenanceSigningKey,
+          network: PASSPORT_C1_NETWORK,
+          artifact: PASSPORT_C1_ARTIFACT,
+          preparedAt: new Date().toISOString(),
+        };
+        await vault(activeProfile.passkey).save<PassportDemoState>(scope, {
+          ...privateState,
+          schema: 4,
+          c1: privateC1,
+        });
+        addActivity({
+          label: 'Passport C1 approved and broadcast',
+          detail: `Dynamic approval ${deployment.receipt.approvalSignatureFingerprint.slice(0, 12)}… is bound to the finalized transaction. Submission identifier ${deployment.submissionId.slice(0, 12)}… (not an explorer hash) is awaiting indexer confirmation.`,
+          status: 'pending',
+          source: 'wallet',
+        });
+
+        const deployedAt = new Date().toISOString();
+        const submittedProfile: DemoPassportProfile = {
+          ...activeProfile,
+          passportPreparation: undefined,
+          passportContract: {
+            address: deployment.contractAddress,
+            deployedAt,
+            // The submission identifier stands in until the indexer returns
+            // the canonical hash below — submitTx does not return a hash.
+            txHash: deployment.submissionId,
+            network: PASSPORT_C1_NETWORK,
+            status: 'submitted',
+            artifact: PASSPORT_C1_ARTIFACT,
+          },
+        };
+        await saveDemoProfile(submittedProfile);
+        setProfile(submittedProfile);
+        activeProfile = submittedProfile;
+
+        setDeploymentPhase('Confirming inclusion on Midnight');
+        confirmingSubmission.current = deployment.submissionId;
+        try {
+          const confirmation = await confirmDynamicSubmission(deployment.submissionId);
+          if (confirmation.applyStatus === 'FAILURE') {
+            const failedProfile: DemoPassportProfile = { ...submittedProfile, passportContract: undefined };
+            await saveDemoProfile(failedProfile);
+            setProfile(failedProfile);
+            throw new Error(`Midnight included transaction ${confirmation.txHash} but applied it as FAILURE; the Passport contract was not created.`);
+          }
+          const confirmedProfile: DemoPassportProfile = {
+            ...submittedProfile,
+            passportContract: {
+              ...submittedProfile.passportContract!,
+              txHash: confirmation.txHash,
+              status: 'confirmed',
+            },
+          };
+          await saveDemoProfile(confirmedProfile);
+          setProfile(confirmedProfile);
+          addActivity({
+            label: 'Passport C1 deployed',
+            detail: `${compactAddress(confirmation.deployAddress ?? deployment.contractAddress)} is live on Midnight preview.`,
+            status: 'complete',
+            source: 'chain',
+            txHash: confirmation.txHash,
+          });
+        } catch (cause) {
+          if (!(cause instanceof DynamicSubmissionPendingError)) throw cause;
+          // The submission stands; only the inclusion lookup timed out. No
+          // mock success: the contract stays 'submitted' until confirmed.
+          // Release the guard so the resume effect may poll again later.
+          confirmingSubmission.current = null;
+          setError(`Passport C1 was submitted, but inclusion is not confirmed yet: ${cause.message}`);
+          addActivity({
+            label: 'Passport C1 confirmation pending',
+            detail: cause.message,
+            status: 'pending',
+            source: 'chain',
+          });
+        }
+        await refreshWallet();
         return;
       }
 
@@ -1831,7 +2009,7 @@ export default function PassportDemo() {
   const refreshPassportPermissions = async () => {
     if (!midnightWallet || !profile?.passportContract) return;
     if (!localMode || profile.passportContract.network !== LOCAL_C1_NETWORK) {
-      setError('Dynamic 4.93.1 can expose the wallet, but it cannot yet prove an arbitrary Passport C1 permission circuit (Compact proof capability missing). This path remains disabled instead of simulating a grant.');
+      setError('Passport permission reads are wired for the disposable localnet only. Dynamic 4.96.0 settles contract transactions via getWalletProvider — the deploy path uses it — but the permission circuits are not routed through it in this demo yet. This path remains disabled instead of simulating a grant.');
       return;
     }
     setBusyAction('permission-read');
@@ -1864,7 +2042,7 @@ export default function PassportDemo() {
   const addPassportPermission = async () => {
     if (!midnightWallet || !profile?.passportContract) return;
     if (!localMode || profile.passportContract.network !== LOCAL_C1_NETWORK) {
-      setError('C1 grant writes require the local validated adapter until Dynamic exposes arbitrary Compact proof finalization.');
+      setError('C1 grant writes are wired for the local validated adapter only; routing them through Dynamic getWalletProvider settlement is not built in this demo yet.');
       return;
     }
     const label = permissionLabel.trim();
@@ -1973,7 +2151,7 @@ export default function PassportDemo() {
       return;
     }
     if (!passportWalletCompatible) {
-      setError('Passport C1 deployment requires the Dynamic embedded Midnight wallet and its explicit arbitrary Compact proof capability.');
+      setError('Passport C1 deployment requires the Dynamic embedded Midnight wallet: only it exposes the getWalletProvider contract settlement boundary.');
       return;
     }
     if (profileStatus === 'loading' || profileStatus === 'idle') {
@@ -2015,7 +2193,7 @@ export default function PassportDemo() {
   const permissionState = !midnightWallet
     ? 'Midnight wallet not provisioned'
     : passportIsConfirmed
-      ? localMode ? 'Passport contract connected' : 'Dynamic C1 proof capability required'
+      ? localMode ? 'Passport contract connected' : 'Permission calls not yet wired over Dynamic settlement'
       : passportIsDeployed
         ? 'Passport deployment submitted'
         : passportPreparation
@@ -2467,7 +2645,7 @@ export default function PassportDemo() {
               <div className="activation-rail" aria-label="Passport activation progress">
                 <ActivationStep number="01" label="Dynamic wallet" detail={midnightWallet ? 'Midnight connected' : 'Provisioning wallet'} state={walletActivationState} />
                 <ActivationStep number="02" label="Passport key" detail={profile ? 'Private state protected' : deploymentPhase === 'Creating Passport key' ? 'Waiting for browser approval' : 'Required for C1'} state={keyActivationState} />
-                <ActivationStep number="03" label="C1 contract" detail={passportIsConfirmed ? `Active on ${passportContract?.network === 'undeployed' ? 'localnet' : 'Midnight'}` : passportIsDeployed ? 'Submitted to testnet' : !passportWalletCompatible && midnightWallet ? 'Dynamic embedded wallet required' : deploymentPhase ?? (passportPreparation ? 'Draft ready to resume' : localMode ? 'Local adapter ready after key setup' : 'Waiting for Dynamic proof support')} state={contractActivationState} />
+                <ActivationStep number="03" label="C1 contract" detail={passportIsConfirmed ? `Active on ${passportContract?.network === 'undeployed' ? 'localnet' : 'Midnight'}` : passportIsDeployed ? 'Submitted to testnet' : !passportWalletCompatible && midnightWallet ? 'Dynamic embedded wallet required' : deploymentPhase ?? (passportPreparation ? 'Draft ready to resume' : localMode ? 'Local adapter ready after key setup' : 'Dynamic settlement ready after key setup')} state={contractActivationState} />
               </div>
             </section>
 

@@ -45,7 +45,7 @@ function dynamicWaasShieldedKeys(wallet: MidnightWallet): {
 } {
   const connector = wallet.connector as MidnightWalletConnector;
   if (connector.overrideKey !== 'dynamicwaas') {
-    throw new Error('Passport C1 deployment currently requires a Dynamic embedded Midnight wallet. External Midnight wallets do not expose the required arbitrary Compact proof capability.');
+    throw new Error('Passport C1 deployment currently requires a Dynamic embedded Midnight wallet. External Midnight wallets do not expose the getWalletProvider contract settlement boundary.');
   }
   const encodedAddress = wallet.additionalAddresses.find((address) => address.type === 'midnight_shielded')?.address;
   if (!encodedAddress) {
@@ -80,11 +80,21 @@ function hexToBytes(hex: string): Uint8Array {
   return result;
 }
 
-function compiledPassportC1Contract() {
+export function compiledPassportC1Contract() {
   return CompiledContract.make('passport_c1', Contract).pipe(
     CompiledContract.withWitnesses(passportC1Witnesses()),
     CompiledContract.withCompiledFileAssets('/zk/passport-c1'),
   );
+}
+
+/**
+ * The constructor arguments for a Passport C1 deployment, derived from the
+ * same private state the witnesses run against.
+ */
+export function passportC1ConstructorArgs(
+  initialPrivateState: PassportC1PrivateState,
+): [ReturnType<typeof pureCircuits.derive_device_commitment>] {
+  return [pureCircuits.derive_device_commitment(hexToBytes(initialPrivateState.deviceSecretHex))];
 }
 
 /** Generates a C1 maintenance authority from browser CSPRNG output. */

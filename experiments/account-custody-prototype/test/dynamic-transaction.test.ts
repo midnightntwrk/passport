@@ -14,7 +14,7 @@ const serializedTransaction = btoa('real call-proved unbound C1 transaction byte
 const finalizedTransaction = btoa('real balanced and finalized C1 transaction bytes');
 const metadata = {
   packageName: '@dynamic-labs/midnight',
-  packageVersion: '4.93.1',
+  packageVersion: '4.96.0',
 };
 
 const intent = {
@@ -69,7 +69,7 @@ function broadcaster(
 }
 
 describe('Dynamic C1 proof capability', () => {
-  it('reports 4.93.1 as externally blocked even when its transfer signer exists', async () => {
+  it('reports a transfer-only surface as externally blocked even when its transfer signer exists', async () => {
     const transferOnlyApi = {
       createTransferTransaction: vi.fn(),
       signTransaction: vi.fn(),

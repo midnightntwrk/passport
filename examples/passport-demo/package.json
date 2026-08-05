@@ -13,8 +13,8 @@
     "build": "npm run prepare:c1 && tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@dynamic-labs/midnight": "4.93.1",
-    "@dynamic-labs/sdk-react-core": "4.93.1",
+    "@dynamic-labs/midnight": "4.96.0",
+    "@dynamic-labs/sdk-react-core": "4.96.0",
     "@fontsource/space-grotesk": "^5.2.10",
     "@midnight-ntwrk/compact-js": "2.5.0",
     "@midnight-ntwrk/compact-runtime": "0.16.0",

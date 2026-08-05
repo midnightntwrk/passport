@@ -85,8 +85,14 @@ export async function submitDynamicTransferTransaction(wallet: MidnightWallet, f
 
 /**
  * Proves, approves, and broadcasts an arbitrary call-proved Compact
- * transaction only through Dynamic's explicit capability contract.
+ * transaction only through the bespoke capability contract Dynamic never
+ * shipped.
  *
+ * SUPERSEDED for settlement by `lib/dynamicContract.ts` on Dynamic 4.96.0+,
+ * where `wallet.getWalletProvider()` balances, fee-funds, MPC-signs, and
+ * submits inside the embedded-wallet iframe. This path remains only as the
+ * fail-closed fallback for SDKs without `getWalletProvider`: the probe below
+ * finds no capability and the call throws instead of simulating success.
  * Dynamic's transfer-only signTransaction API is intentionally not a
  * fallback. The approval signature is retained in the returned receipt and is
  * bound to both the input and finalized transaction digests.
@@ -106,7 +112,7 @@ export async function authorizeAndSubmitDynamicCompactTransaction(
   }
   const proofProvider = createDynamicMidnightProofProvider(connector, {
     packageName: '@dynamic-labs/midnight',
-    packageVersion: '4.93.1',
+    packageVersion: '4.96.0',
   });
 
   return submitAuthorizedCompactTransaction({

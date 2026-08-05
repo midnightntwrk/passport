@@ -193,9 +193,12 @@ export class DynamicMidnightProofCapabilityError extends Error {
  * Adapts the versioned Compact proof contract expected from Dynamic.
  *
  * The existing transfer-only signTransaction method is deliberately not used
- * as a fallback. Dynamic 4.93.1 documents that method for an UnprovenTransaction
- * produced by createTransferTransaction, while Midnight.js hands a C1 wallet
- * provider an already call-proved UnboundTransaction.
+ * as a fallback. Dynamic (4.93.1 through 4.96.0) documents that method for an
+ * UnprovenTransaction produced by createTransferTransaction, while Midnight.js
+ * hands a C1 wallet provider an already call-proved UnboundTransaction.
+ * Dynamic 4.96.0 instead settles contract transactions through
+ * `wallet.getWalletProvider()`; this bespoke protocol survives only as the
+ * fail-closed probe for older SDKs.
  */
 export function createDynamicMidnightProofProvider(
   candidate: unknown,

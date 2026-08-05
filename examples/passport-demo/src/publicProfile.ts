@@ -14,10 +14,15 @@ export interface DemoPassportProfile {
     network: 'preview';
     artifact: 'passport-c1-pilot-v1';
   };
-  /** Set only after Dynamic returns a real transaction hash for a C1 deployment. */
+  /** Set once a C1 deployment has genuinely been broadcast. */
   passportContract?: {
     address: string;
     deployedAt: string;
+    /**
+     * While `status` is 'submitted' on the Dynamic settlement path this holds
+     * the SUBMISSION IDENTIFIER from `submitTx` (not explorer-resolvable);
+     * once confirmed via the indexer it is replaced with the canonical hash.
+     */
     txHash: string;
     network: 'preview' | 'undeployed';
     status: 'submitted' | 'confirmed';

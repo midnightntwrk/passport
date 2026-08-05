@@ -3,7 +3,9 @@
 This Passport client combines the supported Dynamic embedded Midnight-wallet
 flow with a narrow Passport C1 account-management contract and Passport's
 encrypted private-state boundary. It has a real disposable-localnet mode for
-the complete contract flow and a fail-closed Dynamic Preview capability probe.
+the complete contract flow, and a Dynamic Preview deploy path that settles
+through the embedded wallet's `getWalletProvider()` boundary (Dynamic 4.96.0),
+falling back to a fail-closed capability probe on older SDKs.
 Read [`WHAT-THIS-IS.md`](../../WHAT-THIS-IS.md) for what this demo is, and is
 not.
 
@@ -44,8 +46,9 @@ transaction submission are never cached, queued, or presented as available
 offline.
 
 The demo pins `@dynamic-labs/midnight` and `@dynamic-labs/sdk-react-core` to
-the audited stable `4.93.1` release. See the PWA feasibility report for the
-current upstream dependency-audit and Compact-proof blockers.
+`4.96.0`, the first 4.x release that documents embedded-wallet contract
+settlement (`getWalletProvider`). See the blockers document for what remains
+unverified live on this path.
 
 ## Dynamic dashboard prerequisites
 
@@ -69,11 +72,16 @@ current upstream dependency-audit and Compact-proof blockers.
   the isolated fixture fee wallet, registers its Night ID, and enables
   unshielded NIGHT custody, shielded test-note custody, and scoped permission
   transactions. Each completed action exposes its returned localnet hash.
-- On Dynamic Preview, **Deploy Passport** builds the real Compact draft but
-  submits only if the connector exposes an explicit arbitrary-Compact proof
-  capability. Dynamic 4.93.1 currently fails this capability check before
-  proving; transfer-only `signTransaction` and detached message signatures are
-  never used as fallbacks.
+- On Dynamic Preview, **Deploy Passport** settles the real C1 deployment
+  through `wallet.getWalletProvider()` (Dynamic 4.96.0): the embedded wallet
+  balances, pays the DUST fee, MPC-signs, and submits, with a `signMessage`
+  approval receipt bound to the exact transaction digests. `submitTx` returns
+  a submission identifier — not the explorer hash — so the demo confirms
+  inclusion by polling the indexer's `transactions(offset: { identifier })`
+  lookup before claiming the contract is live. On SDKs without
+  `getWalletProvider` the old capability probe still fails closed;
+  transfer-only `signTransaction` and detached message signatures are never
+  used as fallbacks.
 - The local C1 fixture wallet cannot be selected outside `?demoMode=local`.
 
 ## Validation boundary
