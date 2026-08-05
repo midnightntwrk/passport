@@ -1,4 +1,5 @@
 import { ArrowRight, Fingerprint, KeyRound, Loader2, Wallet, X } from 'lucide-react'
+import ThemeToggle from './ThemeToggle'
 import './onboarding.css'
 
 export interface OnboardingProps {
@@ -72,8 +73,6 @@ export default function OnboardingScreen(props: OnboardingProps) {
 
   return (
     <section className="mnob-screen" aria-busy={stage === 'working'}>
-      <div className="mnob-art" aria-hidden="true" />
-
       <header className="mnob-bar">
         <img
           className="mnob-wordmark"
@@ -81,6 +80,7 @@ export default function OnboardingScreen(props: OnboardingProps) {
           alt="Midnight"
         />
         <span className="mnob-bar-label">Passport</span>
+        <ThemeToggle size="sm" className="mnob-theme" />
       </header>
 
       <div className="mnob-body">

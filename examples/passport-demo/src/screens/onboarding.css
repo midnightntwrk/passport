@@ -4,13 +4,11 @@
    Strict monochrome Midnight direction: no radii, hard offset shadows,
    1px hairlines.
 
-   This screen is deliberately a full-bleed dark hero in BOTH themes. It is
-   the pre-authentication brand moment, it carries the monochrome portal
-   artwork, and flipping it to a light card layout would break the one image
-   the product leads with. That decision is expressed by consuming ONLY the
-   fixed --mn-ink-* scale from tokens.css: the darkness is a choice, not a
-   theme that happened to be inherited. Every screen after sign-in follows
-   the user's theme. */
+   This screen follows the user's theme like every other surface: light by
+   default, ink under [data-theme="dark"]. The portal artwork is a dark
+   monochrome image, so per-theme screen-local variables below tune its
+   opacity and the fade gradient — in light it reads as a faint print
+   texture, in dark as the full hero. */
 
 .mnob-screen {
   position: relative;
@@ -18,39 +16,14 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  color: var(--mn-ink-text);
-  background: var(--mn-ink-page);
-  color-scheme: dark;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  color-scheme: var(--mn-color-scheme);
   font-family: var(--mn-font-body);
   padding-top: env(safe-area-inset-top);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
   animation: mnob-in .45s ease-out both;
-}
-
-/* Hero art — monochrome portal, anchored to the lower half, fading into the ink. */
-.mnob-art {
-  position: absolute;
-  inset: 0;
-  background-color: var(--mn-ink-page);
-  background-image: url('/passport-portal-monochrome.png');
-  background-repeat: no-repeat;
-  background-position: center bottom;
-  background-size: cover;
-  clip-path: inset(38% 0 0 0);
-  opacity: .5;
-  pointer-events: none;
-}
-.mnob-art::after {
-  position: absolute;
-  inset: 0;
-  content: "";
-  background: linear-gradient(
-    180deg,
-    var(--mn-ink-page) 30%,
-    var(--mn-ink-fade-mid) 62%,
-    var(--mn-ink-fade-end) 100%
-  );
 }
 
 .mnob-bar {
@@ -62,21 +35,22 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: var(--mn-hairline) solid var(--mn-ink-border-medium);
+  border-bottom: var(--mn-hairline) solid var(--mn-border-medium);
 }
 .mnob-wordmark {
   width: 104px;
   height: auto;
-  filter: var(--mn-ink-wordmark-filter);
+  filter: var(--mn-wordmark-filter);
 }
 .mnob-bar-label {
   margin-left: auto;
-  color: var(--mn-ink-text-muted);
+  color: var(--mn-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .14em;
   text-transform: uppercase;
 }
+.mnob-theme { margin-left: 14px; }
 
 .mnob-body {
   position: relative;
@@ -92,7 +66,7 @@
 
 .mnob-kicker {
   margin: 0 0 16px;
-  color: var(--mn-ink-text-muted);
+  color: var(--mn-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .14em;
@@ -101,19 +75,19 @@
 .mnob-title {
   margin: 0;
   display: grid;
-  color: var(--mn-ink-text);
+  color: var(--mn-text-primary);
   font-family: var(--mn-font-display);
   font-size: clamp(50px, 14.5vw, 82px);
   font-weight: 700;
   letter-spacing: -.02em;
   line-height: .85;
-  text-shadow: 0 2px 0 var(--mn-ink-page);
+  text-shadow: 0 2px 0 var(--mn-surface-page);
 }
 .mnob-title span { display: block; }
 .mnob-lede {
   max-width: 400px;
   margin: 20px 0 0;
-  color: var(--mn-ink-text-secondary);
+  color: var(--mn-text-secondary);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -126,10 +100,10 @@
   gap: 10px;
   margin-top: 26px;
   padding: 10px 12px;
-  border: var(--mn-hairline) solid var(--mn-ink-border-strong);
-  color: var(--mn-ink-text);
-  background: var(--mn-ink-card);
-  box-shadow: var(--mn-ink-shadow-sm);
+  border: var(--mn-hairline) solid var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-card);
+  box-shadow: var(--mn-shadow-sm);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -140,14 +114,14 @@
   display: inline-grid;
   flex: 0 0 auto;
   place-items: center;
-  border: var(--mn-hairline) solid var(--mn-ink-border-medium);
+  border: var(--mn-hairline) solid var(--mn-border-medium);
   border-radius: var(--mn-radius);
-  color: var(--mn-ink-text);
+  color: var(--mn-text-primary);
   background: transparent;
 }
 .mnob-error-dismiss:hover:not(:disabled) {
-  color: var(--mn-ink-text-inverted);
-  background: var(--mn-ink-surface-inverted);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
 }
 
 /* Stages */
@@ -162,18 +136,18 @@
   justify-content: space-between;
   gap: 13px;
   padding: 0 20px;
-  border: var(--mn-hairline) solid var(--mn-ink-surface-inverted);
+  border: var(--mn-hairline) solid var(--mn-surface-inverted);
   border-radius: var(--mn-radius);
-  color: var(--mn-ink-text-inverted);
-  background: var(--mn-ink-surface-inverted);
-  box-shadow: var(--mn-ink-shadow-md);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  box-shadow: var(--mn-shadow-md);
   font-size: 14px;
   font-weight: 780;
   transition: background .15s ease, color .15s ease;
 }
 .mnob-primary:hover:not(:disabled) {
-  color: var(--mn-ink-text);
-  background: var(--mn-ink-raised);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
 }
 
 /* Choose — two passkey routes, then a deliberately quieter Dynamic route.
@@ -183,7 +157,7 @@
 .mnob-choose-label,
 .mnob-alt-label {
   margin: 0 0 12px;
-  color: var(--mn-ink-text-muted);
+  color: var(--mn-text-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .14em;
@@ -199,26 +173,26 @@
   align-items: center;
   gap: 13px;
   padding: 14px 16px;
-  border: var(--mn-hairline) solid var(--mn-ink-border-medium);
+  border: var(--mn-hairline) solid var(--mn-border-medium);
   border-radius: var(--mn-radius);
-  color: var(--mn-ink-text);
-  background: var(--mn-ink-card);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-card);
   text-align: left;
   transition: background .15s ease, border-color .15s ease;
 }
 .mnob-choice:hover:not(:disabled) {
-  border-color: var(--mn-ink-border-strong);
-  background: var(--mn-ink-raised);
+  border-color: var(--mn-border-strong);
+  background: var(--mn-surface-raised);
 }
 .mnob-choice-lead {
-  border-color: var(--mn-ink-surface-inverted);
-  color: var(--mn-ink-text-inverted);
-  background: var(--mn-ink-surface-inverted);
-  box-shadow: var(--mn-ink-shadow-md);
+  border-color: var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  box-shadow: var(--mn-shadow-md);
 }
 .mnob-choice-lead:hover:not(:disabled) {
-  color: var(--mn-ink-text);
-  background: var(--mn-ink-raised);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
 }
 .mnob-choice-icon {
   width: 40px;
@@ -229,13 +203,13 @@
 }
 .mnob-choice-copy { min-width: 0; display: grid; gap: 4px; }
 .mnob-choice-copy strong { font-size: 14px; font-weight: 780; }
-.mnob-choice-copy small { color: var(--mn-ink-text-muted); font-size: 12px; line-height: 1.4; }
-.mnob-choice-lead .mnob-choice-copy small { color: var(--mn-ink-text-inverted); opacity: .68; }
+.mnob-choice-copy small { color: var(--mn-text-muted); font-size: 12px; line-height: 1.4; }
+.mnob-choice-lead .mnob-choice-copy small { color: var(--mn-text-inverted); opacity: .68; }
 .mnob-choice-lead:hover:not(:disabled) .mnob-choice-copy small {
-  color: var(--mn-ink-text-secondary);
+  color: var(--mn-text-secondary);
   opacity: 1;
 }
-.mnob-choice:hover:not(:disabled) .mnob-choice-copy small { color: var(--mn-ink-text-secondary); }
+.mnob-choice:hover:not(:disabled) .mnob-choice-copy small { color: var(--mn-text-secondary); }
 .mnob-choice-arrow { justify-self: end; }
 
 /* A route that genuinely cannot run right now. It stays visible and stays
@@ -249,7 +223,7 @@
 .mnob-choice-note {
   margin: 0;
   padding-left: 2px;
-  color: var(--mn-ink-text-muted);
+  color: var(--mn-text-muted);
   font-size: 11.5px;
   line-height: 1.45;
 }
@@ -259,19 +233,19 @@
 .mnob-alt {
   margin-top: 22px;
   padding-top: 18px;
-  border-top: var(--mn-hairline) solid var(--mn-ink-border-hairline);
+  border-top: var(--mn-hairline) solid var(--mn-border-hairline);
 }
 .mnob-choice-quiet {
   min-height: 62px;
-  border-color: var(--mn-ink-border-hairline);
+  border-color: var(--mn-border-hairline);
   background: transparent;
   box-shadow: none;
 }
 .mnob-choice-quiet .mnob-choice-copy strong { font-weight: 640; }
-.mnob-choice-quiet .mnob-choice-icon { border-color: var(--mn-ink-border-hairline); }
+.mnob-choice-quiet .mnob-choice-icon { border-color: var(--mn-border-hairline); }
 .mnob-choice-quiet:hover:not(:disabled) {
-  border-color: var(--mn-ink-border-medium);
-  background: var(--mn-ink-card);
+  border-color: var(--mn-border-medium);
+  background: var(--mn-surface-card);
 }
 
 /* Working — busy state */
@@ -281,15 +255,15 @@
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  border: var(--mn-hairline) solid var(--mn-ink-border-medium);
-  color: var(--mn-ink-text);
-  background: var(--mn-ink-card);
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-card);
   font-size: 13px;
   font-weight: 680;
 }
 .mnob-working-spinner { flex: 0 0 auto; animation: mnob-spin 1s linear infinite; }
 .mnob-working-copy { overflow-wrap: anywhere; }
-.mnob-working-hint { margin: 12px 0 0; color: var(--mn-ink-text-muted); font-size: 12px; line-height: 1.5; }
+.mnob-working-hint { margin: 12px 0 0; color: var(--mn-text-muted); font-size: 12px; line-height: 1.5; }
 
 .mnob-foot {
   position: relative;
@@ -299,9 +273,9 @@
   margin: 0 auto;
   display: flex;
   align-items: center;
-  border-top: var(--mn-hairline) solid var(--mn-ink-border-hairline);
+  border-top: var(--mn-hairline) solid var(--mn-border-hairline);
   padding-bottom: max(6px, env(safe-area-inset-bottom));
-  color: var(--mn-ink-text-muted);
+  color: var(--mn-text-muted);
   font-size: 11px;
   letter-spacing: .04em;
 }
@@ -309,17 +283,17 @@
   margin-left: auto;
   padding: 0;
   border: 0;
-  border-bottom: var(--mn-hairline) solid var(--mn-ink-text-muted);
+  border-bottom: var(--mn-hairline) solid var(--mn-text-muted);
   border-radius: var(--mn-radius);
-  color: var(--mn-ink-text-secondary);
+  color: var(--mn-text-secondary);
   background: transparent;
   cursor: pointer;
   font: inherit;
   letter-spacing: inherit;
 }
 .mnob-foot-link:hover {
-  color: var(--mn-ink-text);
-  border-bottom-color: var(--mn-ink-text);
+  color: var(--mn-text-primary);
+  border-bottom-color: var(--mn-text-primary);
 }
 
 @keyframes mnob-in { from { opacity: 0; } to { opacity: 1; } }
@@ -340,24 +314,10 @@
 /* Tablet and up. On a phone the stage rides the viewport floor
    (margin-top: auto), which keeps the actions under the thumb. On a tall
    viewport that same rule strands them: a 1133px-tall screen opens a void
-   of bare ink between the lede and the choices. So here the push is capped
-   to a measured interval, the actions stay within reach of the copy, and
-   the portal artwork — revealed higher, brighter, and with the fade eased
-   back — owns the depth that remains beneath them. */
+   of bare page between the lede and the choices. So here the push is capped
+   to a measured interval and the actions stay within reach of the copy. */
 @media (min-width: 700px) {
   .mnob-bar, .mnob-body, .mnob-foot { width: min(100% - 64px, 560px); }
   .mnob-stage { margin-top: clamp(48px, 12svh, 160px); }
-  .mnob-art {
-    clip-path: inset(24% 0 0 0);
-    opacity: .62;
-  }
-  .mnob-art::after {
-    background: linear-gradient(
-      180deg,
-      var(--mn-ink-page) 20%,
-      var(--mn-ink-fade-mid) 52%,
-      var(--mn-ink-fade-end) 100%
-    );
-  }
   .mnob-primary { width: auto; min-width: 280px; }
 }
