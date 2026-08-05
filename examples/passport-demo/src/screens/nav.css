@@ -9,6 +9,28 @@
    active tab is the only inverted block on the bar, so it is unambiguously
    the loudest thing in it; inactive tabs sit back at muted weight. */
 
+/* Opaque page-coloured zone behind the floating bar. The bar is a card with
+   an 8px clearance beneath it and gutters beside it; without this strip,
+   scrolled content slices through those gaps and reads as a rendering
+   glitch. The strip spans the full viewport width from the bar's top edge
+   to the viewport bottom, so content disappears cleanly under its top
+   hairline. It sits one layer below the bar (99 vs 100), which keeps the
+   bar's hard offset shadow falling onto it — the card still reads as
+   lifted, now off a surface of its own. */
+.mnnav-backdrop {
+  position: fixed;
+  z-index: 99;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: calc(
+    var(--mn-nav-height) + 2 * var(--mn-hairline) +
+      max(8px, env(safe-area-inset-bottom))
+  );
+  border-top: var(--mn-hairline) solid var(--mn-border-hairline);
+  background: var(--mn-surface-page);
+}
+
 .mnnav {
   position: fixed;
   z-index: 100;
@@ -71,4 +93,10 @@
 @media (max-width: 400px) {
   .mnnav { width: calc(100% - 24px); }
   .mnnav-tab { letter-spacing: .08em; }
+}
+
+/* Track the Home body column, which widens at the same breakpoint
+   (home.css), so the bar's edges stay flush with the content above it. */
+@media (min-width: 560px) {
+  .mnnav { width: min(100% - 64px, 560px); }
 }

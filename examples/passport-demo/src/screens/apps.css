@@ -17,9 +17,33 @@
   color-scheme: var(--mn-color-scheme);
   font-family: var(--mn-font-body);
   padding:
-    max(18px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+    env(safe-area-inset-top) max(20px, env(safe-area-inset-right))
     calc(var(--mn-nav-height) + max(18px, env(safe-area-inset-bottom))) max(20px, env(safe-area-inset-left));
   animation: mnapps-in .35s ease-out both;
+}
+
+/* Top bar — the same anatomy as Home's, so the two tabs share one page
+   skeleton and the theme control is reachable from either. */
+.mnapps-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-strong);
+  background: var(--mn-surface-page);
+}
+.mnapps-wordmark {
+  width: 96px;
+  height: auto;
+  filter: var(--mn-wordmark-filter);
+}
+.mnapps-bar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
 }
 
 .mnapps-head { padding: 14px 0 22px; border-bottom: var(--mn-hairline) solid var(--mn-border-strong); }
@@ -70,12 +94,15 @@
   color: var(--mn-text-primary);
   background: transparent;
   font-family: inherit;
-  font-size: 14px;
+  /* 16px is the floor below which iOS Safari zooms the viewport on focus —
+     and never zooms it back out on blur. Do not shrink this. */
+  font-size: 16px;
 }
 .mnapps-search input:focus { outline: none; }
 .mnapps-search input::placeholder { color: var(--mn-text-muted); }
 .mnapps-search input::-webkit-search-cancel-button { display: none; }
 .mnapps-search-clear {
+  position: relative;
   width: 28px;
   height: 28px;
   display: grid;
@@ -86,6 +113,13 @@
   background: transparent;
 }
 .mnapps-search-clear:hover { background: var(--mn-surface-hover); }
+/* Touch slop: the drawn square stays 28px, but taps land on a 44px
+   effective target. The ::after belongs to the button, so it activates it. */
+.mnapps-search-clear::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
 
 /* Status rows */
 .mnapps-status {
@@ -162,28 +196,40 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
-.mnapps-card-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+/* One line, always: the card renders at most two network pills plus a "+N"
+   overflow pill, so nothing wraps and neighbouring cards stay the same height. */
+/* 1px right padding keeps the '+N' overflow pill's own border from being
+   clipped by the overflow:hidden crop. */
+.mnapps-card-meta { display: flex; flex-wrap: nowrap; gap: 6px; margin-top: 2px; overflow: hidden; padding-right: 1px; }
 .mnapps-card-arrow { justify-self: end; color: var(--mn-text-muted); }
 .mnapps-card:hover .mnapps-card-arrow { color: var(--mn-text-primary); }
 
 .mnapps-pill,
 .mnapps-tag {
+  flex: 0 0 auto;
   padding: 3px 7px;
   border: var(--mn-hairline) solid var(--mn-border-medium);
   color: var(--mn-text-secondary);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: .1em;
   line-height: 1.4;
   text-transform: uppercase;
 }
+/* Network pills are metadata, not status: dimmer than the NEW tag so the
+   taxonomy reads at a glance. */
+.mnapps-pill { color: var(--mn-text-muted); font-weight: 700; }
 .mnapps-tag {
   border-color: var(--mn-surface-inverted);
   color: var(--mn-text-inverted);
   background: var(--mn-surface-inverted);
 }
 
-/* App icon — registry icons are forced to greyscale to hold the direction. */
+/* App icon — registry icons are forced to greyscale to hold the direction.
+   Third-party marks arrive with their own shapes and backgrounds (rounded
+   squircles, black tiles, wide wordmarks), so every one is CONTAINED, padded,
+   and placed on the same light plate: one square monochrome frame for the
+   whole list, whatever the icon ships with. */
 .mnapps-icon {
   width: 46px;
   height: 46px;
@@ -197,15 +243,27 @@
 .mnapps-icon img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  padding: 5px;
+  object-fit: contain;
   filter: var(--mn-app-icon-filter);
 }
 .mnapps-icon-letter {
-  color: var(--mn-text-inverted);
-  background: var(--mn-surface-inverted);
+  color: var(--mn-text-primary);
   font-family: var(--mn-font-display);
   font-size: 19px;
   font-weight: 700;
+}
+/* Dark: the plate stays light — icons were drawn for light grounds, and a
+   consistent light plate is the frame that makes them read as one set. */
+:root[data-theme="dark"] .mnapps-icon { background: var(--mn-surface-inverted); }
+:root[data-theme="dark"] .mnapps-icon-letter { color: var(--mn-text-inverted); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .mnapps-icon {
+    background: var(--mn-surface-inverted);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .mnapps-icon-letter {
+    color: var(--mn-text-inverted);
+  }
 }
 
 .mnapps-empty {
@@ -271,6 +329,7 @@
 }
 .mnapps-chrome-button:hover { color: var(--mn-text-inverted); background: var(--mn-surface-inverted); }
 .mnapps-icon-chrome { width: 30px; height: 30px; }
+.mnapps-icon-chrome img { padding: 3px; }
 .mnapps-icon-chrome.mnapps-icon-letter { font-size: 13px; }
 .mnapps-chrome-copy { min-width: 0; display: grid; gap: 2px; }
 .mnapps-chrome-copy strong {
@@ -335,6 +394,7 @@
 }
 .mnapps-hint p { grid-column: 2 / -1; margin: 0; font-size: 12px; line-height: 1.45; }
 .mnapps-hint-open {
+  position: relative;
   grid-column: 3;
   min-height: 32px;
   padding: 0 11px;
@@ -350,7 +410,14 @@
   color: var(--mn-text-primary);
   background: transparent;
 }
+/* Same 44px effective touch target as the dismiss beside it. */
+.mnapps-hint-open::after {
+  content: '';
+  position: absolute;
+  inset: -6px -4px;
+}
 .mnapps-hint-dismiss {
+  position: relative;
   grid-column: 4;
   width: 32px;
   height: 32px;
@@ -362,6 +429,13 @@
   background: transparent;
 }
 .mnapps-hint-dismiss:hover:not(:disabled) { color: var(--mn-text-inverted); background: var(--mn-surface-inverted); }
+/* Touch slop to a 44px effective target. Vertical is generous; horizontal is
+   half the hint grid's gap, so it never overlaps the Open button beside it. */
+.mnapps-hint-dismiss::after {
+  content: '';
+  position: absolute;
+  inset: -6px -4px;
+}
 
 /* ----------------------------------------------------------- consent sheet */
 
@@ -522,6 +596,16 @@
   border-color: var(--mn-border-strong);
   color: var(--mn-text-primary);
   background: transparent;
+}
+/* Deliberate opt-in: every box starts unticked, so this button mounts
+   disabled. Style that state explicitly — a hollow, muted control that
+   plainly reads "not yet available" — rather than letting the legacy
+   global `button:disabled { opacity: .42 }` dim the solid slab. */
+.mnapps-button-solid:disabled {
+  border-color: var(--mn-border-medium);
+  color: var(--mn-text-muted);
+  background: transparent;
+  opacity: 1;
 }
 
 .mnapps-sheet-outcome {

@@ -119,8 +119,17 @@ export function AppIcon({
   )
 }
 
+/** Registry names may carry a parenthetical qualifier — "Atlas (Passport demo
+    dApp)". The chrome and consent sheet sit directly above the app's own
+    header, so they show the bare name; the full registry name still goes to
+    the activity feed untouched. */
+function displayName(name: string): string {
+  return name.replace(/\s*\(.*\)$/, '').trim() || name
+}
+
 export default function AppBrowser(props: AppBrowserProps) {
   const { app, profile, onClose, onProfileShared } = props
+  const shownName = displayName(app.name)
 
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   const handshake = useRef<{ requestId: string; nonce: string } | null>(null)
@@ -325,7 +334,7 @@ export default function AppBrowser(props: AppBrowserProps) {
       className="mnapps-browser"
       role="dialog"
       aria-modal="true"
-      aria-label={`${app.name}, open inside Passport`}
+      aria-label={`${shownName}, open inside Passport`}
     >
       <header className="mnapps-chrome">
         <button
@@ -338,7 +347,7 @@ export default function AppBrowser(props: AppBrowserProps) {
         </button>
         <AppIcon app={app} className="mnapps-icon-chrome" />
         <span className="mnapps-chrome-copy">
-          <strong>{app.name}</strong>
+          <strong>{shownName}</strong>
           <code>{origin ?? app.url}</code>
         </span>
         <button
@@ -357,7 +366,7 @@ export default function AppBrowser(props: AppBrowserProps) {
           <iframe
             ref={frameRef}
             className="mnapps-frame"
-            title={app.name}
+            title={shownName}
             src={app.url}
             onLoad={handleLoad}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
@@ -380,7 +389,7 @@ export default function AppBrowser(props: AppBrowserProps) {
               strokeWidth={2}
               aria-hidden="true"
             />
-            <span>Loading {app.name}…</span>
+            <span>Loading {shownName}…</span>
           </div>
         ) : null}
 
@@ -434,7 +443,7 @@ export default function AppBrowser(props: AppBrowserProps) {
                       ? 'Request declined.'
                       : outcome === 'unavailable'
                         ? 'Nothing to share yet.'
-                        : `${app.name} is asking for your profile.`}
+                        : `${shownName} is asking for your profile.`}
                 </h2>
               </div>
             </header>

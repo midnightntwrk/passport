@@ -2437,7 +2437,9 @@ export default function PassportDemo() {
   };
 
   /** How this Passport is named on screen — hosted account, or this device. */
-  const sessionDisplayName = localSessionActive ? 'Passport on this device' : connectedUserName;
+  // null lets HomeScreen render its designed 'Your Passport' fallback — the
+  // literal sentence set as a display headline wrapped into three ragged lines.
+  const sessionDisplayName = localSessionActive ? null : connectedUserName;
 
   /**
    * The classic workspace is the Dynamic-hosted view and renders its sign-in

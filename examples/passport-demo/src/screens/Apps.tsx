@@ -7,6 +7,7 @@ import {
   type RegistryCategory,
 } from '../lib/registry.js'
 import AppBrowser, { AppIcon } from './AppBrowser.js'
+import ThemeToggle from './ThemeToggle.js'
 import './apps.css'
 
 /**
@@ -59,7 +60,13 @@ function matches(app: RegistryApp, query: string): boolean {
   )
 }
 
+/** Most networks a card will name outright; the rest collapse into "+N". */
+const MAX_NETWORK_PILLS = 2
+
 function AppCard({ app, onOpen }: { app: RegistryApp; onOpen: () => void }) {
+  const networks = app.networks ?? []
+  const shown = networks.slice(0, MAX_NETWORK_PILLS)
+  const overflow = networks.length - shown.length
   return (
     <button type="button" className="mnapps-card" onClick={onOpen}>
       <AppIcon app={app} />
@@ -68,11 +75,19 @@ function AppCard({ app, onOpen }: { app: RegistryApp; onOpen: () => void }) {
         {app.description ? <small>{app.description}</small> : null}
         <span className="mnapps-card-meta">
           {app.new ? <span className="mnapps-tag">New</span> : null}
-          {(app.networks ?? []).map((network) => (
+          {shown.map((network) => (
             <span className="mnapps-pill" key={network}>
               {network}
             </span>
           ))}
+          {overflow > 0 ? (
+            <span
+              className="mnapps-pill"
+              title={networks.slice(MAX_NETWORK_PILLS).join(', ')}
+            >
+              +{overflow}
+            </span>
+          ) : null}
         </span>
       </span>
       <ArrowUpRight
@@ -135,6 +150,17 @@ export default function AppsScreen(props: AppsScreenProps) {
   return (
     <>
       <section className="mnapps-screen">
+        <header className="mnapps-bar">
+          <img
+            className="mnapps-wordmark"
+            src="/midnight-wordmark.svg"
+            alt="Midnight"
+          />
+          <div className="mnapps-bar-actions">
+            <ThemeToggle size="sm" />
+          </div>
+        </header>
+
         <header className="mnapps-head">
           <p className="mnapps-kicker">Midnight apps</p>
           <h1 className="mnapps-title">Apps</h1>

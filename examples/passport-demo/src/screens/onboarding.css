@@ -337,8 +337,27 @@
   .mnob-choice { transition: none; }
 }
 
+/* Tablet and up. On a phone the stage rides the viewport floor
+   (margin-top: auto), which keeps the actions under the thumb. On a tall
+   viewport that same rule strands them: a 1133px-tall screen opens a void
+   of bare ink between the lede and the choices. So here the push is capped
+   to a measured interval, the actions stay within reach of the copy, and
+   the portal artwork — revealed higher, brighter, and with the fade eased
+   back — owns the depth that remains beneath them. */
 @media (min-width: 700px) {
   .mnob-bar, .mnob-body, .mnob-foot { width: min(100% - 64px, 560px); }
-  .mnob-art { clip-path: inset(30% 0 0 0); }
+  .mnob-stage { margin-top: clamp(48px, 12svh, 160px); }
+  .mnob-art {
+    clip-path: inset(24% 0 0 0);
+    opacity: .62;
+  }
+  .mnob-art::after {
+    background: linear-gradient(
+      180deg,
+      var(--mn-ink-page) 20%,
+      var(--mn-ink-fade-mid) 52%,
+      var(--mn-ink-fade-end) 100%
+    );
+  }
   .mnob-primary { width: auto; min-width: 280px; }
 }

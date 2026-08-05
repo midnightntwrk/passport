@@ -139,12 +139,49 @@ export default function HomeScreen(props: HomeScreenProps) {
 
   const balancesLoading = balanceStatus === 'loading'
   const fill = clampPercent(dustFillPercent)
-  /* Registration is a real on-chain action, so it is only offered once the DUST
-     state is genuinely known to be empty. While balances are loading or syncing,
-     or when the balance call failed, `fill === null` means "unknown" — not
-     "unregistered" — and nothing is offered. */
-  const dustStateKnown = balanceStatus === 'ready' && !dustSyncing
-  const needsDustRegistration = dustStateKnown && (fill === null || fill === 0)
+  /* Registration is a real on-chain action, so it is only offered once the
+     balance call has answered — 'ready', or 'syncing', where the figures are
+     real but DUST is still catching up. It is NOT additionally gated on the
+     syncing flag: a first sync can report "syncing" indefinitely, and hiding
+     the only actionable control behind that flag would strand the user. When
+     registration genuinely cannot run, the integrator disables the button
+     via `registerDustDisabledReason` instead. Note `dustBalance === '0'` is a
+     genuine zero, but does not by itself mean the wallet is registered — only
+     a reported cap or fill does. */
+  const dustAnswered = balanceStatus === 'ready' || balanceStatus === 'syncing'
+  const needsDustRegistration = dustAnswered && (fill === null || fill === 0)
+
+  /* One legible story for the battery when the fill is unknown: say whether
+     we are still waiting, whether the wallet is unreachable, or whether there
+     is simply no DUST yet. */
+  const ringLabel =
+    fill !== null
+      ? `${Math.round(fill)}%`
+      : balancesLoading || dustSyncing
+        ? 'Syncing'
+        : balanceStatus === 'unavailable'
+          ? 'Unknown'
+          : 'No charge'
+  const ringAriaLabel =
+    fill !== null
+      ? `DUST charge ${Math.round(fill)} per cent`
+      : balancesLoading || dustSyncing
+        ? 'DUST charge still syncing'
+        : balanceStatus === 'unavailable'
+          ? 'DUST charge unknown — wallet unavailable'
+          : 'DUST battery empty'
+
+  const dustDetail = dustCap
+    ? `Cap ${dustCap}${dustSyncing ? ' · charging' : ''}`
+    : balancesLoading
+      ? 'Checking DUST state with the wallet'
+      : balanceStatus === 'unavailable'
+        ? 'DUST state unavailable — refresh once the wallet reconnects'
+        : dustSyncing
+          ? 'No charge reported yet — the wallet is still syncing'
+          : fill === null
+            ? 'Not registered yet — DUST pays transaction fees'
+            : 'Empty — DUST accrues while NIGHT is held'
 
   const ringDash = useMemo(() => {
     const shown = fill ?? 0
@@ -163,7 +200,8 @@ export default function HomeScreen(props: HomeScreenProps) {
       <header className="mnhome-bar">
         <img className="mnhome-wordmark" src="/midnight-wordmark.svg" alt="Midnight" />
         <div className="mnhome-bar-actions">
-          <ThemeToggle size="sm" />
+          {/* Standard 34px size, matching the icon buttons beside it. */}
+          <ThemeToggle />
           <button
             type="button"
             className="mnhome-icon-button"
@@ -230,7 +268,7 @@ export default function HomeScreen(props: HomeScreenProps) {
 
           <article className="mnhome-dust">
             <div className={`mnhome-battery${dustSyncing ? ' mnhome-battery-charging' : ''}`}>
-              <svg viewBox="0 0 80 80" role="img" aria-label={fill === null ? 'DUST charge unknown' : `DUST charge ${Math.round(fill)} per cent`}>
+              <svg viewBox="0 0 80 80" role="img" aria-label={ringAriaLabel}>
                 <circle className="mnhome-battery-track" cx="40" cy="40" r={RING_RADIUS} />
                 <circle
                   className="mnhome-battery-fill"
@@ -241,8 +279,10 @@ export default function HomeScreen(props: HomeScreenProps) {
                   strokeDashoffset="0"
                 />
               </svg>
-              <span className="mnhome-battery-value">
-                {fill === null ? '—' : `${Math.round(fill)}%`}
+              <span
+                className={`mnhome-battery-value${fill === null ? ' mnhome-battery-value-label' : ''}`}
+              >
+                {ringLabel}
               </span>
             </div>
 
@@ -250,7 +290,7 @@ export default function HomeScreen(props: HomeScreenProps) {
               <p className="mnhome-micro">DUST battery</p>
               <p className={`mnhome-dust-balance${dustBalance === null ? ' mnhome-dust-balance-muted' : ''}`}>
                 {dustBalance === null ? (
-                  balancesLoading ? 'Syncing' : 'Unavailable'
+                  balancesLoading || dustSyncing ? 'Syncing' : 'Unavailable'
                 ) : (
                   <>
                     {dustBalance}
@@ -258,10 +298,7 @@ export default function HomeScreen(props: HomeScreenProps) {
                   </>
                 )}
               </p>
-              <p className="mnhome-dust-cap">
-                {dustCap ? `Cap ${dustCap}` : 'Cap not reported'}
-                {dustSyncing ? ' · charging' : ''}
-              </p>
+              <p className="mnhome-dust-cap">{dustDetail}</p>
               {needsDustRegistration ? (
                 <>
                   <button

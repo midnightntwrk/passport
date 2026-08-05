@@ -17,6 +17,7 @@
 }
 
 .mnthemetoggle-option {
+  position: relative;
   width: 32px;
   display: inline-grid;
   place-items: center;
@@ -38,10 +39,18 @@
   color: var(--mn-text-inverted);
   background: var(--mn-surface-inverted);
 }
+/* Vertical touch slop to a 44px effective target. Horizontal is left alone:
+   the segments abut, so sideways misses land on the neighbouring segment. */
+.mnthemetoggle-option::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
 
-/* Compact variant for tight bars. */
-.mnthemetoggle-sm { height: 28px; }
-.mnthemetoggle-sm .mnthemetoggle-option { width: 26px; }
+/* Compact variant. Kept at the 34px control height so a bar mixing this with
+   the standard icon buttons still reads as one row; only the segments narrow. */
+.mnthemetoggle-sm { height: 34px; }
+.mnthemetoggle-sm .mnthemetoggle-option { width: 30px; }
 
 @media (prefers-reduced-motion: reduce) {
   .mnthemetoggle-option { transition: none; }

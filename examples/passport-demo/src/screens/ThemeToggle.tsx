@@ -17,7 +17,7 @@ import './theme-toggle.css'
  *
  * ```tsx
  * <div className="mnhome-bar-actions">
- *   <ThemeToggle size="sm" />
+ *   <ThemeToggle />
  *   …
  * </div>
  * ```
@@ -28,7 +28,7 @@ import './theme-toggle.css'
  */
 
 export interface ThemeToggleProps {
-  /** `sm` matches the 28px controls; the default matches the 34px ones. */
+  /** Both sizes share the 34px control height; `sm` narrows the segments. */
   size?: 'sm' | 'md'
   /** Extra class names, appended to the control's own. */
   className?: string
