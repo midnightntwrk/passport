@@ -81,6 +81,11 @@ import { deleteDemoProfile, loadDemoProfile, saveDemoProfile, type DemoPassportP
 import { PassportProfileConsent } from './profileConsent.js';
 import OnboardingScreen from './screens/Onboarding.js';
 import HomeScreen from './screens/Home.js';
+import {
+  loadStoredNetwork,
+  storeNetwork,
+  type PassportNetwork,
+} from './screens/NetworkSwitcher.js';
 import AppsScreen from './screens/Apps.js';
 import PassportNav, { type MobileTab } from './screens/Nav.js';
 import PassportToasts, { pushToast } from './screens/ToastStack.js';
@@ -651,6 +656,12 @@ export default function PassportDemo() {
     return url.toString();
   }, []);
   const [walletMode, setWalletMode] = useState<WalletMode | null>(storedWalletMode);
+  // Selected network context: filters the app registry. The demo wallet
+  // genuinely runs on preview only, and the UI says so rather than pretending.
+  const [selectedNetwork, setSelectedNetwork] = useState<PassportNetwork>(loadStoredNetwork);
+  useEffect(() => {
+    storeNetwork(selectedNetwork);
+  }, [selectedNetwork]);
   // The passkey route owns its own subject, so the encrypted state it writes is
   // never confused with a Dynamic account's.
   const subjectId = walletMode === 'local' ? LOCAL_ACCOUNT_ID : subjectFor(midnightWallet, user);
@@ -2793,6 +2804,8 @@ export default function PassportDemo() {
             {mobileTab === 'home' ? (
               <HomeScreen
                 displayName={sessionDisplayName}
+                network={selectedNetwork}
+                onSelectNetwork={setSelectedNetwork}
                 syncPercent={walletMode === 'local' ? localSyncPercent : null}
                 unshieldedBalance={activeSurfaces?.unshieldedBalance ?? null}
                 shieldedTokenCount={activeSurfaces?.shieldedTokenCount ?? null}
@@ -2825,7 +2838,12 @@ export default function PassportDemo() {
                 onSignOut={() => void signOutPassport()}
               />
             ) : (
-              <AppsScreen profile={appsProfile} onProfileShared={handleProfileShared} />
+              <AppsScreen
+                profile={appsProfile}
+                onProfileShared={handleProfileShared}
+                network={selectedNetwork}
+                onSelectNetwork={setSelectedNetwork}
+              />
             )}
             <PassportNav active={mobileTab} onSelect={setMobileTab} />
           </>

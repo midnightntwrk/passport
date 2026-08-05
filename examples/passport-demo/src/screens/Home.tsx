@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { createPortal } from 'react-dom'
 
 import { FeaturedApps, type AppsScreenProps } from './Apps.js'
+import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
 import SyncRing from './SyncRing.js'
 import ThemeToggle from './ThemeToggle.js'
 import './home.css'
@@ -37,6 +38,9 @@ export interface HomeScreenProps {
    * (the on-device wallet does; Dynamic does not). null = no figure known.
    */
   syncPercent?: number | null
+  /** Selected network context; filters the app grid, does not move the wallet. */
+  network: PassportNetwork
+  onSelectNetwork: (network: PassportNetwork) => void
   balanceStatus: string
   unshieldedAddress: string | null
   shieldedAddress: string | null
@@ -101,6 +105,8 @@ export default function HomeScreen(props: HomeScreenProps) {
     dustFillPercent,
     dustSyncing,
     syncPercent,
+    network,
+    onSelectNetwork,
     balanceStatus,
     unshieldedAddress,
     shieldedAddress,
@@ -219,6 +225,7 @@ export default function HomeScreen(props: HomeScreenProps) {
       <header className="mnhome-bar">
         <img className="mnhome-wordmark" src="/midnight-wordmark.svg" alt="Midnight" />
         <div className="mnhome-bar-actions">
+          <NetworkSwitcher network={network} onSelect={onSelectNetwork} />
           <button
             type="button"
             className="mnhome-address-pill"
@@ -371,7 +378,7 @@ export default function HomeScreen(props: HomeScreenProps) {
 
         {/* The applications, directly below the wallet summary — the same
             registry, cards, and in-Passport browser as the Apps tab. */}
-        <FeaturedApps profile={appsProfile} onProfileShared={onProfileShared} />
+        <FeaturedApps profile={appsProfile} onProfileShared={onProfileShared} network={network} />
 
         {addressesOpen
           ? createPortal(
