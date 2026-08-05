@@ -56,6 +56,12 @@ export default defineConfig({
     alias: [
       { find: /^node:buffer$/, replacement: workspaceBuffer },
       { find: /^buffer$/, replacement: workspaceBuffer },
+      // @subsquid/scale-codec (wallet SDK chain client) calls assert() at
+      // runtime; Vite's builtin-externalisation stub is not callable.
+      {
+        find: /^(node:)?assert$/,
+        replacement: path.resolve(__dirname, 'src', 'lib', 'assert-shim.ts'),
+      },
       {
         find: 'isomorphic-ws',
         replacement: path.resolve(custodyRoot, 'app', 'src', 'lib', 'ws-shim.ts'),
