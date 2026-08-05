@@ -573,3 +573,20 @@
     box-shadow: var(--mn-shadow-ink);
   }
 }
+
+/* Centred content column: the screen previously let every section stretch the
+   full viewport width, which read as unfinished on anything wider than a
+   phone. Each direct child is constrained and centred; at tablet widths the
+   app lists become two columns. */
+.mnapps-screen > * {
+  width: 100%;
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 700px) {
+  .mnapps-screen > * { max-width: 720px; }
+  .mnapps-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .mnapps-head { text-align: left; }
+}

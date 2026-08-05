@@ -55,7 +55,7 @@ export const ATLAS_DEMO_APP: RegistryApp = {
   name: 'Atlas (Passport demo dApp)',
   description:
     'Separate-origin dApp that requests your Passport profile via consented postMessage',
-  url: webUrl(import.meta.env.VITE_ATLAS_URL, true) ?? 'http://localhost:5174',
+  url: webUrl(import.meta.env.VITE_ATLAS_URL, true) ?? 'http://localhost:5176',
   category: 'tools',
   networks: ['preview'],
   featured: true,

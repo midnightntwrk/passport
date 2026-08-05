@@ -24,6 +24,12 @@ type ConnectionState = 'idle' | 'opening' | 'waiting' | 'approved' | 'denied' | 
 const PASSPORT_ORIGIN =
   import.meta.env.VITE_PASSPORT_ORIGIN?.replace(/\/+$/, '') ?? 'http://localhost:5175';
 
+// Atlas can run two ways: standalone (it opens Passport as a popup and mints
+// the request id and nonce itself), or embedded inside Passport's in-app
+// browser (Passport is the parent frame, mints the id and nonce, and posts a
+// ready message down; Atlas must echo those exact values in its request).
+const EMBEDDED = window.parent !== window;
+
 const FIELD_OPTIONS: Array<{
   field: PassportProfileField;
   label: string;
@@ -66,10 +72,49 @@ function App() {
   const [response, setResponse] = useState<PassportProfileResponse | null>(null);
   const popup = useRef<Window | null>(null);
   const request = useRef<{ requestId: string; nonce: string } | null>(null);
+  // Embedded mode: the handshake Passport issued from the parent frame.
+  const parentHandshake = useRef<{ requestId: string; nonce: string } | null>(null);
 
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   useEffect(() => {
+    if (!EMBEDDED) return;
+    const onParentMessage = (event: MessageEvent) => {
+      if (event.origin !== PASSPORT_ORIGIN || event.source !== window.parent) return;
+
+      const ready = parsePassportProfileReady(event.data);
+      if (ready) {
+        parentHandshake.current = { requestId: ready.requestId, nonce: ready.nonce };
+        setState('idle');
+        setDetail('Passport is present. Choose fields and connect.');
+        return;
+      }
+
+      const active = parentHandshake.current;
+      const profileResponse = parsePassportProfileResponse(event.data);
+      if (
+        !active ||
+        !profileResponse ||
+        profileResponse.requestId !== active.requestId ||
+        profileResponse.nonce !== active.nonce
+      ) {
+        return;
+      }
+      setResponse(profileResponse);
+      if (profileResponse.approved) {
+        setState('approved');
+        setDetail('Passport returned the fields you approved.');
+      } else {
+        setState('denied');
+        setDetail('The Passport request was declined. No data was returned.');
+      }
+    };
+    window.addEventListener('message', onParentMessage);
+    return () => window.removeEventListener('message', onParentMessage);
+  }, []);
+
+  useEffect(() => {
+    if (EMBEDDED) return;
     const onMessage = (event: MessageEvent) => {
       const active = request.current;
       if (!active || event.origin !== PASSPORT_ORIGIN || event.source !== popup.current) return;
@@ -127,6 +172,30 @@ function App() {
 
   const connect = () => {
     if (selected.length === 0) return;
+
+    if (EMBEDDED) {
+      const issued = parentHandshake.current;
+      if (!issued) {
+        setState('error');
+        setDetail('Passport has not completed the handshake yet. Try again in a moment.');
+        return;
+      }
+      setResponse(null);
+      setState('waiting');
+      setDetail('Passport is waiting for your approval.');
+      window.parent.postMessage(
+        {
+          protocol: PASSPORT_PROFILE_PROTOCOL,
+          type: 'passport.profile.request',
+          requestId: issued.requestId,
+          nonce: issued.nonce,
+          fields: selected,
+        },
+        PASSPORT_ORIGIN,
+      );
+      return;
+    }
+
     const requestId = crypto.randomUUID();
     const nonce = randomHex();
     request.current = { requestId, nonce };
@@ -164,7 +233,7 @@ function App() {
         </div>
         <span className={`connection-indicator ${state}`}>
           <i />
-          {state === 'approved' ? 'Passport connected' : 'External dApp'}
+          {state === 'approved' ? 'Passport connected' : EMBEDDED ? 'Inside Passport' : 'External dApp'}
         </span>
       </header>
 
