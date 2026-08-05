@@ -15,7 +15,10 @@ import {
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-import { FeaturedApps, type AppsScreenProps } from './Apps.js'
+import type { AliasRecord } from '../identity/aliasStore.js'
+import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
+import { FeaturedApps, type AppsScreenProps, type FeaturedAppsProps } from './Apps.js'
+import { EcosystemIdentity } from './Ecosystem.js'
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
 import SyncRing from './SyncRing.js'
 import ThemeToggle from './ThemeToggle.js'
@@ -23,6 +26,21 @@ import './home.css'
 
 export interface HomeScreenProps {
   displayName: string | null
+  /**
+   * The `.night` name held on the active network, without its suffix. When set
+   * the greeting reads "Good morning, alice"; when null it falls back to the
+   * previous greeting-plus-displayName behaviour.
+   */
+  aliasLabel?: string | null
+  /**
+   * The ecosystem identity card: the name held on this network with its status,
+   * its real transaction ids, and everything redeemed. Omit to hide the card.
+   */
+  identity?: {
+    record: AliasRecord | null
+    incentives: PassportIncentiveRecord[]
+    onClaimName?: () => void
+  } | null
   /** Formatted NIGHT. `null` means unknown, `'0'` means a real zero. */
   unshieldedBalance: string | null
   shieldedTokenCount: number | null
@@ -63,6 +81,10 @@ export interface HomeScreenProps {
   appsProfile: AppsScreenProps['profile']
   /** Notified after the user approves a profile request, for the activity feed. */
   onProfileShared?: (appName: string, fields: string[]) => void
+  /** The wallet seam the embedded apps grid hands to its in-Passport browser. */
+  executeTransfer?: FeaturedAppsProps['executeTransfer']
+  transferContext?: FeaturedAppsProps['transferContext']
+  onIncentiveRedeemed?: FeaturedAppsProps['onIncentiveRedeemed']
   /**
    * Telegram support channel. When set, an outlined "Support on Telegram"
    * pill renders in the footer area; when null, no support link is shown.
@@ -98,6 +120,8 @@ function clampPercent(value: number | null): number | null {
 export default function HomeScreen(props: HomeScreenProps) {
   const {
     displayName,
+    aliasLabel,
+    identity,
     unshieldedBalance,
     shieldedTokenCount,
     dustBalance,
@@ -120,6 +144,9 @@ export default function HomeScreen(props: HomeScreenProps) {
     walletSourceNote,
     appsProfile,
     onProfileShared,
+    executeTransfer,
+    transferContext,
+    onIncentiveRedeemed,
     supportUrl,
     onOpenClassic,
     onSignOut,
@@ -265,8 +292,13 @@ export default function HomeScreen(props: HomeScreenProps) {
       <div className="mnhome-body">
         <div className="mnhome-identity">
           <p className="mnhome-kicker">Passport</p>
-          <h1 className="mnhome-name">{timeOfDayGreeting()}</h1>
-          {displayName ? <p className="mnhome-person">{displayName}</p> : null}
+          {/* The greeting carries the user's own name once they hold one: the
+              alias IS their identity here, so it leads. Without an alias the
+              screen keeps its previous greeting-plus-displayName shape. */}
+          <h1 className="mnhome-name">
+            {aliasLabel ? `${timeOfDayGreeting()}, ${aliasLabel}` : timeOfDayGreeting()}
+          </h1>
+          {!aliasLabel && displayName ? <p className="mnhome-person">{displayName}</p> : null}
         </div>
 
         {error ? (
@@ -376,9 +408,29 @@ export default function HomeScreen(props: HomeScreenProps) {
           </p>
         ) : null}
 
+        {/* Identity: the name held on this network, its real registration
+            transactions or the reason it is only queued, and what has been
+            redeemed across the ecosystem. */}
+        {identity ? (
+          <EcosystemIdentity
+            network={network}
+            record={identity.record}
+            incentives={identity.incentives}
+            variant="card"
+            onClaimName={identity.onClaimName}
+          />
+        ) : null}
+
         {/* The applications, directly below the wallet summary — the same
             registry, cards, and in-Passport browser as the Apps tab. */}
-        <FeaturedApps profile={appsProfile} onProfileShared={onProfileShared} network={network} />
+        <FeaturedApps
+          profile={appsProfile}
+          onProfileShared={onProfileShared}
+          network={network}
+          executeTransfer={executeTransfer}
+          transferContext={transferContext}
+          onIncentiveRedeemed={onIncentiveRedeemed}
+        />
 
         {addressesOpen
           ? createPortal(

@@ -669,6 +669,89 @@
   opacity: 1;
 }
 
+/* ------------------------------------------------- transaction approval rows */
+
+/* One row per fact the user is agreeing to. Deliberately a definition list:
+   the amount, the purpose, the recipient, and the balance are data about the
+   transaction, not a form. */
+.mnapps-tx-rows {
+  display: grid;
+  margin: 16px 0 0;
+  padding: 0;
+  border-top: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnapps-tx-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  padding: 13px 2px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnapps-tx-row dt {
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mnapps-tx-row dd {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.mnapps-tx-row dd small { color: var(--mn-text-secondary); font-size: 11px; }
+/* The amount is the one number that decides the answer, so it is the only
+   display-type on the sheet. */
+.mnapps-tx-row-amount dd strong {
+  font-family: var(--mn-font-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.05;
+}
+.mnapps-tx-row-amount dd small { font-family: var(--mn-font-mono); }
+
+.mnapps-tx-recipient {
+  display: grid;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+.mnapps-tx-recipient code {
+  font-family: var(--mn-font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.mnapps-tx-recipient small { color: var(--mn-accent); font-size: 11px; font-weight: 600; }
+
+.mnapps-tx-hash {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--mn-font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.mnapps-tx-explorer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--mn-accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.mnapps-tx-explorer:hover { text-decoration: underline; }
+
 .mnapps-sheet-outcome {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr);

@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "prepare:c1": "node scripts/prepare-c1.mjs",
+    "prepare:midnames": "node scripts/prepare-midnames-assets.mjs",
     "test:c1": "npm run prepare:c1 && node scripts/check-c1-draft.mjs",
     "check:pwa": "node scripts/check-pwa.mjs",
     "test:pwa": "npm run build && npm run check:pwa",
-    "dev": "npm run prepare:c1 && vite",
+    "dev": "npm run prepare:c1 && npm run prepare:midnames && vite",
     "preview": "vite preview --host localhost",
-    "build": "npm run prepare:c1 && tsc --noEmit && vite build"
+    "build": "npm run prepare:c1 && npm run prepare:midnames && tsc --noEmit && vite build"
   },
   "dependencies": {
     "@dynamic-labs/midnight": "4.96.0",

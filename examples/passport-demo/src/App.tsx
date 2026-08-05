@@ -81,7 +81,25 @@ import { deleteDemoProfile, loadDemoProfile, saveDemoProfile, type DemoPassportP
 import { PassportProfileConsent } from './profileConsent.js';
 import OnboardingScreen from './screens/Onboarding.js';
 import HomeScreen from './screens/Home.js';
+import AliasClaimScreen from './screens/AliasClaim.js';
+import BackupScreen from './screens/Backup.js';
+import EcosystemScreen from './screens/Ecosystem.js';
+import AliasReclaimModal from './screens/AliasReclaimModal.js';
 import {
+  loadAliasRecords,
+  saveAliasRecord,
+  subscribeAliasRecords,
+  type AliasRecord,
+} from './identity/aliasStore.js';
+import {
+  loadIncentives,
+  saveIncentive,
+  subscribeIncentives,
+  type PassportIncentiveRecord,
+} from './identity/incentiveStore.js';
+import type { AliasAvailability, AliasClaimProgress } from './identity/midnames.js';
+import {
+  NETWORK_LABELS,
   loadStoredNetwork,
   storeNetwork,
   type PassportNetwork,
@@ -196,6 +214,27 @@ const WALLET_MODE_STORAGE_KEY = 'passport-wallet-mode';
  */
 const LOCAL_ACCOUNT_ID = 'passport-local-device';
 const LOCAL_SCOPE = { appId: APP_ID, accountId: LOCAL_ACCOUNT_ID };
+
+/**
+ * The Midnames owner secret's derivation scope.
+ *
+ * Deliberately a DIFFERENT `accountId` from the wallet's, so the 32 bytes that
+ * become the Midnames domain-owner key are cryptographically separated from the
+ * wallet seed even though both come from the same passkey. The passkey itself is
+ * never re-enrolled: one credential, every network, and a distinct derivation
+ * scope per purpose.
+ */
+const MIDNAMES_OWNER_SCOPE = { appId: APP_ID, accountId: 'midnames-owner-v1' };
+
+/** The onboarding steps that follow a successful passkey + wallet open. */
+type IdentityStep = 'alias' | 'backup' | 'ecosystem' | null;
+
+/**
+ * `alice` → `alice.night`. Duplicated from `identity/midnames.ts` on purpose:
+ * that module statically imports the Midnight ledger, and App must not drag the
+ * whole wallet SDK into its own chunk for one string join.
+ */
+const aliasDomainOf = (alias: string) => `${alias}.night`;
 
 /* -------------------------------------------------------------------------- */
 /* Demo-grade session persistence — a §2.2 stopgap, NOT a security boundary   */
@@ -713,6 +752,20 @@ export default function PassportDemo() {
    * Sign in option stays live until we actually know.
    */
   const [localPassportKnown, setLocalPassportKnown] = useState<boolean | null>(null);
+  /* ---------------------------------------------------------------------- */
+  /* Identity — the .night name, per network                                */
+  /* ---------------------------------------------------------------------- */
+  const [aliasRecords, setAliasRecords] = useState<Record<string, AliasRecord>>(loadAliasRecords);
+  const [incentives, setIncentives] = useState<PassportIncentiveRecord[]>(loadIncentives);
+  const [identityStep, setIdentityStep] = useState<IdentityStep>(null);
+  const [claimPhase, setClaimPhase] = useState<AliasClaimProgress['phase'] | null>(null);
+  const [aliasError, setAliasError] = useState<string | null>(null);
+  /** The pending per-network reclaim conflict, when the target says "taken". */
+  const [reclaim, setReclaim] = useState<{ target: PassportNetwork; alias: string } | null>(null);
+  const [reclaimBusy, setReclaimBusy] = useState(false);
+  const [reclaimError, setReclaimError] = useState<string | null>(null);
+  /** Guards the one-shot decision to enter the identity steps for a session. */
+  const identityStepResolved = useRef(false);
   const passportKeyProviders = useRef(new Map<string, WebAuthnPrfKeyProvider>());
   // Submission identifier whose inclusion poll is currently running, shared
   // between the inline deploy flow and the resume effect below so a reload
@@ -1324,6 +1377,225 @@ export default function PassportDemo() {
     return () => window.clearTimeout(timer);
   }, [localDustRetryCount, localSurfaces?.dustSyncing, refreshLocalBalances, walletMode]);
 
+  /* ---------------------------------------------------------------------- */
+  /* Identity — claiming, queueing, and reclaiming a .night name             */
+  /*                                                                         */
+  /* A Passport alias IS a Midnames name. Everything below either reads the   */
+  /* deployed registry or submits a real transaction to it; the only other    */
+  /* state is 'queued', which always carries the reason it is not on chain.   */
+  /* The passkey is NEVER re-enrolled here — it is the login credential for   */
+  /* every network, and only the name is per network.                        */
+  /* ---------------------------------------------------------------------- */
+
+  // The stores are the seam every writer shares: Contract R's connector calls
+  // `saveIncentive` directly, and this subscription is what re-renders Home.
+  useEffect(() => subscribeAliasRecords(setAliasRecords), []);
+  useEffect(() => subscribeIncentives(setIncentives), []);
+
+  /** A live availability probe against one network's own registry. */
+  const probeAlias = useCallback(
+    async (network: PassportNetwork, alias: string): Promise<AliasAvailability> => {
+      const { checkAliasAvailability } = await import('./identity/midnames.js');
+      return checkAliasAvailability(network, alias);
+    },
+    [],
+  );
+
+  const checkAliasOnActiveNetwork = useCallback(
+    (alias: string) => probeAlias(selectedNetwork, alias),
+    [probeAlias, selectedNetwork],
+  );
+
+  const checkAliasOnReclaimTarget = useCallback(
+    (alias: string) => probeAlias(reclaim?.target ?? selectedNetwork, alias),
+    [probeAlias, reclaim?.target, selectedNetwork],
+  );
+
+  /** Records a name as queued — never as registered — with its reason. */
+  const queueAlias = useCallback(
+    (alias: string, network: PassportNetwork, reason: string) => {
+      saveAliasRecord({
+        alias,
+        domain: aliasDomainOf(alias),
+        network,
+        status: 'queued',
+        queuedReason: reason,
+        updatedAt: new Date().toISOString(),
+      });
+      pushToast({
+        tone: 'info',
+        title: `${aliasDomainOf(alias)} queued`,
+        body: 'Not on chain yet — Passport says so plainly until it is.',
+      });
+    },
+    [],
+  );
+
+  /**
+   * The real claim: derives the Midnames owner secret from the passkey (a
+   * distinct scope from the wallet seed), deploys the resolver, and pays
+   * `register_domain_for` on the shared `.night` TLD. Both transaction ids are
+   * real or nothing is recorded as registered.
+   */
+  const claimAliasOnPreview = useCallback(
+    async (alias: string): Promise<void> => {
+      const handle = localWalletRef.current;
+      const activeProfile = profile;
+      if (!handle || !activeProfile) {
+        setAliasError('Your wallet is not open yet. Wait for it to finish opening and try again.');
+        return;
+      }
+      setAliasError(null);
+      setClaimPhase('deploying-resolver');
+      try {
+        const [{ claimAlias }, { deriveWalletSeed }] = await Promise.all([
+          import('./identity/midnames.js'),
+          import('./lib/localWallet.js'),
+        ]);
+        const ownerSecret = await deriveWalletSeed(
+          keyProviderFor(activeProfile.passkey),
+          MIDNAMES_OWNER_SCOPE,
+        );
+        let result;
+        try {
+          result = await claimAlias(handle, ownerSecret, alias, (progress) =>
+            setClaimPhase(progress.phase),
+          );
+        } finally {
+          // The owner secret's only job is done; nothing retains it.
+          ownerSecret.fill(0);
+          passportKeyProviders.current
+            .get(activeProfile.passkey.credentialId)
+            ?.lock(MIDNAMES_OWNER_SCOPE);
+        }
+        saveAliasRecord({
+          alias: result.alias,
+          domain: result.domain,
+          network: result.network,
+          status: 'registered',
+          resolverAddress: result.resolverAddress,
+          resolverDeployTxId: result.resolverDeployTxId,
+          registerTxId: result.registerTxId,
+          registryConfirmed: result.registryConfirmed,
+          updatedAt: result.claimedAt,
+        });
+        addActivity({
+          label: 'Midnight name registered',
+          detail: `${result.domain} now resolves to this Passport on preview.`,
+          status: 'complete',
+          source: 'chain',
+          txHash: result.registerTxId,
+        });
+        pushToast({
+          tone: 'success',
+          title: `${result.domain} is yours`,
+          body: result.registryConfirmed
+            ? 'The registry confirmed the registration.'
+            : 'Submitted — the registry has not reported it yet.',
+        });
+        void refreshLocalBalances();
+        // Only advance when the claim genuinely landed.
+        setIdentityStep((current) => (current === 'alias' ? 'backup' : current));
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        const detail = (cause as { detail?: string })?.detail;
+        setAliasError(detail ? `${message} (${detail})` : message);
+        addActivity({
+          label: 'Midnight name',
+          detail: detail ? `${message} — ${detail}` : message,
+          status: 'error',
+          source: 'chain',
+        });
+      } finally {
+        setClaimPhase(null);
+      }
+    },
+    [addActivity, keyProviderFor, profile, refreshLocalBalances],
+  );
+
+  /** Claim for real on preview; queue honestly anywhere else. */
+  const claimOrQueueAlias = useCallback(
+    async (alias: string, network: PassportNetwork): Promise<void> => {
+      if (network === 'preview' && localWalletNetworkId === 'preview') {
+        await claimAliasOnPreview(alias);
+        return;
+      }
+      queueAlias(
+        alias,
+        network,
+        `Passport's wallet signs and submits on preview only today, so ${alias}.night is reserved for you locally but is NOT registered on ${NETWORK_LABELS[network]}.`,
+      );
+    },
+    [claimAliasOnPreview, localWalletNetworkId, queueAlias],
+  );
+
+  /**
+   * Network switch. The passkey and the wallet session are untouched — no
+   * re-enrolment, no new seed, no new addresses. Only the name is per network,
+   * so Passport tries to reclaim it on the target and asks when it cannot.
+   */
+  const handleSelectNetwork = useCallback(
+    (next: PassportNetwork) => {
+      const previous = selectedNetwork;
+      setSelectedNetwork(next);
+      if (next === previous) return;
+      const held =
+        aliasRecords[previous] ??
+        Object.values(aliasRecords).find((record) => record.status === 'registered') ??
+        Object.values(aliasRecords)[0];
+      if (!held) return;
+      if (aliasRecords[next]) return;
+      void (async () => {
+        const availability = await probeAlias(next, held.alias);
+        if (availability.status === 'taken') {
+          setReclaimError(null);
+          setReclaim({ target: next, alias: held.alias });
+          return;
+        }
+        if (availability.status === 'unreachable') {
+          queueAlias(
+            held.alias,
+            next,
+            `The ${NETWORK_LABELS[next]} .night registry could not be reached during the switch, so ${held.alias}.night is not registered there: ${availability.detail}`,
+          );
+          return;
+        }
+        await claimOrQueueAlias(held.alias, next);
+      })();
+    },
+    [aliasRecords, claimOrQueueAlias, probeAlias, queueAlias, selectedNetwork],
+  );
+
+  const handleReclaimPick = useCallback(
+    async (alias: string): Promise<void> => {
+      const target = reclaim?.target;
+      if (!target) return;
+      setReclaimBusy(true);
+      setReclaimError(null);
+      try {
+        await claimOrQueueAlias(alias, target);
+        setReclaim(null);
+      } catch (cause) {
+        setReclaimError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        setReclaimBusy(false);
+      }
+    },
+    [claimOrQueueAlias, reclaim?.target],
+  );
+
+  /**
+   * Decides once per session whether the identity steps run. A restored
+   * session that already holds a name lands straight on Home; one that never
+   * chose a name is offered the step it skipped.
+   */
+  useEffect(() => {
+    if (localWalletStatus !== 'ready' || !localSurfaces) return;
+    if (identityStepResolved.current) return;
+    identityStepResolved.current = true;
+    if (!loadAliasRecords()[selectedNetwork]) setIdentityStep('alias');
+  }, [localSurfaces, localWalletStatus, selectedNetwork]);
+
   // A dismissed Dynamic sign-in window must not strand the onboarding screen in
   // its working stage. The short grace period lets a successful sign-in settle
   // before the intent is abandoned.
@@ -1500,9 +1772,11 @@ export default function PassportDemo() {
   const registerDust = async () => {
     if (walletMode === 'local') {
       // The Home control is already disabled for this; belt and braces, so no
-      // future caller can quietly reach a wallet that cannot sign.
+      // future caller quietly reaches a path this demo has not built. The
+      // on-device wallet CAN sign and submit NIGHT transfers — DUST
+      // registration is simply a different transaction, and not wired here.
       setError(
-        'DUST registration submits a NIGHT transaction. The on-device wallet cannot sign or submit one in this demo yet.',
+        'DUST registration is a separate transaction that this demo has not wired up for the on-device wallet. Sending NIGHT does work.',
       );
       return;
     }
@@ -2517,6 +2791,15 @@ export default function PassportDemo() {
     setOnboardingIntent(null);
     setOnboardingBusyLabel(null);
     setOnboardingError(null);
+    // The identity steps re-decide on the next sign-in. The alias records
+    // themselves are NOT cleared: the same passkey re-derives the same wallet,
+    // so the name it registered is still that wallet's name.
+    setIdentityStep(null);
+    setClaimPhase(null);
+    setAliasError(null);
+    setReclaim(null);
+    setReclaimError(null);
+    identityStepResolved.current = false;
     transactionsRequest.current += 1;
     setTransactions([]);
     setTransactionsStatus('loading');
@@ -2712,10 +2995,141 @@ export default function PassportDemo() {
     });
   };
 
+  /* ---------------------------------------------------------------------- */
+  /* The app-to-wallet seam — a framed dApp asking Passport to pay          */
+  /*                                                                        */
+  /* An app never touches the wallet. It posts a transaction request, the    */
+  /* in-app browser shows the approval sheet, and only on approval does the  */
+  /* callback below run — the same `sendUnshieldedNight` the wallet uses for */
+  /* everything else, with the same pre-checks and the same real txid.       */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Signs and submits a real unshielded NIGHT transfer for a framed app.
+   *
+   * Handed to the in-app browser ONLY while a local wallet is genuinely open —
+   * an undefined callback is what makes the browser answer `wallet-unavailable`
+   * instead of showing a sheet it could not honour. Every refusal from the
+   * wallet is rethrown untouched so the browser can map it onto the bridge's
+   * vocabulary; nothing is swallowed and nothing is invented.
+   */
+  const executeAppTransfer = useCallback(
+    async (intent: {
+      recipientAddress: string;
+      amount: bigint;
+      purpose: string;
+      origin: string;
+    }): Promise<{ txId: string }> => {
+      const handle = localWalletRef.current;
+      if (!handle) {
+        throw Object.assign(
+          new Error('The Passport wallet session closed before this could be signed.'),
+          { code: 'wallet-closed' },
+        );
+      }
+      const entry = addActivity({
+        label: intent.purpose,
+        detail: `Requested by ${intent.origin}.`,
+        status: 'pending',
+        source: 'wallet',
+      });
+      try {
+        const result = await handle.sendUnshieldedNight({
+          recipientAddress: intent.recipientAddress,
+          amount: intent.amount,
+        });
+        updateActivity(entry.id, {
+          status: 'complete',
+          detail: `Submitted from this device for ${intent.origin}.`,
+          source: 'chain',
+          txHash: result.txId,
+        });
+        pushToast({
+          tone: 'success',
+          title: 'Payment submitted',
+          body: intent.purpose,
+        });
+        // The balance has moved and the indexer needs a moment to see the
+        // transaction; the session row already carries it in the meantime.
+        void refreshLocalBalances();
+        window.setTimeout(() => void refreshTransactions(), 5_000);
+        return { txId: result.txId };
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        updateActivity(entry.id, {
+          status: 'error',
+          detail: message,
+          source: 'local',
+        });
+        throw cause;
+      }
+    },
+    [addActivity, refreshLocalBalances, refreshTransactions, updateActivity],
+  );
+
+  /**
+   * What an app is told about the wallet it is asking to spend from: the
+   * network a recipient must belong to, and the balance the sheet quotes.
+   * `null` whenever no local wallet is open.
+   */
+  const appTransferContext =
+    localSessionActive && localWalletNetworkId
+      ? {
+          networkId: localWalletNetworkId,
+          formattedBalance: activeSurfaces?.unshieldedBalance ?? null,
+        }
+      : null;
+
+  /**
+   * Records something an app says it granted. Passport never invents these:
+   * the only writer is an app's own incentive report, and the store keys by id
+   * so a repeated report updates one row rather than adding another.
+   */
+  const handleIncentiveRedeemed = useCallback(
+    (incentive: { id: string; app: string; label: string; txId?: string }) => {
+      saveIncentive({
+        id: incentive.id,
+        app: incentive.app,
+        label: incentive.label,
+        ...(incentive.txId ? { txId: incentive.txId } : {}),
+        network: localWalletNetworkId ?? selectedNetwork,
+        redeemedAt: new Date().toISOString(),
+      });
+      pushToast({
+        tone: 'success',
+        title: 'Added to your Passport',
+        body: incentive.label,
+      });
+    },
+    [localWalletNetworkId, selectedNetwork],
+  );
+
   /** How this Passport is named on screen — hosted account, or this device. */
   // null lets HomeScreen render its designed 'Your Passport' fallback — the
   // literal sentence set as a display headline wrapped into three ragged lines.
   const sessionDisplayName = localSessionActive ? null : connectedUserName;
+
+  /**
+   * The name held on the ACTIVE network — the greeting's subject. Nothing is
+   * borrowed from another network here: if this network has no record, the
+   * greeting falls back to the display name, because claiming a name on
+   * preview says nothing about who holds it on pre-production.
+   */
+  const activeAliasRecord = aliasRecords[selectedNetwork] ?? null;
+  const aliasLabel = activeAliasRecord?.alias ?? null;
+  const homeIdentity = {
+    record: activeAliasRecord,
+    incentives,
+    onClaimName: () => {
+      setAliasError(null);
+      setIdentityStep('alias');
+    },
+  };
+  /** Queue from the claim screen, then carry on through the steps. */
+  const queueFromClaimScreen = async (alias: string, reason: string) => {
+    queueAlias(alias, selectedNetwork, reason);
+    setIdentityStep('backup');
+  };
 
   /**
    * The classic workspace is the Dynamic-hosted view and renders its sign-in
@@ -2733,12 +3147,18 @@ export default function PassportDemo() {
   };
 
   /**
-   * What the local wallet genuinely cannot do yet. `null` on the Dynamic route,
-   * where the embedded wallet does sign and submit.
+   * What the local wallet genuinely cannot do yet.
+   *
+   * It now signs and submits unshielded NIGHT transfers — that is the path a
+   * framed app uses, and the path that pays for a `.night` name. DUST
+   * registration is a different transaction, and this demo has not wired it for
+   * the on-device wallet, so the control says exactly that rather than failing
+   * at the tap. `null` on the Dynamic route, whose embedded wallet registers
+   * DUST itself.
    */
   const localWalletWriteLimitation =
     walletMode === 'local'
-      ? 'The on-device wallet reads balances and history only. Signing, sending, and contract calls are not wired up in this demo yet.'
+      ? 'DUST registration is not wired up for the on-device wallet in this demo. Sending NIGHT — including app payments and name registration — does work.'
       : null;
 
   const appsProfile = sessionActive
@@ -2799,13 +3219,56 @@ export default function PassportDemo() {
             onDismissError={() => setOnboardingError(null)}
             onOpenClassic={() => setExperience('classic')}
           />
+        ) : identityStep === 'alias' ? (
+          /* Onboarding step 2 — the .night name. The default path, not a
+             detour: everything on the screen is real registry state. */
+          <AliasClaimScreen
+            networkId={selectedNetwork}
+            walletReady={localSessionActive}
+            registrationSupported={
+              selectedNetwork === 'preview' && localWalletNetworkId === 'preview'
+            }
+            nightBalance={activeSurfaces?.unshieldedBalance ?? null}
+            checkAvailability={checkAliasOnActiveNetwork}
+            onClaim={(alias) => claimOrQueueAlias(alias, selectedNetwork)}
+            onQueue={queueFromClaimScreen}
+            onSkip={() => {
+              setAliasError(null);
+              setIdentityStep('backup');
+            }}
+            claimPhase={claimPhase}
+            error={aliasError}
+          />
+        ) : identityStep === 'backup' ? (
+          /* Onboarding step 3 — optional, and honest about what backup is. */
+          <BackupScreen
+            hasEncryptedRecord={Boolean(profile)}
+            onUnderstood={() => setIdentityStep('ecosystem')}
+            onLater={() => setIdentityStep('ecosystem')}
+          />
+        ) : identityStep === 'ecosystem' ? (
+          /* Entry to the ecosystem: the name, its real transactions, and
+             everything redeemed so far. */
+          <EcosystemScreen
+            network={selectedNetwork}
+            record={activeAliasRecord}
+            incentives={incentives}
+            variant="screen"
+            onContinue={() => setIdentityStep(null)}
+            onClaimName={() => {
+              setAliasError(null);
+              setIdentityStep('alias');
+            }}
+          />
         ) : (
           <>
             {mobileTab === 'home' ? (
               <HomeScreen
                 displayName={sessionDisplayName}
+                aliasLabel={aliasLabel}
+                identity={homeIdentity}
                 network={selectedNetwork}
-                onSelectNetwork={setSelectedNetwork}
+                onSelectNetwork={handleSelectNetwork}
                 syncPercent={walletMode === 'local' ? localSyncPercent : null}
                 unshieldedBalance={activeSurfaces?.unshieldedBalance ?? null}
                 shieldedTokenCount={activeSurfaces?.shieldedTokenCount ?? null}
@@ -2822,17 +3285,20 @@ export default function PassportDemo() {
                 onRefresh={refreshMobile}
                 onCopyAddress={copyAddressOfKind}
                 onRegisterDust={() => void registerDust()}
-                /* DUST registration submits a real NIGHT transaction. The
-                   local wallet cannot sign one here yet, so the control is
+                /* DUST registration is its own transaction type, and this demo
+                   has not wired it for the on-device wallet, so the control is
                    disabled and says why instead of failing at the tap. */
                 registerDustDisabledReason={localWalletWriteLimitation}
                 walletSourceNote={
                   walletMode === 'local'
-                    ? `On-device wallet · ${localWalletNetworkId ?? 'preview'} · derived from your passkey. Read-only for now: balances and history come from the indexer, and nothing here can sign or send.`
+                    ? `On-device wallet · ${localWalletNetworkId ?? 'preview'} · derived from your passkey. Balances and history come from the indexer; transfers are signed here and submitted straight to the node.`
                     : null
                 }
                 appsProfile={appsProfile}
                 onProfileShared={handleProfileShared}
+                executeTransfer={localSessionActive ? executeAppTransfer : undefined}
+                transferContext={appTransferContext}
+                onIncentiveRedeemed={handleIncentiveRedeemed}
                 supportUrl={(import.meta.env.VITE_TELEGRAM_URL as string | undefined) ?? null}
                 onOpenClassic={openClassicExperience}
                 onSignOut={() => void signOutPassport()}
@@ -2842,12 +3308,29 @@ export default function PassportDemo() {
                 profile={appsProfile}
                 onProfileShared={handleProfileShared}
                 network={selectedNetwork}
-                onSelectNetwork={setSelectedNetwork}
+                onSelectNetwork={handleSelectNetwork}
+                executeTransfer={localSessionActive ? executeAppTransfer : undefined}
+                transferContext={appTransferContext}
+                onIncentiveRedeemed={handleIncentiveRedeemed}
               />
             )}
             <PassportNav active={mobileTab} onSelect={setMobileTab} />
           </>
         )}
+        {reclaim ? (
+          <AliasReclaimModal
+            targetNetwork={reclaim.target}
+            currentAlias={reclaim.alias}
+            checkAvailability={checkAliasOnReclaimTarget}
+            onPick={handleReclaimPick}
+            onKeepCurrent={() => {
+              setReclaim(null);
+              setReclaimError(null);
+            }}
+            busy={reclaimBusy}
+            error={reclaimError}
+          />
+        ) : null}
         {overlays}
         <PassportToasts />
       </div>

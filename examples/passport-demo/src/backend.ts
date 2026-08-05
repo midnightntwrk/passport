@@ -10,13 +10,20 @@ export {
   WebAuthnPrfKeyProvider,
   createPassportProfileReady,
   createPassportProfileResponse,
+  createPassportTxResponse,
+  parsePassportIncentiveReport,
   parsePassportProfileRequest,
+  parsePassportTxRequest,
 } from 'passport-demo-backend';
 export type {
+  PassportIncentiveReport,
   PassportPasskeyReference,
   PassportProfileField,
   PassportProfileRequest,
   PassportProfileResponse,
   PassportStateScope,
+  PassportTxErrorCode,
+  PassportTxRequest,
+  PassportTxResponse,
   PassportWalletSeedProvider,
 } from 'passport-demo-backend';

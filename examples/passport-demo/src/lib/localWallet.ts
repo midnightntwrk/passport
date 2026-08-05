@@ -16,15 +16,27 @@
  *      `src/dynamic.ts`), so the Home screen can be fed from either source.
  *
  * Proving defaults to an HTTP proof server. The prototype's `?prover=browser`
- * in-tab zkir-v2 path is NOT ported: it depends on a staged `/zk-params`
- * asset tree that this app does not ship. The `provingService` option is the
- * seam for adding it later without touching this module.
+ * in-tab zkir-v2 path is now ported as well (see `./wasmProver.ts`): it needs a
+ * staged `/zk-params` asset tree, produced by `scripts/fetch-zk-params.mjs`.
+ * When those assets are absent the browser prover fails loudly — it never
+ * quietly falls back to the remote proof server, because a demo must not claim
+ * local proving it did not do.
+ *
+ * Sync state is cached (see `./walletSnapshot.ts`) so a second session resumes
+ * the chain walk from the last applied index instead of replaying it from zero.
+ * A snapshot the SDK refuses is discarded and the wallet cold-starts;
+ * `resumedFromSnapshot` reports which of the two actually happened.
  */
 
 import * as ledger from '@midnight-ntwrk/ledger-v8';
 import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import { MidnightBech32m } from '@midnight-ntwrk/wallet-sdk-address-format';
+import {
+  mainnet,
+  MidnightBech32m,
+  UnshieldedAddress,
+} from '@midnight-ntwrk/wallet-sdk-address-format';
 import { DustWallet } from '@midnight-ntwrk/wallet-sdk-dust-wallet';
+import type { BalancingRecipe } from '@midnight-ntwrk/wallet-sdk-facade';
 import { WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
 import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
 import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk-shielded';
@@ -37,6 +49,21 @@ import {
 import * as Rx from 'rxjs';
 
 import type { PassportStateScope, PassportWalletSeedProvider } from '../backend.js';
+import { wasmWalletProvingService } from './wasmProver.js';
+import {
+  clearWalletSnapshots,
+  deleteWalletSnapshot,
+  loadWalletSnapshot,
+  saveWalletSnapshot,
+  WALLET_SNAPSHOT_VERSION,
+  type WalletSnapshot,
+} from './walletSnapshot.js';
+
+/**
+ * Re-exported so a "Reset local sync cache" control can clear the smart-sync
+ * cache without importing the storage module directly.
+ */
+export { clearWalletSnapshots };
 
 // ---------------------------------------------------------------------------
 // Network configuration
@@ -154,6 +181,8 @@ export type LocalWalletBalances = Pick<
 const NIGHT_DECIMALS = 6;
 const DUST_DECIMALS = 15;
 const STATE_TIMEOUT_MS = 15_000;
+/** Upper bound on a snapshot write, so `close()` is never held open by one. */
+const SNAPSHOT_TIMEOUT_MS = 5_000;
 
 function formatUnits(value: bigint, decimals: number): string {
   const negative = value < 0n;
@@ -259,16 +288,76 @@ function installZswapApplyGuard(): void {
   };
 }
 
+export type LocalWalletProvingMode = 'browser' | 'http';
+
 export interface CreateLocalMidnightWalletOptions {
   /** Per-call overrides on top of the `import.meta.env` configuration. */
   network?: Partial<LocalWalletNetworkConfig>;
   /** Fee headroom in blocks. Matches the custody prototype's default. */
   feeBlocksMargin?: number;
   /**
-   * Optional replacement proving service, e.g. an in-tab wasm prover. When
-   * omitted the wallet proves against `network.provingServerUrl`.
+   * Explicit proving service, e.g. a bespoke in-tab prover. Overrides
+   * {@link CreateLocalMidnightWalletOptions.provingMode} when given.
    */
   provingService?: (configuration: unknown) => unknown;
+  /**
+   * `browser` proves in-tab with the zkir-v2 wasm prover and contacts no proof
+   * server; `http` proves against `network.provingServerUrl`. Defaults to
+   * `browser` when `?prover=browser` is in the URL or `VITE_BROWSER_PROVER=1`,
+   * otherwise `http`.
+   */
+  provingMode?: LocalWalletProvingMode;
+  /**
+   * `auto` (the default) resumes the chain walk from the cached sync snapshot
+   * for this network and address when one exists. `never` always cold-starts —
+   * useful for reproducing a first-run sync.
+   */
+  resume?: 'auto' | 'never';
+}
+
+// ---------------------------------------------------------------------------
+// Sending unshielded NIGHT
+// ---------------------------------------------------------------------------
+
+export type SendNightErrorCode =
+  | 'invalid-recipient'
+  | 'wrong-network'
+  | 'insufficient-night'
+  | 'insufficient-dust'
+  | 'proving-failed'
+  | 'submit-rejected'
+  | 'wallet-closed';
+
+/**
+ * A refused or failed NIGHT transfer. Every instance describes something that
+ * really happened: nothing is thrown to stand in for an unknown outcome, and a
+ * submitted transaction never throws.
+ */
+export class SendNightError extends Error {
+  readonly code: SendNightErrorCode;
+  /** The underlying SDK or node message, when there is one. */
+  readonly detail?: string;
+
+  constructor(code: SendNightErrorCode, message: string, detail?: string) {
+    super(message);
+    this.name = 'SendNightError';
+    this.code = code;
+    if (detail !== undefined) this.detail = detail;
+  }
+}
+
+export interface SendNightParams {
+  recipientAddress: string;
+  /** atomic NIGHT units, > 0 */
+  amount: bigint;
+  ttlMinutes?: number;
+}
+
+export interface SendNightResult {
+  txId: string;
+  recipientAddress: string;
+  amount: bigint;
+  submittedAt: string;
 }
 
 export interface LocalMidnightWallet {
@@ -283,6 +372,27 @@ export interface LocalMidnightWallet {
   readonly facade: WalletFacade;
   /** Secret keys and keystore, for balancing and signing. */
   readonly keys: LocalWalletKeys;
+  /** Where proofs are computed for this wallet. */
+  readonly provingMode: LocalWalletProvingMode;
+  /**
+   * `true` only when this wallet was built from a cached sync snapshot that the
+   * SDK accepted, so its chain walk resumed mid-chain. `false` after a cold
+   * start, including when a cached snapshot was found but rejected.
+   */
+  readonly resumedFromSnapshot: boolean;
+  /**
+   * Persists the current sync state for the next session. Called automatically
+   * on first sync, once a minute while synced, and during `close()`. Never
+   * throws: a cache write is a convenience, not a correctness requirement.
+   */
+  saveSnapshot(): Promise<void>;
+  /**
+   * Submits a real unshielded NIGHT transfer on this wallet's network and
+   * resolves with the node's transaction identifier. Throws
+   * {@link SendNightError} for every refusal it can name; balancing and signing
+   * failures surface the SDK's own error unchanged.
+   */
+  sendUnshieldedNight(params: SendNightParams): Promise<SendNightResult>;
   /** Refreshes the balance surfaces. Never throws — failures land in `balanceError`. */
   getBalances(): Promise<LocalWalletBalances>;
   /** Addresses plus a balance refresh, in the shape the Home screen consumes. */
@@ -339,6 +449,85 @@ function componentRatio(progress: {
   return Number(applied) / Number(target);
 }
 
+// ---------------------------------------------------------------------------
+// Funding honesty
+// ---------------------------------------------------------------------------
+
+/** The public Preview faucet. Probed 2026/08/04: `/api/health` reports SERVING. */
+export const PREVIEW_FAUCET_URL = 'https://faucet.preview.midnight.network';
+
+/**
+ * Whether a public faucet exists for this network. Only Preview has one.
+ *
+ * NOTE — deliberately no automated drip. The faucet's `POST /drips` requires an
+ * `X-Captcha-Token` header from a Cloudflare Turnstile challenge (probed
+ * 2026/08/04), so no in-app code can honestly obtain a drip. The only truthful
+ * funding flow is: copy the address, open the faucet, complete the captcha
+ * there, and let the wallet's own sync report the arrival.
+ */
+export function faucetAvailable(networkId: string): boolean {
+  return networkId === 'preview';
+}
+
+// ---------------------------------------------------------------------------
+// Proving-mode selection
+// ---------------------------------------------------------------------------
+
+function defaultProvingMode(): LocalWalletProvingMode {
+  if (environment().VITE_BROWSER_PROVER === '1') return 'browser';
+  try {
+    if (
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('prover') === 'browser'
+    ) {
+      return 'browser';
+    }
+  } catch {
+    // A locked-down or non-browser context simply has no URL override.
+  }
+  return 'http';
+}
+
+// ---------------------------------------------------------------------------
+// Error classification for sends
+// ---------------------------------------------------------------------------
+
+/**
+ * The wallet SDK reports a balancing shortfall as an `effect` tagged error,
+ * `{ _tag: 'Wallet.InsufficientFunds', tokenType }` (see
+ * `wallet-sdk-unshielded-wallet/dist/v1/Transacting.js` and its DUST twin).
+ * `Effect.runPromise` may wrap it, so up to three `cause` links are walked.
+ * Anything that is not recognisably a shortfall returns `null` and the original
+ * error is rethrown untouched — no invented codes.
+ */
+function balancingShortfall(cause: unknown): 'insufficient-night' | 'insufficient-dust' | null {
+  const nightRaw = ledger.nativeToken().raw;
+  let current: unknown = cause;
+  for (let depth = 0; depth < 4 && current !== null && typeof current === 'object'; depth += 1) {
+    const record = current as { _tag?: unknown; tokenType?: unknown; cause?: unknown };
+    if (record._tag === 'Wallet.InsufficientFunds') {
+      return record.tokenType === nightRaw ? 'insufficient-night' : 'insufficient-dust';
+    }
+    current = record.cause;
+  }
+  return null;
+}
+
+function messageOf(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
+/**
+ * `MidnightBech32m.parse` reports mainnet as the exported `mainnet` symbol (a
+ * mainnet address carries no network segment), every other network as its
+ * string. This is the SDK's own normalisation, so `mn_addr1…` compares
+ * correctly against a `mainnet` network id instead of being misreported as a
+ * wrong-network address.
+ */
+function parsedNetworkName(value: string | typeof mainnet): string {
+  return value === mainnet ? 'mainnet' : value;
+}
+
 /**
  * Builds the in-browser Midnight wallet from a passkey-derived seed.
  *
@@ -387,25 +576,91 @@ export async function createLocalMidnightWallet(
     txHistoryStorage: noopTxHistoryStorage(),
   };
 
-  // The facade's `InitParams` generics are far stricter than the starters need;
-  // the custody prototype casts here for the same reason.
-  const facade: WalletFacade = await (WalletFacade.init as (params: unknown) => Promise<WalletFacade>)({
-    configuration,
-    shielded: (config: unknown) =>
-      ShieldedWallet(config as never).startWithSecretKeys(shieldedSecretKeys),
-    unshielded: (config: unknown) =>
-      UnshieldedWallet(config as never).startWithPublicKey(
-        PublicKey.fromKeyStore(unshieldedKeystore),
-      ),
-    dust: (config: unknown) =>
-      DustWallet(config as never).startWithSecretKey(
-        dustSecretKey,
-        ledger.LedgerParameters.initialParameters().dust,
-      ),
-    ...(options.provingService ? { provingService: options.provingService } : {}),
-  });
+  const provingMode = options.provingMode ?? defaultProvingMode();
+  // An explicit service wins; otherwise browser mode injects the in-tab wasm
+  // prover and http mode leaves the facade's default (network.provingServerUrl)
+  // in place. There is deliberately no cross-over: a browser-mode wallet that
+  // cannot find its /zk-params fails, it does not silently phone the server.
+  const provingService =
+    options.provingService ?? (provingMode === 'browser' ? () => wasmWalletProvingService() : undefined);
 
-  await facade.start(shieldedSecretKeys, dustSecretKey);
+  const unshieldedPublicKey = PublicKey.fromKeyStore(unshieldedKeystore);
+  // Available before the facade exists, which is what lets a snapshot be looked
+  // up in time to build the facade with restore starters.
+  const unshieldedAddress = unshieldedPublicKey.address;
+
+  /**
+   * Builds and starts a facade. With `snapshot` the three component wallets are
+   * built through `restore()`, which deserialises the stored state and continues
+   * the indexer subscription from its applied index; `facade.start` then
+   * re-attaches the secret keys exactly as in the cold path. `restore()` throws
+   * synchronously on a payload it cannot decode (`Either.getOrThrow` in
+   * `ShieldedWallet.js`), so a bad snapshot fails here rather than corrupting a
+   * running wallet.
+   */
+  const startFacade = async (snapshot: WalletSnapshot | null): Promise<WalletFacade> => {
+    let started: WalletFacade | null = null;
+    try {
+      // The facade's `InitParams` generics are far stricter than the starters
+      // need; the custody prototype casts here for the same reason.
+      started = await (WalletFacade.init as (params: unknown) => Promise<WalletFacade>)({
+        configuration,
+        shielded: (config: unknown) =>
+          snapshot
+            ? ShieldedWallet(config as never).restore(snapshot.shielded)
+            : ShieldedWallet(config as never).startWithSecretKeys(shieldedSecretKeys),
+        unshielded: (config: unknown) =>
+          snapshot
+            ? UnshieldedWallet(config as never).restore(snapshot.unshielded)
+            : UnshieldedWallet(config as never).startWithPublicKey(unshieldedPublicKey),
+        dust: (config: unknown) =>
+          snapshot
+            ? DustWallet(config as never).restore(snapshot.dust)
+            : DustWallet(config as never).startWithSecretKey(
+                dustSecretKey,
+                ledger.LedgerParameters.initialParameters().dust,
+              ),
+        ...(provingService ? { provingService } : {}),
+      });
+      await started.start(shieldedSecretKeys, dustSecretKey);
+      return started;
+    } catch (cause) {
+      if (started) {
+        try {
+          await started.stop();
+        } catch (stopCause) {
+          console.debug('[localWallet] failed facade did not stop cleanly', stopCause);
+        }
+      }
+      throw cause;
+    }
+  };
+
+  const cached =
+    (options.resume ?? 'auto') === 'auto'
+      ? await loadWalletSnapshot(network.networkId, unshieldedAddress)
+      : null;
+
+  let facade: WalletFacade;
+  let resumedFromSnapshot = false;
+  if (cached) {
+    try {
+      facade = await startFacade(cached);
+      resumedFromSnapshot = true;
+      console.debug(
+        `[localWallet] resumed sync from the snapshot saved at ${cached.savedAt} (${network.networkId})`,
+      );
+    } catch (cause) {
+      // A snapshot must never be able to stop the wallet from opening: drop it
+      // and cold-start. `resumedFromSnapshot` stays false so no caller can
+      // mistake this for a resume.
+      console.debug('[localWallet] cached sync state rejected; cold start', cause);
+      await deleteWalletSnapshot(network.networkId, unshieldedAddress);
+      facade = await startFacade(null);
+    }
+  } else {
+    facade = await startFacade(null);
+  }
 
   const [shieldedAddress, dustAddress] = await Promise.all([
     facade.shielded.getAddress(),
@@ -413,16 +668,81 @@ export async function createLocalMidnightWallet(
   ]);
 
   const keys: LocalWalletKeys = { shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
-  const unshieldedAddress = PublicKey.fromKeyStore(unshieldedKeystore).address;
   const encoded = {
     shielded: MidnightBech32m.encode(network.networkId, shieldedAddress).asString(),
     dust: MidnightBech32m.encode(network.networkId, dustAddress).asString(),
   };
 
   let closed = false;
+  let stopped = false;
 
   const currentState = () =>
     Rx.firstValueFrom(facade.state().pipe(Rx.timeout({ first: STATE_TIMEOUT_MS })));
+
+  // -------------------------------------------------------------------------
+  // Smart-sync snapshot lifecycle
+  // -------------------------------------------------------------------------
+
+  const saveSnapshot = async (): Promise<void> => {
+    if (stopped) return;
+    try {
+      // Bounded so that `close()` — which awaits this — can never be held open
+      // by a wedged facade or a blocked IndexedDB transaction.
+      const [shielded, unshielded, dust] = await Promise.race([
+        Promise.all([
+          facade.shielded.serializeState(),
+          facade.unshielded.serializeState(),
+          facade.dust.serializeState(),
+        ]),
+        new Promise<never>((_resolve, reject) =>
+          setTimeout(
+            () => reject(new Error('serializing the wallet state timed out')),
+            SNAPSHOT_TIMEOUT_MS,
+          ),
+        ),
+      ]);
+      await saveWalletSnapshot({
+        version: WALLET_SNAPSHOT_VERSION,
+        networkId: network.networkId,
+        unshieldedAddress,
+        savedAt: new Date().toISOString(),
+        shielded,
+        unshielded,
+        dust,
+      });
+      if (import.meta.env.DEV) console.debug('[localWallet] sync snapshot saved');
+    } catch (cause) {
+      // Losing the cache costs a longer sync next time and nothing else.
+      console.debug('[localWallet] unable to save the sync snapshot', cause);
+    }
+  };
+
+  let snapshotTimer: ReturnType<typeof setInterval> | null = null;
+  let sawSynced = false;
+  const snapshotSubscription = facade.state().subscribe({
+    next: (state) => {
+      if (closed) return;
+      if (!state.isSynced) {
+        sawSynced = false;
+        return;
+      }
+      if (sawSynced) return;
+      sawSynced = true;
+      void saveSnapshot();
+      if (snapshotTimer === null) {
+        // Keep refreshing while synced so a long-lived tab does not leave a
+        // stale offset behind if it is killed rather than closed.
+        snapshotTimer = setInterval(() => {
+          if (!closed && sawSynced) void saveSnapshot();
+        }, 60_000);
+      }
+    },
+    error: (cause) => {
+      // Sync errors are surfaced through subscribeSyncProgress's `connected`
+      // flag; here they only mean "stop trying to snapshot".
+      console.debug('[localWallet] state stream error; snapshots paused', cause);
+    },
+  });
 
   const getBalances = async (): Promise<LocalWalletBalances> => {
     try {
@@ -466,6 +786,160 @@ export async function createLocalMidnightWallet(
     }
   };
 
+  // -------------------------------------------------------------------------
+  // Sending unshielded NIGHT
+  // -------------------------------------------------------------------------
+
+  const revertQuietly = async (recipe: BalancingRecipe): Promise<void> => {
+    try {
+      await facade.revert(recipe);
+    } catch (cause) {
+      console.debug('[localWallet] could not revert an abandoned transaction', cause);
+    }
+  };
+
+  const sendUnshieldedNight = async (params: SendNightParams): Promise<SendNightResult> => {
+    if (closed) {
+      throw new SendNightError('wallet-closed', 'This Passport wallet has been closed.');
+    }
+    if (params.amount <= 0n) {
+      // A programming error rather than a send outcome, so it gets no code.
+      throw new RangeError('A NIGHT transfer amount must be greater than zero.');
+    }
+
+    // (1) Recipient. Parse, then require this wallet's own network, then require
+    // that the payload really is an unshielded address.
+    const candidate = params.recipientAddress.trim();
+    let parsed: MidnightBech32m;
+    try {
+      parsed = MidnightBech32m.parse(candidate);
+    } catch (cause) {
+      throw new SendNightError(
+        'invalid-recipient',
+        'That is not a Midnight address.',
+        messageOf(cause),
+      );
+    }
+    const recipientNetwork = parsedNetworkName(parsed.network);
+    if (recipientNetwork !== network.networkId) {
+      throw new SendNightError(
+        'wrong-network',
+        `That address belongs to the ${recipientNetwork} network; this wallet is on ${network.networkId}.`,
+      );
+    }
+    let recipient: UnshieldedAddress;
+    try {
+      recipient = parsed.decode(UnshieldedAddress, network.networkId);
+    } catch (cause) {
+      throw new SendNightError(
+        'invalid-recipient',
+        'That is a Midnight address, but not an unshielded (mn_addr…) one.',
+        messageOf(cause),
+      );
+    }
+
+    // (2) Pre-checks against real synced state, BEFORE anything is built. A
+    // refusal here means no transaction was ever constructed.
+    const nightTokenType = ledger.nativeToken().raw;
+    const state = await currentState();
+    const night = state.unshielded.balances[nightTokenType] ?? 0n;
+    if (night < params.amount) {
+      throw new SendNightError(
+        'insufficient-night',
+        `This wallet holds ${formatUnits(night, NIGHT_DECIMALS)} NIGHT; ${formatUnits(params.amount, NIGHT_DECIMALS)} is required.`,
+      );
+    }
+    if (state.dust.balance(new Date()) === 0n) {
+      throw new SendNightError(
+        'insufficient-dust',
+        'Fees are paid in DUST and this wallet has none yet. DUST is generated by registered NIGHT; wait for generation or register a NIGHT UTxO first.',
+      );
+    }
+
+    // (3) Build. (4) Sign with the unshielded keystore.
+    const ttl = new Date(Date.now() + (params.ttlMinutes ?? 30) * 60_000);
+    let recipe: BalancingRecipe;
+    try {
+      recipe = await facade.transferTransaction(
+        [
+          {
+            type: 'unshielded',
+            outputs: [{ type: nightTokenType, receiverAddress: recipient, amount: params.amount }],
+          },
+        ],
+        { shieldedSecretKeys, dustSecretKey },
+        { ttl },
+      );
+    } catch (cause) {
+      const shortfall = balancingShortfall(cause);
+      if (shortfall === 'insufficient-night') {
+        throw new SendNightError(
+          'insufficient-night',
+          'There is not enough NIGHT to cover this transfer once fees are balanced.',
+          messageOf(cause),
+        );
+      }
+      if (shortfall === 'insufficient-dust') {
+        throw new SendNightError(
+          'insufficient-dust',
+          'There is not enough DUST to pay this transaction’s fee.',
+          messageOf(cause),
+        );
+      }
+      throw cause;
+    }
+
+    let signed: BalancingRecipe;
+    try {
+      signed = await facade.signRecipe(recipe, (data) => keys.unshieldedKeystore.signData(data));
+    } catch (cause) {
+      await revertQuietly(recipe);
+      throw cause;
+    }
+
+    const releaseCoins = async () => {
+      // Best effort: the coins this recipe reserved are released so the balance
+      // does not stay locked behind a transaction that never went out.
+      await revertQuietly(signed);
+    };
+
+    // (5) Prove. In browser mode a missing /zk-params tree surfaces here with
+    // the fetch-zk-params instruction in `detail`, unmasked.
+    let finalized: Awaited<ReturnType<typeof facade.finalizeRecipe>>;
+    try {
+      finalized = await facade.finalizeRecipe(signed);
+    } catch (cause) {
+      await releaseCoins();
+      throw new SendNightError(
+        'proving-failed',
+        provingMode === 'browser'
+          ? 'The in-browser prover could not prove this transaction.'
+          : 'The proof server could not prove this transaction.',
+        messageOf(cause),
+      );
+    }
+
+    // (6) Submit. Only a real identifier from the node produces a result.
+    let txId: string;
+    try {
+      txId = await facade.submitTransaction(finalized);
+    } catch (cause) {
+      await releaseCoins();
+      throw new SendNightError(
+        'submit-rejected',
+        'The node rejected this transaction.',
+        messageOf(cause),
+      );
+    }
+
+    return {
+      txId: String(txId),
+      recipientAddress: parsed.asString(),
+      amount: params.amount,
+      submittedAt: new Date().toISOString(),
+    };
+  };
+
   return {
     network,
     unshieldedAddress,
@@ -473,6 +947,10 @@ export async function createLocalMidnightWallet(
     dustAddress: encoded.dust,
     facade,
     keys,
+    provingMode,
+    resumedFromSnapshot,
+    saveSnapshot,
+    sendUnshieldedNight,
     getBalances,
     async surfaces(): Promise<LocalWalletSurfaces> {
       return {
@@ -522,6 +1000,15 @@ export async function createLocalMidnightWallet(
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
+      if (snapshotTimer !== null) {
+        clearInterval(snapshotTimer);
+        snapshotTimer = null;
+      }
+      snapshotSubscription.unsubscribe();
+      // Last write wins: whatever this session reached is what the next one
+      // resumes from, synced or not.
+      await saveSnapshot();
+      stopped = true;
       try {
         await facade.stop();
       } finally {

@@ -6,7 +6,7 @@ import {
   type RegistryApp,
   type RegistryCategory,
 } from '../lib/registry.js'
-import AppBrowser, { AppIcon } from './AppBrowser.js'
+import AppBrowser, { AppIcon, type AppBrowserProps } from './AppBrowser.js'
 import AppFolder from './AppFolder.js'
 import NetworkSwitcher, { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
 import ThemeToggle from './ThemeToggle.js'
@@ -34,6 +34,15 @@ export interface AppsScreenProps {
   /** Selected network; only apps available on it are listed. */
   network?: PassportNetwork
   onSelectNetwork?: (network: PassportNetwork) => void
+  /**
+   * The wallet seam an opened app can ask to spend from. All three are handed
+   * straight to {@link AppBrowser}; leaving `executeTransfer` undefined is what
+   * makes a framed app receive `wallet-unavailable` instead of a sheet it could
+   * never satisfy.
+   */
+  executeTransfer?: AppBrowserProps['executeTransfer']
+  transferContext?: AppBrowserProps['transferContext']
+  onIncentiveRedeemed?: AppBrowserProps['onIncentiveRedeemed']
 }
 
 type LoadState = 'loading' | 'ready'
@@ -120,6 +129,10 @@ export interface FeaturedAppsProps {
   onProfileShared?: (appName: string, fields: string[]) => void
   /** Selected network; only apps available on it are shown. */
   network?: PassportNetwork
+  /** Same wallet seam as the Apps tab — an app behaves identically from Home. */
+  executeTransfer?: AppBrowserProps['executeTransfer']
+  transferContext?: AppBrowserProps['transferContext']
+  onIncentiveRedeemed?: AppBrowserProps['onIncentiveRedeemed']
 }
 
 /**
@@ -129,7 +142,14 @@ export interface FeaturedAppsProps {
  * grouping, and status chrome are left to the Apps screen.
  */
 export function FeaturedApps(props: FeaturedAppsProps) {
-  const { profile, onProfileShared, network } = props
+  const {
+    profile,
+    onProfileShared,
+    network,
+    executeTransfer,
+    transferContext,
+    onIncentiveRedeemed,
+  } = props
 
   const [apps, setApps] = useState<RegistryApp[]>([])
   const [state, setState] = useState<LoadState>('loading')
@@ -186,6 +206,9 @@ export function FeaturedApps(props: FeaturedAppsProps) {
           profile={profile}
           onClose={() => setOpenApp(null)}
           onProfileShared={onProfileShared}
+          executeTransfer={executeTransfer}
+          transferContext={transferContext}
+          onIncentiveRedeemed={onIncentiveRedeemed}
         />
       ) : null}
     </>
@@ -193,7 +216,15 @@ export function FeaturedApps(props: FeaturedAppsProps) {
 }
 
 export default function AppsScreen(props: AppsScreenProps) {
-  const { profile, onProfileShared, network, onSelectNetwork } = props
+  const {
+    profile,
+    onProfileShared,
+    network,
+    onSelectNetwork,
+    executeTransfer,
+    transferContext,
+    onIncentiveRedeemed,
+  } = props
 
   const [apps, setApps] = useState<RegistryApp[]>([])
   const [state, setState] = useState<LoadState>('loading')
@@ -366,6 +397,9 @@ export default function AppsScreen(props: AppsScreenProps) {
           profile={profile}
           onClose={() => setOpenApp(null)}
           onProfileShared={onProfileShared}
+          executeTransfer={executeTransfer}
+          transferContext={transferContext}
+          onIncentiveRedeemed={onIncentiveRedeemed}
         />
       ) : null}
     </>

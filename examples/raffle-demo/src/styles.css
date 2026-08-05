@@ -354,6 +354,38 @@ a {
   border-top: 2px dashed var(--mn-border-hairline);
 }
 
+/* The entry transaction. Present only when Passport really submitted one —
+   the alternative line below says plainly that no payment was made. */
+.ticket-tx {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: var(--mn-accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ticket-tx code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--mn-text-secondary);
+  font-family: var(--mn-font-mono);
+  font-weight: 500;
+}
+
+.ticket-tx:hover code {
+  color: var(--mn-text-primary);
+}
+
+.ticket-offchain {
+  margin: 0 0 14px;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+}
+
 .ticket-incentives {
   margin-bottom: 4px;
 }
