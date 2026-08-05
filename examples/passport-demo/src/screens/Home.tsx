@@ -436,7 +436,7 @@ export default function HomeScreen(props: HomeScreenProps) {
                         {transaction.kind ? <span className="mnhome-pill">{transaction.kind}</span> : null}
                         {stage ? (
                           <span
-                            className={`mnhome-pill${transaction.applyStage === 'FAILURE' ? ' mnhome-pill-hollow' : ''}`}
+                            className={`mnhome-pill${transaction.applyStage === 'FAILURE' ? ' mnhome-pill-hollow' : ''}${transaction.applyStage === 'SUCCESS' ? ' mnhome-pill-success' : ''}`}
                           >
                             {stage}
                           </span>

@@ -2,35 +2,37 @@
 
 /* Theme toggle — prefix "mnthemetoggle-".
    A three-segment control sized to sit beside the 34px icon buttons in the
-   Home top bar. Same rules as everything else: no radii, hairline borders,
-   monochrome, and the selected segment is the only inverted block. */
+   Home top bar. Base-inspired: a rounded segmented control — pill track,
+   pill segments — with the selected segment carried by the solid
+   accent-blue emphasis surface. */
 
 .mnthemetoggle {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: stretch;
+  gap: 2px;
   height: 34px;
-  border: var(--mn-hairline) solid var(--mn-border-medium);
+  padding: 3px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-primary);
-  background: transparent;
+  background: var(--mn-surface-card);
   font-family: var(--mn-font-body);
 }
 
 .mnthemetoggle-option {
   position: relative;
-  width: 32px;
+  width: 30px;
   display: inline-grid;
   place-items: center;
   padding: 0;
   border: 0;
-  border-left: var(--mn-hairline) solid var(--mn-border-hairline);
-  border-radius: var(--mn-radius);
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-muted);
   background: transparent;
   cursor: pointer;
   transition: background .15s ease, color .15s ease;
 }
-.mnthemetoggle-option:first-child { border-left: 0; }
 .mnthemetoggle-option:hover:not(.mnthemetoggle-option-on) {
   color: var(--mn-text-primary);
   background: var(--mn-surface-hover);
@@ -44,13 +46,13 @@
 .mnthemetoggle-option::after {
   content: '';
   position: absolute;
-  inset: -6px 0;
+  inset: -9px -1px;
 }
 
 /* Compact variant. Kept at the 34px control height so a bar mixing this with
    the standard icon buttons still reads as one row; only the segments narrow. */
 .mnthemetoggle-sm { height: 34px; }
-.mnthemetoggle-sm .mnthemetoggle-option { width: 30px; }
+.mnthemetoggle-sm .mnthemetoggle-option { width: 28px; }
 
 @media (prefers-reduced-motion: reduce) {
   .mnthemetoggle-option { transition: none; }

@@ -1,14 +1,14 @@
 @import './tokens.css';
 
 /* Onboarding screen — prefix "mnob-".
-   Strict monochrome Midnight direction: no radii, hard offset shadows,
-   1px hairlines.
+   Base-inspired Midnight direction: white/near-black page surfaces, one
+   electric blue accent, generously rounded cards, and soft vertical
+   shadows (see tokens.css for the full language).
 
    This screen follows the user's theme like every other surface: light by
-   default, ink under [data-theme="dark"]. The portal artwork is a dark
-   monochrome image, so per-theme screen-local variables below tune its
-   opacity and the fade gradient — in light it reads as a faint print
-   texture, in dark as the full hero. */
+   default, ink under [data-theme="dark"]. The hero is carried by huge,
+   tight display type on the clean page surface; the primary actions are
+   accent-blue with white text. */
 
 .mnob-screen {
   position: relative;
@@ -35,7 +35,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: var(--mn-hairline) solid var(--mn-border-medium);
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
 }
 .mnob-wordmark {
   width: 104px;
@@ -46,8 +46,8 @@
   margin-left: auto;
   color: var(--mn-text-muted);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
+  font-weight: 600;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 .mnob-theme { margin-left: 14px; }
@@ -68,8 +68,8 @@
   margin: 0 0 16px;
   color: var(--mn-text-muted);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
+  font-weight: 600;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 .mnob-title {
@@ -77,18 +77,17 @@
   display: grid;
   color: var(--mn-text-primary);
   font-family: var(--mn-font-display);
-  font-size: clamp(50px, 14.5vw, 82px);
-  font-weight: 700;
-  letter-spacing: -.02em;
-  line-height: .85;
-  text-shadow: 0 2px 0 var(--mn-surface-page);
+  font-size: clamp(46px, 13.5vw, 82px);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: .95;
 }
 .mnob-title span { display: block; }
 .mnob-lede {
   max-width: 400px;
-  margin: 20px 0 0;
+  margin: 22px 0 0;
   color: var(--mn-text-secondary);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.6;
 }
 
@@ -100,7 +99,8 @@
   gap: 10px;
   margin-top: 26px;
   padding: 10px 12px;
-  border: var(--mn-hairline) solid var(--mn-border-strong);
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-md);
   color: var(--mn-text-primary);
   background: var(--mn-surface-card);
   box-shadow: var(--mn-shadow-sm);
@@ -115,19 +115,18 @@
   flex: 0 0 auto;
   place-items: center;
   border: var(--mn-hairline) solid var(--mn-border-medium);
-  border-radius: var(--mn-radius);
+  border-radius: var(--mn-radius-md);
   color: var(--mn-text-primary);
   background: transparent;
 }
 .mnob-error-dismiss:hover:not(:disabled) {
-  color: var(--mn-text-inverted);
-  background: var(--mn-surface-inverted);
+  background: var(--mn-surface-hover);
 }
 
 /* Stages */
 .mnob-stage { margin-top: auto; padding-top: 40px; animation: mnob-stage-in .35s ease-out both; }
 
-/* Welcome — single CTA, echoes .portal-cta */
+/* Welcome — single CTA: the accent-blue pill with the blue glow. */
 .mnob-primary {
   width: 100%;
   min-height: 56px;
@@ -135,35 +134,38 @@
   align-items: center;
   justify-content: space-between;
   gap: 13px;
-  padding: 0 20px;
-  border: var(--mn-hairline) solid var(--mn-surface-inverted);
-  border-radius: var(--mn-radius);
+  padding: 0 24px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-inverted);
   background: var(--mn-surface-inverted);
-  box-shadow: var(--mn-shadow-md);
-  font-size: 14px;
-  font-weight: 780;
-  transition: background .15s ease, color .15s ease;
+  box-shadow: var(--mn-shadow-accent);
+  font-size: 15px;
+  font-weight: 700;
+  transition: background .15s ease, transform .1s ease, box-shadow .15s ease;
 }
 .mnob-primary:hover:not(:disabled) {
-  color: var(--mn-text-primary);
-  background: var(--mn-surface-raised);
+  background: var(--mn-accent-hover);
+}
+.mnob-primary:active:not(:disabled) {
+  transform: translateY(1px) scale(.99);
+  box-shadow: var(--mn-shadow-sm);
 }
 
 /* Choose — two passkey routes, then a deliberately quieter Dynamic route.
-   The visual weight ranking is: lead passkey choice (inverted block, hard
-   shadow) > second passkey choice (card) > Dynamic (transparent, hairline
-   only). Nothing above .mnob-alt touches Dynamic. */
+   The visual weight ranking is: lead passkey choice (accent-blue card with
+   the blue glow) > second passkey choice (soft card) > Dynamic (transparent,
+   hairline only). Nothing above .mnob-alt touches Dynamic. */
 .mnob-choose-label,
 .mnob-alt-label {
   margin: 0 0 12px;
   color: var(--mn-text-muted);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
+  font-weight: 600;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
-.mnob-choices { display: grid; gap: 10px; }
+.mnob-choices { display: grid; gap: 12px; }
 .mnob-choice-slot { display: grid; gap: 6px; }
 .mnob-choice {
   width: 100%;
@@ -173,26 +175,33 @@
   align-items: center;
   gap: 13px;
   padding: 14px 16px;
-  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
   border-radius: var(--mn-radius);
   color: var(--mn-text-primary);
   background: var(--mn-surface-card);
+  box-shadow: var(--mn-shadow-sm);
   text-align: left;
-  transition: background .15s ease, border-color .15s ease;
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
 .mnob-choice:hover:not(:disabled) {
-  border-color: var(--mn-border-strong);
+  border-color: var(--mn-border-medium);
   background: var(--mn-surface-raised);
-}
-.mnob-choice-lead {
-  border-color: var(--mn-surface-inverted);
-  color: var(--mn-text-inverted);
-  background: var(--mn-surface-inverted);
   box-shadow: var(--mn-shadow-md);
 }
+.mnob-choice-lead {
+  border-color: transparent;
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  box-shadow: var(--mn-shadow-accent);
+}
 .mnob-choice-lead:hover:not(:disabled) {
-  color: var(--mn-text-primary);
-  background: var(--mn-surface-raised);
+  border-color: transparent;
+  color: var(--mn-text-inverted);
+  background: var(--mn-accent-hover);
+  box-shadow: var(--mn-shadow-accent);
+}
+.mnob-choice:active:not(:disabled) {
+  transform: translateY(1px);
 }
 .mnob-choice-icon {
   width: 40px;
@@ -200,16 +209,18 @@
   display: grid;
   place-items: center;
   border: var(--mn-hairline) solid currentColor;
+  border-radius: var(--mn-radius-md);
 }
 .mnob-choice-copy { min-width: 0; display: grid; gap: 4px; }
-.mnob-choice-copy strong { font-size: 14px; font-weight: 780; }
+.mnob-choice-copy strong { font-size: 14px; font-weight: 700; }
 .mnob-choice-copy small { color: var(--mn-text-muted); font-size: 12px; line-height: 1.4; }
-.mnob-choice-lead .mnob-choice-copy small { color: var(--mn-text-inverted); opacity: .68; }
+.mnob-choice-lead .mnob-choice-copy small { color: var(--mn-text-inverted-muted); }
 .mnob-choice-lead:hover:not(:disabled) .mnob-choice-copy small {
-  color: var(--mn-text-secondary);
-  opacity: 1;
+  color: var(--mn-text-inverted);
 }
-.mnob-choice:hover:not(:disabled) .mnob-choice-copy small { color: var(--mn-text-secondary); }
+.mnob-choice:not(.mnob-choice-lead):hover:not(:disabled) .mnob-choice-copy small {
+  color: var(--mn-text-secondary);
+}
 .mnob-choice-arrow { justify-self: end; }
 
 /* A route that genuinely cannot run right now. It stays visible and stays
@@ -231,8 +242,8 @@
 /* Alternative route — Dynamic. Separated by a rule and set flat, so it never
    competes with the two passkey options above it. */
 .mnob-alt {
-  margin-top: 22px;
-  padding-top: 18px;
+  margin-top: 24px;
+  padding-top: 20px;
   border-top: var(--mn-hairline) solid var(--mn-border-hairline);
 }
 .mnob-choice-quiet {
@@ -241,11 +252,12 @@
   background: transparent;
   box-shadow: none;
 }
-.mnob-choice-quiet .mnob-choice-copy strong { font-weight: 640; }
+.mnob-choice-quiet .mnob-choice-copy strong { font-weight: 600; }
 .mnob-choice-quiet .mnob-choice-icon { border-color: var(--mn-border-hairline); }
 .mnob-choice-quiet:hover:not(:disabled) {
   border-color: var(--mn-border-medium);
   background: var(--mn-surface-card);
+  box-shadow: none;
 }
 
 /* Working — busy state */
@@ -255,11 +267,13 @@
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
   color: var(--mn-text-primary);
   background: var(--mn-surface-card);
+  box-shadow: var(--mn-shadow-sm);
   font-size: 13px;
-  font-weight: 680;
+  font-weight: 600;
 }
 .mnob-working-spinner { flex: 0 0 auto; animation: mnob-spin 1s linear infinite; }
 .mnob-working-copy { overflow-wrap: anywhere; }
@@ -284,7 +298,7 @@
   padding: 0;
   border: 0;
   border-bottom: var(--mn-hairline) solid var(--mn-text-muted);
-  border-radius: var(--mn-radius);
+  border-radius: 0;
   color: var(--mn-text-secondary);
   background: transparent;
   cursor: pointer;
@@ -309,6 +323,8 @@
   .mnob-working-spinner { animation-duration: 2.4s; }
   .mnob-primary,
   .mnob-choice { transition: none; }
+  .mnob-primary:active:not(:disabled),
+  .mnob-choice:active:not(:disabled) { transform: none; }
 }
 
 /* Tablet and up. On a phone the stage rides the viewport floor

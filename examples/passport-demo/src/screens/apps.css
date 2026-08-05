@@ -1,8 +1,10 @@
 @import './tokens.css';
 
 /* Apps screen and in-Passport app browser — prefix "mnapps-".
-   Strict monochrome Midnight direction: no radii, hard offset shadows,
-   1px hairlines, mobile-first at ~390px.
+   Base-inspired Midnight direction: one electric-blue accent, soft
+   rounded cards on airy surfaces, diffuse vertical shadows, hairline
+   borders, mobile-first at ~390px. Every colour, radius, and shadow
+   comes from tokens.css.
 
    Apps shares the Home screen's surface system exactly — same page value,
    same card and raised values, same hairlines — so moving between the two
@@ -32,7 +34,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border-bottom: var(--mn-hairline) solid var(--mn-border-strong);
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
   background: var(--mn-surface-page);
 }
 .mnapps-wordmark {
@@ -46,13 +48,13 @@
   gap: 8px;
 }
 
-.mnapps-head { padding: 14px 0 22px; border-bottom: var(--mn-hairline) solid var(--mn-border-strong); }
+.mnapps-head { padding: 16px 0 24px; }
 .mnapps-kicker {
   margin: 0 0 14px;
   color: var(--mn-text-muted);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
+  font-weight: 600;
+  letter-spacing: .07em;
   text-transform: uppercase;
 }
 .mnapps-title {
@@ -60,37 +62,42 @@
   color: var(--mn-text-primary);
   font-family: var(--mn-font-display);
   font-size: clamp(44px, 13vw, 62px);
-  font-weight: 700;
-  letter-spacing: -.02em;
-  line-height: .88;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: .95;
 }
 .mnapps-lede {
   max-width: 420px;
   margin: 16px 0 0;
   color: var(--mn-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
-/* Search */
+/* Search — a rounded grey-wash field on the white page. */
 .mnapps-search {
-  min-height: 48px;
+  min-height: 50px;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   margin-top: 20px;
-  padding: 0 13px;
-  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  padding: 0 15px;
+  border: var(--mn-hairline) solid transparent;
+  border-radius: var(--mn-radius-md);
   color: var(--mn-text-muted);
+  background: var(--mn-surface-card);
+  transition: border-color .15s ease, background .15s ease;
+}
+.mnapps-search:focus-within {
+  border-color: var(--mn-accent);
+  color: var(--mn-text-primary);
   background: var(--mn-surface-raised);
 }
-.mnapps-search:focus-within { border-color: var(--mn-border-strong); color: var(--mn-text-primary); }
 .mnapps-search input {
   min-width: 0;
   height: 44px;
   border: 0;
-  border-radius: var(--mn-radius);
   color: var(--mn-text-primary);
   background: transparent;
   font-family: inherit;
@@ -108,12 +115,12 @@
   display: grid;
   place-items: center;
   border: var(--mn-hairline) solid var(--mn-border-medium);
-  border-radius: var(--mn-radius);
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-primary);
   background: transparent;
 }
 .mnapps-search-clear:hover { background: var(--mn-surface-hover); }
-/* Touch slop: the drawn square stays 28px, but taps land on a 44px
+/* Touch slop: the drawn circle stays 28px, but taps land on a 44px
    effective target. The ::after belongs to the button, so it activates it. */
 .mnapps-search-clear::after {
   content: '';
@@ -127,8 +134,9 @@
   align-items: center;
   gap: 9px;
   margin: 16px 0 0;
-  padding: 12px 13px;
+  padding: 12px 15px;
   border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
   color: var(--mn-text-secondary);
   background: var(--mn-surface-card);
   font-size: 12px;
@@ -136,10 +144,9 @@
 }
 .mnapps-status-stale {
   flex-wrap: wrap;
-  border-color: var(--mn-border-strong);
   color: var(--mn-text-primary);
   background: var(--mn-surface-raised);
-  box-shadow: var(--mn-shadow-sm);
+  box-shadow: var(--mn-shadow-md);
 }
 .mnapps-status-stale span { flex: 1 1 190px; }
 .mnapps-retry {
@@ -147,15 +154,15 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 0 12px;
-  border: var(--mn-hairline) solid var(--mn-border-strong);
-  border-radius: var(--mn-radius);
+  padding: 0 14px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-primary);
   background: transparent;
   font-size: 12px;
-  font-weight: 740;
+  font-weight: 600;
 }
-.mnapps-retry:hover { color: var(--mn-text-inverted); background: var(--mn-surface-inverted); }
+.mnapps-retry:hover { background: var(--mn-surface-hover); }
 
 /* Sections and cards */
 .mnapps-section { margin-top: 30px; }
@@ -163,11 +170,22 @@
   margin: 0 0 12px;
   color: var(--mn-text-muted);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
+  font-weight: 600;
+  letter-spacing: .07em;
   text-transform: uppercase;
 }
 .mnapps-list { display: grid; gap: 10px; }
+
+/* Featured takes a soft accent wash so the shelf reads as curated without
+   shouting — the cards inside stay on their normal raised surface. */
+.mnapps-section[aria-labelledby='mnapps-featured'] {
+  padding: 14px;
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-accent-soft);
+}
+.mnapps-section[aria-labelledby='mnapps-featured'] .mnapps-section-label {
+  color: var(--mn-accent-ink);
+}
 
 .mnapps-card {
   width: 100%;
@@ -182,11 +200,13 @@
   color: var(--mn-text-primary);
   background: var(--mn-surface-raised);
   text-align: left;
-  transition: border-color .15s ease, box-shadow .15s ease;
+  box-shadow: var(--mn-shadow-sm);
+  transition: box-shadow .15s ease, transform .15s ease;
 }
-.mnapps-card:hover { border-color: var(--mn-border-strong); box-shadow: var(--mn-shadow-ink); }
+.mnapps-card:hover { box-shadow: var(--mn-shadow-md); transform: translateY(-1px); }
+.mnapps-card:active { box-shadow: var(--mn-shadow-sm); transform: translateY(0); }
 .mnapps-card-copy { min-width: 0; display: grid; gap: 5px; }
-.mnapps-card-copy strong { font-size: 14px; font-weight: 760; }
+.mnapps-card-copy strong { font-size: 14px; font-weight: 600; }
 .mnapps-card-copy small {
   display: -webkit-box;
   overflow: hidden;
@@ -202,34 +222,36 @@
    clipped by the overflow:hidden crop. */
 .mnapps-card-meta { display: flex; flex-wrap: nowrap; gap: 6px; margin-top: 2px; overflow: hidden; padding-right: 1px; }
 .mnapps-card-arrow { justify-self: end; color: var(--mn-text-muted); }
-.mnapps-card:hover .mnapps-card-arrow { color: var(--mn-text-primary); }
+.mnapps-card:hover .mnapps-card-arrow { color: var(--mn-accent-ink); }
 
 .mnapps-pill,
 .mnapps-tag {
   flex: 0 0 auto;
-  padding: 3px 7px;
+  padding: 3px 9px;
   border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-secondary);
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .1em;
+  font-weight: 600;
+  letter-spacing: .06em;
   line-height: 1.4;
   text-transform: uppercase;
 }
 /* Network pills are metadata, not status: dimmer than the NEW tag so the
    taxonomy reads at a glance. */
-.mnapps-pill { color: var(--mn-text-muted); font-weight: 700; }
+.mnapps-pill { color: var(--mn-text-muted); }
 .mnapps-tag {
   border-color: var(--mn-surface-inverted);
   color: var(--mn-text-inverted);
   background: var(--mn-surface-inverted);
+  font-weight: 700;
 }
 
-/* App icon — registry icons are forced to greyscale to hold the direction.
-   Third-party marks arrive with their own shapes and backgrounds (rounded
-   squircles, black tiles, wide wordmarks), so every one is CONTAINED, padded,
-   and placed on the same light plate: one square monochrome frame for the
-   whole list, whatever the icon ships with. */
+/* App icon — third-party marks arrive with their own shapes and backgrounds
+   (rounded squircles, black tiles, wide wordmarks), so every one is
+   CONTAINED, padded, and framed on the same neutral LIGHT plate in both
+   themes: brand colours show, and the shared white tile is what makes the
+   list read as one set. */
 .mnapps-icon {
   width: 46px;
   height: 46px;
@@ -237,8 +259,11 @@
   overflow: hidden;
   flex: 0 0 auto;
   place-items: center;
-  border: var(--mn-hairline) solid var(--mn-border-strong);
-  background: var(--mn-surface-raised);
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-sm);
+  /* Literal white on purpose: the plate stays light in dark mode too,
+     because the icons were drawn for light grounds. */
+  background: #ffffff;
 }
 .mnapps-icon img {
   width: 100%;
@@ -248,28 +273,18 @@
   filter: var(--mn-app-icon-filter);
 }
 .mnapps-icon-letter {
-  color: var(--mn-text-primary);
+  /* Near-black to match the always-light plate, in both themes. */
+  color: #0a0b0d;
   font-family: var(--mn-font-display);
   font-size: 19px;
   font-weight: 700;
-}
-/* Dark: the plate stays light — icons were drawn for light grounds, and a
-   consistent light plate is the frame that makes them read as one set. */
-:root[data-theme="dark"] .mnapps-icon { background: var(--mn-surface-inverted); }
-:root[data-theme="dark"] .mnapps-icon-letter { color: var(--mn-text-inverted); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-theme="dark"]) .mnapps-icon {
-    background: var(--mn-surface-inverted);
-  }
-  :root:not([data-theme="light"]):not([data-theme="dark"]) .mnapps-icon-letter {
-    color: var(--mn-text-inverted);
-  }
 }
 
 .mnapps-empty {
   margin: 26px 0 0;
   padding: 22px 16px;
   border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
   color: var(--mn-text-secondary);
   background: var(--mn-surface-card);
   font-size: 13px;
@@ -281,7 +296,8 @@
   max-width: 460px;
   margin: 34px 0 0;
   padding: 14px 16px;
-  border-left: 3px solid var(--mn-border-strong);
+  border-left: 3px solid var(--mn-accent);
+  border-radius: var(--mn-radius-md);
   color: var(--mn-text-secondary);
   background: var(--mn-surface-card);
   font-size: 12px;
@@ -306,28 +322,32 @@
   animation: mnapps-in .22s ease-out both;
 }
 
+/* A rounded floating bar, lifted off the page by the soft shadow scale. */
 .mnapps-chrome {
   display: grid;
   grid-template-columns: 40px 30px minmax(0, 1fr) 40px;
   align-items: center;
   gap: 11px;
-  padding:
-    calc(9px + env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 9px
+  margin:
+    calc(8px + env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 8px
     max(10px, env(safe-area-inset-left));
-  border-bottom: var(--mn-hairline) solid var(--mn-border-strong);
-  background: var(--mn-surface-card);
+  padding: 7px 9px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-md);
 }
 .mnapps-chrome-button {
   width: 40px;
   height: 40px;
   display: grid;
   place-items: center;
-  border: var(--mn-hairline) solid var(--mn-border-medium);
-  border-radius: var(--mn-radius);
+  border: 0;
+  border-radius: var(--mn-radius-md);
   color: var(--mn-text-primary);
   background: transparent;
 }
-.mnapps-chrome-button:hover { color: var(--mn-text-inverted); background: var(--mn-surface-inverted); }
+.mnapps-chrome-button:hover:not(:disabled) { background: var(--mn-surface-hover); }
 .mnapps-icon-chrome { width: 30px; height: 30px; }
 .mnapps-icon-chrome img { padding: 3px; }
 .mnapps-icon-chrome.mnapps-icon-letter { font-size: 13px; }
@@ -335,7 +355,7 @@
 .mnapps-chrome-copy strong {
   overflow: hidden;
   font-size: 13px;
-  font-weight: 740;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -373,7 +393,7 @@
   color: var(--mn-text-secondary);
   background: var(--mn-surface-page);
   font-size: 12px;
-  font-weight: 680;
+  font-weight: 600;
 }
 .mnapps-spinner { animation: mnapps-spin 1s linear infinite; }
 
@@ -386,30 +406,27 @@
   grid-template-columns: 18px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
-  padding: 12px 13px;
-  border: var(--mn-hairline) solid var(--mn-border-strong);
+  padding: 12px 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
   color: var(--mn-text-primary);
   background: var(--mn-surface-raised);
-  box-shadow: var(--mn-shadow-sm);
+  box-shadow: var(--mn-shadow-md);
 }
 .mnapps-hint p { grid-column: 2 / -1; margin: 0; font-size: 12px; line-height: 1.45; }
 .mnapps-hint-open {
   position: relative;
   grid-column: 3;
   min-height: 32px;
-  padding: 0 11px;
-  border: var(--mn-hairline) solid var(--mn-surface-inverted);
-  border-radius: var(--mn-radius);
+  padding: 0 13px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-inverted);
   background: var(--mn-surface-inverted);
   font-size: 11px;
-  font-weight: 780;
+  font-weight: 600;
 }
-.mnapps-hint-open:hover {
-  border-color: var(--mn-border-strong);
-  color: var(--mn-text-primary);
-  background: transparent;
-}
+.mnapps-hint-open:hover { background: var(--mn-accent-hover); }
 /* Same 44px effective touch target as the dismiss beside it. */
 .mnapps-hint-open::after {
   content: '';
@@ -424,11 +441,11 @@
   display: grid;
   place-items: center;
   border: var(--mn-hairline) solid var(--mn-border-medium);
-  border-radius: var(--mn-radius);
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-primary);
   background: transparent;
 }
-.mnapps-hint-dismiss:hover:not(:disabled) { color: var(--mn-text-inverted); background: var(--mn-surface-inverted); }
+.mnapps-hint-dismiss:hover:not(:disabled) { background: var(--mn-surface-hover); }
 /* Touch slop to a 44px effective target. Vertical is generous; horizontal is
    half the hint grid's gap, so it never overlaps the Open button beside it. */
 .mnapps-hint-dismiss::after {
@@ -454,14 +471,26 @@
   max-height: 92svh;
   overflow-y: auto;
   padding:
-    22px max(20px, env(safe-area-inset-right))
+    14px max(20px, env(safe-area-inset-right))
     calc(22px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
-  border-top: var(--mn-hairline) solid var(--mn-border-strong);
+  border-radius: var(--mn-radius-lg) var(--mn-radius-lg) 0 0;
   color: var(--mn-text-primary);
   background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-lg);
   color-scheme: var(--mn-color-scheme);
   font-family: var(--mn-font-body);
   animation: mnapps-sheet-in .28s cubic-bezier(.16, 1, .3, 1) both;
+}
+/* Bottom-sheet grab handle — decorative only; the sheet is dismissed by
+   its buttons and Escape, exactly as before. */
+.mnapps-sheet::before {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 16px;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-border-medium);
 }
 
 .mnapps-sheet-head {
@@ -475,8 +504,8 @@
   margin: 0;
   color: var(--mn-text-muted);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .13em;
+  font-weight: 600;
+  letter-spacing: .07em;
   text-transform: uppercase;
 }
 .mnapps-sheet-head h2 {
@@ -485,7 +514,7 @@
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -.02em;
-  line-height: .95;
+  line-height: 1.05;
 }
 .mnapps-sheet-mark {
   width: 40px;
@@ -493,7 +522,8 @@
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  border: var(--mn-hairline) solid var(--mn-surface-inverted);
+  border: 0;
+  border-radius: var(--mn-radius-md);
   color: var(--mn-text-inverted);
   background: var(--mn-surface-inverted);
 }
@@ -512,12 +542,13 @@
   font-size: 12px;
 }
 .mnapps-sheet-origin small {
-  padding: 3px 7px;
+  padding: 3px 9px;
   border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-secondary);
   font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .1em;
+  font-weight: 600;
+  letter-spacing: .06em;
   text-transform: uppercase;
 }
 .mnapps-sheet-copy { margin: 16px 0 0; font-size: 13px; line-height: 1.55; }
@@ -537,31 +568,38 @@
   grid-template-columns: 22px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
-  padding: 12px 0;
+  padding: 12px 8px;
   border: 0;
-  border-radius: var(--mn-radius);
+  border-radius: var(--mn-radius-md);
   color: var(--mn-text-primary);
   background: transparent;
   text-align: left;
 }
+.mnapps-field:hover:not(:disabled) { background: var(--mn-accent-soft); }
 .mnapps-field-box {
   width: 22px;
   height: 22px;
   display: grid;
   place-items: center;
-  border: var(--mn-hairline) solid var(--mn-border-strong);
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-sm);
   color: transparent;
   background: transparent;
 }
-.mnapps-field-box-on { color: var(--mn-text-inverted); background: var(--mn-surface-inverted); }
+.mnapps-field-box-on {
+  border-color: var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+}
 .mnapps-field-copy { min-width: 0; display: grid; gap: 4px; }
-.mnapps-field-copy strong { font-size: 13px; font-weight: 740; }
+.mnapps-field-copy strong { font-size: 13px; font-weight: 600; }
 .mnapps-field-copy small { color: var(--mn-text-secondary); font-size: 12px; line-height: 1.45; }
 
 .mnapps-sheet-boundary {
   margin: 18px 0 0;
   padding: 13px 15px;
-  border-left: 3px solid var(--mn-border-strong);
+  border-left: 3px solid var(--mn-accent);
+  border-radius: var(--mn-radius-md);
   color: var(--mn-text-secondary);
   background: var(--mn-surface-card);
   font-size: 12px;
@@ -572,39 +610,50 @@
 .mnapps-button-ghost,
 .mnapps-button-solid,
 .mnapps-sheet-done {
-  min-height: 46px;
+  min-height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 0 14px;
-  border: var(--mn-hairline) solid var(--mn-border-strong);
-  border-radius: var(--mn-radius);
+  padding: 0 16px;
+  border: var(--mn-hairline) solid transparent;
+  border-radius: var(--mn-radius-pill);
   font-size: 13px;
-  font-weight: 760;
+  font-weight: 600;
+  transition: background .12s ease, box-shadow .12s ease, transform .06s ease;
 }
-.mnapps-button-ghost { color: var(--mn-text-primary); background: transparent; }
+.mnapps-button-ghost {
+  border-color: var(--mn-border-medium);
+  color: var(--mn-text-primary);
+  background: transparent;
+}
 .mnapps-button-ghost:hover:not(:disabled) { background: var(--mn-surface-hover); }
 .mnapps-button-solid,
 .mnapps-sheet-done {
   border-color: var(--mn-surface-inverted);
   color: var(--mn-text-inverted);
   background: var(--mn-surface-inverted);
+  box-shadow: var(--mn-shadow-accent);
 }
 .mnapps-button-solid:hover:not(:disabled),
 .mnapps-sheet-done:hover {
-  border-color: var(--mn-border-strong);
-  color: var(--mn-text-primary);
-  background: transparent;
+  border-color: var(--mn-accent-hover);
+  background: var(--mn-accent-hover);
+}
+.mnapps-button-solid:active:not(:disabled),
+.mnapps-sheet-done:active {
+  transform: translateY(1px);
+  box-shadow: none;
 }
 /* Deliberate opt-in: every box starts unticked, so this button mounts
    disabled. Style that state explicitly — a hollow, muted control that
    plainly reads "not yet available" — rather than letting the legacy
-   global `button:disabled { opacity: .42 }` dim the solid slab. */
+   global `button:disabled { opacity: .42 }` dim the solid pill. */
 .mnapps-button-solid:disabled {
   border-color: var(--mn-border-medium);
   color: var(--mn-text-muted);
   background: transparent;
+  box-shadow: none;
   opacity: 1;
 }
 
@@ -638,6 +687,8 @@
   .mnapps-browser,
   .mnapps-sheet-backdrop,
   .mnapps-sheet { animation: none; }
+  .mnapps-card,
+  .mnapps-card:hover { transition: none; transform: none; }
   .mnapps-spinner { animation-duration: 2.4s; }
 }
 
@@ -653,9 +704,12 @@
   .mnapps-sheet {
     width: min(520px, 100%);
     padding: 26px;
-    border: var(--mn-hairline) solid var(--mn-border-strong);
-    box-shadow: var(--mn-shadow-ink);
+    border: var(--mn-hairline) solid var(--mn-border-hairline);
+    border-radius: var(--mn-radius-lg);
+    box-shadow: var(--mn-shadow-lg);
   }
+  /* Centred dialog, not a bottom sheet — no grab handle. */
+  .mnapps-sheet::before { display: none; }
 }
 
 /* Centred content column: the screen previously let every section stretch the

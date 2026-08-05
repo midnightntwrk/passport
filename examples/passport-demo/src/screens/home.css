@@ -1,8 +1,9 @@
 @import './tokens.css';
 
 /* Home screen — prefix "mnhome-".
-   Strict monochrome Midnight direction: no radii, hard offset shadows,
-   1px hairlines, mobile-first at ~390px.
+   Base-inspired Midnight direction: one electric-blue accent doing all
+   of the emphasis work, soft diffuse shadows, generous rounding (cards
+   at --mn-radius, primary actions as pills), mobile-first at ~390px.
 
    Every colour on this screen comes from tokens.css. The screen builds its
    hierarchy out of four real surface values — page, card, raised, sunken —
@@ -36,7 +37,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border-bottom: var(--mn-hairline) solid var(--mn-border-strong);
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
   background: var(--mn-surface-page);
 }
 .mnhome-wordmark {
@@ -59,17 +60,18 @@
   place-items: center;
   padding: 0;
   border: var(--mn-hairline) solid var(--mn-border-medium);
-  border-radius: var(--mn-radius);
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-primary);
   background: transparent;
   cursor: pointer;
   transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
 .mnhome-icon-button:hover:not(:disabled) {
-  border-color: var(--mn-border-strong);
-  color: var(--mn-text-inverted);
-  background: var(--mn-surface-inverted);
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
 }
+.mnhome-icon-button:active:not(:disabled) { background: var(--mn-surface-active); }
 .mnhome-icon-button:disabled { opacity: .42; cursor: default; }
 /* Touch slop: the drawn square stays 34px, but the hit area is extended to a
    44px effective target for touch. The ::after is part of the button, so taps
@@ -89,8 +91,8 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding-top: 24px;
+  gap: 20px;
+  padding-top: 28px;
   /* The bottom nav belongs to the integrator — leave room for it. */
   padding-bottom: calc(var(--mn-nav-height) + 24px + env(safe-area-inset-bottom));
 }
@@ -99,16 +101,16 @@
   margin: 0;
   color: var(--mn-text-muted);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
+  font-weight: 600;
+  letter-spacing: .07em;
   text-transform: uppercase;
 }
 .mnhome-kicker {
   margin: 0 0 8px;
   color: var(--mn-text-muted);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
+  font-weight: 600;
+  letter-spacing: .07em;
   text-transform: uppercase;
 }
 
@@ -117,10 +119,10 @@
   margin: 0;
   color: var(--mn-text-primary);
   font-family: var(--mn-font-display);
-  font-size: clamp(32px, 9.4vw, 46px);
-  font-weight: 700;
-  letter-spacing: -.02em;
-  line-height: .92;
+  font-size: clamp(36px, 10.5vw, 52px);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: .95;
   overflow-wrap: anywhere;
 }
 
@@ -129,7 +131,7 @@
 .mnhome-assets {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
 }
 
 .mnhome-card {
@@ -140,10 +142,12 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px;
+  padding: 16px;
   border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
   color: var(--mn-text-primary);
   background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
 }
 .mnhome-card-head {
   display: flex;
@@ -195,10 +199,12 @@
   grid-template-columns: 92px minmax(0, 1fr);
   align-items: center;
   gap: 16px;
-  padding: 14px;
+  padding: 16px;
   border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
   color: var(--mn-text-primary);
   background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
 }
 
 .mnhome-battery {
@@ -218,9 +224,9 @@
 }
 .mnhome-battery-fill {
   fill: none;
-  stroke: var(--mn-text-primary);
+  stroke: var(--mn-accent);
   stroke-width: 6;
-  stroke-linecap: butt;
+  stroke-linecap: round;
   transition: stroke-dasharray .5s ease;
 }
 .mnhome-battery-value {
@@ -241,7 +247,7 @@
   padding: 0 12px;
   color: var(--mn-text-muted);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: .08em;
   line-height: 1.3;
   text-align: center;
@@ -283,8 +289,8 @@
 .mnhome-dust-balance span {
   color: var(--mn-text-muted);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .1em;
+  font-weight: 600;
+  letter-spacing: .08em;
 }
 .mnhome-dust-cap {
   margin: 0;
@@ -302,10 +308,10 @@
   align-items: center;
   gap: 7px;
   margin-top: 4px;
-  padding: 0 12px;
-  border: var(--mn-hairline) solid var(--mn-border-strong);
-  border-radius: var(--mn-radius);
-  color: var(--mn-text-primary);
+  padding: 0 14px;
+  border: var(--mn-hairline) solid var(--mn-accent);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-accent-ink);
   background: transparent;
   cursor: pointer;
   font-size: 12px;
@@ -313,8 +319,12 @@
   transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
 .mnhome-ghost:hover:not(:disabled) {
-  color: var(--mn-text-inverted);
-  background: var(--mn-surface-inverted);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.mnhome-ghost:active:not(:disabled) {
+  color: var(--mn-accent-text);
+  background: var(--mn-accent);
 }
 .mnhome-ghost:disabled { opacity: .42; cursor: default; }
 /* Vertical touch slop to a 44px effective target; horizontal left alone so the
@@ -342,8 +352,9 @@
   align-items: center;
   gap: 9px;
   margin: 0;
-  padding: 10px 12px;
-  border: var(--mn-hairline) solid var(--mn-border-strong);
+  padding: 12px 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
   color: var(--mn-text-primary);
   background: var(--mn-surface-raised);
   box-shadow: var(--mn-shadow-sm);
@@ -361,24 +372,26 @@
   margin: 0;
   padding: 0;
   border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  overflow: hidden;
   background: var(--mn-surface-card);
   list-style: none;
 }
 .mnhome-address {
-  min-height: 46px;
+  min-height: 48px;
   display: grid;
   grid-template-columns: 78px minmax(0, 1fr) 34px;
   align-items: center;
   gap: 10px;
-  padding: 6px 10px;
+  padding: 7px 12px;
   border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
 }
 .mnhome-address:last-child { border-bottom: 0; }
 .mnhome-address-label {
   color: var(--mn-text-muted);
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .12em;
+  font-weight: 600;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 .mnhome-address-value {
@@ -397,6 +410,8 @@
   display: flex;
   flex-direction: column;
   border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  overflow: hidden;
   background: var(--mn-surface-card);
 }
 .mnhome-panel-head {
@@ -418,20 +433,20 @@
   gap: 6px;
   padding: 0 10px;
   border: var(--mn-hairline) solid var(--mn-border-medium);
-  border-radius: var(--mn-radius);
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-primary);
   background: transparent;
   cursor: pointer;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: .06em;
   text-transform: uppercase;
   transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
 .mnhome-panel-refresh:hover:not(:disabled) {
-  border-color: var(--mn-border-strong);
-  color: var(--mn-text-inverted);
-  background: var(--mn-surface-inverted);
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
 }
 .mnhome-panel-refresh:disabled { opacity: .42; cursor: default; }
 /* Touch slop to a 44px effective target inside the 44px panel head. */
@@ -460,7 +475,7 @@
   padding: 11px 12px;
   border: 0;
   border-left: 3px solid transparent;
-  border-radius: var(--mn-radius);
+  border-radius: 0;
   color: var(--mn-text-primary);
   background: transparent;
   cursor: pointer;
@@ -468,8 +483,8 @@
   transition: background .15s ease;
 }
 .mnhome-row:hover { background: var(--mn-surface-hover); }
-/* The user's own transactions carry a full-strength rule. */
-.mnhome-row-mine { border-left-color: var(--mn-border-strong); }
+/* The user's own transactions carry the accent rail. */
+.mnhome-row-mine { border-left-color: var(--mn-accent); }
 
 .mnhome-row-top {
   display: flex;
@@ -499,20 +514,27 @@
 .mnhome-pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 7px;
+  padding: 3px 9px;
   border: var(--mn-hairline) solid var(--mn-surface-inverted);
+  border-radius: var(--mn-radius-pill);
   color: var(--mn-text-inverted);
   background: var(--mn-surface-inverted);
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .1em;
+  font-weight: 600;
+  letter-spacing: .08em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 .mnhome-pill-hollow {
-  border-color: var(--mn-border-strong);
+  border-color: var(--mn-border-medium);
   color: var(--mn-text-primary);
   background: transparent;
+}
+/* A settled SUCCESS reads as a quiet tinted chip, not a loud solid. */
+.mnhome-pill-success {
+  border-color: transparent;
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
 }
 .mnhome-row-block {
   color: var(--mn-text-secondary);
@@ -548,6 +570,7 @@
   display: block;
   height: 10px;
   border: 0;
+  border-radius: var(--mn-radius-sm);
   background: var(--mn-surface-skeleton);
   animation: mnhome-pulse 1.3s ease-in-out infinite;
 }
@@ -584,22 +607,25 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 18px;
-  border: var(--mn-hairline) solid var(--mn-surface-inverted);
-  border-radius: var(--mn-radius);
-  color: var(--mn-text-inverted);
-  background: var(--mn-surface-inverted);
-  box-shadow: var(--mn-shadow-md);
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-accent-text);
+  background: var(--mn-accent);
+  box-shadow: var(--mn-shadow-accent);
   cursor: pointer;
   font-size: 14px;
-  font-weight: 780;
-  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+  font-weight: 700;
+  transition: background .15s ease, box-shadow .15s ease, transform .1s ease;
 }
 .mnhome-classic:hover:not(:disabled) {
-  border-color: var(--mn-border-strong);
-  color: var(--mn-text-primary);
-  background: var(--mn-surface-raised);
-  box-shadow: var(--mn-shadow-ink);
+  background: var(--mn-accent-hover);
+  box-shadow: var(--mn-shadow-accent);
+}
+.mnhome-classic:active:not(:disabled) {
+  background: var(--mn-accent-hover);
+  box-shadow: var(--mn-shadow-sm);
+  transform: translateY(1px);
 }
 
 .mnhome-foot {
@@ -650,6 +676,6 @@
 }
 
 /* Sync gauge: while the wallet walks the chain the ring fills with the live
-   sync percentage in the muted tone; the ink tone stays reserved for a real
-   DUST charge. */
+   sync percentage in the muted tone; the accent blue stays reserved for a
+   real DUST charge. */
 .mnhome-battery-fill-sync { stroke: var(--mn-text-muted); }
