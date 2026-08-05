@@ -648,3 +648,8 @@
     font-size: clamp(15px, 14cqi, 26px);
   }
 }
+
+/* Sync gauge: while the wallet walks the chain the ring fills with the live
+   sync percentage in the muted tone; the ink tone stays reserved for a real
+   DUST charge. */
+.mnhome-battery-fill-sync { stroke: var(--mn-text-muted); }

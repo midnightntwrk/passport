@@ -289,8 +289,54 @@ export interface LocalMidnightWallet {
   surfaces(): Promise<LocalWalletSurfaces>;
   /** Resolves once the facade reports a fully synced state. */
   waitForSync(): Promise<void>;
+  /**
+   * Streams live sync progress, throttled to at most ~2 updates per second.
+   * Returns an unsubscribe function. The listener may fire once more with the
+   * update in flight when unsubscribed.
+   */
+  subscribeSyncProgress(listener: (progress: LocalWalletSyncProgress) => void): () => void;
   /** Stops sync and submission. Safe to call more than once. */
   close(): Promise<void>;
+}
+
+export interface LocalWalletSyncProgress {
+  /**
+   * 0–100 across the shielded, unshielded, and DUST components (the least
+   * synced of the three), or null before the indexer has reported a target.
+   */
+  percent: number | null;
+  synced: boolean;
+  connected: boolean;
+}
+
+/**
+ * The shielded and DUST wallets report `appliedIndex` (wallet-sdk-abstractions
+ * SyncProgress) while the unshielded wallet ships its own shape with
+ * `appliedId`/`highestTransactionId`. Which target field the indexer actually
+ * populates varies by deployment — observed live against preview, only
+ * `highestRelevantWalletIndex` carries the walk target (`highestIndex` and
+ * `highestRelevantIndex` stay 0) — so the target is the largest index any of
+ * them reports. A component with no target yet contributes nothing.
+ */
+function componentRatio(progress: {
+  appliedIndex?: bigint;
+  highestIndex?: bigint;
+  highestRelevantIndex?: bigint;
+  highestRelevantWalletIndex?: bigint;
+  appliedId?: bigint;
+  highestTransactionId?: bigint;
+}): number | null {
+  const candidates = [
+    progress.highestRelevantWalletIndex,
+    progress.highestRelevantIndex,
+    progress.highestIndex,
+    progress.highestTransactionId,
+  ].filter((value): value is bigint => value !== undefined);
+  const target = candidates.reduce((max, value) => (value > max ? value : max), 0n);
+  const reported = progress.appliedIndex ?? progress.appliedId;
+  if (reported === undefined || target <= 0n) return null;
+  const applied = reported > target ? target : reported;
+  return Number(applied) / Number(target);
 }
 
 /**
@@ -440,6 +486,38 @@ export async function createLocalMidnightWallet(
     },
     async waitForSync(): Promise<void> {
       await Rx.firstValueFrom(facade.state().pipe(Rx.filter((state) => state.isSynced)));
+    },
+    subscribeSyncProgress(listener: (progress: LocalWalletSyncProgress) => void): () => void {
+      const subscription = facade
+        .state()
+        .pipe(Rx.throttleTime(500, undefined, { leading: true, trailing: true }))
+        .subscribe((state) => {
+          if (import.meta.env.DEV) {
+            const show = (p: unknown) => JSON.stringify(p, (_k, v) => (typeof v === 'bigint' ? String(v) : v));
+            console.debug(
+              `[localWallet sync] shielded=${show(state.shielded.progress)} unshielded=${show(state.unshielded.progress)} dust=${show(state.dust.progress)} synced=${state.isSynced}`,
+            );
+          }
+          const ratios = [
+            componentRatio(state.shielded.progress),
+            componentRatio(state.unshielded.progress),
+            componentRatio(state.dust.progress),
+          ].filter((ratio): ratio is number => ratio !== null);
+          const percent =
+            ratios.length === 0
+              ? null
+              : Math.max(0, Math.min(100, Math.floor(Math.min(...ratios) * 100)));
+          listener({
+            // A synced facade is 100% regardless of index arithmetic.
+            percent: state.isSynced ? 100 : percent,
+            synced: state.isSynced,
+            connected:
+              state.shielded.progress.isConnected &&
+              state.unshielded.progress.isConnected &&
+              state.dust.progress.isConnected,
+          });
+        });
+      return () => subscription.unsubscribe();
     },
     async close(): Promise<void> {
       if (closed) return;

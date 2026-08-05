@@ -30,6 +30,11 @@ export interface HomeScreenProps {
   /** 0-100, `null` means unknown. */
   dustFillPercent: number | null
   dustSyncing: boolean
+  /**
+   * Live wallet sync progress, 0–100, when the wallet source reports one
+   * (the on-device wallet does; Dynamic does not). null = no figure known.
+   */
+  syncPercent?: number | null
   balanceStatus: string
   unshieldedAddress: string | null
   shieldedAddress: string | null
@@ -108,6 +113,7 @@ export default function HomeScreen(props: HomeScreenProps) {
     dustCap,
     dustFillPercent,
     dustSyncing,
+    syncPercent,
     balanceStatus,
     unshieldedAddress,
     shieldedAddress,
@@ -154,40 +160,53 @@ export default function HomeScreen(props: HomeScreenProps) {
   /* One legible story for the battery when the fill is unknown: say whether
      we are still waiting, whether the wallet is unreachable, or whether there
      is simply no DUST yet. */
+  /* While the wallet is still walking the chain, the ring becomes a live
+     sync gauge when the source reports a percentage; the DUST charge takes
+     over once the fill is known. */
+  const stillSyncing = balancesLoading || dustSyncing
+  const showSyncGauge = fill === null && stillSyncing && syncPercent != null
   const ringLabel =
     fill !== null
       ? `${Math.round(fill)}%`
-      : balancesLoading || dustSyncing
-        ? 'Syncing'
-        : balanceStatus === 'unavailable'
-          ? 'Unknown'
-          : 'No charge'
+      : showSyncGauge
+        ? `${Math.round(syncPercent)}%`
+        : stillSyncing
+          ? 'Syncing'
+          : balanceStatus === 'unavailable'
+            ? 'Unknown'
+            : 'No charge'
   const ringAriaLabel =
     fill !== null
       ? `DUST charge ${Math.round(fill)} per cent`
-      : balancesLoading || dustSyncing
-        ? 'DUST charge still syncing'
-        : balanceStatus === 'unavailable'
-          ? 'DUST charge unknown — wallet unavailable'
-          : 'DUST battery empty'
+      : showSyncGauge
+        ? `Wallet sync ${Math.round(syncPercent)} per cent complete`
+        : stillSyncing
+          ? 'DUST charge still syncing'
+          : balanceStatus === 'unavailable'
+            ? 'DUST charge unknown — wallet unavailable'
+            : 'DUST battery empty'
 
   const dustDetail = dustCap
     ? `Cap ${dustCap}${dustSyncing ? ' · charging' : ''}`
     : balancesLoading
-      ? 'Checking DUST state with the wallet'
+      ? showSyncGauge
+        ? `Syncing the wallet — ${Math.round(syncPercent)}% of the chain walked`
+        : 'Checking DUST state with the wallet'
       : balanceStatus === 'unavailable'
         ? 'DUST state unavailable — refresh once the wallet reconnects'
         : dustSyncing
-          ? 'No charge reported yet — the wallet is still syncing'
+          ? showSyncGauge
+            ? `Syncing the wallet — ${Math.round(syncPercent)}% of the chain walked`
+            : 'No charge reported yet — the wallet is still syncing'
           : fill === null
             ? 'Not registered yet — DUST pays transaction fees'
             : 'Empty — DUST accrues while NIGHT is held'
 
   const ringDash = useMemo(() => {
-    const shown = fill ?? 0
+    const shown = fill ?? (showSyncGauge ? syncPercent : 0) ?? 0
     const filled = (shown / 100) * RING_CIRCUMFERENCE
     return `${filled} ${RING_CIRCUMFERENCE - filled}`
-  }, [fill])
+  }, [fill, showSyncGauge, syncPercent])
 
   const addressRows: { kind: AddressKind; label: string; value: string | null }[] = [
     { kind: 'unshielded', label: 'Unshielded', value: unshieldedAddress },
@@ -271,7 +290,7 @@ export default function HomeScreen(props: HomeScreenProps) {
               <svg viewBox="0 0 80 80" role="img" aria-label={ringAriaLabel}>
                 <circle className="mnhome-battery-track" cx="40" cy="40" r={RING_RADIUS} />
                 <circle
-                  className="mnhome-battery-fill"
+                  className={`mnhome-battery-fill${showSyncGauge ? ' mnhome-battery-fill-sync' : ''}`}
                   cx="40"
                   cy="40"
                   r={RING_RADIUS}
@@ -280,7 +299,7 @@ export default function HomeScreen(props: HomeScreenProps) {
                 />
               </svg>
               <span
-                className={`mnhome-battery-value${fill === null ? ' mnhome-battery-value-label' : ''}`}
+                className={`mnhome-battery-value${fill === null && !showSyncGauge ? ' mnhome-battery-value-label' : ''}`}
               >
                 {ringLabel}
               </span>

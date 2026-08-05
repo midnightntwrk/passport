@@ -565,6 +565,7 @@ export default function PassportDemo() {
   const [transactionsStatus, setTransactionsStatus] = useState<TransactionsStatus>('loading');
   const [localSurfaces, setLocalSurfaces] = useState<LocalWalletSurfaces | null>(null);
   const [localWalletStatus, setLocalWalletStatus] = useState<LocalWalletStatus>('idle');
+  const [localSyncPercent, setLocalSyncPercent] = useState<number | null>(null);
   const [localWalletNetworkId, setLocalWalletNetworkId] = useState<string | null>(null);
   const [localDustRetryCount, setLocalDustRetryCount] = useState(0);
   /**
@@ -1054,6 +1055,30 @@ export default function PassportDemo() {
       onboardingRunning.current = false;
     }
   };
+
+  // Live sync progress from the local wallet's state stream. Resubscribes per
+  // wallet handle; on the transition to fully synced, refresh balances once so
+  // the surfaces settle the moment the chain walk completes.
+  useEffect(() => {
+    if (localWalletStatus !== 'ready') {
+      setLocalSyncPercent(null);
+      return;
+    }
+    const handle = localWalletRef.current;
+    if (!handle) return;
+    let wasSynced = false;
+    const unsubscribe = handle.subscribeSyncProgress((progress) => {
+      setLocalSyncPercent(progress.percent);
+      if (progress.synced && !wasSynced) {
+        wasSynced = true;
+        void refreshLocalBalances();
+      }
+    });
+    return () => {
+      unsubscribe();
+      setLocalSyncPercent(null);
+    };
+  }, [localWalletStatus, refreshLocalBalances]);
 
   // DUST state arrives after the indexer has walked far enough. Retry a few
   // times so the battery settles without the user pressing anything.
@@ -2533,6 +2558,7 @@ export default function PassportDemo() {
             {mobileTab === 'home' ? (
               <HomeScreen
                 displayName={sessionDisplayName}
+                syncPercent={walletMode === 'local' ? localSyncPercent : null}
                 unshieldedBalance={activeSurfaces?.unshieldedBalance ?? null}
                 shieldedTokenCount={activeSurfaces?.shieldedTokenCount ?? null}
                 dustBalance={activeSurfaces?.dustBalance ?? null}
