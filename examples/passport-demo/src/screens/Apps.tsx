@@ -100,6 +100,82 @@ function AppCard({ app, onOpen }: { app: RegistryApp; onOpen: () => void }) {
   )
 }
 
+export interface FeaturedAppsProps {
+  profile: AppsScreenProps['profile']
+  /** Notified after the user approves a profile request, for the activity feed. */
+  onProfileShared?: (appName: string, fields: string[]) => void
+}
+
+/**
+ * FeaturedApps — the compact application grid the Home screen embeds below
+ * the wallet summary. Same registry, same cards and icons, and the same
+ * in-Passport AppBrowser as the full Apps tab; only the search, category
+ * grouping, and status chrome are left to the Apps screen.
+ */
+export function FeaturedApps(props: FeaturedAppsProps) {
+  const { profile, onProfileShared } = props
+
+  const [apps, setApps] = useState<RegistryApp[]>([])
+  const [state, setState] = useState<LoadState>('loading')
+  const [openApp, setOpenApp] = useState<RegistryApp | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const list = await fetchAppRegistry()
+      if (cancelled) return
+      setApps(withLocalApps(list))
+      setState('ready')
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Featured entries lead; the rest follow in registry order.
+  const ordered = useMemo(
+    () => [...apps.filter((app) => app.featured), ...apps.filter((app) => !app.featured)],
+    [apps],
+  )
+
+  return (
+    <>
+      <section className="mnapps-section mnapps-embedded" aria-labelledby="mnapps-home-label">
+        <h2 className="mnapps-section-label" id="mnapps-home-label">
+          Apps
+        </h2>
+        {state === 'loading' ? (
+          <p className="mnapps-status" role="status">
+            <Loader2
+              className="mnapps-spinner"
+              size={15}
+              strokeWidth={2}
+              aria-hidden="true"
+            />
+            Loading apps…
+          </p>
+        ) : (
+          <div className="mnapps-list">
+            {ordered.map((app) => (
+              <AppCard key={app.id} app={app} onOpen={() => setOpenApp(app)} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {openApp ? (
+        <AppBrowser
+          key={openApp.id}
+          app={openApp}
+          profile={profile}
+          onClose={() => setOpenApp(null)}
+          onProfileShared={onProfileShared}
+        />
+      ) : null}
+    </>
+  )
+}
+
 export default function AppsScreen(props: AppsScreenProps) {
   const { profile, onProfileShared } = props
 

@@ -125,6 +125,16 @@
   line-height: .95;
   overflow-wrap: anywhere;
 }
+/* The account's display name, set beneath the time-of-day greeting whenever
+   the session knows one. */
+.mnhome-person {
+  margin: 10px 0 0;
+  color: var(--mn-text-secondary);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  overflow-wrap: anywhere;
+}
 
 /* --- Asset row ----------------------------------------------------------- */
 
@@ -366,6 +376,44 @@
 
 /* --- Addresses ----------------------------------------------------------- */
 
+.mnhome-address-block { display: grid; gap: 10px; }
+
+/* Small disclosure: the address rows are a power-user surface, collapsed by
+   default. The control reads as a quiet outlined pill, never a primary CTA. */
+.mnhome-disclosure {
+  position: relative;
+  justify-self: start;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.mnhome-disclosure:hover {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.mnhome-disclosure:active { background: var(--mn-surface-active); }
+/* Touch slop to a 44px effective target. */
+.mnhome-disclosure::after {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+.mnhome-disclosure-chevron { transition: transform .15s ease; }
+.mnhome-disclosure-chevron-open { transform: rotate(180deg); }
+
 .mnhome-addresses {
   display: grid;
   gap: 0;
@@ -404,200 +452,6 @@
   white-space: nowrap;
 }
 
-/* --- Transactions panel -------------------------------------------------- */
-
-.mnhome-panel {
-  display: flex;
-  flex-direction: column;
-  border: var(--mn-hairline) solid var(--mn-border-hairline);
-  border-radius: var(--mn-radius);
-  overflow: hidden;
-  background: var(--mn-surface-card);
-}
-.mnhome-panel-head {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 12px;
-  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
-  /* Recessed strip: the header sits a step below the rows it labels. */
-  background: var(--mn-surface-sunken);
-}
-.mnhome-panel-refresh {
-  position: relative;
-  margin-left: auto;
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: var(--mn-hairline) solid var(--mn-border-medium);
-  border-radius: var(--mn-radius-pill);
-  color: var(--mn-text-primary);
-  background: transparent;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  transition: background .15s ease, color .15s ease, border-color .15s ease;
-}
-.mnhome-panel-refresh:hover:not(:disabled) {
-  border-color: var(--mn-accent);
-  color: var(--mn-accent-ink);
-  background: var(--mn-accent-soft);
-}
-.mnhome-panel-refresh:disabled { opacity: .42; cursor: default; }
-/* Touch slop to a 44px effective target inside the 44px panel head. */
-.mnhome-panel-refresh::after {
-  content: '';
-  position: absolute;
-  inset: -5px 0;
-}
-.mnhome-panel-refresh:disabled::after { display: none; }
-
-.mnhome-rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.mnhome-rows > li { border-bottom: var(--mn-hairline) solid var(--mn-border-hairline); }
-.mnhome-rows > li:last-child { border-bottom: 0; }
-
-.mnhome-row {
-  width: 100%;
-  min-height: 62px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 7px;
-  padding: 11px 12px;
-  border: 0;
-  border-left: 3px solid transparent;
-  border-radius: 0;
-  color: var(--mn-text-primary);
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  transition: background .15s ease;
-}
-.mnhome-row:hover { background: var(--mn-surface-hover); }
-/* The user's own transactions carry the accent rail. */
-.mnhome-row-mine { border-left-color: var(--mn-accent); }
-
-.mnhome-row-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.mnhome-row-hash {
-  min-width: 0;
-  color: var(--mn-text-primary);
-  font-family: var(--mn-font-mono);
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mnhome-row-arrow { margin-left: auto; flex: 0 0 auto; color: var(--mn-text-muted); }
-.mnhome-row:hover .mnhome-row-arrow { color: var(--mn-text-primary); }
-
-.mnhome-row-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-  color: var(--mn-text-muted);
-  font-size: 11px;
-}
-.mnhome-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 9px;
-  border: var(--mn-hairline) solid var(--mn-surface-inverted);
-  border-radius: var(--mn-radius-pill);
-  color: var(--mn-text-inverted);
-  background: var(--mn-surface-inverted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-.mnhome-pill-hollow {
-  border-color: var(--mn-border-medium);
-  color: var(--mn-text-primary);
-  background: transparent;
-}
-/* A settled SUCCESS reads as a quiet tinted chip, not a loud solid. */
-.mnhome-pill-success {
-  border-color: transparent;
-  color: var(--mn-accent-ink);
-  background: var(--mn-accent-soft);
-}
-.mnhome-row-block {
-  color: var(--mn-text-secondary);
-  font-family: var(--mn-font-mono);
-  font-variant-numeric: var(--mn-numeric);
-}
-.mnhome-row-when { color: var(--mn-text-secondary); font-variant-numeric: var(--mn-numeric); }
-
-/* Skeletons */
-.mnhome-row-skeleton {
-  min-height: 62px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 9px;
-  padding: 11px 12px;
-  cursor: default;
-}
-.mnhome-row-skeleton:hover { background: transparent; }
-
-/* Screen-reader-only status text. */
-.mnhome-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-.mnhome-skeleton {
-  display: block;
-  height: 10px;
-  border: 0;
-  border-radius: var(--mn-radius-sm);
-  background: var(--mn-surface-skeleton);
-  animation: mnhome-pulse 1.3s ease-in-out infinite;
-}
-.mnhome-skeleton-hash { width: 62%; }
-.mnhome-skeleton-meta { width: 38%; }
-
-/* Empty / error states */
-.mnhome-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 0;
-  padding: 26px 14px;
-  color: var(--mn-text-muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
-.mnhome-empty-error p {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: var(--mn-text-primary);
-  font-weight: 700;
-}
-
 /* --- Footer -------------------------------------------------------------- */
 
 .mnhome-classic {
@@ -628,6 +482,32 @@
   transform: translateY(1px);
 }
 
+/* Outlined support pill — rendered only when a support channel is
+   configured (VITE_TELEGRAM_URL). Quieter than the solid dashboard CTA. */
+.mnhome-support {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 20px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.mnhome-support:hover {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.mnhome-support:active { background: var(--mn-surface-active); }
+.mnhome-support svg { flex: 0 0 auto; }
+
 .mnhome-foot {
   display: flex;
   align-items: center;
@@ -647,15 +527,14 @@
 /* --- Motion -------------------------------------------------------------- */
 
 @keyframes mnhome-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes mnhome-pulse { 0%, 100% { opacity: .35; } 50% { opacity: .8; } }
 @keyframes mnhome-charge { 0%, 100% { opacity: 1; } 50% { opacity: .32; } }
 
 @media (prefers-reduced-motion: reduce) {
   .mnhome-screen,
-  .mnhome-skeleton,
   .mnhome-battery-charging .mnhome-battery-fill,
   .mnhome-battery-charging .mnhome-battery-value { animation: none; }
   .mnhome-battery-fill { transition: none; }
+  .mnhome-disclosure-chevron { transition: none; }
 }
 
 /* --- Wider viewports ----------------------------------------------------- */

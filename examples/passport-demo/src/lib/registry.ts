@@ -47,23 +47,24 @@ export const FALLBACK_APPS: readonly RegistryApp[] = [
 ]
 
 /**
- * Local demo entry for the separate-origin Atlas example dApp. This is the
- * entry that demonstrably completes the Passport profile handshake end-to-end.
+ * Local demo entry for the separate-origin Midnight Raffle example dApp —
+ * decided 2026/08/05, replacing the earlier Atlas entry. This is the entry
+ * that demonstrably completes the Passport profile handshake end-to-end.
  */
-export const ATLAS_DEMO_APP: RegistryApp = {
-  id: 'atlas-demo',
-  name: 'Atlas (Passport demo dApp)',
+export const RAFFLE_DEMO_APP: RegistryApp = {
+  id: 'raffle-demo',
+  name: 'Midnight Raffle',
   description:
-    'Separate-origin dApp that requests your Passport profile via consented postMessage',
-  url: webUrl(import.meta.env.VITE_ATLAS_URL, true) ?? 'http://localhost:5176',
-  category: 'tools',
+    'Connect your Passport to claim a race-weekend perk and a demo raffle ticket',
+  url: webUrl(import.meta.env.VITE_RAFFLE_URL, true) ?? 'http://localhost:5177',
+  category: 'other',
   networks: ['preview'],
   featured: true,
 }
 
-/** Prepends the local Atlas demo entry to a fetched registry list. */
+/** Prepends the local Midnight Raffle demo entry to a fetched registry list. */
 export function withLocalApps(apps: RegistryApp[]): RegistryApp[] {
-  return [ATLAS_DEMO_APP, ...apps.filter((app) => app.id !== ATLAS_DEMO_APP.id)]
+  return [RAFFLE_DEMO_APP, ...apps.filter((app) => app.id !== RAFFLE_DEMO_APP.id)]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -83,8 +84,8 @@ function optionalString(value: unknown): string | undefined {
  * sheet cannot meaningfully name, and an `http:` entry would put a framed app
  * — and the profile handshake with it — on the network in the clear.
  *
- * `allowHttp` exists solely for the local Atlas dev entry below, which is
- * configured by us and served from `localhost` over plain http.
+ * `allowHttp` exists solely for the local Midnight Raffle dev entry above,
+ * which is configured by us and served from `localhost` over plain http.
  */
 function webUrl(value: unknown, allowHttp = false): string | undefined {
   const candidate = optionalString(value)

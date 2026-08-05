@@ -191,6 +191,136 @@ const WALLET_MODE_STORAGE_KEY = 'passport-wallet-mode';
 const LOCAL_ACCOUNT_ID = 'passport-local-device';
 const LOCAL_SCOPE = { appId: APP_ID, accountId: LOCAL_ACCOUNT_ID };
 
+/* -------------------------------------------------------------------------- */
+/* Demo-grade session persistence — a §2.2 stopgap, NOT a security boundary   */
+/*                                                                            */
+/* Decision 2026/08/05: a signed-in Passport must survive a reload without    */
+/* re-prompting for the passkey. After deriveWalletSeed succeeds, the 32-byte */
+/* wallet seed is wrapped with AES-GCM under a NON-EXTRACTABLE CryptoKey      */
+/* (generateKey with extractable: false) and both — the CryptoKey via         */
+/* structured clone, and the ciphertext beside it — are stored in IndexedDB,  */
+/* scoped per profile. On load, a persisted session is silently unwrapped and */
+/* the wallet rebuilt with createLocalMidnightWallet; signing out clears it.  */
+/*                                                                            */
+/* BE HONEST ABOUT WHAT THIS IS: the non-extractable flag only prevents       */
+/* exporting the raw key bytes. Any script running on this origin can load    */
+/* the CryptoKey from IndexedDB and call decrypt with it, so the seed is      */
+/* origin-readable at runtime. This is a demo-grade stopgap pending Nicolas's */
+/* private-storage decision (§2.2); it deliberately does NOT touch — and must */
+/* never weaken — the PRF-derived private-state encryption path, which        */
+/* remains gated on a live passkey assertion.                                 */
+/* -------------------------------------------------------------------------- */
+
+const SESSION_DATABASE = 'midnight-passport-session';
+const SESSION_STORE = 'wallet-sessions';
+
+interface PersistedWalletSession {
+  /** AES-GCM-256, extractable: false — structured-cloned into IndexedDB. */
+  key: CryptoKey;
+  iv: Uint8Array;
+  ciphertext: ArrayBuffer;
+  createdAt: string;
+}
+
+function openSessionDatabase(): Promise<IDBDatabase> {
+  if (!globalThis.indexedDB) {
+    return Promise.reject(new Error('IndexedDB is unavailable in this browser.'));
+  }
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(SESSION_DATABASE, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(SESSION_STORE)) {
+        request.result.createObjectStore(SESSION_STORE);
+      }
+    };
+    request.onerror = () =>
+      reject(request.error ?? new Error('Unable to open Passport session storage.'));
+    request.onsuccess = () => resolve(request.result);
+  });
+}
+
+async function sessionRequest<T>(
+  mode: IDBTransactionMode,
+  operation: (store: IDBObjectStore) => IDBRequest<T>,
+): Promise<T> {
+  const db = await openSessionDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(SESSION_STORE, mode);
+    const result = operation(transaction.objectStore(SESSION_STORE));
+    result.onsuccess = () => resolve(result.result);
+    result.onerror = () =>
+      reject(result.error ?? new Error('Passport session storage request failed.'));
+  });
+}
+
+function sessionRecordKey(scope: { appId: string; accountId: string }): string {
+  return `${scope.appId}/${scope.accountId}`;
+}
+
+/** Wraps the seed and stores it. Throws on storage failure; callers treat it as best-effort. */
+async function persistWalletSession(
+  scope: { appId: string; accountId: string },
+  seed: Uint8Array,
+): Promise<void> {
+  const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, [
+    'encrypt',
+    'decrypt',
+  ]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    seed as BufferSource,
+  );
+  const record: PersistedWalletSession = {
+    key,
+    iv,
+    ciphertext,
+    createdAt: new Date().toISOString(),
+  };
+  await sessionRequest('readwrite', (store) => store.put(record, sessionRecordKey(scope)));
+}
+
+/**
+ * Silently unwraps a persisted session's wallet seed, or returns null when no
+ * usable session exists. Never throws and never prompts: the whole point of
+ * the stopgap is that the reload path involves no passkey ceremony. The
+ * caller owns the returned bytes and must zero them after use.
+ */
+async function loadPersistedWalletSeed(scope: {
+  appId: string;
+  accountId: string;
+}): Promise<Uint8Array | null> {
+  try {
+    const record = await sessionRequest<PersistedWalletSession | undefined>(
+      'readonly',
+      (store) => store.get(sessionRecordKey(scope)),
+    );
+    if (!record?.key || !record.iv || !record.ciphertext) return null;
+    const plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: record.iv as BufferSource },
+      record.key,
+      record.ciphertext,
+    );
+    const seed = new Uint8Array(plain);
+    return seed.byteLength === 32 ? seed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Removes the persisted session. Best-effort; never throws. */
+async function clearPersistedWalletSession(scope: {
+  appId: string;
+  accountId: string;
+}): Promise<void> {
+  try {
+    await sessionRequest('readwrite', (store) => store.delete(sessionRecordKey(scope)));
+  } catch {
+    // Storage may be unavailable; there is then nothing persisted to clear.
+  }
+}
+
 function storedExperience(): Experience {
   try {
     return window.localStorage.getItem(EXPERIENCE_STORAGE_KEY) === 'classic' ? 'classic' : 'mobile';
@@ -553,11 +683,8 @@ export default function PassportDemo() {
   const [shieldedCustodyAmount, setShieldedCustodyAmount] = useState('500');
   const [experience, setExperience] = useState<Experience>(storedExperience);
   const [mobileTab, setMobileTab] = useState<MobileTab>('home');
-  // A returning visitor whose wallet source is remembered has already met the
-  // welcome panel; send them straight to the three options.
-  const [onboardingStep, setOnboardingStep] = useState<'welcome' | 'choose'>(() =>
-    storedWalletMode() ? 'choose' : 'welcome',
-  );
+  // One-button onboarding (2026/08/05): there is no separate "choose" step
+  // any more, so the screen only distinguishes idle from working.
   const [onboardingIntent, setOnboardingIntent] = useState<OnboardingIntent | null>(null);
   const [onboardingBusyLabel, setOnboardingBusyLabel] = useState<string | null>(null);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
@@ -937,6 +1064,14 @@ export default function PassportDemo() {
       setLocalWalletStatus('opening');
       setOnboardingBusyLabel('Deriving your Midnight wallet from this passkey');
       const seed = await deriveWalletSeed(keyProviderFor(passkey), LOCAL_SCOPE);
+      // §2.2 stopgap (see the banner near LOCAL_SCOPE): persist the wrapped
+      // seed so a reload silently reopens this session without a passkey
+      // prompt. Best-effort — a storage failure never blocks the live session.
+      try {
+        await persistWalletSession(LOCAL_SCOPE, seed);
+      } catch {
+        // No persisted session, then; the next reload asks for the passkey.
+      }
       let wallet: LocalMidnightWallet;
       try {
         setOnboardingBusyLabel('Opening your Midnight wallet');
@@ -958,6 +1093,67 @@ export default function PassportDemo() {
     },
     [closeLocalWallet, keyProviderFor, refreshLocalBalances],
   );
+
+  // §2.2 session-stopgap restore: if a persisted session exists, unwrap the
+  // seed and rebuild the wallet silently — no passkey ceremony — landing the
+  // returning user on Home. Sign-out clears the session, so a signed-out
+  // reload lands on onboarding as before. The effect's deps are stable
+  // callbacks, so it runs on mount; cancellation (not a one-shot ref, which
+  // StrictMode's mount–unmount–remount would defeat) keeps it single-flight.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      // A wallet is already open — nothing to restore over.
+      if (localWalletRef.current) return;
+      const seed = await loadPersistedWalletSeed(LOCAL_SCOPE);
+      if (!seed) return;
+      if (cancelled) {
+        seed.fill(0);
+        return;
+      }
+      setWalletMode('local');
+      setLocalWalletStatus('opening');
+      setOnboardingBusyLabel('Reopening your Passport');
+      try {
+        const { createLocalMidnightWallet } = await import('./lib/localWallet.js');
+        let wallet: LocalMidnightWallet;
+        try {
+          wallet = await createLocalMidnightWallet(seed);
+        } finally {
+          seed.fill(0);
+        }
+        if (cancelled) {
+          void wallet.close().catch(() => undefined);
+          return;
+        }
+        await closeLocalWallet();
+        localWalletRef.current = wallet;
+        setLocalWalletNetworkId(wallet.network.networkId);
+        setLocalSurfaces(initialLocalSurfaceState(wallet));
+        setLocalDustRetryCount(0);
+        setLocalWalletStatus('ready');
+        void refreshLocalBalances();
+        // The profile is public metadata; restoring it keeps the display
+        // side of the session (and the enrolled-passkey answer) in step.
+        const stored = await loadDemoProfile(LOCAL_ACCOUNT_ID).catch(() => null);
+        if (!cancelled && stored) {
+          setProfile(stored);
+          setProfileStatus('ready');
+          setLocalPassportKnown(true);
+        }
+      } catch {
+        // The persisted session could not be reopened (for example, the
+        // network is unreachable). Fall back to onboarding; the session
+        // record is kept so a later reload can try again.
+        if (!cancelled) setLocalWalletStatus('idle');
+      } finally {
+        if (!cancelled) setOnboardingBusyLabel(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [closeLocalWallet, refreshLocalBalances]);
 
   const createLocalPassportProfile = async (): Promise<DemoPassportProfile> => {
     const existing = await loadDemoProfile(LOCAL_ACCOUNT_ID);
@@ -1011,18 +1207,31 @@ export default function PassportDemo() {
     return existing;
   };
 
-  const runLocalOnboarding = async (intent: 'create' | 'signin') => {
+  const runLocalOnboarding = async (requested: 'create' | 'signin' | 'auto') => {
     if (onboardingRunning.current) return;
     onboardingRunning.current = true;
     setOnboardingError(null);
     setError(null);
     setWalletMode('local');
-    setOnboardingIntent(intent === 'create' ? 'local-create' : 'local-signin');
-    setOnboardingBusyLabel(
-      intent === 'create' ? 'Creating your Passport passkey' : 'Unlocking your Passport',
-    );
+    // Provisional intent so the screen flips to its working stage at once;
+    // the resolved journey below corrects the label.
+    setOnboardingIntent(requested === 'signin' ? 'local-signin' : 'local-create');
+    setOnboardingBusyLabel('Checking this browser for a Passport');
+    // One button, both journeys (2026/08/05): a stored local profile means the
+    // existing sign-in/unlock flow runs; a clean browser means enrolment.
+    // WebAuthn discoverable credentials mean the assertion path also finds a
+    // passkey synced from another device once a profile exists here.
+    let intent: 'create' | 'signin' = requested === 'signin' ? 'signin' : 'create';
     let activeProfile: DemoPassportProfile | null = null;
     try {
+      if (requested === 'auto') {
+        const existing = await loadDemoProfile(LOCAL_ACCOUNT_ID).catch(() => null);
+        intent = existing ? 'signin' : 'create';
+      }
+      setOnboardingIntent(intent === 'create' ? 'local-create' : 'local-signin');
+      setOnboardingBusyLabel(
+        intent === 'create' ? 'Creating your Passport passkey' : 'Unlocking your Passport',
+      );
       activeProfile =
         intent === 'create' ? await createLocalPassportProfile() : await unlockLocalPassportProfile();
       await openLocalWallet(activeProfile.passkey);
@@ -1037,7 +1246,6 @@ export default function PassportDemo() {
       const message = cause instanceof Error ? cause.message : String(cause);
       setLocalWalletStatus('error');
       setOnboardingError(message);
-      setOnboardingStep('choose');
       addActivity({
         label: intent === 'create' ? 'Passport passkey' : 'Passport unlock',
         detail: message,
@@ -1104,7 +1312,6 @@ export default function PassportDemo() {
       authFlowWasOpen.current = false;
       setOnboardingIntent(null);
       setOnboardingBusyLabel(null);
-      setOnboardingStep('choose');
       setOnboardingError('Sign-in was not completed. Choose how you would like to continue.');
     }, 1_500);
     return () => window.clearTimeout(timer);
@@ -1199,7 +1406,6 @@ export default function PassportDemo() {
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         setOnboardingError(message);
-        setOnboardingStep('choose');
         addActivity({
           label: 'Passport key',
           detail: message,
@@ -2251,6 +2457,9 @@ export default function PassportDemo() {
   };
   const signOutPassport = async () => {
     const hadDynamicSession = Boolean(user);
+    // Sign-out is the boundary of the §2.2 session stopgap: the wrapped seed
+    // and its wrapping key are removed before anything else is torn down.
+    await clearPersistedWalletSession(LOCAL_SCOPE);
     await closeLocalWallet();
     setWalletMode(null);
     setLocalSurfaces(null);
@@ -2277,7 +2486,6 @@ export default function PassportDemo() {
     // Classic is a signed-in workspace choice. Leaving it pinned would strand
     // the next visitor there, across reloads, with no way back.
     setExperience('mobile');
-    setOnboardingStep('welcome');
     setOnboardingIntent(null);
     setOnboardingBusyLabel(null);
     setOnboardingError(null);
@@ -2349,7 +2557,10 @@ export default function PassportDemo() {
   const sessionActive = localSessionActive || dynamicSessionActive;
   const showOnboarding =
     !sessionActive || onboardingIntent !== null || onboardingError !== null;
-  const onboardingStage: 'welcome' | 'choose' | 'working' = onboardingIntent ? 'working' : onboardingStep;
+  // The §2.2 session restore opens the wallet with no onboarding intent set,
+  // so an opening local wallet also reads as the working stage.
+  const onboardingStage: 'welcome' | 'working' =
+    onboardingIntent !== null || localWalletStatus === 'opening' ? 'working' : 'welcome';
   const onboardingLabel =
     onboardingBusyLabel ??
     (onboardingIntent === 'dynamic'
@@ -2359,23 +2570,17 @@ export default function PassportDemo() {
           ? 'Provisioning your Midnight wallet'
           : 'Preparing Passport'
       : 'Follow the passkey prompt on this device');
-  /** Only ever set when Sign in genuinely has nothing to assert against. */
-  const signInUnavailableReason =
-    localPassportKnown === false
-      ? 'No Passport passkey is enrolled in this browser yet.'
-      : null;
-  const dynamicUnavailableReason = signInReady
-    ? null
-    : dynamicInitializationBlocked
-      ? 'Dynamic did not finish loading. Reload this page to try again.'
-      : 'Dynamic is still starting up.';
-
   /** Passkey route. Dynamic is not loaded, called, or waited on. */
-  const startPasskeyOnboarding = (intent: 'create' | 'signin') => {
+  const startPasskeyOnboarding = (intent: 'create' | 'signin' | 'auto') => {
     void runLocalOnboarding(intent);
   };
 
-  /** The unchanged hosted route: Dynamic sign-in, then the Passport key. */
+  /**
+   * The hosted route. No longer offered by the mobile onboarding (2026/08/05
+   * decision) — the classic dashboard, reachable through the "Full dashboard"
+   * footer link, keeps the Dynamic path — but the machinery is retained.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const startDynamicOnboarding = () => {
     setOnboardingError(null);
     setWalletMode('dynamic');
@@ -2543,13 +2748,8 @@ export default function PassportDemo() {
             stage={onboardingStage}
             busyLabel={onboardingLabel}
             error={onboardingError}
-            hasExistingPassport={localPassportKnown === true}
-            signInUnavailableReason={signInUnavailableReason}
-            dynamicUnavailableReason={dynamicUnavailableReason}
-            onGetStarted={() => setOnboardingStep('choose')}
-            onCreatePasskey={() => startPasskeyOnboarding('create')}
-            onSignInPasskey={() => startPasskeyOnboarding('signin')}
-            onContinueWithDynamic={startDynamicOnboarding}
+            hasExistingPassport={localPassportKnown}
+            onContinue={() => startPasskeyOnboarding('auto')}
             onDismissError={() => setOnboardingError(null)}
             onOpenClassic={() => setExperience('classic')}
           />
@@ -2569,13 +2769,10 @@ export default function PassportDemo() {
                 unshieldedAddress={activeSurfaces?.unshieldedAddress ?? midnightWallet?.address ?? null}
                 shieldedAddress={activeSurfaces?.shieldedAddress ?? null}
                 dustAddress={activeSurfaces?.dustAddress ?? null}
-                transactions={mergedTransactions}
-                transactionsStatus={mobileTransactionsStatus}
                 error={error}
                 onDismissError={() => setError(null)}
                 onRefresh={refreshMobile}
                 onCopyAddress={copyAddressOfKind}
-                onOpenTransaction={openTransactionByHash}
                 onRegisterDust={() => void registerDust()}
                 /* DUST registration submits a real NIGHT transaction. The
                    local wallet cannot sign one here yet, so the control is
@@ -2586,6 +2783,16 @@ export default function PassportDemo() {
                     ? `On-device wallet · ${localWalletNetworkId ?? 'preview'} · derived from your passkey. Read-only for now: balances and history come from the indexer, and nothing here can sign or send.`
                     : null
                 }
+                appsProfile={appsProfile}
+                onProfileShared={(appName, fields) =>
+                  addActivity({
+                    label: 'Profile shared',
+                    detail: `${appName} received ${fields.join(', ')}.`,
+                    status: 'complete',
+                    source: 'local',
+                  })
+                }
+                supportUrl={(import.meta.env.VITE_TELEGRAM_URL as string | undefined) ?? null}
                 onOpenClassic={openClassicExperience}
                 onSignOut={() => void signOutPassport()}
               />

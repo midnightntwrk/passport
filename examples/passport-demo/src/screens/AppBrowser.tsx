@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Check,
   ChevronLeft,
@@ -329,7 +330,11 @@ export default function AppBrowser(props: AppBrowserProps) {
     : false
   const showHint = hintDue && !hintDismissed && !frameSpoke
 
-  return (
+  /* Portalled to <body>: the browser and its consent sheet are fixed overlays,
+     and a host screen's stacking context (e.g. Home's entry animation with
+     `fill-mode: both`) would otherwise trap them beneath the bottom nav,
+     which then intercepts taps on the sheet's actions. */
+  return createPortal(
     <div
       className="mnapps-browser"
       role="dialog"
@@ -545,6 +550,7 @@ export default function AppBrowser(props: AppBrowserProps) {
           </section>
         </div>
       ) : null}
-    </div>
+    </div>,
+    document.body,
   )
 }

@@ -166,6 +166,9 @@
 
 /* Sections and cards */
 .mnapps-section { margin-top: 30px; }
+/* The compact grid the Home screen embeds: the Home column already spaces its
+   children, so the section brings no margin of its own there. */
+.mnapps-section.mnapps-embedded { margin-top: 0; }
 .mnapps-section-label {
   margin: 0 0 12px;
   color: var(--mn-text-muted);

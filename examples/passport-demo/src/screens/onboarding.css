@@ -126,7 +126,8 @@
 /* Stages */
 .mnob-stage { margin-top: auto; padding-top: 40px; animation: mnob-stage-in .35s ease-out both; }
 
-/* Welcome — single CTA: the accent-blue pill with the blue glow. */
+/* Welcome — the ONE action: an accent-blue pill with the blue glow.
+   Sign-in and enrolment share it; the integrator resolves which runs. */
 .mnob-primary {
   width: 100%;
   min-height: 56px;
@@ -151,113 +152,19 @@
   transform: translateY(1px) scale(.99);
   box-shadow: var(--mn-shadow-sm);
 }
-
-/* Choose — two passkey routes, then a deliberately quieter Dynamic route.
-   The visual weight ranking is: lead passkey choice (accent-blue card with
-   the blue glow) > second passkey choice (soft card) > Dynamic (transparent,
-   hairline only). Nothing above .mnob-alt touches Dynamic. */
-.mnob-choose-label,
-.mnob-alt-label {
-  margin: 0 0 12px;
-  color: var(--mn-text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-.mnob-choices { display: grid; gap: 12px; }
-.mnob-choice-slot { display: grid; gap: 6px; }
-.mnob-choice {
-  width: 100%;
-  min-height: 74px;
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 16px;
+.mnob-primary-copy {
+  display: inline-flex;
   align-items: center;
-  gap: 13px;
-  padding: 14px 16px;
-  border: var(--mn-hairline) solid var(--mn-border-hairline);
-  border-radius: var(--mn-radius);
-  color: var(--mn-text-primary);
-  background: var(--mn-surface-card);
-  box-shadow: var(--mn-shadow-sm);
-  text-align: left;
-  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  gap: 10px;
 }
-.mnob-choice:hover:not(:disabled) {
-  border-color: var(--mn-border-medium);
-  background: var(--mn-surface-raised);
-  box-shadow: var(--mn-shadow-md);
-}
-.mnob-choice-lead {
-  border-color: transparent;
-  color: var(--mn-text-inverted);
-  background: var(--mn-surface-inverted);
-  box-shadow: var(--mn-shadow-accent);
-}
-.mnob-choice-lead:hover:not(:disabled) {
-  border-color: transparent;
-  color: var(--mn-text-inverted);
-  background: var(--mn-accent-hover);
-  box-shadow: var(--mn-shadow-accent);
-}
-.mnob-choice:active:not(:disabled) {
-  transform: translateY(1px);
-}
-.mnob-choice-icon {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border: var(--mn-hairline) solid currentColor;
-  border-radius: var(--mn-radius-md);
-}
-.mnob-choice-copy { min-width: 0; display: grid; gap: 4px; }
-.mnob-choice-copy strong { font-size: 14px; font-weight: 700; }
-.mnob-choice-copy small { color: var(--mn-text-muted); font-size: 12px; line-height: 1.4; }
-.mnob-choice-lead .mnob-choice-copy small { color: var(--mn-text-inverted-muted); }
-.mnob-choice-lead:hover:not(:disabled) .mnob-choice-copy small {
-  color: var(--mn-text-inverted);
-}
-.mnob-choice:not(.mnob-choice-lead):hover:not(:disabled) .mnob-choice-copy small {
-  color: var(--mn-text-secondary);
-}
-.mnob-choice-arrow { justify-self: end; }
+.mnob-primary-copy svg { flex: 0 0 auto; }
 
-/* A route that genuinely cannot run right now. It stays visible and stays
-   labelled, with .mnob-choice-note carrying the reason, rather than being
-   hidden or silently failing after a prompt. */
-.mnob-choice:disabled {
-  opacity: .48;
-  cursor: default;
-  box-shadow: none;
-}
-.mnob-choice-note {
-  margin: 0;
-  padding-left: 2px;
+/* One sentence beneath the button saying which journey it will run. */
+.mnob-hint {
+  margin: 12px 0 0;
   color: var(--mn-text-muted);
-  font-size: 11.5px;
-  line-height: 1.45;
-}
-
-/* Alternative route — Dynamic. Separated by a rule and set flat, so it never
-   competes with the two passkey options above it. */
-.mnob-alt {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: var(--mn-hairline) solid var(--mn-border-hairline);
-}
-.mnob-choice-quiet {
-  min-height: 62px;
-  border-color: var(--mn-border-hairline);
-  background: transparent;
-  box-shadow: none;
-}
-.mnob-choice-quiet .mnob-choice-copy strong { font-weight: 600; }
-.mnob-choice-quiet .mnob-choice-icon { border-color: var(--mn-border-hairline); }
-.mnob-choice-quiet:hover:not(:disabled) {
-  border-color: var(--mn-border-medium);
-  background: var(--mn-surface-card);
-  box-shadow: none;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 /* Working — busy state */
@@ -321,10 +228,8 @@
   .mnob-screen,
   .mnob-stage { animation: none; }
   .mnob-working-spinner { animation-duration: 2.4s; }
-  .mnob-primary,
-  .mnob-choice { transition: none; }
-  .mnob-primary:active:not(:disabled),
-  .mnob-choice:active:not(:disabled) { transform: none; }
+  .mnob-primary { transition: none; }
+  .mnob-primary:active:not(:disabled) { transform: none; }
 }
 
 /* Tablet and up. On a phone the stage rides the viewport floor

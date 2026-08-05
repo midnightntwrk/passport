@@ -1,20 +1,21 @@
 import {
   AlertTriangle,
-  ArrowRight,
   Check,
+  ChevronDown,
   Copy,
   ExternalLink,
   Layers,
   LogOut,
   Plus,
   RefreshCw,
+  Send,
   Wallet,
   X,
   Zap,
 } from 'lucide-react'
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 
-import type { RecentTransaction } from '../lib/indexerTx'
+import { FeaturedApps, type AppsScreenProps } from './Apps.js'
 import ThemeToggle from './ThemeToggle.js'
 import './home.css'
 
@@ -39,14 +40,11 @@ export interface HomeScreenProps {
   unshieldedAddress: string | null
   shieldedAddress: string | null
   dustAddress: string | null
-  transactions: RecentTransaction[]
-  transactionsStatus: 'loading' | 'ready' | 'empty' | 'unavailable'
   /** Failure from any control on this screen — copy, DUST registration, refresh. */
   error?: string | null
   onDismissError?: () => void
   onRefresh: () => void
   onCopyAddress: (kind: 'unshielded' | 'shielded' | 'dust') => void
-  onOpenTransaction: (hash: string) => void
   onRegisterDust: () => void
   /**
    * Set when DUST registration genuinely cannot run for the active wallet.
@@ -56,6 +54,15 @@ export interface HomeScreenProps {
   registerDustDisabledReason?: string | null
   /** Replaces the footer line, so the screen names where its figures came from. */
   walletSourceNote?: string | null
+  /** Fed to the embedded apps grid and its in-Passport browser. */
+  appsProfile: AppsScreenProps['profile']
+  /** Notified after the user approves a profile request, for the activity feed. */
+  onProfileShared?: (appName: string, fields: string[]) => void
+  /**
+   * Telegram support channel. When set, an outlined "Support on Telegram"
+   * pill renders in the footer area; when null, no support link is shown.
+   */
+  supportUrl?: string | null
   onOpenClassic: () => void
   onSignOut: () => void
 }
@@ -65,38 +72,17 @@ type AddressKind = 'unshielded' | 'shielded' | 'dust'
 const RING_RADIUS = 34
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 
-const STAGE_LABELS: Record<string, string> = {
-  SUCCESS: 'Success',
-  PARTIAL_SUCCESS: 'Partial',
-  FAILURE: 'Failed',
-}
-
-const dateFormatter = new Intl.DateTimeFormat('en-GB', {
-  day: '2-digit',
-  month: 'short',
-  hour: '2-digit',
-  minute: '2-digit',
-})
-
 function truncateHash(hash: string): string {
   if (hash.length <= 18) return hash
   return `${hash.slice(0, 9)}...${hash.slice(-7)}`
 }
 
-function formatWhen(timestamp: string | null | undefined): string | null {
-  if (!timestamp) return null
-  const parsed = Date.parse(timestamp)
-  if (Number.isNaN(parsed)) return null
-  const ageMs = Date.now() - parsed
-  if (ageMs >= 0 && ageMs < 60_000) return 'Just now'
-  if (ageMs >= 0 && ageMs < 3_600_000) return `${Math.floor(ageMs / 60_000)} min ago`
-  if (ageMs >= 0 && ageMs < 86_400_000) return `${Math.floor(ageMs / 3_600_000)} h ago`
-  return dateFormatter.format(new Date(parsed))
-}
-
-function stageLabel(applyStage: string | null | undefined): string | null {
-  if (!applyStage) return null
-  return STAGE_LABELS[applyStage] ?? applyStage.replace(/_/g, ' ').toLowerCase()
+/** Date-based time-of-day greeting — no libraries, no locale surprises. */
+function timeOfDayGreeting(date = new Date()): string {
+  const hour = date.getHours()
+  if (hour >= 5 && hour < 12) return 'Good morning'
+  if (hour >= 12 && hour < 18) return 'Good afternoon'
+  return 'Good evening'
 }
 
 function clampPercent(value: number | null): number | null {
@@ -118,21 +104,24 @@ export default function HomeScreen(props: HomeScreenProps) {
     unshieldedAddress,
     shieldedAddress,
     dustAddress,
-    transactions,
-    transactionsStatus,
     error,
     onDismissError,
     onRefresh,
     onCopyAddress,
-    onOpenTransaction,
     onRegisterDust,
     registerDustDisabledReason,
     walletSourceNote,
+    appsProfile,
+    onProfileShared,
+    supportUrl,
     onOpenClassic,
     onSignOut,
   } = props
 
   const [copied, setCopied] = useState<AddressKind | null>(null)
+  /* Addresses are a power-user surface: collapsed by default behind the
+     disclosure below, per the 2026/08/05 declutter decision. */
+  const [showAddresses, setShowAddresses] = useState(false)
 
   const handleCopy = useCallback(
     (kind: AddressKind) => {
@@ -215,7 +204,7 @@ export default function HomeScreen(props: HomeScreenProps) {
   ]
 
   return (
-    <section className="mnhome-screen" aria-busy={balancesLoading || transactionsStatus === 'loading'}>
+    <section className="mnhome-screen" aria-busy={balancesLoading}>
       <header className="mnhome-bar">
         <img className="mnhome-wordmark" src="/midnight-wordmark.svg" alt="Midnight" />
         <div className="mnhome-bar-actions">
@@ -225,7 +214,7 @@ export default function HomeScreen(props: HomeScreenProps) {
             type="button"
             className="mnhome-icon-button"
             onClick={onRefresh}
-            aria-label="Refresh balances and transactions"
+            aria-label="Refresh balances"
             title="Refresh"
           >
             <RefreshCw size={15} aria-hidden="true" />
@@ -245,7 +234,8 @@ export default function HomeScreen(props: HomeScreenProps) {
       <div className="mnhome-body">
         <div className="mnhome-identity">
           <p className="mnhome-kicker">Passport</p>
-          <h1 className="mnhome-name">{displayName ?? 'Your Passport'}</h1>
+          <h1 className="mnhome-name">{timeOfDayGreeting()}</h1>
+          {displayName ? <p className="mnhome-person">{displayName}</p> : null}
         </div>
 
         {error ? (
@@ -345,125 +335,64 @@ export default function HomeScreen(props: HomeScreenProps) {
           </p>
         ) : null}
 
-        <ul className="mnhome-addresses">
-          {addressRows.map((row) => (
-            <li key={row.kind} className="mnhome-address">
-              <span className="mnhome-address-label">{row.label}</span>
-              <code className="mnhome-address-value">
-                {row.value ? truncateHash(row.value) : 'Not available'}
-              </code>
-              <button
-                type="button"
-                className="mnhome-icon-button"
-                onClick={() => handleCopy(row.kind)}
-                disabled={!row.value}
-                aria-label={`Copy ${row.label.toLowerCase()} address`}
-              >
-                {copied === row.kind ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-              </button>
-            </li>
-          ))}
-        </ul>
+        {/* The applications, directly below the wallet summary — the same
+            registry, cards, and in-Passport browser as the Apps tab. */}
+        <FeaturedApps profile={appsProfile} onProfileShared={onProfileShared} />
 
-        <section className="mnhome-panel" aria-label="Recent transactions">
-          <div className="mnhome-panel-head">
-            <h2 className="mnhome-micro">Recent transactions</h2>
-            <button
-              type="button"
-              className="mnhome-panel-refresh"
-              onClick={onRefresh}
-              disabled={transactionsStatus === 'loading'}
-            >
-              <RefreshCw size={13} aria-hidden="true" />
-              <span>Refresh</span>
-            </button>
-          </div>
-
-          {transactionsStatus === 'loading' && transactions.length === 0 ? (
-            <>
-              <p className="mnhome-sr">Loading recent transactions.</p>
-              <ul className="mnhome-rows" aria-hidden="true">
-                {[0, 1, 2, 3].map((index) => (
-                  <li key={index} className="mnhome-row mnhome-row-skeleton">
-                    <span className="mnhome-skeleton mnhome-skeleton-hash" />
-                    <span className="mnhome-skeleton mnhome-skeleton-meta" />
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-
-          {transactions.length === 0 &&
-          (transactionsStatus === 'empty' || transactionsStatus === 'ready') ? (
-            <p className="mnhome-empty">No transactions yet on this account</p>
-          ) : null}
-
-          {transactionsStatus === 'unavailable' ? (
-            <div className="mnhome-empty mnhome-empty-error">
-              <p>
-                <AlertTriangle size={14} aria-hidden="true" />
-                {/* True whether the indexer was unreachable or could only
-                    answer chain-wide — either way this account's own history
-                    is not being shown. */}
-                <span>Account history unavailable</span>
-              </p>
-              <button type="button" className="mnhome-ghost" onClick={onRefresh}>
-                <RefreshCw size={13} aria-hidden="true" />
-                <span>Try again</span>
-              </button>
-            </div>
-          ) : null}
-
-          {/* Rows the app already holds stay visible even while the indexer is
-              unreachable — the notice above says the history may be incomplete. */}
-          {transactions.length > 0 ? (
-            <ul className="mnhome-rows">
-              {transactions.map((transaction, index) => {
-                const stage = stageLabel(transaction.applyStage)
-                const when = formatWhen(transaction.timestamp)
-                return (
-                  <li key={`${transaction.hash}-${index}`}>
-                    <button
-                      type="button"
-                      className={`mnhome-row${transaction.involvesUser ? ' mnhome-row-mine' : ''}`}
-                      onClick={() => onOpenTransaction(transaction.hash)}
-                    >
-                      <span className="mnhome-row-top">
-                        <code className="mnhome-row-hash">{truncateHash(transaction.hash)}</code>
-                        <ArrowRight size={14} aria-hidden="true" className="mnhome-row-arrow" />
-                      </span>
-                      <span className="mnhome-row-meta">
-                        {transaction.kind ? <span className="mnhome-pill">{transaction.kind}</span> : null}
-                        {stage ? (
-                          <span
-                            className={`mnhome-pill${transaction.applyStage === 'FAILURE' ? ' mnhome-pill-hollow' : ''}${transaction.applyStage === 'SUCCESS' ? ' mnhome-pill-success' : ''}`}
-                          >
-                            {stage}
-                          </span>
-                        ) : null}
-                        {typeof transaction.blockHeight === 'number' ? (
-                          <span className="mnhome-row-block">#{transaction.blockHeight}</span>
-                        ) : null}
-                        {when ? <span className="mnhome-row-when">{when}</span> : null}
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
+        <div className="mnhome-address-block">
+          <button
+            type="button"
+            className="mnhome-disclosure"
+            aria-expanded={showAddresses}
+            onClick={() => setShowAddresses((visible) => !visible)}
+          >
+            <span>{showAddresses ? 'Hide addresses' : 'Show addresses'}</span>
+            <ChevronDown
+              className={`mnhome-disclosure-chevron${showAddresses ? ' mnhome-disclosure-chevron-open' : ''}`}
+              size={15}
+              aria-hidden="true"
+            />
+          </button>
+          {showAddresses ? (
+            <ul className="mnhome-addresses">
+              {addressRows.map((row) => (
+                <li key={row.kind} className="mnhome-address">
+                  <span className="mnhome-address-label">{row.label}</span>
+                  <code className="mnhome-address-value">
+                    {row.value ? truncateHash(row.value) : 'Not available'}
+                  </code>
+                  <button
+                    type="button"
+                    className="mnhome-icon-button"
+                    onClick={() => handleCopy(row.kind)}
+                    disabled={!row.value}
+                    aria-label={`Copy ${row.label.toLowerCase()} address`}
+                  >
+                    {copied === row.kind ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                  </button>
+                </li>
+              ))}
             </ul>
           ) : null}
-        </section>
+        </div>
 
         <button type="button" className="mnhome-classic" onClick={onOpenClassic}>
           <span>Open full dashboard</span>
           <ExternalLink size={14} aria-hidden="true" />
         </button>
 
+        {supportUrl ? (
+          <a className="mnhome-support" href={supportUrl} target="_blank" rel="noreferrer">
+            <Send size={14} aria-hidden="true" />
+            <span>Support on Telegram</span>
+          </a>
+        ) : null}
+
         <p className="mnhome-foot">
           <Zap size={12} aria-hidden="true" />
           <span>
             {walletSourceNote ??
-              'Midnight preview · balances and history read live from the indexer'}
+              'Midnight preview · balances read live from the indexer'}
           </span>
         </p>
       </div>
@@ -491,7 +420,7 @@ function BalanceCard(props: BalanceCardProps) {
       <p className={`mnhome-card-value${unknown ? ' mnhome-card-value-muted' : ''}`}>
         {unknown ? (loading ? 'Syncing' : 'Unavailable') : value}
       </p>
-      <p className="mnhome-card-unit">{unknown ? ' ' : unit}</p>
+      <p className="mnhome-card-unit">{unknown ? ' ' : unit}</p>
     </article>
   )
 }

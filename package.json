@@ -6,7 +6,8 @@
   "workspaces": [
     "demo-backend",
     "examples/passport-demo",
-    "examples/passport-profile-client"
+    "examples/passport-profile-client",
+    "examples/raffle-demo"
   ],
   "scripts": {
     "build": "npm run build --workspace passport-demo-backend && npm run build --workspace passport-demo && npm run build --workspace passport-profile-client",
@@ -15,7 +16,8 @@
     "test:c1": "npm run test:c1 --workspace passport-demo",
     "test:pwa": "npm run test:pwa --workspace passport-demo",
     "demo": "npm run dev --workspace passport-demo",
-    "demo:profile-client": "npm run dev --workspace passport-profile-client"
+    "demo:profile-client": "npm run dev --workspace passport-profile-client",
+    "demo:raffle": "npm run dev --workspace examples/raffle-demo"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
