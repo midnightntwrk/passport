@@ -18,6 +18,11 @@ experiments/dynamic-midnight-sdk-validation/
 examples/passport-demo/.generated/
 examples/passport-demo/public/zk/
 
+# Vercel CLI link state and the locally assembled Build Output (see
+# scripts/build-vercel-output.mjs). Never committed — the deployed artefacts
+# are produced locally and uploaded with `vercel deploy --prebuilt`.
+.vercel/
+
 # Node
 node_modules/
 dist/

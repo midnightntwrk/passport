@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/((?!zk/|zk-params/|assets/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/zk-params/(.*)",
+      "headers": [{ "key": "content-type", "value": "application/octet-stream" }]
+    },
+    {
+      "source": "/zk/(.*)",
+      "headers": [{ "key": "content-type", "value": "application/octet-stream" }]
+    },
+    {
+      "source": "/zk/(.*).json",
+      "headers": [{ "key": "content-type", "value": "application/json" }]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "cache-control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "service-worker-allowed", "value": "/" }
+      ]
+    }
+  ]
+}

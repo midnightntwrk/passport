@@ -45,7 +45,34 @@ function deploymentAddress(fileName: string, field: string): string {
 }
 
 export default defineConfig({
-  plugins: [react(), wasm(), topLevelAwait(), serveLocalCustodyAssets()],
+  // `topLevelAwait()` is deliberately absent from the MAIN graph — see
+  // 2026/08/05, found while deploying to Vercel. Its build transform hoists
+  // every exported top-level binding of a chunk into a bare `let a, b, c;`
+  // list and rewrites the definitions as assignments, so
+  //
+  //     export class UnshieldedAddress {
+  //       static codec = new Bech32mCodec('addr', …);
+  //       static [Bech32mSymbol] = UnshieldedAddress.codec;   // inner binding
+  //     }
+  //
+  // in @midnight-ntwrk/wallet-sdk-address-format becomes
+  //
+  //     UnshieldedAddress = class { static [Bech32mSymbol] = UnshieldedAddress.codec; … }
+  //
+  // — an ANONYMOUS class expression. The self-reference no longer resolves to
+  // the class's own inner name (which is live during static initialisation)
+  // but to the outer `let`, which is still undefined at that point. Every
+  // production build therefore died on load with
+  // `TypeError: Cannot read properties of undefined (reading 'codec')`
+  // before React could mount. It never showed in `npm run dev`, which does
+  // not run the transform.
+  //
+  // The plugin is only needed for browsers without native top-level await.
+  // `build.target` below is `esnext`, and every browser that can run this
+  // demo's WASM has had TLA for years, so dropping it costs nothing. It is
+  // kept for `worker.plugins`, a separate and much smaller module graph that
+  // does not contain the affected package.
+  plugins: [react(), wasm(), serveLocalCustodyAssets()],
   define: {
     __FAUCET_ADDRESS__: JSON.stringify(deploymentAddress('faucet-deployment.json', 'faucetAddress')),
     __IDENTITY_REGISTRY_ADDRESS__: JSON.stringify(

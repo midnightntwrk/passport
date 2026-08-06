@@ -1,0 +1,17 @@
+# dist-relative paths that scripts/build-vercel-output.mjs leaves out of the
+# uploaded Build Output. This is our own file — Vercel's vercel.json schema
+# rejects unknown keys, so the list cannot live there.
+#
+# The three contract trees below are the disposable-localnet proving keys
+# (~64 MB). They are only ever fetched in `?demoMode=local`, which drives a
+# devnet on http://localhost:8088 and http://localhost:9944 — endpoints no
+# visitor to a public deployment can reach. Shipping them would be 64 MB that
+# cannot be used. `/zk/passport-c1` and `/zk/midnames` ARE shipped: those are
+# the classic-mode and .night-registration circuits the preview network uses.
+
+zk/account
+zk/faucet
+zk/identity_registry
+
+# Self-ignoring marker written into public/zk-params by fetch-zk-params.mjs.
+zk-params/.gitignore
