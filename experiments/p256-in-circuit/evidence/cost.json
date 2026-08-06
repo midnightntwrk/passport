@@ -1,0 +1,53 @@
+{
+  "environment": {
+    "arch": "aarch64",
+    "cpu": "Apple M4 Max",
+    "memory_bytes": "68719476736",
+    "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
+    "os": "macos",
+    "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)"
+  },
+  "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
+  "prehashed": {
+    "advice_columns": 9,
+    "column_queries": 37,
+    "estimated_proof_size_bytes": 3664,
+    "fixed_columns": 39,
+    "lookups": 2,
+    "max_deg": 5,
+    "nb_unusable_rows": 9,
+    "optimal_k": 15,
+    "permutations": 12,
+    "point_sets": 4,
+    "rows": 28953,
+    "table_rows": 30979
+  },
+  "privatepk": {
+    "advice_columns": 9,
+    "column_queries": 37,
+    "estimated_proof_size_bytes": 3664,
+    "fixed_columns": 39,
+    "lookups": 2,
+    "max_deg": 5,
+    "nb_unusable_rows": 9,
+    "optimal_k": 15,
+    "permutations": 12,
+    "point_sets": 4,
+    "rows": 28951,
+    "table_rows": 30979
+  },
+  "webauthn": {
+    "advice_columns": 9,
+    "column_queries": 44,
+    "estimated_proof_size_bytes": 4064,
+    "fixed_columns": 54,
+    "lookups": 3,
+    "max_deg": 5,
+    "nb_unusable_rows": 10,
+    "optimal_k": 15,
+    "permutations": 12,
+    "point_sets": 4,
+    "rows": 32686,
+    "table_rows": 30979
+  }
+}

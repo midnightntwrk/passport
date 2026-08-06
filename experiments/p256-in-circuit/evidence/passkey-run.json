@@ -1,0 +1,37 @@
+{
+  "authenticator_data_hex": "49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97631d00000000",
+  "authenticator_emitted_high_s": true,
+  "challenge_found_in_client_data": true,
+  "challenge_hex": "b60dc9041277df0829d3352cc198467aff7f79c0a705d51ed095c3022a5b57e6",
+  "client_data_hash_hex": "eb8a33037241925381a931b21db382b08ff4031b5c03ccedf340f9e533e9b72c",
+  "client_data_type_verified": true,
+  "credential_id_b64url": "IRRX5ngd6vOxGJ9gGHK2TgQ5QO4",
+  "environment": {
+    "arch": "aarch64",
+    "cpu": "Apple M4 Max",
+    "memory_bytes": "68719476736",
+    "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
+    "os": "macos",
+    "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)"
+  },
+  "format": "p256-gate-webauthn-v1",
+  "k": 15,
+  "message_hash_hex": "7eb6833854a5934e43d490bb47bd95555b94c55e125bb174b5cb1848ddc1046f",
+  "outcome": "verified in-circuit",
+  "pk_x_hex": "4545bfee657716d0b4f7fa59ad82658caa31f817f7c43bebcea131d079ff1a4f",
+  "pk_y_hex": "d786704d369ae957f7d89c2c0aa02dfbbc6ee549708d2a412b56cbe3b738127a",
+  "proof_bytes": 4064,
+  "prove_ms": [
+    544
+  ],
+  "r_hex": "fafcb32570a0f575b34667d15908e6693f55781e618cd5c24a2b32c4aeb515b4",
+  "relation": "webauthn",
+  "rp_id": "localhost",
+  "rp_id_hash_verified": true,
+  "s_hex": "cadf3f56530b380bcc17ed4de5ab26ed6255a7672929435124e2f31057bd548b",
+  "setup_pk_ms": 261,
+  "setup_vk_ms": 413,
+  "srs_load_ms": 30,
+  "timestamp_utc": "2026-08-06T20:58:40Z",
+  "verify_ms": 2
+}
