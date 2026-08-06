@@ -33,6 +33,7 @@ import {
   PassportStateInjection,
   WebAuthnPrfKeyProvider,
 } from './backend.js';
+import type { DiscoveredPassportPasskey } from './backend.js';
 
 import {
   compactAddress,
@@ -287,8 +288,116 @@ async function resolveDefaultLocalProfile(): Promise<DemoPassportProfile | null>
  */
 const MIDNAMES_OWNER_SCOPE = { appId: APP_ID, accountId: 'midnames-owner-v1' };
 
-/** The onboarding steps that follow a successful passkey + wallet open. */
+/**
+ * The onboarding steps that follow a successful passkey + wallet open.
+ *
+ * 2026/08/06: only 'alias' is ever SCHEDULED. Backup and Ecosystem left the
+ * chain — a new Passport now goes name → dashboard — but both screens stay in
+ * the union because Home and the Ecosystem card still route to them on
+ * demand. (Backup and recovery proper is flagged for later, not built.)
+ */
 type IdentityStep = 'alias' | 'backup' | 'ecosystem' | null;
+
+/**
+ * How long a WebAuthn ceremony may sit unanswered before Passport stops
+ * waiting for it.
+ *
+ * Nothing in WebAuthn guarantees `credentials.create`/`get` ever settles. A
+ * browser wallet extension that claims the passkey UI can leave the promise
+ * pending forever — Lace was observed doing exactly this on 2026/08/06, where
+ * the passkey window simply never appeared — and the user sees a spinner with
+ * no end. Better an honest error with a retry than an infinite wait.
+ */
+const PASSKEY_CEREMONY_TIMEOUT_MS = 25_000;
+
+const PASSKEY_TIMEOUT_MESSAGE =
+  'Your device never showed the passkey prompt. A wallet browser extension — Lace, for example — can intercept it. Try disabling the extension, or open Passport in a private window, then try again.';
+
+/**
+ * Races a passkey ceremony against {@link PASSKEY_CEREMONY_TIMEOUT_MS}.
+ *
+ * A ceremony that answers after we have given up is disposed rather than
+ * abandoned: a late `DiscoveredPassportPasskey` would otherwise keep live PRF
+ * bytes in a handle no caller owns. An `EnrolledPassportPasskey` carries that
+ * handle at `.prf` rather than on itself, so both shapes are covered — a late
+ * creation-time PRF evaluation must not outlive the flow either.
+ */
+async function withPasskeyWatchdog<T>(ceremony: () => Promise<T>): Promise<T> {
+  const pending = ceremony();
+  let timer: number | undefined;
+  const watchdog = new Promise<never>((_resolve, reject) => {
+    timer = window.setTimeout(
+      () => reject(new Error(PASSKEY_TIMEOUT_MESSAGE)),
+      PASSKEY_CEREMONY_TIMEOUT_MS,
+    );
+  });
+  try {
+    return await Promise.race([pending, watchdog]);
+  } catch (cause) {
+    void pending
+      .then((late) => {
+        const value = late as
+          | { dispose?: () => void; prf?: { dispose?: () => void } | null }
+          | null;
+        value?.dispose?.();
+        value?.prf?.dispose?.();
+      })
+      .catch(() => undefined);
+    throw cause;
+  } finally {
+    if (timer !== undefined) window.clearTimeout(timer);
+  }
+}
+
+/**
+ * Whether this browser has already settled the name step for a credential.
+ *
+ * The in-session `identityStepResolved` ref cannot answer this: it is reset by
+ * every mount, so a reload of a live session used to re-enter the wizard and
+ * dump the user back on "choose your .night name" — the "app resets during
+ * sign-in" report from 2026/08/06. A skipped name leaves no alias record, so
+ * the record store alone cannot answer it either. This flag is the missing
+ * half, and it deliberately SURVIVES sign-out: the same passkey re-derives the
+ * same wallet, so it re-derives the same answer.
+ */
+const NAME_STEP_STORAGE_PREFIX = 'mn-passport:name-step:';
+
+type NameStepResolution = 'done' | 'skipped';
+
+function storedNameStep(credentialId: string): NameStepResolution | null {
+  try {
+    const value = window.localStorage.getItem(`${NAME_STEP_STORAGE_PREFIX}${credentialId}`);
+    return value === 'done' || value === 'skipped' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeNameStep(credentialId: string, resolution: NameStepResolution): void {
+  try {
+    window.localStorage.setItem(`${NAME_STEP_STORAGE_PREFIX}${credentialId}`, resolution);
+  } catch {
+    // Best-effort: without it the name step may be offered once more.
+  }
+}
+
+/**
+ * The explorer link a success toast carries — or `null`.
+ *
+ * Only preview has a public explorer, and only `/transactions/{hash}` resolves
+ * there (`/tx/{hash}` 404s). No hash, or any other network, means no link
+ * rather than one that goes nowhere.
+ */
+function explorerTxLink(
+  txHash: string | null | undefined,
+  network: string | null | undefined,
+): { label: string; href: string } | undefined {
+  if (!txHash || network !== 'preview') return undefined;
+  return {
+    label: 'View on explorer',
+    href: `${MIDNIGHT_EXPLORER_URL}/transactions/${encodeURIComponent(txHash)}`,
+  };
+}
 
 /**
  * `alice` → `alice.night`. Duplicated from `identity/midnames.ts` on purpose:
@@ -859,7 +968,26 @@ export default function PassportDemo() {
   const [reclaimError, setReclaimError] = useState<string | null>(null);
   /** Guards the one-shot decision to enter the identity steps for a session. */
   const identityStepResolved = useRef(false);
+  /**
+   * Whether THIS session created the Passport it is holding.
+   *
+   * Only a fresh Passport is walked through the name step. A sign-in, and a
+   * silently restored session, land on the dashboard — jumping an existing
+   * user back into "STEP 2 OF 3" is precisely the reset reported on
+   * 2026/08/06.
+   */
+  const identityStepArmed = useRef(false);
   const passportKeyProviders = useRef(new Map<string, WebAuthnPrfKeyProvider>());
+  /**
+   * Cancels the in-flight §2.2 session restore, if any. A user-initiated
+   * ceremony calls it before touching the wallet so the two never both replace
+   * `localWalletRef`.
+   */
+  const sessionRestoreCancel = useRef<(() => void) | null>(null);
+  const cancelSessionRestore = useCallback(() => {
+    sessionRestoreCancel.current?.();
+    sessionRestoreCancel.current = null;
+  }, []);
   // Submission identifier whose inclusion poll is currently running, shared
   // between the inline deploy flow and the resume effect below so a reload
   // mid-poll neither double-polls nor strands the profile at 'submitted'.
@@ -1141,12 +1269,21 @@ export default function PassportDemo() {
     }
   };
 
+  /**
+   * Reads and validates the encrypted device state.
+   *
+   * `store` defaults to the profile's own vault, which costs a passkey
+   * assertion of its own. The single-sign flows pass a one-shot store built
+   * over an assertion they have ALREADY made, so unlocking the state and
+   * deriving the wallet seed share one ceremony.
+   */
   const loadPassportState = async (
     activeProfile: DemoPassportProfile,
     stateScope = scope,
+    store: ReturnType<typeof vault> = vault(activeProfile.passkey),
   ): Promise<PassportDemoState> => {
     const injection = await PassportStateInjection({
-      store: vault(activeProfile.passkey),
+      store,
       scope: stateScope,
       initialPrivateState: {
         deviceSecret: new Uint8Array(),
@@ -1258,18 +1395,11 @@ export default function PassportDemo() {
     [closeLocalWallet, refreshLocalBalances],
   );
 
-  /** Derives the seed under the profile's own scope, then opens the wallet. */
-  const openLocalWallet = useCallback(
-    async (activeProfile: DemoPassportProfile) => {
-      const { deriveWalletSeed } = await import('./lib/localWallet.js');
-      setLocalWalletStatus('opening');
-      setOnboardingBusyLabel('Deriving your Midnight wallet from this passkey');
-      const scope = localScopeFor(activeProfile);
-      const seed = await deriveWalletSeed(keyProviderFor(activeProfile.passkey), scope);
-      await openLocalWalletWithSeed(seed, scope, activeProfile.passkey.credentialId);
-    },
-    [keyProviderFor, openLocalWalletWithSeed],
-  );
+  /* The old `openLocalWallet` — derive-the-seed-with-its-own-assertion — is
+     gone (2026/08/06). It was the second and third passkey prompt: both
+     onboarding journeys now derive the seed from the ceremony that already
+     unlocked the profile. See `createLocalPassportProfile` and
+     `unlockLocalPassportProfile`. */
 
   // §2.2 session-stopgap restore: if a persisted session exists, unwrap the
   // seed and rebuild the wallet silently — no passkey ceremony — landing the
@@ -1279,13 +1409,20 @@ export default function PassportDemo() {
   // StrictMode's mount–unmount–remount would defeat) keeps it single-flight.
   useEffect(() => {
     let cancelled = false;
+    const abort = () => {
+      cancelled = true;
+    };
+    sessionRestoreCancel.current = abort;
+    // The restore is silent and abandonable; a ceremony the user actually
+    // started is not. Any of these means this effect must not touch state.
+    const superseded = () => cancelled || onboardingRunning.current;
     void (async () => {
       // A wallet is already open — nothing to restore over.
-      if (localWalletRef.current) return;
+      if (localWalletRef.current || superseded()) return;
       const restored = await loadPersistedWalletSession();
       if (!restored) return;
       const seed = restored.seed;
-      if (cancelled) {
+      if (superseded()) {
         seed.fill(0);
         return;
       }
@@ -1300,7 +1437,9 @@ export default function PassportDemo() {
         } finally {
           seed.fill(0);
         }
-        if (cancelled) {
+        // Last check before the only mutation that could collide with a
+        // ceremony: whoever the user asked for keeps the wallet.
+        if (superseded()) {
           void wallet.close().catch(() => undefined);
           return;
         }
@@ -1323,7 +1462,7 @@ export default function PassportDemo() {
         const stored = restored.credentialId
           ? await loadLocalProfileByCredential(restored.credentialId).catch(() => null)
           : await migrateLegacyLocalProfile().catch(() => null);
-        if (!cancelled && stored) {
+        if (!superseded() && stored) {
           setProfile(stored);
           setProfileStatus('ready');
           setLocalPassportKnown(true);
@@ -1332,16 +1471,43 @@ export default function PassportDemo() {
         // The persisted session could not be reopened (for example, the
         // network is unreachable). Fall back to onboarding; the session
         // record is kept so a later reload can try again.
-        if (!cancelled) setLocalWalletStatus('idle');
+        if (!superseded()) setLocalWalletStatus('idle');
       } finally {
-        if (!cancelled) setOnboardingBusyLabel(null);
+        // A ceremony owns the busy label once it has started; clearing it here
+        // would blank the label out from under it.
+        if (!superseded()) setOnboardingBusyLabel(null);
       }
     })();
     return () => {
       cancelled = true;
+      if (sessionRestoreCancel.current === abort) sessionRestoreCancel.current = null;
     };
   }, [closeLocalWallet, refreshLocalBalances]);
 
+  /**
+   * A private-state store bound to ONE already-made assertion.
+   *
+   * Every `getKey` answers from the retained PRF output of that ceremony
+   * rather than starting a new one, and derives byte-identically to the
+   * targeted provider for the same scope.
+   */
+  const oneShotVaultFor = useCallback(
+    (handle: DiscoveredPassportPasskey) =>
+      new EncryptedPassportPrivateStateStore(new IndexedDbPassportEncryptedRecordStore(), {
+        getKey: (keyScope) => handle.deriveStateKey(keyScope),
+      }),
+    [],
+  );
+
+  /**
+   * First-time create — ONE enrolment, and at most ONE assertion.
+   *
+   * The enrolment asks the platform to evaluate the PRF there and then. Where
+   * it obliges, that single ceremony yields both the private-state key and the
+   * wallet seed and the user is prompted exactly once. Where it does not — the
+   * common case, and never surfaced as an error — one targeted assertion
+   * covers both. The old path cost three prompts: enrol, encrypt, derive.
+   */
   const createLocalPassportProfile = async (): Promise<DemoPassportProfile> => {
     const existing = await resolveDefaultLocalProfile();
     if (existing) {
@@ -1351,36 +1517,61 @@ export default function PassportDemo() {
       );
     }
     setOnboardingBusyLabel('Creating your Passport passkey');
-    const passkey = await WebAuthnPrfKeyProvider.enroll({
-      label: 'Midnight Passport',
-      userId: LOCAL_ACCOUNT_ID,
-    });
+    const enrolled = await withPasskeyWatchdog(() =>
+      WebAuthnPrfKeyProvider.enrollWithPrf({
+        label: 'Midnight Passport',
+        userId: LOCAL_ACCOUNT_ID,
+      }),
+    );
+    const passkey = enrolled.reference;
     // New profiles bind to their credential: per-credential storage key and
     // per-credential scope, so a second passkey can never collide with this
     // one's encrypted state.
     const accountId = localCredentialAccountId(passkey.credentialId);
-    const nextProfile: DemoPassportProfile = {
-      subjectId: localProfileId(passkey.credentialId),
-      passkey,
-      accountId,
-      createdAt: new Date().toISOString(),
-    };
-    const state: PassportDemoState = {
-      deviceSecret: newDeviceSecret(),
-      recoverySecret: newDeviceSecret(),
-      createdAt: new Date().toISOString(),
-      schema: 4,
-    };
-    setOnboardingBusyLabel('Encrypting your Passport state on this device');
-    await vault(passkey).save<PassportDemoState>({ appId: APP_ID, accountId }, state);
-    await saveDemoProfile(nextProfile);
-    await requestPassportStoragePersistence();
-    setProfile(nextProfile);
-    setProfileStatus('ready');
-    setLocalPassportKnown(true);
-    return nextProfile;
+    const scope = { appId: APP_ID, accountId };
+    let handle = enrolled.prf;
+    try {
+      if (!handle) {
+        setOnboardingBusyLabel('Confirm with your passkey to finish setting up');
+        handle = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.assertOnce(passkey));
+      }
+      const nextProfile: DemoPassportProfile = {
+        subjectId: localProfileId(passkey.credentialId),
+        passkey,
+        accountId,
+        createdAt: new Date().toISOString(),
+      };
+      const state: PassportDemoState = {
+        deviceSecret: newDeviceSecret(),
+        recoverySecret: newDeviceSecret(),
+        createdAt: new Date().toISOString(),
+        schema: 4,
+      };
+      setOnboardingBusyLabel('Encrypting your Passport state on this device');
+      await oneShotVaultFor(handle).save<PassportDemoState>(scope, state);
+      await saveDemoProfile(nextProfile);
+      await requestPassportStoragePersistence();
+      setProfile(nextProfile);
+      setProfileStatus('ready');
+      setLocalPassportKnown(true);
+      // A brand-new Passport is the only session walked through the name step.
+      identityStepArmed.current = true;
+      // Same handle, same ceremony: the wallet seed costs no further prompt.
+      const seed = await handle.deriveWalletSeed(scope);
+      await openLocalWalletWithSeed(seed, scope, passkey.credentialId);
+      return nextProfile;
+    } finally {
+      handle?.dispose();
+    }
   };
 
+  /**
+   * Sign-in — exactly ONE assertion.
+   *
+   * Decrypting the stored state proves the passkey is the right one (and fails
+   * loudly if the record belongs to another device); the wallet seed comes
+   * from the very same assertion instead of a second prompt.
+   */
   const unlockLocalPassportProfile = async (): Promise<DemoPassportProfile> => {
     const existing = await resolveDefaultLocalProfile();
     if (!existing) {
@@ -1390,18 +1581,29 @@ export default function PassportDemo() {
       );
     }
     setOnboardingBusyLabel('Unlocking your Passport with this device');
-    // Decrypting the stored state is the proof the passkey is the right one;
-    // it also fails loudly if the record was written by a different device.
-    await loadPassportState(existing, localScopeFor(existing));
-    setProfile(existing);
-    setProfileStatus('ready');
-    setLocalPassportKnown(true);
-    return existing;
+    const unlockScope = localScopeFor(existing);
+    const handle = await withPasskeyWatchdog(() =>
+      WebAuthnPrfKeyProvider.assertOnce(existing.passkey),
+    );
+    try {
+      await loadPassportState(existing, unlockScope, oneShotVaultFor(handle));
+      setProfile(existing);
+      setProfileStatus('ready');
+      setLocalPassportKnown(true);
+      const seed = await handle.deriveWalletSeed(unlockScope);
+      await openLocalWalletWithSeed(seed, unlockScope, existing.passkey.credentialId);
+      return existing;
+    } finally {
+      handle.dispose();
+    }
   };
 
   const runLocalOnboarding = async (requested: 'create' | 'signin' | 'auto') => {
     if (onboardingRunning.current) return;
     onboardingRunning.current = true;
+    // A user-initiated ceremony wins over the silent §2.2 restore: two flows
+    // must never race to replace `localWalletRef`.
+    cancelSessionRestore();
     setOnboardingError(null);
     setError(null);
     setWalletMode('local');
@@ -1424,9 +1626,10 @@ export default function PassportDemo() {
       setOnboardingBusyLabel(
         intent === 'create' ? 'Creating your Passport passkey' : 'Unlocking your Passport',
       );
+      // Both journeys now open the wallet from the SAME ceremony that unlocked
+      // the profile — no second passkey prompt to derive the seed.
       activeProfile =
         intent === 'create' ? await createLocalPassportProfile() : await unlockLocalPassportProfile();
-      await openLocalWallet(activeProfile);
       storeLastPasskey(activeProfile.passkey.credentialId);
       setOnboardingError(null);
       addActivity({
@@ -1477,6 +1680,7 @@ export default function PassportDemo() {
   const runDiscoverableSignIn = async () => {
     if (onboardingRunning.current) return;
     onboardingRunning.current = true;
+    cancelSessionRestore();
     setOnboardingError(null);
     setError(null);
     setWalletMode('local');
@@ -1488,7 +1692,7 @@ export default function PassportDemo() {
       // Credential-key the legacy record first, so an existing single-profile
       // browser matches its own passkey below.
       await migrateLegacyLocalProfile().catch(() => null);
-      discovered = await WebAuthnPrfKeyProvider.discover();
+      discovered = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.discover());
       const known = await loadLocalProfileByCredential(discovered.credentialId).catch(() => null);
       if (known) {
         activeProfile = known;
@@ -1531,18 +1735,16 @@ export default function PassportDemo() {
         // Encrypt the initial private state with a key derived from the SAME
         // assertion — no second passkey prompt, and byte-identical to what
         // the targeted provider would derive for this scope.
-        const oneShotDiscovered = discovered;
-        const oneShotVault = new EncryptedPassportPrivateStateStore(
-          new IndexedDbPassportEncryptedRecordStore(),
-          { getKey: (keyScope) => oneShotDiscovered.deriveStateKey(keyScope) },
-        );
-        await oneShotVault.save<PassportDemoState>(scope, state);
+        await oneShotVaultFor(discovered).save<PassportDemoState>(scope, state);
         await saveDemoProfile(nextProfile);
         await requestPassportStoragePersistence();
         activeProfile = nextProfile;
         setProfile(nextProfile);
         setProfileStatus('ready');
         setLocalPassportKnown(true);
+        // A Passport that did not exist here a moment ago: the name step is
+        // part of ITS setup. A sign-in to a known profile never arms it.
+        identityStepArmed.current = true;
         const seed = await discovered.deriveWalletSeed(scope);
         await openLocalWalletWithSeed(seed, scope, discovered.credentialId);
         addActivity({
@@ -1729,10 +1931,16 @@ export default function PassportDemo() {
           body: result.registryConfirmed
             ? 'The registry confirmed the registration.'
             : 'Submitted — the registry has not reported it yet.',
+          // The toast is the success surface now, so the transaction has to be
+          // reachable from it. Preview only; no link where none resolves.
+          link: explorerTxLink(result.registerTxId, result.network),
         });
         void refreshLocalBalances();
-        // Only advance when the claim genuinely landed.
-        setIdentityStep((current) => (current === 'alias' ? 'backup' : current));
+        // Only record the step as settled when the claim genuinely landed.
+        storeNameStep(activeProfile.passkey.credentialId, 'done');
+        // Name, then dashboard (2026/08/06): Backup and Ecosystem have left
+        // the chain, so a landed claim ends the wizard outright.
+        setIdentityStep((current) => (current === 'alias' ? null : current));
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         const detail = (cause as { detail?: string })?.detail;
@@ -1861,6 +2069,7 @@ export default function PassportDemo() {
         body: result.registryConfirmed
           ? `${result.domain} is confirmed by the registry.`
           : `${result.domain} was submitted — the registry has not reported it yet.`,
+        link: explorerTxLink(result.registerTxId, result.network),
       });
       void refreshLocalBalances();
     } catch (cause) {
@@ -1938,16 +2147,27 @@ export default function PassportDemo() {
   );
 
   /**
-   * Decides once per session whether the identity steps run. A restored
-   * session that already holds a name lands straight on Home; one that never
-   * chose a name is offered the step it skipped.
+   * Decides once per session whether the name step runs.
+   *
+   * Three conditions, all of which must hold, and the first is the fix for the
+   * reported reset: ONLY a Passport this session just created is walked
+   * through the step. A sign-in, and a reload that silently restores a live
+   * session, go straight to the dashboard — they used to land on "STEP 2 OF 3"
+   * because the ref below is reset by every mount and a skipped name leaves no
+   * alias record to find. The stored resolution (A4) is the durable half:
+   * it survives sign-out, so a name once claimed or once declined is never
+   * asked for again on this device.
    */
   useEffect(() => {
-    if (localWalletStatus !== 'ready' || !localSurfaces) return;
+    if (localWalletStatus !== 'ready' || !localSurfaces || !profile) return;
     if (identityStepResolved.current) return;
     identityStepResolved.current = true;
-    if (!loadAliasRecords()[selectedNetwork]) setIdentityStep('alias');
-  }, [localSurfaces, localWalletStatus, selectedNetwork]);
+    if (!identityStepArmed.current) return;
+    identityStepArmed.current = false;
+    if (loadAliasRecords()[selectedNetwork]) return;
+    if (storedNameStep(profile.passkey.credentialId)) return;
+    setIdentityStep('alias');
+  }, [localSurfaces, localWalletStatus, profile, selectedNetwork]);
 
   // A dismissed Dynamic sign-in window must not strand the onboarding screen in
   // its working stage. The short grace period lets a successful sign-in settle
@@ -2146,7 +2366,11 @@ export default function PassportDemo() {
         txHash: result.txId,
       });
       if (result.status !== 'no_utxos') {
-        pushToast({ tone: 'success', title: 'DUST registration submitted' });
+        pushToast({
+          tone: 'success',
+          title: 'DUST registration submitted',
+          link: explorerTxLink(result.txId, selectedNetwork),
+        });
       }
       await refreshWallet();
     } catch (cause) {
@@ -3153,6 +3377,10 @@ export default function PassportDemo() {
     setReclaim(null);
     setReclaimError(null);
     identityStepResolved.current = false;
+    // Signing out does NOT re-arm the name step: the next sign-in is a
+    // sign-in, and lands on the dashboard. The stored per-credential
+    // resolution is deliberately left in place for the same reason.
+    identityStepArmed.current = false;
     transactionsRequest.current += 1;
     setTransactions([]);
     setTransactionsStatus('loading');
@@ -3401,6 +3629,7 @@ export default function PassportDemo() {
           tone: 'success',
           title: 'Payment submitted',
           body: intent.purpose,
+          link: explorerTxLink(result.txId, localWalletNetworkId),
         });
         // The balance has moved and the indexer needs a moment to see the
         // transaction; the session row already carries it in the meantime.
@@ -3417,7 +3646,7 @@ export default function PassportDemo() {
         throw cause;
       }
     },
-    [addActivity, refreshLocalBalances, refreshTransactions, updateActivity],
+    [addActivity, localWalletNetworkId, refreshLocalBalances, refreshTransactions, updateActivity],
   );
 
   /**
@@ -3508,10 +3737,15 @@ export default function PassportDemo() {
     },
     ...registerNowProps,
   };
-  /** Queue from the claim screen, then carry on through the steps. */
+  /**
+   * Queue from the claim screen. Queuing IS a resolution of the name step —
+   * the name is chosen, it just is not on chain yet — so it lands on the
+   * dashboard, where the queued card carries the "Register now" action.
+   */
   const queueFromClaimScreen = async (alias: string, reason: string) => {
     queueAlias(alias, selectedNetwork, reason);
-    setIdentityStep('backup');
+    if (profile) storeNameStep(profile.passkey.credentialId, 'done');
+    setIdentityStep(null);
   };
 
   /**
@@ -3604,8 +3838,9 @@ export default function PassportDemo() {
             onOpenClassic={() => setExperience('classic')}
           />
         ) : identityStep === 'alias' ? (
-          /* Onboarding step 2 — the .night name. The default path, not a
-             detour: everything on the screen is real registry state. */
+          /* The name step — the last thing between a new Passport and its
+             dashboard (2026/08/06). Everything on the screen is real registry
+             state; claiming or skipping both land on Home. */
           <AliasClaimScreen
             networkId={selectedNetwork}
             walletReady={localSessionActive}
@@ -3618,17 +3853,22 @@ export default function PassportDemo() {
             onQueue={queueFromClaimScreen}
             onSkip={() => {
               setAliasError(null);
-              setIdentityStep('backup');
+              // Remembered per credential, so a reload — or the next sign-in —
+              // never asks again. Home keeps the "Claim a name" entry point.
+              if (profile) storeNameStep(profile.passkey.credentialId, 'skipped');
+              setIdentityStep(null);
             }}
             claimPhase={claimPhase}
             error={aliasError}
           />
         ) : identityStep === 'backup' ? (
-          /* Onboarding step 3 — optional, and honest about what backup is. */
+          /* Off the onboarding chain since 2026/08/06 — reached only when
+             something routes here deliberately. Backup and recovery proper is
+             flagged for later, not built. */
           <BackupScreen
             hasEncryptedRecord={Boolean(profile)}
-            onUnderstood={() => setIdentityStep('ecosystem')}
-            onLater={() => setIdentityStep('ecosystem')}
+            onUnderstood={() => setIdentityStep(null)}
+            onLater={() => setIdentityStep(null)}
           />
         ) : identityStep === 'ecosystem' ? (
           /* Entry to the ecosystem: the name, its real transactions, and

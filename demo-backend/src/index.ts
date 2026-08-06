@@ -28,6 +28,7 @@ export type {
   DiscoverPassportPasskeyOptions,
   DiscoveredPassportPasskey,
   EnrollPassportPasskeyOptions,
+  EnrolledPassportPasskey,
   PassportPasskeyReference,
 } from './passkey.js';
 export type {

@@ -17,6 +17,7 @@ export {
 } from 'passport-demo-backend';
 export type {
   DiscoveredPassportPasskey,
+  EnrolledPassportPasskey,
   PassportIncentiveReport,
   PassportPasskeyReference,
   PassportProfileField,

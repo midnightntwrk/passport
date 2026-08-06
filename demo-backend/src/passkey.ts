@@ -36,6 +36,23 @@ export interface DiscoverPassportPasskeyOptions {
 }
 
 /**
+ * What {@link WebAuthnPrfKeyProvider.enrollWithPrf} returns: the enrolled
+ * credential, plus — when and only when the platform evaluated the PRF during
+ * `credentials.create` — a one-shot handle over that creation-time PRF output.
+ *
+ * Most platforms return no PRF result at creation (they report only
+ * `prf.enabled`), so `prf` is `null` and the caller must run ONE assertion via
+ * {@link WebAuthnPrfKeyProvider.assertOnce}. Where it is returned, enrolment
+ * alone yields every secret the profile needs and the user sees exactly one
+ * prompt. Callers own the handle and MUST `dispose()` it.
+ */
+export interface EnrolledPassportPasskey {
+  reference: PassportPasskeyReference;
+  /** Non-null only where the authenticator returned a PRF result at creation. */
+  prf: DiscoveredPassportPasskey | null;
+}
+
+/**
  * The outcome of one discoverable assertion: which resident credential the
  * user picked, plus one-shot derivations over that assertion's PRF output.
  *
@@ -137,6 +154,37 @@ async function deriveWalletSeedBytes(
 }
 
 /**
+ * Wraps ONE ceremony's PRF output in the one-shot derivation handle.
+ *
+ * Every path that obtains a PRF output — the discoverable assertion, the
+ * targeted single assertion, and the creation-time evaluation — funnels
+ * through here, so all three derive byte-identical material for a given
+ * credential and scope: same {@link deriveKey}, same
+ * {@link deriveWalletSeedBytes}, same HKDF salts and info strings.
+ */
+function oneShotFromPrf(credentialId: string, prfResult: ArrayBuffer): DiscoveredPassportPasskey {
+  let output: Uint8Array | null = new Uint8Array(prfResult);
+  const take = (): Uint8Array => {
+    if (!output) throw new Error('This discovered passkey has already been disposed.');
+    return output;
+  };
+  return {
+    credentialId,
+    deriveWalletSeed: async (scope) => deriveWalletSeedBytes(take(), scope),
+    deriveStateKey: async (scope) => deriveKey(take(), scope),
+    dispose: () => {
+      output?.fill(0);
+      output = null;
+    },
+  };
+}
+
+/** The PRF slice of a client-extension results bag, however it was obtained. */
+type PrfExtensionResults = AuthenticationExtensionsClientOutputs & {
+  prf?: { enabled?: boolean; results?: { first?: ArrayBuffer } };
+};
+
+/**
  * Browser-only WebAuthn PRF adapter. The PRF output is immediately turned
  * into a non-exportable AES key and is never persisted by this module.
  */
@@ -157,7 +205,21 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
     this.sessionKeys.delete(`${scope.appId}\u0000${scope.accountId}`);
   }
 
-  static async enroll(options: EnrollPassportPasskeyOptions): Promise<PassportPasskeyReference> {
+  /**
+   * Enrols a credential, returning it alongside the creation-time PRF output
+   * where the platform supplied one.
+   *
+   * `credentials.create` asks for `prf: { eval: { first: PRF_SALT } }` in
+   * addition to enabling the extension. Some platforms answer with
+   * `results.first` there and then; where they do, the whole profile — private
+   * state key AND wallet seed — is derivable from this single ceremony and the
+   * user is never prompted again. Where they do not (the common case), `prf`
+   * is `null`, WITHOUT any user-visible error: the caller runs exactly one
+   * {@link assertOnce}. Enrolment happens once either way.
+   */
+  static async enrollWithPrf(
+    options: EnrollPassportPasskeyOptions,
+  ): Promise<EnrolledPassportPasskey> {
     const navigator = getNavigator();
     const hostname = globalThis.location?.hostname;
     const rpId = options.rpId ?? hostname;
@@ -187,19 +249,84 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
                 ],
               }
             : {}),
-          extensions: { prf: {} } as AuthenticationExtensionsClientInputs,
+          // Enable the extension AND ask for the salt to be evaluated now.
+          // Platforms that honour the eval hand back everything this profile
+          // needs without a single assertion; the rest just report `enabled`.
+          extensions: {
+            prf: { eval: { first: asArrayBuffer(PRF_SALT) } },
+          } as AuthenticationExtensionsClientInputs,
         },
       })) as PublicKeyCredential | null;
       if (!credential) throw new Error('Passport passkey creation was cancelled.');
-      const extension = credential.getClientExtensionResults() as AuthenticationExtensionsClientOutputs & {
-        prf?: { enabled?: boolean };
-      };
-      if (!extension.prf?.enabled) {
+      const extension = credential.getClientExtensionResults() as PrfExtensionResults;
+      const evaluated = extension.prf?.results?.first;
+      // A returned result proves the extension is live even on a platform that
+      // omits the `enabled` flag when it evaluates eagerly.
+      if (!extension.prf?.enabled && !evaluated) {
         throw new Error(
           'This authenticator does not support the WebAuthn PRF extension. Use a recent platform passkey or PRF-capable security key.',
         );
       }
-      return { credentialId: toBase64(new Uint8Array(credential.rawId)), label: options.label, rpId };
+      const credentialId = toBase64(new Uint8Array(credential.rawId));
+      return {
+        reference: { credentialId, label: options.label, rpId },
+        prf: evaluated ? oneShotFromPrf(credentialId, evaluated) : null,
+      };
+    } catch (error) {
+      throw new Error(errorMessage(error));
+    }
+  }
+
+  /**
+   * Enrols a credential and discards any creation-time PRF output.
+   *
+   * Kept for callers that only want the reference. Prefer
+   * {@link enrollWithPrf} on the onboarding path: throwing the output away
+   * here is what costs the user an extra passkey prompt.
+   */
+  static async enroll(options: EnrollPassportPasskeyOptions): Promise<PassportPasskeyReference> {
+    const enrolled = await WebAuthnPrfKeyProvider.enrollWithPrf(options);
+    enrolled.prf?.dispose();
+    return enrolled.reference;
+  }
+
+  /**
+   * Runs exactly ONE targeted assertion against a known credential and hands
+   * back a one-shot handle over its PRF output — the counterpart to
+   * {@link discover} for the case where the credential is already known.
+   *
+   * This is what collapses "unlock the private state" and "derive the wallet
+   * seed" into a single passkey prompt: the caller decrypts with
+   * `deriveStateKey` (which proves the passkey is the right one) and derives
+   * the wallet seed with `deriveWalletSeed`, both from the same assertion.
+   * Byte-identical to the cached {@link getKey} / uncached
+   * {@link deriveWalletSeed} pair — same PRF salt, same HKDF constants.
+   *
+   * Callers MUST call `dispose()`; the PRF output must never outlive the flow.
+   */
+  static async assertOnce(
+    reference: PassportPasskeyReference,
+  ): Promise<DiscoveredPassportPasskey> {
+    const navigator = getNavigator();
+    try {
+      const assertion = (await navigator.credentials.get({
+        publicKey: {
+          challenge: asArrayBuffer(randomChallenge()),
+          allowCredentials: [
+            { type: 'public-key', id: asArrayBuffer(fromBase64(reference.credentialId)) },
+          ],
+          userVerification: 'required',
+          extensions: {
+            prf: { eval: { first: asArrayBuffer(PRF_SALT) } },
+          } as AuthenticationExtensionsClientInputs,
+          ...(reference.rpId ? { rpId: reference.rpId } : {}),
+        },
+      })) as PublicKeyCredential | null;
+      if (!assertion) throw new Error('Passport passkey unlock was cancelled.');
+      const extension = assertion.getClientExtensionResults() as PrfExtensionResults;
+      const result = extension.prf?.results?.first;
+      if (!result) throw new Error('The authenticator did not return a PRF result.');
+      return oneShotFromPrf(toBase64(new Uint8Array(assertion.rawId)), result);
     } catch (error) {
       throw new Error(errorMessage(error));
     }
@@ -237,25 +364,10 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
         },
       })) as PublicKeyCredential | null;
       if (!assertion) throw new Error('Passport passkey selection was cancelled.');
-      const extension = assertion.getClientExtensionResults() as AuthenticationExtensionsClientOutputs & {
-        prf?: { results?: { first?: ArrayBuffer } };
-      };
+      const extension = assertion.getClientExtensionResults() as PrfExtensionResults;
       const result = extension.prf?.results?.first;
       if (!result) throw new Error('The authenticator did not return a PRF result.');
-      let output: Uint8Array | null = new Uint8Array(result);
-      const take = (): Uint8Array => {
-        if (!output) throw new Error('This discovered passkey has already been disposed.');
-        return output;
-      };
-      return {
-        credentialId: toBase64(new Uint8Array(assertion.rawId)),
-        deriveWalletSeed: async (scope) => deriveWalletSeedBytes(take(), scope),
-        deriveStateKey: async (scope) => deriveKey(take(), scope),
-        dispose: () => {
-          output?.fill(0);
-          output = null;
-        },
-      };
+      return oneShotFromPrf(toBase64(new Uint8Array(assertion.rawId)), result);
     } catch (error) {
       throw new Error(errorMessage(error));
     }
@@ -281,9 +393,7 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
       },
     })) as PublicKeyCredential | null;
     if (!assertion) throw new Error('Passport passkey unlock was cancelled.');
-    const extension = assertion.getClientExtensionResults() as AuthenticationExtensionsClientOutputs & {
-      prf?: { results?: { first?: ArrayBuffer } };
-    };
+    const extension = assertion.getClientExtensionResults() as PrfExtensionResults;
     const result = extension.prf?.results?.first;
     if (!result) throw new Error('The authenticator did not return a PRF result.');
     return new Uint8Array(result);

@@ -23,8 +23,11 @@ import ThemeToggle from './ThemeToggle.js'
 import './identity.css'
 
 /**
- * Alias claiming — onboarding step 2, and the default path rather than a
- * detour. A Passport alias IS a Midnames `.night` name, so everything on this
+ * Alias claiming — since 2026/08/06 the LAST onboarding screen before the
+ * dashboard, and the default path rather than a detour. Claiming or skipping
+ * both land on Home.
+ *
+ * A Passport alias IS a Midnames `.night` name, so everything on this
  * screen is a statement about the real registry:
  *
  *   - availability is `domains.member()` on the deployed `.night` TLD, probed
@@ -68,6 +71,18 @@ export interface AliasClaimProps {
   onSkip: () => void
   claimPhase: AliasClaimProgress['phase'] | null
   error: string | null
+  /**
+   * Whether the DUST fee for this registration is genuinely covered by the
+   * demo sponsor — reported by the claim path, never assumed here.
+   *
+   * `undefined` (the default) keeps the honest baseline copy: the fee comes
+   * out of this wallet. Only a `true` that the sponsor path actually produced
+   * may soften it, and even then only the FEE is described as covered — the
+   * NIGHT paid to the registry owner still leaves the user's wallet. If the
+   * sponsor is unreachable or unauthorised, this must stay false and the
+   * screen goes back to naming the real cost.
+   */
+  feesSponsored?: boolean
 }
 
 type FieldState =
@@ -104,6 +119,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     onSkip,
     claimPhase,
     error,
+    feesSponsored,
   } = props
 
   const [value, setValue] = useState('')
@@ -217,7 +233,9 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     <section className="mnid-screen" aria-busy={busy}>
       <header className="mnid-bar">
         <img className="mnid-wordmark" src="/midnight-wordmark.svg" alt="Midnight" />
-        <span className="mnid-step">Step 2 of 3</span>
+        {/* No step counter since 2026/08/06: the name is the LAST thing
+            before the dashboard, not step 2 of a three-screen wizard. */}
+        <span className="mnid-step">Last step</span>
         <ThemeToggle size="sm" className="mnid-theme" />
       </header>
 
@@ -362,8 +380,11 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
           <Check size={13} aria-hidden="true" />
           <span>
             Names are 1–32 characters: lowercase letters, numbers, and hyphens inside. A real
-            registration pays the registry owner in unshielded NIGHT and its fee in DUST, both from
-            this wallet — which is why Passport only performs one where it can.
+            registration pays the registry owner in unshielded NIGHT from this wallet
+            {feesSponsored
+              ? ', and its network fee in DUST is covered by the demo sponsor'
+              : ', and its fee in DUST from this wallet too'}{' '}
+            — which is why Passport only performs one where it can.
           </span>
         </p>
       </div>
