@@ -112,10 +112,13 @@ Two rules the template follows and you should too:
    `midnightAddresses`, and not `passportContract`, because it has nothing to
    do with it. Every extra field is a reason for the user to say no to all of
    them.
-2. **Render what arrived and nothing else.** Consent is per-field: a user may
-   approve the name and withhold the address. The template shows the withheld
-   field as *not shared* rather than quietly leaving a gap, and shows a refusal
-   as an ordinary outcome — not an error screen.
+2. **Render what arrived and nothing else.** In embedded mode consent is
+   per-field: a user may approve the name and withhold the address. The
+   standalone popup is coarser — it approves or declines the requested set as
+   a whole — but a field can still come back missing, so the rule is the same
+   either way. The template shows a missing field as *not shared* rather than
+   quietly leaving a gap, and shows a refusal as an ordinary outcome — not an
+   error screen.
 
 ### Act 3 — Payment (optional, off by default)
 
@@ -201,9 +204,13 @@ text into the other side's interface.
 
 | Message | Direction | Body |
 | --- | --- | --- |
-| `passport.profile.ready` | Passport → app *(embedded only)* | `{ protocol, type, requestId, nonce }` |
+| `passport.profile.ready` | Passport → app | `{ protocol, type, requestId, nonce }` |
 | `passport.profile.request` | app → Passport | `{ protocol, type, requestId, nonce, fields }` |
 | `passport.profile.response` | Passport → app | `{ protocol, type, requestId, nonce, approved, profile?, error? }` |
+
+`ready` flows in both modes; only who mints the pair differs. Embedded,
+Passport mints it and broadcasts `ready` unprompted. Standalone, Passport
+echoes back the pair your app handed over on the popup URL.
 
 `fields` is a non-empty subset of:
 
@@ -298,10 +305,13 @@ to arrive as the answer to the profile question, and vice versa. The nonce is
 unguessable random, not a counter and not a timestamp. Each of the three
 exchanges in this template has its own pair.
 
-**Opt-in consent.** Passport's consent sheet starts with every box unticked,
-every time, and it names your app's origin above them. There is no "remember
-this app", no scope you can pre-request, and no way to ask again more
-insistently. If a user approves one field of two, you get one field.
+**Opt-in consent.** Passport's consent surface names your app's origin and
+grants nothing until the user acts. In embedded mode the sheet has a toggle
+per requested field, every one unticked by default — if a user approves one
+field of two, you get one field. The standalone popup is all-or-nothing: it
+lists the requested fields and the user approves or declines them as a whole
+set. In neither mode is there a "remember this app", a scope you can
+pre-request, or a way to ask again more insistently.
 
 **Why you never see keys.** Passport does not inject a provider object into
 your frame. It cannot: the same-origin policy makes it impossible to reach into

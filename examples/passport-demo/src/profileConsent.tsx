@@ -34,6 +34,15 @@ const FIELD_LABELS: Record<PassportProfileField, string> = {
   midnightAddresses: 'Midnight unshielded, shielded, and DUST addresses',
 };
 
+/**
+ * How long a request may wait for the profile props to hydrate before the
+ * opener is told the profile is unavailable. The props arrive asynchronously
+ * (session resume, wallet surfaces), so answering instantly would refuse
+ * requests this Passport could in fact serve — but never answering at all
+ * leaves the opener hanging on a window that renders nothing.
+ */
+const PROFILE_WAIT_MS = 5_000;
+
 function launchParameters(): { requestId: string; nonce: string } | null {
   const parameters = new URLSearchParams(window.location.search);
   const requestId = parameters.get('passportRequestId');
@@ -49,7 +58,7 @@ export function PassportProfileConsent({
 }: ProfileConsentProps) {
   const launch = useMemo(launchParameters, []);
   const [pending, setPending] = useState<PendingRequest | null>(null);
-  const [outcome, setOutcome] = useState<'approved' | 'denied' | null>(null);
+  const [outcome, setOutcome] = useState<'approved' | 'denied' | 'unavailable' | null>(null);
 
   useEffect(() => {
     if (!launch || !window.opener) return;
@@ -72,14 +81,36 @@ export function PassportProfileConsent({
     return () => window.removeEventListener('message', onMessage);
   }, [launch]);
 
-  if (!launch || !pending) return null;
+  const profileReady =
+    !pending ||
+    pending.request.fields.every((field) => {
+      if (field === 'displayName') return Boolean(displayName);
+      if (field === 'midnightAddresses') return Boolean(midnightAddresses);
+      return true;
+    });
 
-  const profileReady = pending.request.fields.every((field) => {
-    if (field === 'displayName') return Boolean(displayName);
-    if (field === 'midnightAddresses') return Boolean(midnightAddresses);
-    return true;
-  });
-  if (!profileReady) return null;
+  /* A request this Passport cannot serve must still be answered — silence
+     leaves the opener disabled forever, waiting on a window that renders
+     nothing. If the profile has not hydrated within the grace period, tell
+     the opener so; the timer is cancelled the moment the fields arrive. */
+  useEffect(() => {
+    if (!pending || profileReady || outcome) return;
+    const timer = window.setTimeout(() => {
+      pending.source.postMessage(
+        createPassportProfileResponse(pending.request, {
+          approved: false,
+          error: 'profile_unavailable',
+        }),
+        pending.origin,
+      );
+      setOutcome('unavailable');
+    }, PROFILE_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [pending, profileReady, outcome]);
+
+  if (!launch || !pending) return null;
+  /* Not ready and not yet answered: the grace timer above is running. */
+  if (!profileReady && !outcome) return null;
 
   const send = (
     response: Omit<
@@ -132,7 +163,9 @@ export function PassportProfileConsent({
                 ? 'Profile shared.'
                 : outcome === 'denied'
                   ? 'Request declined.'
-                  : 'Share your public profile?'}
+                  : outcome === 'unavailable'
+                    ? 'Profile not ready.'
+                    : 'Share your public profile?'}
             </h2>
           </div>
         </header>
@@ -143,7 +176,9 @@ export function PassportProfileConsent({
             <p>
               {outcome === 'approved'
                 ? `Approved fields were returned only to ${pending.origin}.`
-                : `No Passport data was returned to ${pending.origin}.`}
+                : outcome === 'unavailable'
+                  ? `Passport has no profile to share yet, so nothing was returned to ${pending.origin}. Finish setting up this Passport, then ask again from the app.`
+                  : `No Passport data was returned to ${pending.origin}.`}
             </p>
             <button type="button" onClick={() => window.close()}>
               Close window

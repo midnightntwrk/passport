@@ -93,6 +93,25 @@ const formatNight = (value) => {
   return fraction ? `${whole}.${fraction}` : `${whole}`;
 };
 
+// The genesis seed is public knowledge, so this script must only ever drive a
+// disposable localnet. Anything that is not a loopback node and indexer on the
+// localnet network id is refused outright — a public network pointed at by
+// accident is not a faucet, it is a wallet drainer.
+const isLoopback = (endpoint) => {
+  try {
+    const { hostname } = new URL(endpoint);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+};
+if (NETWORK_ID !== 'undeployed' || ![NODE, INDEXER, INDEXER_WS].every(isLoopback)) {
+  console.error(
+    'Refusing to run: this faucet only works against a localnet — the node and indexer must be on localhost or 127.0.0.1, and MIDNIGHT_NETWORK_ID must be "undeployed".',
+  );
+  process.exit(1);
+}
+
 setNetworkId(NETWORK_ID);
 
 // Account 0, index 0 — the derivation the demo and the prototype share.

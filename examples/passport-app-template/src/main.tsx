@@ -114,6 +114,13 @@ const PAYMENT_PURPOSE = 'Template demo payment';
 const TX_TIMEOUT_MS = 180_000;
 
 /**
+ * Standalone only: how often the popup is checked for having been closed. A
+ * user who dismisses the Passport window has answered, even though no message
+ * will ever say so — without this, the Connect button stays disabled forever.
+ */
+const POPUP_POLL_MS = 500;
+
+/**
  * The explorer, and the route that actually resolves on it:
  * `/transactions/{hash}`. `/tx/{hash}` 404s. A link that looks right and goes
  * nowhere is worse than showing the bare identifier, so an empty value here
@@ -162,7 +169,8 @@ const PROFILE_REFUSALS: Record<string, string> = {
 
 const TX_REFUSALS: Record<PassportTxErrorCode, string> = {
   declined: 'You declined the payment on Passport’s approval sheet. Nothing was signed.',
-  'insufficient-funds': 'The Passport wallet does not hold enough NIGHT to cover this payment.',
+  'insufficient-funds':
+    'The Passport wallet cannot cover this payment — it is short of NIGHT, or of the DUST that pays the network fee.',
   'wallet-unavailable': 'No Passport wallet session is open, so nothing could be signed.',
   'invalid-request':
     'Passport refused the request — it was already showing an approval sheet, or the recipient is not a valid unshielded address.',
@@ -216,6 +224,21 @@ function App() {
   /** STANDALONE: the pair this app minted, and the popup it opened. */
   const popup = useRef<Window | null>(null);
   const profileExchange = useRef<Exchange | null>(null);
+  /** STANDALONE: the closed-popup poll and the overall exchange timeout. */
+  const profilePoll = useRef<number | null>(null);
+  const profileTimer = useRef<number | null>(null);
+
+  const clearProfileWatch = () => {
+    if (profilePoll.current !== null) {
+      window.clearInterval(profilePoll.current);
+      profilePoll.current = null;
+    }
+    if (profileTimer.current !== null) {
+      window.clearTimeout(profileTimer.current);
+      profileTimer.current = null;
+    }
+  };
+  useEffect(() => clearProfileWatch, []);
 
   /**
    * The payment is its OWN pair, minted fresh. A payment reply must never be
@@ -244,6 +267,7 @@ function App() {
    * ACT 2 (settling) — turn a profile response into interface state.
    * ---------------------------------------------------------------------- */
   const settleProfile = useCallback((response: PassportProfileResponse) => {
+    clearProfileWatch();
     setProfile(response);
     if (!response.approved) {
       setPhase('refused');
@@ -347,7 +371,11 @@ function App() {
         );
         pushToast({
           title: txResponse.status === 'declined' ? 'Payment declined' : 'Payment failed',
-          body: reason ?? 'No transaction was made.',
+          /* `detail` is the wallet's own sentence about what stopped it —
+             worth more to the user than any generic mapping, so show it. */
+          body: [reason ?? 'No transaction was made.', txResponse.detail]
+            .filter(Boolean)
+            .join(' '),
           tone: 'error',
         });
         return;
@@ -458,6 +486,7 @@ function App() {
     }
 
     /* Standalone: mint the pair, then hand it over on the URL. */
+    clearProfileWatch();
     const exchange: Exchange = { requestId: crypto.randomUUID(), nonce: randomNonce() };
     profileExchange.current = exchange;
     setPhase('opening');
@@ -474,7 +503,33 @@ function App() {
     if (!popup.current) {
       setPhase('error');
       setNote('The browser blocked the Passport window. Allow popups for this site and retry.');
+      return;
     }
+
+    /* A closed popup will never answer, and no message says it closed — the
+       only way to find out is to ask. Both watchers settle the SAME exchange
+       they were armed for, so a stale timer can never kill a later attempt. */
+    const abandon = (reason: string) => {
+      clearProfileWatch();
+      if (profileExchange.current?.requestId !== exchange.requestId) return;
+      profileExchange.current = null;
+      setPhase('error');
+      setNote(reason);
+    };
+    profilePoll.current = window.setInterval(() => {
+      if (popup.current?.closed) {
+        abandon(
+          'The Passport window was closed before it answered. Nothing was shared — connect again to retry.',
+        );
+      }
+    }, POPUP_POLL_MS);
+    /* Same budget as the transaction path: a promise that never settles is a
+       Connect button that never re-enables. */
+    profileTimer.current = window.setTimeout(() => {
+      abandon(
+        'Passport did not answer within three minutes. Nothing was shared — close the Passport window and connect again.',
+      );
+    }, TX_TIMEOUT_MS);
   };
 
   /* -------------------------------------------------------------------------
