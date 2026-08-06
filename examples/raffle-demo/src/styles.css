@@ -1,7 +1,7 @@
 /* Grand Prix Raffle — the Passport demo dApp that replaced Atlas.
    Every colour, radius, and shadow below comes from the Passport token
-   sheet (examples/passport-demo/src/screens/tokens.css); this file
-   declares no palette values of its own. Light is the default; dark
+   sheet (./tokens.css, vendored from the Passport app so this folder
+   builds standalone); this file declares no palette values of its own. Light is the default; dark
    follows prefers-color-scheme via the token sheet's system block. */
 
 * {
@@ -437,4 +437,139 @@ a {
   to {
     transform: rotate(360deg);
   }
+}
+
+
+/* ---------------------------------------------------------------- */
+/* Hero illustration                                                 */
+/*                                                                   */
+/* Inline SVG drawn entirely from the token palette — no image asset */
+/* to ship, no external request, and legible in both themes.         */
+/* ---------------------------------------------------------------- */
+
+.raffle-art-frame {
+  display: grid;
+  place-items: center;
+  height: 128px;
+  margin: 0 0 20px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-accent-soft);
+  overflow: hidden;
+}
+.raffle-art-frame .mnraffle-art { width: 208px; height: auto; }
+
+.mnraffle-plate { fill: var(--mn-surface-raised); }
+.mnraffle-edge {
+  fill: none;
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-opacity: 0.75;
+}
+.mnraffle-tear {
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-opacity: 0.5;
+}
+.mnraffle-rules {
+  stroke: var(--mn-text-muted);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-opacity: 0.55;
+}
+.mnraffle-spark {
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.mnraffle-halo {
+  fill: none;
+  stroke: var(--mn-accent-ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+  stroke-opacity: 0.55;
+}
+
+/* ---------------------------------------------------------------- */
+/* Confirmation toast                                                */
+/* ---------------------------------------------------------------- */
+
+.raffle-toast {
+  position: fixed;
+  z-index: 60;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  left: 50%;
+  width: min(22rem, calc(100vw - 2rem));
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 15px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-lg);
+  transform: translateX(-50%);
+  animation: raffle-toast-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.raffle-toast-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+
+.raffle-toast-copy { flex: 1; min-width: 0; }
+.raffle-toast-title { margin: 0; font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.raffle-toast-body {
+  margin: 2px 0 0;
+  color: var(--mn-text-muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+/* 44px of tappable height: the link is the point of the card. */
+.raffle-toast-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: 2px -8px -10px;
+  padding: 0 8px;
+  border-radius: var(--mn-radius-sm);
+  color: var(--mn-accent-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.raffle-toast-link:hover { background: var(--mn-surface-hover); text-decoration: underline; }
+
+.raffle-toast-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.raffle-toast-close:hover { color: var(--mn-text-primary); background: var(--mn-surface-hover); }
+
+@keyframes raffle-toast-in {
+  from { opacity: 0; transform: translate(-50%, 40px) scale(0.94); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .raffle-toast { animation: none; }
 }

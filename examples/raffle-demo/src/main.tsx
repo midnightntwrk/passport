@@ -19,9 +19,11 @@ import {
   parsePassportTxResponse,
   type PassportProfileField,
   type PassportProfileResponse,
-} from 'passport-demo-backend';
+} from './bridge/index.js';
 
-import '../../passport-demo/src/screens/tokens.css';
+import RaffleArt from './RaffleArt.js';
+import RaffleToast, { pushRaffleToast } from './RaffleToast.js';
+import './tokens.css';
 import './styles.css';
 
 type FlowState =
@@ -39,7 +41,16 @@ const PASSPORT_ORIGIN =
 
 const TELEGRAM_URL = import.meta.env.VITE_TELEGRAM_URL;
 
+/**
+ * The preview explorer, and the route that actually resolves on it:
+ * `/transactions/{hash}`. `/tx/{hash}` 404s — a link that looks right and goes
+ * nowhere is worse than showing the bare identifier.
+ */
 const EXPLORER_URL = 'https://explorer.preview.midnight.network';
+
+function explorerTxHref(txId: string): string {
+  return `${EXPLORER_URL}/transactions/${encodeURIComponent(txId)}`;
+}
 
 // The raffle runs two ways: standalone (it opens Passport as a popup and
 // mints the request id and nonce itself), or embedded inside Passport's
@@ -307,6 +318,14 @@ function App() {
       setEntry({ at: new Date().toISOString(), txId });
       setState('entered');
       setDetail(`Entry paid. Transaction ${shortHash(txId)} was submitted to the node.`);
+      /* The confirmation the user actually reads, with the explorer one tap
+         away. Preview is the only network with a public explorer, and it is
+         the only network Passport submits on today. */
+      pushRaffleToast({
+        title: 'You are in the draw',
+        body: `Entry paid — ${shortHash(txId)}.`,
+        link: { label: 'View on explorer', href: explorerTxHref(txId) },
+      });
       reportIncentives(address, txId, exchange);
       return;
     }
@@ -520,6 +539,9 @@ function App() {
       <main className="raffle-main">
         {(state === 'hero' || busy || state === 'denied' || state === 'error') && (
           <section className="raffle-hero" aria-label="Raffle offer">
+            <div className="raffle-art-frame">
+              <RaffleArt title="A raffle ticket with its prize stub" />
+            </div>
             <span className="raffle-eyebrow">Grand Prix weekend</span>
             <h1>
               Free Grab
@@ -647,7 +669,7 @@ function App() {
               {ticketTxId ? (
                 <a
                   className="ticket-tx"
-                  href={`${EXPLORER_URL}/tx/${ticketTxId}`}
+                  href={explorerTxHref(ticketTxId)}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -697,6 +719,8 @@ function App() {
           </section>
         )}
       </main>
+
+      <RaffleToast />
 
       <footer className="raffle-footer">
         {ON_CHAIN
