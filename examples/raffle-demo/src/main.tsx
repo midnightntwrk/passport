@@ -591,10 +591,12 @@ function App() {
             <h1>Hey, {name}.</h1>
             <p className="raffle-sub">
               {ON_CHAIN ? (
+                /* Kept deliberately clean — the amount and recipient are
+                   named on Passport's approval sheet, which is where the
+                   informed-consent moment actually lives. */
                 <>
-                  Your ride credit is reserved. Entry costs{' '}
-                  <strong>{ENTRY_PRICE} NIGHT</strong>, paid from your Passport wallet to the
-                  raffle's collection address — Passport will ask you to approve it.
+                  Your ride credit is reserved. Enter the draw to lock in your
+                  ticket — Passport will ask you to approve the entry.
                 </>
               ) : (
                 <>
@@ -603,20 +605,6 @@ function App() {
                 </>
               )}
             </p>
-
-            {address && (
-              <div className="raffle-address">
-                <span>Connected address</span>
-                <code>{shortAddress(address)}</code>
-              </div>
-            )}
-
-            {ON_CHAIN && (
-              <div className="raffle-address">
-                <span>Entry paid to</span>
-                <code>{shortAddress(COLLECTION_ADDRESS)}</code>
-              </div>
-            )}
 
             <button
               type="button"
@@ -629,11 +617,7 @@ function App() {
               ) : (
                 <Ticket size={18} aria-hidden="true" />
               )}
-              {state === 'submitting'
-                ? 'Waiting for Passport…'
-                : ON_CHAIN
-                  ? `Enter the raffle · ${ENTRY_PRICE} NIGHT`
-                  : 'Enter the raffle'}
+              {state === 'submitting' ? 'Waiting for Passport…' : 'Enter the raffle'}
             </button>
 
             <p className="raffle-detail" role="status">
