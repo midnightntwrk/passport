@@ -1,0 +1,133 @@
+@import './screens/tokens.css';
+
+/* Mobile install / notifications sheet — prefix "pwainstall-".
+   Sits above the bottom nav (100) and the toast stack (118), below the app
+   consent sheet (120): it is an invitation, never something that can cover a
+   decision the user is in the middle of making. */
+
+/* Explicitly one below the sheet. Relying on DOM order alone left the scrim
+   painting over the sheet's own buttons. */
+.pwainstall-scrim {
+  position: fixed;
+  z-index: 118;
+  inset: 0;
+  background: rgba(4, 5, 7, .48);
+  animation: pwainstall-fade .18s ease-out;
+}
+
+.pwainstall-sheet {
+  position: fixed;
+  z-index: 119;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  gap: 14px;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+  border-top: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-lg) var(--mn-radius-lg) 0 0;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-lg);
+  animation: pwainstall-rise .24s cubic-bezier(.22, 1, .36, 1);
+}
+
+.pwainstall-grip {
+  justify-self: center;
+  width: 36px;
+  height: 4px;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-border-medium);
+}
+
+.pwainstall-head {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 13px;
+}
+.pwainstall-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--mn-radius);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.pwainstall-head h2 {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.pwainstall-head p {
+  margin: 3px 0 0;
+  color: var(--mn-text-muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.pwainstall-steps {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 13px 15px;
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-sunken);
+  color: var(--mn-text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+  list-style: none;
+}
+.pwainstall-steps li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+}
+.pwainstall-steps svg { color: var(--mn-accent-ink); }
+
+.pwainstall-actions { display: grid; gap: 9px; }
+
+.pwainstall-primary,
+.pwainstall-secondary {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 18px;
+  border-radius: var(--mn-radius-pill);
+  font-size: 14px;
+  font-weight: 650;
+}
+.pwainstall-primary {
+  border: 0;
+  color: var(--mn-accent-text);
+  background: var(--mn-accent);
+}
+.pwainstall-primary:hover { background: var(--mn-accent-hover); }
+.pwainstall-secondary {
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  color: var(--mn-text-secondary);
+  background: transparent;
+}
+.pwainstall-secondary:hover { background: var(--mn-surface-hover); }
+
+.pwainstall-note {
+  margin: 0;
+  color: var(--mn-text-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+@keyframes pwainstall-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pwainstall-rise {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pwainstall-scrim, .pwainstall-sheet { animation: none; }
+}
