@@ -35,8 +35,11 @@ const KNOWN_NETWORKS: readonly PassportNetworkId[] = ['preview', 'preprod', 'mai
  */
 export const DEFAULT_NETWORK_ID = 'preview';
 
+/** Safe outside Vite, where there is no `import.meta.env`. See `localWallet.ts`. */
 function environment(): Record<string, string | undefined> {
-  return import.meta.env as unknown as Record<string, string | undefined>;
+  return (
+    (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {}
+  );
 }
 
 /**

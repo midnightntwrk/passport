@@ -82,8 +82,18 @@ export interface SponsorConfig {
  */
 export const BALANCE_WITHOUT_DUST: ('shielded' | 'unshielded')[] = ['shielded', 'unshielded'];
 
+/**
+ * Vite replaces `import.meta.env` at build time; under plain Node — which is
+ * how the wallet's live behaviour gets measured against a real chain before
+ * anything ships — there is no such object. An absent one reads as "nothing
+ * configured", which for sponsorship means `disabled`. Same shim as
+ * `localWallet.ts`; found on 2026/08/06 when a Node harness for
+ * `subscribeBalances` died in `sponsorConfig` on the bare read.
+ */
 function environment(): Record<string, string | undefined> {
-  return import.meta.env as unknown as Record<string, string | undefined>;
+  return (
+    (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {}
+  );
 }
 
 function trimmed(value: string | undefined): string | undefined {
