@@ -952,9 +952,9 @@ export default function AppBrowser(props: AppBrowserProps) {
                 <p>
                   {txOutcome.kind === 'submitted' ? (
                     <>
-                      {formatNight(pendingTx.amount)} NIGHT left this wallet. The node
-                      accepted the transaction and returned its identifier; the app has
-                      been told the same id.
+                      Sent — {formatNight(pendingTx.amount)} NIGHT went out of this
+                      wallet. The node accepted the transaction and returned its
+                      identifier; the app has been told the same id.
                       <br />
                       <code className="mnapps-tx-hash">{txOutcome.txId}</code>
                       {explorerHref ? (
@@ -979,7 +979,8 @@ export default function AppBrowser(props: AppBrowserProps) {
                     </>
                   ) : (
                     <>
-                      No NIGHT left this wallet. {txOutcome.message}
+                      Nothing was sent — no NIGHT moved from this wallet.{' '}
+                      {txOutcome.message}
                     </>
                   )}
                 </p>
