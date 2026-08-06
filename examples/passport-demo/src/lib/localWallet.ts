@@ -146,6 +146,47 @@ function devMode(): boolean {
 }
 
 /**
+ * Networks with public infrastructure. A wallet on one of these whose endpoint
+ * points at a loopback address is almost always carrying a stale localnet
+ * override, and the failure it produces later reaches the user as a nameless
+ * "the proof server could not prove this" — so the mismatch is called out at
+ * assembly time, naming the variable and both values.
+ */
+const PUBLIC_NETWORK_IDS = new Set(['preview', 'preprod', 'mainnet']);
+
+function isLoopbackUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname === '[::1]'
+    );
+  } catch {
+    // An unparseable URL fails on its own terms soon enough.
+    return false;
+  }
+}
+
+/** See {@link PUBLIC_NETWORK_IDS}. Warns; never blocks, because a developer may genuinely be proxying. */
+function warnOnLoopbackEndpoints(config: LocalWalletNetworkConfig): void {
+  if (!PUBLIC_NETWORK_IDS.has(config.networkId)) return;
+  const endpoints: Array<[variable: string, url: string]> = [
+    ['VITE_MIDNIGHT_PROVING_URL', config.provingServerUrl],
+    ['VITE_INDEXER_URL', config.indexerHttpUrl],
+    ['VITE_INDEXER_WS_URL', config.indexerWsUrl],
+    ['VITE_MIDNIGHT_RELAY_URL (or the VITE_MIDNIGHT_NODE_URL it derives from)', config.relayUrl],
+  ];
+  for (const [variable, url] of endpoints) {
+    if (!isLoopbackUrl(url)) continue;
+    console.error(
+      `[localWallet] ${variable} is ${url}, but VITE_MIDNIGHT_NETWORK_ID is "${config.networkId}" — a public network served from a loopback endpoint. This looks like a stale localnet override: unset ${variable} or change VITE_MIDNIGHT_NETWORK_ID to match.`,
+    );
+  }
+}
+
+/**
  * Resolves the network the local wallet talks to. Everything is overridable so
  * the same build can be pointed at a localnet, and nothing is pinned to one.
  *
@@ -163,7 +204,7 @@ export function localWalletNetworkConfig(
   const indexerHttpUrl =
     overrides.indexerHttpUrl ?? env.VITE_INDEXER_URL ?? DEFAULT_INDEXER_HTTP_URL;
   const nodeUrl = env.VITE_MIDNIGHT_NODE_URL ?? DEFAULT_NODE_URL;
-  return {
+  const config: LocalWalletNetworkConfig = {
     networkId: overrides.networkId ?? env.VITE_MIDNIGHT_NETWORK_ID ?? DEFAULT_NETWORK_ID,
     indexerHttpUrl,
     indexerWsUrl:
@@ -172,6 +213,8 @@ export function localWalletNetworkConfig(
     provingServerUrl:
       overrides.provingServerUrl ?? env.VITE_MIDNIGHT_PROVING_URL ?? DEFAULT_PROVING_SERVER_URL,
   };
+  warnOnLoopbackEndpoints(config);
+  return config;
 }
 
 // ---------------------------------------------------------------------------
@@ -244,6 +287,15 @@ const NO_DUST_SENTENCE =
 /** Default floor between {@link LocalMidnightWallet.subscribeBalances} calls. */
 const DEFAULT_BALANCE_MIN_INTERVAL_MS = 4_000;
 
+/**
+ * How often {@link LocalMidnightWallet.subscribeBalances} re-projects the DUST
+ * balance while the chain is quiet. DUST accrues against the wall clock, and
+ * accrual is deliberately outside the change fingerprint (see
+ * {@link projectBalances}), so without this an idle wallet's displayed DUST
+ * would freeze at whatever the last chain-driven emission carried.
+ */
+const DUST_HEARTBEAT_INTERVAL_MS = 45_000;
+
 // ---------------------------------------------------------------------------
 // Balance derivation
 // ---------------------------------------------------------------------------
@@ -269,7 +321,9 @@ const DEFAULT_BALANCE_MIN_INTERVAL_MS = 4_000;
  * both sync flags. Every field of the returned {@link LocalWalletBalances} is
  * covered except the DUST balance's continuous accrual, which is why the
  * emitted `dustBalance` is always evaluated at `now`: when a call does happen,
- * the figure it carries is current, not a replay of the one that changed.
+ * the figure it carries is current, not a replay of the one that changed. The
+ * accrual itself reaches an idle listener through `subscribeBalances`'s slow
+ * heartbeat, never through this fingerprint.
  */
 function projectBalances(
   state: FacadeState,
@@ -464,17 +518,42 @@ export interface CreateLocalMidnightWalletOptions {
 // First-sync bootstrap
 // ---------------------------------------------------------------------------
 
+const DEFAULT_DEEP_CHAIN_BLOCK_THRESHOLD = 1_000_000n;
+
+/**
+ * `VITE_DEEP_CHAIN_BLOCK_THRESHOLD`, when set, overrides the default ceiling —
+ * a deployment can lift it without a code change. A value `BigInt` cannot
+ * parse, and any value that is not positive, is ignored rather than allowed to
+ * turn the guard off by accident.
+ */
+function resolveDeepChainBlockThreshold(): bigint {
+  const raw = environment().VITE_DEEP_CHAIN_BLOCK_THRESHOLD?.trim();
+  if (!raw) return DEFAULT_DEEP_CHAIN_BLOCK_THRESHOLD;
+  try {
+    const parsed = BigInt(raw);
+    return parsed > 0n ? parsed : DEFAULT_DEEP_CHAIN_BLOCK_THRESHOLD;
+  } catch {
+    return DEFAULT_DEEP_CHAIN_BLOCK_THRESHOLD;
+  }
+}
+
 /**
  * Above this many blocks, a from-genesis walk is refused rather than started.
  *
  * Chosen from measurement, not taste. Preview (~296k blocks) completes in a tab
  * in ~75 s at a steady ~90 MB heap; Pre-production (~1.98M) reached 3 % in
- * 150 s with the heap climbing ~25 MB/s until the tab died at ~4.2 GB. 500k
- * sits above everything that is known to work and far below anything known to
- * fail, and it is a ceiling on a browser tab — not a statement about the SDK,
- * which walks these chains happily in Node.
+ * 150 s with the heap climbing ~25 MB/s until the tab died at ~4.2 GB.
+ *
+ * The default is 1M because the chain moves and a fixed ceiling rots: Preview's
+ * tip was 303,932 on 2026/08/06 and grows ~14,400 blocks/day, so the previous
+ * 500k default would have started refusing every fresh Preview onboarding
+ * around 2026/08/20. 1M keeps Preview onboardable until roughly 2026/09/23
+ * while still sitting at about half the only measured failure point (1.98M),
+ * and `VITE_DEEP_CHAIN_BLOCK_THRESHOLD` can lift it further once a deeper walk
+ * has been measured to survive. It remains a ceiling on a browser tab — not a
+ * statement about the SDK, which walks these chains happily in Node.
  */
-export const DEEP_CHAIN_BLOCK_THRESHOLD = 500_000n;
+export const DEEP_CHAIN_BLOCK_THRESHOLD = resolveDeepChainBlockThreshold();
 
 export type WalletBootstrapErrorCode = 'chain-too-deep';
 
@@ -615,6 +694,13 @@ export interface SendNightResult {
  *                 fee. Carries the formatted balance it would pay from.
  *   `no-dust`   — no sponsor and no DUST, with the reason a send would give.
  *
+ * When a sponsor URL is configured but the service is not ready, the fallback
+ * modes carry `sponsorUnavailableReason` — the reason `sponsorReadiness()`
+ * gave — so a surface can say "fee sponsor unavailable (reason), paying from
+ * your own DUST" instead of silently pretending sponsorship never existed.
+ * Absent when sponsorship is simply not configured. Additive: the three modes
+ * and their existing fields are unchanged.
+ *
  * Advisory only. It is a *prediction*, made from a state that may be a block
  * old by the time a transfer is built, so `sendUnshieldedNight` re-checks
  * everything itself and its refusals remain the authority. A surface may use
@@ -622,8 +708,8 @@ export interface SendNightResult {
  */
 export type FeeReadiness =
   | { mode: 'sponsored' }
-  | { mode: 'own-dust'; dustBalance: string }
-  | { mode: 'no-dust'; reason: string };
+  | { mode: 'own-dust'; dustBalance: string; sponsorUnavailableReason?: string }
+  | { mode: 'no-dust'; reason: string; sponsorUnavailableReason?: string };
 
 export interface LocalMidnightWallet {
   readonly network: LocalWalletNetworkConfig;
@@ -682,7 +768,7 @@ export interface LocalMidnightWallet {
    * emission through the same {@link projectBalances} that `getBalances()` uses.
    * When the unshielded wallet applies a transaction that pays this wallet, its
    * state emits, the facade re-combines, and the listener is called with the new
-   * NIGHT balance. No `getBalances()` call is involved and no interval exists.
+   * NIGHT balance. No `getBalances()` call is involved.
    *
    * Cost. The SDK's indexer subscription runs whether or not anything listens
    * here, so this adds *zero* network traffic: it is one more subscriber to an
@@ -692,7 +778,13 @@ export interface LocalMidnightWallet {
    * nothing. Genuine changes are throttled to at most one listener call per
    * `minIntervalMs`, 4 s by default, leading and trailing — so a burst of
    * blocks cannot turn into a burst of renders, and the last state of the burst
-   * is never dropped.
+   * is never dropped. One slow timer accompanies the push path: every 45 s the
+   * latest state is re-projected at the current wall clock, and the listener is
+   * called only when the continuously accruing DUST balance — deliberately
+   * outside the change fingerprint — has moved since the last delivery. That is
+   * how an idle wallet's DUST keeps rising on screen; the heartbeat touches no
+   * network, costs one projection per tick, and is cleared by the returned
+   * unsubscribe function.
    *
    * The listener is called once on subscribe with the current state, provided
    * all three component wallets have emitted (they have, once the facade has
@@ -1100,28 +1192,54 @@ export async function createLocalMidnightWallet(
     options: { minIntervalMs?: number } = {},
   ): () => void => {
     const minIntervalMs = Math.max(0, options.minIntervalMs ?? DEFAULT_BALANCE_MIN_INTERVAL_MS);
+    // For the heartbeat: the newest state seen (null once the stream has
+    // errored, so a dead subscription cannot keep reporting fresh numbers) and
+    // the last balances actually handed to the listener.
+    let latestState: FacadeState | null = null;
+    let lastDelivered: LocalWalletBalances | null = null;
+    const deliver = (balances: LocalWalletBalances) => {
+      lastDelivered = balances;
+      listener(balances);
+    };
     const subscription = facade
       .state()
       .pipe(
+        Rx.tap((state) => {
+          latestState = state;
+        }),
         Rx.map((state) => projectBalances(state, new Date())),
         Rx.distinctUntilChanged((before, after) => before.fingerprint === after.fingerprint),
-        // The only timer in this module's live path, and it exists solely to
-        // hold the trailing emission of a burst.
+        // Exists solely to hold the trailing emission of a burst.
         Rx.throttleTime(minIntervalMs, undefined, { leading: true, trailing: true }),
       )
       .subscribe({
         next: ({ balances }) => {
           if (closed) return;
-          listener(balances);
+          deliver(balances);
         },
         error: (cause) => {
           // Same treatment `getBalances()` gives a failed read: say it is
           // unavailable and why, rather than reporting a zero or going quiet.
+          latestState = null;
           if (closed) return;
           listener(unavailableBalances(cause));
         },
       });
-    return () => subscription.unsubscribe();
+    // The heartbeat. The fingerprint filter above deliberately ignores DUST
+    // accrual, so while the chain is quiet nothing re-emits — but the balance
+    // keeps growing against the wall clock. Every 45 s the latest state is
+    // re-projected at `now`, and the listener is called only when the DUST
+    // figure it would see has actually moved. No network is touched, and the
+    // push path keeps sole custody of every chain-visible fact.
+    const heartbeat = setInterval(() => {
+      if (closed || latestState === null) return;
+      const { balances } = projectBalances(latestState, new Date());
+      if (balances.dustBalance !== lastDelivered?.dustBalance) deliver(balances);
+    }, DUST_HEARTBEAT_INTERVAL_MS);
+    return () => {
+      clearInterval(heartbeat);
+      subscription.unsubscribe();
+    };
   };
 
   const feeReadiness = async (): Promise<FeeReadiness> => {
@@ -1131,11 +1249,24 @@ export async function createLocalMidnightWallet(
     // sponsorship is configured.
     const sponsorship = await sponsorReadiness();
     if (sponsorship.state === 'ready') return { mode: 'sponsored' };
+    // `unavailable` means a sponsor URL is configured but the service cannot
+    // pay right now; that fact travels with the fallback mode so the UI can
+    // name it. `disabled` carries nothing — there is no sponsor to miss.
+    const sponsorUnavailableReason =
+      sponsorship.state === 'unavailable' ? sponsorship.reason : undefined;
     const dust = (await currentState()).dust.balance(new Date());
     if (dust > 0n) {
-      return { mode: 'own-dust', dustBalance: formatUnits(dust, DUST_DECIMALS) };
+      return {
+        mode: 'own-dust',
+        dustBalance: formatUnits(dust, DUST_DECIMALS),
+        ...(sponsorUnavailableReason !== undefined ? { sponsorUnavailableReason } : {}),
+      };
     }
-    return { mode: 'no-dust', reason: NO_DUST_SENTENCE };
+    return {
+      mode: 'no-dust',
+      reason: NO_DUST_SENTENCE,
+      ...(sponsorUnavailableReason !== undefined ? { sponsorUnavailableReason } : {}),
+    };
   };
 
   // -------------------------------------------------------------------------
@@ -1161,15 +1292,27 @@ export async function createLocalMidnightWallet(
    *     → POST /balance-only    ← the sponsor attaches and proves the DUST leg
    *     → submitTransaction     ← this wallet submits, not the service
    *
-   * Returns `null` — never throws — when the sponsor could not be used, having
-   * first released every coin it reserved so the caller's unsponsored path can
-   * build the same transfer again from a clean slate.
+   * Returns `null` — never a throw — when the sponsor could not be used
+   * *before* anything was submitted, having first released every coin it
+   * reserved so the caller's unsponsored path can build the same transfer again
+   * from a clean slate. Once `submitTransaction` has been called the
+   * transaction may have reached the chain even when the call throws (a
+   * timeout, a transient error after acceptance), so from that point every
+   * failure propagates as a `submit-rejected` {@link SendNightError} and
+   * nothing falls back — a second, unsponsored send against an uncertain first
+   * one is how a user pays twice.
    */
   const trySponsoredTransfer = async (
     outputs: Parameters<typeof facade.transferTransaction>[0],
     ttl: Date,
   ): Promise<{ txId: string; sponsorTxHash: string } | null> => {
     const reserved: BalancingRecipe[] = [];
+    let balancedTransaction: ledger.Transaction<
+      ledger.SignatureEnabled,
+      ledger.Proof,
+      ledger.Binding
+    >;
+    let sponsorTxHash: string;
     try {
       const base = await facade.transferTransaction(
         outputs,
@@ -1198,13 +1341,22 @@ export async function createLocalMidnightWallet(
       );
       const finalized = await facade.finalizeRecipe(signed);
       const balanced = await sponsorBalanceOnly(finalized.serialize());
-      const balancedTransaction = ledger.Transaction.deserialize<
+      // The sponsor stamps an expiry on the balanced transaction. An already
+      // expired one is refused here, while falling back is still safe; an empty
+      // or unparseable stamp reads as "no expiry given", matching
+      // `validateSponsorBalanceResult`.
+      const expiresAtMs = Date.parse(balanced.expiresAt);
+      if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
+        throw new Error(
+          `the sponsor's balanced transaction expired at ${balanced.expiresAt} before it could be submitted`,
+        );
+      }
+      balancedTransaction = ledger.Transaction.deserialize<
         ledger.SignatureEnabled,
         ledger.Proof,
         ledger.Binding
       >('signature', 'proof', 'binding', sponsorHexToBytes(balanced.txBytes));
-      const txId = await facade.submitTransaction(balancedTransaction);
-      return { txId: String(txId), sponsorTxHash: balanced.txHash };
+      sponsorTxHash = balanced.txHash;
     } catch (cause) {
       // Loud in the console, invisible in the UI: the user gets the ordinary
       // transfer, and no copy anywhere claims a fee that was not covered.
@@ -1214,6 +1366,20 @@ export async function createLocalMidnightWallet(
       );
       for (const recipe of [...reserved].reverse()) await revertQuietly(recipe);
       return null;
+    }
+
+    // Past this line the transaction may land whether or not the call resolves,
+    // so a throw ends the send — same rule as the unsponsored submit below.
+    try {
+      const txId = await facade.submitTransaction(balancedTransaction);
+      return { txId: String(txId), sponsorTxHash };
+    } catch (cause) {
+      for (const recipe of [...reserved].reverse()) await revertQuietly(recipe);
+      throw new SendNightError(
+        'submit-rejected',
+        'The node rejected this sponsored transaction.',
+        messageOf(cause),
+      );
     }
   };
 
@@ -1270,7 +1436,7 @@ export async function createLocalMidnightWallet(
         'proving-failed',
         provingMode === 'browser'
           ? 'The in-browser prover could not prove the DUST registration.'
-          : 'The proof server could not prove the DUST registration.',
+          : `The proof server at ${network.provingServerUrl} (network ${network.networkId}) could not prove the DUST registration.`,
         messageOf(cause),
       );
     }
@@ -1442,7 +1608,7 @@ export async function createLocalMidnightWallet(
         'proving-failed',
         provingMode === 'browser'
           ? 'The in-browser prover could not prove this transaction.'
-          : 'The proof server could not prove this transaction.',
+          : `The proof server at ${network.provingServerUrl} (network ${network.networkId}) could not prove this transaction.`,
         messageOf(cause),
       );
     }
