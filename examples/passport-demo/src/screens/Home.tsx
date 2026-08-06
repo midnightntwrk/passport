@@ -556,6 +556,7 @@ export default function HomeScreen(props: HomeScreenProps) {
           <SendSheet
             networkId={send.networkId}
             availableBalance={unshieldedBalance}
+            balanceStatus={balanceStatus}
             provingMode={send.provingMode}
             readFeeReadiness={send.readFeeReadiness}
             onSend={send.onSend}

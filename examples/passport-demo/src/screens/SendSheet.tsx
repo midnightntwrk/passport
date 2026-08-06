@@ -28,8 +28,9 @@ import './home.css'
  * recipient is validated with the wallet SDK's own codec, so its refusals are
  * the wallet's own taxonomy rather than a regular expression's guess; the
  * amount is converted to atomic units by string arithmetic, never through a
- * float; the fee sentence is whatever the wallet's sponsor probe reported and
- * promises a covered fee on no other basis; and the sheet only reports success
+ * float; the fee sentence is whatever the wallet's sponsor probe reported —
+ * quoted as the prediction it is, and re-read immediately before submitting so
+ * a stale quote is never silently acted on; and the sheet only reports success
  * once the node has returned a transaction id.
  *
  * The host mounts this ONLY while a local wallet session is genuinely open. A
@@ -44,6 +45,14 @@ export interface SendSheetProps {
   networkId: string
   /** Formatted NIGHT available to send. `null` means genuinely not known yet. */
   availableBalance: string | null
+  /**
+   * Why the balance is `null`, when it is — the wallet's
+   * `LocalWalletBalanceStatus`. `'unavailable'` is a read that failed and
+   * disables sending; anything else while the balance is `null` reads as a
+   * read still in flight. Optional, so a host with no status to report gets
+   * the loading copy, never the failure one.
+   */
+  balanceStatus?: string
   /**
    * Where this wallet computes its proofs, so the progress line names the right
    * machine. `browser` proves in this tab; `http` proves on a proof server.
@@ -178,6 +187,7 @@ export default function SendSheet(props: SendSheetProps) {
   const {
     networkId,
     availableBalance,
+    balanceStatus,
     provingMode,
     readFeeReadiness,
     onSend,
@@ -193,6 +203,7 @@ export default function SendSheet(props: SendSheetProps) {
   const [showFullRecipient, setShowFullRecipient] = useState(false)
   const [fee, setFee] = useState<FeeReadiness | null>(null)
   const [feeUnknown, setFeeUnknown] = useState<string | null>(null)
+  const [feeChanged, setFeeChanged] = useState(false)
 
   const recipientRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -252,21 +263,40 @@ export default function SendSheet(props: SendSheetProps) {
 
   const amount = parsedAmount && !('error' in parsedAmount) ? parsedAmount.amount : null
   const recipientReady = recipient.trim().length > 0 && recipientError === null
-  const canReview = recipientReady && amount !== null && amountError === null
+  /* A balance the wallet tried and failed to read. Distinct from one still in
+     flight: with no ceiling to compare against, sending stays disabled rather
+     than proceeding uncapped. */
+  const balanceUnreadable = availableBalance === null && balanceStatus === 'unavailable'
+  const canReview =
+    recipientReady && amount !== null && amountError === null && !balanceUnreadable
 
-  /* The fee note. It says only what the wallet reported: a covered fee is
-     promised on `sponsored` and on nothing else, and `no-dust` replaces the
-     send control with the wallet's own refusal rather than a rewrite of it. */
-  const feeNote =
+  /* Why no sponsor is covering the fee, when the wallet says. The field is
+     being added to `feeReadiness()`'s answer and may not exist yet, so it is
+     read defensively — absence simply says nothing. */
+  const sponsorUnavailableReason = useMemo(() => {
+    if (fee === null || fee.mode === 'sponsored') return null
+    const reason = (fee as { sponsorUnavailableReason?: unknown }).sponsorUnavailableReason
+    return typeof reason === 'string' && reason ? reason : null
+  }, [fee])
+
+  /* The fee note. It says only what the wallet reported, and as the prediction
+     it is: `feeReadiness()` is advisory and a sponsor can drain between this
+     quote and the submit, so `sponsored` earns "expected to be covered" and
+     nothing stronger. `no-dust` replaces the send control with the wallet's
+     own refusal rather than a rewrite of it. */
+  const feeNoteBase =
     fee === null
       ? feeUnknown
         ? `The wallet could not report how this fee would be paid: ${feeUnknown}`
         : 'Checking how this fee will be paid…'
       : fee.mode === 'sponsored'
-        ? 'Network fee covered by the fee sponsor.'
+        ? 'Network fee expected to be covered by the fee sponsor.'
         : fee.mode === 'own-dust'
           ? `Network fee paid from your DUST (${fee.dustBalance} DUST available).`
           : /* The wallet's own refusal sentence, verbatim. */ fee.reason
+  const feeNote = sponsorUnavailableReason
+    ? `${feeNoteBase} ${sponsorUnavailableReason}`
+    : feeNoteBase
 
   const feeBlocksSend = fee?.mode === 'no-dust'
 
@@ -279,6 +309,33 @@ export default function SendSheet(props: SendSheetProps) {
     if (amount === null || !recipientReady || busy) return
     setBusy(true)
     setFailure(null)
+    setFeeChanged(false)
+    /* The fee quote was read when the sheet opened and is only a prediction —
+       a sponsor can drain in the meantime, and the send would then quietly
+       fall back to the user's own DUST. Re-read immediately before submitting;
+       a different answer means the quoted sentence is no longer true, so
+       nothing is sent until it has been confirmed against the new one. A
+       probe that fails outright is handled the same way: the line falls back
+       to "could not report", and a second confirm against that sentence — the
+       modes then match — proceeds, because the probe is advisory and the send
+       path keeps its own authoritative checks. */
+    const quotedMode = fee?.mode ?? null
+    let recheckedMode: FeeReadiness['mode'] | null
+    try {
+      const readiness = await readFeeReadiness()
+      recheckedMode = readiness.mode
+      setFee(readiness)
+      setFeeUnknown(null)
+    } catch (cause) {
+      recheckedMode = null
+      setFee(null)
+      setFeeUnknown(messageOf(cause))
+    }
+    if (recheckedMode !== quotedMode) {
+      setBusy(false)
+      setFeeChanged(true)
+      return
+    }
     try {
       await onSend({ recipientAddress: recipient.trim(), amount })
       // A real txId came back from the node. The host owns the toast, the
@@ -300,7 +357,7 @@ export default function SendSheet(props: SendSheetProps) {
       setBusy(false)
       setFailure({ message: messageOf(cause), detail: detailOf(cause) })
     }
-  }, [amount, busy, onClose, onSend, recipient, recipientReady])
+  }, [amount, busy, fee, onClose, onSend, readFeeReadiness, recipient, recipientReady])
 
   return createPortal(
     <div
@@ -396,7 +453,9 @@ export default function SendSheet(props: SendSheetProps) {
               ) : (
                 <span className="mnhome-send-hint">
                   {availableBalance === null
-                    ? 'The balance is still being read from the indexer, so nothing is capped yet.'
+                    ? balanceUnreadable
+                      ? 'The balance could not be read, so sending is disabled until it can be.'
+                      : 'The balance is still being read from the indexer, so nothing is capped yet.'
                     : `${availableBalance} NIGHT available. Fees are paid in DUST, so the whole balance can go.`}
                 </span>
               )}
@@ -427,6 +486,7 @@ export default function SendSheet(props: SendSheetProps) {
                 onClick={() => {
                   setShowFullRecipient(false)
                   setFailure(null)
+                  setFeeChanged(false)
                   setStep('review')
                 }}
                 disabled={!canReview}
@@ -471,6 +531,19 @@ export default function SendSheet(props: SendSheetProps) {
                 <dd>{feeNote}</dd>
               </div>
             </dl>
+
+            {feeChanged ? (
+              /* The pre-send re-check answered differently from the quote the
+                 user confirmed against. The fee line above already shows the
+                 new reality; this explains why nothing was submitted. */
+              <p className="mnhome-notice" role="alert">
+                <AlertTriangle size={14} aria-hidden="true" />
+                <span>
+                  Nothing was sent — the fee arrangement changed. Review the fee line above
+                  and confirm again.
+                </span>
+              </p>
+            ) : null}
 
             {failure ? (
               <p className="mnhome-notice" role="alert">

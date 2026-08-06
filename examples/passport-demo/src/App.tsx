@@ -2510,7 +2510,9 @@ export default function PassportDemo() {
           pushToast({
             tone: 'success',
             title: 'DUST registration submitted',
-            link: explorerTxLink(result.txId, selectedNetwork),
+            // The wallet's own network, not the UI-selected one — the two can
+            // differ, and the link must point where the transaction really is.
+            link: explorerTxLink(result.txId, localWalletNetworkId),
           });
         }
         await refreshWallet();
@@ -3897,7 +3899,9 @@ export default function PassportDemo() {
         });
         pushToast({
           tone: 'success',
-          title: 'NIGHT sent',
+          /* The node has accepted the transaction, not yet included it — the
+             title claims exactly that much and no more. */
+          title: 'NIGHT accepted by the network — confirming',
           /* A covered fee is claimed on the strength of the flag's own
              contract and nothing else — a sponsored attempt that fell back to
              the user's own DUST reports `false` and is described as such. */
