@@ -1,0 +1,18 @@
+[package]
+name = "p256-gate-circuit"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+description = "NIST P-256 ECDSA verification relations for the midnight-zk proof system"
+
+[dependencies]
+midnight-zk-stdlib = { workspace = true }
+midnight-circuits = { workspace = true }
+midnight-curves = { workspace = true }
+midnight-proofs = { workspace = true }
+
+group = { workspace = true }
+ff = { workspace = true }
+p256 = { workspace = true }
+sha2 = { workspace = true }
+hex-literal = { workspace = true }

@@ -1,0 +1,24 @@
+[package]
+name = "p256-gate-measure"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+description = "Evidence and measurement harness for the P-256 in-circuit experiment"
+
+[dependencies]
+p256-gate-circuit = { workspace = true }
+
+midnight-zk-stdlib = { workspace = true }
+midnight-proofs = { workspace = true }
+midnight-curves = { workspace = true }
+
+anyhow = { workspace = true }
+base64 = { workspace = true }
+blake2b_simd = { workspace = true }
+clap = { workspace = true }
+hex = { workspace = true }
+p256 = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
