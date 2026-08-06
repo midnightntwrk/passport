@@ -15,6 +15,13 @@
  * no Midnight SDK dependency. Passport decodes the recipient against its own
  * live wallet network before it will show an approval sheet, which is the only
  * place that check can be made honestly.
+ *
+ * The reply may additionally state that the network fee was covered by a
+ * sponsor (`sponsored`, `feeNote`). Both are optional and both are additive:
+ * a reply that omits them is exactly the reply this protocol carried before
+ * sponsorship existed. `sponsored: true` is only mintable and only parseable on
+ * a `submitted` reply, for the same reason `submitted` requires a real `txId` —
+ * there is no covered fee on a transaction that does not exist.
  */
 
 export const PASSPORT_TX_PROTOCOL = 'org.midnight.passport.tx/v1' as const;
@@ -25,6 +32,7 @@ const MAX_PURPOSE_LENGTH = 140;
 const MAX_ADDRESS_LENGTH = 200;
 const MAX_DETAIL_LENGTH = 400;
 const MAX_LABEL_LENGTH = 80;
+const MAX_FEE_NOTE_LENGTH = 140;
 
 /** Atomic NIGHT units, base-10, no sign, no exponent, no decimal point. */
 const AMOUNT_PATTERN = /^[0-9]{1,20}$/;
@@ -73,6 +81,19 @@ export interface PassportTxResponse {
   txId?: string;
   error?: PassportTxErrorCode;
   detail?: string;
+  /**
+   * `true` only when the transaction that was submitted came back from a fee
+   * sponsor with its fee input attached, so the user paid no network fee.
+   *
+   * Optional and additive: absent means "not stated", which an app must read as
+   * an ordinary, user-paid transaction. An app may render "network fee covered"
+   * for `true` and for nothing else — and Passport may only set `true` when the
+   * submitted transaction really came back from the sponsor. Anything looser
+   * would let the demo claim a free transaction it did not get.
+   */
+  sponsored?: boolean;
+  /** Optional human-readable note about the fee, e.g. who covered it. */
+  feeNote?: string;
 }
 
 export interface PassportIncentiveReport {
@@ -165,6 +186,14 @@ export function createPassportTxResponse(
   if (body.status !== 'submitted' && !isPassportTxErrorCode(body.error)) {
     throw new Error('A non-submitted transaction response requires a known error code.');
   }
+  if (body.sponsored === true && body.status !== 'submitted') {
+    /* The honesty invariant, enforced where the reply is minted: there is no
+       such thing as a covered fee on a transaction that was never submitted. */
+    throw new Error('Only a submitted transaction can report a sponsored fee.');
+  }
+  if (body.feeNote !== undefined && !isBoundedString(body.feeNote, MAX_FEE_NOTE_LENGTH)) {
+    throw new Error('A fee note must be a non-empty string of at most 140 characters.');
+  }
   return {
     protocol: PASSPORT_TX_PROTOCOL,
     type: 'passport.tx.response',
@@ -196,6 +225,15 @@ export function parsePassportTxResponse(value: unknown): PassportTxResponse | nu
   if (value.detail !== undefined && !isBoundedString(value.detail, MAX_DETAIL_LENGTH)) {
     return null;
   }
+  /* Additive, and strictly so: absent is fine, present must be a real boolean.
+     A truthy string like `"false"` must not be able to buy a "fee covered"
+     badge, so anything that is not a boolean rejects the whole reply. */
+  if (value.sponsored !== undefined && typeof value.sponsored !== 'boolean') return null;
+  /* And a covered fee is only meaningful on a transaction that exists. */
+  if (value.sponsored === true && value.status !== 'submitted') return null;
+  if (value.feeNote !== undefined && !isBoundedString(value.feeNote, MAX_FEE_NOTE_LENGTH)) {
+    return null;
+  }
 
   const response: PassportTxResponse = {
     protocol: PASSPORT_TX_PROTOCOL,
@@ -207,6 +245,10 @@ export function parsePassportTxResponse(value: unknown): PassportTxResponse | nu
   if (typeof value.txId === 'string' && value.txId.length > 0) response.txId = value.txId;
   if (isPassportTxErrorCode(value.error)) response.error = value.error;
   if (typeof value.detail === 'string' && value.detail.length > 0) response.detail = value.detail;
+  if (typeof value.sponsored === 'boolean') response.sponsored = value.sponsored;
+  if (typeof value.feeNote === 'string' && value.feeNote.length > 0) {
+    response.feeNote = value.feeNote;
+  }
   return response;
 }
 

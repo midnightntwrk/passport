@@ -1,0 +1,500 @@
+/**
+ * Sponsored fees — a minimal ProofStation balance-service client.
+ *
+ * The demo's promise is that a name registration and a raffle entry cost the
+ * user nothing. That promise is kept by a *sponsor*: a service that owns DUST,
+ * adds the fee input to a transaction the user has already built, proved, and
+ * signed, and hands the balanced transaction back for the user's own wallet to
+ * submit. The user's NIGHT never moves to pay a fee, and the user's approval
+ * moment is untouched — sponsorship removes the cost, not the signing.
+ *
+ * This is a deliberately small port of the 1AM wallet's balance-service client
+ * (`packages/wallet-core/src/network/balance-service-{client,policy}.ts` on
+ * `one-am-wallet-william` `origin/main`), carrying only the two endpoints this
+ * demo needs and none of the wallet-settings machinery:
+ *
+ *   POST {base}/balance-only   raw serialised PROVEN transaction bytes in,
+ *                              `{ txHash, txBytes, expiresAt }` out.
+ *   GET  {base}/wallet-status  `{ total, available, wallets[] }`.
+ *
+ * Three rules make this honest by construction:
+ *
+ *   1. **Opt-in.** With `VITE_SPONSOR_URL` unset the module reports `disabled`
+ *      and every caller takes exactly the path it took before sponsorship
+ *      existed. No default URL is baked in.
+ *   2. **`available > 0`, not "ready".** The upstream `isBalanceServiceReady`
+ *      returns `true` for a wallet that is merely *synced* — which is precisely
+ *      the state the deployed preview gateway is in today (`total: 1`,
+ *      `available: 0`, dust balance `"0"`, `unavailableCause:
+ *      INSUFFICIENT_DUST`). Gating on that would make the demo claim a free
+ *      transaction and then fail. We gate on `available > 0` only.
+ *   3. **Never a silent claim.** A caller may only report a covered fee when a
+ *      real `/balance-only` response came back and the transaction it returned
+ *      is the one that was submitted. Everything else falls back to the
+ *      unsponsored path, real fees and all.
+ *
+ * `/ready` is NOT used: it is the legacy check and 404s on the deployed
+ * gateway. `/wallet-status` is the deployed truth.
+ *
+ * Service state on 2026/08/05 (probed live over HTTPS at
+ * `https://api-preview.1am.xyz`): healthy cluster, one balance wallet, fully
+ * synced, zero DUST, therefore `available: 0` and `/balance-only` answering
+ * `503 { error: 'WALLETS_UNAVAILABLE', cause: 'INSUFFICIENT_DUST' }`. Until the
+ * sponsor wallet
+ * `mn_addr_preview1emdcrp6c8l7n8z3uwtm8mtqtxywyur4aqlte8qh8nafyvzd26c5q0k5elf`
+ * holds DUST, this module correctly reports `unavailable` and nothing in the
+ * demo changes.
+ */
+
+/* -------------------------------------------------------------------------- */
+/* Configuration                                                              */
+/* -------------------------------------------------------------------------- */
+
+/** How long a readiness probe is trusted before it is taken again. */
+export const SPONSOR_READINESS_TTL_MS = 30_000;
+/** Upper bound on the whole 429 `PENDING_TRANSACTION` retry window. */
+export const SPONSOR_PENDING_RETRY_WINDOW_MS = 20_000;
+/** Floor on a retry delay, so a zero `retryAfterMs` cannot spin. */
+const SPONSOR_PENDING_RETRY_MIN_DELAY_MS = 250;
+/** Fallback delay when the service names no `retryAfterMs`. */
+const SPONSOR_PENDING_RETRY_DEFAULT_DELAY_MS = 2_000;
+/** A readiness probe must not hold a send hostage. */
+const SPONSOR_STATUS_TIMEOUT_MS = 6_000;
+/** Balancing proves a dust segment server-side, so it gets real room. */
+const SPONSOR_BALANCE_TIMEOUT_MS = 90_000;
+
+export interface SponsorConfig {
+  /** Base URL, no trailing slash. */
+  url: string;
+  apiKey?: string;
+  clientId?: string;
+}
+
+/**
+ * The token kinds a sponsored transaction balances *locally*, mirroring
+ * `BALANCE_WITHOUT_DUST` in the 1AM runtime.
+ *
+ * The sponsor owns DUST and nothing else. It cannot supply the user's NIGHT or
+ * shielded coins, and a transaction handed over with those legs unbalanced is
+ * rejected by the node (error 138, `BalanceCheckOverspend`). So the wallet
+ * balances every kind except DUST before it asks, and the fee input — the one
+ * thing that would otherwise cost the user — is all the service adds.
+ */
+export const BALANCE_WITHOUT_DUST: ('shielded' | 'unshielded')[] = ['shielded', 'unshielded'];
+
+function environment(): Record<string, string | undefined> {
+  return import.meta.env as unknown as Record<string, string | undefined>;
+}
+
+function trimmed(value: string | undefined): string | undefined {
+  const candidate = value?.trim();
+  return candidate ? candidate : undefined;
+}
+
+/**
+ * Reads the sponsor configuration from the environment.
+ *
+ *   VITE_SPONSOR_URL         base URL of the ProofStation gateway. Unset means
+ *                            sponsorship is off — there is no default.
+ *   VITE_SPONSOR_API_KEY     optional `X-API-Key`.
+ *   VITE_SPONSOR_CLIENT_ID   optional `X-Client-ID`.
+ *
+ * Returns `null` when sponsorship is not configured, and throws when it is
+ * configured with a URL that could leak a signed transaction over plaintext.
+ */
+export function sponsorConfig(
+  env: Record<string, string | undefined> = environment(),
+): SponsorConfig | null {
+  const raw = trimmed(env.VITE_SPONSOR_URL);
+  if (!raw) return null;
+  const url = raw.replace(/\/+$/, '');
+  assertSecureSponsorUrl(url);
+  const config: SponsorConfig = { url };
+  const apiKey = trimmed(env.VITE_SPONSOR_API_KEY);
+  const clientId = trimmed(env.VITE_SPONSOR_CLIENT_ID);
+  if (apiKey) config.apiKey = apiKey;
+  if (clientId) config.clientId = clientId;
+  return config;
+}
+
+/**
+ * A signed, proved transaction is going over this wire. Anything other than
+ * HTTPS — localhost excepted, for a developer running a gateway on the same
+ * machine — is refused rather than downgraded.
+ */
+export function assertSecureSponsorUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid sponsor service URL: ${url}`);
+  }
+  const isLocalhost =
+    parsed.hostname === 'localhost' ||
+    parsed.hostname === '127.0.0.1' ||
+    parsed.hostname === '::1' ||
+    parsed.hostname === '[::1]';
+  if (!isLocalhost && parsed.protocol !== 'https:') {
+    throw new Error(
+      `Insecure sponsor service URL: ${parsed.protocol}// — HTTPS is required for anything but localhost.`,
+    );
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Wire types and their parsers                                               */
+/* -------------------------------------------------------------------------- */
+
+/** The `/balance-only` success body. `txBytes` is the balanced transaction. */
+export interface SponsorBalanceResult {
+  txHash: string;
+  /** Hex, without a `0x` prefix, even length. */
+  txBytes: string;
+  /** ISO timestamp after which the balanced transaction is stale. May be ''. */
+  expiresAt: string;
+}
+
+export interface SponsorWalletStatus {
+  total: number;
+  available: number;
+  wallets: Array<{
+    index: number;
+    ready: boolean;
+    syncState?: string;
+    dust: { balance: string; utxoCount: number; isSynced: boolean };
+  }>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const HEX_PATTERN = /^[0-9a-fA-F]*$/;
+
+/** Normalises `0x`-prefixed or bare hex, refusing anything that is not hex. */
+export function normaliseSponsorHex(value: string): string {
+  const body = value.startsWith('0x') || value.startsWith('0X') ? value.slice(2) : value;
+  if (body.length === 0 || body.length % 2 !== 0 || !HEX_PATTERN.test(body)) {
+    throw new Error('The sponsor service returned a transaction that is not hex.');
+  }
+  return body.toLowerCase();
+}
+
+export function sponsorHexToBytes(value: string): Uint8Array {
+  const hex = normaliseSponsorHex(value);
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+/**
+ * Accepts a `/balance-only` body only when it carries both a transaction hash
+ * and real hex transaction bytes. A missing or malformed field is a failure,
+ * never a partially-filled result: the caller would otherwise submit nothing
+ * and report a covered fee.
+ */
+export function validateSponsorBalanceResult(body: unknown): SponsorBalanceResult {
+  if (!isRecord(body)) {
+    throw new Error('The sponsor service returned a response that is not an object.');
+  }
+  if (typeof body.txHash !== 'string' || body.txHash.length === 0) {
+    throw new Error('The sponsor service response is missing txHash.');
+  }
+  if (typeof body.txBytes !== 'string' || body.txBytes.length === 0) {
+    throw new Error('The sponsor service response is missing txBytes.');
+  }
+  return {
+    txHash: body.txHash,
+    txBytes: normaliseSponsorHex(body.txBytes),
+    expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : '',
+  };
+}
+
+/** Parses `/wallet-status`. `null` for any body that is not that shape. */
+export function parseSponsorWalletStatus(body: unknown): SponsorWalletStatus | null {
+  if (!isRecord(body)) return null;
+  if (typeof body.total !== 'number' || typeof body.available !== 'number') return null;
+  const wallets = (Array.isArray(body.wallets) ? body.wallets : []).filter(isRecord).map((wallet) => {
+    const dust = isRecord(wallet.dust) ? wallet.dust : {};
+    const entry: SponsorWalletStatus['wallets'][number] = {
+      index: typeof wallet.index === 'number' ? wallet.index : -1,
+      ready: wallet.ready === true,
+      dust: {
+        balance: typeof dust.balance === 'string' ? dust.balance : '0',
+        utxoCount: typeof dust.utxoCount === 'number' ? dust.utxoCount : 0,
+        isSynced: dust.isSynced === true,
+      },
+    };
+    if (typeof wallet.syncState === 'string') entry.syncState = wallet.syncState;
+    return entry;
+  });
+  return { total: body.total, available: body.available, wallets };
+}
+
+/**
+ * The gate. Strictly `available > 0` — see rule 2 in the module header. A
+ * wallet that is `ready: true`, `syncState: 'ready'`, and `dust.isSynced: true`
+ * with a zero DUST balance is exactly what the preview gateway reports today,
+ * and it cannot sponsor anything.
+ */
+export function sponsorWalletIsAvailable(status: SponsorWalletStatus | null): boolean {
+  return status !== null && status.available > 0;
+}
+
+/** Why the sponsor could not be used, in words a log line can carry. */
+export function describeSponsorWalletStatus(status: SponsorWalletStatus): string {
+  const causes = status.wallets
+    .map((wallet) => `#${wallet.index} dust ${wallet.dust.balance}`)
+    .join(', ');
+  return `sponsor reports ${status.available}/${status.total} wallets available${
+    causes ? ` (${causes})` : ''
+  }`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Errors                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A named failure from the balance service. Carries the HTTP status so a
+ * caller can tell "the service said no" from "the service was not there".
+ */
+export class SponsorError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly detail: string;
+  readonly retryAfterMs?: number;
+
+  constructor(status: number, code: string, detail: string, retryAfterMs?: number) {
+    super(`${code}: ${detail}`);
+    this.name = 'SponsorError';
+    this.status = status;
+    this.code = code;
+    this.detail = detail;
+    if (retryAfterMs !== undefined) this.retryAfterMs = retryAfterMs;
+  }
+
+  /** 503 — the service is up but has no wallet that can pay right now. */
+  get isRetryable(): boolean {
+    return this.status === 503;
+  }
+
+  get isWalletSyncing(): boolean {
+    return this.code === 'WALLET_SYNCING';
+  }
+
+  get isInsufficientDust(): boolean {
+    return this.code === 'INSUFFICIENT_DUST';
+  }
+
+  /** 429 — a sponsor wallet is mid-transaction; worth waiting out. */
+  get isPendingTransaction(): boolean {
+    return (
+      this.status === 429 &&
+      (this.code === 'PENDING_TRANSACTION' ||
+        /already pending/i.test(this.detail) ||
+        /already pending/i.test(this.message))
+    );
+  }
+}
+
+/** Builds a {@link SponsorError} from an error body, inventing no fields. */
+export function createSponsorError(status: number, body: unknown): SponsorError {
+  const record = isRecord(body) ? body : {};
+  const rawCode = typeof record.error === 'string' ? record.error : undefined;
+  const message = typeof record.message === 'string' ? record.message : undefined;
+  const cause = typeof record.cause === 'string' ? record.cause : undefined;
+  const detail = message ?? cause ?? rawCode ?? `HTTP ${status}`;
+  const retryAfterMs =
+    typeof record.retryAfterMs === 'number' && Number.isFinite(record.retryAfterMs)
+      ? record.retryAfterMs
+      : undefined;
+  return new SponsorError(status, rawCode ?? 'UNKNOWN', detail, retryAfterMs);
+}
+
+/** How long to wait before a `PENDING_TRANSACTION` retry, given the budget. */
+export function sponsorRetryDelayMs(retryAfterMs: number | undefined, remainingMs: number): number {
+  const requested = retryAfterMs ?? SPONSOR_PENDING_RETRY_DEFAULT_DELAY_MS;
+  return Math.max(SPONSOR_PENDING_RETRY_MIN_DELAY_MS, Math.min(requested, remainingMs));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Client                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export interface SponsorClientOptions {
+  config?: SponsorConfig | null;
+  fetch?: typeof globalThis.fetch;
+  now?: () => number;
+  sleep?: (milliseconds: number) => Promise<void>;
+  /** Total 429 retry budget. Defaults to 20 s; 0 disables retrying. */
+  pendingRetryWindowMs?: number;
+}
+
+function defaultSleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function authHeaders(config: SponsorConfig): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (config.apiKey) headers['X-API-Key'] = config.apiKey;
+  if (config.clientId) headers['X-Client-ID'] = config.clientId;
+  return headers;
+}
+
+function resolveConfig(options: SponsorClientOptions): SponsorConfig | null {
+  return options.config !== undefined ? options.config : sponsorConfig();
+}
+
+/**
+ * Readiness, in the three states a caller actually has to branch on.
+ *
+ *   `disabled`    — sponsorship is not configured for this build.
+ *   `ready`       — the service answered and has a wallet that can pay.
+ *   `unavailable` — configured, but not usable right now, with the reason.
+ */
+export type SponsorReadiness =
+  | { state: 'disabled' }
+  | { state: 'ready'; url: string; available: number }
+  | { state: 'unavailable'; url: string; reason: string };
+
+interface CachedReadiness {
+  url: string;
+  at: number;
+  value: SponsorReadiness;
+}
+
+let readinessCache: CachedReadiness | null = null;
+let readinessInFlight: Promise<SponsorReadiness> | null = null;
+
+/** Drops the cached probe — for tests, and for a "retry sponsorship" control. */
+export function resetSponsorReadinessCache(): void {
+  readinessCache = null;
+  readinessInFlight = null;
+}
+
+/**
+ * Probes `GET /wallet-status`, at most once per
+ * {@link SPONSOR_READINESS_TTL_MS}. Never throws: an unreachable service is an
+ * `unavailable` answer, because a send must not fail because a *fee optimiser*
+ * was down.
+ */
+export async function sponsorReadiness(
+  options: SponsorClientOptions = {},
+): Promise<SponsorReadiness> {
+  const config = resolveConfig(options);
+  if (!config) return { state: 'disabled' };
+
+  const now = options.now ?? Date.now;
+  const cached = readinessCache;
+  if (cached && cached.url === config.url && now() - cached.at < SPONSOR_READINESS_TTL_MS) {
+    return cached.value;
+  }
+  if (readinessInFlight) return readinessInFlight;
+
+  const fetchRequest = options.fetch ?? globalThis.fetch;
+  const probe = (async (): Promise<SponsorReadiness> => {
+    let value: SponsorReadiness;
+    try {
+      const response = await fetchRequest(`${config.url}/wallet-status`, {
+        method: 'GET',
+        headers: authHeaders(config),
+        signal: AbortSignal.timeout(SPONSOR_STATUS_TIMEOUT_MS),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        value = {
+          state: 'unavailable',
+          url: config.url,
+          reason: `wallet-status returned HTTP ${response.status}`,
+        };
+      } else {
+        const status = parseSponsorWalletStatus(body);
+        if (!status) {
+          value = {
+            state: 'unavailable',
+            url: config.url,
+            reason: 'wallet-status returned an unrecognised body',
+          };
+        } else if (sponsorWalletIsAvailable(status)) {
+          value = { state: 'ready', url: config.url, available: status.available };
+        } else {
+          value = {
+            state: 'unavailable',
+            url: config.url,
+            reason: describeSponsorWalletStatus(status),
+          };
+        }
+      }
+    } catch (cause) {
+      value = {
+        state: 'unavailable',
+        url: config.url,
+        reason: cause instanceof Error ? cause.message : String(cause),
+      };
+    }
+    readinessCache = { url: config.url, at: now(), value };
+    return value;
+  })();
+
+  readinessInFlight = probe;
+  try {
+    return await probe;
+  } finally {
+    readinessInFlight = null;
+  }
+}
+
+/** Convenience wrapper: `true` only when the sponsor can pay right now. */
+export async function sponsorCanPay(options: SponsorClientOptions = {}): Promise<boolean> {
+  return (await sponsorReadiness(options)).state === 'ready';
+}
+
+/**
+ * `POST /balance-only` with a raw serialised PROVEN transaction.
+ *
+ * The service adds its own DUST fee input, proves and balances the dust
+ * segment, and returns the balanced transaction for *this* wallet to submit.
+ * A 429 `PENDING_TRANSACTION` is retried inside a bounded window; every other
+ * failure ends the attempt so the caller can fall back to real fees.
+ */
+export async function sponsorBalanceOnly(
+  provenTxBytes: Uint8Array,
+  options: SponsorClientOptions = {},
+): Promise<SponsorBalanceResult> {
+  const config = resolveConfig(options);
+  if (!config) throw new Error('Sponsorship is not configured (VITE_SPONSOR_URL is unset).');
+  assertSecureSponsorUrl(config.url);
+
+  const fetchRequest = options.fetch ?? globalThis.fetch;
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? defaultSleep;
+  const retryWindowMs = options.pendingRetryWindowMs ?? SPONSOR_PENDING_RETRY_WINDOW_MS;
+  const deadline = now() + retryWindowMs;
+
+  for (;;) {
+    let body: unknown;
+    let ok: boolean;
+    let status: number;
+    const response = await fetchRequest(`${config.url}/balance-only`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', ...authHeaders(config) },
+      // A fresh view over the exact bytes: `BodyInit` will not take a
+      // `Uint8Array<ArrayBufferLike>` whose buffer may be shared.
+      body: provenTxBytes.slice().buffer as ArrayBuffer,
+      signal: AbortSignal.timeout(SPONSOR_BALANCE_TIMEOUT_MS),
+    });
+    ok = response.ok;
+    status = response.status;
+    body = await response.json().catch(() => null);
+
+    if (ok) return validateSponsorBalanceResult(body);
+
+    const error = createSponsorError(status, body);
+    const remainingMs = deadline - now();
+    if (!error.isPendingTransaction || retryWindowMs <= 0 || remainingMs <= 0) throw error;
+    await sleep(sponsorRetryDelayMs(error.retryAfterMs, remainingMs));
+  }
+}

@@ -39,11 +39,23 @@
  * which needs no ambient network id at all.
  */
 
-import { nativeToken } from '@midnight-ntwrk/ledger-v8';
+import {
+  nativeToken,
+  Transaction,
+  type Binding,
+  type Proof,
+  type SignatureEnabled,
+} from '@midnight-ntwrk/ledger-v8';
 import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import * as Rx from 'rxjs';
 
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
+import {
+  sponsorBalanceOnly,
+  sponsorHexToBytes,
+  sponsorReadiness,
+  BALANCE_WITHOUT_DUST,
+} from '../lib/sponsor.js';
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
@@ -540,23 +552,80 @@ async function createMidnamesProviders(
 
   const state = await currentWalletState(wallet);
   const facade = wallet.facade as unknown as {
-    balanceUnboundTransaction(tx: unknown, keys: unknown, options: { ttl: Date }): Promise<unknown>;
+    balanceUnboundTransaction(
+      tx: unknown,
+      keys: unknown,
+      options: { ttl: Date; tokenKindsToBalance?: readonly string[] },
+    ): Promise<unknown>;
     signRecipe(recipe: unknown, sign: (data: Uint8Array) => unknown): Promise<unknown>;
-    finalizeRecipe(signed: unknown): Promise<unknown>;
+    finalizeRecipe(signed: unknown): Promise<{ serialize(): Uint8Array }>;
     submitTransaction(tx: unknown): Promise<unknown>;
+    revert(recipe: unknown): Promise<unknown>;
+  };
+
+  /**
+   * Both claim transactions go through here — the resolver `deployContract`
+   * and the paid `register_domain_for` call — so sponsoring this one function
+   * sponsors the whole registration.
+   *
+   * The sponsored branch balances every token kind EXCEPT dust, proves locally,
+   * and asks the service for the fee input. The unsponsored branch is exactly
+   * the code that shipped before sponsorship existed, unchanged. The NIGHT the
+   * user pays the registry owner is untouched either way — only the fee
+   * disappears, and the user still signs.
+   */
+  const balanceLocally = async (tx: unknown, ttl: Date) => {
+    const recipe = await facade.balanceUnboundTransaction(tx, wallet.keys, { ttl });
+    const signed = await facade.signRecipe(recipe, (data: Uint8Array) =>
+      wallet.keys.unshieldedKeystore.signData(data),
+    );
+    return facade.finalizeRecipe(signed);
+  };
+
+  const balanceWithSponsor = async (tx: unknown, ttl: Date): Promise<unknown | null> => {
+    let recipe: unknown;
+    try {
+      recipe = await facade.balanceUnboundTransaction(tx, wallet.keys, {
+        ttl,
+        tokenKindsToBalance: BALANCE_WITHOUT_DUST,
+      });
+      const signed = await facade.signRecipe(recipe, (data: Uint8Array) =>
+        wallet.keys.unshieldedKeystore.signData(data),
+      );
+      const finalized = await facade.finalizeRecipe(signed);
+      const balanced = await sponsorBalanceOnly(finalized.serialize());
+      return Transaction.deserialize<SignatureEnabled, Proof, Binding>(
+        'signature',
+        'proof',
+        'binding',
+        sponsorHexToBytes(balanced.txBytes),
+      );
+    } catch (cause) {
+      console.warn(
+        '[midnames] the sponsored balancing failed; falling back to this wallet’s own DUST',
+        cause,
+      );
+      if (recipe !== undefined) {
+        try {
+          await facade.revert(recipe);
+        } catch (revertCause) {
+          console.debug('[midnames] could not revert an abandoned balancing recipe', revertCause);
+        }
+      }
+      return null;
+    }
   };
 
   const walletProvider = {
     getCoinPublicKey: () => state.shielded.coinPublicKey.toHexString(),
     getEncryptionPublicKey: () => state.shielded.encryptionPublicKey.toHexString(),
     async balanceTx(tx: unknown, ttl?: Date) {
-      const recipe = await facade.balanceUnboundTransaction(tx, wallet.keys, {
-        ttl: ttl ?? new Date(Date.now() + 30 * 60 * 1_000),
-      });
-      const signed = await facade.signRecipe(recipe, (data: Uint8Array) =>
-        wallet.keys.unshieldedKeystore.signData(data),
-      );
-      return facade.finalizeRecipe(signed);
+      const deadline = ttl ?? new Date(Date.now() + 30 * 60 * 1_000);
+      if ((await sponsorReadiness()).state === 'ready') {
+        const sponsored = await balanceWithSponsor(tx, deadline);
+        if (sponsored !== null) return sponsored;
+      }
+      return balanceLocally(tx, deadline);
     },
     submitTx: (tx: unknown) => facade.submitTransaction(tx),
   };
@@ -622,6 +691,10 @@ export async function checkAliasClaimFunds(
       reason: `Registering ${aliasDomain(label)} costs ${formatNight(cost)} NIGHT, and this wallet holds ${formatNight(night)}. Top up from the preview faucet, then try again.`,
     };
   }
+  // A funded sponsor pays the fee, so a dustless wallet is no longer a reason
+  // to refuse. The gate is `available > 0` on the service's own
+  // `/wallet-status` — never a hopeful assumption.
+  if ((await sponsorReadiness()).state === 'ready') return { ok: true };
   const dust = state.dust.balance(new Date());
   if (dust <= 0n) {
     return {
@@ -683,12 +756,19 @@ export async function claimAlias(
       `Registering ${aliasDomain(label)} costs ${formatNight(cost)} NIGHT, and this wallet holds ${formatNight(night)}.`,
     );
   }
-  const dust = state.dust.balance(new Date());
-  if (dust <= 0n) {
-    throw new AliasClaimError(
-      'insufficient-dust',
-      'This wallet has no DUST, so it cannot pay the transaction fee yet. DUST accrues while NIGHT is held.',
-    );
+  // Same rule as `checkAliasClaimFunds`: only a sponsor that has really told us
+  // it can pay lets a dustless wallet through. If the sponsor then fails
+  // mid-claim, `balanceTx` falls back to local DUST and the SDK's own
+  // insufficient-funds error surfaces as `deploy-failed` / `register-rejected`
+  // with the real reason attached.
+  if ((await sponsorReadiness()).state !== 'ready') {
+    const dust = state.dust.balance(new Date());
+    if (dust <= 0n) {
+      throw new AliasClaimError(
+        'insufficient-dust',
+        'This wallet has no DUST, so it cannot pay the transaction fee yet. DUST accrues while NIGHT is held.',
+      );
+    }
   }
 
   const ownerSecretHex = bytesToHex(ownerSecret);
