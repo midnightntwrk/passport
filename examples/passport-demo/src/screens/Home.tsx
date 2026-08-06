@@ -295,6 +295,30 @@ export default function HomeScreen(props: HomeScreenProps) {
         </div>
       </header>
 
+      {/* Compact sync status: a hairline progress strip under the bar while
+          the wallet walks the chain — the sync percent's home now that the
+          DUST card no longer doubles as a gauge. Gone once synced. */}
+      {syncPercent != null && syncPercent < 100 && stillSyncing ? (
+        <div
+          className="mnhome-syncstrip"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(syncPercent)}
+          aria-label={`Wallet sync ${Math.round(syncPercent)} per cent complete`}
+        >
+          <span className="mnhome-syncstrip-track" aria-hidden="true">
+            <span
+              className="mnhome-syncstrip-fill"
+              style={{ width: `${Math.max(2, Math.min(100, syncPercent))}%` }}
+            />
+          </span>
+          <span className="mnhome-syncstrip-label">
+            Syncing · {Math.round(syncPercent)}%
+          </span>
+        </div>
+      ) : null}
+
       <div className="mnhome-body">
         <div className="mnhome-identity">
           <p className="mnhome-kicker">Passport</p>
@@ -344,6 +368,11 @@ export default function HomeScreen(props: HomeScreenProps) {
             loading={balancesLoading}
           />
 
+          {/* The DUST card earns its place only when it has something real:
+              a charge, a cap, or a registration the wallet can actually run.
+              The on-device wallet's dead state (no charge, registration not
+              wired) is hidden — sync progress lives in the strip up top. */}
+          {fill === null && !dustCap && registerDustDisabledReason ? null : (
           <article className="mnhome-dust">
             <div className={`mnhome-battery${dustSyncing ? ' mnhome-battery-charging' : ''}`}>
               {fill !== null ? (
@@ -405,6 +434,7 @@ export default function HomeScreen(props: HomeScreenProps) {
               ) : null}
             </div>
           </article>
+          )}
         </div>
 
         {balanceStatus === 'unavailable' ? (

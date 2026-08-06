@@ -652,3 +652,35 @@ a.mnhome-icon-button {
   white-space: nowrap;
 }
 .mnhome-addr-faucet:hover { background: var(--mn-accent-soft); }
+
+/* Compact sync strip under the top bar — the sync percent's new home. */
+.mnhome-syncstrip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.mnhome-syncstrip-track {
+  flex: 1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-surface-sunken);
+}
+.mnhome-syncstrip-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-accent);
+  transition: width .6s ease;
+}
+.mnhome-syncstrip-label {
+  flex-shrink: 0;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: var(--mn-numeric);
+  letter-spacing: .02em;
+}
+
+.mnhome-address-pill { white-space: nowrap; }
