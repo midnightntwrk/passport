@@ -674,3 +674,238 @@ a.mnhome-icon-button {
 }
 
 .mnhome-address-pill { white-space: nowrap; }
+
+/* --- Send / Receive ------------------------------------------------------ */
+
+/* The money row, between the greeting and the balance cards. Send renders only
+   while a local wallet session is genuinely open, so this row is sometimes a
+   single control — hence the auto-fit grid rather than a fixed pair. */
+.mnhome-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 12px;
+}
+.mnhome-action {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  transition: background .15s ease, border-color .15s ease;
+}
+.mnhome-action:hover { background: var(--mn-surface-hover); }
+.mnhome-action:active { background: var(--mn-surface-active); }
+.mnhome-action-primary {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-text);
+  background: var(--mn-accent);
+}
+.mnhome-action-primary:hover { background: var(--mn-accent-hover); }
+.mnhome-action-primary:active { background: var(--mn-accent-hover); }
+
+/* The sheet itself reuses .mnhome-addr-scrim / .mnhome-addr-modal so the two
+   money surfaces sit in the same place, at the same size, with the same scrim. */
+.mnhome-send { width: min(100%, 460px); }
+.mnhome-send-form { display: grid; gap: 16px; }
+
+.mnhome-send-field { display: grid; gap: 7px; }
+.mnhome-send-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.mnhome-send-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 13px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  font-family: var(--mn-font-body);
+  font-size: 15px;
+  font-variant-numeric: var(--mn-numeric);
+  line-height: 1.4;
+  resize: none;
+}
+.mnhome-send-input-mono {
+  font-family: var(--mn-font-mono);
+  font-size: 12.5px;
+  letter-spacing: -.01em;
+  overflow-wrap: anywhere;
+}
+.mnhome-send-input:focus-visible { outline: var(--mn-focus-ring); }
+.mnhome-send-input[aria-invalid='true'] { border-color: var(--mn-border-strong); }
+
+.mnhome-send-amount { position: relative; display: block; }
+.mnhome-send-amount .mnhome-send-input { padding-right: 68px; }
+.mnhome-send-unit {
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  transform: translateY(-50%);
+  color: var(--mn-text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  pointer-events: none;
+}
+.mnhome-send-max {
+  padding: 3px 9px;
+  border: var(--mn-hairline) solid var(--mn-accent);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-accent-ink);
+  background: transparent;
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mnhome-send-max:hover:not(:disabled) { background: var(--mn-accent-soft); }
+.mnhome-send-max:disabled { opacity: .42; cursor: default; }
+
+.mnhome-send-hint,
+.mnhome-send-error,
+.mnhome-send-fee {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.mnhome-send-hint { color: var(--mn-text-muted); }
+/* A refusal is set in the primary ink and weighted: it is the most important
+   sentence on the field, and the palette carries no danger colour to lean on. */
+.mnhome-send-error { color: var(--mn-text-primary); font-weight: 600; }
+.mnhome-send-fee {
+  padding: 11px 13px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-sunken);
+  font-size: 12px;
+}
+.mnhome-send-fee-blocked { color: var(--mn-text-primary); font-weight: 600; }
+
+.mnhome-send-primary,
+.mnhome-send-secondary {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  border-radius: var(--mn-radius-pill);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.mnhome-send-primary {
+  border: var(--mn-hairline) solid var(--mn-accent);
+  color: var(--mn-accent-text);
+  background: var(--mn-accent);
+}
+.mnhome-send-primary:hover:not(:disabled) { background: var(--mn-accent-hover); }
+.mnhome-send-primary:disabled { opacity: .45; cursor: default; }
+.mnhome-send-secondary {
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  color: var(--mn-text-primary);
+  background: transparent;
+}
+.mnhome-send-secondary:hover:not(:disabled) { background: var(--mn-surface-hover); }
+.mnhome-send-secondary:disabled { opacity: .45; cursor: default; }
+
+.mnhome-send-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+
+.mnhome-send-rows {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
+}
+.mnhome-send-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  padding: 12px 13px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnhome-send-row:last-child { border-bottom: 0; }
+.mnhome-send-row dt {
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mnhome-send-row dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.mnhome-send-row dd strong { display: block; font-size: 15px; font-weight: 700; }
+.mnhome-send-row dd small {
+  display: block;
+  margin-top: 2px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-variant-numeric: var(--mn-numeric);
+}
+.mnhome-send-reveal {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.mnhome-send-reveal code {
+  display: block;
+  font-family: var(--mn-font-mono);
+  font-size: 11.5px;
+  letter-spacing: -.01em;
+  overflow-wrap: anywhere;
+}
+.mnhome-send-reveal small {
+  display: block;
+  margin-top: 3px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+}
+
+.mnhome-send-busy {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  color: var(--mn-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.mnhome-send-spinner { flex: 0 0 auto; animation: mnhome-send-spin 1s linear infinite; }
+@keyframes mnhome-send-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .mnhome-send-spinner { animation: none; }
+}

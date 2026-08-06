@@ -879,6 +879,14 @@ export default function AppBrowser(props: AppBrowserProps) {
                                 ? FIELD_DETAILS[field]
                                 : 'Not available on this Passport yet.'}
                             </small>
+                            {/* Consent should show what is actually about to
+                                leave, not only its category. The display name
+                                is short and human, so it is quoted in full; the
+                                addresses are set out in the app's own view
+                                after sharing rather than dumped here. */}
+                            {available && field === 'displayName' && profile?.displayName ? (
+                              <em className="mnapps-field-value">{profile.displayName}</em>
+                            ) : null}
                           </span>
                         </button>
                       </li>

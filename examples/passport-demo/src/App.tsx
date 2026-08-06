@@ -123,7 +123,13 @@ import { aliasRegistrationSupported, explorerTxUrl, walletNetwork } from './lib/
 // The local wallet drags the whole Midnight wallet SDK in with it. It is loaded
 // on demand, from the passkey routes only, so a Dynamic-only session never pays
 // for it. Types are erased at build time and cost nothing here.
-import type { LocalMidnightWallet, LocalWalletSurfaces } from './lib/localWallet.js';
+import type {
+  FeeReadiness,
+  LocalMidnightWallet,
+  LocalWalletBalances,
+  LocalWalletSurfaces,
+  SendNightResult,
+} from './lib/localWallet.js';
 
 type ActivityStatus = 'pending' | 'complete' | 'blocked' | 'error';
 type TransferPool = 'unshielded' | 'shielded';
@@ -976,6 +982,14 @@ export default function PassportDemo() {
   const [localSyncPercent, setLocalSyncPercent] = useState<number | null>(null);
   const [localWalletNetworkId, setLocalWalletNetworkId] = useState<string | null>(null);
   /**
+   * Where the open wallet computes its proofs. Held in state rather than read
+   * off the handle during render, so the Send sheet's progress line names the
+   * right machine without a render-time ref read.
+   */
+  const [localWalletProvingMode, setLocalWalletProvingMode] = useState<
+    'browser' | 'http' | null
+  >(null);
+  /**
    * Whether the OPEN wallet's network is one Passport genuinely registers
    * names on. Falls back to the build's configured network before a wallet has
    * opened, so the claim screen can already say which mode it is in.
@@ -983,7 +997,6 @@ export default function PassportDemo() {
   const aliasClaimSupported = aliasRegistrationSupported(
     localWalletNetworkId ?? configuredWalletNetwork,
   );
-  const [localDustRetryCount, setLocalDustRetryCount] = useState(0);
   /**
    * Whether a passkey Passport is already enrolled in this browser. `null`
    * while the lookup is still running — which is not the same as "no", so the
@@ -1436,9 +1449,9 @@ export default function PassportDemo() {
       await closeLocalWallet();
       localWalletRef.current = wallet;
       setLocalWalletNetworkId(wallet.network.networkId);
+      setLocalWalletProvingMode(wallet.provingMode);
       // Addresses are known immediately; balances are still unknown, and say so.
       setLocalSurfaces(initialLocalSurfaceState(wallet));
-      setLocalDustRetryCount(0);
       setLocalWalletStatus('ready');
       // The first balance read waits on indexer sync, so it runs behind the
       // screen rather than holding onboarding open.
@@ -1498,8 +1511,8 @@ export default function PassportDemo() {
         await closeLocalWallet();
         localWalletRef.current = wallet;
         setLocalWalletNetworkId(wallet.network.networkId);
+        setLocalWalletProvingMode(wallet.provingMode);
         setLocalSurfaces(initialLocalSurfaceState(wallet));
-        setLocalDustRetryCount(0);
         setLocalWalletStatus('ready');
         pushToast({
           tone: 'info',
@@ -1857,16 +1870,62 @@ export default function PassportDemo() {
     };
   }, [localWalletStatus, refreshLocalBalances]);
 
-  // DUST state arrives after the indexer has walked far enough. Retry a few
-  // times so the battery settles without the user pressing anything.
+  /**
+   * Live balances from the same wallet state stream the sync percent rides.
+   *
+   * This REPLACES the three-attempt 10 s DUST retry timer that used to sit
+   * here. That loop existed because the only way DUST state ever settled was a
+   * refresh the user could not know to press, and it gave up after thirty
+   * seconds whether or not the wallet had caught up. Incoming NIGHT had no
+   * equivalent at all — funds arrived and sat invisible until a page reload.
+   * `subscribeBalances` covers both: every change the wallet sees, for as long
+   * as the session lasts, with no timers on this side.
+   *
+   * Throttling is entirely the wallet's (Contract W's ≥4 s floor, leading and
+   * trailing). This effect adds no debounce of its own — two independent
+   * throttles over one stream would only make the delay harder to reason about.
+   *
+   * Battery sanity: while the tab is hidden the newest snapshot is stored and
+   * NOT rendered, then flushed once on return to visible. A backgrounded
+   * Passport therefore costs a ref write per emission and no React work.
+   */
   useEffect(() => {
-    if (walletMode !== 'local' || !localSurfaces?.dustSyncing || localDustRetryCount >= 3) return;
-    const timer = window.setTimeout(() => {
-      setLocalDustRetryCount((current) => current + 1);
-      void refreshLocalBalances();
-    }, 10_000);
-    return () => window.clearTimeout(timer);
-  }, [localDustRetryCount, localSurfaces?.dustSyncing, refreshLocalBalances, walletMode]);
+    if (localWalletStatus !== 'ready') return;
+    const handle = localWalletRef.current;
+    if (!handle) return;
+
+    let pending: LocalWalletBalances | null = null;
+
+    const apply = (balances: LocalWalletBalances) => {
+      // A stale handle's stream must never write over a newer wallet's numbers.
+      if (localWalletRef.current !== handle) return;
+      setLocalSurfaces((current) =>
+        current ? { ...current, ...balances } : current,
+      );
+    };
+
+    const unsubscribe = handle.subscribeBalances((balances) => {
+      if (document.visibilityState === 'hidden') {
+        pending = balances;
+        return;
+      }
+      pending = null;
+      apply(balances);
+    });
+
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || pending === null) return;
+      const latest = pending;
+      pending = null;
+      apply(latest);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      unsubscribe();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [localWalletStatus]);
 
   /* ---------------------------------------------------------------------- */
   /* Identity — claiming, queueing, and reclaiming a .night name             */
@@ -2428,13 +2487,45 @@ export default function PassportDemo() {
 
   const registerDust = async () => {
     if (walletMode === 'local') {
-      // The Home control is already disabled for this; belt and braces, so no
-      // future caller quietly reaches a path this demo has not built. The
-      // on-device wallet CAN sign and submit NIGHT transfers — DUST
-      // registration is simply a different transaction, and not wired here.
-      setError(
-        'DUST registration is a separate transaction that this demo has not wired up for the on-device wallet. Sending NIGHT does work.',
-      );
+      // The on-device wallet registers its own NIGHT for DUST generation, which
+      // is what makes a faucet-funded Passport able to pay its first fee.
+      const wallet = localWalletRef.current;
+      if (!wallet) return;
+      setBusyAction('dust');
+      setError(null);
+      try {
+        const result = await wallet.registerDust();
+        const detail =
+          result.status === 'already-generating'
+            ? 'Every NIGHT UTxO in this wallet is already generating DUST; nothing to submit.'
+            : `Registered ${result.utxoCount} NIGHT UTxO${result.utxoCount === 1 ? '' : 's'} for DUST generation.`;
+        addActivity({
+          label: 'DUST registration',
+          detail,
+          status: result.status === 'already-generating' ? 'blocked' : 'complete',
+          source: result.txId ? 'chain' : 'wallet',
+          ...(result.txId ? { txHash: result.txId } : {}),
+        });
+        if (result.status === 'registered') {
+          pushToast({
+            tone: 'success',
+            title: 'DUST registration submitted',
+            link: explorerTxLink(result.txId, selectedNetwork),
+          });
+        }
+        await refreshWallet();
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        setError(message);
+        addActivity({
+          label: 'DUST registration',
+          detail: message,
+          status: 'error',
+          source: 'wallet',
+        });
+      } finally {
+        setBusyAction(null);
+      }
       return;
     }
     if (!midnightWallet) return;
@@ -3432,7 +3523,7 @@ export default function PassportDemo() {
     setLocalSurfaces(null);
     setLocalWalletStatus('idle');
     setLocalWalletNetworkId(null);
-    setLocalDustRetryCount(0);
+    setLocalWalletProvingMode(null);
     passportKeyProviders.current.clear();
     setProfile(null);
     setProfileStatus('idle');
@@ -3750,6 +3841,119 @@ export default function PassportDemo() {
         }
       : null;
 
+  /* ---------------------------------------------------------------------- */
+  /* The user's own Send — the same wallet call, initiated by the owner      */
+  /*                                                                        */
+  /* `executeAppTransfer` above is a framed app asking Passport to pay. This  */
+  /* is the user asking Passport to pay, from the Send sheet on Home. The     */
+  /* wallet call, the activity row, the explorer link, and the two refreshes  */
+  /* are deliberately the same — one transfer path, one set of side effects.  */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * How the next transfer's fee would really be paid. Advisory — the send path
+   * re-checks everything — so a failure here is thrown, not smoothed into
+   * `no-dust`: "we could not tell" and "you cannot pay" are different
+   * sentences, and the sheet says whichever is true.
+   */
+  const readLocalFeeReadiness = useCallback(async (): Promise<FeeReadiness> => {
+    const handle = localWalletRef.current;
+    if (!handle) throw new Error('The Passport wallet session is not open.');
+    return handle.feeReadiness();
+  }, []);
+
+  /**
+   * Signs and submits the user's own unshielded NIGHT transfer.
+   *
+   * Every refusal is rethrown untouched: the Send sheet maps `SendNightError.code`
+   * onto its own copy and keeps the wallet's message, so nothing is swallowed
+   * and no code is invented on the way through.
+   */
+  const executeOwnSend = useCallback(
+    async (params: { recipientAddress: string; amount: bigint }): Promise<SendNightResult> => {
+      const handle = localWalletRef.current;
+      if (!handle) {
+        /* Structurally a `SendNightError` — `{ code, message }` — without a
+           value import of `lib/localWallet.ts`, which statically pulls in the
+           whole wallet SDK. Same reason `executeAppTransfer` does it this way. */
+        throw Object.assign(
+          new Error('The Passport wallet session closed before this could be signed.'),
+          { code: 'wallet-closed' as const },
+        );
+      }
+      const entry = addActivity({
+        label: 'Sent NIGHT',
+        detail: `To ${params.recipientAddress}.`,
+        status: 'pending',
+        source: 'wallet',
+      });
+      try {
+        const result = await handle.sendUnshieldedNight(params);
+        updateActivity(entry.id, {
+          status: 'complete',
+          detail: `Submitted from this device to ${params.recipientAddress}.`,
+          source: 'chain',
+          txHash: result.txId,
+        });
+        pushToast({
+          tone: 'success',
+          title: 'NIGHT sent',
+          /* A covered fee is claimed on the strength of the flag's own
+             contract and nothing else — a sponsored attempt that fell back to
+             the user's own DUST reports `false` and is described as such. */
+          body: result.sponsored
+            ? 'The fee sponsor covered the network fee.'
+            : 'The network fee was paid from your DUST.',
+          link: explorerTxLink(result.txId, localWalletNetworkId),
+        });
+        // The balance has moved and the indexer needs a moment to see the
+        // transaction; the session row already carries it in the meantime.
+        // The live balance stream will also catch this, but an own send is
+        // the one case where waiting for a throttle window is needless.
+        void refreshLocalBalances();
+        window.setTimeout(() => void refreshTransactions(), 5_000);
+        return result;
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        updateActivity(entry.id, {
+          status: 'error',
+          detail: message,
+          source: 'local',
+        });
+        const code =
+          typeof cause === 'object' && cause !== null &&
+          typeof (cause as { code?: unknown }).code === 'string'
+            ? (cause as { code: string }).code
+            : null;
+        if (code === 'wallet-closed') {
+          // The sheet closes on this one, so the toast has to carry the message.
+          pushToast({ tone: 'error', title: 'Nothing was sent', body: message });
+        }
+        throw cause;
+      }
+    },
+    [addActivity, localWalletNetworkId, refreshLocalBalances, refreshTransactions, updateActivity],
+  );
+
+  /**
+   * The Send seam handed to Home — `null` unless a local wallet session is
+   * genuinely open AND has an unshielded address to send from. Home renders no
+   * Send control at all in that case, rather than a disabled one implying the
+   * wallet nearly could.
+   */
+  const homeSend =
+    localSessionActive &&
+    localWalletNetworkId &&
+    localWalletProvingMode &&
+    localSurfaces?.unshieldedAddress
+      ? {
+          networkId: localWalletNetworkId,
+          provingMode: localWalletProvingMode,
+          readFeeReadiness: readLocalFeeReadiness,
+          onSend: executeOwnSend,
+        }
+      : null;
+
   /**
    * Records something an app says it granted. Passport never invents these:
    * the only writer is an app's own incentive report, and the store keys by id
@@ -3774,10 +3978,41 @@ export default function PassportDemo() {
     [localWalletNetworkId, selectedNetwork],
   );
 
-  /** How this Passport is named on screen — hosted account, or this device. */
-  // null lets HomeScreen render its designed 'Your Passport' fallback — the
-  // literal sentence set as a display headline wrapped into three ragged lines.
-  const sessionDisplayName = localSessionActive ? null : connectedUserName;
+  /**
+   * The display name Passport is willing to SHARE — the `displayName` field of
+   * the profile a dApp may ask for, and the row the consent sheet offers.
+   *
+   * Until 2026/08/06 this was hardcoded to null on the passkey route, so the
+   * very first field a developer requests came back withheld: the consent sheet
+   * had nothing to tick, and every integration's "Hello, {name}" rendered
+   * blank. A passkey Passport does have a name — the `.night` name it claimed
+   * on its own wallet network, and failing that the label the passkey was
+   * enrolled under — so it says so.
+   *
+   * Keyed on the CONFIGURED wallet network, not the selected one: this is the
+   * name attached to the Passport whose addresses are being shared, and a name
+   * claimed on preview says nothing about who holds it on pre-production.
+   * Sharing is still consent-gated — nothing here changes what leaves without
+   * a tick.
+   */
+  /* `configuredWalletNetwork` is null on a devnet build, which signs on no
+     public network at all — there is then no per-network record to read, and
+     the enrolled passkey's label is the honest answer. */
+  const passkeyDisplayName =
+    (configuredWalletNetwork ? aliasRecords[configuredWalletNetwork]?.domain : null) ??
+    profile?.passkey.label ??
+    null;
+  const sessionDisplayName = localSessionActive ? passkeyDisplayName : connectedUserName;
+
+  /**
+   * The greeting's subject on Home, which is a different question from the name
+   * above: the alias already leads the greeting when there is one, so repeating
+   * it beneath as a display name would say the same thing twice, and the
+   * enrolled passkey's label ('Midnight Passport') is not a person's name. null
+   * lets HomeScreen render its designed fallback — the greeting alone, set as a
+   * display headline wrapped into ragged lines.
+   */
+  const homeDisplayName = localSessionActive ? null : connectedUserName;
 
   /**
    * The name held on the ACTIVE network — the greeting's subject. Nothing is
@@ -3853,19 +4088,16 @@ export default function PassportDemo() {
   };
 
   /**
-   * What the local wallet genuinely cannot do yet.
+   * What the local wallet genuinely cannot do yet — nothing, as of 2026/08/06.
    *
-   * It now signs and submits unshielded NIGHT transfers — that is the path a
-   * framed app uses, and the path that pays for a `.night` name. DUST
-   * registration is a different transaction, and this demo has not wired it for
-   * the on-device wallet, so the control says exactly that rather than failing
-   * at the tap. `null` on the Dynamic route, whose embedded wallet registers
-   * DUST itself.
+   * It signs and submits unshielded NIGHT transfers (the path a framed app
+   * uses, and the path that pays for a `.night` name), and it now registers its
+   * own NIGHT for DUST generation through `LocalMidnightWallet.registerDust()`.
+   * The Dynamic route needs no note either: its embedded wallet registers DUST
+   * itself. Kept as a named constant so a future limitation has one place to
+   * go, rather than being scattered back through the Home props.
    */
-  const localWalletWriteLimitation =
-    walletMode === 'local'
-      ? 'DUST registration is not wired up for the on-device wallet in this demo. Sending NIGHT — including app payments and name registration — does work.'
-      : null;
+  const localWalletWriteLimitation: string | null = null;
 
   const appsProfile = sessionActive
     ? {
@@ -3978,7 +4210,7 @@ export default function PassportDemo() {
           <>
             {mobileTab === 'home' ? (
               <HomeScreen
-                displayName={sessionDisplayName}
+                displayName={homeDisplayName}
                 aliasLabel={aliasLabel}
                 identity={homeIdentity}
                 network={selectedNetwork}
@@ -3999,10 +4231,12 @@ export default function PassportDemo() {
                 onRefresh={refreshMobile}
                 onCopyAddress={copyAddressOfKind}
                 onRegisterDust={() => void registerDust()}
-                /* DUST registration is its own transaction type, and this demo
-                   has not wired it for the on-device wallet, so the control is
-                   disabled and says why instead of failing at the tap. */
+                /* No limitation remains — see `localWalletWriteLimitation`,
+                   kept as the single place a future one would go. */
                 registerDustDisabledReason={localWalletWriteLimitation}
+                /* The Send seam. `null` when no local wallet session is open,
+                   which is what makes Home render no Send control at all. */
+                send={homeSend}
                 walletSourceNote={
                   walletMode === 'local'
                     ? `On-device wallet · ${localWalletNetworkId ?? configuredWalletNetwork ?? 'unknown network'} · derived from your passkey. Balances and history come from the indexer; transfers are signed here and submitted straight to the node.`

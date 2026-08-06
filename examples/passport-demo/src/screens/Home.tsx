@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  ArrowDownLeft,
   Droplets,
   Check,
   Copy,
@@ -9,6 +10,7 @@ import {
   Plus,
   RefreshCw,
   Send,
+  SendHorizontal,
   Wallet,
   X,
 } from 'lucide-react'
@@ -17,9 +19,12 @@ import { createPortal } from 'react-dom'
 
 import type { AliasRecord } from '../identity/aliasStore.js'
 import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
+/* The two names this screen shares with the wallet (Contract W). Type-only. */
+import type { FeeReadiness, SendNightResult } from '../lib/localWallet.js'
 import { FeaturedApps, type AppsScreenProps, type FeaturedAppsProps } from './Apps.js'
 import { EcosystemIdentity } from './Ecosystem.js'
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
+import SendSheet from './SendSheet.js'
 import SyncRing from './SyncRing.js'
 import ThemeToggle from './ThemeToggle.js'
 import './home.css'
@@ -89,6 +94,27 @@ export interface HomeScreenProps {
    * the interface so the integrator needs no change, and nothing renders it.
    */
   walletSourceNote?: string | null
+  /**
+   * The Send seam — the open on-device wallet's own `sendUnshieldedNight`, plus
+   * the fee-readiness probe whose answer the sheet quotes.
+   *
+   * Omitted or `null` whenever no local wallet session is genuinely open, or
+   * the wallet is Dynamic-hosted. The Send control is then ABSENT rather than
+   * disabled: a button that cannot work should not be on screen claiming it
+   * nearly could. Receive needs no seam — it is the address sheet, which is
+   * driven by the addresses this screen already has.
+   */
+  send?: {
+    /** The wallet's own network id, which a recipient must belong to. */
+    networkId: string
+    /** Where this wallet proves — the send sheet's progress line names it. */
+    provingMode: 'browser' | 'http'
+    readFeeReadiness: () => Promise<FeeReadiness>
+    onSend: (params: {
+      recipientAddress: string
+      amount: bigint
+    }) => Promise<SendNightResult>
+  } | null
   /** Fed to the embedded apps grid and its in-Passport browser. */
   appsProfile: AppsScreenProps['profile']
   /** Notified after the user approves a profile request, for the activity feed. */
@@ -153,6 +179,7 @@ export default function HomeScreen(props: HomeScreenProps) {
     onCopyAddress,
     onRegisterDust,
     registerDustDisabledReason,
+    send,
     appsProfile,
     onProfileShared,
     executeTransfer,
@@ -165,8 +192,11 @@ export default function HomeScreen(props: HomeScreenProps) {
 
   const [copied, setCopied] = useState<AddressKind | null>(null)
   /* Addresses are a power-user surface: collapsed by default behind the
-     disclosure below, per the 2026/08/05 declutter decision. */
+     disclosure below, per the 2026/08/05 declutter decision. This same portal
+     IS the Receive surface — the addresses to receive at, with their copy
+     buttons and the faucet beside them. No second sheet was invented for it. */
   const [addressesOpen, setAddressesOpen] = useState(false)
+  const [sendOpen, setSendOpen] = useState(false)
 
   // Escape closes the address modal, mirroring the scrim click.
   useEffect(() => {
@@ -251,6 +281,9 @@ export default function HomeScreen(props: HomeScreenProps) {
     const filled = (shown / 100) * RING_CIRCUMFERENCE
     return `${filled} ${RING_CIRCUMFERENCE - filled}`
   }, [fill, showSyncGauge, syncPercent])
+
+  /* Sending needs a seam AND an address to send from. Both, or no button. */
+  const canSend = Boolean(send) && Boolean(unshieldedAddress)
 
   const addressRows: { kind: AddressKind; label: string; value: string | null }[] = [
     { kind: 'unshielded', label: 'Unshielded', value: unshieldedAddress },
@@ -351,6 +384,37 @@ export default function HomeScreen(props: HomeScreenProps) {
               </button>
             ) : null}
           </p>
+        ) : null}
+
+        {/* The money row. Send is present only when a local wallet session is
+            genuinely open and has an unshielded address to send from — see the
+            `send` prop. Receive opens the address portal below, which is the
+            receive surface: the addresses, their copy buttons, and the faucet. */}
+        {canSend || unshieldedAddress ? (
+          <div className="mnhome-actions">
+            {canSend ? (
+              <button
+                type="button"
+                className="mnhome-action mnhome-action-primary"
+                onClick={() => setSendOpen(true)}
+                aria-haspopup="dialog"
+              >
+                <SendHorizontal size={16} aria-hidden="true" />
+                <span>Send</span>
+              </button>
+            ) : null}
+            {unshieldedAddress ? (
+              <button
+                type="button"
+                className="mnhome-action"
+                onClick={() => setAddressesOpen(true)}
+                aria-haspopup="dialog"
+              >
+                <ArrowDownLeft size={16} aria-hidden="true" />
+                <span>Receive</span>
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="mnhome-assets">
@@ -476,6 +540,26 @@ export default function HomeScreen(props: HomeScreenProps) {
           transferContext={transferContext}
           onIncentiveRedeemed={onIncentiveRedeemed}
         />
+
+        {sendOpen && send ? (
+          <SendSheet
+            networkId={send.networkId}
+            availableBalance={unshieldedBalance}
+            provingMode={send.provingMode}
+            readFeeReadiness={send.readFeeReadiness}
+            onSend={send.onSend}
+            /* Offered only when the battery card's own registration affordance
+               applies — a wallet that is already generating DUST, or one that
+               genuinely cannot register, gets the refusal without a pointer to
+               a button that would not help. */
+            onRegisterDust={
+              needsDustRegistration && !registerDustDisabledReason
+                ? () => onRegisterDust()
+                : undefined
+            }
+            onClose={() => setSendOpen(false)}
+          />
+        ) : null}
 
         {addressesOpen
           ? createPortal(

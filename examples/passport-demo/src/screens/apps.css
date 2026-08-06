@@ -659,6 +659,14 @@
 .mnapps-field-copy { min-width: 0; display: grid; gap: 4px; }
 .mnapps-field-copy strong { font-size: 13px; font-weight: 600; }
 .mnapps-field-copy small { color: var(--mn-text-secondary); font-size: 12px; line-height: 1.45; }
+/* The value itself, quoted so consent shows what will actually be shared. */
+.mnapps-field-value {
+  color: var(--mn-text-primary);
+  font-size: 12.5px;
+  font-style: normal;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
 
 .mnapps-sheet-boundary {
   margin: 18px 0 0;
