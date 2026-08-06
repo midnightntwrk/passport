@@ -26,6 +26,26 @@
  * the chain walk from the last applied index instead of replaying it from zero.
  * A snapshot the SDK refuses is discarded and the wallet cold-starts;
  * `resumedFromSnapshot` reports which of the two actually happened.
+ *
+ * HOW A WALLET GETS ITS FIRST CHAIN POSITION (2026/08/06)
+ * ------------------------------------------------------
+ * Two ways, and the handle says which happened:
+ *
+ *   1. `resumedFromSnapshot` — a cached snapshot for this (network, address)
+ *      was accepted, so the walk continues from where it stopped.
+ *   2. Otherwise, a walk from genesis — but only where one can finish. Above
+ *      {@link DEEP_CHAIN_BLOCK_THRESHOLD} blocks it is refused outright with a
+ *      {@link WalletBootstrapError} rather than started, because in a browser
+ *      tab it does not finish: measured on Pre-production (~1.98M blocks) the
+ *      heap climbs ~25 MB/s and the tab dies at ~4.2 GB. Refusing is honest;
+ *      crashing is not.
+ *
+ * There is deliberately no third way. Starting a brand-new wallet at the chain
+ * tip was implemented and measured on 2026/08/06 and does not work — the
+ * ledger's zswap and DUST commitment trees must be filled from genesis in
+ * index order, and no public indexer endpoint can fast-forward them. The
+ * evidence, and the code that would do it if that ever changes, is in the
+ * tip-bootstrap section of `./walletSnapshot.ts`. Nothing here calls it.
  */
 
 import * as ledger from '@midnight-ntwrk/ledger-v8';
@@ -59,6 +79,7 @@ import { wasmWalletProvingService } from './wasmProver.js';
 import {
   clearWalletSnapshots,
   deleteWalletSnapshot,
+  fetchChainHeight,
   loadWalletSnapshot,
   saveWalletSnapshot,
   WALLET_SNAPSHOT_VERSION,
@@ -107,8 +128,21 @@ function relayFrom(nodeUrl: string): string {
   return nodeUrl.replace(/^http/, 'ws');
 }
 
+/**
+ * Vite replaces `import.meta.env` at build time. Under plain Node — which is
+ * how this module's sync behaviour gets measured against a real indexer before
+ * anything is shipped — there is no such object, so an absent one reads as
+ * "nothing configured" rather than throwing.
+ */
 function environment(): Record<string, string | undefined> {
-  return import.meta.env as unknown as Record<string, string | undefined>;
+  return (
+    (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {}
+  );
+}
+
+/** `import.meta.env.DEV`, safe to read outside Vite. See {@link environment}. */
+function devMode(): boolean {
+  return (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true;
 }
 
 /**
@@ -319,6 +353,61 @@ export interface CreateLocalMidnightWalletOptions {
    * useful for reproducing a first-run sync.
    */
   resume?: 'auto' | 'never';
+  /**
+   * Overrides {@link DEEP_CHAIN_BLOCK_THRESHOLD} for this call. Exists so the
+   * guard can be exercised against a real network without waiting for one to
+   * grow; production callers should leave it alone.
+   */
+  deepChainBlockThreshold?: bigint;
+}
+
+// ---------------------------------------------------------------------------
+// First-sync bootstrap
+// ---------------------------------------------------------------------------
+
+/**
+ * Above this many blocks, a from-genesis walk is refused rather than started.
+ *
+ * Chosen from measurement, not taste. Preview (~296k blocks) completes in a tab
+ * in ~75 s at a steady ~90 MB heap; Pre-production (~1.98M) reached 3 % in
+ * 150 s with the heap climbing ~25 MB/s until the tab died at ~4.2 GB. 500k
+ * sits above everything that is known to work and far below anything known to
+ * fail, and it is a ceiling on a browser tab — not a statement about the SDK,
+ * which walks these chains happily in Node.
+ */
+export const DEEP_CHAIN_BLOCK_THRESHOLD = 500_000n;
+
+export type WalletBootstrapErrorCode = 'chain-too-deep';
+
+/**
+ * A wallet that could not be opened because the only remaining option was a
+ * chain walk this environment cannot finish. Carries the numbers so the UI can
+ * say what actually happened instead of "sync failed".
+ */
+export class WalletBootstrapError extends Error {
+  readonly code: WalletBootstrapErrorCode;
+  readonly networkId: string;
+  readonly blockHeight: bigint | null;
+  readonly threshold: bigint;
+  /** What was tried first, when something was. */
+  readonly detail?: string;
+
+  constructor(params: {
+    code: WalletBootstrapErrorCode;
+    message: string;
+    networkId: string;
+    blockHeight: bigint | null;
+    threshold: bigint;
+    detail?: string;
+  }) {
+    super(params.message);
+    this.name = 'WalletBootstrapError';
+    this.code = params.code;
+    this.networkId = params.networkId;
+    this.blockHeight = params.blockHeight;
+    this.threshold = params.threshold;
+    if (params.detail !== undefined) this.detail = params.detail;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -646,6 +735,32 @@ export async function createLocalMidnightWallet(
     }
   };
 
+  const threshold = options.deepChainBlockThreshold ?? DEEP_CHAIN_BLOCK_THRESHOLD;
+
+  /**
+   * The last resort: a walk from genesis, but only where one can finish. Above
+   * {@link DEEP_CHAIN_BLOCK_THRESHOLD} blocks it refuses instead of starting
+   * something that would take the tab down with it. An unreadable height counts
+   * as too deep — "we could not check" is not "it is shallow".
+   */
+  const startFromGenesis = async (attempted?: string): Promise<WalletFacade> => {
+    const height = await fetchChainHeight(network.indexerHttpUrl);
+    if (height === null || height > threshold) {
+      throw new WalletBootstrapError({
+        code: 'chain-too-deep',
+        message:
+          height === null
+            ? `This Passport has no cached sync state for ${network.networkId}, and the indexer would not say how deep that chain is. Syncing a wallet with existing history from scratch is not something this browser demo can do without knowing that.`
+            : `This Passport has no cached sync state for ${network.networkId}, and that chain is ${height.toLocaleString('en-GB')} blocks deep. A first sync on a chain this deep is not supported in a browser demo — it exhausts the tab long before it finishes, and the ledger offers no way to skip the walk. Sign in on the device that already holds this Passport's sync state, or use a shallower network.`,
+        networkId: network.networkId,
+        blockHeight: height,
+        threshold,
+        ...(attempted !== undefined ? { detail: attempted } : {}),
+      });
+    }
+    return startFacade(null);
+  };
+
   const cached =
     (options.resume ?? 'auto') === 'auto'
       ? await loadWalletSnapshot(network.networkId, unshieldedAddress)
@@ -666,10 +781,10 @@ export async function createLocalMidnightWallet(
       // mistake this for a resume.
       console.debug('[localWallet] cached sync state rejected; cold start', cause);
       await deleteWalletSnapshot(network.networkId, unshieldedAddress);
-      facade = await startFacade(null);
+      facade = await startFromGenesis(messageOf(cause));
     }
   } else {
-    facade = await startFacade(null);
+    facade = await startFromGenesis();
   }
 
   const [shieldedAddress, dustAddress] = await Promise.all([
@@ -720,7 +835,7 @@ export async function createLocalMidnightWallet(
         unshielded,
         dust,
       });
-      if (import.meta.env.DEV) console.debug('[localWallet] sync snapshot saved');
+      if (devMode()) console.debug('[localWallet] sync snapshot saved');
     } catch (cause) {
       // Losing the cache costs a longer sync next time and nothing else.
       console.debug('[localWallet] unable to save the sync snapshot', cause);
@@ -932,7 +1047,7 @@ export async function createLocalMidnightWallet(
     // this refusal stands exactly as it did before sponsorship existed.
     const sponsorship = await sponsorReadiness();
     if (sponsorship.state !== 'ready') {
-      if (import.meta.env.DEV && sponsorship.state === 'unavailable') {
+      if (devMode() && sponsorship.state === 'unavailable') {
         console.debug('[localWallet] fees are not sponsored:', sponsorship.reason);
       }
       if (state.dust.balance(new Date()) === 0n) {
@@ -1084,7 +1199,7 @@ export async function createLocalMidnightWallet(
         .state()
         .pipe(Rx.throttleTime(500, undefined, { leading: true, trailing: true }))
         .subscribe((state) => {
-          if (import.meta.env.DEV) {
+          if (devMode()) {
             const show = (p: unknown) => JSON.stringify(p, (_k, v) => (typeof v === 'bigint' ? String(v) : v));
             console.debug(
               `[localWallet sync] shielded=${show(state.shielded.progress)} unshielded=${show(state.unshielded.progress)} dust=${show(state.dust.progress)} synced=${state.isSynced}`,
