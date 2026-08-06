@@ -235,22 +235,37 @@ export function PassportPwaShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!installSheetEligible) return;
-    let delay: number | undefined;
-    // `localStorage` fires no same-tab event, so the session signal is polled
-    // rather than subscribed to. The poll stops the moment it is satisfied.
-    const arm = () => {
-      if (delay !== undefined || !hasPassportSession()) return;
-      window.clearInterval(poll);
-      // Deliberately late even then: it follows the session, it does not
-      // interrupt it.
-      delay = window.setTimeout(() => setInstallSheetOpen(true), INSTALL_SHEET_DELAY_MS);
+    /**
+     * The invitation may only open once the user is clear of onboarding: a
+     * session exists AND no identity screen (`.mnid-screen` — the name step,
+     * and Backup/Ecosystem when routed to) is on show. The session key is
+     * written the moment the wallet opens, which is BEFORE the name step, so
+     * the session alone is not enough — on iOS, where no install event gates
+     * the sheet, it would slide over "Choose your .night name" four seconds
+     * into it (observed live, 2026/08/06).
+     */
+    const clearToOpen = () =>
+      hasPassportSession() && !document.querySelector('.mnid-screen');
+    // `localStorage` fires no same-tab event, so the signal is polled rather
+    // than subscribed to. The sheet opens only after the app has been clear
+    // for a full INSTALL_SHEET_DELAY_MS — an identity screen appearing mid-
+    // countdown resets it, so the invitation follows the flow, it never
+    // interrupts one.
+    let clearSince: number | undefined;
+    const tick = () => {
+      if (!clearToOpen()) {
+        clearSince = undefined;
+        return;
+      }
+      clearSince = clearSince ?? Date.now();
+      if (Date.now() - clearSince >= INSTALL_SHEET_DELAY_MS) {
+        window.clearInterval(poll);
+        setInstallSheetOpen(true);
+      }
     };
-    const poll = window.setInterval(arm, SESSION_POLL_MS);
-    arm();
-    return () => {
-      window.clearInterval(poll);
-      if (delay !== undefined) window.clearTimeout(delay);
-    };
+    const poll = window.setInterval(tick, SESSION_POLL_MS);
+    tick();
+    return () => window.clearInterval(poll);
   }, [installSheetEligible]);
 
   /** Any dismissal is permanent — no second invitation, ever. */
