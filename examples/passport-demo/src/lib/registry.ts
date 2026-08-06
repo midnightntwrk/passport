@@ -70,9 +70,51 @@ export const RAFFLE_DEMO_APP: RegistryApp = {
   featured: true,
 }
 
-/** Prepends the local Midnight Raffle demo entry to a fetched registry list. */
+/**
+ * Generic local-development entry — added 2026/08/06.
+ *
+ * `VITE_RAFFLE_URL` above is the slot third-party developers were being told to
+ * use to see their own app in the grid, and the name asks them to pretend their
+ * app is a raffle. This is the same mechanism under a name that says what it is:
+ * set `VITE_LOCAL_APP_URL` to whatever your dev server is serving, optionally
+ * `VITE_LOCAL_APP_NAME` for the label. `null` when the variable is unset, so a
+ * build that does not set it behaves exactly as it did before this entry
+ * existed. `VITE_RAFFLE_URL` keeps working, unchanged, and both entries can be
+ * present at once.
+ */
+export const LOCAL_DEV_APP: RegistryApp | null = buildLocalDevApp()
+
+function buildLocalDevApp(): RegistryApp | null {
+  // `allowHttp` for the same reason the raffle entry has it: this URL is
+  // configured by whoever runs the build, and a dev server is plain http on
+  // localhost. Nothing from the fetched registry reaches this path.
+  const url = webUrl(import.meta.env.VITE_LOCAL_APP_URL, true)
+  if (!url) return null
+  return {
+    id: 'local-dev-app',
+    name: optionalString(import.meta.env.VITE_LOCAL_APP_NAME) ?? 'Local app',
+    description: 'A local development server, added by this build’s VITE_LOCAL_APP_URL',
+    url,
+    category: 'other',
+    // Same reasoning as the raffle entry: follow the wallet's network rather
+    // than declaring one, or the entry vanishes from a grid filtered to a
+    // network the developer happens to be on.
+    networks: walletNetwork() ? [walletNetwork() as RegistryNetwork] : ['preview'],
+    // Featured so a developer who has just pointed the build at their own dev
+    // server finds it at the top of the grid rather than hunting for it.
+    featured: true,
+  }
+}
+
+/**
+ * Prepends the locally configured entries — the generic `VITE_LOCAL_APP_URL`
+ * one when it is configured, and the Midnight Raffle demo — to a fetched
+ * registry list. Both, when both are present; neither replaces the other.
+ */
 export function withLocalApps(apps: RegistryApp[]): RegistryApp[] {
-  return [RAFFLE_DEMO_APP, ...apps.filter((app) => app.id !== RAFFLE_DEMO_APP.id)]
+  const local = LOCAL_DEV_APP ? [LOCAL_DEV_APP, RAFFLE_DEMO_APP] : [RAFFLE_DEMO_APP]
+  const localIds = new Set(local.map((app) => app.id))
+  return [...local, ...apps.filter((app) => !localIds.has(app.id))]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -92,8 +134,10 @@ function optionalString(value: unknown): string | undefined {
  * sheet cannot meaningfully name, and an `http:` entry would put a framed app
  * — and the profile handshake with it — on the network in the clear.
  *
- * `allowHttp` exists solely for the local Midnight Raffle dev entry above,
- * which is configured by us and served from `localhost` over plain http.
+ * `allowHttp` exists solely for the two local development entries above — the
+ * Midnight Raffle demo and the generic `VITE_LOCAL_APP_URL` slot — whose URLs
+ * come from the build's own environment, not from the registry, and which are
+ * served from `localhost` over plain http.
  */
 function webUrl(value: unknown, allowHttp = false): string | undefined {
   const candidate = optionalString(value)
