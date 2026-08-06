@@ -11,7 +11,6 @@ import {
   Send,
   Wallet,
   X,
-  Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -81,7 +80,14 @@ export interface HomeScreenProps {
    * button is never left live to fail silently.
    */
   registerDustDisabledReason?: string | null
-  /** Replaces the footer line, so the screen names where its figures came from. */
+  /**
+   * @deprecated Ignored since 2026/08/06.
+   *
+   * This fed the Home footer line — "On-device wallet · preview · derived from
+   * your passkey…" — which the 2026/08/06 review cut: the dashboard should not
+   * be telling the user where their wallet physically lives. The prop stays on
+   * the interface so the integrator needs no change, and nothing renders it.
+   */
   walletSourceNote?: string | null
   /** Fed to the embedded apps grid and its in-Passport browser. */
   appsProfile: AppsScreenProps['profile']
@@ -147,7 +153,6 @@ export default function HomeScreen(props: HomeScreenProps) {
     onCopyAddress,
     onRegisterDust,
     registerDustDisabledReason,
-    walletSourceNote,
     appsProfile,
     onProfileShared,
     executeTransfer,
@@ -555,13 +560,6 @@ export default function HomeScreen(props: HomeScreenProps) {
           </a>
         ) : null}
 
-        <p className="mnhome-foot">
-          <Zap size={12} aria-hidden="true" />
-          <span>
-            {walletSourceNote ??
-              'Midnight preview · balances read live from the indexer'}
-          </span>
-        </p>
       </div>
     </section>
   )

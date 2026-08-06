@@ -215,6 +215,59 @@
   box-shadow: var(--mn-shadow-sm);
   transition: box-shadow .15s ease, transform .15s ease;
 }
+
+/* --- The illustrated raffle card ---------------------------------------- */
+/* One extra grid row, bleeding to the card's edges, holding the inline
+   drawing. Tokens only, so it reads in both themes. */
+.mnapps-card-illustrated {
+  grid-template-columns: minmax(0, 1fr) 16px;
+  row-gap: 12px;
+}
+.mnapps-card-art {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  height: 96px;
+  margin: -14px -14px 0;
+  border-radius: var(--mn-radius) var(--mn-radius) 0 0;
+  background: var(--mn-accent-soft);
+  overflow: hidden;
+}
+.mnapps-card-art .mnraffle-art { width: 152px; height: auto; }
+
+/* --- Raffle illustration ------------------------------------------------- */
+.mnraffle-plate { fill: var(--mn-surface-raised); }
+.mnraffle-edge {
+  fill: none;
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-opacity: .75;
+}
+.mnraffle-tear {
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-opacity: .5;
+}
+.mnraffle-rules {
+  stroke: var(--mn-text-muted);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-opacity: .55;
+}
+.mnraffle-spark {
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.mnraffle-halo {
+  fill: none;
+  stroke: var(--mn-accent-ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+  stroke-opacity: .55;
+}
+
 .mnapps-card:hover { box-shadow: var(--mn-shadow-md); transform: translateY(-1px); }
 .mnapps-card:active { box-shadow: var(--mn-shadow-sm); transform: translateY(0); }
 .mnapps-card-copy { min-width: 0; display: grid; gap: 5px; }

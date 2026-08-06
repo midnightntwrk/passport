@@ -86,6 +86,15 @@
   background: var(--mn-accent-soft);
   font-weight: 700;
 }
+/* The raffle's inline drawing, inset so its 3:2 artwork breathes inside the
+   square tile. Tokened background, so it reads in both themes. */
+.mnfold-tile-art {
+  display: grid;
+  place-items: center;
+  padding: 14%;
+  background: var(--mn-accent-soft);
+}
+.mnfold-tile-art .mnraffle-art { width: 100%; height: auto; }
 
 .mnfold-overlay {
   position: fixed;

@@ -2,7 +2,8 @@ import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-import type { RegistryApp } from '../lib/registry'
+import { RAFFLE_DEMO_APP, type RegistryApp } from '../lib/registry'
+import RaffleArt from './RaffleArt.js'
 import './app-folder.css'
 
 /**
@@ -45,6 +46,18 @@ function TileImage({
   layoutId?: string
 }) {
   const [broken, setBroken] = useState(false)
+  /* Our own entry, so our own drawing rather than a bare letter tile. */
+  if (app.id === RAFFLE_DEMO_APP.id) {
+    return (
+      <motion.span
+        className="mnfold-tile mnfold-tile-art"
+        aria-label={app.name}
+        layoutId={layoutId}
+      >
+        <RaffleArt />
+      </motion.span>
+    )
+  }
   if (broken || !app.icon) {
     return (
       <motion.span

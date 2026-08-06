@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowUpRight, Loader2, RotateCw, Search, X } from 'lucide-react'
 import {
   fetchAppRegistry,
+  RAFFLE_DEMO_APP,
   withLocalApps,
   type RegistryApp,
   type RegistryCategory,
 } from '../lib/registry.js'
+import RaffleArt from './RaffleArt.js'
 import AppBrowser, { AppIcon, type AppBrowserProps } from './AppBrowser.js'
 import AppFolder from './AppFolder.js'
 import NetworkSwitcher, { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
@@ -82,9 +84,25 @@ function AppCard({ app, onOpen }: { app: RegistryApp; onOpen: () => void }) {
   const networks = app.networks ?? []
   const shown = networks.slice(0, MAX_NETWORK_PILLS)
   const overflow = networks.length - shown.length
+  /* The raffle is the one entry we author ourselves, so it is the one entry we
+     can illustrate honestly — registry apps get their own icon or a letter
+     tile, never art we invented for them. */
+  const illustrated = app.id === RAFFLE_DEMO_APP.id
   return (
-    <button type="button" className="mnapps-card" onClick={onOpen}>
-      <AppIcon app={app} />
+    <button
+      type="button"
+      className={illustrated ? 'mnapps-card mnapps-card-illustrated' : 'mnapps-card'}
+      onClick={onOpen}
+    >
+      {illustrated ? (
+        /* The banner IS the identity here, so the letter tile beside it would
+           only be a second, worse one. */
+        <span className="mnapps-card-art" aria-hidden="true">
+          <RaffleArt />
+        </span>
+      ) : (
+        <AppIcon app={app} />
+      )}
       <span className="mnapps-card-copy">
         <strong>{app.name}</strong>
         {app.description ? <small>{app.description}</small> : null}
