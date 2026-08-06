@@ -548,10 +548,11 @@ export default function HomeScreen(props: HomeScreenProps) {
             )
           : null}
 
-        <button type="button" className="mnhome-classic" onClick={onOpenClassic}>
-          <span>Open full dashboard</span>
-          <ExternalLink size={14} aria-hidden="true" />
-        </button>
+        {/* The "Open full dashboard" button was cut 2026/08/06 — the classic
+            workspace remains reachable through the onboarding footer's "Full
+            dashboard" link, which keeps the Dynamic path available without a
+            competing call to action on Home. onOpenClassic stays in the props
+            for that wiring. */}
 
         {supportUrl ? (
           <a className="mnhome-support" href={supportUrl} target="_blank" rel="noreferrer">
