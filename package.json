@@ -19,7 +19,8 @@
     "demo:profile-client": "npm run dev --workspace passport-profile-client",
     "demo:raffle": "npm run dev --workspace examples/raffle-demo",
     "deploy:passport": "VITE_RAFFLE_URL=https://midnight-raffle-demo.vercel.app npm run build --workspace passport-demo && node scripts/build-vercel-output.mjs examples/passport-demo && cd examples/passport-demo && vercel deploy --prebuilt --prod --yes",
-    "deploy:raffle": "VITE_PASSPORT_ORIGIN=https://midnight-passport-app.vercel.app npm run build --workspace examples/raffle-demo && node scripts/build-vercel-output.mjs examples/raffle-demo && cd examples/raffle-demo && vercel deploy --prebuilt --prod --yes"
+    "deploy:raffle": "VITE_PASSPORT_ORIGIN=https://midnight-passport-app.vercel.app npm run build --workspace examples/raffle-demo && node scripts/build-vercel-output.mjs examples/raffle-demo && cd examples/raffle-demo && vercel deploy --prebuilt --prod --yes",
+    "deploy:template": "cd examples/passport-app-template && VITE_PASSPORT_ORIGIN=https://midnight-passport-app.vercel.app npm run build && cd ../.. && node scripts/build-vercel-output.mjs examples/passport-app-template && cd examples/passport-app-template && vercel deploy --prebuilt --prod --yes"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
