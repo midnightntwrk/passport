@@ -65,7 +65,16 @@ export function asPassportNetwork(networkId: string | null | undefined): Passpor
  * gated on this.
  */
 export function walletNetwork(): PassportNetworkId | null {
-  return asPassportNetwork(configuredNetworkId());
+  const network = asPassportNetwork(configuredNetworkId());
+  if (network) return network;
+  /* DEMO MASQUERADE, env-gated: a devnet build that also carries a local
+     Midnames TLD override presents itself as Preview so the identity card
+     and claim path light up. The wallet still signs on its real configured
+     network; the chain, the transactions, and the registry are the local
+     ones. Public builds never set VITE_MIDNAMES_TLD_ADDRESS, so this branch
+     is dead there and behaviour is byte-identical. */
+  if (environment().VITE_MIDNAMES_TLD_ADDRESS?.trim()) return 'preview';
+  return null;
 }
 
 /**

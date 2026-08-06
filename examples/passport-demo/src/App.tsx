@@ -119,7 +119,7 @@ import AppsScreen from './screens/Apps.js';
 import PassportNav, { type MobileTab } from './screens/Nav.js';
 import PassportToasts, { pushToast } from './screens/ToastStack.js';
 import { fetchRecentTransactions, type RecentTransaction } from './lib/indexerTx.js';
-import { aliasRegistrationSupported, explorerTxUrl, walletNetwork } from './lib/networks.js';
+import { aliasRegistrationSupported, configuredNetworkId, explorerTxUrl, walletNetwork } from './lib/networks.js';
 // The local wallet drags the whole Midnight wallet SDK in with it. It is loaded
 // on demand, from the passkey routes only, so a Dynamic-only session never pays
 // for it. Types are erased at build time and cost nothing here.
@@ -4034,12 +4034,17 @@ export default function PassportDemo() {
     ((activeSurfaces?.balanceStatus ?? 'loading') === 'loading' ||
       (localSyncPercent !== null && localSyncPercent < 100));
   const registerNowDisabledReason =
-    activeAliasRecord?.status === 'queued'
+    (import.meta.env as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1'
+      ? null /* demo mode: the mock claim needs no gating */
+      : activeAliasRecord?.status === 'queued'
       ? selectedNetwork !== configuredWalletNetwork
         ? `Passport's wallet signs and submits on ${signingNetworkLabel} only, so ${activeAliasRecord.domain} cannot be registered on ${NETWORK_LABELS[selectedNetwork]} from here.`
         : !localSessionActive
           ? 'Sign in with your passkey to open the wallet before registering this name.'
-          : localWalletNetworkId !== selectedNetwork || !aliasClaimSupported
+          : localWalletNetworkId !== configuredNetworkId() || !aliasClaimSupported
+            /* Compared against the RAW configured id: under the env-gated demo
+               masquerade the wallet's real network is a devnet presented as
+               Preview, and that pairing is exactly the sanctioned one. */
             ? `This wallet session runs on ${localWalletNetworkId ?? 'an unknown network'}; names register on ${signingNetworkLabel} only.`
             : walletStillSyncing
               ? 'The wallet is still syncing. Registration opens once the sync completes.'

@@ -13,6 +13,7 @@ import {
   SendHorizontal,
   Wallet,
   X,
+  Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -441,7 +442,17 @@ export default function HomeScreen(props: HomeScreenProps) {
               a charge, a cap, or a registration the wallet can actually run.
               The on-device wallet's dead state (no charge, registration not
               wired) is hidden — sync progress lives in the strip up top. */}
-          {fill === null && !dustCap && registerDustDisabledReason ? null : (
+          {(import.meta.env as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1' ? (
+            /* Demo mode: the battery card stays hidden, but fee generation
+               still needs enabling once — a single quiet pill that vanishes
+               as soon as DUST exists. */
+            needsDustRegistration && !registerDustDisabledReason ? (
+              <button type="button" className="mnhome-ghost" onClick={onRegisterDust}>
+                <Zap size={13} aria-hidden="true" />
+                <span>Generate Dust</span>
+              </button>
+            ) : null
+          ) : fill === null && !dustCap && registerDustDisabledReason ? null : (
           <article className="mnhome-dust">
             <div className={`mnhome-battery${dustSyncing ? ' mnhome-battery-charging' : ''}`}>
               {fill !== null ? (

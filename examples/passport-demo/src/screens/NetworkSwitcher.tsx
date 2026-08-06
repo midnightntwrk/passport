@@ -22,8 +22,13 @@ export const DEFAULT_NETWORK: PassportNetwork = defaultSelectedNetwork()
 const WALLET_NETWORK = walletNetwork()
 const STORAGE_KEY = 'passport-network'
 
+/* Under the owner's localnet screen-recording mode the masqueraded network
+   is labelled for what it really is. Env-gated; public builds never set it. */
+const LOCALNET_DEMO =
+  ((import.meta.env ?? {}) as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1'
+
 export const NETWORK_LABELS: Record<PassportNetwork, string> = {
-  preview: 'Preview',
+  preview: LOCALNET_DEMO ? 'Localnet' : 'Preview',
   preprod: 'Pre-production',
   mainnet: 'Mainnet',
 }

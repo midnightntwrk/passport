@@ -80,8 +80,12 @@ export const MIDNAMES_TLD = 'night';
  * with our pinned contract build, each reports `BUY_ENABLED = true`, and each
  * charges 600 / 140 / 10 atomic NIGHT for a name of ≤3 / 4 / ≥5 bytes.
  */
+const TLD_OVERRIDE = (import.meta.env ?? {}).VITE_MIDNAMES_TLD_ADDRESS?.trim();
+
 export const MIDNAMES_TLD_ADDRESSES: Record<MidnamesNetwork, string> = {
-  preview: 'e2655a6d554d5d3ceb03dfbee517ad4186d6c287c5e638a29258320dde3e0ba7',
+  /* Demo override: a locally deployed TLD (devnet) can stand in for the
+     Preview registry — env-gated, unset in every public build. */
+  preview: TLD_OVERRIDE || 'e2655a6d554d5d3ceb03dfbee517ad4186d6c287c5e638a29258320dde3e0ba7',
   preprod: '43b500cadaa57d174d82cd6fd596002e33e3e680d7cf8bd7ba3383f62ceb0749',
   mainnet: '0167c9ad2f166e717dd7b4a72606bf5cbba2fd462d5e1ca95e2d0452af288638',
 };
@@ -92,7 +96,12 @@ export const MIDNAMES_TLD_ADDRESSES: Record<MidnamesNetwork, string> = {
  * wallet derives its own (see `lib/localWallet.ts`).
  */
 export const MIDNAMES_INDEXER_URLS: Record<MidnamesNetwork, string> = {
-  preview: 'https://indexer.preview.midnight.network/api/v4/graphql',
+  /* When the TLD override is active, registry reads go to the wallet's own
+     configured indexer (the local one) instead of the public Preview host. */
+  preview: TLD_OVERRIDE
+    ? ((import.meta.env ?? {}).VITE_INDEXER_URL ??
+       'https://indexer.preview.midnight.network/api/v4/graphql')
+    : 'https://indexer.preview.midnight.network/api/v4/graphql',
   preprod: 'https://indexer.preprod.midnight.network/api/v4/graphql',
   mainnet: 'https://indexer.mainnet.midnight.network/api/v4/graphql',
 };
@@ -353,6 +362,10 @@ export async function checkAliasAvailability(
   alias: string,
   options: { fresh?: boolean } = {},
 ): Promise<AliasAvailability> {
+  if (((import.meta.env ?? {}) as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1') {
+    /* Demo mode: every well-formed name reads as available, instantly. */
+    return { status: 'available' } as Awaited<ReturnType<typeof checkAliasAvailability>>;
+  }
   const label = normalizePassportAlias(alias);
   try {
     const registry = await readRegistry(network, options.fresh ?? false);
@@ -683,6 +696,10 @@ export async function checkAliasClaimFunds(
   wallet: LocalMidnightWallet,
   alias: string,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (((import.meta.env ?? {}) as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1') {
+    /* Demo mode: the staged mock claim needs no funds. */
+    return { ok: true };
+  }
   const label = normalizePassportAlias(alias);
   const cost = aliasCostAtomicNight(label);
   const state = await currentWalletState(wallet);
@@ -733,6 +750,38 @@ export async function claimAlias(
   onProgress?: (progress: AliasClaimProgress) => void,
 ): Promise<AliasClaimResult> {
   const label = normalizePassportAlias(alias);
+  /* DEMO MOCK, env-gated (VITE_LOCALNET_DEMO=1): the owner's screen-recording
+     mode. Stages the phases over ~6 seconds and returns a fabricated success
+     with random ids — NO transaction is pushed to any chain. Never set in a
+     public build; with the flag unset this branch is dead code and the real
+     two-transaction registration below runs unchanged. */
+  if (((import.meta.env ?? {}) as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1') {
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const fakeId = () =>
+      [...crypto.getRandomValues(new Uint8Array(32))]
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+    onProgress?.({ phase: 'deploying-resolver' });
+    await wait(2500);
+    onProgress?.({ phase: 'registering' });
+    await wait(2500);
+    onProgress?.({ phase: 'confirming' });
+    await wait(1000);
+    return {
+      alias: label,
+      domain: `${label}.night`,
+      /* Filed under the UI's selected network key so the identity card —
+         which reads records for that key — sees the registered state. */
+      network: 'preview',
+      tldAddress: MIDNAMES_TLD_ADDRESSES.preview,
+      resolverAddress: fakeId(),
+      resolverDeployTxId: fakeId(),
+      registerTxId: fakeId(),
+      targetUnshieldedAddress: wallet.unshieldedAddress,
+      registryConfirmed: true,
+      claimedAt: new Date().toISOString(),
+    } as AliasClaimResult;
+  }
   const walletNetworkId = wallet.network.networkId;
   if (!aliasRegistrationSupported(walletNetworkId)) {
     throw new AliasClaimError(
