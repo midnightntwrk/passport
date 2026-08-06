@@ -60,7 +60,12 @@ function shortHash(value: string): string {
 function explorerUrl(network: string, txId: string): string | null {
   // Only preview has a public explorer we can honestly link. Other networks
   // show the hash without pretending it resolves somewhere.
-  return network === 'preview' ? `${PREVIEW_EXPLORER_URL}/tx/${txId}` : null
+  //
+  // The route is `/transactions/{hash}`; the `/tx/{hash}` this used to build
+  // 404s, so the link was honest about existing and dishonest about working.
+  return network === 'preview'
+    ? `${PREVIEW_EXPLORER_URL}/transactions/${encodeURIComponent(txId)}`
+    : null
 }
 
 function formatDate(iso: string): string {

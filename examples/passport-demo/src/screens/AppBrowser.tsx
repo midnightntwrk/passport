@@ -30,6 +30,7 @@ import {
   type PassportTxResponse,
 } from '../backend.js'
 import type { RegistryApp } from '../lib/registry.js'
+import { pushToast } from './ToastStack.js'
 import './apps.css'
 
 /**
@@ -118,6 +119,17 @@ const NIGHT_DECIMALS = 6
 
 /** The only Midnight network with a public explorer this demo can link to. */
 const PREVIEW_EXPLORER_URL = 'https://explorer.preview.midnight.network'
+
+/**
+ * The explorer's transaction route.
+ *
+ * `/transactions/{hash}` — NOT `/tx/{hash}`, which 404s. The short form was
+ * shipped here and went nowhere; a link that does not resolve is worse than no
+ * link, so it is corrected rather than kept for symmetry.
+ */
+function explorerTxHref(txId: string): string {
+  return `${PREVIEW_EXPLORER_URL}/transactions/${encodeURIComponent(txId)}`
+}
 
 /** Atomic NIGHT → display NIGHT. Exact: string arithmetic, never a float. */
 function formatNight(atomic: bigint): string {
@@ -631,6 +643,17 @@ export default function AppBrowser(props: AppBrowserProps) {
       if (!txId) throw new Error('The wallet returned no transaction id.')
       postTx(pendingTx.request, { status: 'submitted', txId })
       setTxOutcome({ kind: 'submitted', txId })
+      /* The toast is the primary success surface since 2026/08/06 — it
+         outlives the sheet the user is about to dismiss, and carries the
+         explorer link. Preview only: nowhere else has one to link to. */
+      pushToast({
+        tone: 'success',
+        title: 'Transaction submitted',
+        body: `${pendingTx.origin} was told the same transaction id.`,
+        ...(transferContext?.networkId === 'preview'
+          ? { link: { label: 'View on explorer', href: explorerTxHref(txId) } }
+          : {}),
+      })
     } catch (cause) {
       const { error, detail } = transferErrorFrom(cause)
       postTx(pendingTx.request, { status: 'failed', error, detail })
@@ -638,7 +661,7 @@ export default function AppBrowser(props: AppBrowserProps) {
     } finally {
       setSigning(false)
     }
-  }, [pendingTx, postTx, signing])
+  }, [pendingTx, postTx, signing, transferContext?.networkId])
 
   /* Escape closes a sheet first, then the browser. It never cancels a signature
      already in flight: the transaction may already be at the node. */
@@ -670,7 +693,7 @@ export default function AppBrowser(props: AppBrowserProps) {
      the id is shown as text rather than pretending it resolves somewhere. */
   const explorerHref =
     txOutcome?.kind === 'submitted' && transferContext?.networkId === 'preview'
-      ? `${PREVIEW_EXPLORER_URL}/tx/${txOutcome.txId}`
+      ? explorerTxHref(txOutcome.txId)
       : null
 
   /* Portalled to <body>: the browser and its consent sheet are fixed overlays,

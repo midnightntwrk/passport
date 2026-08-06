@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { AlertTriangle, Check, Info, X } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, Info, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import './toast-stack.css'
@@ -17,17 +17,32 @@ import './toast-stack.css'
 
 export type ToastTone = 'success' | 'error' | 'info'
 
+/**
+ * An outbound link carried by a toast — since 2026/08/06 this is how a
+ * transaction reaches its explorer entry, in place of a modal popup.
+ *
+ * The caller decides whether there is a link at all: a network with no public
+ * explorer must pass none rather than be given one that resolves nowhere.
+ */
+export interface PassportToastLink {
+  label: string
+  href: string
+}
+
 export interface PassportToast {
   id: number
   tone: ToastTone
   title: string
   body?: string
+  link?: PassportToastLink
 }
 
 type Listener = (toasts: PassportToast[]) => void
 
 const MAX_VISIBLE = 4
 const AUTO_DISMISS_MS = 5000
+/** A toast carrying a link has to survive long enough to be aimed at. */
+const LINKED_DISMISS_MS = 12000
 
 let nextId = 0
 let queue: PassportToast[] = []
@@ -49,6 +64,14 @@ export function dismissToast(id: number) {
   emit()
 }
 
+/* Development only: a handle for driving the stack from a test harness, so a
+   toast — including its explorer link — can be exercised without first making
+   a real transaction. Stripped from production builds by the DEV guard. */
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  ;(window as unknown as { __passportPushToast?: typeof pushToast }).__passportPushToast =
+    pushToast
+}
+
 const TONE_ICON = {
   success: Check,
   error: AlertTriangle,
@@ -66,7 +89,7 @@ function Toast({
 }) {
   const isVisible = index < MAX_VISIBLE
   const timer = useRef<number | null>(null)
-  const remaining = useRef(AUTO_DISMISS_MS)
+  const remaining = useRef(toast.link ? LINKED_DISMISS_MS : AUTO_DISMISS_MS)
   const startedAt = useRef(0)
 
   useEffect(() => {
@@ -130,6 +153,21 @@ function Toast({
       <div className="mntoast-content">
         <p className="mntoast-title">{toast.title}</p>
         {toast.body ? <p className="mntoast-body">{toast.body}</p> : null}
+        {toast.link ? (
+          /* A tap on the link opens the explorer and leaves the stack alone:
+             no dismissal of this toast, and none of the ones behind it. The
+             countdown is already paused by the pointer being over the card. */
+          <a
+            className="mntoast-link"
+            href={toast.link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span>{toast.link.label}</span>
+            <ExternalLink size={13} strokeWidth={2.2} aria-hidden="true" />
+          </a>
+        ) : null}
       </div>
       <motion.button
         type="button"
