@@ -1,18 +1,25 @@
 import { Check, ChevronDown, Globe } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
+import { defaultSelectedNetwork, walletNetwork } from '../lib/networks.js'
 import './network-switcher.css'
 
 /**
  * Network indicator + switcher. The selected network filters which registry
- * apps are shown; it does not move the demo wallet, which genuinely runs on
- * preview only — callers surface that honestly rather than pretending
- * balances exist elsewhere. Default is always preview.
+ * apps are shown; it does not move the demo wallet, which runs on the ONE
+ * network this build was configured for (`VITE_MIDNIGHT_NETWORK_ID`) — callers
+ * surface that honestly rather than pretending balances exist elsewhere.
+ *
+ * The default follows that same build configuration (2026/08/06), so the app
+ * opens on the network its wallet actually signs on and the app grid filters
+ * to match. A user's own choice, once made, still wins.
  */
 
 export type PassportNetwork = 'preview' | 'preprod' | 'mainnet'
 
-export const DEFAULT_NETWORK: PassportNetwork = 'preview'
+export const DEFAULT_NETWORK: PassportNetwork = defaultSelectedNetwork()
+/** The network the wallet in this build signs on, or null on a devnet build. */
+const WALLET_NETWORK = walletNetwork()
 const STORAGE_KEY = 'passport-network'
 
 export const NETWORK_LABELS: Record<PassportNetwork, string> = {
@@ -105,14 +112,15 @@ export default function NetworkSwitcher({ network, onSelect }: NetworkSwitcherPr
               <span className={`mnnet-dot mnnet-dot-${candidate}`} aria-hidden="true" />
               <span className="mnnet-option-copy">
                 <strong>{NETWORK_LABELS[candidate]}</strong>
-                {candidate === 'preview' ? <small>Demo wallet lives here</small> : null}
+                {candidate === WALLET_NETWORK ? <small>Demo wallet lives here</small> : null}
               </span>
               {candidate === network ? <Check size={14} aria-hidden="true" /> : null}
             </button>
           ))}
           <p className="mnnet-note">
             <Globe size={12} aria-hidden="true" />
-            Switching filters the app list. The demo wallet stays on Preview.
+            Switching filters the app list. The demo wallet stays on{' '}
+            {WALLET_NETWORK ? NETWORK_LABELS[WALLET_NETWORK] : 'its configured network'}.
           </p>
         </div>
       ) : null}

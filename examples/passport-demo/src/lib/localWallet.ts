@@ -471,21 +471,13 @@ function componentRatio(progress: {
 // Funding honesty
 // ---------------------------------------------------------------------------
 
-/** The public Preview faucet. Probed 2026/08/04: `/api/health` reports SERVING. */
-export const PREVIEW_FAUCET_URL = 'https://faucet.preview.midnight.network';
-
 /**
- * Whether a public faucet exists for this network. Only Preview has one.
- *
- * NOTE — deliberately no automated drip. The faucet's `POST /drips` requires an
- * `X-Captcha-Token` header from a Cloudflare Turnstile challenge (probed
- * 2026/08/04), so no in-app code can honestly obtain a drip. The only truthful
- * funding flow is: copy the address, open the faucet, complete the captcha
- * there, and let the wallet's own sync report the arrival.
+ * Which networks have a public faucet, and where, now lives in
+ * {@link ./networks.ts} so the wallet, the claim screen, and the explorer
+ * links all read the same table. Re-exported here because this module is the
+ * one every funding surface already imports.
  */
-export function faucetAvailable(networkId: string): boolean {
-  return networkId === 'preview';
-}
+export { faucetAvailable, faucetUrlFor } from './networks.js';
 
 // ---------------------------------------------------------------------------
 // Proving-mode selection

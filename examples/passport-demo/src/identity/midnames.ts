@@ -28,7 +28,10 @@
  * Verified live on 2026/08/05 against the deployed preview TLD: every one of
  * the eleven verifier keys in our pinned build (Midnames rev 83f8422b, compact
  * 0.31.1) is byte-identical to the key in the deployed contract state, so
- * `findDeployedContract` accepts it and `register_domain_for` is callable. If
+ * `findDeployedContract` accepts it and `register_domain_for` is callable.
+ * Re-verified against the PREPROD TLD on 2026/08/06, when the demo moved
+ * there: its ledger decodes with the same pinned build (45 domains already
+ * registered, `BUY_ENABLED = true`, identical COST_SHORT/MED/LONG). If
  * that ever stops being true the mismatch surfaces as a real failure
  * (`register-rejected`) and the UI queues the name — it is never papered over.
  *
@@ -50,6 +53,11 @@ import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-a
 import * as Rx from 'rxjs';
 
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
+import {
+  CLAIMABLE_NETWORKS,
+  aliasRegistrationSupported,
+  faucetAvailable,
+} from '../lib/networks.js';
 import {
   sponsorBalanceOnly,
   sponsorHexToBytes,
@@ -90,17 +98,11 @@ export const MIDNAMES_INDEXER_URLS: Record<MidnamesNetwork, string> = {
 };
 
 /**
- * The preview faucet. Captcha-gated (`X-Captcha-Token`, Cloudflare Turnstile),
- * so it cannot honestly be driven from inside the app — the UI hands the user
- * their address and this link, and the wallet's own sync shows the arrival.
- *
- * Declared here rather than imported so this module carries no dependency on
- * `lib/localWallet.ts` beyond its types.
+ * Which networks a name can genuinely be registered on lives in
+ * {@link ../lib/networks.ts}, so the UI can ask without importing this module
+ * and the ledger runtime behind it. Re-exported for callers already here.
  */
-export const PREVIEW_FAUCET_URL = 'https://faucet.preview.midnight.network';
-
-/** Public explorer used to link real transaction ids. Preview only. */
-export const PREVIEW_EXPLORER_URL = 'https://explorer.preview.midnight.network';
+export { CLAIMABLE_NETWORKS, aliasRegistrationSupported };
 
 /**
  * Names Passport will not let a user claim, whatever the registry says. These
@@ -688,7 +690,11 @@ export async function checkAliasClaimFunds(
   if (night < cost) {
     return {
       ok: false,
-      reason: `Registering ${aliasDomain(label)} costs ${formatNight(cost)} NIGHT, and this wallet holds ${formatNight(night)}. Top up from the preview faucet, then try again.`,
+      reason: `Registering ${aliasDomain(label)} costs ${formatNight(cost)} NIGHT, and this wallet holds ${formatNight(night)}.${
+        faucetAvailable(wallet.network.networkId)
+          ? ` Top up from the ${wallet.network.networkId} faucet, then try again.`
+          : ''
+      }`,
     };
   }
   // A funded sponsor pays the fee, so a dustless wallet is no longer a reason
@@ -707,11 +713,15 @@ export async function checkAliasClaimFunds(
 }
 
 /**
- * Claims `alias` as `<alias>.night` for this Passport's unshielded address.
+ * Claims `alias` as `<alias>.night` for this Passport's unshielded address, on
+ * whichever network the open wallet is actually on.
  *
- * Preview only, and deliberately so: the demo wallet's keys, DUST, and proof
- * server all live on preview, so a "claim" anywhere else would be a claim we
- * cannot make. Callers hand other networks to the queue path instead.
+ * The registration always happens on `wallet.network.networkId` and nowhere
+ * else: the wallet's keys, its NIGHT, and its proof server all belong to that
+ * network, so a "claim" anywhere else would be a claim we cannot make. Callers
+ * hand every other network to the queue path instead. Until 2026/08/06 this
+ * was pinned to preview; it now follows the build, which is what let the demo
+ * move to pre-production without the UI lying about where names land.
  *
  * Every failure mode is a real one. Nothing here reports success without both
  * transaction ids in hand.
@@ -723,19 +733,20 @@ export async function claimAlias(
   onProgress?: (progress: AliasClaimProgress) => void,
 ): Promise<AliasClaimResult> {
   const label = normalizePassportAlias(alias);
-  const network = wallet.network.networkId;
-  if (network !== 'preview') {
+  const walletNetworkId = wallet.network.networkId;
+  if (!aliasRegistrationSupported(walletNetworkId)) {
     throw new AliasClaimError(
       'unsupported-network',
-      `Passport can only register names on preview today; this wallet is on ${network}.`,
+      `Passport registers names on ${CLAIMABLE_NETWORKS.join(' and ')} only; this wallet is on ${walletNetworkId}.`,
     );
   }
+  const network = walletNetworkId as MidnamesNetwork;
 
-  const availability = await checkAliasAvailability('preview', label, { fresh: true });
+  const availability = await checkAliasAvailability(network, label, { fresh: true });
   if (availability.status === 'taken') {
     throw new AliasClaimError(
       'taken',
-      `${aliasDomain(label)} is already registered on preview.`,
+      `${aliasDomain(label)} is already registered on ${network}.`,
       availability.resolverAddress,
     );
   }
@@ -783,7 +794,7 @@ export async function claimAlias(
     '@midnight-ntwrk/midnight-js-contracts'
   );
 
-  const tldAddress = MIDNAMES_TLD_ADDRESSES.preview;
+  const tldAddress = MIDNAMES_TLD_ADDRESSES[network];
   const targetBytes = unshieldedAddressBytes(wallet);
   const { key: labelKey, len } = domainToKey(label);
 
@@ -848,10 +859,10 @@ export async function claimAlias(
   }
 
   onProgress?.({ phase: 'confirming' });
-  invalidateAliasRegistry('preview');
+  invalidateAliasRegistry(network);
   let registryConfirmed = false;
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    const confirmation = await checkAliasAvailability('preview', label, { fresh: true });
+    const confirmation = await checkAliasAvailability(network, label, { fresh: true });
     if (confirmation.status === 'taken' && confirmation.resolverAddress === resolverAddress) {
       registryConfirmed = true;
       break;
@@ -862,7 +873,7 @@ export async function claimAlias(
   return {
     alias: label,
     domain: aliasDomain(label),
-    network: 'preview',
+    network,
     tldAddress,
     resolverAddress,
     resolverDeployTxId,

@@ -7,6 +7,8 @@
  * `stale: true` so the UI can be honest about what it is showing.
  */
 
+import { walletNetwork } from './networks.js'
+
 const REGISTRY_URL =
   'https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/registry.json'
 const CACHE_KEY = 'mnapps.registry.v1'
@@ -58,7 +60,13 @@ export const RAFFLE_DEMO_APP: RegistryApp = {
     'Connect your Passport to claim a race-weekend perk and a demo raffle ticket',
   url: webUrl(import.meta.env.VITE_RAFFLE_URL, true) ?? 'http://localhost:5177',
   category: 'other',
-  networks: ['preview'],
+  // The raffle runs against whichever network Passport's wallet is on, because
+  // the only thing it asks Passport for is a profile and (when an operator
+  // address is configured) a transfer that Passport itself signs. Declaring it
+  // on one fixed network hid it from the grid the moment the build moved —
+  // found on 2026/08/06 while trialling a pre-production build, where the grid
+  // filters to preprod and a preview-only entry simply vanishes.
+  networks: walletNetwork() ? [walletNetwork() as RegistryNetwork] : ['preview'],
   featured: true,
 }
 

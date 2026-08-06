@@ -2,7 +2,7 @@ import { ArrowRight, ArrowUpRight, ExternalLink, Loader2, Sparkles, Tag } from '
 
 import type { AliasRecord } from '../identity/aliasStore.js'
 import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
-import { PREVIEW_EXPLORER_URL } from '../identity/midnames.js'
+import { explorerTxUrl } from '../lib/networks.js'
 import { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
 import ThemeToggle from './ThemeToggle.js'
 import './identity.css'
@@ -58,14 +58,11 @@ function shortHash(value: string): string {
 }
 
 function explorerUrl(network: string, txId: string): string | null {
-  // Only preview has a public explorer we can honestly link. Other networks
-  // show the hash without pretending it resolves somewhere.
-  //
-  // The route is `/transactions/{hash}`; the `/tx/{hash}` this used to build
-  // 404s, so the link was honest about existing and dishonest about working.
-  return network === 'preview'
-    ? `${PREVIEW_EXPLORER_URL}/transactions/${encodeURIComponent(txId)}`
-    : null
+  // Networks with no public explorer show the hash without pretending it
+  // resolves somewhere. The route is `/transactions/{hash}`; the `/tx/{hash}`
+  // this used to build 404s, so the link was honest about existing and
+  // dishonest about working. The per-network table lives in lib/networks.ts.
+  return explorerTxUrl(network, txId)
 }
 
 function formatDate(iso: string): string {

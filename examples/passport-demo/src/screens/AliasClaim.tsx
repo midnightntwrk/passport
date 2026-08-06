@@ -14,10 +14,10 @@ import {
   aliasDomain,
   formatNight,
   normalizePassportAlias,
-  PREVIEW_FAUCET_URL,
   type AliasAvailability,
   type AliasClaimProgress,
 } from '../identity/midnames.js'
+import { faucetUrlFor } from '../lib/networks.js'
 import { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
 import ThemeToggle from './ThemeToggle.js'
 import './identity.css'
@@ -57,6 +57,12 @@ export interface AliasClaimProps {
    * sentence would be exactly the kind of claim this work is meant to remove.
    */
   registrationSupported: boolean
+  /**
+   * Human label for the network Passport's wallet DOES sign on, used in the
+   * queue copy. Passed in rather than derived here so one sentence about where
+   * names land cannot drift from the one the Home card shows.
+   */
+  signingNetworkLabel: string
   /** Formatted NIGHT, as the wallet surfaces report it. `null` = unknown. */
   nightBalance: string | null
   checkAvailability: (alias: string) => Promise<AliasAvailability>
@@ -112,6 +118,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     networkId,
     walletReady,
     registrationSupported,
+    signingNetworkLabel,
     nightBalance,
     checkAvailability,
     onClaim,
@@ -177,7 +184,8 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
   // panel would be answering a question nobody asked.
   const shortOfNight = registrationSupported && isAvailable && canPay === false
 
-  const queueReasonForNetwork = `Passport's wallet signs and submits on preview only today, so this name is reserved for you locally but is NOT registered on ${NETWORK_LABELS[networkId]}.`
+  const faucetUrl = faucetUrlFor(networkId)
+  const queueReasonForNetwork = `Passport's wallet signs and submits on ${signingNetworkLabel} only, so this name is reserved for you locally but is NOT registered on ${NETWORK_LABELS[networkId]}.`
   const queueReasonForRegistry = isUnreachable
     ? `The .night registry on ${NETWORK_LABELS[networkId]} could not be reached when the name was chosen: ${
         availability?.status === 'unreachable' ? availability.detail : 'no detail reported'
@@ -252,7 +260,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
           ) : (
             <>
               This is the name people send to and apps recognise you by. Passport&apos;s wallet
-              signs and submits on preview only today, so a name chosen for{' '}
+              signs and submits on {signingNetworkLabel} only, so a name chosen for{' '}
               {NETWORK_LABELS[networkId]} is queued here rather than registered — and Passport says
               so wherever it appears.
             </>
@@ -304,20 +312,18 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
                   <span className="mnid-cost">{nightBalance}</span> NIGHT
                 </>
               )}
-              . Top it up
-              from the {NETWORK_LABELS[networkId]} faucet — it needs a captcha, so it opens in a
-              new tab — then come back and claim.
+              .{' '}
+              {faucetUrl
+                ? `Top it up from the ${NETWORK_LABELS[networkId]} faucet — it needs a captcha, so it opens in a new tab — then come back and claim.`
+                : `${NETWORK_LABELS[networkId]} has no public faucet, so this wallet has to be funded from elsewhere before the name can be registered.`}
             </p>
             <div className="mnid-panel-actions">
-              <a
-                className="mnid-link"
-                href={PREVIEW_FAUCET_URL}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <ExternalLink size={14} aria-hidden="true" />
-                Open the faucet
-              </a>
+              {faucetUrl ? (
+                <a className="mnid-link" href={faucetUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink size={14} aria-hidden="true" />
+                  Open the faucet
+                </a>
+              ) : null}
               <button
                 type="button"
                 className="mnid-link"

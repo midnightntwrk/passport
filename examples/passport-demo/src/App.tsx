@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useDynamicContext, useUserWallets } from '@dynamic-labs/sdk-react-core';
 import { isMidnightWallet, type MidnightWallet } from '@dynamic-labs/midnight';
-import { MidnightBech32m, ShieldedAddress, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
+import { mainnet, MidnightBech32m, ShieldedAddress, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import {
   EncryptedPassportPrivateStateStore,
   IndexedDbPassportEncryptedRecordStore,
@@ -119,6 +119,7 @@ import AppsScreen from './screens/Apps.js';
 import PassportNav, { type MobileTab } from './screens/Nav.js';
 import PassportToasts, { pushToast } from './screens/ToastStack.js';
 import { fetchRecentTransactions, type RecentTransaction } from './lib/indexerTx.js';
+import { aliasRegistrationSupported, explorerTxUrl, walletNetwork } from './lib/networks.js';
 // The local wallet drags the whole Midnight wallet SDK in with it. It is loaded
 // on demand, from the passkey routes only, so a Dynamic-only session never pays
 // for it. Types are erased at build time and cost nothing here.
@@ -207,8 +208,20 @@ interface PassportDemoState {
 type DisplayPermission = LocalPassportPermission & { label: string };
 
 const APP_ID = 'org.midnight.passport.demo';
-const MIDNIGHT_EXPLORER_URL = 'https://explorer.preview.midnight.network';
-/** Preview indexer. `fetchRecentTransactions` derives its own WebSocket URL from this. */
+/**
+ * The public network this build's passkey wallet signs on, and its label.
+ * `null` on a devnet build, where the wallet signs on nothing public and every
+ * name is honestly queued.
+ */
+const configuredWalletNetwork = walletNetwork();
+const signingNetworkLabel = configuredWalletNetwork
+  ? NETWORK_LABELS[configuredWalletNetwork]
+  : 'its configured network';
+/**
+ * The indexer this build reads history from. `fetchRecentTransactions` derives
+ * its own WebSocket URL from it, and it must be the same network the wallet is
+ * configured for — see `lib/networks.ts`.
+ */
 const MIDNIGHT_INDEXER_URL =
   import.meta.env.VITE_INDEXER_URL ?? 'https://indexer.preview.midnight.network/api/v4/graphql';
 const EXPERIENCE_STORAGE_KEY = 'passport-experience';
@@ -382,21 +395,19 @@ function storeNameStep(credentialId: string, resolution: NameStepResolution): vo
 }
 
 /**
- * The explorer link a success toast carries — or `null`.
+ * The explorer link a success toast carries — or `undefined`.
  *
- * Only preview has a public explorer, and only `/transactions/{hash}` resolves
- * there (`/tx/{hash}` 404s). No hash, or any other network, means no link
- * rather than one that goes nowhere.
+ * Preview and pre-production each have a public explorer; mainnet is not in
+ * the table, and only `/transactions/{hash}` resolves (`/tx/{hash}` 404s). No
+ * hash, or a network with no explorer, means no link rather than one that goes
+ * nowhere.
  */
 function explorerTxLink(
   txHash: string | null | undefined,
   network: string | null | undefined,
 ): { label: string; href: string } | undefined {
-  if (!txHash || network !== 'preview') return undefined;
-  return {
-    label: 'View on explorer',
-    href: `${MIDNIGHT_EXPLORER_URL}/transactions/${encodeURIComponent(txHash)}`,
-  };
+  const href = explorerTxUrl(network, txHash);
+  return href ? { label: 'View on explorer', href } : undefined;
 }
 
 /**
@@ -700,10 +711,27 @@ async function copyText(value: string): Promise<void> {
   if (!copied) throw new Error('Your browser did not allow this address to be copied.');
 }
 
-function validatePreviewRecipient(address: string, pool: TransferPool): void {
+/**
+ * A recipient must belong to the SAME network the open wallet signs on. An
+ * `mn_addr_preview…` handed to a pre-production wallet is not a typo the node
+ * will forgive — the transaction would be built against a chain that address
+ * does not exist on — so it is refused here, by name, before anything is
+ * signed.
+ */
+function validateRecipientOnNetwork(
+  address: string,
+  pool: TransferPool,
+  networkId: string,
+): void {
   const parsed = MidnightBech32m.parse(address);
-  if (parsed.network !== 'preview') throw new Error('Recipient must be a Midnight preview address.');
-  parsed.decode(pool === 'shielded' ? ShieldedAddress : UnshieldedAddress, 'preview');
+  // A mainnet address carries no network segment at all, so the codec reports
+  // it as the `mainnet` symbol rather than a string. Normalise before
+  // comparing, or every mainnet address would read as a mismatch.
+  const parsedNetwork = parsed.network === mainnet ? 'mainnet' : parsed.network;
+  if (parsedNetwork !== networkId) {
+    throw new Error(`Recipient must be a Midnight ${networkId} address.`);
+  }
+  parsed.decode(pool === 'shielded' ? ShieldedAddress : UnshieldedAddress, parsed.network);
 }
 
 function ActivityPill({ status }: { status: ActivityStatus }) {
@@ -895,8 +923,10 @@ export default function PassportDemo() {
     return url.toString();
   }, []);
   const [walletMode, setWalletMode] = useState<WalletMode | null>(storedWalletMode);
-  // Selected network context: filters the app registry. The demo wallet
-  // genuinely runs on preview only, and the UI says so rather than pretending.
+  // Selected network context: filters the app registry. The demo wallet runs
+  // on the ONE network this build was configured for, and the UI says so
+  // rather than pretending balances exist elsewhere. The initial selection
+  // follows that same configuration (see lib/networks.ts).
   const [selectedNetwork, setSelectedNetwork] = useState<PassportNetwork>(loadStoredNetwork);
   useEffect(() => {
     storeNetwork(selectedNetwork);
@@ -945,6 +975,14 @@ export default function PassportDemo() {
   const [localWalletStatus, setLocalWalletStatus] = useState<LocalWalletStatus>('idle');
   const [localSyncPercent, setLocalSyncPercent] = useState<number | null>(null);
   const [localWalletNetworkId, setLocalWalletNetworkId] = useState<string | null>(null);
+  /**
+   * Whether the OPEN wallet's network is one Passport genuinely registers
+   * names on. Falls back to the build's configured network before a wallet has
+   * opened, so the claim screen can already say which mode it is in.
+   */
+  const aliasClaimSupported = aliasRegistrationSupported(
+    localWalletNetworkId ?? configuredWalletNetwork,
+  );
   const [localDustRetryCount, setLocalDustRetryCount] = useState(0);
   /**
    * Whether a passkey Passport is already enrolled in this browser. `null`
@@ -960,6 +998,20 @@ export default function PassportDemo() {
   const [identityStep, setIdentityStep] = useState<IdentityStep>(null);
   const [claimPhase, setClaimPhase] = useState<AliasClaimProgress['phase'] | null>(null);
   const [aliasError, setAliasError] = useState<string | null>(null);
+  /**
+   * Whether the demo sponsor has really told us it can pay this registration's
+   * DUST fee — `available > 0` on its own `/wallet-status`, never an
+   * assumption. It starts false and only a live probe may raise it, so the
+   * claim screen's baseline copy ("its fee in DUST from this wallet too")
+   * stands unless the service itself contradicts it.
+   *
+   * Until 2026/08/06 the claim path consulted the sponsor but the screen never
+   * did, so this sentence could not have told the truth on an environment
+   * where the fee genuinely was covered. It is wired up now. On preview, where
+   * the sponsor is unset (and where the service reports `available: 0` even
+   * when it is set), the probe leaves this false and the baseline copy stands.
+   */
+  const [feesSponsored, setFeesSponsored] = useState(false);
   /** True while a queued name's "Register now" re-run is in flight. */
   const [registerNowBusy, setRegisterNowBusy] = useState(false);
   /** The pending per-network reclaim conflict, when the target says "taken". */
@@ -1826,6 +1878,29 @@ export default function PassportDemo() {
   /* every network, and only the name is per network.                        */
   /* ---------------------------------------------------------------------- */
 
+  /**
+   * Probe the sponsor once the name step is actually on screen, so the fee
+   * sentence there describes what will really happen. A failed or disabled
+   * probe leaves `feesSponsored` false — the honest baseline — and is never
+   * surfaced as an error, because unsponsored is a working state, not a fault.
+   */
+  useEffect(() => {
+    if (identityStep !== 'alias') return undefined;
+    let live = true;
+    void (async () => {
+      try {
+        const { sponsorReadiness } = await import('./lib/sponsor.js');
+        const readiness = await sponsorReadiness();
+        if (live) setFeesSponsored(readiness.state === 'ready');
+      } catch {
+        if (live) setFeesSponsored(false);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [identityStep]);
+
   // The stores are the seam every writer shares: Contract R's connector calls
   // `saveIncentive` directly, and this subscription is what re-renders Home.
   useEffect(() => subscribeAliasRecords(setAliasRecords), []);
@@ -1876,7 +1951,7 @@ export default function PassportDemo() {
    * `register_domain_for` on the shared `.night` TLD. Both transaction ids are
    * real or nothing is recorded as registered.
    */
-  const claimAliasOnPreview = useCallback(
+  const claimAliasOnChain = useCallback(
     async (alias: string): Promise<void> => {
       const handle = localWalletRef.current;
       const activeProfile = profile;
@@ -1920,7 +1995,7 @@ export default function PassportDemo() {
         });
         addActivity({
           label: 'Midnight name registered',
-          detail: `${result.domain} now resolves to this Passport on preview.`,
+          detail: `${result.domain} now resolves to this Passport on ${result.network}.`,
           status: 'complete',
           source: 'chain',
           txHash: result.registerTxId,
@@ -1932,7 +2007,7 @@ export default function PassportDemo() {
             ? 'The registry confirmed the registration.'
             : 'Submitted — the registry has not reported it yet.',
           // The toast is the success surface now, so the transaction has to be
-          // reachable from it. Preview only; no link where none resolves.
+          // reachable from it. No link on a network with no public explorer.
           link: explorerTxLink(result.registerTxId, result.network),
         });
         void refreshLocalBalances();
@@ -1958,20 +2033,24 @@ export default function PassportDemo() {
     [addActivity, keyProviderFor, profile, refreshLocalBalances],
   );
 
-  /** Claim for real on preview; queue honestly anywhere else. */
+  /**
+   * Claim for real on the network the open wallet is actually on; queue
+   * honestly anywhere else. Both halves of the condition matter: the user may
+   * be *browsing* a network the wallet does not sign on.
+   */
   const claimOrQueueAlias = useCallback(
     async (alias: string, network: PassportNetwork): Promise<void> => {
-      if (network === 'preview' && localWalletNetworkId === 'preview') {
-        await claimAliasOnPreview(alias);
+      if (network === localWalletNetworkId && aliasClaimSupported) {
+        await claimAliasOnChain(alias);
         return;
       }
       queueAlias(
         alias,
         network,
-        `Passport's wallet signs and submits on preview only today, so ${alias}.night is reserved for you locally but is NOT registered on ${NETWORK_LABELS[network]}.`,
+        `Passport's wallet signs and submits on ${signingNetworkLabel} only, so ${alias}.night is reserved for you locally but is NOT registered on ${NETWORK_LABELS[network]}.`,
       );
     },
-    [claimAliasOnPreview, localWalletNetworkId, queueAlias],
+    [aliasClaimSupported, claimAliasOnChain, localWalletNetworkId, queueAlias, signingNetworkLabel],
   );
 
   /**
@@ -2005,11 +2084,16 @@ export default function PassportDemo() {
       const { checkAliasAvailability, checkAliasClaimFunds, claimAlias } = await import(
         './identity/midnames.js'
       );
-      // (1) The name may have been taken while it sat in the queue.
-      const availability = await checkAliasAvailability('preview', record.alias, { fresh: true });
+      // (1) The name may have been taken while it sat in the queue. It is
+      // re-probed on the network the record is FILED under — which is the one
+      // the wallet signs on, because `registerNowDisabledReason` has already
+      // refused the action on any other.
+      const availability = await checkAliasAvailability(selectedNetwork, record.alias, {
+        fresh: true,
+      });
       if (availability.status === 'unreachable') {
         requeue(
-          `The preview .night registry could not be reached, so ${record.domain} is still not on chain: ${availability.detail}`,
+          `The ${selectedNetwork} .night registry could not be reached, so ${record.domain} is still not on chain: ${availability.detail}`,
         );
         return;
       }
@@ -2018,7 +2102,7 @@ export default function PassportDemo() {
           `${record.domain} was registered by someone else while it was queued here. Pick an alternative name to register instead.`,
         );
         setReclaimError(null);
-        setReclaim({ target: 'preview', alias: record.alias });
+        setReclaim({ target: selectedNetwork, alias: record.alias });
         return;
       }
       // (2) Funds, before any passkey prompt.
@@ -2384,6 +2468,10 @@ export default function PassportDemo() {
 
   const reviewTransfer = () => {
     if (!midnightWallet) return;
+    // The Dynamic wallet's own address names the network it is on — never this
+    // build's configured one, which the hosted wallet knows nothing about.
+    const parsedWalletNetwork = MidnightBech32m.parse(midnightWallet.address).network;
+    const transferNetworkId = parsedWalletNetwork === mainnet ? 'mainnet' : parsedWalletNetwork;
     if (!recipient.trim() || !amount.trim()) {
       setError('Enter a recipient and an atomic token amount.');
       return;
@@ -2393,9 +2481,9 @@ export default function PassportDemo() {
       return;
     }
     try {
-      validatePreviewRecipient(recipient.trim(), transferPool);
+      validateRecipientOnNetwork(recipient.trim(), transferPool, transferNetworkId);
     } catch (cause) {
-      setError(`Enter a valid ${transferPool} Midnight preview address: ${cause instanceof Error ? cause.message : String(cause)}`);
+      setError(`Enter a valid ${transferPool} Midnight ${transferNetworkId} address: ${cause instanceof Error ? cause.message : String(cause)}`);
       return;
     }
     setError(null);
@@ -3701,9 +3789,10 @@ export default function PassportDemo() {
   const aliasLabel = activeAliasRecord?.alias ?? null;
   /**
    * Why "Register now" cannot run right now, or null when it can. The demo
-   * wallet genuinely signs on preview only; a missing or still-syncing
-   * session cannot pay or prove; each case renders the action disabled with
-   * its honest sentence instead of leaving a live button to fail.
+   * wallet signs on exactly one network — the one this build was configured
+   * for; a missing or still-syncing session cannot pay or prove; each case
+   * renders the action disabled with its honest sentence instead of leaving a
+   * live button to fail.
    */
   const walletStillSyncing =
     localSessionActive &&
@@ -3711,12 +3800,12 @@ export default function PassportDemo() {
       (localSyncPercent !== null && localSyncPercent < 100));
   const registerNowDisabledReason =
     activeAliasRecord?.status === 'queued'
-      ? selectedNetwork !== 'preview'
-        ? `Passport's wallet signs and submits on preview only today, so ${activeAliasRecord.domain} cannot be registered on ${NETWORK_LABELS[selectedNetwork]} from here.`
+      ? selectedNetwork !== configuredWalletNetwork
+        ? `Passport's wallet signs and submits on ${signingNetworkLabel} only, so ${activeAliasRecord.domain} cannot be registered on ${NETWORK_LABELS[selectedNetwork]} from here.`
         : !localSessionActive
           ? 'Sign in with your passkey to open the wallet before registering this name.'
-          : localWalletNetworkId !== 'preview'
-            ? `This wallet session runs on ${localWalletNetworkId ?? 'an unknown network'}; names register on preview only.`
+          : localWalletNetworkId !== selectedNetwork || !aliasClaimSupported
+            ? `This wallet session runs on ${localWalletNetworkId ?? 'an unknown network'}; names register on ${signingNetworkLabel} only.`
             : walletStillSyncing
               ? 'The wallet is still syncing. Registration opens once the sync completes.'
               : null
@@ -3844,9 +3933,9 @@ export default function PassportDemo() {
           <AliasClaimScreen
             networkId={selectedNetwork}
             walletReady={localSessionActive}
-            registrationSupported={
-              selectedNetwork === 'preview' && localWalletNetworkId === 'preview'
-            }
+            registrationSupported={selectedNetwork === localWalletNetworkId && aliasClaimSupported}
+            signingNetworkLabel={signingNetworkLabel}
+            feesSponsored={feesSponsored}
             nightBalance={activeSurfaces?.unshieldedBalance ?? null}
             checkAvailability={checkAliasOnActiveNetwork}
             onClaim={(alias) => claimOrQueueAlias(alias, selectedNetwork)}
@@ -3916,7 +4005,7 @@ export default function PassportDemo() {
                 registerDustDisabledReason={localWalletWriteLimitation}
                 walletSourceNote={
                   walletMode === 'local'
-                    ? `On-device wallet · ${localWalletNetworkId ?? 'preview'} · derived from your passkey. Balances and history come from the indexer; transfers are signed here and submitted straight to the node.`
+                    ? `On-device wallet · ${localWalletNetworkId ?? configuredWalletNetwork ?? 'unknown network'} · derived from your passkey. Balances and history come from the indexer; transfers are signed here and submitted straight to the node.`
                     : null
                 }
                 appsProfile={appsProfile}
@@ -4257,7 +4346,10 @@ function TransferReviewModal({
 
 function TransactionModal({ entry, onClose }: { entry: ActivityEntry; onClose: () => void }) {
   const source = activitySource(entry);
-  const explorerHref = entry.txHash ? `${MIDNIGHT_EXPLORER_URL}/transactions/${encodeURIComponent(entry.txHash)}` : null;
+  // Activity rows carry no network of their own, so the link is built for the
+  // network this build runs on — and omitted entirely where that network has
+  // no public explorer, rather than pointing at another network's.
+  const explorerHref = explorerTxUrl(configuredWalletNetwork, entry.txHash);
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -4267,7 +4359,7 @@ function TransactionModal({ entry, onClose }: { entry: ActivityEntry; onClose: (
         {entry.txHash && (
           <div className="modal-actions">
             <button className="modal-secondary" onClick={() => void copyText(entry.txHash!)}><Copy size={16} /> Copy hash</button>
-            <a className="modal-copy modal-explorer" href={explorerHref ?? MIDNIGHT_EXPLORER_URL} target="_blank" rel="noreferrer"><ArrowUpRight size={16} /> Open explorer</a>
+            {explorerHref ? <a className="modal-copy modal-explorer" href={explorerHref} target="_blank" rel="noreferrer"><ArrowUpRight size={16} /> Open explorer</a> : null}
           </div>
         )}
       </div>
