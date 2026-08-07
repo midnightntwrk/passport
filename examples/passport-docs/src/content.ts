@@ -59,9 +59,9 @@ fingerprint, or device PIN.
 
 | Piece | What it is | Where it lives |
 | --- | --- | --- |
-| **Passport app** | The wallet and identity client itself — onboarding, balances, Send and Receive, the DUST battery, \`.night\` names, and the in-app browser for connected apps. | [midnight-passport-app.vercel.app](https://midnight-passport-app.vercel.app) |
-| **App Hub** | The public list of applications that speak the Passport bridge. Listing is a pull request against the registry, not a code change. | [passport-app-hub.vercel.app](https://passport-app-hub.vercel.app) |
-| **App template** | A starter kit for building your own Passport-connected app — the bridge modules, a reference client, and full protocol docs. | [midnight-passport-app-template.vercel.app](https://midnight-passport-app-template.vercel.app) |
+| **Passport app** | The wallet and identity client itself — onboarding, balances, Send and Receive, the DUST battery, \`.night\` names, and the in-app browser for connected apps. | [midnightpassport.com](https://midnightpassport.com) |
+| **App Hub** | The public list of applications that speak the Passport bridge. Listing is a pull request against the registry, not a code change. | [hub.midnightpassport.com](https://hub.midnightpassport.com) |
+| **App template** | A starter kit for building your own Passport-connected app — the bridge modules, a reference client, and full protocol docs. | [template.midnightpassport.com](https://template.midnightpassport.com) |
 | **App registry** | The \`registry.json\` file that both Passport's app grid and the App Hub fetch. One schema-checked JSON entry per listed app. | Public repository URL to be published — the Hub's "Raise a PR" button lights up when it is. |
 
 These deployments will move to \`midnightpassport.com\` subdomains; the Vercel
@@ -479,7 +479,7 @@ Map every code to a plain sentence; never show a bare code. Show Passport's
 
 ## Quickstart with the template
 
-1. Copy the [app template](https://midnight-passport-app-template.vercel.app),
+1. Copy the [app template](https://template.midnightpassport.com),
    then \`npm install && npm run dev\` — it runs on
    **http://localhost:5178**, pinned with \`strictPort\`. Passport frames your
    app by URL, and a dev server that quietly moves ports is a handshake that

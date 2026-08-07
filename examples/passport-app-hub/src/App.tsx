@@ -14,8 +14,8 @@ import type { RegistryApp, RegistryResult } from './registry';
  */
 const REGISTRY_REPO_URL: string | null = null;
 
-const TEMPLATE_URL = 'https://midnight-passport-app-template.vercel.app';
-const PASSPORT_URL = 'https://midnight-passport-app.vercel.app';
+const TEMPLATE_URL = 'https://template.midnightpassport.com';
+const PASSPORT_URL = 'https://midnightpassport.com';
 
 const CATEGORY_LABELS: Record<string, string> = {
   defi: 'DeFi',
