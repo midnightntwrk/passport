@@ -83,6 +83,13 @@ export interface AppBrowserProps {
    */
   executeTransfer?: (intent: PassportTransferIntent) => Promise<{ txId: string }>
   /**
+   * True when the open session is Dynamic-hosted with no local passkey wallet —
+   * the one case where a profile connect succeeds but nothing can sign, so the
+   * `wallet-unavailable` refusal names the real reason instead of claiming no
+   * session is open at all.
+   */
+  dynamicOnlySession?: boolean
+  /**
    * The wallet the approval sheet is describing. `networkId` is the network a
    * recipient address must belong to; `formattedBalance` is NIGHT in display
    * units, or null while it is still unknown (the sheet then says so).
@@ -254,6 +261,7 @@ export default function AppBrowser(props: AppBrowserProps) {
     onClose,
     onProfileShared,
     executeTransfer,
+    dynamicOnlySession,
     transferContext,
     onIncentiveRedeemed,
   } = props
@@ -444,8 +452,12 @@ export default function AppBrowser(props: AppBrowserProps) {
         postTx(txRequest, {
           status: 'failed',
           error: 'wallet-unavailable',
-          detail:
-            'No Passport wallet session is open in this browser, so nothing can be signed or sent.',
+          /* Same error code either way — apps already handle it — but a
+             Dynamic-only session deserves the honest detail: the connect
+             worked, and it is specifically signing that needs the passkey. */
+          detail: dynamicOnlySession
+            ? 'This session is signed in with Dynamic; paying from Passport requires the local passkey wallet. Sign in with a passkey to pay.'
+            : 'No Passport wallet session is open in this browser, so nothing can be signed or sent.',
         })
         return
       }
@@ -499,6 +511,7 @@ export default function AppBrowser(props: AppBrowserProps) {
     return () => window.removeEventListener('message', onMessage)
   }, [
     app.name,
+    dynamicOnlySession,
     onIncentiveRedeemed,
     origin,
     pending,

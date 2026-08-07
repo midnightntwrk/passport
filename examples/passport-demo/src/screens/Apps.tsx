@@ -43,6 +43,8 @@ export interface AppsScreenProps {
    * never satisfy.
    */
   executeTransfer?: AppBrowserProps['executeTransfer']
+  /** See {@link AppBrowserProps.dynamicOnlySession} — shapes the refusal detail. */
+  dynamicOnlySession?: AppBrowserProps['dynamicOnlySession']
   transferContext?: AppBrowserProps['transferContext']
   onIncentiveRedeemed?: AppBrowserProps['onIncentiveRedeemed']
 }
@@ -149,6 +151,7 @@ export interface FeaturedAppsProps {
   network?: PassportNetwork
   /** Same wallet seam as the Apps tab — an app behaves identically from Home. */
   executeTransfer?: AppBrowserProps['executeTransfer']
+  dynamicOnlySession?: AppBrowserProps['dynamicOnlySession']
   transferContext?: AppBrowserProps['transferContext']
   onIncentiveRedeemed?: AppBrowserProps['onIncentiveRedeemed']
 }
@@ -165,6 +168,7 @@ export function FeaturedApps(props: FeaturedAppsProps) {
     onProfileShared,
     network,
     executeTransfer,
+    dynamicOnlySession,
     transferContext,
     onIncentiveRedeemed,
   } = props
@@ -225,6 +229,7 @@ export function FeaturedApps(props: FeaturedAppsProps) {
           onClose={() => setOpenApp(null)}
           onProfileShared={onProfileShared}
           executeTransfer={executeTransfer}
+          dynamicOnlySession={dynamicOnlySession}
           transferContext={transferContext}
           onIncentiveRedeemed={onIncentiveRedeemed}
         />
@@ -240,6 +245,7 @@ export default function AppsScreen(props: AppsScreenProps) {
     network,
     onSelectNetwork,
     executeTransfer,
+    dynamicOnlySession,
     transferContext,
     onIncentiveRedeemed,
   } = props
@@ -416,6 +422,7 @@ export default function AppsScreen(props: AppsScreenProps) {
           onClose={() => setOpenApp(null)}
           onProfileShared={onProfileShared}
           executeTransfer={executeTransfer}
+          dynamicOnlySession={dynamicOnlySession}
           transferContext={transferContext}
           onIncentiveRedeemed={onIncentiveRedeemed}
         />

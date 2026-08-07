@@ -3628,6 +3628,13 @@ export default function PassportDemo() {
   const localSessionActive = localWalletStatus === 'ready' && localSurfaces !== null;
   const dynamicSessionActive = Boolean(user) && passportEnrolled;
   const sessionActive = localSessionActive || dynamicSessionActive;
+  /**
+   * Signed in through Dynamic with no local passkey wallet open: the profile
+   * connect works, but nothing here can sign a transfer. The app browser is
+   * told so it can refuse payments honestly instead of claiming no session
+   * exists at all.
+   */
+  const dynamicOnlySession = dynamicSessionActive && !localSessionActive;
   const showOnboarding =
     !sessionActive || onboardingIntent !== null || onboardingError !== null;
   // The §2.2 session restore opens the wallet with no onboarding intent set,
@@ -4254,6 +4261,7 @@ export default function PassportDemo() {
                 appsProfile={appsProfile}
                 onProfileShared={handleProfileShared}
                 executeTransfer={localSessionActive ? executeAppTransfer : undefined}
+                dynamicOnlySession={dynamicOnlySession}
                 transferContext={appTransferContext}
                 onIncentiveRedeemed={handleIncentiveRedeemed}
                 supportUrl={(import.meta.env.VITE_TELEGRAM_URL as string | undefined) ?? null}
@@ -4267,6 +4275,7 @@ export default function PassportDemo() {
                 network={selectedNetwork}
                 onSelectNetwork={handleSelectNetwork}
                 executeTransfer={localSessionActive ? executeAppTransfer : undefined}
+                dynamicOnlySession={dynamicOnlySession}
                 transferContext={appTransferContext}
                 onIncentiveRedeemed={handleIncentiveRedeemed}
               />

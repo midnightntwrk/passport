@@ -122,6 +122,7 @@ export interface HomeScreenProps {
   onProfileShared?: (appName: string, fields: string[]) => void
   /** The wallet seam the embedded apps grid hands to its in-Passport browser. */
   executeTransfer?: FeaturedAppsProps['executeTransfer']
+  dynamicOnlySession?: FeaturedAppsProps['dynamicOnlySession']
   transferContext?: FeaturedAppsProps['transferContext']
   onIncentiveRedeemed?: FeaturedAppsProps['onIncentiveRedeemed']
   /**
@@ -184,6 +185,7 @@ export default function HomeScreen(props: HomeScreenProps) {
     appsProfile,
     onProfileShared,
     executeTransfer,
+    dynamicOnlySession,
     transferContext,
     onIncentiveRedeemed,
     supportUrl,
@@ -548,6 +550,7 @@ export default function HomeScreen(props: HomeScreenProps) {
           onProfileShared={onProfileShared}
           network={network}
           executeTransfer={executeTransfer}
+          dynamicOnlySession={dynamicOnlySession}
           transferContext={transferContext}
           onIncentiveRedeemed={onIncentiveRedeemed}
         />
