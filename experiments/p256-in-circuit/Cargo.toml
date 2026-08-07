@@ -34,6 +34,9 @@ blake2b_simd = "1"
 p256 = { version = "0.13", features = ["ecdsa"] }
 sha2 = "0.10"
 
+# Reference Ed25519 signer for the recursion leg's EdDSA inner relation.
+ed25519-dalek = "2"
+
 # Encoding and CLI plumbing.
 hex = "0.4"
 hex-literal = "1"

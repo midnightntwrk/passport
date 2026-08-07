@@ -9,6 +9,7 @@ description = "Evidence and measurement harness for the P-256 in-circuit experim
 p256-gate-circuit = { workspace = true }
 
 midnight-zk-stdlib = { workspace = true }
+midnight-circuits = { workspace = true }
 midnight-proofs = { workspace = true }
 midnight-curves = { workspace = true }
 

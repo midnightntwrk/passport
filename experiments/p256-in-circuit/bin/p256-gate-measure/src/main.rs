@@ -8,6 +8,10 @@
 //!   `evidence/timings-<relation>.json`.
 //! * `passkey` — verify a real WebAuthn assertion (exported as JSON) both
 //!   out-of-circuit and in-circuit.
+//! * `recursion` — direct-vs-wrapped comparison for one signature scheme:
+//!   prove the signature relation directly (Poseidon transcript), then wrap
+//!   an inner proof in the in-circuit verifier and measure the outer proof;
+//!   appended to `evidence/recursion-<scheme>.json`.
 
 use std::{
     env, fs,
@@ -19,23 +23,32 @@ use std::{
 use anyhow::{anyhow, bail, Context, Result};
 use base64::Engine;
 use clap::{Parser, Subcommand, ValueEnum};
+use midnight_circuits::hash::poseidon::PoseidonState;
+use midnight_curves::G1Projective;
+use midnight_proofs::transcript::{Hashable, Sampleable, TranscriptHash};
 use midnight_zk_stdlib::{
     cost_model, optimal_k, prove, setup_pk, setup_vk,
     utils::plonk_api::{load_srs, SrsSource},
-    verify, Relation,
+    verify, MidnightPK, MidnightVK, Relation,
 };
 use p256::{
     ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey},
     elliptic_curve::scalar::IsHigh,
 };
 use p256_gate_circuit::{
+    ed25519::Ed25519Verify,
+    jubjub_schnorr::JubjubSchnorrVerify,
     relations::{
-        P256EcdsaPreHashed, P256EcdsaPrivatePk, P256EcdsaWebAuthn, AUTHENTICATOR_DATA_LEN,
+        P256EcdsaPreHashed, P256EcdsaPrivatePk, P256EcdsaWebAuthn, AUTHENTICATOR_DATA_LEN, F,
     },
     vectors::{
-        cavp_prehashed, generated_prehashed, generated_webauthn, high_s_twin, point_from_xy_bytes,
-        point_to_xy_bytes, scalar_from_be_bytes, scalar_to_be_bytes, wrong_pk, PreHashedVector,
-        GENERATED_MESSAGE,
+        cavp_prehashed, dalek_verify_strict, generated_ed25519, generated_jubjub_schnorr,
+        generated_prehashed, generated_webauthn, high_s_twin, jubjub_schnorr_verify,
+        point_from_xy_bytes, point_to_xy_bytes, scalar_from_be_bytes, scalar_to_be_bytes, wrong_pk,
+        PreHashedVector, GENERATED_MESSAGE,
+    },
+    wrapper::{
+        prove_inner, unsupported_inner_rotations, verify_wrapped, wrap_inner_proof, ProofWrap,
     },
 };
 use rand::rngs::OsRng;
@@ -96,6 +109,20 @@ enum Command {
         #[arg(long, default_value = "localhost")]
         rp_id: String,
     },
+    /// Measure the cost of verifying a proof inside the circuit, per
+    /// signature scheme: (a) DIRECT proving of the signature relation under
+    /// the Poseidon transcript, (b) WRAPPED: one inner proof verified
+    /// in-circuit by the outer wrapper relation, with the complete
+    /// verification (native verify + deferred accumulator pairing check)
+    /// timed. Appends a record to evidence/recursion-<scheme>.json.
+    Recursion {
+        /// Which signature scheme to measure.
+        #[arg(long, value_enum)]
+        scheme: SchemeKind,
+        /// Number of timed proving runs (direct and outer).
+        #[arg(long, default_value_t = 3)]
+        runs: usize,
+    },
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -115,6 +142,26 @@ impl RelationKind {
     }
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum SchemeKind {
+    /// ECDSA over P-256 with a pre-hashed message (P256EcdsaPreHashed).
+    P256Prehashed,
+    /// Ed25519 with a 32-byte message (Ed25519Verify).
+    Ed25519,
+    /// Schnorr over JubJub with a Poseidon challenge (JubjubSchnorrVerify).
+    JubjubSchnorr,
+}
+
+impl SchemeKind {
+    fn name(self) -> &'static str {
+        match self {
+            SchemeKind::P256Prehashed => "p256-prehashed",
+            SchemeKind::Ed25519 => "ed25519",
+            SchemeKind::JubjubSchnorr => "jubjub-schnorr",
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     fs::create_dir_all(&cli.evidence_dir)
@@ -125,6 +172,7 @@ fn main() -> Result<()> {
         Command::Mock => cmd_mock(&cli.evidence_dir),
         Command::Prove { relation, runs, k } => cmd_prove(&cli.evidence_dir, relation, runs, k),
         Command::Passkey { input, rp_id } => cmd_passkey(&cli.evidence_dir, &input, &rp_id),
+        Command::Recursion { scheme, runs } => cmd_recursion(&cli.evidence_dir, scheme, runs),
     }
 }
 
@@ -294,6 +342,8 @@ fn cmd_mock(evidence_dir: &Path) -> Result<()> {
         "prehashed": relation_cost_json(&P256EcdsaPreHashed, "prehashed"),
         "webauthn": relation_cost_json(&P256EcdsaWebAuthn, "webauthn"),
         "privatepk": relation_cost_json(&P256EcdsaPrivatePk, "privatepk"),
+        "ed25519": relation_cost_json(&Ed25519Verify, "ed25519"),
+        "jubjub_schnorr": relation_cost_json(&JubjubSchnorrVerify, "jubjub_schnorr"),
     });
     write_pretty_json(&evidence_dir.join("cost.json"), &cost)
 }
@@ -312,16 +362,29 @@ struct ProveReport {
     proof_bytes: usize,
 }
 
-fn timed_prove_runs<R>(
+/// A [`ProveReport`] plus the artefacts (SRS, keys, last proof) the
+/// recursion measurement needs to keep working with.
+struct ProveSession<R: Relation> {
+    report: ProveReport,
+    srs: midnight_proofs::poly::kzg::params::ParamsKZG<midnight_curves::Bls12>,
+    vk: MidnightVK,
+    pk: MidnightPK<R>,
+    proof: Vec<u8>,
+}
+
+fn timed_prove_session<R, H>(
     relation: &R,
     instance: &R::Instance,
     witness: &R::Witness,
     runs: usize,
     k: Option<u32>,
-) -> Result<ProveReport>
+) -> Result<ProveSession<R>>
 where
     R: Relation,
     R::Error: std::fmt::Debug,
+    H: TranscriptHash,
+    G1Projective: Hashable<H>,
+    F: Hashable<H> + Sampleable<H>,
 {
     // Resolve the circuit size and constraint-system degree before starting
     // the SRS timer: with `k = None`, `optimal_k` synthesises the circuit
@@ -352,9 +415,8 @@ where
     let mut proof = Vec::new();
     for run in 0..runs {
         let start = Instant::now();
-        proof =
-            prove::<R, blake2b_simd::State>(&srs, &pk, relation, instance, witness.clone(), OsRng)
-                .map_err(|e| anyhow!("proof generation failed: {e:?}"))?;
+        proof = prove::<R, H>(&srs, &pk, relation, instance, witness.clone(), OsRng)
+            .map_err(|e| anyhow!("proof generation failed: {e:?}"))?;
         let elapsed = start.elapsed().as_millis();
         println!(
             "run {}: proof generated in {elapsed} ms ({} bytes)",
@@ -365,12 +427,12 @@ where
     }
 
     let start = Instant::now();
-    verify::<R, blake2b_simd::State>(&srs.verifier_params(), &vk, instance, None, &proof)
+    verify::<R, H>(&srs.verifier_params(), &vk, instance, None, &proof)
         .map_err(|e| anyhow!("proof verification failed: {e:?}"))?;
     let verify_ms = start.elapsed().as_millis();
     println!("proof verified in {verify_ms} ms");
 
-    Ok(ProveReport {
+    let report = ProveReport {
         k: u32::from(vk.k()),
         srs_load_ms,
         setup_vk_ms,
@@ -378,7 +440,29 @@ where
         prove_ms,
         verify_ms,
         proof_bytes: proof.len(),
+    };
+    Ok(ProveSession {
+        report,
+        srs,
+        vk,
+        pk,
+        proof,
     })
+}
+
+fn timed_prove_runs<R>(
+    relation: &R,
+    instance: &R::Instance,
+    witness: &R::Witness,
+    runs: usize,
+    k: Option<u32>,
+) -> Result<ProveReport>
+where
+    R: Relation,
+    R::Error: std::fmt::Debug,
+{
+    timed_prove_session::<R, blake2b_simd::State>(relation, instance, witness, runs, k)
+        .map(|session| session.report)
 }
 
 fn append_timing_record(evidence_dir: &Path, relation: RelationKind, record: Json) -> Result<()> {
@@ -452,6 +536,215 @@ fn cmd_prove(
         "environment": environment_json(),
     });
     append_timing_record(evidence_dir, relation, record)
+}
+
+// ---------------------------------------------------------------------------
+// recursion
+// ---------------------------------------------------------------------------
+
+fn prove_report_json(report: &ProveReport) -> Json {
+    json!({
+        "k": report.k,
+        "srs_load_ms": report.srs_load_ms,
+        "setup_vk_ms": report.setup_vk_ms,
+        "setup_pk_ms": report.setup_pk_ms,
+        "prove_ms": report.prove_ms,
+        "verify_ms": report.verify_ms,
+        "proof_bytes": report.proof_bytes,
+    })
+}
+
+/// Direct-vs-wrapped measurement for one inner relation.
+///
+/// DIRECT: the signature relation proved and verified under the POSEIDON
+/// transcript. The existing `prove` subcommand keeps blake2b; the direct
+/// numbers here are re-measured under Poseidon so the comparison with the
+/// wrapped path (whose inner proof must be Poseidon, since the in-circuit
+/// verifier hashes with a Poseidon sponge) is fair.
+///
+/// WRAPPED: one fresh (timed) inner proof, wrapped by `ProofWrap<R>`; the
+/// outer proof uses blake2b (it is verified natively) and its complete
+/// verification (native verify + deferred accumulator pairing check) is
+/// timed via `verify_wrapped`.
+fn recursion_record<R>(
+    relation: &R,
+    instance: &R::Instance,
+    witness: &R::Witness,
+    runs: usize,
+) -> Result<Json>
+where
+    R: Relation,
+    R::Error: std::fmt::Debug,
+{
+    // ---- DIRECT (Poseidon transcript) ----
+    println!("== direct: signature relation under the Poseidon transcript ==");
+    let inner =
+        timed_prove_session::<R, PoseidonState<F>>(relation, instance, witness, runs, None)?;
+
+    // ---- WRAPPED ----
+    // The in-circuit verifier evaluates openings only at rotations -1, 0,
+    // and 1; an inner circuit whose constraint system queries any other
+    // rotation (at the pinned rev: only the SHA-512 chip, rotations 2 and 3)
+    // cannot be wrapped. Record the limitation as evidence instead of
+    // panicking deep inside wrapper synthesis.
+    let wide_rotations = unsupported_inner_rotations(&inner.vk);
+    if !wide_rotations.is_empty() {
+        println!(
+            "wrapping unsupported: the inner circuit queries rotations {wide_rotations:?}, \
+             but the in-circuit verifier evaluates only -1, 0, and 1"
+        );
+        return Ok(json!({
+            "inner_transcript": "poseidon",
+            "direct": prove_report_json(&inner.report),
+            "wrapped_unsupported": {
+                "inner_rotations_beyond_support": wide_rotations,
+                "reason": "the in-circuit VerifierGadget evaluates openings only at \
+                           rotations -1, 0, and 1 (midnight-zk \
+                           circuits/src/verifier/verifier_gadget.rs panics with 'We do \
+                           not support other rotations'); the inner circuit's constraint \
+                           system queries rotations outside that set. At the pinned rev \
+                           the only ZkStdLib source of such queries is the SHA-512 chip, \
+                           and RFC 8032 fixes the Ed25519 challenge hash to SHA-512, so \
+                           an Ed25519 inner circuit cannot be wrapped.",
+            },
+        }));
+    }
+
+    println!("== wrapped: inner proof verified in-circuit ==");
+    let start = Instant::now();
+    let inner_proof = prove_inner(
+        &inner.srs,
+        &inner.pk,
+        relation,
+        instance,
+        witness.clone(),
+        OsRng,
+    )
+    .map_err(|e| anyhow!("inner proof generation failed: {e:?}"))?;
+    let inner_prove_ms = start.elapsed().as_millis();
+    println!(
+        "inner proof generated in {inner_prove_ms} ms ({} bytes)",
+        inner_proof.len()
+    );
+
+    let nb_inner_pis = R::format_instance(instance)
+        .map_err(|e| anyhow!("format_instance failed: {e:?}"))?
+        .len();
+    let wrapper = ProofWrap::<R>::new(&inner.vk, nb_inner_pis);
+    let (wrap_instance, wrap_witness) = wrap_inner_proof::<R>(&inner.vk, instance, &inner_proof)
+        .map_err(|e| anyhow!("wrapping the inner proof failed: {e:?}"))?;
+
+    let outer_k = optimal_k(&wrapper);
+    if outer_k > 19 {
+        bail!(
+            "the wrapper circuit needs k = {outer_k}, beyond the k <= 19 the \
+             Filecoin SRS supports"
+        );
+    }
+    let outer = timed_prove_session::<_, blake2b_simd::State>(
+        &wrapper,
+        &wrap_instance,
+        &wrap_witness,
+        runs,
+        Some(outer_k),
+    )?;
+
+    // Complete verification: native outer verify + the deferred KZG pairing
+    // check on the accumulator (skipping the latter would be unsound).
+    let start = Instant::now();
+    verify_wrapped(
+        &outer.srs.verifier_params(),
+        &outer.vk,
+        &inner.vk,
+        &wrap_instance,
+        &outer.proof,
+    )
+    .map_err(|e| anyhow!("complete wrapped verification failed: {e:?}"))?;
+    let complete_verify_ms = start.elapsed().as_millis();
+    println!("complete wrapped verification in {complete_verify_ms} ms");
+
+    // The outer report's `verify_ms` times a bare native verify, which is
+    // soundness-INCOMPLETE for a wrapped proof (it skips the deferred
+    // pairing check). Surface it under an explicit name next to
+    // `complete_verify_ms`, the only verification number a reader should
+    // quote for the wrapped path.
+    let mut outer_report = prove_report_json(&outer.report);
+    let outer_native_verify_ms = outer_report
+        .as_object_mut()
+        .expect("prove report is a JSON object")
+        .remove("verify_ms")
+        .expect("prove report carries verify_ms");
+
+    Ok(json!({
+        "inner_transcript": "poseidon",
+        "outer_transcript": "blake2b",
+        "direct": prove_report_json(&inner.report),
+        "wrapped": {
+            "inner_prove_ms": inner_prove_ms,
+            "inner_proof_bytes": inner_proof.len(),
+            "outer": outer_report,
+            "outer_native_verify_ms": outer_native_verify_ms,
+            "complete_verify_ms": complete_verify_ms,
+        },
+    }))
+}
+
+fn cmd_recursion(evidence_dir: &Path, scheme: SchemeKind, runs: usize) -> Result<()> {
+    ensure_srs_dir();
+
+    let record = match scheme {
+        SchemeKind::P256Prehashed => {
+            let vector = generated_prehashed();
+            recursion_record(
+                &P256EcdsaPreHashed,
+                &(vector.pk, vector.hash),
+                &(vector.r, vector.s),
+                runs,
+            )?
+        }
+        SchemeKind::Ed25519 => {
+            let vector = generated_ed25519();
+            if !dalek_verify_strict(&vector) {
+                bail!("Ed25519 vector must verify out-of-circuit");
+            }
+            recursion_record(
+                &Ed25519Verify,
+                &(vector.pk_bytes, vector.message),
+                &(vector.r_bytes, vector.s_bytes),
+                runs,
+            )?
+        }
+        SchemeKind::JubjubSchnorr => {
+            let vector = generated_jubjub_schnorr();
+            if !jubjub_schnorr_verify(&vector) {
+                bail!("JubJub Schnorr vector must verify out-of-circuit");
+            }
+            recursion_record(
+                &JubjubSchnorrVerify,
+                &(vector.pk, vector.message),
+                &vector.signature,
+                runs,
+            )?
+        }
+    };
+
+    let mut record = record;
+    let obj = record
+        .as_object_mut()
+        .expect("recursion record is a JSON object");
+    obj.insert("timestamp_utc".into(), json!(utc_timestamp()));
+    obj.insert("scheme".into(), json!(scheme.name()));
+    obj.insert("runs".into(), json!(runs));
+    obj.insert("environment".into(), environment_json());
+
+    let path = evidence_dir.join(format!("recursion-{}.json", scheme.name()));
+    let mut records: Vec<Json> = match fs::read_to_string(&path) {
+        Ok(text) => serde_json::from_str(&text)
+            .with_context(|| format!("{} is not a JSON array", path.display()))?,
+        Err(_) => Vec::new(),
+    };
+    records.push(record);
+    write_pretty_json(&path, &Json::Array(records))
 }
 
 // ---------------------------------------------------------------------------

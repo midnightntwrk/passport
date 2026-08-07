@@ -1,15 +1,30 @@
-//! Test vectors for the P-256 ECDSA relations.
+//! Test vectors for the signature relations.
 //!
-//! Two sources:
+//! P-256 sources:
 //!
 //! 1. Vectors generated deterministically with the RustCrypto `p256` crate
 //!    (RFC 6979 nonces, so re-generation is bit-stable).
 //! 2. One NIST CAVP FIPS 186-4 ECDSA SigVer known-answer vector, copied
 //!    literally.
+//!
+//! Recursion-leg inner relations:
+//!
+//! 3. An Ed25519 vector generated with `ed25519-dalek` (deterministic
+//!    signing per RFC 8032, so re-generation is bit-stable) from a
+//!    hardcoded secret key.
+//! 4. A JubJub Schnorr vector produced by reproducing the keygen/sign logic
+//!    of midnight-zk's `zk_stdlib/examples/schnorr_sig.rs` with fixed
+//!    (deterministic) secret key and nonce instead of an RNG.
 
+use ed25519_dalek::{Signer, SigningKey as Ed25519SigningKey};
 use ff::PrimeField;
+use group::Group;
 use hex_literal::hex;
-use midnight_curves::p256::{affine_from_xy, Fp, Fq, P256};
+use midnight_circuits::{hash::poseidon::PoseidonChip, instructions::hash::HashCPU};
+use midnight_curves::{
+    p256::{affine_from_xy, Fp, Fq, P256},
+    Fr as JubjubScalar, JubjubAffine, JubjubExtended as Jubjub, JubjubSubgroup,
+};
 use p256::{
     ecdsa::{
         signature::hazmat::{PrehashSigner, PrehashVerifier},
@@ -19,7 +34,11 @@ use p256::{
 };
 use sha2::{Digest, Sha256};
 
-use crate::relations::{AUTHENTICATOR_DATA_LEN, DIGEST_LEN};
+use crate::{
+    ed25519::ED25519_ENC_LEN,
+    jubjub_schnorr::JubjubSchnorrSignature,
+    relations::{AUTHENTICATOR_DATA_LEN, DIGEST_LEN, F},
+};
 
 /// A `(pk, hash, r, s)` tuple matching the instance/witness split of
 /// `P256EcdsaPreHashed` (and, reshaped, `P256EcdsaPrivatePk`).
@@ -209,4 +228,171 @@ pub fn generated_webauthn() -> WebAuthnVector {
         r,
         s,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Ed25519 (recursion-leg inner relation)
+// ---------------------------------------------------------------------------
+
+/// An Ed25519 vector matching the instance/witness split of
+/// `Ed25519Verify`.
+#[derive(Clone, Debug)]
+pub struct Ed25519Vector {
+    /// The compressed public key `A`.
+    pub pk_bytes: [u8; ED25519_ENC_LEN],
+    /// The 32-byte message.
+    pub message: [u8; DIGEST_LEN],
+    /// The compressed nonce commitment `R` (first half of the signature).
+    pub r_bytes: [u8; ED25519_ENC_LEN],
+    /// The response scalar `s` bytes (second half of the signature).
+    pub s_bytes: [u8; ED25519_ENC_LEN],
+}
+
+/// Fixed Ed25519 secret key for the deterministically generated vector.
+/// Test-only material; never use outside this experiment.
+pub const ED25519_SK_BYTES: [u8; 32] =
+    hex!("4041424344454647484942aa4c4d4e4f505152535455565758595a5b5c5d5e5f");
+
+/// Fixed message string; the vector signs its SHA-256 digest (the relation
+/// takes a 32-byte message).
+pub const ED25519_MESSAGE: &[u8] =
+    b"Ed25519 in a midnight-zk circuit: recursion-leg inner relation";
+
+/// Fixed Ed25519 secret key for the "wrong public key" negative vector.
+pub const ED25519_WRONG_SK_BYTES: [u8; 32] =
+    hex!("606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f");
+
+/// The compressed public key of the unrelated keypair
+/// [`ED25519_WRONG_SK_BYTES`], for negative tests. Being a genuine dalek
+/// public key, it decompresses without panicking off-circuit.
+pub fn wrong_ed25519_pk_bytes() -> [u8; ED25519_ENC_LEN] {
+    Ed25519SigningKey::from_bytes(&ED25519_WRONG_SK_BYTES)
+        .verifying_key()
+        .to_bytes()
+}
+
+/// Deterministic ed25519-dalek vector: RFC 8032 signature with
+/// [`ED25519_SK_BYTES`] over `SHA-256(ED25519_MESSAGE)`.
+pub fn generated_ed25519() -> Ed25519Vector {
+    let message: [u8; DIGEST_LEN] = Sha256::digest(ED25519_MESSAGE).into();
+    let signing_key = Ed25519SigningKey::from_bytes(&ED25519_SK_BYTES);
+    let signature = signing_key.sign(&message);
+    Ed25519Vector {
+        pk_bytes: signing_key.verifying_key().to_bytes(),
+        message,
+        r_bytes: *signature.r_bytes(),
+        s_bytes: *signature.s_bytes(),
+    }
+}
+
+/// Out-of-circuit sanity check of an Ed25519 vector with ed25519-dalek's
+/// `verify_strict`. Both check the same cofactorless equation, but the
+/// acceptance sets are not identical: `verify_strict` additionally rejects
+/// small-order `R` and `A` (the circuit's prime-subgroup check admits the
+/// identity), and the circuit additionally enforces canonical encodings.
+/// They agree on all honestly generated dalek vectors, which is what this
+/// guard checks.
+pub fn dalek_verify_strict(vector: &Ed25519Vector) -> bool {
+    let Ok(verifying_key) = ed25519_dalek::VerifyingKey::from_bytes(&vector.pk_bytes) else {
+        return false;
+    };
+    let mut sig_bytes = [0u8; 64];
+    sig_bytes[..32].copy_from_slice(&vector.r_bytes);
+    sig_bytes[32..].copy_from_slice(&vector.s_bytes);
+    let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+    verifying_key
+        .verify_strict(&vector.message, &signature)
+        .is_ok()
+}
+
+// ---------------------------------------------------------------------------
+// JubJub Schnorr (recursion-leg inner relation)
+// ---------------------------------------------------------------------------
+
+/// A JubJub Schnorr vector matching the instance/witness split of
+/// `JubjubSchnorrVerify`.
+#[derive(Clone, Debug)]
+pub struct JubjubSchnorrVector {
+    /// The public key `pk = sk * G`.
+    pub pk: JubjubSubgroup,
+    /// The message, a native field element.
+    pub message: F,
+    /// The signature `(s, e_bytes)`.
+    pub signature: JubjubSchnorrSignature,
+}
+
+/// Fixed 64-byte expansion of the JubJub Schnorr secret key (reduced into
+/// the scalar field with `from_bytes_wide`). Test-only material.
+const JUBJUB_SK_WIDE: [u8; 64] = hex!(
+    "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf"
+    "c0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf"
+);
+
+/// Fixed 64-byte expansion of the signing nonce `k`. A fixed nonce is safe
+/// here because the key signs exactly one message, ever.
+const JUBJUB_NONCE_WIDE: [u8; 64] = hex!(
+    "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f"
+    "303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f"
+);
+
+/// Fixed message field element.
+const JUBJUB_MESSAGE: u64 = 0x7061737370407274; // "passp@rt"
+
+/// Affine coordinates of a JubJub subgroup point, as in the upstream
+/// example.
+fn jubjub_coords(point: &JubjubSubgroup) -> (F, F) {
+    let point: &Jubjub = point.into();
+    let point: JubjubAffine = point.into();
+    (point.get_u(), point.get_v())
+}
+
+/// Reduces 32 challenge bytes into the JubJub scalar field, as in the
+/// upstream example's sign and verify.
+fn jubjub_challenge_scalar(e_bytes: &[u8; 32]) -> JubjubScalar {
+    let mut buff = [0u8; 64];
+    buff[..32].copy_from_slice(e_bytes);
+    JubjubScalar::from_bytes_wide(&buff)
+}
+
+/// Deterministic JubJub Schnorr vector, signed with the upstream example's
+/// logic: `R = k * G`, `e_bytes = Poseidon(pk.x, pk.y, R.x, R.y, m)` in LE
+/// bytes, `s = k - e * sk`.
+pub fn generated_jubjub_schnorr() -> JubjubSchnorrVector {
+    let sk = JubjubScalar::from_bytes_wide(&JUBJUB_SK_WIDE);
+    let k = JubjubScalar::from_bytes_wide(&JUBJUB_NONCE_WIDE);
+    let message = F::from(JUBJUB_MESSAGE);
+
+    let pk = JubjubSubgroup::generator() * sk;
+    let r = JubjubSubgroup::generator() * k;
+
+    let (rx, ry) = jubjub_coords(&r);
+    let (pkx, pky) = jubjub_coords(&pk);
+
+    let h = <PoseidonChip<F> as HashCPU<F, F>>::hash(&[pkx, pky, rx, ry, message]);
+    let e_bytes = h.to_bytes_le();
+
+    let s = k - jubjub_challenge_scalar(&e_bytes) * sk;
+
+    JubjubSchnorrVector {
+        pk,
+        message,
+        signature: JubjubSchnorrSignature { s, e_bytes },
+    }
+}
+
+/// Out-of-circuit verification of a JubJub Schnorr vector, ported from the
+/// upstream example's `verify`.
+pub fn jubjub_schnorr_verify(vector: &JubjubSchnorrVector) -> bool {
+    let e = jubjub_challenge_scalar(&vector.signature.e_bytes);
+
+    // 1. R' = s * G + e * pk.
+    let rv = JubjubSubgroup::generator() * vector.signature.s + vector.pk * e;
+
+    let (rx, ry) = jubjub_coords(&rv);
+    let (pkx, pky) = jubjub_coords(&vector.pk);
+
+    // 2. e' = Poseidon(pk.x, pk.y, R'.x, R'.y, m).
+    let h = <PoseidonChip<F> as HashCPU<F, F>>::hash(&[pkx, pky, rx, ry, vector.message]);
+
+    h.to_bytes_le() == vector.signature.e_bytes
 }

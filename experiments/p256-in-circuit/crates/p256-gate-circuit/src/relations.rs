@@ -106,7 +106,7 @@ fn ecdsa_assert_valid(
 }
 
 /// Assigns an array of instance bytes and constrains them as public inputs.
-fn assign_public_bytes<const N: usize>(
+pub(crate) fn assign_public_bytes<const N: usize>(
     std_lib: &ZkStdLib,
     layouter: &mut impl Layouter<F>,
     bytes: Value<[u8; N]>,
@@ -120,7 +120,7 @@ fn assign_public_bytes<const N: usize>(
 
 /// Public inputs for a byte array, in the same order as
 /// [`assign_public_bytes`] constrains them.
-fn bytes_as_public_input(bytes: &[u8]) -> Vec<F> {
+pub(crate) fn bytes_as_public_input(bytes: &[u8]) -> Vec<F> {
     bytes
         .iter()
         .flat_map(AssignedByte::<F>::as_public_input)

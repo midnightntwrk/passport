@@ -1,4 +1,18 @@
 {
+  "ed25519": {
+    "advice_columns": 10,
+    "column_queries": 46,
+    "estimated_proof_size_bytes": 4736,
+    "fixed_columns": 52,
+    "lookups": 3,
+    "max_deg": 5,
+    "nb_unusable_rows": 12,
+    "optimal_k": 16,
+    "permutations": 13,
+    "point_sets": 6,
+    "rows": 50143,
+    "table_rows": 61699
+  },
   "environment": {
     "arch": "aarch64",
     "cpu": "Apple M4 Max",
@@ -6,6 +20,20 @@
     "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
     "os": "macos",
     "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)"
+  },
+  "jubjub_schnorr": {
+    "advice_columns": 9,
+    "column_queries": 34,
+    "estimated_proof_size_bytes": 2928,
+    "fixed_columns": 32,
+    "lookups": 1,
+    "max_deg": 5,
+    "nb_unusable_rows": 9,
+    "optimal_k": 11,
+    "permutations": 10,
+    "point_sets": 3,
+    "rows": 1467,
+    "table_rows": 1291
   },
   "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
   "prehashed": {

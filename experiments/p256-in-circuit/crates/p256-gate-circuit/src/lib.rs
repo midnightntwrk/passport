@@ -22,6 +22,27 @@
 //! either of `(r, s)` and `(r, n - s)` satisfies the relation. This
 //! malleability is documented by an explicit test and feeds the low-S policy
 //! discussion in the MIP.
+//!
+//! # Recursion leg
+//!
+//! The crate additionally measures out-of-chain proving: a device proves
+//! knowledge of a signature off-chain with the scheme its hardware supports
+//! (the inner proof), and an on-chain circuit verifies that proof
+//! in-circuit. Two further inner relations cover the other device schemes:
+//!
+//! * [`ed25519::Ed25519Verify`]: Ed25519 (RFC 8032) verification, ported
+//!   from midnight-zk's `cardano_signature.rs` example.
+//! * [`jubjub_schnorr::JubjubSchnorrVerify`]: Schnorr over the native
+//!   embedded curve JubJub with a Poseidon challenge, ported from
+//!   midnight-zk's `schnorr_sig.rs` example (the MIP-0013 device scheme).
+//!
+//! [`wrapper::ProofWrap`] is the outer relation that verifies an inner
+//! proof in-circuit; [`wrapper::verify_wrapped`] is the ONLY sound way to
+//! verify a wrapped proof (the in-circuit verifier defers the final KZG
+//! pairing check to the native side; see the `wrapper` module docs).
 
+pub mod ed25519;
+pub mod jubjub_schnorr;
 pub mod relations;
 pub mod vectors;
+pub mod wrapper;
