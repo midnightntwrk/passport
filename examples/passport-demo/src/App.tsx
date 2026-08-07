@@ -2493,6 +2493,13 @@ export default function PassportDemo() {
       if (!wallet) return;
       setBusyAction('dust');
       setError(null);
+      // Proving and submitting can take tens of seconds; a silent spinner
+      // reads as "nothing happened" and invites a second press.
+      pushToast({
+        tone: 'info',
+        title: 'Registering NIGHT for DUST generation',
+        body: 'Proving and submitting — this can take a moment.',
+      });
       try {
         const result = await wallet.registerDust();
         const detail =
@@ -2510,6 +2517,9 @@ export default function PassportDemo() {
           pushToast({
             tone: 'success',
             title: 'DUST registration submitted',
+            body:
+              result.note ??
+              'DUST accrues gradually from registered NIGHT — the battery starts filling within a minute.',
             // The wallet's own network, not the UI-selected one — the two can
             // differ, and the link must point where the transaction really is.
             link: explorerTxLink(result.txId, localWalletNetworkId),
@@ -2518,10 +2528,19 @@ export default function PassportDemo() {
         await refreshWallet();
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        setError(message);
+        // A RegisterDustError carries the node's own sentence in `detail` —
+        // dropping it leaves the user with an unverifiable accusation. Matched
+        // structurally: importing the class would pull the wallet SDK into the
+        // initial bundle, which the type-only import above exists to prevent.
+        const nodeDetail =
+          cause instanceof Error && cause.name === 'RegisterDustError'
+            ? (cause as { detail?: string }).detail
+            : undefined;
+        const detail = nodeDetail ? `${message} ${nodeDetail}` : message;
+        setError(detail);
         addActivity({
           label: 'DUST registration',
-          detail: message,
+          detail,
           status: 'error',
           source: 'wallet',
         });

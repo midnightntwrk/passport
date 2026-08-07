@@ -653,6 +653,14 @@ export interface RegisterDustResult {
   /** How many NIGHT UTxOs this registration covered. */
   utxoCount: number;
   submittedAt: string;
+  /**
+   * Present when the node's submit response was an error but the registration
+   * was then observed applied on-chain — the node can answer with a transient
+   * error for a transaction it goes on to include, and reporting that answer
+   * as a rejection would be a lie. Callers should surface this as a success
+   * with the note attached.
+   */
+  note?: string;
 }
 
 export interface SendNightParams {
@@ -1441,10 +1449,52 @@ export async function createLocalMidnightWallet(
       );
     }
 
+    // The hash exists before the node ever sees the transaction, so a noisy
+    // submit response can still be checked against what actually landed.
+    const txHash = String(finalized.transactionHash());
+    const submittedKeys = new Set(
+      unregistered.map((coin) => `${coin.utxo.intentHash}:${coin.utxo.outputNo}`),
+    );
+
+    /**
+     * True once none of the UTxOs this registration covered still shows as
+     * available-and-unregistered — the only shape the wallet's own state can
+     * take after the registration applies, whether the flag flips in place or
+     * the outputs are replaced.
+     */
+    const registrationObserved = async (): Promise<boolean> => {
+      const fresh = await currentState();
+      return !(fresh.unshielded.availableCoins ?? []).some(
+        (coin) =>
+          coin.utxo.type === nightTokenType &&
+          coin.meta.registeredForDustGeneration === false &&
+          submittedKeys.has(`${coin.utxo.intentHash}:${coin.utxo.outputNo}`),
+      );
+    };
+
     let txId: string;
     try {
-      txId = await facade.submitTransaction(finalized);
+      // The node's own identifier is what the explorer resolves, so the happy
+      // path keeps it; the pre-computed hash only stands in when the submit
+      // response never arrived to carry one.
+      txId = String(await facade.submitTransaction(finalized));
     } catch (cause) {
+      // The node has answered errors for transactions it then included — seen
+      // live on preview 2026/08/07 (submit "rejected", DUST generating minutes
+      // later). An unverified rejection claim is worse than a short wait: poll
+      // the wallet's own state across ~5 preview blocks before believing it.
+      for (let attempt = 0; attempt < 15 && !closed; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+        if (await registrationObserved()) {
+          return {
+            status: 'registered',
+            txId: txHash,
+            utxoCount: unregistered.length,
+            submittedAt: new Date().toISOString(),
+            note: 'The node answered the submission with an error, but the registration was then observed applied on-chain.',
+          };
+        }
+      }
       throw new RegisterDustError(
         'submit-rejected',
         'The node rejected the DUST registration.',
@@ -1454,7 +1504,7 @@ export async function createLocalMidnightWallet(
 
     return {
       status: 'registered',
-      txId: String(txId),
+      txId,
       utxoCount: unregistered.length,
       submittedAt: new Date().toISOString(),
     };
