@@ -40,8 +40,18 @@ Refusals are clear JSON, `{"error": code, "message": sentence}`:
 ### `GET /status`
 
 `{"network": "preview", "address": "mn_addr…", "balanceAtomic": "…",
-"dripsServed": 3, "ready": true}` — never the seed. `ready` means synced,
-holding at least one drip's worth of NIGHT, and able to pay its own fee.
+"dripsServed": 3, "ready": true, "settling": false}` — never the seed. `ready`
+means synced, holding at least one drip's worth of NIGHT, and able to pay its
+own fee.
+
+`settling` tells the two indistinguishable-on-chain reasons for `ready: false`
+apart. A spend consumes its whole UTxO and the change returns in a new one, so
+for a block or two after a drip the funder genuinely holds nothing spendable —
+`settling: true` says the funds are in flight, not gone. `/status` answers
+instantly either way; `/activate` waits out that window rather than refusing
+the next person, and only reports `funder-empty` for a shortfall that outlives
+it. Measured on preview 2026/08/07: change landed 20 s after a drip, and two
+back-to-back activations both succeeded (21 s, 24 s).
 
 ## Running it
 

@@ -95,33 +95,58 @@ async function main(): Promise<void> {
 
   let dripsServed = 0;
 
-  const readiness = async (): Promise<{ ready: boolean; night: bigint; refuse: Refusal | null }> => {
-    const state = await wallet.currentState();
-    const heldNight = await wallet.nightBalance(state);
-    const heldDust = await wallet.dustBalance(state);
-    if (heldNight < config.dripAtomic) {
-      return {
-        ready: false,
-        night: heldNight,
-        refuse: refusal(
-          503,
-          'funder-empty',
-          `The funder holds ${formatNight(heldNight)} NIGHT, less than one ${formatNight(config.dripAtomic)} NIGHT drip. Its address (${wallet.address}) needs topping up from the ${config.networkId} faucet.`,
-        ),
-      };
+  /**
+   * A spend consumes its whole UTxO and the change comes back in a new one, so
+   * for a block or two after a drip the wallet really does hold nothing
+   * spendable. Measured on preview 2026/08/07: a funder holding ~5,000 NIGHT
+   * read zero immediately after a drip and was whole again 20 s later.
+   *
+   * Reporting that as `funder-empty` would be false, and would turn away the
+   * very next person during a signup run. So a shortfall is not believed until
+   * it has had time to settle: `/activate` waits, and only a shortfall that
+   * outlives the window is refused.
+   */
+  const CHANGE_SETTLE_MS = 90_000;
+  const SETTLE_POLL_MS = 3_000;
+
+  /** When the last drip was sent, so `/status` can say "settling", not "empty". */
+  let lastDripAt = 0;
+
+  const readiness = async (
+    options: { settle?: boolean } = {},
+  ): Promise<{ ready: boolean; night: bigint; refuse: Refusal | null }> => {
+    const deadline = Date.now() + (options.settle ? CHANGE_SETTLE_MS : 0);
+    for (;;) {
+      const state = await wallet.currentState();
+      const heldNight = await wallet.nightBalance(state);
+      const heldDust = await wallet.dustBalance(state);
+      if (heldNight >= config.dripAtomic && heldDust > 0n) {
+        return { ready: true, night: heldNight, refuse: null };
+      }
+      if (Date.now() >= deadline) {
+        if (heldNight < config.dripAtomic) {
+          return {
+            ready: false,
+            night: heldNight,
+            refuse: refusal(
+              503,
+              'funder-empty',
+              `The funder holds ${formatNight(heldNight)} NIGHT, less than one ${formatNight(config.dripAtomic)} NIGHT drip. Its address (${wallet.address}) needs topping up from the ${config.networkId} faucet.`,
+            ),
+          };
+        }
+        return {
+          ready: false,
+          night: heldNight,
+          refuse: refusal(
+            503,
+            'funder-no-dust',
+            'The funder cannot pay a transaction fee yet: its DUST is still accruing. Try again in a minute.',
+          ),
+        };
+      }
+      await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_MS));
     }
-    if (heldDust === 0n) {
-      return {
-        ready: false,
-        night: heldNight,
-        refuse: refusal(
-          503,
-          'funder-no-dust',
-          'The funder cannot pay a transaction fee yet: its DUST is still accruing. Try again in a minute.',
-        ),
-      };
-    }
-    return { ready: true, night: heldNight, refuse: null };
   };
 
   const activate = async (rawAddress: unknown): Promise<{ status: number; body: Record<string, unknown> }> => {
@@ -178,7 +203,7 @@ async function main(): Promise<void> {
       );
     }
 
-    const ready = await readiness();
+    const ready = await readiness({ settle: true });
     if (ready.refuse) return fail(ready.refuse);
 
     // Best-effort, bounded read of the recipient's own balance. An address
@@ -195,6 +220,7 @@ async function main(): Promise<void> {
     try {
       const result = await wallet.drip(recipient, config.dripAtomic);
       dripsServed += 1;
+      lastDripAt = Date.now();
       await ledgerFile.record(normalized, {
         txHash: result.txHash,
         amountAtomic: result.amountAtomic.toString(),
@@ -255,6 +281,9 @@ async function main(): Promise<void> {
       }
 
       if (request.method === 'GET' && path === '/status') {
+        /* Never waits: a monitor asking the question deserves the answer now.
+           `settling` distinguishes change in flight from a funder that is
+           genuinely out of NIGHT — the two read identically on the chain. */
         const { ready, night } = await readiness().catch(() => ({ ready: false, night: 0n }));
         respond(request, response, 200, {
           network: config.networkId,
@@ -262,6 +291,7 @@ async function main(): Promise<void> {
           balanceAtomic: night.toString(),
           dripsServed,
           ready,
+          settling: !ready && Date.now() - lastDripAt < CHANGE_SETTLE_MS,
         });
         return;
       }
