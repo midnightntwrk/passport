@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { loadRegistry, snapshotApps } from './registry';
 import type { RegistryApp, RegistryResult } from './registry';
 
 /**
  * Public URL of the app registry repository. The registry exists but has not
- * been pushed to a public remote yet, so this stays `null` for now — the copy
- * below says "the registry repository" generically until it is filled in.
+ * been pushed to a public remote yet, so this stays `null` for now — while it
+ * is null the hackathon panel renders its button disabled with a short note.
  *
  * TODO(orchestrator): once the registry is public, set this to its GitHub URL
  * (for example 'https://github.com/<owner>/midnight-passport-app-registry')
@@ -24,15 +25,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
-function RegistryLink({ children }: { children: string }) {
-  if (!REGISTRY_REPO_URL) return <strong>{children}</strong>;
-  return (
-    <a href={REGISTRY_REPO_URL} target="_blank" rel="noreferrer">
-      {children}
-    </a>
-  );
-}
-
 function AppIcon({ app }: { app: RegistryApp }) {
   const [failed, setFailed] = useState(false);
   if (!app.icon || failed) {
@@ -49,10 +41,15 @@ function AppIcon({ app }: { app: RegistryApp }) {
   );
 }
 
-function AppCard({ app }: { app: RegistryApp }) {
+/** `--i` drives the CSS entrance stagger; the stylesheet caps the total delay. */
+function staggerStyle(index: number): CSSProperties {
+  return { '--i': index } as CSSProperties;
+}
+
+function AppCard({ app, index }: { app: RegistryApp; index: number }) {
   const category = CATEGORY_LABELS[app.category ?? 'other'] ?? 'Other';
   return (
-    <article className={`card${app.stale ? ' card-stale' : ''}`}>
+    <article className={`card${app.stale ? ' card-stale' : ''}`} style={staggerStyle(index)}>
       <div className="card-head">
         <AppIcon app={app} />
         <div className="card-title">
@@ -78,6 +75,40 @@ function AppCard({ app }: { app: RegistryApp }) {
   );
 }
 
+/**
+ * Shown while the hackathon section has no entries: an invitation, the whole
+ * register flow in one sentence, and the pull-request button — disabled with a
+ * note until the registry repository has a public URL.
+ */
+function HackathonInvite() {
+  return (
+    <div className="hackathon-panel">
+      <h3>This space is yours.</h3>
+      <p className="hackathon-lede">
+        Ship an app during the hackathon and raise a PR to appear here.
+      </p>
+      <p className="hackathon-how">
+        One JSON entry in the registry's <code>registry.json</code> with{' '}
+        <code>"section": "hackathon"</code> — that is the whole submission.
+      </p>
+      {REGISTRY_REPO_URL ? (
+        <a className="button button-primary" href={REGISTRY_REPO_URL} target="_blank" rel="noreferrer">
+          Raise a PR
+        </a>
+      ) : (
+        <>
+          <button className="button" type="button" disabled>
+            Raise a PR
+          </button>
+          <p className="hackathon-note">
+            The registry repository's public URL will be published here shortly.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [result, setResult] = useState<RegistryResult>(() => ({
     apps: snapshotApps(),
@@ -94,8 +125,13 @@ export default function App() {
     };
   }, []);
 
-  const featured = result.apps.filter((app) => app.featured);
-  const rest = result.apps.filter((app) => !app.featured);
+  // Entries without a section come from the older registry format and belong
+  // to the standard list — the parser defaults them there.
+  const standard = result.apps.filter((app) => (app.section ?? 'standard') !== 'hackathon');
+  const hackathon = result.apps.filter((app) => app.section === 'hackathon');
+  const apps = [...standard].sort(
+    (a, b) => Number(b.featured === true) - Number(a.featured === true),
+  );
 
   return (
     <div className="page">
@@ -103,27 +139,16 @@ export default function App() {
         <p className="hero-kicker">Midnight Passport</p>
         <h1>Passport App Hub</h1>
         <p className="hero-lede">
-          Passport is a passkey wallet for the Midnight network — sign in with a passkey, hold a
-          wallet, approve what apps may see and spend. This hub lists the applications that
-          integrate the Passport bridge: they open in Passport's in-app browser, ask for a profile,
-          and ask Passport to sign transactions, with every approval made on Passport's own
-          surface.
+          The applications that speak the Passport bridge — open them in Passport's in-app
+          browser and approve what they may see and spend, on Passport's own surface.
         </p>
-        <div className="hero-register">
-          <h2>Register your app</h2>
-          <p>
-            Listing is a pull request against <RegistryLink>the registry repository</RegistryLink>:
-            fork it, add one JSON entry for your app to <code>registry.json</code> (name,
-            description, icon, URL, category, networks), and open the pull request. A
-            dependency-free validator schema-checks your entry in CI, a maintainer reviews it by
-            hand, and once merged your app appears here and in Passport's app grid — no build step,
-            no server, just JSON.
-          </p>
-          {!REGISTRY_REPO_URL && (
-            <p className="hero-note">
-              The registry repository's public URL will be published here shortly.
-            </p>
-          )}
+        <div className="hero-links">
+          <a className="button button-primary" href={TEMPLATE_URL} target="_blank" rel="noreferrer">
+            App template
+          </a>
+          <a className="button" href={PASSPORT_URL} target="_blank" rel="noreferrer">
+            Open Passport
+          </a>
         </div>
       </header>
 
@@ -134,40 +159,31 @@ export default function App() {
             below are marked stale.
           </p>
         )}
-        {featured.length > 0 && (
-          <section>
-            <h2 className="section-title">Featured</h2>
-            <div className="grid">
-              {featured.map((app) => (
-                <AppCard key={app.id} app={app} />
-              ))}
-            </div>
-          </section>
-        )}
+
         <section>
-          <h2 className="section-title">{featured.length > 0 ? 'All apps' : 'Apps'}</h2>
+          <h2 className="section-title">Apps</h2>
           <div className="grid">
-            {(featured.length > 0 ? rest : result.apps).map((app) => (
-              <AppCard key={app.id} app={app} />
+            {apps.map((app, index) => (
+              <AppCard key={app.id} app={app} index={index} />
             ))}
           </div>
+        </section>
+
+        <section>
+          <h2 className="section-title">Hackathon apps</h2>
+          {hackathon.length > 0 ? (
+            <div className="grid">
+              {hackathon.map((app, index) => (
+                <AppCard key={app.id} app={app} index={index} />
+              ))}
+            </div>
+          ) : (
+            <HackathonInvite />
+          )}
         </section>
       </main>
 
       <footer className="footer">
-        <h2>Start building</h2>
-        <p>
-          The fastest way onto this list is the open-source app template — it already speaks the
-          Passport bridge.
-        </p>
-        <div className="footer-links">
-          <a className="button button-primary" href={TEMPLATE_URL} target="_blank" rel="noreferrer">
-            App template
-          </a>
-          <a className="button" href={PASSPORT_URL} target="_blank" rel="noreferrer">
-            Open Passport
-          </a>
-        </div>
         <p className="footer-fineprint">
           A listing records that an application exists and asked to be listed. It is not an audit,
           and listed applications remain their authors' property.

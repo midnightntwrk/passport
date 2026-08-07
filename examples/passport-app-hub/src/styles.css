@@ -25,6 +25,22 @@
   --hub-font:
     Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
+  /* Spring-flavoured ease for entrance rises: critically damped, no overshoot. */
+  --hub-spring: linear(
+    0,
+    0.062,
+    0.222,
+    0.424,
+    0.606,
+    0.746,
+    0.847,
+    0.916,
+    0.96,
+    0.985,
+    0.996,
+    0.999,
+    1
+  );
 }
 
 @media (prefers-color-scheme: dark) {
@@ -69,6 +85,61 @@ body {
   padding: 48px 20px 64px;
 }
 
+/* --- Entrance animation ---------------------------------------------------
+ *
+ * CSS-only, compositor-friendly: only `transform` and `opacity` animate.
+ * Order: hero first, then section headers, then cards staggered by `--i`
+ * (set inline per card), with the stagger capped at 600ms however many cards
+ * the registry holds. Keyframes declare only `from` so finished animations
+ * stop applying values and hover transitions keep working; fill-mode
+ * `backwards` hides elements during their delay.
+ */
+
+@keyframes hub-rise {
+  from {
+    transform: translateY(12px) scale(0.985);
+  }
+}
+
+@keyframes hub-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.hero {
+  animation:
+    hub-rise 450ms var(--hub-spring) backwards,
+    hub-fade 350ms ease-out backwards;
+}
+
+.list-notice,
+.section-title {
+  animation:
+    hub-rise 400ms var(--hub-spring) 180ms backwards,
+    hub-fade 300ms ease-out 180ms backwards;
+}
+
+.card,
+.hackathon-panel {
+  animation:
+    hub-rise 420ms var(--hub-spring) backwards,
+    hub-fade 320ms ease-out backwards;
+  animation-delay: calc(280ms + min(calc(var(--i, 0) * 50ms), 600ms));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero,
+  .list-notice,
+  .section-title,
+  .card,
+  .hackathon-panel {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* --- Hero ---------------------------------------------------------------- */
 
 .hero-kicker {
@@ -95,46 +166,11 @@ body {
   color: var(--hub-text-secondary);
 }
 
-.hero-register {
-  margin-top: 28px;
-  padding: 24px;
-  border-radius: 20px;
-  background: var(--hub-accent-soft);
-  border: 1px solid var(--hub-border);
-  max-width: 720px;
-}
-
-.hero-register h2 {
-  margin: 0 0 8px;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--hub-accent-ink);
-}
-
-.hero-register p {
-  margin: 0;
-  color: var(--hub-text-secondary);
-}
-
-.hero-register code {
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  font-size: 13px;
-  padding: 1px 5px;
-  border-radius: 6px;
-  background: var(--hub-card);
-  border: 1px solid var(--hub-border);
-}
-
-.hero-register a {
-  color: var(--hub-accent-ink);
-  font-weight: 600;
-}
-
-.hero-note {
-  margin-top: 10px !important;
-  font-size: 13px;
-  color: var(--hub-text-muted);
+.hero-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
 }
 
 /* --- List ---------------------------------------------------------------- */
@@ -174,8 +210,8 @@ body {
   border: 1px solid var(--hub-border);
   box-shadow: var(--hub-shadow-sm);
   transition:
-    box-shadow 140ms ease,
-    transform 140ms ease;
+    box-shadow 150ms ease,
+    transform 150ms ease;
 }
 
 .card:hover {
@@ -256,9 +292,11 @@ body {
   font-weight: 600;
   color: var(--hub-accent-ink);
   text-decoration: none;
+  transition: color 150ms ease;
 }
 
 .card-link:hover {
+  color: var(--hub-accent-hover);
   text-decoration: underline;
 }
 
@@ -297,37 +335,54 @@ body {
   color: var(--hub-text-muted);
 }
 
-/* --- Footer -------------------------------------------------------------- */
+/* --- Hackathon invitation ------------------------------------------------- */
 
-.footer {
-  margin-top: 56px;
-  padding: 28px;
+.hackathon-panel {
+  padding: 36px 28px;
   border-radius: 20px;
-  background: var(--hub-card);
-  border: 1px solid var(--hub-border);
   text-align: center;
+  background: var(--hub-accent-soft);
+  border: 1.5px dashed var(--hub-accent-ink);
 }
 
-.footer h2 {
+.hackathon-panel h3 {
   margin: 0 0 6px;
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  color: var(--hub-accent-ink);
 }
 
-.footer p {
+.hackathon-lede {
   margin: 0 auto;
-  max-width: 52ch;
+  max-width: 46ch;
+  font-size: 15px;
   color: var(--hub-text-secondary);
 }
 
-.footer-links {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 18px 0;
+.hackathon-how {
+  margin: 10px auto 18px;
+  max-width: 56ch;
+  font-size: 13px;
+  color: var(--hub-text-muted);
 }
+
+.hackathon-how code {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--hub-card);
+  border: 1px solid var(--hub-border);
+}
+
+.hackathon-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--hub-text-muted);
+}
+
+/* --- Buttons -------------------------------------------------------------- */
 
 .button {
   display: inline-block;
@@ -335,15 +390,27 @@ body {
   border-radius: 999px;
   font-size: 14px;
   font-weight: 600;
+  font-family: var(--hub-font);
   text-decoration: none;
+  cursor: pointer;
   color: var(--hub-text);
   background: var(--hub-raised);
   border: 1px solid var(--hub-border);
-  transition: background 140ms ease;
+  transition:
+    background 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
 }
 
-.button:hover {
+.button:hover:not(:disabled) {
   background: var(--hub-accent-soft);
+  box-shadow: var(--hub-shadow-sm);
+  transform: translateY(-1px);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .button-primary {
@@ -352,12 +419,33 @@ body {
   border-color: var(--hub-accent);
 }
 
-.button-primary:hover {
+.button-primary:hover:not(:disabled) {
   background: var(--hub-accent-hover);
   border-color: var(--hub-accent-hover);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card:hover,
+  .button,
+  .button:hover:not(:disabled) {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* --- Footer -------------------------------------------------------------- */
+
+.footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--hub-border);
+  text-align: center;
+}
+
 .footer-fineprint {
+  margin: 0 auto;
+  max-width: 62ch;
   font-size: 12px;
   color: var(--hub-text-muted);
 }
@@ -367,7 +455,7 @@ body {
     padding: 32px 16px 48px;
   }
 
-  .hero-register {
-    padding: 18px;
+  .hackathon-panel {
+    padding: 26px 18px;
   }
 }

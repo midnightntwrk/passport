@@ -17,6 +17,7 @@ const FETCH_TIMEOUT_MS = 8_000
 
 export type RegistryCategory = 'defi' | 'gaming' | 'tools' | 'identity' | 'other'
 export type RegistryNetwork = 'preview' | 'preprod' | 'mainnet'
+export type RegistrySection = 'standard' | 'hackathon'
 
 export interface RegistryApp {
   id: string
@@ -26,6 +27,13 @@ export interface RegistryApp {
   /** Absolute URL to the app icon. */
   icon?: string
   category?: RegistryCategory
+  /**
+   * Which hub section the entry belongs to. The Passport app registry's v2
+   * format carries this; the original 1AM format does not, so the parser
+   * defaults absent or unrecognised values to 'standard'. Carried for
+   * consumers — nothing in this demo filters on it yet.
+   */
+  section?: RegistrySection
   networks?: RegistryNetwork[]
   featured?: boolean
   new?: boolean
@@ -172,6 +180,7 @@ function parseApp(value: unknown): RegistryApp | null {
     description: optionalString(value.description),
     icon: webUrl(value.icon),
     category,
+    section: value.section === 'hackathon' ? 'hackathon' : 'standard',
     networks,
     featured: value.featured === true,
     new: value.new === true,

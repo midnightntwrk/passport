@@ -6,7 +6,8 @@
  *
  * 1. **Bundled snapshot** — `registry.snapshot.json` in this folder is a
  *    build-time copy of the registry repository's `registry.json` (snapshot
- *    taken 2026/08/07). It ships inside the bundle, so the page always has
+ *    refreshed 2026/08/07, registry format version 2 with `section`). It
+ *    ships inside the bundle, so the page always has
  *    something honest to show, offline included. Refresh it by copying the
  *    registry's `registry.json` over it and rebuilding.
  * 2. **Runtime fetch** — when `VITE_REGISTRY_JSON_URL` is set at build time
@@ -27,6 +28,7 @@ const FETCH_TIMEOUT_MS = 8_000;
 
 export type RegistryCategory = 'defi' | 'gaming' | 'tools' | 'identity' | 'other';
 export type RegistryNetwork = 'preview' | 'preprod' | 'mainnet';
+export type RegistrySection = 'standard' | 'hackathon';
 
 export interface RegistryApp {
   id: string;
@@ -36,6 +38,11 @@ export interface RegistryApp {
   /** Absolute https URL to the app icon. */
   icon?: string;
   category?: RegistryCategory;
+  /**
+   * Which hub section lists the entry. Registry format v2 requires it;
+   * entries from the older format (no `section`) default to 'standard'.
+   */
+  section?: RegistrySection;
   networks?: RegistryNetwork[];
   featured?: boolean;
   new?: boolean;
@@ -97,6 +104,7 @@ function parseApp(value: unknown): RegistryApp | null {
     description: optionalString(value.description),
     icon: webUrl(value.icon),
     category,
+    section: value.section === 'hackathon' ? 'hackathon' : 'standard',
     networks,
     featured: value.featured === true,
     new: value.new === true,
