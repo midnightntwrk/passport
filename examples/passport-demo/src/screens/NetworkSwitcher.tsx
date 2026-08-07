@@ -12,7 +12,10 @@ import './network-switcher.css'
  *
  * The default follows that same build configuration (2026/08/06), so the app
  * opens on the network its wallet actually signs on and the app grid filters
- * to match. A user's own choice, once made, still wins.
+ * to match. A user's own choice, once made, wins for the session — but a
+ * persisted choice that no longer matches the wallet's network is discarded at
+ * boot (2026/08/06), because a stale selection silently filtered this build's
+ * own apps (the raffle, local dev entries) out of the grid.
  */
 
 export type PassportNetwork = 'preview' | 'preprod' | 'mainnet'
@@ -38,7 +41,18 @@ const NETWORK_ORDER: PassportNetwork[] = ['preview', 'preprod', 'mainnet']
 export function loadStoredNetwork(): PassportNetwork {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'preview' || stored === 'preprod' || stored === 'mainnet') return stored
+    if (stored === 'preview' || stored === 'preprod' || stored === 'mainnet') {
+      /* A selection persisted by an earlier visit can disagree with the
+         network THIS build's wallet signs on — after a redeploy, or across
+         builds sharing an origin. Keeping it would filter the build's own
+         apps out of the grid with no hint why, so the wallet's network wins
+         at boot and the stale selection is discarded. */
+      if (WALLET_NETWORK && stored !== WALLET_NETWORK) {
+        localStorage.removeItem(STORAGE_KEY)
+        return DEFAULT_NETWORK
+      }
+      return stored
+    }
   } catch {
     /* storage unavailable — stay on the default */
   }
