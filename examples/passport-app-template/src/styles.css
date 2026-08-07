@@ -122,7 +122,11 @@ code {
 
 .pt-card {
   background: var(--mn-surface-card);
-  border-radius: var(--mn-radius-lg);
+  /* Passport card recipe: default card radius, hairline, soft resting lift
+     (see .mnhome-card / .mnhome-addresses in the Passport demo). */
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  box-shadow: var(--mn-shadow-sm);
   padding: 18px 18px 20px;
   display: flex;
   flex-direction: column;
@@ -212,7 +216,9 @@ code {
   gap: 1px;
   border-radius: var(--mn-radius-md);
   overflow: hidden;
-  background: var(--mn-hairline);
+  /* The 1px gaps between rows read as hairlines; --mn-hairline is a width
+     token, so the COLOUR token paints them. */
+  background: var(--mn-border-hairline);
 }
 
 .pt-facts > div {
@@ -256,7 +262,8 @@ code {
   background: var(--mn-accent);
   color: var(--mn-accent-text);
   font-size: 14px;
-  font-weight: 600;
+  /* Passport primary pills carry weight 700. */
+  font-weight: 700;
   letter-spacing: -0.01em;
   cursor: pointer;
   box-shadow: var(--mn-shadow-accent);
@@ -282,7 +289,8 @@ code {
 .pt-tx:focus-visible,
 .pt-toast-link:focus-visible,
 .pt-toast-close:focus-visible {
-  outline: var(--mn-focus-ring);
+  /* --mn-focus-ring is a colour; a bare `outline: <colour>` draws nothing. */
+  outline: 2px solid var(--mn-focus-ring);
   outline-offset: 2px;
 }
 
@@ -322,7 +330,7 @@ code {
   padding: 11px 13px;
   border-radius: var(--mn-radius-md);
   background: var(--mn-surface-page);
-  border-left: 3px solid var(--mn-hairline);
+  border-left: 3px solid var(--mn-border-hairline);
 }
 
 .pt-fields li.shared {
@@ -386,7 +394,7 @@ code {
   padding: 11px 13px;
   border-radius: var(--mn-radius-md);
   background: var(--mn-surface-page);
-  border-left: 3px solid var(--mn-hairline);
+  border-left: 3px solid var(--mn-border-hairline);
 }
 
 .pt-result.ok {
@@ -504,6 +512,7 @@ code {
   align-items: flex-start;
   gap: 11px;
   padding: 13px 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
   border-radius: var(--mn-radius);
   background: var(--mn-surface-raised);
   box-shadow: var(--mn-shadow-lg);

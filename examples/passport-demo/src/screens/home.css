@@ -751,7 +751,9 @@ a.mnhome-icon-button {
   letter-spacing: -.01em;
   overflow-wrap: anywhere;
 }
-.mnhome-send-input:focus-visible { outline: var(--mn-focus-ring); }
+/* The token is a colour; a bare colour in `outline` sets no style, so no
+   ring ever drew. */
+.mnhome-send-input:focus-visible { outline: 2px solid var(--mn-focus-ring); outline-offset: 2px; }
 .mnhome-send-input[aria-invalid='true'] { border-color: var(--mn-border-strong); }
 
 .mnhome-send-amount { position: relative; display: block; }
