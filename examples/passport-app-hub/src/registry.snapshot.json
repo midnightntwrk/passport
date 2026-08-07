@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "lastUpdated": "2026/08/05",
+  "apps": [
+    {
+      "id": "ascend-dex",
+      "name": "Ascend DEX",
+      "description": "Privacy-first decentralized exchange on Midnight",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/ascend.svg",
+      "url": "https://dex.ascend.market",
+      "category": "defi",
+      "networks": ["preview", "preprod", "mainnet"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "pulse",
+      "name": "Pulse",
+      "description": "AMM DEX with private swaps",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/pulse.png",
+      "url": "https://pulsefinance.org",
+      "category": "defi",
+      "networks": ["preprod"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "midnight-city",
+      "name": "Midnight City",
+      "description": "On-chain AI simulation on Midnight Network",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/midnight-city.png",
+      "url": "https://www.midnight.city/spaces/central",
+      "category": "gaming",
+      "networks": ["mainnet"],
+      "featured": true,
+      "new": true,
+      "immersive": true
+    },
+    {
+      "id": "ascend-market",
+      "name": "Ascend Market",
+      "description": "Trade prediction markets with up to 100x+ leverage",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/ascend.svg",
+      "url": "https://testnet.ascend.market",
+      "category": "defi",
+      "networks": ["preview"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "dominion",
+      "name": "Dominion",
+      "description": "On-chain poker with mental poker cryptography and ZK proofs",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/dominion.svg",
+      "url": "https://dominion.fun",
+      "category": "gaming",
+      "networks": ["preview", "preprod", "mainnet"]
+    },
+    {
+      "id": "1am-explorer",
+      "name": "1AM Explorer",
+      "description": "Block explorer for Midnight Network",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/1am-explorer.svg",
+      "url": "https://explorer.1am.xyz",
+      "category": "tools",
+      "networks": ["preview", "preprod", "mainnet"]
+    },
+    {
+      "id": "northstar-dex",
+      "name": "NorthStar DEX",
+      "description": "Privacy-first DEX on Midnight",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/northstar-dex.png",
+      "url": "https://preprod.northstardex.com",
+      "category": "defi",
+      "networks": ["preprod"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "galaxyswap",
+      "name": "GalaxySwap",
+      "description": "Major Privacy DEX on Midnight",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/galaxyswap.png",
+      "url": "https://preprod.galaxyswap.io",
+      "category": "defi",
+      "networks": ["preprod"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "zkmint",
+      "name": "ZKMint",
+      "description": "Night-ID name service and ZK-powered launchpad on Midnight Network",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/zkmint.svg",
+      "url": "https://zkmint.1am.xyz",
+      "category": "identity",
+      "networks": ["preview", "preprod", "mainnet"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "nyx-dex",
+      "name": "NyxDex",
+      "description": "Privacy DeFi on Midnight",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/nyxdex.png",
+      "url": "https://nyxdex.io",
+      "category": "defi",
+      "networks": ["preview"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "night-heron",
+      "name": "Night Heron",
+      "description": "Blockchain-native Florida community association management (Ch. 718/719/720)",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/night-heron.png",
+      "url": "https://nightheron.io",
+      "category": "other",
+      "networks": ["preprod"],
+      "new": true
+    },
+    {
+      "id": "1am-playground",
+      "name": "1AM Playground",
+      "description": "A collection of sample dApps demonstrating 1AM Wallet integrations",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/1am-playground.svg",
+      "url": "https://playground.1am.xyz/",
+      "category": "tools",
+      "networks": ["preview", "preprod"],
+      "new": true
+    }
+  ]
+}

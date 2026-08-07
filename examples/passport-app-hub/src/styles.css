@@ -1,0 +1,373 @@
+/* Passport App Hub — standalone stylesheet.
+ *
+ * Follows the Passport demo's "Midnight, Base-inspired" design language
+ * (examples/passport-demo/src/screens/tokens.css): one electric blue accent
+ * (#0052FF), roomy rounded cards, soft vertical shadows, Inter/system type,
+ * light by default with dark honoured from the operating system via
+ * prefers-color-scheme. Kept self-contained so the hub builds alone.
+ */
+
+:root {
+  --hub-accent: #0052ff;
+  --hub-accent-hover: #0043d6;
+  --hub-accent-soft: rgba(0, 82, 255, 0.08);
+  --hub-accent-ink: #0040cc;
+  --hub-accent-text: #ffffff;
+  --hub-page: #ffffff;
+  --hub-card: #f5f6f8;
+  --hub-raised: #ffffff;
+  --hub-text: #0a0b0d;
+  --hub-text-secondary: #464b55;
+  --hub-text-muted: #5b616e;
+  --hub-border: #e2e6eb;
+  --hub-shadow-sm: 0 1px 2px rgba(10, 11, 13, 0.05);
+  --hub-shadow-md: 0 6px 18px rgba(10, 11, 13, 0.08);
+  --hub-font:
+    Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hub-accent-hover: #3d77ff;
+    --hub-accent-soft: rgba(61, 119, 255, 0.16);
+    --hub-accent-ink: #7da2ff;
+    --hub-page: #0a0b0d;
+    --hub-card: #16181d;
+    --hub-raised: #1e2127;
+    --hub-text: #f7f9fc;
+    --hub-text-secondary: #b4bac6;
+    --hub-text-muted: #8a919e;
+    --hub-border: #23262c;
+    --hub-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --hub-shadow-md: 0 6px 18px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--hub-page);
+  color: var(--hub-text);
+  font-family: var(--hub-font);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 48px 20px 64px;
+}
+
+/* --- Hero ---------------------------------------------------------------- */
+
+.hero-kicker {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--hub-accent-ink);
+}
+
+.hero h1 {
+  margin: 0 0 16px;
+  font-size: clamp(38px, 7vw, 64px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.hero-lede {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 16px;
+  color: var(--hub-text-secondary);
+}
+
+.hero-register {
+  margin-top: 28px;
+  padding: 24px;
+  border-radius: 20px;
+  background: var(--hub-accent-soft);
+  border: 1px solid var(--hub-border);
+  max-width: 720px;
+}
+
+.hero-register h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--hub-accent-ink);
+}
+
+.hero-register p {
+  margin: 0;
+  color: var(--hub-text-secondary);
+}
+
+.hero-register code {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 13px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--hub-card);
+  border: 1px solid var(--hub-border);
+}
+
+.hero-register a {
+  color: var(--hub-accent-ink);
+  font-weight: 600;
+}
+
+.hero-note {
+  margin-top: 10px !important;
+  font-size: 13px;
+  color: var(--hub-text-muted);
+}
+
+/* --- List ---------------------------------------------------------------- */
+
+.list-notice {
+  margin: 32px 0 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--hub-card);
+  border: 1px solid var(--hub-border);
+  color: var(--hub-text-muted);
+  font-size: 13px;
+}
+
+.section-title {
+  margin: 40px 0 16px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+/* --- Cards --------------------------------------------------------------- */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--hub-card);
+  border: 1px solid var(--hub-border);
+  box-shadow: var(--hub-shadow-sm);
+  transition:
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.card:hover {
+  box-shadow: var(--hub-shadow-md);
+  transform: translateY(-2px);
+}
+
+.card-stale {
+  opacity: 0.75;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--hub-raised);
+  border: 1px solid var(--hub-border);
+}
+
+.card-icon-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--hub-accent-ink);
+  background: var(--hub-accent-soft);
+}
+
+.card-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.card-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-category {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hub-text-muted);
+}
+
+.card-description {
+  margin: 0;
+  font-size: 14px;
+  color: var(--hub-text-secondary);
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.card-link {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--hub-accent-ink);
+  text-decoration: none;
+}
+
+.card-link:hover {
+  text-decoration: underline;
+}
+
+.card-footnote {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--hub-border);
+  font-size: 11px;
+  color: var(--hub-text-muted);
+}
+
+/* --- Badges -------------------------------------------------------------- */
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.badge-network {
+  background: var(--hub-accent-soft);
+  color: var(--hub-accent-ink);
+}
+
+.badge-new {
+  background: var(--hub-accent);
+  color: var(--hub-accent-text);
+}
+
+.badge-stale {
+  background: var(--hub-raised);
+  border: 1px solid var(--hub-border);
+  color: var(--hub-text-muted);
+}
+
+/* --- Footer -------------------------------------------------------------- */
+
+.footer {
+  margin-top: 56px;
+  padding: 28px;
+  border-radius: 20px;
+  background: var(--hub-card);
+  border: 1px solid var(--hub-border);
+  text-align: center;
+}
+
+.footer h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.footer p {
+  margin: 0 auto;
+  max-width: 52ch;
+  color: var(--hub-text-secondary);
+}
+
+.footer-links {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.button {
+  display: inline-block;
+  padding: 10px 22px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--hub-text);
+  background: var(--hub-raised);
+  border: 1px solid var(--hub-border);
+  transition: background 140ms ease;
+}
+
+.button:hover {
+  background: var(--hub-accent-soft);
+}
+
+.button-primary {
+  color: var(--hub-accent-text);
+  background: var(--hub-accent);
+  border-color: var(--hub-accent);
+}
+
+.button-primary:hover {
+  background: var(--hub-accent-hover);
+  border-color: var(--hub-accent-hover);
+}
+
+.footer-fineprint {
+  font-size: 12px;
+  color: var(--hub-text-muted);
+}
+
+@media (max-width: 480px) {
+  .page {
+    padding: 32px 16px 48px;
+  }
+
+  .hero-register {
+    padding: 18px;
+  }
+}

@@ -130,6 +130,33 @@ with NIGHT but no registered DUST generation still gets `insufficient-funds`
 — that is designed behaviour (`docs/TROUBLESHOOTING.md`). `submitted` means
 *at the node*, not *final*. Nothing here is free, and no copy may say it is.
 
+## Getting listed on the Passport App Hub
+
+The Passport App Hub (`examples/passport-app-hub` in the Passport repository)
+is the public list of apps that integrate this bridge. It renders the app
+registry's `registry.json` — the same file Passport's own app grid fetches —
+so listing is one pull request against the registry repository, not a code
+change anywhere:
+
+1. Fork the registry repository, add **one entry** to the `apps` array in
+   `registry.json`, and open a pull request.
+2. CI schema-checks the entry with the registry's dependency-free
+   `validate.js` (run it locally first: `node validate.js`, no install).
+3. A maintainer reviews by hand and merges; the hub and Passport's grid pick
+   the entry up on their next fetch.
+
+Required fields, per the registry schema: `id` (unique, `^[a-z0-9-]{1,32}$`),
+`name` (≤ 40 chars), `description` (≤ 120 chars, honest), `icon` (absolute
+`https` URL, 128×128 PNG or SVG, ≤ 50KB), `url` (absolute `https`, live),
+`category` (one of `defi`, `gaming`, `tools`, `identity`, `other`), and
+`networks` (non-empty subset of `preview`, `preprod`, `mainnet`). Optional:
+`new` and `immersive`; **never set `featured`** — it is maintainers-only. No
+other keys are permitted; the validator rejects them.
+
+The hub only lists schema-checked entries, and a listing is not an audit —
+it records that the app exists, is reachable over `https`, and asked to be
+listed.
+
 ## Conventions
 
 - British English in user-facing copy ("colour", "authorise"), Oxford comma.
