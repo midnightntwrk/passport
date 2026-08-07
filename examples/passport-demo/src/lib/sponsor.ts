@@ -19,9 +19,12 @@
  *
  * Three rules make this honest by construction:
  *
- *   1. **Opt-in.** With `VITE_SPONSOR_URL` unset the module reports `disabled`
- *      and every caller takes exactly the path it took before sponsorship
- *      existed. No default URL is baked in.
+ *   1. **On by default, off by one word.** Each public network carries a
+ *      default gateway (see `DEFAULT_SPONSOR_URLS` — decided 2026/08/07,
+ *      because a fresh passkey wallet holds no DUST and default-off failed
+ *      every first transaction). `VITE_SPONSOR_URL` overrides it, and the
+ *      literal `off` disables sponsorship, returning every caller to exactly
+ *      the path it took before sponsorship existed.
  *   2. **`available > 0`, not "ready".** The upstream `isBalanceServiceReady`
  *      returns `true` for a wallet that is merely *synced* — which is precisely
  *      the state the deployed preview gateway is in today (`total: 1`,
@@ -102,20 +105,37 @@ function trimmed(value: string | undefined): string | undefined {
 }
 
 /**
+ * The gateway each public network sponsors through when nothing overrides it.
+ * Sponsorship is ON BY DEFAULT (decided 2026/08/07): a fresh passkey wallet
+ * holds no DUST, so without a sponsor its first transaction is impossible —
+ * default-off made every new user's first attempt fail. A devnet has no entry
+ * and stays unsponsored unless a URL is set explicitly.
+ */
+const DEFAULT_SPONSOR_URLS: Record<string, string> = {
+  preview: 'https://api-preview.1am.xyz',
+  preprod: 'https://api-preprod.1am.xyz',
+};
+
+/**
  * Reads the sponsor configuration from the environment.
  *
- *   VITE_SPONSOR_URL         base URL of the ProofStation gateway. Unset means
- *                            sponsorship is off — there is no default.
+ *   VITE_SPONSOR_URL         base URL of the ProofStation gateway. Unset falls
+ *                            back to the network's default gateway; the
+ *                            literal `off` disables sponsorship outright.
  *   VITE_SPONSOR_API_KEY     optional `X-API-Key`.
  *   VITE_SPONSOR_CLIENT_ID   optional `X-Client-ID`.
  *
- * Returns `null` when sponsorship is not configured, and throws when it is
- * configured with a URL that could leak a signed transaction over plaintext.
+ * Returns `null` when sponsorship is disabled or the network has no gateway,
+ * and throws when a URL could leak a signed transaction over plaintext.
  */
 export function sponsorConfig(
   env: Record<string, string | undefined> = environment(),
 ): SponsorConfig | null {
-  const raw = trimmed(env.VITE_SPONSOR_URL);
+  const explicit = trimmed(env.VITE_SPONSOR_URL);
+  if (explicit === 'off') return null;
+  const raw =
+    explicit ??
+    DEFAULT_SPONSOR_URLS[trimmed(env.VITE_MIDNIGHT_NETWORK_ID) ?? 'preview'];
   if (!raw) return null;
   const url = raw.replace(/\/+$/, '');
   assertSecureSponsorUrl(url);
