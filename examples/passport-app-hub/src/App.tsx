@@ -1,7 +1,49 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties } from 'react';
 import { loadRegistry, snapshotApps } from './registry';
 import type { RegistryApp, RegistryResult } from './registry';
+import {
+  getResolvedTheme,
+  subscribeToTheme,
+  toggleTheme,
+  type ResolvedTheme,
+} from './theme';
+
+function useResolvedTheme(): ResolvedTheme {
+  return useSyncExternalStore(subscribeToTheme, getResolvedTheme, () => 'light');
+}
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+    </svg>
+  );
+}
+
+function ThemeToggle() {
+  const dark = useResolvedTheme() === 'dark';
+  return (
+    <button
+      type="button"
+      className="theme-toggle"
+      onClick={() => toggleTheme()}
+      aria-label={dark ? 'Switch to the light theme' : 'Switch to the dark theme'}
+      title={dark ? 'Light theme' : 'Dark theme'}
+    >
+      {dark ? <SunIcon /> : <MoonIcon />}
+    </button>
+  );
+}
 
 /**
  * Public URL of the app registry repository. The registry exists but has not
@@ -125,24 +167,23 @@ export default function App() {
     };
   }, []);
 
-  // Entries without a section come from the older registry format and belong
-  // to the standard list — the parser defaults them there.
-  const standard = result.apps.filter((app) => (app.section ?? 'standard') !== 'hackathon');
+  // The seeded catalogue is Passport's alone — it renders inside the wallet's
+  // Apps tab, never here. The hub shows only what the hackathon submits.
   const hackathon = result.apps.filter((app) => app.section === 'hackathon');
-  const apps = [...standard].sort(
-    (a, b) => Number(b.featured === true) - Number(a.featured === true),
-  );
 
   return (
     <div className="page">
+      <div className="page-topbar">
+        <ThemeToggle />
+      </div>
       <header className="hero">
         <p className="hero-kicker">
           Midnight Passport <span className="beta-badge">Beta</span>
         </p>
         <h1>Passport App Hub</h1>
         <p className="hero-lede">
-          The applications that speak the Passport bridge — open them in Passport's in-app
-          browser and approve what they may see and spend, on Passport's own surface.
+          Apps built for Passport arrive here from the hackathon — one pull request each. The
+          full catalogue lives inside Passport's own Apps tab.
         </p>
         <div className="hero-links">
           <a className="button button-primary" href={TEMPLATE_URL} target="_blank" rel="noreferrer">
@@ -155,21 +196,12 @@ export default function App() {
       </header>
 
       <main>
-        {result.source === 'snapshot-after-failed-fetch' && (
+        {result.source === 'snapshot-after-failed-fetch' && hackathon.length > 0 && (
           <p className="list-notice">
             The live registry could not be reached — showing the bundled snapshot instead. Entries
             below are marked stale.
           </p>
         )}
-
-        <section>
-          <h2 className="section-title">Apps</h2>
-          <div className="grid">
-            {apps.map((app, index) => (
-              <AppCard key={app.id} app={app} index={index} />
-            ))}
-          </div>
-        </section>
 
         <section>
           <h2 className="section-title">Hackathon apps</h2>

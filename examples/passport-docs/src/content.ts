@@ -60,7 +60,7 @@ fingerprint, or device PIN.
 | Piece | What it is | Where it lives |
 | --- | --- | --- |
 | **Passport app** | The wallet and identity client itself — onboarding, balances, Send and Receive, the DUST battery, \`.night\` names, and the in-app browser for connected apps. | [midnightpassport.com](https://midnightpassport.com) |
-| **App Hub** | The public list of applications that speak the Passport bridge. Listing is a pull request against the registry, not a code change. | [hub.midnightpassport.com](https://hub.midnightpassport.com) |
+| **App Hub** | The hackathon showcase for apps built on the Passport bridge — listing is a pull request against the registry. The full app catalogue renders inside Passport's own Apps tab. | [hub.midnightpassport.com](https://hub.midnightpassport.com) |
 | **App template** | A starter kit for building your own Passport-connected app — the bridge modules, a reference client, and full protocol docs. | [template.midnightpassport.com](https://template.midnightpassport.com) |
 | **App registry** | The \`registry.json\` file that both Passport's app grid and the App Hub fetch. One schema-checked JSON entry per listed app. | Public repository URL to be published — the Hub's "Raise a PR" button lights up when it is. |
 
