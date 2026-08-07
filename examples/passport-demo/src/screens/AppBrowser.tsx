@@ -12,11 +12,6 @@ import {
   X,
 } from 'lucide-react'
 import {
-  mainnet,
-  MidnightBech32m,
-  UnshieldedAddress,
-} from '@midnight-ntwrk/wallet-sdk-address-format'
-import {
   createPassportProfileReady,
   createPassportProfileResponse,
   createPassportTxResponse,
@@ -27,9 +22,22 @@ import {
   type PassportProfileRequest,
   type PassportProfileResponse,
   type PassportTxRequest,
-  type PassportTxResponse,
 } from '../backend.js'
-import { explorerTxUrl } from '../lib/networks.js'
+/* The approval ladder, the NIGHT formatting, the error mapping, and the two
+   sentences of sheet copy live in one module so the popup approval surface
+   (`txConsent.tsx`) cannot drift from this one. Extraction only — every string
+   and the order of the checks are unchanged. */
+import {
+  capTxDetail,
+  evaluateTxRequest,
+  explorerTxHref,
+  formatNight,
+  shortAddress,
+  transferErrorFrom,
+  txBoundaryCopy,
+  walletHoldsCopy,
+  type PassportTxResponseBody,
+} from '../lib/txApproval.js'
 import type { RegistryApp } from '../lib/registry.js'
 import { pushToast } from './ToastStack.js'
 import './apps.css'
@@ -127,71 +135,6 @@ type TransferOutcome =
   | { kind: 'submitted'; txId: string }
   | { kind: 'declined' }
   | { kind: 'failed'; message: string }
-
-const NIGHT_DECIMALS = 6
-
-/**
- * The explorer's transaction route, per network. The link takes the 32-byte
- * ledger transaction hash — never the identifier `submitTransaction` answers
- * with, which resolves nowhere. Which networks have an
- * explorer at all is answered by `lib/networks.ts`, and `null` from it means
- * the id is shown as text instead.
- */
-function explorerTxHref(networkId: string | null | undefined, txId: string): string | null {
-  return explorerTxUrl(networkId, txId)
-}
-
-/** Atomic NIGHT → display NIGHT. Exact: string arithmetic, never a float. */
-function formatNight(atomic: bigint): string {
-  const negative = atomic < 0n
-  const digits = (negative ? -atomic : atomic).toString().padStart(NIGHT_DECIMALS + 1, '0')
-  const whole = digits.slice(0, digits.length - NIGHT_DECIMALS)
-  const fraction = digits.slice(digits.length - NIGHT_DECIMALS).replace(/0+$/, '')
-  return `${negative ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`
-}
-
-function shortAddress(value: string): string {
-  return value.length <= 24 ? value : `${value.slice(0, 12)}…${value.slice(-8)}`
-}
-
-/** `mainnet` arrives as a symbol from the address codec; every other network is its own name. */
-function networkNameOf(value: string | typeof mainnet): string {
-  return value === mainnet ? 'mainnet' : value
-}
-
-function messageOf(cause: unknown): string {
-  if (cause instanceof Error && cause.message) return cause.message
-  return typeof cause === 'string' && cause ? cause : 'No further detail was reported.'
-}
-
-/**
- * Maps a wallet failure onto the bridge's fixed error vocabulary. The thrown
- * value is Contract W's `SendNightError` shape — `{ code, message }` — but this
- * is postMessage-adjacent code, so an unrecognised throw becomes
- * `submit-failed` with its real message rather than a guess at a nicer code.
- */
-function transferErrorFrom(cause: unknown): {
-  error: NonNullable<PassportTxResponse['error']>
-  detail: string
-} {
-  const code =
-    typeof cause === 'object' && cause !== null && typeof (cause as { code?: unknown }).code === 'string'
-      ? (cause as { code: string }).code
-      : null
-  const detail = messageOf(cause)
-  if (code === 'insufficient-night' || code === 'insufficient-dust') {
-    return { error: 'insufficient-funds', detail }
-  }
-  if (code === 'wrong-network') return { error: 'network-mismatch', detail }
-  if (code === 'invalid-recipient') return { error: 'invalid-request', detail }
-  /* The wallet went away between the sheet appearing and the approval landing —
-     a genuinely unavailable wallet, not a failed submission. */
-  if (code === 'wallet-closed') return { error: 'wallet-unavailable', detail }
-  /* The session's passkey could not be asserted at all, so no transaction can
-     be approved until the user signs in again. */
-  if (code === 'presence-unavailable') return { error: 'wallet-unavailable', detail }
-  return { error: 'submit-failed', detail }
-}
 
 const FIELD_LABELS: Record<PassportProfileField, string> = {
   displayName: 'Passport display name',
@@ -381,22 +324,13 @@ export default function AppBrowser(props: AppBrowserProps) {
   )
 
   const postTx = useCallback(
-    (
-      request: PassportTxRequest,
-      body: Omit<PassportTxResponse, 'protocol' | 'type' | 'requestId' | 'nonce'>,
-    ) => {
+    (request: PassportTxRequest, body: PassportTxResponseBody) => {
       const target = frameRef.current?.contentWindow
       if (!target || !origin) return
       /* The app's own parser caps `detail` at 400 characters and rejects the
-         whole response if it is longer. An SDK message can be far longer than
-         that, so truncate here rather than have the app silently ignore an
-         honest failure reply. */
-      const detail =
-        body.detail && body.detail.length > 400 ? `${body.detail.slice(0, 397)}…` : body.detail
-      target.postMessage(
-        createPassportTxResponse(request, detail ? { ...body, detail } : body),
-        origin,
-      )
+         whole response if it is longer — `capTxDetail` truncates rather than
+         have the app silently ignore an honest failure reply. */
+      target.postMessage(createPassportTxResponse(request, capTxDetail(body)), origin)
     },
     [origin],
   )
@@ -460,74 +394,23 @@ export default function AppBrowser(props: AppBrowserProps) {
     }
 
     const handleTxRequest = (txRequest: PassportTxRequest, requestOrigin: string) => {
-      /* (1) One sheet at a time, exactly as for profile requests. */
-      if (pending || pendingTx) {
-        postTx(txRequest, {
-          status: 'failed',
-          error: 'invalid-request',
-          detail: 'Passport is already showing an approval sheet for this app.',
-        })
+      /* The four-step ladder — sheet already open, wallet availability,
+         recipient decode plus network match, amount — lives in
+         `lib/txApproval.ts` so the popup approval surface climbs exactly the
+         same one, in exactly the same order, answering with exactly the same
+         codes and sentences. */
+      const verdict = evaluateTxRequest(txRequest, {
+        sheetOpen: Boolean(pending || pendingTx),
+        walletReady: Boolean(executeTransferRef.current),
+        transferContext: transferContext ?? null,
+        dynamicOnlySession: Boolean(dynamicOnlySession),
+      })
+      if (verdict.kind === 'refuse') {
+        postTx(txRequest, verdict.body)
         return
       }
 
-      /* (2) No wallet, no sheet. Asking the user to approve a signature that
-         cannot happen would be theatre, and the network in step 3 is the open
-         wallet's — with no wallet there is nothing to validate against. */
-      const wallet = executeTransferRef.current
-      if (!wallet || !transferContext) {
-        postTx(txRequest, {
-          status: 'failed',
-          error: 'wallet-unavailable',
-          /* Same error code either way — apps already handle it — but a
-             Dynamic-only session deserves the honest detail: the connect
-             worked, and it is specifically signing that needs the passkey. */
-          detail: dynamicOnlySession
-            ? 'This session is signed in with Dynamic; paying from Passport requires the local passkey wallet. Sign in with a passkey to pay.'
-            : 'No Passport wallet session is open in this browser, so nothing can be signed or sent.',
-        })
-        return
-      }
-
-      /* (3) The recipient must really be an unshielded address on the open
-         wallet's own network. This is the check the bridge protocol cannot make
-         for itself — the demo backend carries no Midnight SDK. */
-      let parsed: MidnightBech32m
-      try {
-        parsed = MidnightBech32m.parse(txRequest.intent.recipientAddress.trim())
-      } catch (cause) {
-        postTx(txRequest, {
-          status: 'failed',
-          error: 'invalid-request',
-          detail: `That recipient is not a Midnight address. ${messageOf(cause)}`,
-        })
-        return
-      }
-      const recipientNetwork = networkNameOf(parsed.network)
-      if (recipientNetwork !== transferContext.networkId) {
-        postTx(txRequest, {
-          status: 'failed',
-          error: 'network-mismatch',
-          detail: `That address belongs to the ${recipientNetwork} network; this Passport wallet is on ${transferContext.networkId}.`,
-        })
-        return
-      }
-      try {
-        parsed.decode(UnshieldedAddress, transferContext.networkId)
-      } catch (cause) {
-        postTx(txRequest, {
-          status: 'failed',
-          error: 'invalid-request',
-          detail: `That is a Midnight address, but not an unshielded (mn_addr…) one. ${messageOf(cause)}`,
-        })
-        return
-      }
-
-      /* (4) The amount. The parser has already refused anything that is not
-         1–20 base-10 digits and non-zero, so this cannot throw — but the sheet
-         and the send must be driven by one bigint, not two conversions. */
-      const amount = BigInt(txRequest.intent.amount)
-
-      setPendingTx({ request: txRequest, origin: requestOrigin, amount })
+      setPendingTx({ request: txRequest, origin: requestOrigin, amount: verdict.amount })
       setSigning(false)
       setTxOutcome(null)
       setShowFullRecipient(false)
@@ -1089,18 +972,12 @@ export default function AppBrowser(props: AppBrowserProps) {
                   </div>
                   <div className="mnapps-tx-row">
                     <dt>This wallet holds</dt>
-                    <dd>
-                      {transferContext?.formattedBalance
-                        ? `${transferContext.formattedBalance} NIGHT`
-                        : 'Not known yet — the balance is still being read from the indexer.'}
-                    </dd>
+                    <dd>{walletHoldsCopy(transferContext?.formattedBalance)}</dd>
                   </div>
                 </dl>
 
                 <p className="mnapps-sheet-boundary">
-                  Approving signs a real transaction on {transferContext?.networkId ?? 'this'}{' '}
-                  with this Passport's own key, on this device. The app never sees the key,
-                  and only receives the transaction id once the node has accepted it.
+                  {txBoundaryCopy(transferContext?.networkId)}
                 </p>
 
                 <div className="mnapps-sheet-actions">

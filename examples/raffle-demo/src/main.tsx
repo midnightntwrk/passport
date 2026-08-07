@@ -58,6 +58,11 @@ function explorerTxHref(txId: string): string {
 // in-app browser (Passport is the parent frame, mints the id and nonce, and
 // posts a ready message down; the raffle must echo those exact values in its
 // request).
+//
+// Both modes can now pay. The profile exchange and the entry payment each run
+// over whichever channel this build finds itself on, with the same protocol
+// messages either way; only who mints the pair, and where the message is
+// posted, differ.
 const EMBEDDED = window.parent !== window;
 
 /**
@@ -74,6 +79,22 @@ const ON_CHAIN = COLLECTION_ADDRESS.length > 0 && /^[0-9]{1,20}$/.test(ENTRY_AMO
 
 /** Passport signs and submits; the wait covers proving as well as the node. */
 const TX_TIMEOUT_MS = 180_000;
+
+/**
+ * Standalone only: how often an open Passport popup is checked for having been
+ * closed. A user who dismisses the window has answered, even though no message
+ * will ever say so — without this the raffle would sit on a spinner forever.
+ */
+const POPUP_POLL_MS = 500;
+
+/**
+ * One name, therefore one Passport window. Both exchanges — the profile
+ * connect and the entry payment — target it, so the payment reuses the window
+ * the user already signed in to rather than stacking a second one beside it.
+ * Passport restores its session across that navigation without a further
+ * ceremony; the passkey is asked for at approval, which is where it belongs.
+ */
+const PASSPORT_WINDOW = 'midnight-passport';
 
 const ENTRY_PURPOSE = 'F1 Grand Prix raffle entry';
 
@@ -182,6 +203,8 @@ function App() {
      answer to a different question. */
   const txExchange = useRef<{ requestId: string; nonce: string } | null>(null);
   const txTimer = useRef<number | null>(null);
+  /* Standalone only: the closed-popup poll for the payment exchange. */
+  const txPoll = useRef<number | null>(null);
   /* The message listeners are registered once, so anything they need about the
      connected Passport lives in a ref rather than in a render-scoped closure
      that would still be holding the first render's `null`. */
@@ -217,6 +240,10 @@ function App() {
       window.clearTimeout(txTimer.current);
       txTimer.current = null;
     }
+    if (txPoll.current !== null) {
+      window.clearInterval(txPoll.current);
+      txPoll.current = null;
+    }
   };
 
   useEffect(() => clearTxTimer, []);
@@ -224,12 +251,19 @@ function App() {
   /**
    * Tells Passport what this entry earned the user. Passport records exactly
    * these two and nothing else — it does not invent incentives on our behalf.
+   *
+   * Embedded only, and not for want of trying: the incentive report is a
+   * fire-and-forget message to the Passport frame hosting this app, and the
+   * popup approval surface does not record them. In standalone mode there is
+   * no parent to post to — `window.parent` is this very window — so the raffle
+   * says nothing rather than posting a report to itself.
    */
   const reportIncentives = (
     address: string,
     txId: string,
     exchange: { requestId: string; nonce: string },
   ) => {
+    if (!EMBEDDED) return;
     for (const incentive of [
       { id: `raffle-entry:${txId}`, label: ENTRY_PURPOSE, txId },
       { id: `grab-credit:${address}`, label: 'Grab ride credit' },
@@ -387,11 +421,82 @@ function App() {
     );
   };
 
+  /**
+   * Posts the entry-payment intent to the Passport popup. Split out because
+   * standalone mode sends it on `ready` rather than immediately: the window
+   * has to say it is listening first, exactly as for the profile exchange.
+   */
+  const postTxRequest = (
+    target: Window,
+    exchange: { requestId: string; nonce: string },
+  ) => {
+    target.postMessage(
+      {
+        protocol: PASSPORT_TX_PROTOCOL,
+        type: 'passport.tx.request',
+        requestId: exchange.requestId,
+        nonce: exchange.nonce,
+        intent: {
+          kind: 'unshielded-transfer',
+          recipientAddress: COLLECTION_ADDRESS,
+          amount: ENTRY_AMOUNT,
+          purpose: ENTRY_PURPOSE,
+        },
+      },
+      PASSPORT_ORIGIN,
+    );
+  };
+
   useEffect(() => {
     if (EMBEDDED) return;
     const onMessage = (event: MessageEvent) => {
+      /* Two gates before anything is parsed: the pinned origin, and the window
+         this app opened itself. */
+      if (event.origin !== PASSPORT_ORIGIN || event.source !== popup.current) return;
+
+      /* The payment exchange is checked first and matched on its OWN pair. The
+         popup announces itself with the same `ready` message either way, so
+         the pair is the only thing that says which question it is answering. */
+      const txActive = txExchange.current;
+      if (txActive) {
+        const txReady = parsePassportProfileReady(event.data);
+        if (
+          txReady &&
+          txReady.requestId === txActive.requestId &&
+          txReady.nonce === txActive.nonce
+        ) {
+          const target = popup.current;
+          if (target) {
+            postTxRequest(target, txActive);
+            setDetail(
+              `Passport is asking you to approve the ${ENTRY_PRICE} NIGHT entry payment.`,
+            );
+          }
+          return;
+        }
+        const popupTxResponse = parsePassportTxResponse(event.data);
+        if (popupTxResponse) {
+          if (
+            popupTxResponse.requestId !== txActive.requestId ||
+            popupTxResponse.nonce !== txActive.nonce
+          ) {
+            return;
+          }
+          clearTxTimer();
+          txExchange.current = null;
+          settleTransaction(
+            popupTxResponse.status,
+            popupTxResponse.txId,
+            popupTxResponse.error,
+            popupTxResponse.detail,
+            txActive,
+          );
+          return;
+        }
+      }
+
       const active = request.current;
-      if (!active || event.origin !== PASSPORT_ORIGIN || event.source !== popup.current) return;
+      if (!active) return;
 
       const ready = parsePassportProfileReady(event.data);
       if (ready && ready.requestId === active.requestId && ready.nonce === active.nonce) {
@@ -460,7 +565,7 @@ function App() {
     });
     popup.current = window.open(
       `${PASSPORT_ORIGIN}/?${query.toString()}`,
-      'midnight-passport-profile',
+      PASSPORT_WINDOW,
       'popup,width=620,height=780',
     );
     if (!popup.current) {
@@ -487,45 +592,79 @@ function App() {
       return;
     }
 
-    /* Standalone mode. The transaction bridge is only implemented between an
-       app and the Passport frame around it, so this window cannot pay — and
-       says so instead of issuing a ticket it did not earn. */
-    if (!EMBEDDED) {
-      storeEntry(address);
-      setEntry({ at: new Date().toISOString() });
-      setState('entered');
-      setDetail(
-        "On-chain entry works inside Passport's app browser. This standalone window issued a profile-only ticket — no NIGHT was paid and no transaction was made.",
-      );
+    const requestId = crypto.randomUUID();
+    const nonce = randomHex();
+    /* A fresh pair per payment, never the profile handshake's: a payment reply
+       must not be mistakable for the answer to a different question. */
+    const exchange = { requestId, nonce };
+
+    if (EMBEDDED) {
+      txExchange.current = exchange;
+      setState('submitting');
+      setDetail(`Passport is asking you to approve the ${ENTRY_PRICE} NIGHT entry payment.`);
+      postTxRequest(window.parent, exchange);
+      armTxWatch(exchange);
       return;
     }
 
-    const requestId = crypto.randomUUID();
-    const nonce = randomHex();
-    txExchange.current = { requestId, nonce };
-    setState('submitting');
-    setDetail(`Passport is asking you to approve the ${ENTRY_PRICE} NIGHT entry payment.`);
-    window.parent.postMessage(
-      {
-        protocol: PASSPORT_TX_PROTOCOL,
-        type: 'passport.tx.request',
-        requestId,
-        nonce,
-        intent: {
-          kind: 'unshielded-transfer',
-          recipientAddress: COLLECTION_ADDRESS,
-          amount: ENTRY_AMOUNT,
-          purpose: ENTRY_PURPOSE,
-        },
-      },
-      PASSPORT_ORIGIN,
-    );
+    /* Standalone. The same request over the popup channel: the pair goes on
+       Passport's launch URL, Passport echoes it back to say it is listening,
+       and the intent follows. Reusing PASSPORT_WINDOW navigates the window the
+       user already connected with rather than opening a second Passport. */
     clearTxTimer();
-    txTimer.current = window.setTimeout(() => {
-      if (!txExchange.current || txExchange.current.requestId !== requestId) return;
+    txExchange.current = exchange;
+    setState('submitting');
+    setDetail('Opening Midnight Passport to approve the entry payment…');
+    const query = new URLSearchParams({
+      passportTxRequestId: requestId,
+      passportTxNonce: nonce,
+    });
+    popup.current = window.open(
+      `${PASSPORT_ORIGIN}/?${query.toString()}`,
+      PASSPORT_WINDOW,
+      'popup,width=620,height=780',
+    );
+    if (!popup.current) {
+      /* No window, no approval, no payment — and therefore no ticket. The
+         raffle says exactly that rather than issuing one it did not earn. */
       txExchange.current = null;
       setState('connected');
       setDetail(
+        'The browser blocked the Passport window, so the entry payment could not be approved. No ticket was issued — allow popups for this site and try again.',
+      );
+      return;
+    }
+    popup.current.focus();
+    armTxWatch(exchange);
+  };
+
+  /**
+   * The two watchers on a payment in flight: the overall budget, and — in
+   * standalone mode — the closed-popup poll. Both settle only the exchange
+   * they were armed for, so a stale timer can never kill a later attempt, and
+   * neither ever issues a ticket: a payment that did not come back is a
+   * payment that did not happen as far as this app can honestly claim.
+   */
+  const armTxWatch = (exchange: { requestId: string; nonce: string }) => {
+    clearTxTimer();
+    const abandon = (reason: string) => {
+      clearTxTimer();
+      if (!txExchange.current || txExchange.current.requestId !== exchange.requestId) return;
+      txExchange.current = null;
+      setState('connected');
+      setDetail(reason);
+    };
+    if (!EMBEDDED) {
+      txPoll.current = window.setInterval(() => {
+        if (popup.current?.closed) {
+          abandon(
+            'The Passport window was closed before the entry payment was approved. No ticket was issued; you can try again.',
+          );
+        }
+      }, POPUP_POLL_MS);
+    }
+    txTimer.current = window.setTimeout(() => {
+      abandon(
         'Passport did not answer the entry payment request. No ticket was issued; you can try again.',
       );
     }, TX_TIMEOUT_MS);

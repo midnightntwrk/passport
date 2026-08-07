@@ -7,7 +7,8 @@
  *
  *   Act 1  CONNECT   Establish a channel with Passport and pin its origin.
  *   Act 2  PROFILE   Ask for fields; render exactly what came back.
- *   Act 3  PAYMENT   (optional, off by default) Ask Passport to pay.
+ *   Act 3  PAYMENT   (optional, off by default) Ask Passport to pay. Works
+ *                    over either channel — framed, or popup.
  *
  * The things worth internalising, all of which are enforced below:
  *
@@ -48,6 +49,7 @@ import {
   type PassportProfileField,
   type PassportProfileResponse,
   type PassportTxErrorCode,
+  type PassportTxResponse,
 } from './bridge/index.js';
 
 import BridgeLog, { recordBridgeMessage } from './BridgeLog.js';
@@ -99,8 +101,9 @@ const PAYMENT_AMOUNT = (import.meta.env.VITE_DEMO_PAYMENT_AMOUNT ?? '100000').tr
 /** Atomic-unit amounts are base-10 strings. A float would lose precision. */
 const AMOUNT_IS_VALID = /^[0-9]{1,20}$/.test(PAYMENT_AMOUNT) && !/^0+$/.test(PAYMENT_AMOUNT);
 /**
- * All three conditions, and the embedded check at the call site. An armed flag
- * with no recipient is not a payment — it is a button that lies.
+ * All three conditions. An armed flag with no recipient is not a payment — it
+ * is a button that lies. The mounting mode is deliberately NOT one of them:
+ * payment works framed and standalone alike, over the channel each mode has.
  */
 const PAYMENT_ARMED = PAYMENT_ENABLED && PAYMENT_ADDRESS.length > 0 && AMOUNT_IS_VALID;
 
@@ -119,6 +122,15 @@ const TX_TIMEOUT_MS = 180_000;
  * will ever say so — without this, the Connect button stays disabled forever.
  */
 const POPUP_POLL_MS = 500;
+
+/**
+ * Standalone only: the name of the Passport window. One name means one
+ * window — the payment reuses the Passport the user already connected with
+ * instead of stacking a second one beside it. Passport restores its session
+ * across that navigation without a further ceremony; the passkey is asked for
+ * at approval, which is where it belongs.
+ */
+const PASSPORT_WINDOW = 'midnight-passport';
 
 /**
  * The explorer link, as a URL template with a `{hash}` placeholder. The
@@ -252,11 +264,17 @@ function App() {
    */
   const txExchange = useRef<Exchange | null>(null);
   const txTimer = useRef<number | null>(null);
+  /** STANDALONE: the closed-popup poll for a payment in flight. */
+  const txPoll = useRef<number | null>(null);
 
   const clearTxTimer = () => {
     if (txTimer.current !== null) {
       window.clearTimeout(txTimer.current);
       txTimer.current = null;
+    }
+    if (txPoll.current !== null) {
+      window.clearInterval(txPoll.current);
+      txPoll.current = null;
     }
   };
   useEffect(() => clearTxTimer, []);
@@ -266,6 +284,83 @@ function App() {
     recordBridgeMessage('out', String(message.type ?? 'unknown'), message);
     /* The second argument is the whole point. Never `'*'`. */
     target.postMessage(message, PASSPORT_ORIGIN);
+  }, []);
+
+  /**
+   * The payment intent, in one place because two channels send it. Embedded it
+   * goes to `window.parent` the moment the button is tapped; standalone it
+   * goes to the popup, but only once that window has said `ready` — there is
+   * no point posting into a document that has not loaded yet.
+   */
+  const sendTxRequest = useCallback(
+    (target: Window, exchange: Exchange) => {
+      send(target, {
+        protocol: PASSPORT_TX_PROTOCOL,
+        type: 'passport.tx.request',
+        requestId: exchange.requestId,
+        nonce: exchange.nonce,
+        intent: {
+          kind: 'unshielded-transfer',
+          recipientAddress: PAYMENT_ADDRESS,
+          /* Atomic units, base-10 string. Not a number: JSON numbers cannot
+             carry atomic amounts without precision loss. */
+          amount: PAYMENT_AMOUNT,
+          purpose: PAYMENT_PURPOSE,
+        },
+      });
+    },
+    [send],
+  );
+
+  /* -------------------------------------------------------------------------
+   * ACT 3 (settling) — turn a payment response into interface state.
+   *
+   * One function, both channels. A reply that arrived through the parent frame
+   * and one that arrived through the popup say exactly the same things and are
+   * treated exactly the same way; the channel is a transport detail and must
+   * never leak into what the user is told.
+   * ---------------------------------------------------------------------- */
+  const settleTxResponse = useCallback((txResponse: PassportTxResponse) => {
+    clearTxTimer();
+    txExchange.current = null;
+
+    if (txResponse.status === 'submitted' && txResponse.txId) {
+      setPaymentPhase('submitted');
+      setTxId(txResponse.txId);
+      /* `sponsored: true` is the ONLY thing that may be rendered as a
+         covered fee. Absent means "not stated", which is an ordinary,
+         user-paid transaction — not a free one. */
+      setSponsored(txResponse.sponsored === true);
+      setPaymentNote(
+        txResponse.sponsored === true
+          ? `Submitted. ${txResponse.feeNote ?? 'The network fee was covered by a sponsor.'}`
+          : 'Submitted to the node, and paid for out of the Passport wallet.',
+      );
+      const href = explorerTxHref(txResponse.txId);
+      pushToast({
+        title: 'Payment submitted',
+        body: `Transaction ${shorten(txResponse.txId, 10, 6)}.`,
+        ...(href ? { link: { label: 'View on explorer', href } } : {}),
+      });
+      return;
+    }
+
+    /* declined and failed both land here: no transaction, and copy that
+       names what actually stopped it. */
+    setPaymentPhase('refused');
+    setTxId(null);
+    setSponsored(false);
+    const reason = txResponse.error ? TX_REFUSALS[txResponse.error] : undefined;
+    setPaymentNote(
+      [reason ?? 'The payment did not go through.', txResponse.detail].filter(Boolean).join(' '),
+    );
+    pushToast({
+      title: txResponse.status === 'declined' ? 'Payment declined' : 'Payment failed',
+      /* `detail` is the wallet's own sentence about what stopped it —
+         worth more to the user than any generic mapping, so show it. */
+      body: [reason ?? 'No transaction was made.', txResponse.detail].filter(Boolean).join(' '),
+      tone: 'error',
+    });
   }, []);
 
   /* -------------------------------------------------------------------------
@@ -339,50 +434,7 @@ function App() {
           return;
         }
         recordBridgeMessage('in', txResponse.type, txResponse);
-        clearTxTimer();
-        txExchange.current = null;
-
-        if (txResponse.status === 'submitted' && txResponse.txId) {
-          setPaymentPhase('submitted');
-          setTxId(txResponse.txId);
-          /* `sponsored: true` is the ONLY thing that may be rendered as a
-             covered fee. Absent means "not stated", which is an ordinary,
-             user-paid transaction — not a free one. */
-          setSponsored(txResponse.sponsored === true);
-          setPaymentNote(
-            txResponse.sponsored === true
-              ? `Submitted. ${txResponse.feeNote ?? 'The network fee was covered by a sponsor.'}`
-              : 'Submitted to the node, and paid for out of the Passport wallet.',
-          );
-          const href = explorerTxHref(txResponse.txId);
-          pushToast({
-            title: 'Payment submitted',
-            body: `Transaction ${shorten(txResponse.txId, 10, 6)}.`,
-            ...(href ? { link: { label: 'View on explorer', href } } : {}),
-          });
-          return;
-        }
-
-        /* declined and failed both land here: no transaction, and copy that
-           names what actually stopped it. */
-        setPaymentPhase('refused');
-        setTxId(null);
-        setSponsored(false);
-        const reason = txResponse.error ? TX_REFUSALS[txResponse.error] : undefined;
-        setPaymentNote(
-          [reason ?? 'The payment did not go through.', txResponse.detail]
-            .filter(Boolean)
-            .join(' '),
-        );
-        pushToast({
-          title: txResponse.status === 'declined' ? 'Payment declined' : 'Payment failed',
-          /* `detail` is the wallet's own sentence about what stopped it —
-             worth more to the user than any generic mapping, so show it. */
-          body: [reason ?? 'No transaction was made.', txResponse.detail]
-            .filter(Boolean)
-            .join(' '),
-          tone: 'error',
-        });
+        settleTxResponse(txResponse);
         return;
       }
 
@@ -403,27 +455,61 @@ function App() {
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [send, settleProfile]);
+  }, [send, settleProfile, settleTxResponse]);
 
   /* -------------------------------------------------------------------------
    * ACT 1 — STANDALONE. Passport is a popup this app opened.
    *
-   * Here the app mints the pair and hands it to Passport on the popup URL as
-   * `passportRequestId` and `passportNonce`. Passport echoes it back in
-   * `ready`, which is the app's signal that the window is listening.
+   * Here the app mints the pair and hands it to Passport on the popup URL and
+   * Passport echoes it back in `ready`, which is the app's signal that the
+   * window is listening. Two launch contracts, one per exchange, and the
+   * parameter names are what keep them apart:
    *
-   * Note what standalone mode CANNOT do: the transaction bridge only exists
-   * between Passport and a frame it is hosting. Act three says so rather than
-   * offering a button that cannot work.
+   *   profile — `passportRequestId` + `passportNonce`
+   *   payment — `passportTxRequestId` + `passportTxNonce`
+   *
+   * Passport arms exactly one consent surface per window load, from whichever
+   * pair of parameters it was given. Both surfaces announce themselves with
+   * the same `passport.profile.ready` message, so the PAIR — not the message
+   * type — is what tells the app which question is being answered. Match on
+   * it, always.
    * ---------------------------------------------------------------------- */
   useEffect(() => {
     if (EMBEDDED) return;
 
     const onMessage = (event: MessageEvent) => {
+      /* Two gates before anything is parsed: the pinned origin, and the window
+         we opened ourselves. */
+      if (event.origin !== PASSPORT_ORIGIN || event.source !== popup.current) return;
+
+      /* --- the payment exchange, matched on its own pair ---------------- */
+      const txActive = txExchange.current;
+      if (txActive) {
+        const txReady = parsePassportProfileReady(event.data);
+        if (
+          txReady &&
+          txReady.requestId === txActive.requestId &&
+          txReady.nonce === txActive.nonce
+        ) {
+          recordBridgeMessage('in', txReady.type, txReady);
+          const target = popup.current;
+          if (target) sendTxRequest(target, txActive);
+          return;
+        }
+        const popupTx = parsePassportTxResponse(event.data);
+        if (popupTx) {
+          if (popupTx.requestId !== txActive.requestId || popupTx.nonce !== txActive.nonce) {
+            return;
+          }
+          recordBridgeMessage('in', popupTx.type, popupTx);
+          settleTxResponse(popupTx);
+          return;
+        }
+      }
+
       const active = profileExchange.current;
-      /* Three gates: a live exchange, the pinned origin, and the window we
-         opened ourselves. */
-      if (!active || event.origin !== PASSPORT_ORIGIN || event.source !== popup.current) return;
+      /* The third gate for the profile exchange: it must actually be live. */
+      if (!active) return;
 
       const ready = parsePassportProfileReady(event.data);
       if (ready && ready.requestId === active.requestId && ready.nonce === active.nonce) {
@@ -457,7 +543,7 @@ function App() {
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [send, settleProfile]);
+  }, [send, sendTxRequest, settleProfile, settleTxResponse]);
 
   /* -------------------------------------------------------------------------
    * ACT 2 — ask. One button, two mounting modes.
@@ -502,7 +588,7 @@ function App() {
     });
     popup.current = window.open(
       `${PASSPORT_ORIGIN}/?${query.toString()}`,
-      'midnight-passport-profile',
+      PASSPORT_WINDOW,
       'popup,width=620,height=780',
     );
     if (!popup.current) {
@@ -540,48 +626,91 @@ function App() {
   /* -------------------------------------------------------------------------
    * ACT 3 — the optional payment.
    *
-   * Off unless `VITE_DEMO_PAYMENT=1` AND a recipient is configured AND the app
-   * is embedded. Read `PAYMENT_ARMED` above: an armed flag with no recipient
-   * is a button that lies, so it stays off.
+   * Off unless `VITE_DEMO_PAYMENT=1` AND a recipient is configured. Read
+   * `PAYMENT_ARMED` above: an armed flag with no recipient is a button that
+   * lies, so it stays off.
    *
    * Your app does not build, sign, or submit anything. It posts an INTENT —
    * recipient, amount, purpose — and Passport does the rest on its own
    * surface, returning either the node's transaction identifier or a named
    * refusal. That asymmetry is the security model, not an inconvenience.
+   *
+   * Both mounting modes reach it. Embedded, the intent goes straight to the
+   * parent frame. Standalone, the app opens (or reuses) the Passport window on
+   * the payment launch contract — `passportTxRequestId` and `passportTxNonce`
+   * — waits for that window to echo the pair back in `ready`, and posts the
+   * intent then. Same protocol, same replies, same 180 s budget.
    * ---------------------------------------------------------------------- */
   const requestPayment = () => {
-    if (!PAYMENT_ARMED || !EMBEDDED) return;
+    if (!PAYMENT_ARMED) return;
 
+    /* A fresh pair per payment, never the handshake pair. */
     const exchange: Exchange = { requestId: crypto.randomUUID(), nonce: randomNonce() };
+    clearTxTimer();
     txExchange.current = exchange;
     setPaymentPhase('awaiting-approval');
     setTxId(null);
     setSponsored(false);
+
+    if (EMBEDDED) {
+      setPaymentNote(
+        `Passport is asking you to approve ${formatNight(PAYMENT_AMOUNT)} NIGHT. The amount and recipient are named on its own sheet — that is where consent happens.`,
+      );
+      sendTxRequest(window.parent, exchange);
+      armTxWatch(exchange);
+      return;
+    }
+
     setPaymentNote(
-      `Passport is asking you to approve ${formatNight(PAYMENT_AMOUNT)} NIGHT. The amount and recipient are named on its own sheet — that is where consent happens.`,
+      `Opening Midnight Passport to approve ${formatNight(PAYMENT_AMOUNT)} NIGHT. The amount and recipient are named on its own sheet — that is where consent happens.`,
     );
-
-    send(window.parent, {
-      protocol: PASSPORT_TX_PROTOCOL,
-      type: 'passport.tx.request',
-      requestId: exchange.requestId,
-      nonce: exchange.nonce,
-      intent: {
-        kind: 'unshielded-transfer',
-        recipientAddress: PAYMENT_ADDRESS,
-        /* Atomic units, base-10 string. Not a number: JSON numbers cannot
-           carry atomic amounts without precision loss. */
-        amount: PAYMENT_AMOUNT,
-        purpose: PAYMENT_PURPOSE,
-      },
+    const query = new URLSearchParams({
+      passportTxRequestId: exchange.requestId,
+      passportTxNonce: exchange.nonce,
     });
-
-    clearTxTimer();
-    txTimer.current = window.setTimeout(() => {
-      if (!txExchange.current || txExchange.current.requestId !== exchange.requestId) return;
+    popup.current = window.open(
+      `${PASSPORT_ORIGIN}/?${query.toString()}`,
+      PASSPORT_WINDOW,
+      'popup,width=620,height=780',
+    );
+    if (!popup.current) {
+      /* No window, no approval sheet, no payment. Say so; do not pretend. */
       txExchange.current = null;
       setPaymentPhase('refused');
       setPaymentNote(
+        'The browser blocked the Passport window, so nothing could be approved and nothing was paid. Allow popups for this site and try again.',
+      );
+      return;
+    }
+    popup.current.focus();
+    armTxWatch(exchange);
+  };
+
+  /**
+   * The watchers on a payment in flight: the 180 s budget, and — standalone —
+   * the closed-popup poll. Both settle only the exchange they were armed for,
+   * so a stale watcher can never kill a later attempt.
+   */
+  const armTxWatch = (exchange: Exchange) => {
+    clearTxTimer();
+    const abandon = (reason: string) => {
+      clearTxTimer();
+      if (!txExchange.current || txExchange.current.requestId !== exchange.requestId) return;
+      txExchange.current = null;
+      setPaymentPhase('refused');
+      setPaymentNote(reason);
+    };
+    if (!EMBEDDED) {
+      txPoll.current = window.setInterval(() => {
+        if (popup.current?.closed) {
+          abandon(
+            'The Passport window was closed before the payment was approved. Nothing was signed and nothing was paid — try again when you are ready.',
+          );
+        }
+      }, POPUP_POLL_MS);
+    }
+    txTimer.current = window.setTimeout(() => {
+      abandon(
         'Passport did not answer within three minutes. Nothing was confirmed — check Passport before retrying, in case the transaction did reach the node.',
       );
     }, TX_TIMEOUT_MS);
@@ -625,7 +754,7 @@ function App() {
           <p className="pt-muted">
             {EMBEDDED
               ? 'Passport framed this app and minted the handshake pair. The app echoes that exact pair in its request, and acknowledges the ready message so Passport knows the frame is alive.'
-              : 'This app was opened directly, so it mints the handshake pair itself and hands it to Passport on the popup URL. The transaction bridge is not available in this mode.'}
+              : 'This app was opened directly, so it mints the handshake pair itself and hands it to Passport on the popup URL. Both exchanges run over that window — the profile connect and the payment, each on its own launch parameters and its own pair.'}
           </p>
           <dl className="pt-facts">
             <div>
@@ -754,11 +883,6 @@ function App() {
                 : 'the amount is not a positive base-10 integer of atomic units'}
               , so the act stays off rather than offering a button that cannot work.
             </p>
-          ) : !EMBEDDED ? (
-            <p className="pt-muted">
-              The transaction bridge exists only between Passport and an app it is hosting. Open
-              this app from inside Passport to try it. Nothing here will pretend otherwise.
-            </p>
           ) : phase !== 'connected' ? (
             <p className="pt-muted">Connect first — the payment act needs an approved profile.</p>
           ) : (
@@ -778,6 +902,11 @@ function App() {
                   </dd>
                 </div>
               </dl>
+              <p className="pt-muted">
+                {EMBEDDED
+                  ? 'The intent goes to the Passport frame around this app, which shows its own approval sheet. This app never builds, signs, or submits anything.'
+                  : 'The intent goes to the Passport window this app opens on the payment launch parameters, which shows its own approval sheet there. This app never builds, signs, or submits anything.'}
+              </p>
               <button
                 type="button"
                 className="pt-cta"

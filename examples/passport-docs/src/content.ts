@@ -428,7 +428,7 @@ any mode. Two protocols make up the whole surface:
 | \`passport.profile.ready\` | Passport → app | Handshake: carries/echoes \`{requestId, nonce}\`. |
 | \`passport.profile.request\` | app → Passport | \`fields\`: non-empty, duplicate-free subset of \`displayName\`, \`passportContract\`, \`midnightAddresses\`. |
 | \`passport.profile.response\` | Passport → app | \`approved: true\` + \`profile\` (only approved fields), or \`approved: false\` + \`error\`. |
-| \`passport.tx.request\` | app → Passport | \`intent\`: \`{ kind: 'unshielded-transfer', recipientAddress (≤200), amount (base-10 string, 1–20 digits, > 0), purpose (≤140) }\`. Embedded only. |
+| \`passport.tx.request\` | app → Passport | \`intent\`: \`{ kind: 'unshielded-transfer', recipientAddress (≤200), amount (base-10 string, 1–20 digits, > 0), purpose (≤140) }\`. Both channels — posted to the Passport frame when embedded, or to a Passport popup opened on \`passportTxRequestId\`/\`passportTxNonce\` when standalone. |
 | \`passport.tx.response\` | Passport → app | \`status\`: \`submitted\` (always with \`txId\`) \\| \`declined\` \\| \`failed\` (with \`error\`); optional \`detail\` (≤400), \`sponsored\`, \`feeNote\` (≤140). |
 | \`passport.incentive.report\` | app → Passport | Fire-and-forget: \`{ id (≤256), label (≤80), txId? }\`. No reply. |
 
@@ -443,11 +443,12 @@ Mode detection is one comparison: \`window.parent !== window\`.
 | | Embedded (normal case) | Standalone |
 | --- | --- | --- |
 | Topology | Passport frames the app in its in-app browser; Passport is \`window.parent\`. | App opens Passport as a popup. |
-| Handshake pair | **Passport mints it**, posts \`ready\` down, re-broadcasts every 800 ms (capped at 40 attempts, ~32 s) until the frame speaks. The app must echo that exact pair. | **The app mints it** and hands it over as \`passportRequestId\`/\`passportNonce\` URL query parameters; Passport echoes it back in \`ready\`. |
+| Handshake pair | **Passport mints it**, posts \`ready\` down, re-broadcasts every 800 ms (capped at 40 attempts, ~32 s) until the frame speaks. The app must echo that exact pair. | **The app mints it** and hands it over as URL query parameters; Passport echoes it back in \`ready\`. |
 | Ack | Answer \`ready\` with any message (the template posts \`passport.profile.hello\`) to stop the re-broadcast and clear Passport's "not responding" hint. | Not applicable. |
 | Profile consent | **Per-field**: a toggle per requested field, each unticked by default. Any subset may come back. | **All-or-nothing**: the requested set is approved or declined as a whole. |
-| Transaction bridge | Available. | **Does not exist.** Never offer a payment button standalone. |
-| Popup management | Not applicable. | Poll \`popup.closed\` every 500 ms; 180 s overall timeout. |
+| Transaction bridge | Available, posted to \`window.parent\`. | Available, over a Passport popup. Same messages, same replies, same approval sheet. |
+| Popup launch contract | Not applicable. | One surface per window load, chosen by the query parameters: \`passportRequestId\`/\`passportNonce\` for the profile exchange, \`passportTxRequestId\`/\`passportTxNonce\` for the payment. Both surfaces announce with \`ready\`, so the **pair** is what says which exchange is being answered. |
+| Popup management | Not applicable. | Poll \`popup.closed\` every 500 ms; 180 s overall timeout. One window name for both exchanges, so the payment reuses the window the user connected with. |
 
 The payment exchange budgets **180 s** — Passport proves, signs, and submits
 before it answers, so the wait is long by web standards, and a timeout does

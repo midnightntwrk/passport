@@ -57,27 +57,35 @@ never has one — but scheme, host, and port must all match. This failure is
 *silent by design*: dropped messages are dropped before they are parsed or
 logged (`src/BridgeLog.tsx`).
 
-## "The browser blocked the Passport window. Allow popups for this site and retry."
+## "The browser blocked the Passport window…"
 
-**Where:** standalone mode, when `window.open` returns `null`
-(`connect()` in `src/main.tsx`).
+**Where:** standalone mode, when `window.open` returns `null` — in `connect()`
+("The browser blocked the Passport window. Allow popups for this site and
+retry.") and in `requestPayment()` ("The browser blocked the Passport window,
+so nothing could be approved and nothing was paid…").
 
-**Fix:** allow popups for the app's origin and tap Connect again. Popup
-blockers are per-site; `localhost` counts as a site.
+**Fix:** allow popups for the app's origin and tap the button again. Popup
+blockers are per-site; `localhost` counts as a site. Note what the payment
+copy does *not* do: no window means no approval sheet, so nothing was signed
+and nothing was paid. Never treat a blocked popup as a soft success.
 
-## "The Passport window was closed before it answered. Nothing was shared — connect again to retry."
+## "The Passport window was closed before it answered…"
 
-**Where:** standalone mode. The app polls the popup every 500 ms for having
-been closed (`POPUP_POLL_MS`), because a closed popup will never answer and no
-message says it closed.
+**Where:** standalone mode, both exchanges. The app polls the popup every
+500 ms for having been closed (`POPUP_POLL_MS`), because a closed popup will
+never answer and no message says it closed.
 
-**Meaning:** the user dismissed Passport. That is an answer — nothing was
-shared. Connect again to retry.
+- **Profile:** "…Nothing was shared — connect again to retry."
+- **Payment:** "…Nothing was signed and nothing was paid — try again when you
+  are ready."
+
+**Meaning:** the user dismissed Passport. That is an answer.
 
 ## "Passport did not answer within three minutes."
 
-**Where:** both the standalone profile exchange and the payment exchange run
-on the same 180 s budget (`TX_TIMEOUT_MS`).
+**Where:** every exchange that can be left hanging runs on the same 180 s
+budget (`TX_TIMEOUT_MS`): the standalone profile exchange, and the payment
+exchange over either channel.
 
 - **Profile:** "Nothing was shared — close the Passport window and connect
   again."
@@ -87,6 +95,29 @@ on the same 180 s budget (`TX_TIMEOUT_MS`).
   timeout does not guarantee the transaction failed. Check Passport's own
   surface before paying again.
 
+## The standalone payment popup opens but no approval sheet appears
+
+**Cause:** almost always the launch parameters. Passport arms exactly one
+consent surface per window load, chosen by the query parameters on the URL:
+`passportRequestId`/`passportNonce` arms the profile surface,
+`passportTxRequestId`/`passportTxNonce` arms the transaction surface. A
+payment launched on the profile parameters gets a Passport that is waiting for
+a profile request and will silently ignore a `passport.tx.request` — what you
+observe is your own 180 s timeout.
+
+The other possibilities, in order of likelihood:
+
+- The `requestId`/`nonce` in the request do not match the pair on the launch
+  URL. Passport drops a request bound to any other pair **without a reply**;
+  it is not this window's exchange.
+- No Passport session is open in that window yet. Passport waits
+  *indefinitely* while the user is signing in — that is deliberate, since a
+  passkey ceremony takes as long as it takes — and only starts the five-second
+  wallet grace once a session exists.
+- A second Passport window. Use one window name for both exchanges
+  (`PASSPORT_WINDOW`) so the payment reuses the window the user connected
+  with; two windows means two sessions and two places to look.
+
 ## `wallet-unavailable` — "No Passport wallet session is open, so nothing could be signed."
 
 **Causes:** the Passport you are talking to has no wallet that can sign —
@@ -95,6 +126,13 @@ been established, or the user signed in with Dynamic only (the profile
 handshake works, but paying requires the local passkey wallet; Passport's
 `detail` sentence says so — show it verbatim). Sign in to Passport with a
 passkey, created in the same browser profile you are testing in, and retry.
+
+**Timing, in the standalone popup:** Passport does not answer this the instant
+it cannot sign. It waits indefinitely while no session is open at all — the
+user may be mid-passkey-ceremony — and once a session *is* open it allows a
+further five seconds for the wallet surfaces to arrive before refusing. So a
+`wallet-unavailable` from a popup means a session exists and still nothing can
+sign it, which in practice means Dynamic-only. Read the `detail`.
 
 ## `insufficient-funds` — NIGHT versus DUST
 

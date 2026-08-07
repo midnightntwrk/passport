@@ -34,11 +34,30 @@ Detection is one comparison: `EMBEDDED = window.parent !== window`
 | | Embedded (normal case) | Standalone |
 | --- | --- | --- |
 | Topology | Passport frames the app in its in-app browser; Passport is `window.parent`. | App opens Passport as a popup. |
-| Handshake pair | **Passport mints it**, posts `passport.profile.ready` down, re-broadcasts every 800 ms (capped at 40 attempts, ~32 s) until the frame speaks. The app must echo that exact pair. | **The app mints it** (`crypto.randomUUID()` + random nonce) and hands it over as `passportRequestId`/`passportNonce` URL query parameters; Passport echoes it back in `ready`. |
+| Handshake pair | **Passport mints it**, posts `passport.profile.ready` down, re-broadcasts every 800 ms (capped at 40 attempts, ~32 s) until the frame speaks. The app must echo that exact pair. | **The app mints it** (`crypto.randomUUID()` + random nonce) and hands it over as URL query parameters; Passport echoes it back in `ready`. |
 | Ack | Required in practice: answer `ready` with any message (the template posts `passport.profile.hello`) to stop the re-broadcast and clear Passport's "not responding" hint. | Not applicable. |
 | Profile consent | **Per-field**: a toggle per requested field, each unticked by default. Any subset may come back. | **All-or-nothing**: the requested set is approved or declined as a whole. |
-| Transaction bridge | Available. | **Does not exist.** Say so in the interface; never offer a payment button standalone. |
-| Popup management | Not applicable. | Poll `popup.closed` every 500 ms; 180 s overall timeout. |
+| Transaction bridge | Available, posted to `window.parent`. | Available, over a Passport popup opened on the payment launch parameters. Same messages, same replies. |
+| Incentive report | Available. | **Not available** — the popup surface does not record them, and there is no parent to post to. Do not send it. |
+| Popup management | Not applicable. | Poll `popup.closed` every 500 ms; 180 s overall timeout. One window name for both exchanges, so the payment reuses the window the user connected with. |
+
+### The popup launch contract (standalone)
+
+Passport arms **exactly one** consent surface per window load, chosen by the
+query parameters the launch URL carries:
+
+| Exchange | Query parameters |
+| --- | --- |
+| Profile | `passportRequestId`, `passportNonce` |
+| Payment | `passportTxRequestId`, `passportTxNonce` |
+
+Both surfaces announce themselves with `passport.profile.ready` echoing that
+pair, so the **pair**, never the message type, is what says which exchange is
+being answered. Passport accepts a request only from `window.opener` and only
+when it carries that exact pair; anything else is dropped without a reply. A
+re-send of the same pair is the same request, not a second sheet. A payment
+launched on the profile parameters will never be answered — that is the
+commonest standalone-payment bug (`docs/TROUBLESHOOTING.md`).
 
 ## The bridge surface (complete)
 
@@ -51,9 +70,9 @@ examples, and validation rules: `docs/PROTOCOL.md`.
 | `passport.profile.ready` | Passport → app | Handshake: carries/echoes `{requestId, nonce}`. |
 | `passport.profile.request` | app → Passport | `fields`: non-empty, duplicate-free subset of `displayName`, `passportContract`, `midnightAddresses`. |
 | `passport.profile.response` | Passport → app | `approved: true` + `profile` (only approved fields), or `approved: false` + `error`: `denied` \| `profile_unavailable` \| `invalid_request`. |
-| `passport.tx.request` | app → Passport | `intent`: `{ kind: 'unshielded-transfer', recipientAddress (≤200), amount (base-10 string, 1–20 digits, > 0), purpose (≤140) }`. Embedded only. |
+| `passport.tx.request` | app → Passport | `intent`: `{ kind: 'unshielded-transfer', recipientAddress (≤200), amount (base-10 string, 1–20 digits, > 0), purpose (≤140) }`. Both channels. |
 | `passport.tx.response` | Passport → app | `status`: `submitted` (always with `txId`) \| `declined` \| `failed` (with `error`); optional `detail` (≤400), `sponsored`, `feeNote` (≤140). |
-| `passport.incentive.report` | app → Passport | Fire-and-forget: `{ id (≤256), label (≤80), txId? }`. No reply. |
+| `passport.incentive.report` | app → Passport | Fire-and-forget: `{ id (≤256), label (≤80), txId? }`. No reply. Embedded only. |
 
 Transaction error vocabulary (`txProtocol.ts:82`): `declined`,
 `insufficient-funds`, `wallet-unavailable`, `invalid-request`,
@@ -87,7 +106,11 @@ NIGHT (1 NIGHT = 1 000 000), never a JSON number.
 - **Never reuse a request pair.** Each exchange gets a freshly minted
   `requestId` + `nonce` (except the embedded profile request, which must echo
   the pair Passport minted). Match every reply against the pair currently
-  awaited; drop everything else.
+  awaited; drop everything else. Standalone, that pair also goes on the popup
+  launch URL, under the parameter names for *that* exchange.
+- **Never treat a blocked or closed popup as a success.** No window means no
+  approval sheet, so nothing was signed and nothing was paid. Say that, and
+  grant nothing.
 - **Never promise a free transaction.** Render "network fee covered" only for
   `sponsored === true` on a `submitted` reply. Absent means user-paid.
 - **Never fill consent gaps.** Render only fields that actually arrived;

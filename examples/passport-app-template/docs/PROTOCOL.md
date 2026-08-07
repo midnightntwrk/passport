@@ -83,10 +83,15 @@ Mode difference:
   that never speaks the protocol is not pestered forever. `ready` is
   therefore idempotent and can arrive late, mid-flow — never let a repeat
   reset state (`main.tsx`, Act 1 embedded).
-- **Standalone:** the app mints the pair, hands it to Passport as the
-  `passportRequestId` and `passportNonce` query parameters on the popup URL,
-  and Passport echoes it back in `ready` — the signal that the window is
+- **Standalone:** the app mints the pair, hands it to Passport on the popup
+  URL, and Passport echoes it back in `ready` — the signal that the window is
   listening (`main.tsx`, Act 1 standalone).
+
+`ready` is also what the **payment** popup announces itself with; it is not
+profile-specific in practice, it just means *this Passport window is live, and
+here is your pair back*. The pair, never the message type, is what tells an app
+which exchange is being answered. Match on it — see
+[the popup launch contract](#the-popup-launch-contract) below.
 
 ### `passport.profile.request` — app → Passport
 
@@ -210,7 +215,8 @@ sequenceDiagram
 The app is open in an ordinary tab and opens Passport in a popup.
 
 1. The app mints `{requestId, nonce}` and opens
-   `PASSPORT_ORIGIN/?passportRequestId=…&passportNonce=…` as a popup.
+   `PASSPORT_ORIGIN/?passportRequestId=…&passportNonce=…` as a popup, under the
+   window name `midnight-passport` (`PASSPORT_WINDOW` in `main.tsx`).
 2. Passport posts `passport.profile.ready` echoing that pair back.
 3. The app posts `passport.profile.request` with the same pair and its fields.
 4. Passport shows its consent surface; the user approves or declines the set
@@ -237,14 +243,81 @@ sequenceDiagram
 
 ## Transactions — `org.midnight.passport.tx/v1`
 
-**Embedded only.** The transaction bridge exists only between Passport and a
-frame it is hosting; there is no popup equivalent today (`main.tsx`, Act 3).
+**Both channels.** A framed app posts the intent to `window.parent`; a
+standalone app posts it to a Passport popup it opened on the payment launch
+contract below. The messages, the validation, the error vocabulary, and the
+approval sheet's content are the same either way — Passport climbs one shared
+ladder of checks before either surface will show a sheet (`main.tsx`, Act 3).
 
 The app never builds, signs, or submits anything. It posts an **intent** —
 recipient, amount, purpose — and Passport proves, signs, and submits on its
 own surface, returning either the node's transaction identifier or a named
 refusal. The wait is long by web standards; the template budgets 180 s
 (`TX_TIMEOUT_MS`).
+
+### The popup launch contract
+
+Standalone only. Passport arms **exactly one** consent surface per window load,
+chosen by which pair of query parameters the launch URL carries:
+
+| Exchange | Query parameters | Surface |
+| --- | --- | --- |
+| Profile | `passportRequestId`, `passportNonce` | Passport's profile consent popup |
+| Payment | `passportTxRequestId`, `passportTxNonce` | Passport's transaction approval popup |
+
+Distinct names are the point: one window serves one exchange, and a payment
+launch can never also arm the profile surface (or the reverse) on the same
+load. Both values are the pair the **app** minted for that exchange — fresh
+per payment, never the profile handshake's pair.
+
+The exchange then runs:
+
+1. The app opens
+   `PASSPORT_ORIGIN/?passportTxRequestId=…&passportTxNonce=…` under the window
+   name `midnight-passport`. Reusing that one name **navigates the Passport
+   window the user already connected with** rather than stacking a second one
+   beside it; Passport restores its session across the navigation with no
+   further ceremony. `window.open` returning `null` is a blocked popup: no
+   window, no approval, no payment — say so and stop (`requestPayment()` in
+   `main.tsx`).
+2. Passport echoes the pair back in `passport.profile.ready`, posted to `'*'`
+   — the popup does not learn the opener's origin until a message arrives from
+   it, and the message carries nothing the opener did not send. Every reply
+   after that goes to the exact origin the request came from.
+3. The app posts `passport.tx.request` with that same pair.
+4. Passport accepts it only from `window.opener` and only when both
+   `requestId` and `nonce` equal its own launch pair; anything else is dropped
+   **without a reply**. A re-send of the same pair is the same request, not a
+   second sheet, and is ignored rather than refused.
+5. Passport shows the approval sheet — recipient, amount in display NIGHT and
+   in atomic units, purpose, the wallet's own NIGHT balance, and the sentence
+   saying whose key signs and what the app will receive. The passkey ceremony
+   runs on approval, once.
+6. Passport posts `passport.tx.response`, bound to the same pair.
+
+If no wallet that can sign has appeared **five seconds after a Passport
+session is open**, the popup answers `wallet-unavailable` rather than leaving
+the app waiting. Before a session is open it waits indefinitely: the user may
+still be mid-sign-in, and that takes as long as it takes.
+
+Meanwhile the app polls `popup.closed` every 500 ms (`POPUP_POLL_MS`) and
+abandons the exchange after 180 s (`TX_TIMEOUT_MS`). A closed or silent popup
+never answers, and no message says so.
+
+```mermaid
+sequenceDiagram
+    participant App as App (tab)
+    participant P as Passport (popup)
+    participant N as Midnight node
+    App->>P: window.open(origin + "?passportTxRequestId=…&passportTxNonce=…", "midnight-passport")
+    P->>App: passport.profile.ready (echoes the payment pair)
+    App->>P: passport.tx.request (same pair, intent)
+    Note over P: Approval sheet on Passport's surface -<br/>recipient, amount, purpose, balance.<br/>Passkey ceremony on approval.
+    P->>N: submit transaction
+    N-->>P: transaction id
+    P->>App: passport.tx.response (submitted + txId, or declined / failed + error)
+    Note over App: Meanwhile - poll popup.closed every 500 ms,<br/>abandon after 180 s.
+```
 
 ### `passport.tx.request` — app → Passport
 
@@ -338,9 +411,12 @@ Optional fields:
 
 ### `passport.incentive.report` — app → Passport
 
-The one message with no reply. It tells Passport what the app granted the user
-so Passport can show it; Passport records exactly what is reported and never
-invents one on an app's behalf (`parsePassportIncentiveReport`,
+The one message with no reply, and the one message that is still **embedded
+only**: it is recorded by the Passport frame hosting the app, and the popup
+approval surface does not listen for it. A standalone app has no parent to
+post it to and should not send it. It tells Passport what the app granted the
+user so Passport can show it; Passport records exactly what is reported and
+never invents one on an app's behalf (`parsePassportIncentiveReport`,
 `txProtocol.ts:275`).
 
 ```json
@@ -362,6 +438,9 @@ Validation: `incentive.id` non-empty ≤ 256, `incentive.label` non-empty ≤ 80
 does not send it; the raffle demo does.
 
 ### Sequence — payment (embedded)
+
+The standalone equivalent is under
+[the popup launch contract](#the-popup-launch-contract) above.
 
 ```mermaid
 sequenceDiagram
