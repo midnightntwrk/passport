@@ -475,6 +475,41 @@ function transactionId(result: unknown): string {
   return String(value);
 }
 
+/**
+ * The ids midnight-js reports are transaction *identifiers* (33 bytes, 66 hex
+ * chars), not the 32-byte block-level hashes explorers resolve — a link built
+ * from an identifier dies with "not found" (seen live on preview 2026/08/07:
+ * identifier 00b819…, actual hash ea39f2…, block 312113). The indexer maps one
+ * to the other via `transactions(offset: { identifier })`. The transaction is
+ * already finalized when this runs, so the retries only cover indexer lag; if
+ * every attempt fails the identifier is returned unchanged, which is exactly
+ * the pre-resolution behaviour.
+ */
+async function resolveTransactionHash(
+  network: MidnamesNetwork,
+  identifier: string,
+): Promise<string> {
+  const query = `{ transactions(offset: { identifier: "${identifier}" }) { hash } }`;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      const response = await fetch(MIDNAMES_INDEXER_URLS[network], {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+      const body = (await response.json()) as {
+        data?: { transactions?: Array<{ hash?: string }> };
+      };
+      const hash = body.data?.transactions?.[0]?.hash;
+      if (hash) return hash;
+    } catch {
+      // Transient network or parse failure — retried below.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  return identifier;
+}
+
 function maybeBytes(value?: Uint8Array): { is_some: boolean; value: Uint8Array } {
   return value ? { is_some: true, value } : { is_some: false, value: new Uint8Array(32) };
 }
@@ -908,6 +943,12 @@ export async function claimAlias(
   }
 
   onProgress?.({ phase: 'confirming' });
+  // Swap both identifiers for the block-level hashes explorers resolve; the
+  // identifier survives only if the indexer never answers.
+  [resolverDeployTxId, registerTxId] = await Promise.all([
+    resolveTransactionHash(network, resolverDeployTxId),
+    resolveTransactionHash(network, registerTxId),
+  ]);
   invalidateAliasRegistry(network);
   let registryConfirmed = false;
   for (let attempt = 0; attempt < 30; attempt += 1) {

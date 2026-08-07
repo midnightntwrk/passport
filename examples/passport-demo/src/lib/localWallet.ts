@@ -1379,8 +1379,12 @@ export async function createLocalMidnightWallet(
     // Past this line the transaction may land whether or not the call resolves,
     // so a throw ends the send — same rule as the unsponsored submit below.
     try {
-      const txId = await facade.submitTransaction(balancedTransaction);
-      return { txId: String(txId), sponsorTxHash };
+      await facade.submitTransaction(balancedTransaction);
+      // The submit call answers with a transaction *identifier* (33 bytes),
+      // which no explorer resolves — links built from it die with "not found"
+      // (seen live 2026/08/07). The ledger's own hash is the one the indexer
+      // and explorers key on.
+      return { txId: String(balancedTransaction.transactionHash()), sponsorTxHash };
     } catch (cause) {
       for (const recipe of [...reserved].reverse()) await revertQuietly(recipe);
       throw new SendNightError(
@@ -1472,12 +1476,11 @@ export async function createLocalMidnightWallet(
       );
     };
 
-    let txId: string;
     try {
-      // The node's own identifier is what the explorer resolves, so the happy
-      // path keeps it; the pre-computed hash only stands in when the submit
-      // response never arrived to carry one.
-      txId = String(await facade.submitTransaction(finalized));
+      // The submit call's return value is a transaction *identifier*, which no
+      // explorer resolves — the pre-computed ledger hash is the result in
+      // every outcome.
+      await facade.submitTransaction(finalized);
     } catch (cause) {
       // The node has answered errors for transactions it then included — seen
       // live on preview 2026/08/07 (submit "rejected", DUST generating minutes
@@ -1504,7 +1507,7 @@ export async function createLocalMidnightWallet(
 
     return {
       status: 'registered',
-      txId,
+      txId: txHash,
       utxoCount: unregistered.length,
       submittedAt: new Date().toISOString(),
     };
@@ -1663,10 +1666,11 @@ export async function createLocalMidnightWallet(
       );
     }
 
-    // (6) Submit. Only a real identifier from the node produces a result.
-    let txId: string;
+    // (6) Submit. The node must accept it, but the submit call's return value
+    // is a transaction *identifier* (33 bytes), which no explorer resolves —
+    // the ledger's own hash is what the indexer and explorers key on.
     try {
-      txId = await facade.submitTransaction(finalized);
+      await facade.submitTransaction(finalized);
     } catch (cause) {
       await releaseCoins();
       throw new SendNightError(
@@ -1677,7 +1681,7 @@ export async function createLocalMidnightWallet(
     }
 
     return {
-      txId: String(txId),
+      txId: String(finalized.transactionHash()),
       recipientAddress: parsed.asString(),
       amount: params.amount,
       submittedAt: new Date().toISOString(),
