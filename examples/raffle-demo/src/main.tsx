@@ -102,6 +102,17 @@ function shortAddress(value: string): string {
   return `${value.slice(0, 10)}…${value.slice(-8)}`;
 }
 
+/**
+ * The network segment of a Midnight bech32m address — the human-readable part
+ * before the `1` separator, minus the `mn_addr_` prefix. `undeployed`,
+ * `preview`, and `preprod` are the values seen in practice; `null` means the
+ * configured value does not even look like an address.
+ */
+function addressNetwork(address: string): string | null {
+  const match = /^mn_addr_([a-z]+)1/.exec(address);
+  return match ? match[1] : null;
+}
+
 function shortHash(value: string): string {
   if (value.length <= 18) return value;
   return `${value.slice(0, 10)}…${value.slice(-6)}`;
@@ -352,8 +363,15 @@ function App() {
       return;
     }
     if (error === 'network-mismatch') {
+      /* The fault here is as likely to be the raffle's own configuration as
+         the user's wallet, so name both sides — and log the full configured
+         address so an operator can spot a stale env instantly. */
+      console.warn(
+        `Raffle collection address configured as: ${COLLECTION_ADDRESS || '(empty)'} — check VITE_RAFFLE_COLLECTION_ADDRESS.`,
+      );
+      const collectionNetwork = addressNetwork(COLLECTION_ADDRESS);
       setDetail(
-        `This raffle collects entries on preview, and your Passport wallet is on another network. ${responseDetail ?? ''}`.trim(),
+        `This raffle's collection address is on ${collectionNetwork ?? 'an unrecognised network'}; your Passport wallet is on a different network — check the raffle's VITE_RAFFLE_COLLECTION_ADDRESS configuration. ${responseDetail ?? ''}`.trim(),
       );
       return;
     }
