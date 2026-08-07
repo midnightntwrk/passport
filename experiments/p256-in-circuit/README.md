@@ -33,8 +33,10 @@ first-class P-256 support in Compact.
   dedicated section below): two further inner relations
   (`Ed25519Verify`, ported from midnight-zk's `cardano_signature.rs`
   example, and `JubjubSchnorrVerify`, ported from its `schnorr_sig.rs`
-  example), the proof-of-proof wrapper `ProofWrap<R>`, and the
-  complete-verification helper `verify_wrapped`.
+  example), the witness-preimage relations `PoseidonPreimage` and
+  `Sha256Preimage` (knowledge of a 32-byte hash preimage, the cheapest
+  realistic device statement), the proof-of-proof wrapper `ProofWrap<R>`,
+  and the complete-verification helper `verify_wrapped`.
 - `bin/p256-gate-measure`: evidence harness (`vectors`, `mock`, `prove`,
   `passkey`, `recursion` subcommands) writing JSON to `evidence/`.
 - `webauthn/`: a local capture page (`python3 serve.py`, then
@@ -65,16 +67,20 @@ wrong hash respectively.
 
 The recursion-leg tests (`tests/mock.rs` additions and `tests/wrapper.rs`)
 additionally check: valid Ed25519 and JubJub Schnorr vectors are accepted
-and tampered ones rejected; the wrapper accepts a valid inner proof and
-rejects tampered proof bytes and a mismatching inner instance; and,
-end-to-end, that an invalid inner proof can still yield a natively valid
-outer proof which only the deferred pairing check rejects (the reason
-`verify_wrapped` exists). A further test pins the rotation diagnosis: the
-Ed25519 inner circuit is unwrappable at the pinned rev (see the recursion
-results section). Unlike the P-256 mock tests, `tests/wrapper.rs`
+and tampered ones rejected; the witness-preimage relations accept their
+valid vector and reject a flipped secret byte and a wrong commitment (in
+the constraint system, not as a synthesis abort); the wrapper accepts a
+valid inner proof and rejects tampered proof bytes and a mismatching inner
+instance; and, end-to-end, that an invalid inner proof can still yield a
+natively valid outer proof which only the deferred pairing check rejects
+(the reason `verify_wrapped` exists). A further test pins the rotation
+diagnosis: the Ed25519 inner circuit is unwrappable at the pinned rev (see
+the recursion results section), while both witness-preimage circuits pass
+the rotation guard. Unlike the P-256 mock tests, `tests/wrapper.rs`
 needs the SRS below, because producing an inner proof requires real
-proving; the wrapper is exercised against the cheapest inner relation only
-(JubJub Schnorr) to keep the suite fast.
+proving; the default suite wraps the two cheapest inner relations only
+(JubJub Schnorr and the Poseidon preimage) to keep the suite fast, with a
+re-runnable SHA-256 preimage wrap behind `#[ignore]`.
 
 ## SRS (needed for `prove`, `passkey`, `recursion`, and `tests/wrapper.rs`)
 
@@ -99,6 +105,8 @@ cargo run --release -p p256-gate-measure -- passkey --input <export.json>
 cargo run --release -p p256-gate-measure -- recursion --scheme p256-prehashed --runs 3
 cargo run --release -p p256-gate-measure -- recursion --scheme ed25519 --runs 3
 cargo run --release -p p256-gate-measure -- recursion --scheme jubjub-schnorr --runs 3
+cargo run --release -p p256-gate-measure -- recursion --scheme witness-poseidon --runs 3
+cargo run --release -p p256-gate-measure -- recursion --scheme witness-sha256 --runs 3
 ```
 
 The `passkey` subcommand consumes a real WebAuthn assertion exported as JSON
@@ -123,12 +131,32 @@ The question this leg answers is how much more expensive in-circuit proof
 verification is compared with verifying the signature directly in the
 outer circuit.
 
+The inner statement does not have to be a signature at all. The cheapest
+realistic device statement is a witness preimage: the account stores a
+hash commitment, the device proves knowledge of the 32-byte secret behind
+it, and the outer proof has the same size and verification cost for every
+wrappable scheme. The `witness-poseidon` and `witness-sha256` schemes
+measure this case with the two commitment hashes that matter (Poseidon,
+the proof system's native hash, and SHA-256, the persistentHash commitment
+shape Midnight contracts already use for preimage authorisation). The
+commitment is deterministic and unsalted, so it is binding but hiding only
+for an unguessable secret: the secret MUST be uniformly random 32 bytes
+(as a device-held secret is); a public commitment to a lower-entropy
+preimage could be brute-forced offline, and would need a salted variant,
+`H(w, salt)`, instead.
+
 The wrapper (`ProofWrap<R>` in `crates/p256-gate-circuit/src/wrapper.rs`)
 follows midnight-zk's `aggregation/examples/single_circuit_aggregation.rs`,
 simplified to a single-shot wrap with no IVC folding. Its public instance
 is the inner verifying key's `transcript_repr`, the inner public inputs
 (re-exposed), and a KZG accumulator; its witness is the inner instance and
-the inner proof bytes.
+the inner proof bytes. Because the inner verifying key's `transcript_repr`
+is a public input of the outer proof (and the outer circuit itself varies
+with the inner circuit's shape: k = 17 for the JubJub Schnorr and Poseidon
+preimage wraps, k = 18 for the P-256 and SHA-256 preimage wraps), an
+observer of a wrapped proof can tell which inner circuit was used. Hiding
+the scheme would require witnessing the verifying key and proving its
+membership of an approved set, which this experiment does not implement.
 
 **Deferred pairing check.** The in-circuit verifier re-runs the PLONK
 verification transcript of the inner proof but does NOT perform the final
@@ -160,22 +188,34 @@ times and the timed inner proof of the wrapped leg, are in
 `evidence/recursion-<scheme>.json`
 (`cargo run --release -p p256-gate-measure -- recursion --scheme <s> --runs 3`).
 
-| Scheme | Direct k | Direct prove | Wrapped outer k | Wrapped outer prove | Outer proof | Complete verify | Premium |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `p256-prehashed` | 15 | 0.499 s | 18 | 4.915 s | 5,056 B | 3 ms | 9.9× |
-| `ed25519` | 16 | 0.853 s | unwrappable | unwrappable | n/a | n/a | n/a |
-| `jubjub-schnorr` | 11 | 0.076 s | 17 | 2.748 s | 5,056 B | 3 ms | 36.2× |
+| Scheme | Direct k | Direct prove | Inner prove (device) | Wrapped outer k | Wrapped outer prove | Outer proof | Complete verify | Premium |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `p256-prehashed` | 15 | 0.499 s | 0.495 s | 18 | 4.915 s | 5,056 B | 3 ms | 9.9× |
+| `ed25519` | 16 | 0.853 s | n/a | unwrappable | unwrappable | n/a | n/a | n/a |
+| `jubjub-schnorr` | 11 | 0.076 s | 0.079 s | 17 | 2.748 s | 5,056 B | 3 ms | 36.2× |
+| `witness-poseidon` | 9 | 0.018 s | 0.018 s | 17 | 2.809 s | 5,056 B | 3 ms | 156.1× |
+| `witness-sha256` | 13 | 0.087 s | 0.089 s | 18 | 5.010 s | 5,056 B | 3 ms | 57.6× |
 
-"Direct" is the signature relation proved under the Poseidon transcript;
-"wrapped outer" is the proof that verifies one such inner proof
-in-circuit; "complete verify" is the native outer verification plus the
-deferred accumulator pairing check (`verify_wrapped`, both steps timed as
-one); "premium" is the wrapped-to-direct proving-time ratio. The measured
-premium is roughly a factor of ten for P-256 (0.499 s direct against
-4.915 s wrapped) and a factor of thirty-six for JubJub Schnorr (0.076 s
-direct against 2.748 s wrapped), because the outer circuit's size is
-dominated by the in-circuit verifier itself rather than by the inner
-relation.
+"Direct" is the inner relation proved under the Poseidon transcript;
+"inner prove (device)" is the off-chain, on-device proving cost: the time
+the user's device pays to produce the very inner proof the wrapped leg
+consumes (one Poseidon-transcript prove of the inner relation, so it
+tracks the direct column); "wrapped outer" is the proof that verifies one
+such inner proof in-circuit; "complete verify" is the native outer
+verification plus the deferred accumulator pairing check
+(`verify_wrapped`, both steps timed as one); "premium" is the
+wrapped-to-direct proving-time ratio. The measured premium is roughly a
+factor of ten for P-256 (0.499 s direct against 4.915 s wrapped) and a
+factor of thirty-six for JubJub Schnorr (0.076 s direct against 2.748 s
+wrapped), because the outer circuit's size is dominated by the in-circuit
+verifier itself rather than by the inner relation. The witness-preimage
+rows sharpen the point: the Poseidon preimage proves directly in 18 ms
+(and on the device side an inner proof costs the same 18 ms), yet its
+wrap still costs 2.8 s. The wrapped cost varies with the inner circuit's
+constraint-system structure (columns, lookups, and public inputs), not
+with the inner statement's semantic complexity, which is why the SHA-256
+preimage wrap lands at k = 18 like P-256 while the Poseidon preimage wrap
+stays at k = 17 like JubJub Schnorr.
 
 **Ed25519 cannot be wrapped at the pinned rev.** The in-circuit verifier
 evaluates the inner circuit's openings only at the rotations -1, 0, and 1

@@ -36,6 +36,17 @@
 //!   embedded curve JubJub with a Poseidon challenge, ported from
 //!   midnight-zk's `schnorr_sig.rs` example (the MIP-0013 device scheme).
 //!
+//! The wrapper carries ANY inner statement, not just signatures. The
+//! cheapest realistic device statement is knowledge of a hash preimage
+//! (the account stores a commitment, the device proves knowledge of the
+//! 32-byte secret behind it):
+//!
+//! * [`witness_preimage::PoseidonPreimage`]: Poseidon commitment over the
+//!   secret packed into two field elements.
+//! * [`witness_preimage::Sha256Preimage`]: SHA-256 digest of the secret,
+//!   the persistentHash commitment shape Midnight contracts already use
+//!   for preimage authorisation.
+//!
 //! [`wrapper::ProofWrap`] is the outer relation that verifies an inner
 //! proof in-circuit; [`wrapper::verify_wrapped`] is the ONLY sound way to
 //! verify a wrapped proof (the in-circuit verifier defers the final KZG
@@ -45,4 +56,5 @@ pub mod ed25519;
 pub mod jubjub_schnorr;
 pub mod relations;
 pub mod vectors;
+pub mod witness_preimage;
 pub mod wrapper;

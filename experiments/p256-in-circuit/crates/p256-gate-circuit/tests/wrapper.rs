@@ -1,9 +1,11 @@
 //! MockProver-based tests for the proof-of-proof wrapper, plus an
 //! end-to-end test of the complete-verification helper.
 //!
-//! The wrapper is exercised against the cheapest inner relation only
-//! (JubJub Schnorr): the outer circuit's shape barely depends on the inner
-//! relation, and one wrapped scheme keeps the suite's runtime sane. Unlike
+//! The default suite wraps the two cheapest inner relations only (JubJub
+//! Schnorr and the Poseidon preimage): the outer circuit's shape barely
+//! depends on the inner relation, and few wrapped schemes keep the suite's
+//! runtime sane; a SHA-256 preimage wrap is re-runnable behind
+//! `#[ignore]`. Unlike
 //! `tests/mock.rs`, these tests need the Filecoin SRS (see the README):
 //! producing an inner proof requires real proving.
 //!
@@ -30,7 +32,11 @@ use midnight_zk_stdlib::{
 use p256_gate_circuit::{
     ed25519::Ed25519Verify,
     jubjub_schnorr::JubjubSchnorrVerify,
-    vectors::{generated_jubjub_schnorr, jubjub_schnorr_verify},
+    vectors::{
+        generated_jubjub_schnorr, generated_witness_preimage, jubjub_schnorr_verify,
+        witness_preimage_verify,
+    },
+    witness_preimage::{PoseidonPreimage, Sha256Preimage},
     wrapper::{
         prove_inner, unsupported_inner_rotations, verify_inner, verify_wrapped, wrap_inner_proof,
         ProofWrap, WrapInstance, WrapWitness,
@@ -48,6 +54,12 @@ type Inner = JubjubSchnorrVerify;
 /// `wrapper_accepts_valid_inner_proof`, which fails if the circuit no
 /// longer fits.
 const WRAPPER_K: u32 = 17;
+
+/// Circuit size of the wrapper over the `Sha256Preimage` inner relation,
+/// as measured by the `recursion` subcommand
+/// (`evidence/recursion-witness-sha256.json`). Only used by the
+/// `#[ignore]`d SHA-256 wrap test below.
+const SHA256_WRAPPER_K: u32 = 18;
 
 struct Fixture {
     wrapper: ProofWrap<Inner>,
@@ -425,6 +437,151 @@ fn ed25519_inner_circuit_is_unwrappable_wide_rotations() {
         unsupported_inner_rotations(&ed_vk),
         vec![2, 3],
         "the SHA-512 chip's wide rotations should be the only obstruction"
+    );
+}
+
+/// The wrapper accepts a valid PoseidonPreimage inner proof: the cheapest
+/// device statement (knowledge of a 32-byte hash preimage) wraps at the
+/// same outer size as the JubJub Schnorr fixture (the `recursion`
+/// subcommand's `witness-poseidon` run confirms optimal k = 17 for this
+/// inner relation too). Complements the rotation guard below with a full
+/// MockProver pass; the timed end-to-end wrapped run lives in the
+/// `recursion` subcommand.
+#[test]
+fn wrapper_accepts_valid_poseidon_preimage_inner_proof() {
+    // Reuse the fixture for its SRS_DIR side effect.
+    let _ = fixture();
+
+    let relation = PoseidonPreimage;
+    let vector = generated_witness_preimage();
+    assert!(
+        witness_preimage_verify(&vector),
+        "vector must verify out-of-circuit"
+    );
+    let inner_instance = vector.poseidon_commitment;
+
+    let inner_srs = srs_for_test(&relation, None);
+    let inner_vk = setup_vk(&inner_srs, &relation);
+    let inner_pk = setup_pk(&relation, &inner_vk);
+    let inner_proof = prove_inner(
+        &inner_srs,
+        &inner_pk,
+        &relation,
+        &inner_instance,
+        vector.secret,
+        OsRng,
+    )
+    .expect("inner proof generation should not fail");
+
+    let nb_inner_pis = PoseidonPreimage::format_instance(&inner_instance)
+        .expect("formattable instance")
+        .len();
+    let wrapper = ProofWrap::<PoseidonPreimage>::new(&inner_vk, nb_inner_pis);
+    let (instance, witness) =
+        wrap_inner_proof::<PoseidonPreimage>(&inner_vk, &inner_instance, &inner_proof)
+            .expect("wrapping the inner proof should not fail");
+
+    let public_inputs =
+        ProofWrap::<PoseidonPreimage>::format_instance(&instance).expect("formattable instance");
+    let circuit = MidnightCircuit::new(
+        &wrapper,
+        Value::known(instance),
+        Value::known(witness),
+        Some(WRAPPER_K),
+    );
+    // Instance column 0 carries committed instances (unused here), column 1
+    // the raw public inputs; this mirrors upstream's own MockProver tests.
+    let prover = MockProver::run(&circuit, vec![vec![], public_inputs])
+        .expect("wrapper synthesis should not fail");
+    prover
+        .verify()
+        .expect("a valid preimage inner proof must satisfy the wrapper circuit");
+}
+
+/// Same full MockProver pass for a `Sha256Preimage` inner proof.
+/// `#[ignore]`d by default like `discover_wrapper_optimal_k`: its wrap
+/// needs outer k = 18 (one step above the JubJub Schnorr and Poseidon
+/// preimage wraps), which would roughly double the suite's runtime; the
+/// timed end-to-end wrapped run lives in the `recursion` subcommand. Run
+/// with `cargo test -p p256-gate-circuit --release -- --ignored`.
+#[test]
+#[ignore]
+fn wrapper_accepts_valid_sha256_preimage_inner_proof() {
+    // Reuse the fixture for its SRS_DIR side effect.
+    let _ = fixture();
+
+    let relation = Sha256Preimage;
+    let vector = generated_witness_preimage();
+    assert!(
+        witness_preimage_verify(&vector),
+        "vector must verify out-of-circuit"
+    );
+    let inner_instance = vector.sha256_digest;
+
+    let inner_srs = srs_for_test(&relation, None);
+    let inner_vk = setup_vk(&inner_srs, &relation);
+    let inner_pk = setup_pk(&relation, &inner_vk);
+    let inner_proof = prove_inner(
+        &inner_srs,
+        &inner_pk,
+        &relation,
+        &inner_instance,
+        vector.secret,
+        OsRng,
+    )
+    .expect("inner proof generation should not fail");
+
+    let nb_inner_pis = Sha256Preimage::format_instance(&inner_instance)
+        .expect("formattable instance")
+        .len();
+    let wrapper = ProofWrap::<Sha256Preimage>::new(&inner_vk, nb_inner_pis);
+    let (instance, witness) =
+        wrap_inner_proof::<Sha256Preimage>(&inner_vk, &inner_instance, &inner_proof)
+            .expect("wrapping the inner proof should not fail");
+
+    let public_inputs =
+        ProofWrap::<Sha256Preimage>::format_instance(&instance).expect("formattable instance");
+    let circuit = MidnightCircuit::new(
+        &wrapper,
+        Value::known(instance),
+        Value::known(witness),
+        Some(SHA256_WRAPPER_K),
+    );
+    // Instance column 0 carries committed instances (unused here), column 1
+    // the raw public inputs; this mirrors upstream's own MockProver tests.
+    let prover = MockProver::run(&circuit, vec![vec![], public_inputs])
+        .expect("wrapper synthesis should not fail");
+    prover
+        .verify()
+        .expect("a valid preimage inner proof must satisfy the wrapper circuit");
+}
+
+/// Pins the wrappability of the witness-preimage inner circuits: neither
+/// the Poseidon chip nor the SHA-256 chip queries rotations outside -1, 0,
+/// and 1 (the upstream aggregation example wraps a sha2_256 circuit, and
+/// the IVC wraps Poseidon-bearing circuits), so both relations must pass
+/// the rotation guard. The end-to-end wrapped measurement lives in the
+/// `recursion` subcommand (`--scheme witness-poseidon` and
+/// `--scheme witness-sha256`), keeping this suite fast.
+#[test]
+fn witness_preimage_inner_circuits_are_wrappable() {
+    // Reuse the fixture for its SRS_DIR side effect.
+    let _ = fixture();
+
+    let poseidon_srs = srs_for_test(&PoseidonPreimage, None);
+    let poseidon_vk = setup_vk(&poseidon_srs, &PoseidonPreimage);
+    assert_eq!(
+        unsupported_inner_rotations(&poseidon_vk),
+        Vec::<i32>::new(),
+        "the PoseidonPreimage inner circuit must be wrappable"
+    );
+
+    let sha_srs = srs_for_test(&Sha256Preimage, None);
+    let sha_vk = setup_vk(&sha_srs, &Sha256Preimage);
+    assert_eq!(
+        unsupported_inner_rotations(&sha_vk),
+        Vec::<i32>::new(),
+        "the Sha256Preimage inner circuit must be wrappable"
     );
 }
 

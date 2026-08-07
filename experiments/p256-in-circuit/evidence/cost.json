@@ -36,6 +36,20 @@
     "table_rows": 1291
   },
   "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
+  "poseidon_preimage": {
+    "advice_columns": 8,
+    "column_queries": 32,
+    "estimated_proof_size_bytes": 2640,
+    "fixed_columns": 27,
+    "lookups": 1,
+    "max_deg": 5,
+    "nb_unusable_rows": 9,
+    "optimal_k": 9,
+    "permutations": 8,
+    "point_sets": 3,
+    "rows": 60,
+    "table_rows": 257
+  },
   "prehashed": {
     "advice_columns": 9,
     "column_queries": 37,
@@ -63,6 +77,20 @@
     "point_sets": 4,
     "rows": 28951,
     "table_rows": 30979
+  },
+  "sha256_preimage": {
+    "advice_columns": 8,
+    "column_queries": 37,
+    "estimated_proof_size_bytes": 3408,
+    "fixed_columns": 41,
+    "lookups": 2,
+    "max_deg": 5,
+    "nb_unusable_rows": 9,
+    "optimal_k": 13,
+    "permutations": 9,
+    "point_sets": 4,
+    "rows": 1922,
+    "table_rows": 7933
   },
   "webauthn": {
     "advice_columns": 9,

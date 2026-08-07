@@ -1,7 +1,8 @@
 //! MockProver-based satisfiability tests for the three P-256 ECDSA
-//! relations and the two recursion-leg inner relations (Ed25519 and JubJub
-//! Schnorr). Run with `cargo test -p p256-gate-circuit --release`
-//! (MockProver is unusably slow in debug builds).
+//! relations and the recursion-leg inner relations (Ed25519, JubJub
+//! Schnorr, and the two witness-preimage relations). Run with
+//! `cargo test -p p256-gate-circuit --release` (MockProver is unusably
+//! slow in debug builds).
 
 use std::sync::OnceLock;
 
@@ -16,10 +17,12 @@ use p256_gate_circuit::{
     relations::{P256EcdsaPreHashed, P256EcdsaPrivatePk, P256EcdsaWebAuthn},
     vectors::{
         cavp_prehashed, dalek_verify_strict, generated_ed25519, generated_jubjub_schnorr,
-        generated_prehashed, generated_webauthn, high_s_twin, jubjub_schnorr_verify,
-        rustcrypto_verify, scalar_from_be_bytes, scalar_to_be_bytes, wrong_ed25519_pk_bytes,
-        wrong_pk, Ed25519Vector, JubjubSchnorrVector, PreHashedVector,
+        generated_prehashed, generated_webauthn, generated_witness_preimage, high_s_twin,
+        jubjub_schnorr_verify, rustcrypto_verify, scalar_from_be_bytes, scalar_to_be_bytes,
+        witness_preimage_verify, wrong_ed25519_pk_bytes, wrong_pk, Ed25519Vector,
+        JubjubSchnorrVector, PreHashedVector, WitnessPreimageVector,
     },
+    witness_preimage::{PoseidonPreimage, Sha256Preimage},
 };
 
 /// Runs the MockProver on `relation` for the given instance/witness pair.
@@ -418,5 +421,115 @@ fn jubjub_schnorr_rejects_tampered_challenge() {
     assert!(
         check_jubjub_schnorr(&vector).is_err(),
         "tampered e_bytes must not satisfy the circuit"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Witness-preimage inner relations
+// ---------------------------------------------------------------------------
+
+fn poseidon_preimage_k() -> u32 {
+    static K: OnceLock<u32> = OnceLock::new();
+    *K.get_or_init(|| optimal_k(&PoseidonPreimage))
+}
+
+fn sha256_preimage_k() -> u32 {
+    static K: OnceLock<u32> = OnceLock::new();
+    *K.get_or_init(|| optimal_k(&Sha256Preimage))
+}
+
+fn check_poseidon_preimage(vector: &WitnessPreimageVector) -> Result<(), String> {
+    mock_check(
+        &PoseidonPreimage,
+        poseidon_preimage_k(),
+        &vector.poseidon_commitment,
+        &vector.secret,
+    )
+}
+
+fn check_sha256_preimage(vector: &WitnessPreimageVector) -> Result<(), String> {
+    mock_check(
+        &Sha256Preimage,
+        sha256_preimage_k(),
+        &vector.sha256_digest,
+        &vector.secret,
+    )
+}
+
+// (s) A valid witness-preimage vector satisfies PoseidonPreimage.
+#[test]
+fn poseidon_preimage_accepts_valid_vector() {
+    let vector = generated_witness_preimage();
+    assert!(
+        witness_preimage_verify(&vector),
+        "vector must verify out-of-circuit"
+    );
+    check_poseidon_preimage(&vector).expect("valid preimage vector must satisfy the circuit");
+}
+
+// (t) A flipped secret byte must be rejected: the packed halves change, so
+// the recomputed Poseidon commitment no longer matches the public one.
+#[test]
+fn poseidon_preimage_rejects_flipped_secret_byte() {
+    let mut vector = generated_witness_preimage();
+    vector.secret[0] ^= 0x01;
+    let err = check_poseidon_preimage(&vector)
+        .expect_err("a flipped secret byte must not satisfy the circuit");
+    assert!(
+        err.starts_with("unsatisfied"),
+        "rejection must come from the constraint system, not a synthesis abort: {err}"
+    );
+}
+
+// (u) A wrong public commitment must be rejected: the constrained Poseidon
+// output no longer matches the instance value.
+#[test]
+fn poseidon_preimage_rejects_wrong_commitment() {
+    let mut vector = generated_witness_preimage();
+    vector.poseidon_commitment += p256_gate_circuit::relations::F::from(1);
+    let err = check_poseidon_preimage(&vector)
+        .expect_err("a wrong commitment must not satisfy the circuit");
+    assert!(
+        err.starts_with("unsatisfied"),
+        "rejection must come from the constraint system, not a synthesis abort: {err}"
+    );
+}
+
+// (v) A valid witness-preimage vector satisfies Sha256Preimage.
+#[test]
+fn sha256_preimage_accepts_valid_vector() {
+    let vector = generated_witness_preimage();
+    assert!(
+        witness_preimage_verify(&vector),
+        "vector must verify out-of-circuit"
+    );
+    check_sha256_preimage(&vector).expect("valid preimage vector must satisfy the circuit");
+}
+
+// (w) A flipped secret byte must be rejected: the in-circuit SHA-256 of the
+// tampered secret no longer matches the public digest.
+#[test]
+fn sha256_preimage_rejects_flipped_secret_byte() {
+    let mut vector = generated_witness_preimage();
+    vector.secret[0] ^= 0x01;
+    let err = check_sha256_preimage(&vector)
+        .expect_err("a flipped secret byte must not satisfy the circuit");
+    assert!(
+        err.starts_with("unsatisfied"),
+        "rejection must come from the constraint system, not a synthesis abort: {err}"
+    );
+}
+
+// (x) A wrong public digest must be rejected: the constrained digest bytes
+// no longer match the instance values.
+#[test]
+fn sha256_preimage_rejects_wrong_digest() {
+    let mut vector = generated_witness_preimage();
+    vector.sha256_digest[0] ^= 0xff;
+    let err =
+        check_sha256_preimage(&vector).expect_err("a wrong digest must not satisfy the circuit");
+    assert!(
+        err.starts_with("unsatisfied"),
+        "rejection must come from the constraint system, not a synthesis abort: {err}"
     );
 }

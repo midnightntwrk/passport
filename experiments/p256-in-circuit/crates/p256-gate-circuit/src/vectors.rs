@@ -15,6 +15,10 @@
 //! 4. A JubJub Schnorr vector produced by reproducing the keygen/sign logic
 //!    of midnight-zk's `zk_stdlib/examples/schnorr_sig.rs` with fixed
 //!    (deterministic) secret key and nonce instead of an RNG.
+//! 5. A witness-preimage vector: a fixed 32-byte secret with its Poseidon
+//!    commitment (computed with the upstream `PoseidonChip` `HashCPU`
+//!    implementation, so off-circuit and in-circuit agree) and its SHA-256
+//!    digest.
 
 use ed25519_dalek::{Signer, SigningKey as Ed25519SigningKey};
 use ff::PrimeField;
@@ -38,6 +42,7 @@ use crate::{
     ed25519::ED25519_ENC_LEN,
     jubjub_schnorr::JubjubSchnorrSignature,
     relations::{AUTHENTICATOR_DATA_LEN, DIGEST_LEN, F},
+    witness_preimage::{pack_secret, SECRET_LEN},
 };
 
 /// A `(pk, hash, r, s)` tuple matching the instance/witness split of
@@ -395,4 +400,52 @@ pub fn jubjub_schnorr_verify(vector: &JubjubSchnorrVector) -> bool {
     let h = <PoseidonChip<F> as HashCPU<F, F>>::hash(&[pkx, pky, rx, ry, vector.message]);
 
     h.to_bytes_le() == vector.signature.e_bytes
+}
+
+// ---------------------------------------------------------------------------
+// Witness preimage (recursion-leg inner relations)
+// ---------------------------------------------------------------------------
+
+/// A witness-preimage vector: one 32-byte secret with both commitment
+/// forms, matching the instance/witness splits of `PoseidonPreimage` and
+/// `Sha256Preimage`.
+#[derive(Clone, Debug)]
+pub struct WitnessPreimageVector {
+    /// The 32-byte device secret (the witness of both relations).
+    pub secret: [u8; SECRET_LEN],
+    /// Poseidon commitment over the packed secret halves.
+    pub poseidon_commitment: F,
+    /// SHA-256 digest of the secret bytes.
+    pub sha256_digest: [u8; DIGEST_LEN],
+}
+
+/// Fixed 32-byte secret for the witness-preimage vectors. Test-only
+/// material; never use outside this experiment.
+pub const WITNESS_SECRET_BYTES: [u8; SECRET_LEN] =
+    hex!("e0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff");
+
+/// Off-circuit Poseidon commitment to a 32-byte secret: the secret is
+/// packed with [`pack_secret`] (two field elements of 16 little-endian
+/// bytes each) and hashed with the upstream `PoseidonChip` `HashCPU`
+/// implementation, the CPU counterpart of the in-circuit `poseidon`
+/// gadget, so off-circuit and in-circuit commitments agree.
+pub fn poseidon_commitment(secret: &[u8; SECRET_LEN]) -> F {
+    <PoseidonChip<F> as HashCPU<F, F>>::hash(&pack_secret(secret))
+}
+
+/// Deterministic witness-preimage vector over [`WITNESS_SECRET_BYTES`].
+pub fn generated_witness_preimage() -> WitnessPreimageVector {
+    let secret = WITNESS_SECRET_BYTES;
+    WitnessPreimageVector {
+        secret,
+        poseidon_commitment: poseidon_commitment(&secret),
+        sha256_digest: Sha256::digest(secret).into(),
+    }
+}
+
+/// Out-of-circuit check of a witness-preimage vector: both commitments
+/// recompute from the secret.
+pub fn witness_preimage_verify(vector: &WitnessPreimageVector) -> bool {
+    poseidon_commitment(&vector.secret) == vector.poseidon_commitment
+        && <[u8; DIGEST_LEN]>::from(Sha256::digest(vector.secret)) == vector.sha256_digest
 }

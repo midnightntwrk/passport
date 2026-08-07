@@ -8,10 +8,11 @@
 //!   `evidence/timings-<relation>.json`.
 //! * `passkey` — verify a real WebAuthn assertion (exported as JSON) both
 //!   out-of-circuit and in-circuit.
-//! * `recursion` — direct-vs-wrapped comparison for one signature scheme:
-//!   prove the signature relation directly (Poseidon transcript), then wrap
-//!   an inner proof in the in-circuit verifier and measure the outer proof;
-//!   appended to `evidence/recursion-<scheme>.json`.
+//! * `recursion` — direct-vs-wrapped comparison for one scheme (a signature
+//!   or a witness-preimage statement): prove the inner relation directly
+//!   (Poseidon transcript), then wrap an inner proof in the in-circuit
+//!   verifier and measure the outer proof; appended to
+//!   `evidence/recursion-<scheme>.json`.
 
 use std::{
     env, fs,
@@ -43,10 +44,11 @@ use p256_gate_circuit::{
     },
     vectors::{
         cavp_prehashed, dalek_verify_strict, generated_ed25519, generated_jubjub_schnorr,
-        generated_prehashed, generated_webauthn, high_s_twin, jubjub_schnorr_verify,
-        point_from_xy_bytes, point_to_xy_bytes, scalar_from_be_bytes, scalar_to_be_bytes, wrong_pk,
-        PreHashedVector, GENERATED_MESSAGE,
+        generated_prehashed, generated_webauthn, generated_witness_preimage, high_s_twin,
+        jubjub_schnorr_verify, point_from_xy_bytes, point_to_xy_bytes, scalar_from_be_bytes,
+        scalar_to_be_bytes, witness_preimage_verify, wrong_pk, PreHashedVector, GENERATED_MESSAGE,
     },
+    witness_preimage::{PoseidonPreimage, Sha256Preimage},
     wrapper::{
         prove_inner, unsupported_inner_rotations, verify_wrapped, wrap_inner_proof, ProofWrap,
     },
@@ -110,13 +112,13 @@ enum Command {
         rp_id: String,
     },
     /// Measure the cost of verifying a proof inside the circuit, per
-    /// signature scheme: (a) DIRECT proving of the signature relation under
-    /// the Poseidon transcript, (b) WRAPPED: one inner proof verified
-    /// in-circuit by the outer wrapper relation, with the complete
-    /// verification (native verify + deferred accumulator pairing check)
-    /// timed. Appends a record to evidence/recursion-<scheme>.json.
+    /// scheme: (a) DIRECT proving of the inner relation under the Poseidon
+    /// transcript, (b) WRAPPED: one inner proof verified in-circuit by the
+    /// outer wrapper relation, with the complete verification (native
+    /// verify + deferred accumulator pairing check) timed. Appends a record
+    /// to evidence/recursion-<scheme>.json.
     Recursion {
-        /// Which signature scheme to measure.
+        /// Which scheme to measure.
         #[arg(long, value_enum)]
         scheme: SchemeKind,
         /// Number of timed proving runs (direct and outer).
@@ -150,6 +152,12 @@ enum SchemeKind {
     Ed25519,
     /// Schnorr over JubJub with a Poseidon challenge (JubjubSchnorrVerify).
     JubjubSchnorr,
+    /// Knowledge of the 32-byte Poseidon preimage of a public commitment
+    /// (PoseidonPreimage).
+    WitnessPoseidon,
+    /// Knowledge of the 32-byte SHA-256 preimage of a public digest
+    /// (Sha256Preimage).
+    WitnessSha256,
 }
 
 impl SchemeKind {
@@ -158,6 +166,8 @@ impl SchemeKind {
             SchemeKind::P256Prehashed => "p256-prehashed",
             SchemeKind::Ed25519 => "ed25519",
             SchemeKind::JubjubSchnorr => "jubjub-schnorr",
+            SchemeKind::WitnessPoseidon => "witness-poseidon",
+            SchemeKind::WitnessSha256 => "witness-sha256",
         }
     }
 }
@@ -344,6 +354,8 @@ fn cmd_mock(evidence_dir: &Path) -> Result<()> {
         "privatepk": relation_cost_json(&P256EcdsaPrivatePk, "privatepk"),
         "ed25519": relation_cost_json(&Ed25519Verify, "ed25519"),
         "jubjub_schnorr": relation_cost_json(&JubjubSchnorrVerify, "jubjub_schnorr"),
+        "poseidon_preimage": relation_cost_json(&PoseidonPreimage, "poseidon_preimage"),
+        "sha256_preimage": relation_cost_json(&Sha256Preimage, "sha256_preimage"),
     });
     write_pretty_json(&evidence_dir.join("cost.json"), &cost)
 }
@@ -556,7 +568,7 @@ fn prove_report_json(report: &ProveReport) -> Json {
 
 /// Direct-vs-wrapped measurement for one inner relation.
 ///
-/// DIRECT: the signature relation proved and verified under the POSEIDON
+/// DIRECT: the inner relation proved and verified under the POSEIDON
 /// transcript. The existing `prove` subcommand keeps blake2b; the direct
 /// numbers here are re-measured under Poseidon so the comparison with the
 /// wrapped path (whose inner proof must be Poseidon, since the in-circuit
@@ -577,7 +589,7 @@ where
     R::Error: std::fmt::Debug,
 {
     // ---- DIRECT (Poseidon transcript) ----
-    println!("== direct: signature relation under the Poseidon transcript ==");
+    println!("== direct: inner relation under the Poseidon transcript ==");
     let inner =
         timed_prove_session::<R, PoseidonState<F>>(relation, instance, witness, runs, None)?;
 
@@ -725,6 +737,25 @@ fn cmd_recursion(evidence_dir: &Path, scheme: SchemeKind, runs: usize) -> Result
                 &vector.signature,
                 runs,
             )?
+        }
+        SchemeKind::WitnessPoseidon => {
+            let vector = generated_witness_preimage();
+            if !witness_preimage_verify(&vector) {
+                bail!("witness-preimage vector must verify out-of-circuit");
+            }
+            recursion_record(
+                &PoseidonPreimage,
+                &vector.poseidon_commitment,
+                &vector.secret,
+                runs,
+            )?
+        }
+        SchemeKind::WitnessSha256 => {
+            let vector = generated_witness_preimage();
+            if !witness_preimage_verify(&vector) {
+                bail!("witness-preimage vector must verify out-of-circuit");
+            }
+            recursion_record(&Sha256Preimage, &vector.sha256_digest, &vector.secret, runs)?
         }
     };
 
