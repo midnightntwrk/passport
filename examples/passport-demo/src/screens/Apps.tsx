@@ -9,7 +9,6 @@ import {
 } from '../lib/registry.js'
 import RaffleArt from './RaffleArt.js'
 import AppBrowser, { AppIcon, type AppBrowserProps } from './AppBrowser.js'
-import AppFolder from './AppFolder.js'
 import NetworkSwitcher, { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
 import ThemeToggle from './ThemeToggle.js'
 import './apps.css'
@@ -384,15 +383,13 @@ export default function AppsScreen(props: AppsScreenProps) {
         ) : null}
 
         {grouped.length > 0 ? (
-          <section className="mnapps-section" aria-label="Apps by category">
-            <div className="mnapps-folder-grid">
-              {grouped.map((group) => (
-                <AppFolder
-                  key={group.category}
-                  title={CATEGORY_LABELS[group.category]}
-                  apps={group.apps}
-                  onOpenApp={(app) => setOpenApp(app)}
-                />
+          <section className="mnapps-section" aria-labelledby="mnapps-all">
+            <h2 className="mnapps-section-label" id="mnapps-all">
+              All apps
+            </h2>
+            <div className="mnapps-list">
+              {grouped.flatMap((group) => group.apps).map((app) => (
+                <AppCard key={app.id} app={app} onOpen={() => setOpenApp(app)} />
               ))}
             </div>
           </section>
