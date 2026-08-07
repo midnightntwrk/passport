@@ -46,6 +46,11 @@ import './apps.css'
 /** How long to wait before warning that the app may have refused to frame. */
 const FRAME_HINT_MS = 6_000
 
+/** Must equal the `.mnapps-browser-closing` animation length in apps.css —
+    the parent unmounts the browser the moment `onClose` runs, so `onClose`
+    may only fire once the exit animation has played. */
+const CLOSE_ANIMATION_MS = 200
+
 /** Shape of the profile Passport is willing to expose to a framed app. */
 export interface PassportProfileSummary {
   displayName?: string | null
@@ -304,6 +309,24 @@ export default function AppBrowser(props: AppBrowserProps) {
      handler must always see the wallet that is open *now*. */
   const executeTransferRef = useRef(executeTransfer)
   executeTransferRef.current = executeTransfer
+
+  /* Closing is one-shot: `closing` flips the exit-animation class, and the
+     parent's `onClose` is deferred until that animation has played. The ref
+     guard means a second Escape or back tap during the exit does nothing. */
+  const [closing, setClosing] = useState(false)
+  const closingRef = useRef(false)
+  const closeTimer = useRef(0)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  const requestClose = useCallback(() => {
+    if (closingRef.current) return
+    closingRef.current = true
+    setClosing(true)
+    closeTimer.current = window.setTimeout(() => onCloseRef.current(), CLOSE_ANIMATION_MS)
+  }, [])
+  /* The timer must not outlive this instance: with `key={app.id}` a stale
+     timeout would close whichever app replaced this one. */
+  useEffect(() => () => window.clearTimeout(closeTimer.current), [])
 
   /* `null` means "Passport refuses to frame this entry", which is also what
      switches the surface over to the explanatory panel below. Registry
@@ -702,11 +725,11 @@ export default function AppBrowser(props: AppBrowserProps) {
         else deny('denied')
         return
       }
-      onClose()
+      requestClose()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [pending, pendingTx, outcome, txOutcome, signing, declineTransfer, deny, onClose])
+  }, [pending, pendingTx, outcome, txOutcome, signing, declineTransfer, deny, requestClose])
 
   const anythingToShare = pending
     ? pending.request.fields.some((field) => hasField(profile, field))
@@ -725,7 +748,7 @@ export default function AppBrowser(props: AppBrowserProps) {
      which then intercepts taps on the sheet's actions. */
   return createPortal(
     <div
-      className="mnapps-browser"
+      className={closing ? 'mnapps-browser mnapps-browser-closing' : 'mnapps-browser'}
       role="dialog"
       aria-modal="true"
       aria-label={`${shownName}, open inside Passport`}
@@ -734,7 +757,7 @@ export default function AppBrowser(props: AppBrowserProps) {
         <button
           type="button"
           className="mnapps-chrome-button"
-          onClick={onClose}
+          onClick={requestClose}
           aria-label="Close app and return to Apps"
         >
           <ChevronLeft size={20} strokeWidth={2.2} aria-hidden="true" />

@@ -268,8 +268,18 @@
   stroke-opacity: .55;
 }
 
-.mnapps-card:hover { box-shadow: var(--mn-shadow-md); transform: translateY(-1px); }
-.mnapps-card:active { box-shadow: var(--mn-shadow-sm); transform: translateY(0); }
+/* Hover polish only where a hover state truly exists — a touch screen must
+   never be left with a stuck lifted card after a tap. */
+@media (hover: hover) {
+  .mnapps-card:hover { box-shadow: var(--mn-shadow-md); transform: translateY(-2px); }
+}
+/* Press acknowledgement must land inside the tap itself, so it runs faster
+   than the .15s hover transition. */
+.mnapps-card:active {
+  box-shadow: var(--mn-shadow-sm);
+  transform: scale(.98);
+  transition-duration: .1s;
+}
 .mnapps-card-copy { min-width: 0; display: grid; gap: 5px; }
 .mnapps-card-copy strong { font-size: 14px; font-weight: 600; }
 .mnapps-card-copy small {
@@ -287,7 +297,9 @@
    clipped by the overflow:hidden crop. */
 .mnapps-card-meta { display: flex; flex-wrap: nowrap; gap: 6px; margin-top: 2px; overflow: hidden; padding-right: 1px; }
 .mnapps-card-arrow { justify-self: end; color: var(--mn-text-muted); }
-.mnapps-card:hover .mnapps-card-arrow { color: var(--mn-accent-ink); }
+@media (hover: hover) {
+  .mnapps-card:hover .mnapps-card-arrow { color: var(--mn-accent-ink); }
+}
 
 .mnapps-pill,
 .mnapps-tag {
@@ -384,7 +396,16 @@
   background: var(--mn-surface-page);
   color-scheme: var(--mn-color-scheme);
   font-family: var(--mn-font-body);
-  animation: mnapps-in .22s ease-out both;
+  /* Backwards fill, never forwards: a persisting transform would make this
+     element the containing block for the fixed sheet backdrop inside it —
+     the same trap the portal in AppBrowser.tsx exists to escape. */
+  animation: mnapps-browser-in .26s cubic-bezier(.22, 1, .36, 1) backwards;
+}
+/* Exit mirrors the open, shorter; AppBrowser defers onClose by the same
+   200ms, so the two durations must move together. */
+.mnapps-browser-closing {
+  animation: mnapps-browser-out .2s cubic-bezier(.3, 0, .8, .15) both;
+  pointer-events: none;
 }
 
 /* A rounded floating bar, lifted off the page by the soft shadow scale. */
@@ -832,7 +853,16 @@
 /* ---------------------------------------------------------------- motion */
 
 @keyframes mnapps-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mnapps-fade-out { to { opacity: 0; } }
 @keyframes mnapps-spin { to { transform: rotate(360deg); } }
+/* No overshoot anywhere in these curves: this is a wallet, and the browser
+   frames a payment surface — the motion must read as precise, not playful. */
+@keyframes mnapps-browser-in {
+  from { opacity: 0; transform: scale(.97); }
+}
+@keyframes mnapps-browser-out {
+  to { opacity: 0; transform: scale(.97); }
+}
 @keyframes mnapps-sheet-in {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
@@ -840,11 +870,15 @@
 
 @media (prefers-reduced-motion: reduce) {
   .mnapps-screen,
-  .mnapps-browser,
   .mnapps-sheet-backdrop,
   .mnapps-sheet { animation: none; }
+  /* Fades only — no transform. The close fade must still exist, because
+     AppBrowser unmounts on a timer that assumes an exit is playing. */
+  .mnapps-browser { animation: mnapps-in .15s ease-out backwards; }
+  .mnapps-browser-closing { animation: mnapps-fade-out .15s ease-in both; }
   .mnapps-card,
-  .mnapps-card:hover { transition: none; transform: none; }
+  .mnapps-card:hover,
+  .mnapps-card:active { transition: none; transform: none; }
   .mnapps-spinner { animation-duration: 2.4s; }
 }
 
