@@ -10,6 +10,13 @@ import {
 } from './backend.js';
 
 interface ProfileConsentProps {
+  /**
+   * Whether a Passport session (local passkey or Dynamic) is open. While it is
+   * false the popup is still mid-sign-in — the passkey ceremony takes as long
+   * as it takes — so the unavailability grace timer must not run: answering
+   * "unavailable" then would refuse every standalone popup connect.
+   */
+  sessionActive: boolean;
   displayName: string | null;
   passportContract: {
     address: string;
@@ -35,11 +42,14 @@ const FIELD_LABELS: Record<PassportProfileField, string> = {
 };
 
 /**
- * How long a request may wait for the profile props to hydrate before the
- * opener is told the profile is unavailable. The props arrive asynchronously
- * (session resume, wallet surfaces), so answering instantly would refuse
- * requests this Passport could in fact serve — but never answering at all
- * leaves the opener hanging on a window that renders nothing.
+ * How long a request may wait, ONCE A SESSION IS OPEN, for the profile props
+ * to hydrate before the opener is told the profile is unavailable. The props
+ * arrive asynchronously (session resume, wallet surfaces), so answering
+ * instantly would refuse requests this Passport could in fact serve — but
+ * never answering at all leaves the opener hanging on a window whose fields
+ * genuinely failed to hydrate. Before a session exists the timer never runs:
+ * the user may still be mid-passkey-ceremony, and that takes as long as it
+ * takes.
  */
 const PROFILE_WAIT_MS = 5_000;
 
@@ -52,6 +62,7 @@ function launchParameters(): { requestId: string; nonce: string } | null {
 }
 
 export function PassportProfileConsent({
+  sessionActive,
   displayName,
   passportContract,
   midnightAddresses,
@@ -90,11 +101,13 @@ export function PassportProfileConsent({
     });
 
   /* A request this Passport cannot serve must still be answered — silence
-     leaves the opener disabled forever, waiting on a window that renders
-     nothing. If the profile has not hydrated within the grace period, tell
-     the opener so; the timer is cancelled the moment the fields arrive. */
+     leaves the opener disabled forever. But "cannot serve" is only knowable
+     once a session is open: before then the user is mid-sign-in, so wait
+     indefinitely. With a session open, if the profile has not hydrated within
+     the grace period, tell the opener so; the timer is cancelled the moment
+     the fields arrive. */
   useEffect(() => {
-    if (!pending || profileReady || outcome) return;
+    if (!pending || !sessionActive || profileReady || outcome) return;
     const timer = window.setTimeout(() => {
       pending.source.postMessage(
         createPassportProfileResponse(pending.request, {
@@ -106,7 +119,7 @@ export function PassportProfileConsent({
       setOutcome('unavailable');
     }, PROFILE_WAIT_MS);
     return () => window.clearTimeout(timer);
-  }, [pending, profileReady, outcome]);
+  }, [pending, sessionActive, profileReady, outcome]);
 
   if (!launch || !pending) return null;
   /* Not ready and not yet answered: the grace timer above is running. */

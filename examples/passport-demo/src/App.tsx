@@ -4141,6 +4141,7 @@ export default function PassportDemo() {
       {transferReview && <TransferReviewModal review={transferReview} onCancel={() => setTransferReview(null)} onSubmit={() => void submitTransfer()} busy={busyAction === 'transfer'} />}
       {showPassportSetup && <PassportSetupModal localMode={localMode} onClose={() => setShowPassportSetup(false)} onContinue={() => { setShowPassportSetup(false); void deployPassport(); }} />}
       <PassportProfileConsent
+        sessionActive={sessionActive}
         displayName={sessionActive ? sessionDisplayName : null}
         passportContract={
           passportContract
