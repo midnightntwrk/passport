@@ -151,10 +151,13 @@ can retry.
 
 ## The explorer link 404s
 
-The route that resolves is `/transactions/{hash}` — `/tx/{hash}` **404s**
-(`explorerTxHref` in `src/main.tsx`). If your network has no public explorer,
-set `VITE_EXPLORER_URL` to an empty value and the template renders the bare
-transaction id instead of a link that goes nowhere.
+The link needs the 32-byte ledger transaction **hash** — the 33-byte
+transaction *identifier* some APIs answer with resolves nowhere. Passport
+reports the hash, and `explorerTxHref` in `src/main.tsx` substitutes it into
+`VITE_EXPLORER_TX_URL` at its `{hash}` placeholder (default: the 1AM explorer,
+`https://explorer.1am.xyz/tx/{hash}?network=preview`). If your network has no
+public explorer, set `VITE_EXPLORER_TX_URL` to an empty value and the template
+renders the bare hash instead of a link that goes nowhere.
 
 ## Port collisions
 

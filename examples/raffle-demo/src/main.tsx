@@ -42,14 +42,15 @@ const PASSPORT_ORIGIN =
 const TELEGRAM_URL = import.meta.env.VITE_TELEGRAM_URL;
 
 /**
- * The preview explorer, and the route that actually resolves on it:
- * `/transactions/{hash}`. `/tx/{hash}` 404s — a link that looks right and goes
- * nowhere is worse than showing the bare identifier.
+ * The 1AM explorer, verified live 2026/08/07 with this raffle's own entry
+ * transaction (hash 2cc3d4…, block 312237). The route takes the 32-byte
+ * ledger transaction hash Passport reports over the bridge — never the
+ * 33-byte identifier, which no explorer resolves.
  */
-const EXPLORER_URL = 'https://explorer.preview.midnight.network';
+const EXPLORER_URL = 'https://explorer.1am.xyz';
 
 function explorerTxHref(txId: string): string {
-  return `${EXPLORER_URL}/transactions/${encodeURIComponent(txId)}`;
+  return `${EXPLORER_URL}/tx/${encodeURIComponent(txId)}?network=preview`;
 }
 
 // The raffle runs two ways: standalone (it opens Passport as a popup and

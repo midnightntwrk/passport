@@ -59,9 +59,9 @@ function shortHash(value: string): string {
 
 function explorerUrl(network: string, txId: string): string | null {
   // Networks with no public explorer show the hash without pretending it
-  // resolves somewhere. The route is `/transactions/{hash}`; the `/tx/{hash}`
-  // this used to build 404s, so the link was honest about existing and
-  // dishonest about working. The per-network table lives in lib/networks.ts.
+  // resolves somewhere. The link needs the 32-byte ledger transaction hash —
+  // an identifier dies with "not found". The per-network table and the route
+  // shape live in lib/networks.ts.
   return explorerTxUrl(network, txId)
 }
 

@@ -122,12 +122,17 @@ export const FAUCET_URLS: Partial<Record<PassportNetworkId, string>> = {
 };
 
 /**
- * Public block explorers, by network. Only `/transactions/{hash}` resolves
- * (`/tx/{hash}` 404s). Mainnet is omitted rather than guessed.
+ * Public block explorer, by network. The 1AM explorer serves every network
+ * from one origin, selected by a `network` query parameter — verified live
+ * 2026/08/07 with a real preview transaction
+ * (`/tx/ea39f2…?network=preview`). Its `/tx/{hash}` route takes the 32-byte
+ * ledger transaction HASH, never the 33-byte identifier `submitTransaction`
+ * answers with. Mainnet is omitted until a link to it has been seen to
+ * resolve.
  */
 export const EXPLORER_URLS: Partial<Record<PassportNetworkId, string>> = {
-  preview: 'https://explorer.preview.midnight.network',
-  preprod: 'https://explorer.preprod.midnight.network',
+  preview: 'https://explorer.1am.xyz',
+  preprod: 'https://explorer.1am.xyz',
 };
 
 /** The faucet for a network, or `null` where there is none. */
@@ -155,7 +160,8 @@ export function explorerTxUrl(
   networkId: string | null | undefined,
   txHash: string | null | undefined,
 ): string | null {
+  const network = asPassportNetwork(networkId);
   const origin = explorerUrlFor(networkId);
-  if (!origin || !txHash) return null;
-  return `${origin}/transactions/${encodeURIComponent(txHash)}`;
+  if (!network || !origin || !txHash) return null;
+  return `${origin}/tx/${encodeURIComponent(txHash)}?network=${network}`;
 }

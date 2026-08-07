@@ -121,17 +121,22 @@ const TX_TIMEOUT_MS = 180_000;
 const POPUP_POLL_MS = 500;
 
 /**
- * The explorer, and the route that actually resolves on it:
- * `/transactions/{hash}`. `/tx/{hash}` 404s. A link that looks right and goes
- * nowhere is worse than showing the bare identifier, so an empty value here
- * renders the identifier as plain text instead.
+ * The explorer link, as a URL template with a `{hash}` placeholder. The
+ * default is the 1AM explorer, verified live 2026/08/07 with a real preview
+ * transaction. The placeholder takes the 32-byte ledger transaction hash that
+ * Passport reports — never a transaction identifier, which no explorer
+ * resolves. A link that looks right and goes nowhere is worse than showing
+ * the bare hash, so an empty value here renders the hash as plain text
+ * instead.
  */
-const EXPLORER_URL = (
-  import.meta.env.VITE_EXPLORER_URL ?? 'https://explorer.preview.midnight.network'
-).replace(/\/+$/, '');
+const EXPLORER_TX_URL = (
+  import.meta.env.VITE_EXPLORER_TX_URL ?? 'https://explorer.1am.xyz/tx/{hash}?network=preview'
+).trim();
 
 function explorerTxHref(txId: string): string | null {
-  return EXPLORER_URL ? `${EXPLORER_URL}/transactions/${encodeURIComponent(txId)}` : null;
+  return EXPLORER_TX_URL.includes('{hash}')
+    ? EXPLORER_TX_URL.replace('{hash}', encodeURIComponent(txId))
+    : null;
 }
 
 /* ---------------------------------------------------------------------------

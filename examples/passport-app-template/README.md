@@ -101,7 +101,7 @@ Copy `.env.example` to `.env.local`. Every variable is optional.
 | `VITE_DEMO_PAYMENT` | unset | Exactly `1` arms Act 3. Anything else leaves it off. |
 | `VITE_DEMO_PAYMENT_ADDRESS` | unset | The unshielded recipient (`mn_addr…`). Act 3 stays off without it. |
 | `VITE_DEMO_PAYMENT_AMOUNT` | `100000` | Atomic NIGHT (`100000` = 0.1 NIGHT). |
-| `VITE_EXPLORER_URL` | `https://explorer.preview.midnight.network` | Base for the `/transactions/{hash}` link. Empty renders the bare id. |
+| `VITE_EXPLORER_TX_URL` | `https://explorer.1am.xyz/tx/{hash}?network=preview` | Link template; `{hash}` is replaced with the transaction hash. Empty renders the bare hash. |
 
 Vite inlines `VITE_*` variables into the public bundle. Never put a secret in
 one.
