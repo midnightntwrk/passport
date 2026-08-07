@@ -119,6 +119,7 @@ import AppsScreen from './screens/Apps.js';
 import PassportNav, { type MobileTab } from './screens/Nav.js';
 import PassportToasts, { pushToast } from './screens/ToastStack.js';
 import { fetchRecentTransactions, type RecentTransaction } from './lib/indexerTx.js';
+import { PasskeyPresenceError, confirmPresence } from './lib/passkeyPresence.js';
 import { aliasRegistrationSupported, configuredNetworkId, explorerTxUrl, walletNetwork } from './lib/networks.js';
 // The local wallet drags the whole Midnight wallet SDK in with it. It is loaded
 // on demand, from the passkey routes only, so a Dynamic-only session never pays
@@ -404,9 +405,9 @@ function storeNameStep(credentialId: string, resolution: NameStepResolution): vo
  * The explorer link a success toast carries — or `undefined`.
  *
  * Preview and pre-production each have a public explorer; mainnet is not in
- * the table, and only `/transactions/{hash}` resolves (`/tx/{hash}` 404s). No
- * hash, or a network with no explorer, means no link rather than one that goes
- * nowhere.
+ * the table. The link takes the 32-byte ledger transaction hash — never the
+ * identifier `submitTransaction` answers with. No hash, or a network with no
+ * explorer, means no link rather than one that goes nowhere.
  */
 function explorerTxLink(
   txHash: string | null | undefined,
@@ -2025,6 +2026,11 @@ export default function PassportDemo() {
           import('./identity/midnames.js'),
           import('./lib/localWallet.js'),
         ]);
+        // The owner-secret derivation below costs one fresh user-verified
+        // WebAuthn assertion (`deriveWalletSeed` is deliberately uncached), so
+        // it IS this approval's ceremony. One approval, one prompt, and both
+        // chain transactions ride on it — a `confirmPresence` here as well
+        // would double-prompt.
         const ownerSecret = await deriveWalletSeed(
           keyProviderFor(activeProfile.passkey),
           MIDNAMES_OWNER_SCOPE,
@@ -2170,7 +2176,9 @@ export default function PassportDemo() {
         requeue(funds.reason);
         return;
       }
-      // (3) The same two real transactions the onboarding claim runs.
+      // (3) The same two real transactions the onboarding claim runs. The
+      // owner-secret derivation costs one fresh user-verified WebAuthn
+      // assertion, which IS this approval's ceremony — see `claimAliasOnChain`.
       setClaimPhase('deploying-resolver');
       const { deriveWalletSeed } = await import('./lib/localWallet.js');
       const ownerSecret = await deriveWalletSeed(
@@ -2491,6 +2499,18 @@ export default function PassportDemo() {
       // is what makes a faucet-funded Passport able to pay its first fee.
       const wallet = localWalletRef.current;
       if (!wallet) return;
+      // A real chain transaction, so it takes the same approval ceremony as
+      // every other local submission. A refusal means nothing was signed.
+      try {
+        await confirmLocalApproval('Register NIGHT for DUST generation');
+      } catch (cause) {
+        pushToast({
+          tone: 'error',
+          title: 'DUST registration not submitted',
+          body: cause instanceof Error ? cause.message : String(cause),
+        });
+        return;
+      }
       setBusyAction('dust');
       setError(null);
       // Proving and submitting can take tens of seconds; a silent spinner
@@ -3793,6 +3813,32 @@ export default function PassportDemo() {
   /* ---------------------------------------------------------------------- */
 
   /**
+   * The per-transaction approval ceremony for the open passkey session.
+   *
+   * The wallet seed lives in memory once a session is open, so without this a
+   * submission would be a bare click. The platform's own verification sheet —
+   * Touch ID, fingerprint, device PIN — is the approval UI, and a refusal
+   * aborts before anything is signed. Exactly ONE ceremony per user-approved
+   * action: a flow that makes several chain transactions from one approval
+   * calls this once. Dynamic sessions never reach it — that wallet carries its
+   * own signing UX. A session restored without its profile has no credential
+   * to assert against, and fails closed rather than skipping the ceremony.
+   */
+  const confirmLocalApproval = useCallback(
+    async (reason: string): Promise<void> => {
+      const passkey = profile?.passkey;
+      if (!passkey?.credentialId) {
+        throw new PasskeyPresenceError(
+          'presence-unavailable',
+          'Passport cannot find the passkey this session signed in with, so nothing was signed or sent. Sign in again, then retry.',
+        );
+      }
+      await withPasskeyWatchdog(() => confirmPresence(passkey, reason));
+    },
+    [profile],
+  );
+
+  /**
    * Signs and submits a real unshielded NIGHT transfer for a framed app.
    *
    * Handed to the in-app browser ONLY while a local wallet is genuinely open —
@@ -3815,6 +3861,10 @@ export default function PassportDemo() {
           { code: 'wallet-closed' },
         );
       }
+      // The approval sheet's Approve tap lands here; the ceremony IS the
+      // popup. No verification, no submission — the browser maps a refusal
+      // onto the bridge's own vocabulary.
+      await confirmLocalApproval(intent.purpose);
       const entry = addActivity({
         label: intent.purpose,
         detail: `Requested by ${intent.origin}.`,
@@ -3853,7 +3903,7 @@ export default function PassportDemo() {
         throw cause;
       }
     },
-    [addActivity, localWalletNetworkId, refreshLocalBalances, refreshTransactions, updateActivity],
+    [addActivity, confirmLocalApproval, localWalletNetworkId, refreshLocalBalances, refreshTransactions, updateActivity],
   );
 
   /**
@@ -3909,6 +3959,10 @@ export default function PassportDemo() {
           { code: 'wallet-closed' as const },
         );
       }
+      // The Send sheet's confirm lands here; the ceremony IS the popup. A
+      // refusal is rethrown for the sheet's own failure line — nothing was
+      // signed, so no activity row is written for it either.
+      await confirmLocalApproval('Send NIGHT');
       const entry = addActivity({
         label: 'Sent NIGHT',
         detail: `To ${params.recipientAddress}.`,
@@ -3962,7 +4016,7 @@ export default function PassportDemo() {
         throw cause;
       }
     },
-    [addActivity, localWalletNetworkId, refreshLocalBalances, refreshTransactions, updateActivity],
+    [addActivity, confirmLocalApproval, localWalletNetworkId, refreshLocalBalances, refreshTransactions, updateActivity],
   );
 
   /**

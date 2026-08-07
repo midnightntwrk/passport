@@ -126,9 +126,9 @@ type TransferOutcome =
 const NIGHT_DECIMALS = 6
 
 /**
- * The explorer's transaction route, per network — `/transactions/{hash}`, NOT
- * `/tx/{hash}`, which 404s. The short form was shipped here and went nowhere;
- * a link that does not resolve is worse than no link. Which networks have an
+ * The explorer's transaction route, per network. The link takes the 32-byte
+ * ledger transaction hash — never the identifier `submitTransaction` answers
+ * with, which resolves nowhere. Which networks have an
  * explorer at all is answered by `lib/networks.ts`, and `null` from it means
  * the id is shown as text instead.
  */
@@ -182,6 +182,9 @@ function transferErrorFrom(cause: unknown): {
   /* The wallet went away between the sheet appearing and the approval landing —
      a genuinely unavailable wallet, not a failed submission. */
   if (code === 'wallet-closed') return { error: 'wallet-unavailable', detail }
+  /* The session's passkey could not be asserted at all, so no transaction can
+     be approved until the user signs in again. */
+  if (code === 'presence-unavailable') return { error: 'wallet-unavailable', detail }
   return { error: 'submit-failed', detail }
 }
 
@@ -665,9 +668,19 @@ export default function AppBrowser(props: AppBrowserProps) {
         ...(submittedHref ? { link: { label: 'View on explorer', href: submittedHref } } : {}),
       })
     } catch (cause) {
-      const { error, detail } = transferErrorFrom(cause)
-      postTx(pendingTx.request, { status: 'failed', error, detail })
-      setTxOutcome({ kind: 'failed', message: detail })
+      /* Cancelling the passkey verification sheet is the user declining, not a
+         submission that failed — the app is told exactly that. */
+      const cancelledCode =
+        typeof cause === 'object' && cause !== null &&
+        (cause as { code?: unknown }).code === 'approval-cancelled'
+      if (cancelledCode) {
+        postTx(pendingTx.request, { status: 'declined', error: 'declined' })
+        setTxOutcome({ kind: 'declined' })
+      } else {
+        const { error, detail } = transferErrorFrom(cause)
+        postTx(pendingTx.request, { status: 'failed', error, detail })
+        setTxOutcome({ kind: 'failed', message: detail })
+      }
     } finally {
       setSigning(false)
     }
