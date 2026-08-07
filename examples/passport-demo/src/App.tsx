@@ -2244,6 +2244,21 @@ export default function PassportDemo() {
   const claimOrQueueAlias = useCallback(
     async (alias: string, network: PassportNetwork): Promise<void> => {
       if (network === localWalletNetworkId && aliasClaimSupported) {
+        /* A brand-new Passport holds nothing, and its first act should not be
+           a trip to a captcha faucet. Where a funder is configured, the grant
+           is fetched and waited for HERE, before the claim — so the one button
+           the user pressed does the whole thing. A funder that refuses or
+           never lands is not fatal: the claim proceeds and fails with its own
+           honest insufficient-funds message. */
+        const shortfall = FUNDER_URL ? await claimNightShortfall(alias) : null;
+        if (shortfall !== null) {
+          setClaimPhase('activating');
+          try {
+            await activateWalletViaFunder(shortfall);
+          } finally {
+            setClaimPhase(null);
+          }
+        }
         await claimAliasOnChain(alias);
         return;
       }
@@ -2253,7 +2268,15 @@ export default function PassportDemo() {
         `Passport's wallet signs and submits on ${signingNetworkLabel} only, so ${alias}.night is reserved for you locally but is NOT registered on ${NETWORK_LABELS[network]}.`,
       );
     },
-    [aliasClaimSupported, claimAliasOnChain, localWalletNetworkId, queueAlias, signingNetworkLabel],
+    [
+      activateWalletViaFunder,
+      aliasClaimSupported,
+      claimAliasOnChain,
+      claimNightShortfall,
+      localWalletNetworkId,
+      queueAlias,
+      signingNetworkLabel,
+    ],
   );
 
   /**
@@ -4451,6 +4474,11 @@ export default function PassportDemo() {
             registrationSupported={selectedNetwork === localWalletNetworkId && aliasClaimSupported}
             signingNetworkLabel={signingNetworkLabel}
             feesSponsored={feesSponsored}
+            autoActivates={
+              Boolean(FUNDER_URL) &&
+              selectedNetwork === localWalletNetworkId &&
+              aliasClaimSupported
+            }
             nightBalance={activeSurfaces?.unshieldedBalance ?? null}
             checkAvailability={checkAliasOnActiveNetwork}
             onClaim={(alias) => claimOrQueueAlias(alias, selectedNetwork)}

@@ -44,10 +44,14 @@ export interface EcosystemProps {
   /** True while the re-run claim is in flight. */
   registerNowBusy?: boolean
   /** Live claim phase while the re-run is in flight. */
-  registerNowPhase?: 'deploying-resolver' | 'registering' | 'confirming' | null
+  registerNowPhase?: 'activating' | 'deploying-resolver' | 'registering' | 'confirming' | null
 }
 
-const REGISTER_PHASE_LABELS: Record<'deploying-resolver' | 'registering' | 'confirming', string> = {
+const REGISTER_PHASE_LABELS: Record<
+  'activating' | 'deploying-resolver' | 'registering' | 'confirming',
+  string
+> = {
+  activating: 'Activating this Passport…',
   'deploying-resolver': 'Deploying resolver…',
   registering: 'Registering on-chain…',
   confirming: 'Confirming…',

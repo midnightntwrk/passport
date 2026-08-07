@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   ArrowRight,
+  Sparkles,
   Check,
   CircleSlash,
   ExternalLink,
@@ -89,6 +90,13 @@ export interface AliasClaimProps {
    * screen goes back to naming the real cost.
    */
   feesSponsored?: boolean
+  /**
+   * True when an activation funder is configured, so an empty wallet can be
+   * granted enough NIGHT to register on the spot. It turns the shortfall from
+   * a dead end into a step: the claim button stays live, and the panel says a
+   * grant arrives first rather than sending the user to a captcha faucet.
+   */
+  autoActivates?: boolean
 }
 
 type FieldState =
@@ -108,6 +116,7 @@ function atomicNightFrom(formatted: string | null): bigint | null {
 }
 
 const PHASE_COPY: Record<AliasClaimProgress['phase'], (domain: string) => string> = {
+  activating: () => 'Activating this Passport…',
   'deploying-resolver': () => "Deploying your name's resolver…",
   registering: (domain) => `Registering ${domain}…`,
   confirming: () => 'Waiting for the registry to confirm…',
@@ -127,6 +136,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     claimPhase,
     error,
     feesSponsored,
+    autoActivates = false,
   } = props
 
   const [value, setValue] = useState('')
@@ -184,6 +194,16 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
   // panel would be answering a question nobody asked.
   const shortOfNight = registrationSupported && isAvailable && canPay === false
 
+  /**
+   * With an activation funder configured, an empty wallet is a step in the
+   * claim rather than a wall in front of it: pressing Claim asks the funder
+   * for a grant, waits for it to land, and registers. So the shortfall stops
+   * disabling the button and stops rerouting to the queue — it only changes
+   * what the panel says will happen next.
+   */
+  const activationCovers = shortOfNight && autoActivates
+  const blockedByFunds = shortOfNight && !autoActivates
+
   const faucetUrl = faucetUrlFor(networkId)
   const queueReasonForNetwork = `Passport's wallet signs and submits on ${signingNetworkLabel} only, so this name is reserved for you locally but is NOT registered on ${NETWORK_LABELS[networkId]}.`
   const queueReasonForRegistry = isUnreachable
@@ -204,7 +224,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
       void onQueue(alias, queueReasonForNetwork)
       return
     }
-    if (shortOfNight) {
+    if (blockedByFunds) {
       void onQueue(alias, queueReasonForFunds)
       return
     }
@@ -218,7 +238,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     queueReasonForNetwork,
     queueReasonForRegistry,
     registrationSupported,
-    shortOfNight,
+    blockedByFunds,
   ])
 
   const primaryLabel = busy
@@ -235,7 +255,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     alias === null ||
     availability === null ||
     availability.status === 'taken' ||
-    shortOfNight
+    blockedByFunds
 
   return (
     <section className="mnid-screen" aria-busy={busy}>
@@ -295,7 +315,23 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
           networkId={networkId}
         />
 
-        {shortOfNight ? (
+        {activationCovers ? (
+          <div className="mnid-panel" role="status">
+            <p className="mnid-panel-head">
+              <Sparkles size={15} aria-hidden="true" />
+              This Passport will be activated for you
+            </p>
+            <p>
+              {aliasDomain(alias ?? '')} costs{' '}
+              <span className="mnid-cost">{formatNight(cost ?? 0n)}</span> NIGHT, paid to the
+              registry owner, and this wallet is empty. Press claim: a small NIGHT grant is
+              sent to it first, and the registration follows once the grant lands — usually
+              within a few seconds.
+            </p>
+          </div>
+        ) : null}
+
+        {blockedByFunds ? (
           <div className="mnid-panel" role="status">
             <p className="mnid-panel-head">
               <AlertTriangle size={15} aria-hidden="true" />

@@ -50,7 +50,7 @@ export interface HomeScreenProps {
     onRegisterNow?: () => void
     registerNowDisabledReason?: string | null
     registerNowBusy?: boolean
-    registerNowPhase?: 'deploying-resolver' | 'registering' | 'confirming' | null
+    registerNowPhase?: 'activating' | 'deploying-resolver' | 'registering' | 'confirming' | null
   } | null
   /** Formatted NIGHT. `null` means unknown, `'0'` means a real zero. */
   unshieldedBalance: string | null

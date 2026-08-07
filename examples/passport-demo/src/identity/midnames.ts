@@ -435,7 +435,12 @@ export class AliasClaimError extends Error {
 }
 
 export interface AliasClaimProgress {
-  phase: 'deploying-resolver' | 'registering' | 'confirming';
+  /**
+   * `activating` belongs to the caller, not to `claimAlias`: it covers the
+   * activation grant a funder sends an empty wallet before the registration
+   * itself can start. The three that follow are this module's own.
+   */
+  phase: 'activating' | 'deploying-resolver' | 'registering' | 'confirming';
 }
 
 export interface AliasClaimResult {
