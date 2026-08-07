@@ -136,7 +136,9 @@ export default function App() {
   return (
     <div className="page">
       <header className="hero">
-        <p className="hero-kicker">Midnight Passport</p>
+        <p className="hero-kicker">
+          Midnight Passport <span className="beta-badge">Beta</span>
+        </p>
         <h1>Passport App Hub</h1>
         <p className="hero-lede">
           The applications that speak the Passport bridge — open them in Passport's in-app

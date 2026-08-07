@@ -605,6 +605,7 @@ function App() {
             <Fingerprint size={15} strokeWidth={2.4} />
           </span>
           <strong>Passport app template</strong>
+          <span className="beta-badge">Beta</span>
         </div>
         <span className={`pt-chip ${phase === 'connected' ? 'on' : ''}`}>
           <i aria-hidden="true" />

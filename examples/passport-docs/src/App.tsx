@@ -175,6 +175,7 @@ export default function App() {
             <span className="docs-brand-name">
               Midnight Passport <span>Docs</span>
             </span>
+            <span className="beta-badge">Beta</span>
           </a>
           <div className="docs-topbar-actions">
             <CopyForAI />

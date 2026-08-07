@@ -505,3 +505,18 @@ body {
     padding: 26px 18px;
   }
 }
+
+/* The family-wide beta mark — micro-caps on the accent wash, as in Passport. */
+.beta-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--hub-radius-pill, 999px);
+  background: var(--hub-accent-soft);
+  color: var(--hub-accent-ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  vertical-align: 2px;
+}
