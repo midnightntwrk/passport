@@ -90,6 +90,7 @@ import {
   type DemoPassportProfile,
 } from './publicProfile.js';
 import { PassportProfileConsent } from './profileConsent.js';
+import { PassportTxConsent } from './txConsent.js';
 import OnboardingScreen from './screens/Onboarding.js';
 import HomeScreen from './screens/Home.js';
 import AliasClaimScreen from './screens/AliasClaim.js';
@@ -231,6 +232,35 @@ const signingNetworkLabel = configuredWalletNetwork
  */
 const MIDNIGHT_INDEXER_URL =
   import.meta.env.VITE_INDEXER_URL ?? 'https://indexer.preview.midnight.network/api/v4/graphql';
+/**
+ * Optional activation funder (`VITE_FUNDER_URL`, see
+ * `examples/passport-funder`). When set, Passport asks this self-hosted
+ * service to drip an activation-sized NIGHT grant to a brand-new wallet, so
+ * the first `.night` claim executes immediately instead of queueing until the
+ * user has visited the captcha faucet. Unset, the queue behaviour is exactly
+ * what it always was.
+ */
+const FUNDER_URL =
+  (import.meta.env as Record<string, string | undefined>).VITE_FUNDER_URL?.trim().replace(/\/+$/, '') ||
+  null;
+/** Ceiling on the wait for a funder grant to show up in the balance stream. */
+const FUNDER_WAIT_CEILING_MS = 45_000;
+/** Appended to the queue reason when activation was attempted and failed. */
+const FUNDER_UNAVAILABLE_SENTENCE =
+  'Automatic activation was unavailable just now, so the wallet still needs funding.';
+
+/**
+ * Parses a formatted (6-decimal) NIGHT figure back to atomic units, exactly.
+ * Mirrors `atomicNightFrom` in `screens/AliasClaim.tsx`.
+ */
+function atomicNightFromFormatted(formatted: string | null): bigint | null {
+  if (formatted === null) return null;
+  const cleaned = formatted.replace(/[\s,]/g, '');
+  if (!/^\d*(\.\d*)?$/.test(cleaned) || cleaned === '' || cleaned === '.') return null;
+  const [whole, fraction = ''] = cleaned.split('.');
+  const padded = `${fraction}000000`.slice(0, 6);
+  return BigInt(whole || '0') * 1_000_000n + BigInt(padded || '0');
+}
 const EXPERIENCE_STORAGE_KEY = 'passport-experience';
 const WALLET_MODE_STORAGE_KEY = 'passport-wallet-mode';
 
@@ -2005,6 +2035,114 @@ export default function PassportDemo() {
     [],
   );
 
+  /* ---------------------------------------------------------------------- */
+  /* Activation funding — VITE_FUNDER_URL only                               */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Wallet addresses this session has already asked the funder to activate.
+   * One attempt per wallet per session, whatever the outcome — the funder's
+   * own once-only ledger is the real gate; this ref just avoids asking twice.
+   */
+  const funderActivationAttempted = useRef(new Set<string>());
+  /** The identity step, readable from async funder waits without a stale closure. */
+  const identityStepRef = useRef<IdentityStep>(null);
+  useEffect(() => {
+    identityStepRef.current = identityStep;
+  }, [identityStep]);
+
+  /**
+   * The registration cost of `alias` when the open wallet holds LESS than it,
+   * or `null` when the wallet can already pay (or cannot be read — an unknown
+   * balance must not trigger a drip request).
+   */
+  const claimNightShortfall = useCallback(async (alias: string): Promise<bigint | null> => {
+    const handle = localWalletRef.current;
+    if (!handle) return null;
+    try {
+      const { aliasCostAtomicNight } = await import('./identity/midnames.js');
+      const cost = aliasCostAtomicNight(alias);
+      const held = atomicNightFromFormatted((await handle.getBalances()).unshieldedBalance);
+      if (held === null || held >= cost) return null;
+      return cost;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  /**
+   * Asks the funder to activate the open wallet, then waits for the grant on
+   * the SAME live balance stream that feeds the Home surfaces — the wallet's
+   * push-based `subscribeBalances`, never a `getBalances` poll — with a 45 s
+   * ceiling. Resolves `true` only when the wallet really holds
+   * `requiredAtomic`; every failure resolves `false` and the caller's queue
+   * path stands unchanged.
+   */
+  const activateWalletViaFunder = useCallback(
+    async (requiredAtomic: bigint): Promise<boolean> => {
+      if (!FUNDER_URL) return false;
+      const handle = localWalletRef.current;
+      if (!handle) return false;
+      const address = handle.unshieldedAddress;
+      if (funderActivationAttempted.current.has(address)) return false;
+      funderActivationAttempted.current.add(address);
+      pushToast({
+        tone: 'info',
+        title: 'Activating this Passport',
+        body: 'A small NIGHT grant is on its way.',
+      });
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15_000);
+        let response: Response;
+        try {
+          response = await fetch(`${FUNDER_URL}/activate`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ address }),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        // `already-funded` and `already-activated` both mean the NIGHT exists
+        // on chain and only this wallet's own sync is behind, so the wait
+        // below still applies. Every other refusal means no grant is coming.
+        if (!response.ok && body.error !== 'already-funded' && body.error !== 'already-activated') {
+          console.warn('[funder] activation refused:', body);
+          return false;
+        }
+        return await new Promise<boolean>((resolve) => {
+          let unsubscribe: (() => void) | null = null;
+          let settled = false;
+          const finish = (outcome: boolean) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(ceiling);
+            unsubscribe?.();
+            resolve(outcome);
+          };
+          const ceiling = setTimeout(() => finish(false), FUNDER_WAIT_CEILING_MS);
+          unsubscribe = handle.subscribeBalances(
+            (balances) => {
+              const held = atomicNightFromFormatted(balances.unshieldedBalance);
+              if (held !== null && held >= requiredAtomic) finish(true);
+            },
+            { minIntervalMs: 1_000 },
+          );
+          // The listener fires synchronously with the current state, so the
+          // wait may already be over by the time the unsubscriber exists.
+          if (settled) unsubscribe();
+        });
+      } catch (cause) {
+        console.warn('[funder] activation failed:', cause);
+        return false;
+      }
+    },
+    [],
+  );
+
   /**
    * The real claim: derives the Midnames owner secret from the passkey (a
    * distinct scope from the wallet seed), deploys the resolver, and pays
@@ -2170,11 +2308,23 @@ export default function PassportDemo() {
         setReclaim({ target: selectedNetwork, alias: record.alias });
         return;
       }
-      // (2) Funds, before any passkey prompt.
-      const funds = await checkAliasClaimFunds(handle, record.alias);
+      // (2) Funds, before any passkey prompt. With a funder configured, a
+      // NIGHT shortfall earns one automatic activation attempt before the
+      // record goes honestly back in the queue — and the re-check afterwards
+      // is the same gate run again, never an assumption that the drip landed.
+      let funds = await checkAliasClaimFunds(handle, record.alias);
       if (!funds.ok) {
-        requeue(funds.reason);
-        return;
+        const shortfall = FUNDER_URL ? await claimNightShortfall(record.alias) : null;
+        const activated = shortfall !== null && (await activateWalletViaFunder(shortfall));
+        if (activated) funds = await checkAliasClaimFunds(handle, record.alias);
+        if (!funds.ok) {
+          requeue(
+            shortfall !== null && !activated
+              ? `${funds.reason} ${FUNDER_UNAVAILABLE_SENTENCE}`
+              : funds.reason,
+          );
+          return;
+        }
       }
       // (3) The same two real transactions the onboarding claim runs. The
       // owner-secret derivation costs one fresh user-verified WebAuthn
@@ -2240,7 +2390,7 @@ export default function PassportDemo() {
       setClaimPhase(null);
       setRegisterNowBusy(false);
     }
-  }, [addActivity, keyProviderFor, profile, refreshLocalBalances, registerNowBusy, selectedNetwork]);
+  }, [activateWalletViaFunder, addActivity, claimNightShortfall, keyProviderFor, profile, refreshLocalBalances, registerNowBusy, selectedNetwork]);
 
   /**
    * Network switch. The passkey and the wallet session are untouched — no
@@ -4156,6 +4306,36 @@ export default function PassportDemo() {
    * dashboard, where the queued card carries the "Register now" action.
    */
   const queueFromClaimScreen = async (alias: string, reason: string) => {
+    // With a funder configured, an insufficient-NIGHT queue on the wallet's
+    // own network becomes an activation attempt first: drip, wait for the
+    // grant on the live balance stream, then run the REAL claim (sponsored
+    // fees exactly as today). Every other queue reason — wrong network,
+    // unreachable registry — passes through untouched, as does everything
+    // when no funder is configured.
+    if (FUNDER_URL && selectedNetwork === localWalletNetworkId && aliasClaimSupported) {
+      const shortfall = await claimNightShortfall(alias);
+      // The probe keeps this branch honest: a name queued because the REGISTRY
+      // was unreachable (or taken meanwhile) must queue exactly as before —
+      // only a claim that would succeed given funds is worth activating for.
+      const claimable =
+        shortfall !== null &&
+        (await probeAlias(selectedNetwork, alias).catch(() => null))?.status === 'available';
+      if (shortfall !== null && claimable) {
+        const activated = await activateWalletViaFunder(shortfall);
+        // The user may have skipped or signed out during the wait; springing
+        // a passkey prompt (or a queue toast) on them then would be worse
+        // than doing nothing — their own action already resolved the step.
+        if (identityStepRef.current !== 'alias') return;
+        if (activated) {
+          await claimAliasOnChain(alias);
+          return;
+        }
+        queueAlias(alias, selectedNetwork, `${reason} ${FUNDER_UNAVAILABLE_SENTENCE}`);
+        if (profile) storeNameStep(profile.passkey.credentialId, 'done');
+        setIdentityStep(null);
+        return;
+      }
+    }
     queueAlias(alias, selectedNetwork, reason);
     if (profile) storeNameStep(profile.passkey.credentialId, 'done');
     setIdentityStep(null);
@@ -4230,6 +4410,19 @@ export default function PassportDemo() {
               }
             : null
         }
+      />
+      {/* The popup half of the transaction bridge, and the deliberate sibling
+          of the profile consent above: armed only by a launch carrying
+          ?passportTxRequestId and ?passportTxNonce, and rendering nothing on
+          every other launch. It is handed exactly what the in-app browser is
+          handed — the same send seam (which runs the passkey ceremony), the
+          same session flags, and the same wallet context — so a standalone
+          app and a framed one are answered by the same rules. */}
+      <PassportTxConsent
+        sessionActive={sessionActive}
+        executeTransfer={localSessionActive ? executeAppTransfer : undefined}
+        dynamicOnlySession={dynamicOnlySession}
+        transferContext={appTransferContext}
       />
     </>
   );

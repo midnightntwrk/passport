@@ -8,6 +8,7 @@
     "examples/passport-app-hub",
     "examples/passport-demo",
     "examples/passport-docs",
+    "examples/passport-funder",
     "examples/passport-profile-client",
     "examples/raffle-demo"
   ],
