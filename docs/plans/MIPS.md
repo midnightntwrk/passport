@@ -1,139 +1,179 @@
 # Midnight Passport — MIPs Pipeline
 
-The Midnight Improvement Proposals (MIPs) that Midnight Passport must produce.
-Midnight has no formal improvement-proposal process yet; the Passport MIPs
-are both the vehicle for interoperability and the forcing function that
-creates that process.
+The Midnight Improvement Proposals (MIPs) that Midnight Passport
+produces or adopts. Midnight's improvement-proposal process is live:
+problem statements (MPS) and proposals (MIP) move through the
+MIP-0001 lifecycle in the
+[midnightntwrk/midnight-improvement-proposals](https://github.com/midnightntwrk/midnight-improvement-proposals)
+repository, with editor-assigned numbers and weekly review sessions.
+Passport works through that process: problems are framed as MPSs,
+standards land as MIPs, and every normative claim is backed by
+evidence in this workspace (an experiment, a reference
+implementation, or a cryptographer review).
 
 The MIPs are the central body of v1.0 deliverables. The October MVP
-consumes them as they firm up — MVP-window MIPs are the ones the MVP
-build depends on; post-MVP MIPs continue toward feature-complete v1.0
-after the October demo.
+consumes them as they firm up — the account keystone is already
+published upstream and implemented; the remaining MIPs continue toward
+feature-complete v1.0.
 
-Every MIP ships with a **named external co-author** — unilateral drafts
-become shelfware. The adoption narrative tracks who that co-author is
-for each MIP.
+Each MIP names an external co-author or committed external reviewer —
+unilateral drafts become shelfware. The adoption narrative tracks who
+that counterpart is for each MIP.
 
-Last updated: 2026/05/20.
-
----
-
-## Pipeline at a glance
-
-| MIP | Pipeline ID | Title | When |
-|-----|-------------|-------|------|
-| **MIP-8** | STD-06 | Name service registry | MVP-window |
-| **MIP-3** | STD-04 | Multi-key account | Post-MVP |
-| **MIP-4** | STD-05 | Recovery paths | Post-MVP |
-| **MIP-5** | ECO-01 | dApp ↔ Wallet Connection Protocol | Post-MVP |
-| **MIP-6** | ECO-02 | Privacy-preserving credentials | Post-MVP |
-| **MIP-7** | ECO-03 | DecentralisedAuth | Post-MVP |
-
-A cross-cutting prerequisite ships alongside the MIPs:
-
-- **STD-03** — Domain-separation registry. Every `persistentHash` use
-  site gets a prefix. Cryptographer-reviewed; required before
-  credentials, signing, and naming can be ratified. Now framed by
-  [`mps-mip/mps/mps-domain-separation.md`](../mps-mip/mps/mps-domain-separation.md) and
-  decided in [ADR-0001](../adrs/0001-domain-separation-registry.md)
-  (central registry; enforcement deferred); evidenced by
-  `experiments/domain-separation-inventory/`.
+Last updated: 2026/08/17.
 
 ---
 
-## MVP-window MIPs
+## Published upstream (Passport-authored; upstream copy is canonical)
 
-### Key derivation & address format — adopted upstream, not Passport-authored
+| Upstream ID | Title | Status | Component |
+|---|---|---|---|
+| **MPS-0018** | Multi-key Account Custody for Midnight-Native Assets | Proposed | C1 · C4 |
+| **MPS-0027** | Domain Separation for Midnight Hash Constructions | Proposed | C8 |
+| **MIP-0012** | Contract Custody of Midnight-Native Assets | Proposed | C4 · C1 |
+| **MIP-0013** | Multi-key Account Authorisation for Custody Contracts | Proposed | C1 · C5 |
 
-The HD derivation tree (`m / 44' / 2400' / account' / role / index`, the role
-table, and coin type **2400**) and the `mn_addr` Bech32m address format are
-already specified in Midnight's WalletEngine Specification (ADR-0017 / 0019 /
-0020, Proposal 0013), and **MIP-0003 (ECDSA support)** extends them. Passport
-**adopts** these rather than drafting parallel standards — ARC's contribution is
-reviewing and strengthening MIP-0003 directly
-([discussion #129](https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/129)).
-The one derivation concern *not* covered upstream — deriving the account root
-from a WebAuthn passkey (PRF → seed) — lives in
-[C9 — Device-bound authentication](components/C9-device-bound-authentication.md)
-and can graduate to its own MIP if it needs to become a standard.
+MIP-0012 and MIP-0013 are the two building blocks of the multi-key
+account keystone MPS-0018 recommends. Implementing them surfaced three
+errata — the direct-transfer return signature, the unconditional DST
+derivation, and the post-deploy bootstrap — all proposed and merged
+upstream, so the published texts match what the reference
+implementation (`contract/`) exercises. The direct
+contract-to-contract validation also restated the payment-mode section
+upstream: one-hop counterparty-private routing and linking-accepted
+direct transfer are both normative.
 
----
+**Path to Active for the keystone pair.** Cryptographer review of the
+signature scheme (an explicit acceptance criterion), the FROST
+ciphersuite specification with a t-of-n committee demonstration, a
+second independent implementation, and ecosystem review in the
+upstream discussion venues.
 
-### MIP-8 · STD-06 — Name service registry
+## Adopted upstream (not Passport-authored)
 
-**Scope.** On-chain registry binding human-readable names (`alice.midnight`)
-to Passport account anchors, with a resolver surface for chain-native
-addresses and a hook for cross-chain resolution (P10 / C25). Includes
-namehash construction (domain-separated via STD-03), ENSIP-15-aligned
-normalisation, and an anti-squatting policy. The registry / resolver
-split-vs-single question, the anti-squat mechanism, and the cross-chain
-resolution shape remain open in the C2 canvas and resolve inside this MIP.
+### Key derivation & address format — MIP-0003 (Accepted)
 
-ARC's role on this MIP is **co-author / reviewer** — primary authorship
-sits with the Midnight Foundation and a name service provider engaged
-for the registry implementation.
+The HD derivation tree (`m / 44' / 2400' / account' / role / index`,
+the role table, and coin type **2400**) and the `mn_addr` Bech32m
+address format are specified in Midnight's WalletEngine Specification,
+extended by **MIP-0003 (ECDSA support)**, now Accepted upstream.
+Passport **adopts** these rather than drafting parallel standards; the
+ARC review that strengthened MIP-0003 concluded when the proposal was
+accepted. The one derivation concern *not* covered upstream — deriving
+the device key from a WebAuthn passkey (PRF → JubJub scalar) — lives
+in [C9](components/C9-device-bound-authentication.md) and is a
+candidate MIP of its own (below).
 
-**Maps to component.** [C2 — Name service](components/C2-name-service.md).
+### Name service — MIP-0007 (Proposed; adopted, with our amendment merged)
 
----
+Passport adopts the deployed upstream name service (MIP-0007,
+addressing the Accepted MPS-0012 on human-readable aliasing) rather
+than authoring a parallel standard. The fit assessment's number-one
+condition is satisfied: MIP-0007 now carries normative
+**forward-looking authorisation arms** — contract-owned names via
+cross-contract authorisation (the arm a multi-key account contract
+needs) and ECDSA owners, both availability-gated. What remains
+Passport-side is the `passport.night` sub-domain layer: issuance
+mechanics, squat resistance, and Foundation policy. See
+[C2](components/C2-name-service.md).
 
-## Post-MVP MIPs
+### Chain identifiers — MIP-0008 (Draft)
 
-### MIP-3 · STD-04 — Multi-key account
-
-**Scope.** On-chain multi-device contract — the authorisation surface that
-allows a single Passport account to be controlled by multiple per-device
-keys, with explicit add / rotate / revoke ceremonies.
-
-**Maps to component.** [C1 — Account-custody contract](components/C1-account-custody-contract.md).
-
----
-
-### MIP-4 · STD-05 — Recovery paths
-
-**Scope.** The recovery surface: social recovery via DeRec helpers, plus
-an encrypted-blob backup path for users without a social graph.
-
-**Maps to component.** [C14 — Total-loss recovery flow](components/C14-total-loss-recovery-flow.md).
-
----
-
-### MIP-5 · ECO-01 — dApp ↔ Wallet Connection Protocol
-
-**Scope.** The CIP-30 equivalent for Midnight. CAIP-25-shaped, with privacy
-scopes and an asynchronous proof lifecycle. This is what the wider
-ecosystem builds against.
-
-**Maps to component.** [C23 — dApp connection protocol](components/C23-dapp-connection-protocol.md).
+CAIP-2 network identifiers of the `midnight:mainnet` style. Passport
+surfaces that need a chain identifier follow it.
 
 ---
 
-### MIP-6 · ECO-02 — Privacy-preserving credentials
+## In the pipeline (Passport-authored, not yet filed)
 
-**Scope.** Attestation-tree domain separators, nullifier construction, and
-multi-issuer support for privacy-preserving verifiable credentials.
+### Recovery paths — building block three
 
-**Maps to component.** [C20 — Selective-disclosure proof](components/C20-selective-disclosure-proof.md).
+**Scope.** Total-loss recovery behind the account standard's recovery
+seam, whose interface MIP-0013 fixes (epoch bump, single fresh
+device). Mechanism decided: BUSS / ANARKey stateless guardians plus
+paper keys (ePrint 2025/551), implemented in the account-custody
+prototype (shared guardian wire formats across CLI and app). The MIP
+specifies the construction, the guardian protocol and wire formats,
+the paper-key format, and parameters, with DeRec and encrypted-blob
+backup as substitutable profiles behind the same seam. The upstream
+recovery slot is unclaimed; no other recovery MPS or MIP has been
+filed.
 
----
+**Maps to components.** [C14](components/C14-total-loss-recovery-flow.md) ·
+[C15](components/C15-helper-protocol.md) ·
+[C13](components/C13-lost-device-flow.md).
 
-### MIP-7 · ECO-03 — DecentralisedAuth
+### Domain-separation registry
 
-**Scope.** Privacy-preserving dApp sign-in protocol — the
-"sign-in-with-Passport" primitive that does not leak the user's address or
-identity to the dApp by default. Sister protocol to MIP-5: MIP-5 covers
-connection, MIP-7 covers authentication.
+**Scope.** The registry MPS-0027 motivates: every `persistentHash` use
+site gets a domain prefix, recorded centrally (ADR-0001: central
+registry, compile-time enforcement deferred). The custody and
+account-authorisation MIPs already name their tags against the future
+registry (`midnight:custody:inbox:v1`, `midnight:account:device:v1`,
+`midnight:account:auth:v1:*`, `midnight:account:boot:v1`).
+Cryptographer review gates ratification. Evidence:
+`experiments/domain-separation-inventory/`. The case has sharpened:
+upstream code now ships an untagged JubJub Schnorr challenge, and the
+unpublished `persistentHash` byte framing has been raised as a gap by
+others in the upstream venues.
 
-**Maps to component.** [C23 — dApp connection protocol](components/C23-dapp-connection-protocol.md).
+**Maps to component.** [C8](components/C8-domain-separation-registry.md).
+
+### dApp ↔ Wallet Connection Protocol
+
+**Scope.** The connection surface third-party dApps build against —
+Open Wallet Standard is the chosen direction, with CAIP-25, EIP-6963,
+and WalletConnect v2 as underlying transport and discovery layers, and
+privacy scopes plus an asynchronous proof lifecycle on top.
+
+**Maps to component.** [C23](components/C23-dapp-connection-protocol.md).
+
+### DecentralisedAuth (sign-in)
+
+**Scope.** Privacy-preserving dApp sign-in — the "sign-in-with-Passport"
+primitive that does not leak the user's address or identity to the dApp
+by default. Sister protocol to the connection MIP: connection covers
+capability grants, this covers authentication.
+
+**Maps to component.** [C23](components/C23-dapp-connection-protocol.md).
+
+### Privacy-preserving credentials
+
+**Scope.** Attestation-tree domain separators, nullifier construction,
+and multi-issuer support for privacy-preserving verifiable
+credentials.
+
+**Maps to component.** [C20](components/C20-selective-disclosure-proof.md)
+(with C18 · C19 · C21).
+
+### Candidate MIPs
+
+- **Passkey-derived device keys** — the PRF → JubJub scalar
+  derivation, domain-separated under the registry; graduates from C9
+  if it needs to become a standard for cross-wallet portability.
+- **Scoped-grant extension** — MIP-0013 deliberately reserves scoped
+  grants as a successor extension behind the same authorisation seam;
+  C10 – C12 own the schema it will carry.
+- **secp256r1 (P-256) signature verification** — the upstream
+  signature-verification MPS family stops at RSA and secp256k1, and
+  the proof system now carries a first-class P-256 chip; the slot is
+  unclaimed and Passport holds the passkey-gate evidence.
 
 ---
 
 ## Process notes
 
-- Each MIP opens as a pull request against the Midnight Improvement
-  Proposals repository.
-- Each MIP names its external co-author at draft time. If no co-author can
-  be named, the MIP is not yet ready to start.
-- MVP-window MIPs are the contract for adoption: if the Foundation and
-  partner wallets cannot consume them, the MVP has not landed.
-
+- Problems are filed as MPSs, standards as MIPs, per the upstream
+  MIP-0001 lifecycle: Draft status on entry, editor-assigned numbers,
+  and the MPS header's Proposed Solutions field linking the MIPs that
+  address it.
+- Local working copies live in [`docs/mps-mip/`](../mps-mip/); once a
+  document merges upstream, the upstream copy is canonical.
+- Each MIP names its external co-author or committed reviewer at
+  draft time. If none can be named, the MIP is not yet ready to
+  start.
+- Earlier internal pipeline labels map to the upstream register as
+  follows: MIP-3A → MIP-0012, MIP-3B → MIP-0013, STD-03 → the
+  domain-separation registry (MPS-0027 lineage), MIP-4 → recovery
+  paths, MIP-5 / MIP-7 → connection and sign-in, MIP-6 → credentials,
+  MIP-8 / STD-06 → superseded by the MIP-0007 adoption.

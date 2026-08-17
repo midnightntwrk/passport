@@ -20,11 +20,11 @@ leaves to the on-chain Merkle root (C18). Per design doc § 8.
 Permissionless, governance-gated, or something in between?
 
 **Issuer revocation.** If an issuer goes rogue or is decommissioned,
-what happens to credentials they issued? Per design doc § 8.7 there's
+what happens to credentials they issued? Per design doc § 8.7 there is
 revocation infrastructure; specifics?
 
 **Issuance privacy.** The issuer learns what attributes are being issued
-(that's the role); does the issuance transaction reveal the user's
+(that is the role); does the issuance transaction reveal the user's
 identity to chain observers?
 
 **Issuer reputation.** Multiple issuers possible; how does the user
@@ -33,14 +33,14 @@ pick? Reputation system, browsing UI, or default issuer?
 ## Failure modes
 
 **Compromised issuer issues bogus credentials.** A breached issuer mints
-credentials they shouldn't. *Detection:* anomaly detection on issuance
+credentials they should not. *Detection:* anomaly detection on issuance
 volume or pattern.
 
-**Issuer goes offline.** Users can't get credentials issued.
+**Issuer goes offline.** Users cannot get credentials issued.
 *Detection:* user reports of stuck issuance flows.
 
 **Cross-issuer confusion.** Two issuers use overlapping attribute
-schemas; verifiers can't disambiguate. *Detection:* a credential
+schemas; verifiers cannot disambiguate. *Detection:* a credential
 intended for issuer A's schema is accepted under issuer B's.
 
 ## Alternatives

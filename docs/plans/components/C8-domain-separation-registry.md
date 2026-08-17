@@ -51,7 +51,7 @@ circuit, does the prefix change? Carried into the MPS, alongside whether
 separators are frozen at network deployment.
 
 **Audit timing.** When does the registry get a cryptographer sign-off?
-What's the cadence post-v1.0? Cryptographer review gates the registry MIP
+What is the cadence post-v1.0? Cryptographer review gates the registry MIP
 (external dependency).
 
 **Registry interface and query surface.** The registry must be readable
@@ -81,7 +81,7 @@ calls.
 that lets external observers correlate identifiers with domains —
 either by listing keys / accounts per domain or by accepting
 existence-test probes ("is X associated with domain Y?"). The registry
-then leaks participation patterns even when individual hashes don't.
+then leaks participation patterns even when individual hashes do not.
 *Detection:* the registry interface admits prefix → identifiers
 lookups, or scoped existence tests, beyond what protocol participants
 strictly need. *Mitigation:* scope read access — write-only public

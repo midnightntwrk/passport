@@ -18,7 +18,7 @@ Merkle proof locally.
 
 ## Open questions
 
-**Tree depth and width.** What's the maximum number of attributes per
+**Tree depth and width.** What is the maximum number of attributes per
 user? Affects proof size and cost.
 
 **Update model.** Issuer updates the root by submitting an update

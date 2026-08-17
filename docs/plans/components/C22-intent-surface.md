@@ -81,7 +81,7 @@ constrain to single-Intent per signing for simplicity?
 dust fees and always executes; fallible segments roll back independently.
 Does the wallet UI surface this segmentation, or hide it? Hidden risks
 user confusion if a fallible segment fails (e.g., they paid dust but the
-swap didn't go through).
+swap did not go through).
 
 **dApp interchange format.** What flows through C23 — a PRD-style
 declarative trade intent, a Passport wrapper, or a partially-constructed
@@ -100,11 +100,11 @@ provides?
 ## Failure modes
 
 **Trade-intent format diverges from upstream PRD.** Passport adopts a
-wallet-specific format the solver network can't consume. *Detection:*
+wallet-specific format the solver network cannot consume. *Detection:*
 user-built trade intents fail to find solver matches; or solver-built
-ledger Intents don't reflect what the user intended.
+ledger Intents do not reflect what the user intended.
 
-**UI abstraction leak.** The wallet's declarative summary doesn't match
+**UI abstraction leak.** The wallet's declarative summary does not match
 the underlying ledger Intent — extra contract actions, surprising
 `dust_actions`, segment confusion. *Detection:* on-chain operation differs
 from the user's understanding; comparing user-visible description to
@@ -119,7 +119,7 @@ multiple unrelated trade intents and is accepted by verifiers.
 operator without a substitutable interface. *Detection:* the wallet has
 no fallback PMR configured, and no published spec for an alternative.
 
-**Multi-segment confusion.** Users don't understand the guaranteed /
+**Multi-segment confusion.** Users do not understand the guaranteed /
 fallible split — they think "all-or-nothing" when in fact segment 0
 always executes. *Detection:* user reports of unexpected dust deductions
 on otherwise-failed transactions.
@@ -133,7 +133,7 @@ fail.
 at one abstraction level; chain-side enforcement (C12) operates at a
 different level (e.g., over ledger Intent shape). *Detection:* a grant
 the user thought they made fails to authorise an operation, or authorises
-one they didn't intend.
+one they did not intend.
 
 ## Alternatives
 
@@ -164,7 +164,7 @@ depends on SDK availability, licensing, and feature coverage.
 **E — Stop-gap intent shape if no upstream format is available in time.**
 Time-boxed fallback: Passport defines a trade-intent shape, contributes
 it upstream as a draft, and retires it as soon as the upstream format
-lands. Used only if upstream PRD adoption isn't possible by the time
+lands. Used only if upstream PRD adoption is not possible by the time
 Passport needs to ship.
 
 ## Readings

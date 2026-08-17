@@ -8,6 +8,13 @@ The authorisation primitive — operation type × object × quantitative
 bounds. Used for both intra-user (device-to-device) and dApp grants. Per
 P7.
 
+The substrate is fixed: MIP-0013 deliberately leaves scoped grants out
+of the account-authorisation building block and reserves them as a
+successor extension behind the same authorisation seam — a grant is a
+new way to satisfy `require_authorised()`, not a parallel mechanism.
+What this canvas owns is the grant schema and semantics that extension
+will carry.
+
 ## Dependencies
 
 - **C1** — grants live in account-custody contract state.
@@ -25,7 +32,7 @@ scope (which assets, contracts, attestations) and quantitative bounds
 function-call key shape, or define Passport-specific?
 
 **Compose with chain abstraction.** Per P10's I-10.3, trade intents
-don't pin specific settlement chains. Are grants chain-agnostic by
+do not pin specific settlement chains. Are grants chain-agnostic by
 default, or chain-scoped with an "all chains" option?
 
 **Composition with selective disclosure.** When a dApp grant requires a
@@ -34,7 +41,7 @@ per-request?
 
 ## Failure modes
 
-**Schema unsuitable for ecosystem.** Third-party dApps can't express
+**Schema unsuitable for ecosystem.** Third-party dApps cannot express
 their needs. *Detection:* dApp integration partners request schema
 extensions.
 

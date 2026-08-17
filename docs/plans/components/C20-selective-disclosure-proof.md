@@ -17,7 +17,7 @@ core deliverable.
 
 ## Open questions
 
-**Proof size and verification cost.** What's the proof size on-chain,
+**Proof size and verification cost.** What is the proof size on-chain,
 and the verification cost per proof? Affects scalability.
 
 **Composition with trade intents.** Per C22 open question: does a
@@ -38,8 +38,8 @@ the proof's public output uniquely identify the prover or attribute?
 reused across uses. *Detection:* nullifier check (cross-reference C21).
 
 **Predicate not expressible.** A use case requires a predicate the
-system doesn't support. *Detection:* dApp integration request that
-can't be satisfied.
+system does not support. *Detection:* dApp integration request that
+cannot be satisfied.
 
 ## Alternatives
 

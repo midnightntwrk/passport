@@ -2,9 +2,9 @@
 
 > **Workstream — resolved.** The upstream design question for the
 > cryptographic stack is answered: stateless contract custody (A″),
-> now normative in the custody MIP draft
-> (`docs/mps-mip/mips/mip-xxxx-native-asset-custody.md`), merged in
-> this workspace with upstream submission prepared.
+> normative in the custody MIP, published upstream as **MIP-0012 —
+> Contract Custody of Midnight-Native Assets** and implemented by the
+> reference implementation at `contract/`.
 
 **Serves:** P3 · P4 · P5 · P6.
 
@@ -16,23 +16,26 @@ recovery), and P6 (key non-exfiltration) simultaneously, integrating
 cleanly with C1 (account-custody contract), C5 (signing primitive), C14
 (total-loss recovery flow), and C16 (wallet local storage).
 
-**Status 2026/07:** the choice is made and drafted as a standard. The
-custody MIP specifies contract custody with the stateless shielded
-pattern (no coin material in public ledger state, encrypted-inbox
-discovery, witness-supplied spends), a normative surviving-coin change
-rule (the defect it prevents is fixed upstream:
+**Status 2026/07:** the choice is made and standardised. The custody
+MIP (upstream MIP-0012) specifies contract custody with the stateless
+shielded pattern (no coin material in public ledger state,
+encrypted-inbox discovery, witness-supplied spends), a normative
+surviving-coin change rule (the defect it prevents is fixed upstream:
 OpenZeppelin/compact-contracts#656 → #661), an explicit per-color
 unshielded mirror, and authorisation abstracted to a single seam that
-the account-authorisation MIP instantiates (C5). Two findings ride
-along: the account encryption secret is a pure *viewing capability* —
-delegable to an accountant or auditor without ceding custody — and the
-residual metadata profile is documented and accepted in the MIP's
-security considerations rather than left open.
+the account-authorisation MIP (upstream MIP-0013) instantiates (C5).
+Two findings ride along: the account encryption secret is a pure
+*viewing capability* — delegable to an accountant or auditor without
+ceding custody — and the residual metadata profile is documented and
+accepted in the MIP's security considerations rather than left open.
+The reference implementation (`contract/`) realises both MIPs in one
+deployment with their conformance suites passing, and the errata it
+surfaced are folded back into the upstream texts.
 
 **Exclusivity (decided 2026/07):** the user holds assets no other way
 than through the account custody contract. Assets at rest are always
 in the contract; the user-held coins that the one-hop payment rule
-(MIP-3A §6.6) necessarily creates are in-flight plumbing that the
+(MIP-0012 §6.6) necessarily creates are in-flight plumbing that the
 client sweeps into the account, never a holding location. This is a
 Passport client policy layered on the standard — the MIP permits
 user-held coins, Passport's wallet does not park value in them. The
@@ -53,8 +56,8 @@ evaluated against `midnight-node:0.22.5`) and extended by
 | Night · contract ↔ contract | **Protocol-feasible; SDK-blocked, half-unblocked.** The wallet fee-balancing side (`midnight-wallet#293`) is resolved upstream — deterministic segment placement merged in [midnight-wallet#334](https://github.com/midnightntwrk/midnight-wallet/pull/334) (2026/04/21). Remaining gap: the `midnight-js` multi-contract-call composition utility. U2 / U4 re-probe against a post-#334 wallet release pending. Workaround meanwhile: route through user → user. |
 | Shielded · user → contract deposit | **Feasible** (S4 PASS, via `rawTokenType` recipe). |
 | Shielded · contract → user / cross-block | **Feasible by two patterns.** Public-state (S6 PASS, OZ `Map<color, QualifiedShieldedCoinInfo>` + `Map.insertCoin`: publishes holdings), and stateless witness-supplied QSCI (W3 PASS: no coin material in public ledger state). |
-| Shielded · third-party deposit + owner discovery | **Feasible** (W5 PASS, encrypted on-contract inbox + indexer lookup). Gap: the indexer offers no contract-address → transaction enumeration, so discovery routes through the inbox counter (C17 finding). |
-| Shielded · contract ↔ contract | **Feasible — validated** (`experiments/contract-to-contract-transfer/` P1 – P3 PASS, run 2026/07). One client-composed transaction pairs A's `sendShielded`-to-ContractAddress with B's `receiveShielded` claim: compose by grafting B's call intent onto A's transaction (`Transaction.addIntent`; a plain `Transaction.merge` duplicates the claimed output and fails balancing), prove both circuits in one `submitTx`. The received coin is first-class (decryptable inbox blob, onward spend accepted). Cost measured, accepted by decision of 2026/07/16: the transaction exposes both contract addresses together; value, colour, and nonce stay hidden. The one-hop user-key routing rule remains the counterparty-private mode; direct transfer is the linking-accepted mode (MIP-0012 §6.6 amendment pending). |
+| Shielded · third-party deposit + owner discovery | **Feasible** (W5 PASS, encrypted on-contract inbox + indexer lookup). The enumeration gap W5 recorded is closed: the indexer's `contractActions` subscription replays the complete per-address action history, verified end-to-end by the reference implementation's discovery suite (C17 finding). |
+| Shielded · contract ↔ contract | **Feasible — validated** (`experiments/contract-to-contract-transfer/` P1 – P3 PASS, run 2026/07). One client-composed transaction pairs A's `sendShielded`-to-ContractAddress with B's `receiveShielded` claim: compose by grafting B's call intent onto A's transaction (`Transaction.addIntent`; a plain `Transaction.merge` duplicates the claimed output and fails balancing), prove both circuits in one `submitTx`. The received coin is first-class (decryptable inbox blob, onward spend accepted). Cost measured, accepted by decision of 2026/07/16: the transaction exposes both contract addresses together; value, color, and nonce stay hidden. The one-hop user-key routing rule remains the counterparty-private mode; direct transfer is the linking-accepted mode (the two modes are normative in MIP-0012 §6.6, restated upstream after this validation). |
 | Dust · contract pays user fee | **Not feasible on v1** — *contract-attached* paymaster only. Does not preclude wallet-level sponsorship; see C24. |
 | Foreign-chain assets (cross-chain) | **Out of C4's scope** — handled by upstream cross-chain vaults via C25 (Cross-chain integration interface). Passport's account-custody contract custodies Midnight-native assets only. |
 
@@ -65,8 +68,9 @@ evaluated against `midnight-node:0.22.5`) and extended by
 - **C16** — the stateless shielded pattern makes the wallet-local coin
   store load-bearing: coin info exists only there and in the encrypted
   inbox backup on the contract.
-- **C17** — third-party deposit discovery needs an indexer surface; the
-  current enumeration gap is worked around via the inbox counter.
+- **C17** — third-party deposit discovery needs an indexer surface;
+  the `contractActions` subscription provides the required per-address
+  enumeration (verified by the reference implementation).
 - **Upstream** — `midnight-js` multi-contract-call utility (the one
   remaining gate on contract ↔ contract Night; the wallet fee-balancing
   side, `midnight-wallet#293`, was resolved by
@@ -77,7 +81,7 @@ evaluated against `midnight-node:0.22.5`) and extended by
 
 **QSCI privacy trade-off (resolved).** The leak is a consequence of the
 storage pattern, not of the ledger. Contract-owned inputs and outputs
-publish no cleartext value or colour, and the node accepts spends whose
+publish no cleartext value or color, and the node accepts spends whose
 `QualifiedShieldedCoinInfo` is supplied as a witness rather than read
 from public ledger state (`experiments/stateless-shielded-custody/`,
 W1 – W6). Contract custody therefore does not require publishing
@@ -91,12 +95,14 @@ considerations, with a witness-private shared-custody profile deferred
 to a successor proposal for applications needing a wider anonymity
 set.
 
-**Indexer discovery surface.** The indexer exposes no
-contract-address → transaction enumeration, so a wallet discovering
-third-party deposits walks the account's inbox counter instead of
-querying by address. Whether to request the enumeration surface
-upstream or standardise the inbox walk is a C17 question; C4 owns only
-the requirement that discovery work from public chain data alone.
+**Indexer discovery surface (resolved).** The indexer's
+`contractActions` subscription replays the complete per-address action
+history, so a wallet discovers third-party deposits from the contract
+address alone — verified end-to-end by the reference implementation's
+discovery suite. The remaining client guidance (subscription vs point
+query, identifier matching, `mt_index` candidates) lives in C17; C4's
+requirement that discovery work from public chain data alone is
+satisfied.
 
 **Compliance posture for inbound shielded transfers.** The shielded
 asset model reveals amount to the receiver but not the sender. Any
@@ -131,6 +137,15 @@ store from chain data alone. "Recovered account ↔ recovered assets"
 holds structurally; the recovery *mechanism* is the recovery-paths
 MIP's subject (C14).
 
+**Cross-contract calls (upcoming toolchain wave).** The ledger-v9
+toolchain line introduces Compact-level cross-contract calls. Two
+consequences to track: shielded operations in called contracts are
+merged upstream but unreleased, so the client-composed direct-transfer
+graft gains a principled successor; and called contracts must not
+invoke witnesses, which fences the stateless witness-QSCI pattern to
+root circuits. Neither affects the standard on the current (v8)
+stack; both shape how MIP-0012 composes once the hardfork wave lands.
+
 **OAuth façade compatibility.** Does the chosen custody pattern work
 cleanly behind an OAuth-shaped façade (P8 rationale), or does the façade
 need a custody-specific adapter?
@@ -139,12 +154,15 @@ need a custody-specific adapter?
 *custody-side* question (where Dust balances live, if anywhere); the
 *fee-payment* question lives in C24.
 
-**Shielded contract ↔ contract feasibility.** Untested by S1 – S6.
-Plausibly subject to the same same-tx pairing requirement and SDK gap that
-blocks Night U2. Doesn't affect alternative A's viability for ordinary
-user operations (which only need user ↔ contract flows), but matters for
-dApp-contract integration patterns. Tracked as an S7 follow-up to be
-appended to `experiments/contract-custody-feasibility/`.
+**Shielded contract ↔ contract feasibility (resolved).** Validated by
+`experiments/contract-to-contract-transfer/` (P1 – P3 PASS): one
+client-composed transaction pairs the sender's witness-QSCI spend with
+the recipient's claim, with no Compact cross-contract calls. The
+technical leg of the one-hop rule falls; the privacy leg stands and is
+measured — the composed transaction links the two contract addresses
+while value, color, and nonce stay hidden. Direct transfer is the
+linking-accepted mode; the one-hop route remains the
+counterparty-private mode. See the feasibility map above.
 
 ## Failure modes
 
@@ -152,7 +170,7 @@ appended to `experiments/contract-custody-feasibility/`.
 custody labels every deposit and spend with the contract address, and a
 direct contract → contract payment links the two accounts in one
 transaction. *Detection:* on-chain analysis correlates account activity
-(counts, timing, counterparties) even though values and colours stay
+(counts, timing, counterparties) even though values and colors stay
 hidden. *Mitigation:* the one-hop user-key routing rule for payments
 between custody accounts.
 
@@ -183,7 +201,7 @@ user-required flow.
 multi-step orchestration for common operations. *Detection:* user-facing
 flows decompose into multiple proof flows the wallet UI cannot collapse.
 
-**Recovery doesn't follow assets.** Recovery restores account identity but
+**Recovery does not follow assets.** Recovery restores account identity but
 not asset access. *Detection:* C14 end-to-end test fails to restore
 visible balances.
 
@@ -209,7 +227,7 @@ in-transaction, and the re-owned coin is re-captured client-side and
 backed up to the inbox. Validated end-to-end
 (`experiments/stateless-shielded-custody/`, W1 – W6): observer surfaces
 carry zero coin artefacts where the public-state control leaks nonce
-and colour verbatim. Cost: the wallet coin store becomes mandatory, and
+and color verbatim. Cost: the wallet coin store becomes mandatory, and
 third-party deposit discovery depends on the inbox plus indexer
 lookups. Residue: contract-address activity metadata, depositor
 first-hop traceability, and single-bit change disclosures.
@@ -234,9 +252,9 @@ date.
 - **MVP (October demo):** B (address-custody) — fastest to ship; sidesteps the
   QSCI publicity question; takes the seed-existing-but-wrapped reading of
   P1.
-- **v1.0 deliverable:** A″ (stateless contract-custody) — now normative
-  in the custody MIP draft, merged in this workspace with upstream
-  submission prepared, and **exclusive**: assets at rest live only in
+- **v1.0 deliverable:** A″ (stateless contract-custody) — normative in
+  the custody MIP, published upstream as MIP-0012 and realised by the
+  reference implementation, and **exclusive**: assets at rest live only in
   the account contract (B and C are rejected as policy, not merely
   deprioritised; Dust remains the ledger-forced fee-path exception).
   QSCI publicity is avoided rather than accepted or mitigated, which

@@ -23,6 +23,20 @@ P2's no-off-chain-database invariant holds by inheritance. What this
 canvas still owns is the sub-domain layer: issuance mechanics, squat
 resistance, and Foundation policy under `passport.night`.
 
+**Adoption condition satisfied upstream.** The fit assessment's number
+one condition — the baseline owner gate is a preimage commitment,
+which a 1-of-n device set or a FROST committee cannot pass, so a
+multi-key account could not itself own a name — is answered: MIP-0007
+now carries normative **forward-looking authorisation arms**, adding
+an OPTIONAL contract-owned-names arm (cross-contract authorisation;
+gated on cross-contract calls being live on the network) and an
+OPTIONAL ECDSA-owner arm (gated on MIP-0003 availability), with
+registries tagging the arm in use and names able to move between arms
+via the ownership-transfer circuits. The contract-owned arm is exactly
+the shape a Passport account contract needs; until it activates, a
+name is held by a device-key-controlled owner commitment and migrates
+to contract ownership when the arm goes live.
+
 ## Dependencies
 
 - **C1** — names bind to account-custody contract instances.
@@ -59,6 +73,13 @@ or MCS layer); Passport consumes it.
 **Reserved names.** Within `passport.night` this is Midnight Foundation
 policy; what does Passport recommend (brand protection, offensive-name
 policy, dispute handling)?
+
+**Contract-owned-arm activation.** The forward-looking arm that lets
+the account contract own its name is availability-gated on
+cross-contract calls, which arrive with the next toolchain generation.
+Until then: which owner commitment holds Passport names (a designated
+device key? a dedicated naming key?), and what the migration ceremony
+to contract ownership looks like when the arm activates.
 
 ## Failure modes
 

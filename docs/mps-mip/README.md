@@ -14,28 +14,32 @@ canonical and the copy here is retired to a pointer.
   Multi-key Account Custody for Midnight-Native Assets.
 - `mps/mps-domain-separation.md` → upstream **MPS-0027**,
   Domain Separation for Midnight Hash Constructions.
+- `mips/mip-xxxx-native-asset-custody.md` → upstream **MIP-0012**,
+  Contract Custody of Midnight-Native Assets (Proposed). Building
+  block one of the MPS-0018 keystone: how a contract holds and
+  releases unshielded values (Night and any other unshielded color)
+  and shielded values; authorisation abstracted to a single seam. The
+  return-signature erratum and the two-payment-mode restatement are
+  merged upstream.
+- `mips/mip-xxxx-account-authorisation.md` → upstream **MIP-0013**,
+  Multi-key Account Authorisation for Custody Contracts (Proposed).
+  Building block two: rolling single-use device entries, lifecycle,
+  and revocation epochs, with the seam instantiated by in-circuit
+  Schnorr verification over JubJub (FROST-compatible, separating
+  approval from proving). The DST-derivation and bootstrap errata are
+  merged upstream. Scoped grants are deferred to a successor
+  extension.
+
+The two MIP files here are retained as working mirrors while the
+reference implementation (`contract/`) and the upstream texts evolve
+together; the upstream copies are canonical.
 
 ## In draft
 
-MPS-0018 recommends a multi-key account contract MIP as "the keystone
-the others hang from". We author that keystone as small building blocks,
-each independently reviewable, each usable without the others:
-
-1. **Asset custody** (`mips/mip-xxxx-native-asset-custody.md`): how a
-   contract holds and releases unshielded values (Night and any other
-   unshielded color) and shielded values; authorisation abstracted to a
-   single seam; validated by the stateless-custody and account-custody
-   experiments.
-2. **Account and authorisation**
-   (`mips/mip-xxxx-account-authorisation.md`): the multi-key device
-   set, lifecycle, and revocation epochs, with the seam instantiated
-   by in-circuit Schnorr verification over JubJub (FROST-compatible,
-   native to the proof system, and separating approval from proving);
-   validated by the redjubjub-wallet experiments. Scoped grants are
-   deferred to a successor extension.
-3. **Recovery paths** (not yet drafted): total-loss recovery behind the
-   seam; the prototype realises this with BUSS, and the standard stays
-   scheme-agnostic at the contract surface.
+- **Recovery paths (building block three; not yet drafted)**:
+  total-loss recovery behind the seam; the prototype realises this
+  with BUSS, and the standard stays scheme-agnostic at the contract
+  surface. The upstream recovery slot remains unclaimed.
 
 ## Process
 

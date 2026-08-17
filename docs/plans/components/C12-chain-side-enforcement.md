@@ -19,8 +19,12 @@ application discretion.
 
 ## Open questions
 
-**Verifier inside or outside C1?** A verifier circuit inside C1 is
-tightly coupled; a separate contract is more modular but adds gas.
+**Verifier inside or outside C1? (half-answered.)** Authorisation
+verification is in-contract in the published standard: MIP-0013's
+Schnorr verifier runs inside the account contract's circuits. What
+remains open is where grant-scope evaluation lives once the grant
+extension (C10) arrives — inline against the same seam, or in a
+separate verifier contract.
 
 **Scope-evaluation language.** Is grant scope evaluated by a generic
 parameterised verifier or per-grant-shape circuits? Affects gas and

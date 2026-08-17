@@ -36,4 +36,4 @@ more, into a single v1.0.
 - [`../README.md`](../README.md) — current converged v1.0 overview.
 - [`../PROMISES.md`](../PROMISES.md) — v1.0 user-facing promises and
   invariants.
-- [`../components/`](../components/) — per-component canvases (C1 – C25).
+- [`../components/`](../components/) — per-component canvases (C1 – C26).

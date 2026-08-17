@@ -55,14 +55,14 @@ published in a public repo, both? Distribution shapes the maintenance
 burden as much as the audience boundary does.
 
 **Maintenance discipline.** Skills go stale fast as canvases evolve.
-What's the update cadence — derive automatically from canvases on each
+What is the update cadence — derive automatically from canvases on each
 docs commit, or hand-maintain with a periodic refresh?
 
 **Source-of-truth coupling.** Should the skills *embed* canvas content
 or *link to* it? Embed = stable distribution, drift risk; link = always
 fresh, but requires the canvases to be public.
 
-**Day-1 buildable scope.** What's the minimum viable skill set that's
+**Day-1 buildable scope.** What is the minimum viable skill set that is
 useful from day 1 — a single "Passport overview" skill, or one per
 audience? The day-1 ask is about getting feedback flowing, not shipping
 a polished package.
@@ -76,14 +76,14 @@ two audiences?
 tone; PM skills want analytical with judgement; dev skills want precise.
 Same voice or three voices?
 
-**Workstream-pending markers.** With five workstreams (C3, C4, C22, C24,
-C25) live, parts of the planning surface are still in flux. How does a
-skill represent open workstreams without leading the user to assume
-they're decided?
+**Workstream-pending markers.** With open workstreams (C3, C22, C25,
+plus C24's sponsor-service half) still live, parts of the planning
+surface are in flux. How does a skill represent open workstreams
+without leading the user to assume they are decided?
 
 ## Failure modes
 
-**Skill drift.** Canvases evolve; skills don't. Users get stale advice.
+**Skill drift.** Canvases evolve; skills do not. Users get stale advice.
 *Detection:* sample query against the skill returns information
 contradicting the live canvas. *Mitigation:* automate skill regeneration
 from canvases, or assign explicit ownership for refresh cadence.
@@ -128,7 +128,7 @@ separation and maintenance.
 `docs/plans/` and emits skills automatically. Highest fidelity, highest
 infrastructure cost.
 
-**E — Defer.** Don't build skills as a v1.0 by-product; revisit
+**E — Defer.** Do not build skills as a v1.0 by-product; revisit
 post-v1.0 when canvases stabilise. Cost: misses the day-1
 context-accumulation opportunity that motivated this canvas in the
 first place.

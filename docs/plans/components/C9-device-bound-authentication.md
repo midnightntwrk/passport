@@ -16,12 +16,12 @@ both custody models, with two distinct roles:
   derives the device's JubJub keypair on-device. The passkey gates the
   key — no plaintext key material needs to persist in storage (C16
   holds at most wrapped state), and the derived public key registers
-  in the account's device set as a MIP-3B device.
+  in the account's device set as a MIP-0013 device.
 - **Managed path (MVP).** The same passkey authenticates the user to
   the MPC service (OAuth2-shaped flow, WebAuthn assertion — no PRF
   required); the service's committee holds the JubJub threshold-DSA
   (FROST) capability and registers in the account as a single
-  threshold device (MIP-3B section 7). The account contract cannot
+  threshold device (MIP-0013 section 7). The account contract cannot
   tell the two paths apart — same verification equation.
 
 What remains is support-matrix and fallback policy, not the model.
@@ -29,7 +29,7 @@ What remains is support-matrix and fallback policy, not the model.
 ## Dependencies
 
 - **C5** — the signing key produced (decentralised) or fronted
-  (managed) by device-bound auth; the MIP-3B device set is where both
+  (managed) by device-bound auth; the MIP-0013 device set is where both
   register.
 - **C8** — the PRF → JubJub scalar derivation needs a registered
   domain-separation tag.
@@ -47,13 +47,17 @@ What remains is support-matrix and fallback policy, not the model.
 authenticator combinations provide PRF, and what is the decentralised
 path's behaviour where it is absent — managed path as fallback,
 platform-native derivation, or unsupported? Product-owner-signed
-matrix still needed.
+matrix still needed. The fallback space is widening upstream: the
+proof system's next ZKIR revision adds native secp256r1, which would
+make a passkey's ordinary ECDSA-P256 assertion verifiable in-circuit —
+a PRF-free candidate fallback worth assessing once the toolchain
+exposes it.
 
 **Synced passkeys.** A synced passkey (iCloud Keychain, Google
 Password Manager) reproduces the PRF seed on several physical devices,
 blurring the device boundary: does one synced passkey constitute one
 logical device in the account, or does policy require per-device
-credentials? Interacts with P3's peer-device model and MIP-3B's
+credentials? Interacts with P3's peer-device model and MIP-0013's
 one-commitment-per-device set.
 
 **Derivation specification.** The PRF → JubJub scalar derivation needs
@@ -73,13 +77,13 @@ its own matrix column.
 
 ## Failure modes
 
-**Passkey not recoverable on device loss.** If passkey isn't synced,
+**Passkey not recoverable on device loss.** If passkey is not synced,
 losing the device loses that device's key — by design recoverable via
 `remove_device` from a surviving device or the recovery seam, but a
 single-device account falls to total-loss recovery. *Detection:* user
 reports of recovery failure tied to passkey absence.
 
-**PRF unavailable.** User's browser / OS doesn't support PRF; the
+**PRF unavailable.** User's browser / OS does not support PRF; the
 decentralised path cannot derive a device key. *Detection:* telemetry
 shows PRF failure rate above threshold. *Mitigation:* fallback policy
 (open question above).
@@ -93,7 +97,7 @@ zeroisation — the C7 discipline applies to the derivation pipeline.
 exercise it. *Detection:* security review of WebAuthn `rpId` binding.
 
 **Hardware token gap.** Partners or users who expect FIDO2 / YubiKey /
-Ledger can't onboard with their preferred device. *Detection:*
+Ledger cannot onboard with their preferred device. *Detection:*
 stakeholder request with no provisioned answer in the spec.
 
 ## Alternatives

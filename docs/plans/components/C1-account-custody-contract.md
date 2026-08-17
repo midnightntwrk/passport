@@ -9,27 +9,38 @@ device set, name binding, active scoped grants, and — per C4's resolved
 custody choice — the user's Midnight-native assets. Every
 Passport-touching operation interacts with this contract.
 
-**Status 2026/07:** specified as two drafted standards, the building
-blocks of the multi-key account keystone recommended by MPS-0018:
+**Status 2026/08:** specified by two standards published upstream, the
+building blocks of the multi-key account keystone recommended by
+MPS-0018, and realised end to end by the reference implementation at
+`contract/` (both MIPs in one deployment, conformance suites passing,
+an independent bit-exact Rust signer):
 
-- **Custody MIP** (`docs/mps-mip/mips/mip-xxxx-native-asset-custody.md`,
-  merged in this workspace, upstream submission prepared): how the
+- **MIP-0012 — Contract Custody of Midnight-Native Assets**: how the
   contract holds and releases unshielded and shielded value —
   stateless shielded custody, encrypted-inbox discovery, the
-  surviving-coin change rule, an explicit per-color unshielded mirror
-  — with authorisation abstracted to a single seam
-  (`require_authorised()`) whose observable semantics are fixed.
-- **Account-authorisation MIP**
-  (`docs/mps-mip/mips/mip-xxxx-account-authorisation.md`, drafted): the
-  device set (`Map<commitment, epoch>`), revocation epochs
-  (one bump invalidates every stale credential), device lifecycle
-  ceremonies with a last-device guard, a dedicated `auth_nonce`
-  freshness counter, and the seam instantiated with in-circuit JubJub
-  Schnorr (see C5). A recovery seam is fixed but its mechanism is
-  deferred to the recovery-paths MIP (C14).
+  surviving-coin change rule, an explicit per-color unshielded mirror,
+  two payment modes (one-hop counterparty-private routing and
+  linking-accepted direct transfer) — with authorisation abstracted to
+  a single seam (`require_authorised()`) whose observable semantics
+  are fixed.
+- **MIP-0013 — Multi-key Account Authorisation for Custody
+  Contracts**: rolling single-use device entries (each gated call
+  consumes an entry and inserts its successor, AUTH-9), revocation
+  epochs (one bump invalidates every stale credential), device
+  lifecycle ceremonies with a last-device guard, a dedicated
+  `auth_nonce` freshness counter, per-circuit challenge binding with
+  witness-value pinning (AUTH-10), a post-deploy bootstrap (the
+  constructor stores a salted commitment; `activate_initial_device`
+  installs the real entry, since no deploy-time code can know the
+  contract's own address), and the seam instantiated with in-circuit
+  JubJub Schnorr (see C5). A recovery seam is fixed but its mechanism
+  is deferred to the recovery-paths MIP (C14).
 
-Scoped grants (C10/C11) remain a permitted extension behind the same
-seam — deliberately not baked into either building block.
+Implementing the standards surfaced three errata (the direct-transfer
+return signature, the DST derivation, and the bootstrap), all folded
+back into the upstream texts. Scoped grants (C10/C11) remain a
+permitted extension behind the same seam — deliberately not baked into
+either building block.
 
 ## Dependencies
 
@@ -51,10 +62,15 @@ onboarding-cost projections at scale still to gather.
 The standards are silent on the deployer; the onboarding flow owns
 this.
 
-**Fleet migration.** Instances are immutable per the ledger's deploy
-semantics; the MIPs version via a `spec_version` cell and a `Replaces`
-chain, but tooling for migrating a deployed fleet remains
-implementation work.
+**Fleet migration.** Circuits are evolvable in place via the contract
+maintenance authority (empirically verified: remove, rewrite, and add
+circuits at the same address, ledger state preserved), and the next
+ledger line extends maintenance to the circuit IR itself — but the
+ledger state schema is fixed at deploy, and upstream's own
+major-version transition ships no state migration at all (new ledger
+lines bootstrap fresh chains). The MIPs version via a `spec_version`
+cell and a `Replaces` chain; tooling for migrating a deployed fleet
+across schema or ledger generations remains implementation work.
 
 ## Failure modes
 
@@ -69,13 +85,13 @@ accounts incompatible with new tooling.
 **Seam misuse.** An implementation authorises from wallet-supplied,
 circuit-unconstrained data (`ownPublicKey()` is the canonical
 counter-example) instead of the specified seam. Prohibited normatively
-by both MIP drafts; *detection:* the conformance suite's
+by both MIPs; *detection:* the conformance suite's
 rejection-matrix tests.
 
 ## Alternatives
 
-**A — One Compact contract per account.** **Chosen — ratified in the
-custody MIP draft.** Per-user schema evolution, isolated failure; the
+**A — One Compact contract per account.** **Chosen — normative in
+MIP-0012.** Per-user schema evolution, isolated failure; the
 deploy-cost question moves to onboarding projections.
 
 **B — Single registry contract with accounts as entries.** Rejected:
@@ -106,9 +122,14 @@ binding account, circuit, arguments, and `auth_nonce`. Composes with
 FROST (a threshold committee registers as one device); separates
 approval from proving. See C5 for the full shape.
 
-**C — P-256 ECDSA (passkey assertion).** Blocked today — Compact has
-no in-circuit P-256 verifier, and non-native curve arithmetic is
-prohibitively expensive in the BLS12-381 circuit. Would be required
-for flows where the signing operation must occur inside the
-authenticator's secure element; revisit if upstream ships a P-256
-gadget.
+**C — P-256 ECDSA (passkey assertion).** Viable, evidenced, not
+chosen. In-circuit ECDSA-P256 verification has since been measured at
+practical cost (k=15, sub-second proving) against a real platform
+passkey assertion, and upstream now carries P-256 as a first-class
+proof-system chip with secp256r1 operations entering the next ZKIR
+revision — the "prohibitively expensive" rationale no longer holds.
+The JubJub Schnorr choice (B) stands on its own grounds:
+FROST-compatibility, native-curve verification cost, and approval /
+proving separation. C remains the candidate for flows where the
+signing operation must occur inside the authenticator's secure
+element, and is the natural shape for a PRF-free fallback (C9).

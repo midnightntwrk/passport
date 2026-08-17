@@ -31,7 +31,7 @@ consumes those deliverables early, built with partners.
   surfaces in implementation.
 - **The October MVP.** Hard date October 2026. A runnable, end-to-end
   demonstration that consumes deliverables as they firm up. Where a
-  deliverable isn't yet mature, the MVP picks the simplest workable
+  deliverable is not yet mature, the MVP picks the simplest workable
   mechanism (the "make it run by October" path) and records a migration
   plan back to the principled spec.
 
@@ -44,7 +44,7 @@ and the **v1.0 deliverable target**.
 - [`README.md`](README.md) — this index.
 - [`PROMISES.md`](PROMISES.md) — the ten v1.0 user-facing promises
   (P1 – P10) and their testable invariants (I-N.M).
-- [`components/`](components/) — per-component canvases (C1 – C25). Each
+- [`components/`](components/) — per-component canvases (C1 – C26). Each
   component carries its outcome, dependencies, open questions, failure
   modes, and alternatives, plus its track readings where they apply.
 - [`archive/`](archive/) — the Plan A vs Plan B fork that framed the
