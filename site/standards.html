@@ -414,6 +414,7 @@
   <a class="navbar-brand" href="index.html">Midnight Passport <span class="brand-tag">· ARC</span></a>
   <div class="navbar-links">
     <a href="index.html">Overview</a>
+    <a href="how-it-works.html">How it works</a>
     <a href="parallelisation.html">Parallelisation</a>
     <a href="architecture.html">Architecture</a>
     <a href="demo.html">Demo</a>
@@ -447,7 +448,7 @@
 
       <div class="kind">ARC · Delivery · Continuous</div>
       <h1>Standards &amp; feature-complete v1.0</h1>
-      <p class="subtitle">A standards-and-spec body that survives external review. Every MIP carries a named external co-author from the start — a wallet partner or ecosystem reviewer — so what we ratify is a shared standard, portable across wallets. Cryptographer and formal-methods reviews are scheduled against component stability, not against a Passport-internal calendar.</p>
+      <p class="subtitle">A standards-and-spec body that survives external review. Every MIP names an external co-author or committed reviewer from the start — a wallet partner or ecosystem reviewer — so what we ratify is a shared standard, portable across wallets. Cryptographer and formal-methods reviews are scheduled against component stability, not against a Passport-internal calendar.</p>
 
       <div class="symbiosis-banner">
         Parallel delivery — see <a href="demo.html">The October demo →</a>
@@ -460,7 +461,7 @@
       <header class="section-head">
         <div class="section-kind">Pipeline</div>
         <h2>The MIP pipeline</h2>
-        <p>Sequenced by dependency. Every MIP carries a named external co-author from the start — that's what makes it portable across wallets rather than a Passport-shaped specification. STD-03 is a cryptographic prerequisite that ships before any MIP that hashes user state. A note on identifiers: four-digit ids (MIP-0003, MIP-0007) are upstream-assigned numbers; short ids (MIP-3A, MIP-4…) are workspace pipeline labels — our drafts carry the literal <code>mip-xxxx</code> filename until an upstream editor assigns a number at merge.</p>
+        <p>Sequenced by dependency. Every MIP names an external co-author or committed reviewer from the start — that is what makes it portable across wallets rather than a Passport-shaped specification. STD-03 is a cryptographic prerequisite that ships before any MIP that hashes user state. A note on identifiers: four-digit ids (MIP-0003, MIP-0007, MIP-0012, MIP-0013) are upstream-assigned numbers — the account keystone pair now carries them; short ids (MIP-4…) are workspace pipeline labels for proposals not yet filed, which carry the literal <code>mip-xxxx</code> filename until an upstream editor assigns a number at merge.</p>
       </header>
 
       <div class="mips" id="mipsList"></div>
@@ -496,7 +497,7 @@
       <header class="section-head">
         <div class="section-kind">Coverage</div>
         <h2>Promise → MIP map</h2>
-        <p>Which MIPs lock down which promises. A promise without at least one MIP carrying it is a promise the standards body doesn't yet hold. This section is the audit trail for &quot;is the standards path complete enough to call v1.0 feature-complete?&quot;.</p>
+        <p>Which MIPs lock down which promises. A promise without at least one MIP carrying it is a promise the standards body does not yet hold. This section is the audit trail for &quot;is the standards path complete enough to call v1.0 feature-complete?&quot;.</p>
       </header>
 
       <div class="promise-map" id="promiseMap"></div>
@@ -565,6 +566,9 @@
       const secondMeta = m.kind === 'upstream'
         ? `<dt>Upstream</dt><dd><a href="${escapeHtml(m.upstream || '#')}" target="_blank" rel="noopener">${escapeHtml(m.upstream_label || m.id)}</a></dd>`
         : `<dt>Co-author target</dt><dd>${escapeHtml(m.co_author || '—')}</dd>`;
+      const upstreamExtra = (m.kind !== 'upstream' && m.upstream)
+        ? `<div><dt>Upstream</dt><dd><a href="${escapeHtml(m.upstream)}" target="_blank" rel="noopener">${escapeHtml(m.upstream_label || m.id)}</a></dd></div>`
+        : '';
       return `
         <div class="mip-card" id="${m.id}">
           <div class="mip-head">
@@ -581,6 +585,7 @@
             <div>
               ${secondMeta}
             </div>
+            ${upstreamExtra}
             <div>
               <dt>Component</dt>
               <dd>${compHtml}</dd>

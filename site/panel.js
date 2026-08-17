@@ -1,7 +1,8 @@
 // Midnight Passport — shared panel rendering.
 //
 // Renders component and promise canvases in the sliding side panel that
-// index.html already exposes. Loaded by demo.html, standards.html, and
+// index.html already exposes. Loaded by demo.html, standards.html,
+// architecture.html, parallelisation.html, onboarding-mockup.html, and
 // any future page that wants the same in-place view, so a click on a
 // component or promise reference opens the panel rather than navigating
 // away.

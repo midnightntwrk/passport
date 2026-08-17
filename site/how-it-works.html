@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Midnight Passport — How it works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  body { font-size: 17px; line-height: 1.65; min-height: 100vh; display: flex; flex-direction: column; }
+  main { flex: 1; }
+  .container { max-width: clamp(820px, 82vw, 1400px); margin: 0 auto; padding: 0 clamp(24px, 5vw, 80px); width: 100%; }
+
+  section.hero { padding: 64px 0 32px; }
+  .kind {
+    font-family: var(--font-mono); font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.14em; color: var(--iog-infared); font-weight: 600; margin-bottom: 20px;
+  }
+  h1 {
+    font-family: var(--font-display); font-size: clamp(2.2rem, 4.6vw, 3.6rem);
+    font-weight: 500; letter-spacing: -0.03em; line-height: 1.06; margin-bottom: 18px; color: var(--text);
+  }
+  p.subtitle { font-size: 1.15rem; color: var(--text-mute); font-weight: 300; line-height: 1.55; max-width: 66ch; }
+
+  section.section { padding: 40px 0 56px; border-top: 1px solid var(--line); }
+  .section-kind {
+    font-family: var(--font-mono); font-size: 0.74rem; text-transform: uppercase;
+    letter-spacing: 0.14em; color: var(--iog-infared); font-weight: 600; margin-bottom: 12px;
+  }
+  .section-head h2 {
+    font-family: var(--font-display); font-size: clamp(1.6rem, 2.8vw, 2.2rem);
+    font-weight: 500; letter-spacing: -0.02em; color: var(--text); margin-bottom: 12px;
+  }
+  .section-head p { color: var(--text-mute); max-width: 74ch; }
+
+  /* ─────────────── Chapter tabs ─────────────── */
+
+  .chapters { display: flex; flex-wrap: wrap; gap: 8px; margin: 26px 0 18px; }
+  .chapter-tab {
+    font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.05em;
+    border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px;
+    background: var(--bg); color: var(--text-mute); cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .chapter-tab:hover { border-color: var(--iog-infared); color: var(--text); }
+  .chapter-tab.active { border-color: var(--iog-infared); color: var(--iog-infared); background: var(--bad-soft); font-weight: 600; }
+  .chapter-tab .n { opacity: .55; margin-right: 6px; }
+
+  /* ─────────────── The stage ─────────────── */
+
+  .stage-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-soft); }
+  .stage {
+    position: relative; display: grid; grid-template-columns: 1fr 1.05fr;
+    min-width: 900px; min-height: 480px;
+  }
+  .zone { padding: 18px 20px 22px; }
+  .zone-label {
+    font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .zone-off { border-right: 2px dashed var(--line-strong); }
+  .zone-off .zone-label { color: var(--info); }
+  .zone-on  .zone-label { color: var(--iog-infared); }
+  .zone-label .sub { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-faint); }
+
+  .actors { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .actor {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+    padding: 12px 14px; min-height: 86px; transition: opacity .4s, border-color .3s, box-shadow .3s;
+  }
+  .actor.dim { opacity: 0.32; filter: grayscale(1); }
+  .actor.flash { border-color: var(--iog-infared); box-shadow: 0 0 0 3px var(--bad-soft); }
+  .actor.flash-ok { border-color: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
+  .actor-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .actor-ico { width: 20px; height: 20px; flex: none; color: var(--text-mute); }
+  .actor-ico svg { width: 100%; height: 100%; }
+  .actor-name { font-family: var(--font-display); font-size: 0.92rem; font-weight: 600; color: var(--text); }
+  .actor-sub { font-size: 0.72rem; color: var(--text-faint); margin-left: auto; font-family: var(--font-mono); }
+  .actor.paper { border-style: dashed; position: relative; }
+  .actor.paper::before {
+    content: '✂'; position: absolute; top: -10px; left: 12px; font-size: 0.8rem;
+    color: var(--text-faint); background: var(--bg); padding: 0 4px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 24px; }
+  .chip {
+    font-family: var(--font-mono); font-size: 0.68rem; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--text-mute); background: var(--bg-soft);
+    animation: chipIn .35s ease;
+  }
+  .chip.secret { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+  .chip.artefact { border-color: var(--info); color: var(--info); background: var(--info-soft); }
+  .chip.gone { text-decoration: line-through; opacity: .45; }
+  @keyframes chipIn { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+  /* Contract ledger card */
+  .contract {
+    border: 1.5px solid var(--card-stroke); border-radius: 10px; background: var(--card-fill);
+    overflow: hidden;
+  }
+  .contract-head {
+    display: flex; align-items: baseline; gap: 10px; padding: 12px 16px;
+    border-bottom: 1px solid var(--line); background: var(--bg-alt);
+  }
+  .contract-head .t { font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; color: var(--text); }
+  .contract-head .a { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-faint); margin-left: auto; }
+  .lrow {
+    display: flex; align-items: baseline; gap: 12px; padding: 8px 16px;
+    border-bottom: 1px dashed var(--line); font-size: 0.8rem;
+  }
+  .lrow:last-child { border-bottom: none; }
+  .lrow .k { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-mute); width: 128px; flex: none; }
+  .lrow .v { font-family: var(--font-mono); font-size: 0.76rem; color: var(--text); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+  .lrow .v .empty { color: var(--text-faint); }
+  .lrow.pulse { animation: rowPulse 1.1s ease; }
+  @keyframes rowPulse { 0% { background: var(--bad-soft); } 100% { background: transparent; } }
+  .lchip {
+    border: 1px solid var(--line-strong); border-radius: 4px; padding: 1px 7px;
+    font-size: 0.7rem; background: var(--bg-soft);
+  }
+  .lchip.dead { text-decoration: line-through; opacity: .4; }
+  .lchip.hot { border-color: var(--iog-infared); color: var(--iog-infared); background: var(--bad-soft); }
+
+  /* Packets */
+  .packet {
+    position: absolute; z-index: 5; pointer-events: none;
+    font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600;
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+    transition: transform 0.85s cubic-bezier(.45,.05,.35,1), opacity .25s;
+    transform: translate(-50%, -50%);
+  }
+  .packet-commit { background: var(--info-soft); color: var(--info); border: 1px solid var(--info); }
+  .packet-proof  { background: var(--good-soft); color: var(--good); border: 1px solid var(--good); }
+  .packet-secret { background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad); }
+  .packet-data   { background: var(--bg-alt); color: var(--text); border: 1px solid var(--line-strong); }
+  .packet-reject { background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad); }
+  .packet.shake { animation: shake .5s ease; }
+  @keyframes shake {
+    0%,100% { margin-left: 0; } 20% { margin-left: -7px; } 40% { margin-left: 7px; }
+    60% { margin-left: -5px; } 80% { margin-left: 5px; }
+  }
+
+  /* Narration + controls */
+  .narration {
+    margin-top: 16px; border: 1px solid var(--line); border-left: 3px solid var(--iog-infared);
+    border-radius: 8px; padding: 16px 20px; background: var(--bg);
+    min-height: 92px;
+  }
+  .narration .ch {
+    font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--iog-infared); margin-bottom: 6px;
+  }
+  .narration .txt { color: var(--text); max-width: 90ch; }
+  .narration .note {
+    margin-top: 10px; padding: 10px 14px; border-radius: 6px; background: var(--warn-soft);
+    color: var(--text); font-size: 0.9rem; border: 1px solid var(--warn);
+  }
+  .narration .note strong { color: var(--warn); }
+
+  .controls { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .btn {
+    font-family: var(--font-body); font-size: 0.92rem; font-weight: 600;
+    border-radius: 8px; padding: 10px 22px; cursor: pointer; border: 1px solid var(--line-strong);
+    background: var(--bg); color: var(--text); transition: border-color .15s, background .15s;
+  }
+  .btn:hover { border-color: var(--iog-infared); }
+  .btn.primary { background: var(--iog-infared); border-color: var(--iog-infared); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .progress { font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-faint); margin-left: auto; }
+
+  /* ─────────────── Storage inventory ─────────────── */
+
+  .inventory { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 24px; }
+  .inv-col { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .inv-col h3 {
+    font-family: var(--font-mono); font-size: 0.74rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.12em; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--bg-alt);
+  }
+  .inv-col.on h3 { color: var(--iog-infared); }
+  .inv-col.off h3 { color: var(--info); }
+  .inv-col ul { list-style: none; margin: 0; padding: 8px 0; }
+  .inv-col li { padding: 8px 16px; font-size: 0.9rem; color: var(--text-mute); border-bottom: 1px dashed var(--line); }
+  .inv-col li:last-child { border-bottom: none; }
+  .inv-col li b { color: var(--text); font-weight: 600; }
+  .inv-col li .who { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-faint); display: block; margin-top: 2px; }
+
+  /* ─────────────── Findings cards ─────────────── */
+
+  .findings { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+  .finding {
+    border: 1px solid var(--line); border-radius: 8px; padding: 22px; background: var(--bg);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .finding .fk {
+    font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--iog-infared);
+  }
+  .finding h3 { font-family: var(--font-display); font-size: 1.15rem; font-weight: 500; color: var(--text); }
+  .finding p { font-size: 0.93rem; color: var(--text-mute); line-height: 1.6; flex: 1; }
+  .finding .links { font-size: 0.82rem; font-family: var(--font-mono); display: flex; flex-wrap: wrap; gap: 12px; }
+  .finding .links a { color: var(--text-mute); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .finding .links a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
+
+  footer.landing-footer {
+    border-top: 1px solid var(--line); padding: 26px clamp(24px, 5vw, 80px);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    font-size: 0.82rem; color: var(--text-mute);
+  }
+  footer.landing-footer a { color: var(--text-mute); text-decoration: none; border-bottom: 1px solid var(--line); }
+  footer.landing-footer a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
+  .footer-meta { font-size: 0.74rem; color: var(--text-faint); }
+
+  @media (max-width: 760px) {
+    .inventory { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .packet { transition: none; }
+    .actor, .chip { animation: none; transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar" aria-label="Primary">
+  <a class="navbar-brand" href="index.html">Midnight Passport <span class="brand-tag">· ARC</span></a>
+  <div class="navbar-links">
+    <a href="index.html">Overview</a>
+    <a href="parallelisation.html">Parallelisation</a>
+    <a href="architecture.html">Architecture</a>
+    <a href="how-it-works.html" class="active">How it works</a>
+    <a href="demo.html">Demo</a>
+    <a href="standards.html">Standards</a>
+    <a href="onboarding-mockup.html">Onboarding</a>
+  </div>
+</nav>
+
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle colour scheme" title="Auto · Light · Dark">
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+  </svg>
+</button>
+
+<main>
+
+<section class="hero">
+  <div class="container">
+    <div class="kind">Interactive explainer</div>
+    <h1>How a Passport account works</h1>
+    <p class="subtitle">
+      One account is one contract on the Midnight ledger. Everything below is a working
+      simulation of that contract: press <b>next</b> and watch what crosses the line between
+      your world and the chain, what the contract checks before it moves anything, and how an
+      account survives the loss of every device. Nothing secret ever crosses.
+    </p>
+  </div>
+</section>
+
+<section class="section" id="sim">
+  <div class="container">
+    <header class="section-head">
+      <div class="section-kind">The simulation</div>
+      <h2>Two worlds, one dashed line</h2>
+      <p>
+        The left side is private: devices, people, and paper. The right side is the public
+        ledger: readable by anyone, forever. The whole design of Passport is the discipline of
+        that boundary.
+      </p>
+    </header>
+
+    <div class="chapters" id="chapterTabs" role="tablist"></div>
+
+    <div class="stage-scroll">
+      <div class="stage" id="stage">
+        <div class="zone zone-off">
+          <div class="zone-label">Off-chain · your world <span class="sub">— nothing here is published</span></div>
+          <div class="actors">
+            <div class="actor" id="a-phone">
+              <div class="actor-head">
+                <span class="actor-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg></span>
+                <span class="actor-name">Your phone</span><span class="actor-sub" id="sub-phone"></span>
+              </div>
+              <div class="chips" id="c-phone"></div>
+            </div>
+            <div class="actor" id="a-laptop">
+              <div class="actor-head">
+                <span class="actor-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg></span>
+                <span class="actor-name">Your laptop</span><span class="actor-sub" id="sub-laptop"></span>
+              </div>
+              <div class="chips" id="c-laptop"></div>
+            </div>
+            <div class="actor" id="a-dapp">
+              <div class="actor-head">
+                <span class="actor-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg></span>
+                <span class="actor-name">A dApp</span><span class="actor-sub"></span>
+              </div>
+              <div class="chips" id="c-dapp"></div>
+            </div>
+            <div class="actor" id="a-guardian">
+              <div class="actor-head">
+                <span class="actor-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.4-3.4 4-5 7-5s5.6 1.6 7 5"/></svg></span>
+                <span class="actor-name">Guardian passport</span><span class="actor-sub">someone you trust</span>
+              </div>
+              <div class="chips" id="c-guardian"></div>
+            </div>
+            <div class="actor paper" id="a-paper1">
+              <div class="actor-head"><span class="actor-name">Paper slip 1</span><span class="actor-sub">drawer at home</span></div>
+              <div class="chips" id="c-paper1"></div>
+            </div>
+            <div class="actor paper" id="a-paper2">
+              <div class="actor-head"><span class="actor-name">Paper slip 2</span><span class="actor-sub">somewhere else</span></div>
+              <div class="chips" id="c-paper2"></div>
+            </div>
+            <div class="actor" id="a-memory" style="grid-column: 1 / -1;">
+              <div class="actor-head">
+                <span class="actor-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 4a5 5 0 0 1 5 5c0 2-1 3-1 5h-8c0-2-1-3-1-5a5 5 0 0 1 5-5z"/><path d="M10 18h4M11 21h2"/></svg></span>
+                <span class="actor-name">What you must remember</span><span class="actor-sub">no app, no chain</span>
+              </div>
+              <div class="chips" id="c-memory"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="zone zone-on">
+          <div class="zone-label">On-chain · public ledger <span class="sub">— readable by anyone, forever</span></div>
+          <div class="contract" id="a-contract">
+            <div class="contract-head">
+              <span class="t">Your account contract</span>
+              <span class="a" id="l-addr">not deployed</span>
+            </div>
+            <div class="lrow" id="r-round"><span class="k">round</span><span class="v" id="l-round"><span class="empty">—</span></span></div>
+            <div class="lrow" id="r-epoch"><span class="k">device_epoch</span><span class="v" id="l-epoch"><span class="empty">—</span></span></div>
+            <div class="lrow" id="r-devices"><span class="k">devices</span><span class="v" id="l-devices"><span class="empty">none</span></span></div>
+            <div class="lrow" id="r-night"><span class="k">night_balances</span><span class="v" id="l-night"><span class="empty">empty</span></span></div>
+            <div class="lrow" id="r-coins"><span class="k">coins (shielded)</span><span class="v" id="l-coins"><span class="empty">empty</span></span></div>
+            <div class="lrow" id="r-grants"><span class="k">grants</span><span class="v" id="l-grants"><span class="empty">none</span></span></div>
+            <div class="lrow" id="r-recovery"><span class="k">recovery</span><span class="v" id="l-recovery"><span class="empty">—</span></span></div>
+            <div class="lrow" id="r-phi"><span class="k">recovery_phi</span><span class="v" id="l-phi"><span class="empty">no backup</span></span></div>
+            <div class="lrow" id="r-session"><span class="k">recovery_session</span><span class="v" id="l-session"><span class="empty">—</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration" aria-live="polite">
+      <div class="ch" id="narrCh"></div>
+      <div class="txt" id="narrTxt"></div>
+      <div id="narrNote"></div>
+    </div>
+
+    <div class="controls">
+      <button class="btn primary" id="btnNext">Next ▸</button>
+      <button class="btn" id="btnRestart">Restart chapter</button>
+      <span class="progress" id="progress"></span>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <header class="section-head">
+      <div class="section-kind">The storage split</div>
+      <h2>What lives where</h2>
+      <p>
+        The end state of the simulation, written down. The on-chain column is the account's
+        entire public footprint; the off-chain column is every piece of private material and
+        who holds it. No column contains a seed phrase, and no row requires an operator.
+      </p>
+    </header>
+    <div class="inventory">
+      <div class="inv-col on">
+        <h3>On-chain — public, permanent</h3>
+        <ul>
+          <li><b>Device commitments</b> and the epoch each was enrolled in. Hashes: they recognise a device, they do not identify it.<span class="who">devices · device_epoch</span></li>
+          <li><b>Unshielded balances</b> held by the contract (Night), public by design.<span class="who">night_balances</span></li>
+          <li><b>Shielded holdings</b> of the contract, stored as sealed commitments with an encrypted inbox for the owner: amount and token type are not readable on-chain. The older vault recipe exposed both; the standard (MIP-0012) records the private pattern.<span class="who">coins</span></li>
+          <li><b>Grant scopes</b>: commitment, token color, cumulative cap, spend so far, active flag. The scope is enforced by the circuit, so it must be readable by it.<span class="who">grants</span></li>
+          <li><b>Recovery commitment</b>: one hash of the current recovery secret.<span class="who">recovery</span></li>
+          <li><b>The BUSS public vector φ</b>: two to four field points that provably leak nothing about the secret, plus the session nonce. Ninety-six bytes covers a three-of-five setup.<span class="who">recovery_phi · recovery_session</span></li>
+          <li><b>The round counter</b>: replay defence, bumped by every authorised call.<span class="who">round</span></li>
+        </ul>
+      </div>
+      <div class="inv-col off">
+        <h3>Off-chain — private, distributed</h3>
+        <ul>
+          <li><b>Device secrets</b>, one per device, derived from each passkey on every use and never stored.<span class="who">your devices</span></li>
+          <li><b>The recovery secret</b>, held transiently by your wallet; reconstructable from a guardian quorum plus the public φ.<span class="who">your wallet</span></li>
+          <li><b>Guardian keys</b>: each guardian's own long-lived key, which they already had. Guardians store nothing for you.<span class="who">each guardian</span></li>
+          <li><b>Paper keys</b>: random keys written down; each slip is a guardian.<span class="who">wherever you put them</span></li>
+          <li><b>The guardian roster</b>: who they are, how many, and the threshold. Deliberately not on-chain, so the ledger reveals nothing about your social graph.<span class="who">your memory or a note</span></li>
+          <li><b>Grant secrets</b>, held by the dApp they were issued to.<span class="who">each dApp</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <header class="section-head">
+      <div class="section-kind">Findings this page records</div>
+      <h2>What we validated to be able to show this</h2>
+      <p>
+        Every mechanism in the simulation above runs for real in the account-custody prototype
+        against a local Midnight network: same circuits, same storage layout, same recovery
+        mathematics. The pattern has since graduated: the reference implementation at
+        <code>contract/</code> realises the published standards (MIP-0012 and MIP-0013) in one
+        deployment, with the conformance suites both standards require passing.
+      </p>
+    </header>
+    <div class="findings">
+      <div class="finding">
+        <div class="fk">Recovery · C14 / C15</div>
+        <h3>Community recovery without guardian storage</h3>
+        <p>
+          Recovery adopts BUSS, the bottom-up secret sharing construction from the ANARKey
+          paper. Guardians derive their share on demand from a key they already hold and store
+          nothing between ceremonies; paper keys join people under one threshold. The on-chain
+          footprint is a commitment plus a few public points, and the previous placeholder
+          (plaintext shares in public state) is removed rather than patched. Two rules are
+          load-bearing: a fresh session and a fresh secret for every published backup, and a
+          full re-ceremony on any guardian change.
+        </p>
+        <div class="links">
+          <a href="https://eprint.iacr.org/2025/551" target="_blank" rel="noopener">ANARKey paper</a>
+          <a href="https://github.com/input-output-hk/arc-pleiades" target="_blank" rel="noopener">Pleiades library</a>
+          <a href="https://github.com/midnightntwrk/passport/pull/90" target="_blank" rel="noopener">prototype change</a>
+        </div>
+      </div>
+      <div class="finding">
+        <div class="fk">Custody · C1 / C4</div>
+        <h3>Private contract custody of shielded assets is possible</h3>
+        <p>
+          The belief that contract-held shielded coins must show their amounts and types in
+          public state was proven wrong on a real node. The publicity came from the widely
+          copied vault recipe, which also silently lost change returned to the contract, a
+          defect found and fixed along the way. The validated stateless pattern keeps holdings
+          as sealed commitments with an encrypted inbox, so an observer learns nothing while
+          the owner can always rebuild the coin store. The per-account contract custodies
+          Night and shielded tokens end to end this way: permissionless deposits,
+          device-authorised and grant-authorised withdrawals, and partial spends with change.
+        </p>
+        <div class="links">
+          <a href="https://github.com/midnightntwrk/passport/pull/89" target="_blank" rel="noopener">the experiment</a>
+          <a href="standards.html">standards &amp; v1.0</a>
+        </div>
+      </div>
+      <div class="finding">
+        <div class="fk">Keys · C5 / C9</div>
+        <h3>Keys validate operations through one seam</h3>
+        <p>
+          Every authorised circuit performs the same check: the caller proves knowledge of a
+          secret whose commitment is enrolled at the current device epoch. Secrets never leave
+          the device; only proofs cross. The check lives in a single helper circuit — the seam —
+          and the replacement it was shaped for has happened: the reference implementation
+          instantiates the seam with in-circuit JubJub Schnorr per MIP-0013, without touching
+          any other circuit. One epoch bump retires every device
+          and grant at once, which is exactly what recovery relies on.
+        </p>
+        <div class="links">
+          <a href="architecture.html">architecture</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="landing-footer">
+  <span>ARC · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="standards.html">standards</a></span>
+  <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/01<!--/DEPLOY--></span>
+</footer>
+
+<script src="theme-toggle.js"></script>
+<script>
+(function () {
+'use strict';
+
+/* ───────────────────────── model ───────────────────────── */
+
+function freshModel() {
+  return {
+    deployed: false,
+    round: null, epoch: null,
+    devices: [],          // {label, epoch, dead}
+    night: null,
+    coins: [],            // {label, dead}
+    grants: [],           // {label, dead}
+    recovery: null,
+    phi: [], session: null,
+    chips: { phone: [], laptop: [], dapp: [], guardian: [], paper1: [], paper2: [], memory: [] },
+    dim: {},              // actorId -> bool
+    subs: { phone: '', laptop: '' },
+  };
+}
+let M = freshModel();
+
+const $ = (id) => document.getElementById(id);
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function chipHtml(c) {
+  return `<span class="chip ${c.kind || ''} ${c.gone ? 'gone' : ''}">${c.text}</span>`;
+}
+
+function render(pulse) {
+  $('l-addr').textContent = M.deployed ? '0a81…77d4' : 'not deployed';
+  $('l-round').innerHTML = M.round === null ? '<span class="empty">—</span>' : String(M.round);
+  $('l-epoch').innerHTML = M.epoch === null ? '<span class="empty">—</span>' : String(M.epoch);
+  $('l-devices').innerHTML = M.devices.length
+    ? M.devices.map(d => `<span class="lchip ${d.dead ? 'dead' : ''} ${d.hot ? 'hot' : ''}">${d.label}@e${d.epoch}</span>`).join('')
+    : '<span class="empty">none</span>';
+  $('l-night').innerHTML = M.night === null ? '<span class="empty">empty</span>' : `NIGHT: ${M.night}`;
+  $('l-coins').innerHTML = M.coins.length
+    ? M.coins.map(c => `<span class="lchip ${c.dead ? 'dead' : ''}">${c.label}</span>`).join('')
+    : '<span class="empty">empty</span>';
+  $('l-grants').innerHTML = M.grants.length
+    ? M.grants.map(g => `<span class="lchip ${g.dead ? 'dead' : ''}">${g.label}</span>`).join('')
+    : '<span class="empty">none</span>';
+  $('l-recovery').innerHTML = M.recovery ? `commit(${M.recovery})` : '<span class="empty">—</span>';
+  $('l-phi').innerHTML = M.phi.length
+    ? M.phi.map(p => `<span class="lchip">${p}</span>`).join('')
+    : '<span class="empty">no backup</span>';
+  $('l-session').innerHTML = M.session ? M.session : '<span class="empty">—</span>';
+
+  for (const actor of Object.keys(M.chips)) {
+    $('c-' + actor).innerHTML = M.chips[actor].map(chipHtml).join('');
+    $('a-' + actor).classList.toggle('dim', !!M.dim[actor]);
+  }
+  $('sub-phone').textContent = M.subs.phone;
+  $('sub-laptop').textContent = M.subs.laptop;
+
+  if (pulse) {
+    for (const row of pulse) {
+      const el = $('r-' + row);
+      if (!el) continue;
+      el.classList.remove('pulse');
+      void el.offsetWidth;
+      el.classList.add('pulse');
+    }
+  }
+}
+
+/* ───────────────────────── animation api ───────────────────────── */
+
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+function centreOf(id) {
+  const stage = $('stage').getBoundingClientRect();
+  const r = $(id).getBoundingClientRect();
+  return { x: r.left - stage.left + r.width / 2, y: r.top - stage.top + r.height / 2 };
+}
+
+async function movePacket(fromId, toId, label, kind, fast, opts) {
+  if (fast || reduced) return;
+  const stage = $('stage');
+  const a = centreOf(fromId), b = centreOf(toId);
+  const dot = document.createElement('div');
+  dot.className = 'packet packet-' + kind;
+  dot.textContent = label;
+  dot.style.left = a.x + 'px';
+  dot.style.top = a.y + 'px';
+  stage.appendChild(dot);
+  await wait(30);
+  if (opts && opts.blocked) {
+    const mid = centreOf('a-contract');
+    const bound = (centreOf('a-phone').x + mid.x) / 2 + 40;
+    dot.style.transform = `translate(${bound - a.x - 50}%, -50%)`;
+    dot.style.transform = 'translate(-50%,-50%)';
+    dot.style.left = bound + 'px';
+    dot.style.top = ((a.y + centreOf(toId).y) / 2) + 'px';
+    await wait(880);
+    dot.classList.add('shake');
+    await wait(520);
+    dot.style.opacity = '0';
+    await wait(240);
+    dot.remove();
+    return;
+  }
+  dot.style.left = b.x + 'px';
+  dot.style.top = b.y + 'px';
+  await wait(900);
+  dot.style.opacity = '0';
+  await wait(220);
+  dot.remove();
+}
+
+function makeApi(fast) {
+  return {
+    fast,
+    packet: (f, t, label, kind) => movePacket('a-' + f, 'a-' + t, label, kind, fast),
+    toChain: (f, label, kind) => movePacket('a-' + f, 'a-contract', label, kind, fast),
+    fromChain: (t, label, kind) => movePacket('a-contract', 'a-' + t, label, kind, fast),
+    blocked: (f, label) => movePacket('a-' + f, 'a-contract', label, 'secret', fast, { blocked: true }),
+    flash: async (id, ok) => {
+      if (fast || reduced) return;
+      const el = $('a-' + id) || $(id);
+      el.classList.add(ok ? 'flash-ok' : 'flash');
+      await wait(850);
+      el.classList.remove('flash', 'flash-ok');
+    },
+    render: (rows) => render(fast ? null : rows),
+    wait: (ms) => (fast ? Promise.resolve() : wait(ms)),
+  };
+}
+
+/* ───────────────────────── chip helpers ───────────────────────── */
+
+function addChip(actor, text, kind) { M.chips[actor].push({ text, kind }); }
+function dropChips(actor, pred) {
+  M.chips[actor] = M.chips[actor].filter(c => !(pred ? pred(c) : true));
+}
+function markGone(actor, match) {
+  M.chips[actor].forEach(c => { if (c.text.includes(match)) c.gone = true; });
+}
+
+/* ───────────────────────── chapters ───────────────────────── */
+
+const CHAPTERS = [
+{
+  title: 'The cast',
+  steps: [
+    { text: 'Two worlds. On the left, everything you control and nothing anyone else can read: your devices, the people you trust, pieces of paper. On the right, the Midnight ledger: every value there is public and permanent. Passport is the discipline of what may cross the dashed line.',
+      run: async (api) => { api.render(); } },
+    { text: 'Your account is not an entry in an operator database. It is a contract of its own on the ledger, and its state, shown here field by field, is the only authority over your assets. Anyone can read it; only proofs can change it.',
+      run: async (api) => { await api.flash('contract', true); } },
+    { text: 'The golden rule: secrets never cross. Watch one try. A raw secret is stopped at the boundary; the only things allowed through are hashes of secrets (commitments), zero-knowledge proofs about secrets, and public points that leak nothing.',
+      run: async (api) => {
+        addChip('phone', '⚿ some secret', 'secret'); api.render();
+        await api.blocked('phone', '⚿ secret — never crosses');
+        dropChips('phone'); api.render();
+      } },
+  ],
+},
+{
+  title: 'Onboarding',
+  steps: [
+    { text: 'Your phone creates a passkey. Its PRF output becomes the device secret: re-derived behind biometrics on every use, never written down, never leaving the device. No seed phrase exists anywhere in this story.',
+      run: async (api) => {
+        addChip('phone', '⚿ device secret', 'secret');
+        M.subs.phone = 'passkey'; api.render();
+        await api.flash('phone', true);
+      } },
+    { text: 'The phone hashes the secret into a commitment and deploys your account contract with it, together with a commitment to a freshly generated recovery secret. Two hashes cross the line; two secrets stay.',
+      run: async (api) => {
+        addChip('phone', '⚿ recovery secret', 'secret'); api.render();
+        await api.toChain('phone', 'commit(device)', 'commit');
+        await api.toChain('phone', 'commit(recovery)', 'commit');
+        M.deployed = true; M.round = 0; M.epoch = 0;
+        M.devices.push({ label: 'phone', epoch: 0 });
+        M.recovery = 'r₀';
+        api.render(['devices', 'recovery', 'round', 'epoch']);
+      } },
+    { text: 'Your laptop joins as an equal. It makes its own passkey and secret; your phone, already enrolled, authorises add_device with a proof, and the laptop’s commitment is enrolled at the current epoch. Devices are peers: any of them can act, enrol, or revoke.',
+      run: async (api) => {
+        addChip('laptop', '⚿ device secret', 'secret');
+        M.subs.laptop = 'passkey'; api.render();
+        await api.toChain('phone', 'proof ✓', 'proof');
+        await api.toChain('laptop', 'commit(device)', 'commit');
+        M.devices.push({ label: 'laptop', epoch: 0 });
+        M.round = 1;
+        api.render(['devices', 'round']);
+      } },
+  ],
+},
+{
+  title: 'Holding assets',
+  steps: [
+    { text: 'Anyone may fund the account. A deposit of 500 NIGHT lands in the contract’s balance mirror. Unshielded means public: the amount is meant to be visible.',
+      run: async (api) => {
+        await api.toChain('phone', '500 NIGHT', 'data');
+        M.night = 500;
+        api.render(['night']);
+      } },
+    { text: 'A shielded token arrives next and the contract takes custody. Look closely at the ledger row: what the chain records for a contract-owned shielded coin is a sealed commitment. An observer learns that something arrived, but not the amount, not the token type, and not which deposit will pay for which later spend.',
+      run: async (api) => {
+        await api.toChain('phone', 'shielded coin (sealed)', 'commit');
+        M.coins.push({ label: 'sealed ▓▓▓▓' });
+        api.render(['coins']);
+      },
+      note: '<strong>Finding, proven on a real node.</strong> We believed the chain forced contract-held shielded coins to be public. It does not. The widely copied vault recipe wrote amount, token type, and serial number into public state as a bookkeeping choice (and silently lost change returned to the contract, a defect found and fixed along the way). The validated stateless pattern stores sealed commitments plus an encrypted inbox, so the owner can always rebuild their coin store while the observer reads nothing.' },
+    { text: 'Withdrawals are a different matter: money out always requires authority. That is the next chapter.',
+      run: async (api) => { await api.flash('contract', true); } },
+  ],
+},
+{
+  title: 'Who may act',
+  steps: [
+    { text: 'Your phone withdraws 100 NIGHT. The device secret stays put; what crosses is a zero-knowledge proof that the caller knows a secret whose commitment is enrolled at the current epoch. The circuit checks the proof, moves the funds, and bumps the round counter so the transaction can never be replayed.',
+      run: async (api) => {
+        await api.toChain('phone', 'proof ✓ withdraw 100', 'proof');
+        M.night = 400; M.round = 2;
+        api.render(['night', 'round']);
+      } },
+    { text: 'Now an impostor tries the same call with a made-up secret. The proof cannot be produced for a commitment that is not enrolled, so the ledger rejects it. Note what the contract never learnt: no username, no biometrics, no identity. Enrolment of the commitment is the whole notion of "who".',
+      run: async (api) => {
+        await api.toChain('dapp', 'unknown device ✗', 'reject');
+        await api.flash('contract', false);
+      } },
+  ],
+},
+{
+  title: 'Scoped grants',
+  steps: [
+    { text: 'You connect to a dApp, but you do not hand it your keys. Your phone enrols a grant: a separate secret for the dApp, scoped on-chain to one token color and a cumulative cap of 300.',
+      run: async (api) => {
+        await api.toChain('phone', 'proof ✓ add_grant', 'proof');
+        addChip('dapp', '⚿ grant secret', 'secret');
+        M.grants.push({ label: 'AMBER cap 300 spent 0' });
+        M.round = 3;
+        api.render(['grants', 'round']);
+      } },
+    { text: 'The dApp spends 250 within its scope, proving knowledge of the grant secret. The ledger enforces the cap and records the cumulative spend. Enforcement lives in the circuit, not in the dApp’s goodwill.',
+      run: async (api) => {
+        await api.toChain('dapp', 'proof ✓ spend 250', 'proof');
+        M.grants[0].label = 'AMBER cap 300 spent 250';
+        M.night = 150; M.round = 4;
+        api.render(['grants', 'night', 'round']);
+      } },
+    { text: 'A second spend of 100 would exceed the cap: rejected by the ledger itself. And when you revoke the grant, the dApp’s secret becomes worthless no matter what the dApp stores.',
+      run: async (api) => {
+        await api.toChain('dapp', 'cap exceeded ✗', 'reject');
+        await api.flash('contract', false);
+        await api.toChain('phone', 'proof ✓ revoke', 'proof');
+        M.grants[0].dead = true; M.round = 5;
+        markGone('dapp', 'grant');
+        api.render(['grants', 'round']);
+      } },
+  ],
+},
+{
+  title: 'Guardians (BUSS)',
+  steps: [
+    { text: 'Time to make total loss survivable. You choose three guardians: one person with their own passport, and two paper slips. Nothing about them, not even how many there are, will ever appear on-chain.',
+      run: async (api) => {
+        await api.flash('guardian', true);
+        await api.flash('paper1', true);
+        await api.flash('paper2', true);
+      } },
+    { text: 'Your phone rotates the recovery secret and picks a fresh session nonce, then sends each guardian a small request: the account address, the nonce, and their index. The paper guardians are simpler still: your phone generates a random key for each slip, and you write it down.',
+      run: async (api) => {
+        M.chips.phone = M.chips.phone.map(c => c.text.includes('recovery') ? { text: '⚿ recovery secret (fresh)', kind: 'secret' } : c);
+        api.render();
+        await api.packet('phone', 'guardian', 'request', 'data');
+        addChip('paper1', '⚿ key on paper', 'secret');
+        addChip('paper2', '⚿ key on paper', 'secret');
+        api.render();
+      } },
+    { text: 'The guardian answers with a single value: σ = H(session ‖ their own key). That key is one they already had; they compute σ on demand and keep nothing. A guardian on a plane, a guardian who lost their notes, a guardian ten years from now: all equally able to answer.',
+      run: async (api) => {
+        await api.packet('guardian', 'phone', 'σ₁', 'data');
+        await api.flash('guardian', true);
+      },
+      note: '<strong>The point.</strong> Guardians store nothing, at enrolment or ever. Their share is re-derived from their own key each time it is needed. Compare share-holding schemes, where every guardian must protect a fragment forever.' },
+    { text: 'Your phone computes σ for the two paper keys locally, fits the one polynomial through the secret and all three shares, and publishes the leftover public points φ, the session nonce, and the rotated commitment: one transaction, ninety-six bytes of public state, none of it secret.',
+      run: async (api) => {
+        await api.toChain('phone', 'φ + nonce + commit', 'commit');
+        M.recovery = 'r₁'; M.phi = ['φ₁', 'φ₂']; M.session = 'n₁'; M.round = 6;
+        addChip('memory', '3 guardians, any 2', 'artefact');
+        api.render(['recovery', 'phi', 'session', 'round']);
+      },
+      note: '<strong>Load-bearing rule.</strong> Every published backup uses a fresh secret and a fresh session nonce, and any change to the guardian set is a full re-ceremony. Reusing shares across sessions weakens the threshold; rotation is what makes removing a guardian real.' },
+    { text: 'The audit: on-chain there are now two field points, a nonce, and a hash. φ is provably useless without a quorum of shares. Off-chain, the guardian holds only their own key, the slips hold theirs, and you remember one line: three guardians, any two.',
+      run: async (api) => { await api.flash('contract', true); } },
+  ],
+},
+{
+  title: 'Losing everything',
+  steps: [
+    { text: 'The disaster: phone and laptop are gone, and with them every device secret and the recovery secret. What survives? The public ledger, the guardian’s own key, two slips of paper, and one remembered line.',
+      run: async (api) => {
+        M.dim.phone = true; M.dim.laptop = true;
+        M.chips.phone.forEach(c => c.gone = true);
+        M.chips.laptop.forEach(c => c.gone = true);
+        api.render();
+      } },
+    { text: 'A replacement device reads everything it needs from public state: the points φ, the session nonce, and the commitment to beat. Then it asks the guardian, who re-derives the same σ from nothing, and you type in one paper slip.',
+      run: async (api) => {
+        M.dim.phone = false;
+        M.chips.phone = []; M.subs.phone = 'new device';
+        api.render();
+        await api.fromChain('phone', 'φ, nonce (public read)', 'data');
+        await api.packet('guardian', 'phone', 'σ₁', 'data');
+        await api.packet('paper1', 'phone', 'σ₂ (typed in)', 'data');
+      } },
+    { text: 'Reconstruction happens entirely off-chain: two shares plus two public points determine the polynomial, and its value at zero is the recovery secret. The new device checks it against the on-chain commitment before going any further. The chain has seen nothing yet.',
+      run: async (api) => {
+        addChip('phone', '⚿ recovery secret (rebuilt)', 'secret');
+        api.render();
+        await api.flash('phone', true);
+      } },
+    { text: 'One transaction finishes it: a proof of the recovery secret, a fresh device commitment, a fresh recovery commitment. The epoch bumps, and in that single step every old device and every old grant is retired; the spent backup is cleared with it.',
+      run: async (api) => {
+        addChip('phone', '⚿ device secret (new passkey)', 'secret');
+        api.render();
+        await api.toChain('phone', 'proof ✓ recover', 'proof');
+        M.epoch = 1; M.round = 7;
+        M.devices.forEach(d => d.dead = true);
+        M.devices.push({ label: 'new-phone', epoch: 1, hot: true });
+        M.grants.forEach(g => g.dead = true);
+        M.recovery = 'r₂'; M.phi = []; M.session = null;
+        api.render(['epoch', 'devices', 'grants', 'recovery', 'phi', 'session', 'round']);
+      } },
+    { text: 'Same account, same address, same name, same balances: nothing moved, only the authority over it. The guardian still stores nothing and can serve again after you re-enrol a fresh backup. That is the promise: losing every device does not lose the account.',
+      run: async (api) => {
+        await api.flash('contract', true);
+      },
+      note: '<strong>What remains open.</strong> A lying guardian is caught by the commitment check but not identified (a traceable follow-up construction exists); the guardian roster stays off-chain by design; and the final commitment check replaces the paper’s key-pair check, pending cryptographer sign-off.' },
+  ],
+},
+];
+
+/* ───────────────────────── player ───────────────────────── */
+
+let chapter = 0, step = -1, busy = false;
+
+function renderTabs() {
+  $('chapterTabs').innerHTML = CHAPTERS.map((c, i) =>
+    `<button class="chapter-tab ${i === chapter ? 'active' : ''}" role="tab" data-i="${i}"><span class="n">${i}</span>${c.title}</button>`
+  ).join('');
+}
+
+function setNarration(text, note) {
+  $('narrCh').textContent = `Chapter ${chapter} · ${CHAPTERS[chapter].title}`;
+  $('narrTxt').textContent = text;
+  $('narrNote').innerHTML = note ? `<div class="note">${note}</div>` : '';
+  const total = CHAPTERS[chapter].steps.length;
+  $('progress').textContent = `step ${Math.max(step + 1, 1)} / ${total}`;
+  $('btnNext').textContent = (step >= total - 1)
+    ? (chapter >= CHAPTERS.length - 1 ? 'Done — restart ↺' : 'Next chapter ▸')
+    : 'Next ▸';
+}
+
+async function fastForwardTo(ch, st) {
+  M = freshModel();
+  render();
+  const api = makeApi(true);
+  for (let c = 0; c <= ch; c++) {
+    const last = (c === ch) ? st : CHAPTERS[c].steps.length - 1;
+    for (let s = 0; s <= last; s++) await CHAPTERS[c].steps[s].run(api);
+  }
+  render();
+}
+
+async function advance() {
+  if (busy) return;
+  busy = true;
+  $('btnNext').disabled = true;
+  const steps = CHAPTERS[chapter].steps;
+  if (step >= steps.length - 1) {
+    chapter = (chapter + 1) % CHAPTERS.length;
+    step = -1;
+    if (chapter === 0) { M = freshModel(); render(); }
+    renderTabs();
+  }
+  step += 1;
+  const s = CHAPTERS[chapter].steps[step];
+  setNarration(s.text, s.note);
+  await s.run(makeApi(false));
+  $('btnNext').disabled = false;
+  busy = false;
+}
+
+$('btnNext').addEventListener('click', advance);
+$('btnRestart').addEventListener('click', async () => {
+  if (busy) return;
+  busy = true;
+  step = -1;
+  if (chapter === 0) { M = freshModel(); render(); }
+  else await fastForwardTo(chapter - 1, CHAPTERS[chapter - 1].steps.length - 1);
+  busy = false;
+  advance();
+});
+$('chapterTabs').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.chapter-tab');
+  if (!btn || busy) return;
+  busy = true;
+  chapter = Number(btn.dataset.i);
+  step = -1;
+  renderTabs();
+  if (chapter === 0) { M = freshModel(); render(); }
+  else await fastForwardTo(chapter - 1, CHAPTERS[chapter - 1].steps.length - 1);
+  busy = false;
+  advance();
+});
+
+renderTabs();
+render();
+setNarration('Press next to begin. The simulation runs the same mechanics as the working prototype: every field on the right mirrors the real contract’s ledger.', null);
+$('progress').textContent = '';
+})();
+</script>
+
+</body>
+</html>

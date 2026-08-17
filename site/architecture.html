@@ -783,6 +783,7 @@
   <a class="navbar-brand" href="index.html">Midnight Passport <span class="brand-tag">· ARC</span></a>
   <div class="navbar-links">
     <a href="index.html">Overview</a>
+    <a href="how-it-works.html">How it works</a>
     <a href="parallelisation.html">Parallelisation</a>
     <a href="architecture.html" class="active">Architecture</a>
     <a href="demo.html">Demo</a>
@@ -816,7 +817,7 @@
 
       <div class="kind">ARC · Architecture · Discussion draft</div>
       <h1>Architecture context</h1>
-      <p class="subtitle">Where the 26 components live, who they talk to, and what shape Passport's identity surface takes across the stack. Click any component for its canvas; click an actor for its role in the system. Toggle DID focus to dim everything outside the identity story.</p>
+      <p class="subtitle">Where the 26 components live, who they talk to, and what shape Passport's identity surface takes across the stack. Click any component for its canvas; click an actor for its role in the system. Use the category pills to focus one slice of the stack.</p>
 
       <div class="cat-pills" id="catPills" role="group" aria-label="Filter by category"></div>
       <div class="toolbar">
@@ -852,8 +853,8 @@
 
             <div class="arch-zone">
               <div class="arch-zone-head">
-                <span class="arch-zone-label">Local proof server</span>
-                <span class="arch-zone-sublabel">Rust sidecar / WASM</span>
+                <span class="arch-zone-label">Prover</span>
+                <span class="arch-zone-sublabel">Browser WASM (in-tab); Rust sidecar self-host</span>
               </div>
               <div class="arch-zone-body" id="zone-prover"></div>
             </div>
@@ -941,11 +942,11 @@
         <h3>Notes for reviewers</h3>
         <ul>
           <li><strong>This is a context + container view.</strong> It shows where components live and who they talk to, not the data flow for any specific operation. The <a href="#runtime">runtime view</a> below names the actual modules and walks one end-to-end flow.</li>
-          <li><strong>Workstreams are explicitly unresolved.</strong> C3 (DID surface), C4 (asset custody), C22 (intent surface), C24 (fee model), and C25 (cross-chain interface) are dashed because the chosen alternative is not yet decided. Their placement may shift once a workstream resolves.</li>
+          <li><strong>Workstreams are explicitly unresolved.</strong> C3 (DID surface), C22 (intent surface), C24 (fee model — mechanism confirmed, sponsor operator open), and C25 (cross-chain interface) are dashed because a live decision remains. C4 (asset custody) has resolved to stateless contract custody, normative in MIP-0012. Placement may shift once a workstream resolves.</li>
           <li><strong>C3 sits inside the on-chain zone</strong> as the primary architectural element, but the workstream's resolution runs through engagement with the external <em>midnight-did</em> repository — drawn alongside in the external identity ecosystem.</li>
           <li><strong>C8 (domain separation) is cross-cutting</strong> and shown as an annotation rather than placed in any single zone — every <code>persistentHash</code> use site needs a registered prefix.</li>
           <li><strong>C6 / C7 / C20 are placed in the proof server</strong> sub-zone for clarity; in practice their orchestration code lives in the wallet runtime. The trust property is what matters: witnesses must not leave the user device.</li>
-          <li><strong>C26 (AI agent skills) is omitted</strong> — it's a meta-deliverable about documentation and tooling, not a runtime element.</li>
+          <li><strong>C26 (AI agent skills) is omitted</strong> — it is a meta-deliverable about documentation and tooling, not a runtime element.</li>
           <li><strong>The MVP vs. v1.0 split</strong> is not represented here; this view holds for both readings. <a href="standards.html">Standards</a> and <a href="demo.html">Demo</a> document where they diverge.</li>
         </ul>
       </div>
@@ -957,7 +958,7 @@
       <div class="section-head">
         <div class="section-kind">Architecture · At a glance</div>
         <h2>Identity, signing &amp; custody</h2>
-        <p>The conceptual shape of Passport — what authorises operations, what holds state, what lives on chain. Boxes are architectural concepts; arrow labels are the protocol verbs. Open relationships and unresolved boxes are marked <code>TBD</code> or with a dashed outline. Click any element for more detail. Integrations (dApp connect, fee sponsorship, credential issuance) live on a separate diagram still to come.</p>
+        <p>The conceptual shape of Passport — what authorises operations, what holds state, what lives on chain. Boxes are architectural concepts; arrow labels are the protocol verbs. Open relationships and unresolved boxes are marked <code>TBD</code> or with a dashed outline. Click any element for more detail. Integrations (dApp connect, fee sponsorship, credential issuance) are documented in their component canvases; a dedicated integrations diagram may follow.</p>
       </div>
 
       <div class="diagram-card">
@@ -1082,7 +1083,7 @@
               <rect x="130" y="495" width="230" height="55" rx="6" class="svg-module-rect" />
               <circle cx="348" cy="505" r="3" class="svg-module-dot" />
               <text x="245" y="513" class="svg-module-label" text-anchor="middle">Indexer</text>
-              <text x="245" y="528" class="svg-module-sub" text-anchor="middle">view-key consumer · read state</text>
+              <text x="245" y="528" class="svg-module-sub" text-anchor="middle">contract-action enumeration · read state</text>
               <g class="svg-canvas-pill" data-component="C17">
                 <title>C17 · View-key + indexer sync</title>
                 <rect x="234" y="535" width="22" height="11" rx="3" class="svg-pill-rect" />
@@ -1094,7 +1095,7 @@
               <rect x="880" y="495" width="230" height="55" rx="6" class="svg-module-rect" />
               <circle cx="1098" cy="505" r="3" class="svg-module-dot" />
               <text x="995" y="513" class="svg-module-label" text-anchor="middle">Recovery helpers</text>
-              <text x="995" y="528" class="svg-module-sub" text-anchor="middle">DeRec quorum · P5</text>
+              <text x="995" y="528" class="svg-module-sub" text-anchor="middle">Stateless guardians · P5</text>
               <g class="svg-canvas-pill" data-component="C14">
                 <title>C14 · Total-loss recovery flow</title>
                 <rect x="971" y="535" width="22" height="11" rx="3" class="svg-pill-rect" />
@@ -1176,9 +1177,9 @@
               </g>
             </g>
 
-            <!-- Name Service (right, TBD) -->
+            <!-- Name Service (right, decided: upstream MIP-0007 adopted) -->
             <g class="svg-module" data-module="name-service" data-category="identity">
-              <rect x="820" y="690" width="250" height="60" rx="6" class="svg-module-rect hyp" />
+              <rect x="820" y="690" width="250" height="60" rx="6" class="svg-module-rect" />
               <circle cx="1058" cy="700" r="3" class="svg-module-dot" />
               <text x="945" y="710" class="svg-module-label" text-anchor="middle">Name Service</text>
               <text x="945" y="726" class="svg-module-sub" text-anchor="middle">alice.passport.night resolution</text>
@@ -1223,9 +1224,9 @@
               <path class="svg-arrow dashed" d="M 460 720 H 380" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" />
               <text class="svg-arrow-label" x="420" y="710" text-anchor="middle" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">TBD</text>
 
-              <!-- A9: Account custody ⇢ Name Service (TBD) -->
+              <!-- A9: Account custody ⇢ Name Service (name binds to account; owner arm gated) -->
               <path class="svg-arrow dashed" d="M 740 720 H 820" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" />
-              <text class="svg-arrow-label" x="780" y="710" text-anchor="middle" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">TBD</text>
+              <text class="svg-arrow-label" x="780" y="710" text-anchor="middle" style="paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round;">binds</text>
             </g>
           </svg>
         </div>
@@ -1280,9 +1281,9 @@
     { id: 'dapp',             label: 'dApp partner',       sub: 'CAIP-25 · EIP-6963' },
     { id: 'issuer',           label: 'Credential issuer',  sub: 'e.g. zkMe' },
     { id: 'verifier',         label: 'Credential verifier', sub: 'consumes proofs' },
-    { id: 'helper',           label: 'Recovery helper',    sub: 'DeRec or alt' },
+    { id: 'helper',           label: 'Recovery helper',    sub: 'stateless guardian (BUSS)' },
     { id: 'sponsor',          label: 'Sponsor service',    sub: 'pays Dust fees' },
-    { id: 'indexer-provider', label: 'Indexer provider',   sub: 'view-key consumer' },
+    { id: 'indexer-provider', label: 'Indexer provider',   sub: 'contract-action enumeration' },
   ];
 
   const upstreamActors = [
@@ -1294,7 +1295,7 @@
   ];
 
   const externalIdActors = [
-    { id: 'midnight-did',     label: 'midnight-did',         sub: 'partner repo · Yurii' },
+    { id: 'midnight-did',     label: 'midnight-did',         sub: 'IOG partner repo' },
     { id: 'iamx',             label: 'IAMX',                 sub: 'did:midnight registry' },
     { id: 'w3c-vc',           label: 'W3C DID / VC',         sub: 'verifiers · resolvers' },
   ];
@@ -1477,10 +1478,10 @@
     },
     'proof-server': {
       kind: 'Concept · on user device',
-      label: 'Proof server',
+      label: 'Prover',
       status: 'known',
-      body: 'Local process that produces ZK proofs from witnesses without those witnesses crossing the device boundary. The witness-doesn\'t-leave-device invariant is the architecturally important fact.',
-      caveats: 'Performance is a known concern (~18–21 s per typical circuit; did-core examples reach k=19, slow on the proof server). Per-platform variant (Rust sidecar, WASM, native) is open. Stub — pending second-pass review.',
+      body: 'Produces ZK proofs from witnesses without those witnesses crossing the device boundary. Decided: browser WASM proving in a dedicated Web Worker is the promoted path — the full stack proves in-tab with the proof-server container stopped. The witness-does-not-leave-device invariant is the architecturally important fact.',
+      caveats: 'Measured envelope ~3.5 s at k=12 to ~44 s at k=16 single-threaded; account circuits sit at the low end. The local Rust proof server remains the self-host and development harness; the Foundation\'s hosted provider is the bounded-trust fallback (one-call signature and spend witnesses, never a device key). Mobile envelopes still to measure.',
       relatedCanvases: ['C6', 'C7'],
     },
     'local-storage': {
@@ -1503,40 +1504,40 @@
       kind: 'External service',
       label: 'Indexer',
       status: 'known',
-      body: 'Off-chain read service. Receives the wallet\'s view keys and projects user-visible chain state for the wallet UI. Substitutable per P8.',
-      caveats: 'Operator model is open — hosted singleton, multi-provider directory, or client-only light-client sync. Privacy of the indexer query surface needs explicit limits. Stub — pending second-pass review.',
+      body: 'Off-chain read service projecting user-visible chain state for the wallet UI. For account-held assets no viewing key is ever handed over: the inbox walk needs only public chain data plus local decryption, and the required enumeration surface exists (the contractActions subscription replays the complete per-address history). Substitutable per P8.',
+      caveats: 'Operator model is open — hosted singleton, multi-provider directory, or client-only light-client sync. The view-key trade-off survives only for user-held in-flight coin detection. Privacy of the indexer query surface needs explicit limits.',
       relatedCanvases: ['C17'],
     },
     'recovery-helpers': {
       kind: 'External service · P5',
-      label: 'Recovery helpers',
+      label: 'Recovery guardians',
       status: 'known',
-      body: 'DeRec quorum holding shares of the user\'s recovery secret. On total device loss (P5), helpers collectively release their shares so the user can re-establish the account on a fresh device.',
-      caveats: 'Recovery scheme variants (Shamir 3-of-5 default vs alternatives), helper authentication, and non-collusion guarantees are open at the C14 / C15 level. Stub — pending second-pass review.',
+      body: 'Stateless guardians per the decided BUSS / ANARKey design: a guardian stores nothing and derives its share on demand from keys it already holds. On total device loss (P5), any quorum plus the on-chain public vector reconstructs the recovery secret off-chain; recovery executes through the account\'s epoch-bump seam and assets never move. Paper keys are the no-social-graph backstop.',
+      caveats: 'Guardian-set parameters, rotation and replacement ceremonies, request-authentication UX, and cryptographer review of the integration remain open at the C14 / C15 level; the recovery-paths MIP specifies the construction next. DeRec survives only as a substitutable profile.',
       relatedCanvases: ['C14', 'C15'],
     },
     'account-custody': {
       kind: 'Contract · Midnight chain',
       label: 'Account custody contract',
-      status: 'open',
-      body: 'The on-chain Compact contract representing a Passport account. Holds the device set, name binding, scoped grants, and (depending on the C4 workstream) Midnight-native asset balances. The integration vessel for everything chain-side.',
-      caveats: 'Contract shape (per-account vs single registry vs hybrid) is the C1 open question. What it holds depends on C4. Upgrade path is open. Stub — pending second-pass review.',
+      status: 'known',
+      body: 'The on-chain Compact contract representing a Passport account. Holds the device set, name binding, scoped grants, and — per the resolved C4 custody model — the user\'s Midnight-native assets, statelessly (no coin material in public ledger state). Specified by upstream MIP-0012 and MIP-0013 and realised by the reference implementation, one contract per account.',
+      caveats: 'Onboarding deploy cost at scale and the deployer model remain implementation questions. Circuits are evolvable via the contract maintenance authority; the ledger state schema is fixed at deploy, so fleet migration tooling is real work. Scoped grants arrive as a successor extension behind the same seam.',
       relatedCanvases: ['C1', 'C4', 'C8', 'C10', 'C11', 'C12', 'C18', 'C21'],
     },
     'midnight-did': {
       kind: 'Contract · Midnight chain · partner',
       label: 'Midnight DID contract',
       status: 'open',
-      body: "External Compact contract by Yurii's team (midnightntwrk/midnight-did). Defines the current did:midnight spec and reference implementation. Passport's C3 workstream is how account identity, name linkage, and the delivery model integrate with this.",
+      body: "External Compact contract from IOG's Midnight DID effort (midnightntwrk/midnight-did). Defines the current did:midnight spec and reference implementation. Passport's C3 workstream is how account identity, name linkage, and the delivery model integrate with this.",
       caveats: 'C3 workstream — relationship with the account custody contract is TBD; open questions include how alice.passport.night is linked and proven, whether one account may maintain multiple DIDs, and whether DID-facing behaviour is embedded in Passport or delegated to Identity Wallet. Method-name negotiation with IAMX over did:midnight remains a live sub-question. k=19 proof-server cost on some did-core examples is a known performance bound to design around. Stub — pending second-pass review.',
       relatedCanvases: ['C3'],
     },
     'name-service': {
       kind: 'Contract · Midnight chain',
       label: 'Name Service',
-      status: 'open',
+      status: 'known',
       body: 'Resolves alice.passport.night to an account custody address. Decided 2026/07: the deployed upstream name service (MIP-0007), with free first-come-first-served sub-domains under the Foundation-held passport.night; if names are exposed as stable URLs, C3 may link them from DID Documents via alsoKnownAs.',
-      caveats: 'Open whether this is a separate Compact contract Passport authors, or whether we adopt an upstream name service. The relationship between account custody and the name service (does account reference name? does name resolve to account?) is TBD, as is the proof model for showing that a DID subject actually controls the linked name. Stub — pending second-pass review.',
+      caveats: 'Passport authors no name contract — the upstream service is adopted as deployed, and it now carries the contract-owned-names authorisation arm a multi-key account needs (availability-gated on cross-contract calls). Remaining Passport-side work is the sub-domain layer: issuance mechanics, squat resistance, and reserved-names policy. The proof model for showing that a DID subject controls the linked name stays a C3 question.',
       relatedCanvases: ['C2'],
     },
   };
@@ -1586,7 +1587,7 @@
 
     const caveatsHtml = m.caveats ? `
       <section class="panel-section">
-        <h4>What's open · caveats</h4>
+        <h4>Open questions · caveats</h4>
         <p>${escapeHtml(m.caveats)}</p>
       </section>
     ` : '';

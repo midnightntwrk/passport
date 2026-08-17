@@ -1156,6 +1156,7 @@
   <a class="navbar-brand" href="index.html">Midnight Passport <span class="brand-tag">· ARC</span></a>
   <div class="navbar-links">
     <a href="index.html" class="active">Overview</a>
+    <a href="how-it-works.html">How it works</a>
     <a href="parallelisation.html">Parallelisation</a>
     <a href="architecture.html">Architecture</a>
     <a href="demo.html">Demo</a>
@@ -1192,7 +1193,7 @@
       <header class="section-head">
         <div class="section-kind">At a glance</div>
         <h2>Where Passport stands</h2>
-        <p>Two problem statements are merged upstream (MPS-0018, MPS-0027), the account keystone they recommend is drafted as two reviewable standards, and every load-bearing claim below is backed by an experiment run against a real node. The map shows how much of the design space is locked; <a href="#progress">the timeline</a> shows how it got there and what remains.</p>
+        <p>Two problem statements are merged upstream (MPS-0018, MPS-0027), the account keystone they recommend is published upstream as MIP-0012 and MIP-0013 with a reference implementation whose conformance suites pass, and every load-bearing claim below is backed by an experiment run against a real node. The map shows how much of the design space is locked; <a href="#progress">the timeline</a> shows how it got there and what remains.</p>
       </header>
       <div class="glance-stats" id="glanceStats"></div>
       <div class="glance-map" id="glanceMap"></div>
@@ -1401,7 +1402,7 @@
       <header class="section-head">
         <div class="section-kind">Section 5</div>
         <h2>Progress to date — and what remains</h2>
-        <p>What has moved from open question to evidence, and from evidence to drafted standard. Every entry is backed by an artefact — experiments run against real nodes, problem statements merged upstream in the Midnight improvement-proposal repository, and MIP drafts that make the validated patterns normative. The headline result so far: the account keystone recommended by MPS-0018 is drafted as two reviewable standards, each resting on end-to-end evidence.</p>
+        <p>What has moved from open question to evidence, and from evidence to published standard. Every entry is backed by an artefact — experiments run against real nodes, problem statements merged upstream in the Midnight improvement-proposal repository, and MIPs that make the validated patterns normative. The headline result so far: the account keystone recommended by MPS-0018 is published upstream as MIP-0012 and MIP-0013, each resting on end-to-end evidence, with a reference implementation that passes both conformance suites.</p>
       </header>
       <ol class="progress-timeline" id="progressTimeline"></ol>
 
@@ -1419,14 +1420,14 @@
       <header class="section-head">
         <div class="section-kind">Section 6</div>
         <h2>The delivery</h2>
-        <p>Feature-complete v1.0 is a body of deliverables — ratified MIPs, formal-methods sign-off on critical components, cryptographer reviews. The October demo is an MVP that consumes those deliverables early, built with partners. Where a deliverable isn't yet mature, the MVP picks the simplest workable mechanism and records a migration plan back to the principled spec. Symbiotic — same primitives evolve in lockstep, MVP findings push back into deliverables, and deliverable drafts inform MVP choices.</p>
+        <p>Feature-complete v1.0 is a body of deliverables — ratified MIPs, formal-methods sign-off on critical components, cryptographer reviews. The October demo is an MVP that consumes those deliverables early, built with partners. Where a deliverable is not yet mature, the MVP picks the simplest workable mechanism and records a migration plan back to the principled spec. Symbiotic — same primitives evolve in lockstep, MVP findings push back into deliverables, and deliverable drafts inform MVP choices.</p>
       </header>
 
       <div class="delivery-grid">
         <a class="delivery-card" href="demo.html">
           <div class="delivery-kind">October 2026</div>
           <h3 class="delivery-title">The demo</h3>
-          <p class="delivery-summary">An end-to-end Passport account, on a screen, with a recovery sad-path. Six phases (May–October), built with partners against the components that exist by then. Pragmatic mechanism choices carry a migration plan to the principled spec.</p>
+          <p class="delivery-summary">An end-to-end Passport account, on a screen, with a recovery sad-path. Six phases running to October, built against the components that exist by then. Pragmatic mechanism choices carry a migration plan to the principled spec.</p>
           <span class="delivery-open">Open<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span>
         </a>
 
@@ -1454,11 +1455,11 @@
             <div class="cx-roles">
               <div class="cx-role cx-role-demo">
                 <span class="cx-role-label">MVP</span>
-                <p class="cx-role-text">Deploys one Compact contract per account. Mirrors the custody-feasibility experiment; on-chain by Phase A.</p>
+                <p class="cx-role-text">Deploys one Compact contract per account. Mirrors the reference implementation; on-chain by Phase A.</p>
               </div>
               <div class="cx-role cx-role-std">
                 <span class="cx-role-label">v1.0 spec</span>
-                <p class="cx-role-text">Drafted as two building blocks: <a href="standards.html#MIP-3A">MIP-3A</a> (contract custody, stateless shielded) and <a href="standards.html#MIP-3B">MIP-3B</a> (multi-key authorisation). Formal-methods sign-off post-ratification.</p>
+                <p class="cx-role-text">Published upstream as two building blocks: <a href="standards.html#MIP-0012">MIP-0012</a> (contract custody, stateless shielded) and <a href="standards.html#MIP-0013">MIP-0013</a> (multi-key authorisation), with a reference implementation. Formal-methods sign-off post-ratification.</p>
               </div>
             </div>
           </article>
@@ -1475,7 +1476,7 @@
               </div>
               <div class="cx-role cx-role-std">
                 <span class="cx-role-label">v1.0 spec</span>
-                <p class="cx-role-text">Per-device Schnorr-on-Jubjub drafted as <a href="standards.html#MIP-3B">MIP-3B</a> — same verification equation the MVP committee satisfies. Key derivation adopted upstream from <a href="standards.html#MIP-0003">MIP-0003</a>.</p>
+                <p class="cx-role-text">Per-device Schnorr-on-Jubjub published upstream as <a href="standards.html#MIP-0013">MIP-0013</a> — same verification equation the MVP committee satisfies. Key derivation adopted upstream from <a href="standards.html#MIP-0003">MIP-0003</a>.</p>
               </div>
             </div>
           </article>
@@ -1588,14 +1589,14 @@
 
   const statsHost = document.getElementById('glanceStats');
   if (statsHost) {
-    const mipDrafts = (data.mips || []).filter(m => m.kind === 'mip' && /^Drafted/.test(m.status || '')).length;
+    const mipsUpstream = (data.mips || []).filter(m => m.kind === 'mip' && /^Published/.test(m.status || '')).length;
     const expDone = (data.experiments || []).filter(e => /^Complete/.test(e.status || '')).length;
     const tiles = [
-      { v: groups.specified.length, label: 'Specified — drafted standards', dot: 's-specified' },
+      { v: groups.specified.length, label: 'Specified — published standards', dot: 's-specified' },
       { v: groups.decided.length,   label: 'Decided — spec pending',        dot: 's-decided' },
       { v: groups.open.length,      label: 'Open decisions',                dot: 's-open' },
       { v: groups.design.length,    label: 'In design',                     dot: 's-neutral' },
-      { v: mipDrafts,               label: 'MIP drafts (the keystone)',     dot: 's-neutral' },
+      { v: mipsUpstream,            label: 'MIPs published upstream (the keystone)', dot: 's-neutral' },
       { v: expDone,                 label: 'Experiments complete',          dot: 's-neutral' },
     ];
     statsHost.innerHTML = tiles.map(t => `
