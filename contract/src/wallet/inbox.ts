@@ -150,7 +150,9 @@ export function openInboxEntry(encSecretKey: Uint8Array, entry: Uint8Array): Pla
     const tag = b.subarray(46, 62);
     const ct = b.subarray(62, 62 + PLAINTEXT_SIZE);
     const key = deriveAeadKey(x25519(encSecretKey, ephPub));
-    const decipher = createDecipheriv('aes-256-gcm', key, nonce);
+    // authTagLength pins the full 16-byte tag; the fixed entry layout already
+    // guarantees it, this makes the invariant explicit to the cipher itself.
+    const decipher = createDecipheriv('aes-256-gcm', key, nonce, { authTagLength: 16 });
     decipher.setAAD(b.subarray(0, 2));
     decipher.setAuthTag(tag);
     const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
