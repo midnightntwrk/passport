@@ -47,6 +47,14 @@ nothing about the challenge: it must also decode `clientDataJSON`, confirm
 SHA-256 of the expected relying-party identifier. Only then is the signature
 bound to this specific challenge from this specific origin.
 
+Two relations consume the capture. `P256EcdsaWebAuthn` verifies the
+signature over the envelope and leaves those binding checks to the proof's
+consumer (the `passkey` subcommand performs them natively on the public
+inputs). `P256EcdsaWebAuthnEnvelope` performs every one of them inside the
+circuit — clientDataJSON and authenticatorData become witnesses, and the
+proof's public inputs shrink to the public key, the rpIdHash, and the
+challenge.
+
 ## Trust model of vector.json
 
 The JSON carries only raw captured bytes: public key coordinates, the DER

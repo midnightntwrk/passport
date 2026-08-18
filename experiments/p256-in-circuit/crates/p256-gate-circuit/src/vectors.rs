@@ -40,6 +40,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     ed25519::ED25519_ENC_LEN,
+    envelope::{base64url_encode_challenge, CLIENT_DATA_PREFIX},
     jubjub_schnorr::JubjubSchnorrSignature,
     relations::{AUTHENTICATOR_DATA_LEN, DIGEST_LEN, F},
     witness_preimage::{pack_secret, SECRET_LEN},
@@ -233,6 +234,78 @@ pub fn generated_webauthn() -> WebAuthnVector {
         r,
         s,
     }
+}
+
+/// A whole-envelope WebAuthn vector matching the instance/witness split of
+/// `P256EcdsaWebAuthnEnvelope`.
+#[derive(Clone, Debug)]
+pub struct WebAuthnEnvelopeVector {
+    /// The P-256 public key.
+    pub pk: P256,
+    /// SHA-256 of the relying-party identifier.
+    pub rp_id_hash: [u8; DIGEST_LEN],
+    /// The 32-byte challenge.
+    pub challenge: [u8; DIGEST_LEN],
+    /// The full clientDataJSON bytes (witness).
+    pub client_data_json: Vec<u8>,
+    /// The 37-byte authenticator data (witness).
+    pub authenticator_data: [u8; AUTHENTICATOR_DATA_LEN],
+    /// Signature scalar `r`.
+    pub r: Fq,
+    /// Signature scalar `s`.
+    pub s: Fq,
+}
+
+/// Fixed 32-byte challenge for the whole-envelope vector. Test-only
+/// material.
+pub const ENVELOPE_CHALLENGE: [u8; DIGEST_LEN] =
+    hex!("c0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf");
+
+/// Deterministic whole-envelope WebAuthn vector: a complete clientDataJSON
+/// (the fixed prefix, the base64url-encoded challenge, an origin tail) and
+/// authenticator data with flags 0x05 (user present + user verified),
+/// signed over `SHA-256(authenticator_data || SHA-256(client_data_json))`.
+pub fn generated_webauthn_envelope() -> WebAuthnEnvelopeVector {
+    let rp_id_hash: [u8; DIGEST_LEN] = Sha256::digest(b"p256-gate.example").into();
+    let challenge = ENVELOPE_CHALLENGE;
+
+    let mut client_data_json = Vec::new();
+    client_data_json.extend_from_slice(CLIENT_DATA_PREFIX);
+    client_data_json.extend_from_slice(&base64url_encode_challenge(&challenge));
+    client_data_json.extend_from_slice(br#"","origin":"https://p256-gate.example"}"#);
+
+    let mut authenticator_data = [0u8; AUTHENTICATOR_DATA_LEN];
+    authenticator_data[..32].copy_from_slice(&rp_id_hash);
+    authenticator_data[32] = 0x05;
+    authenticator_data[33..].copy_from_slice(&1u32.to_be_bytes());
+
+    let (pk, r, s) =
+        sign_envelope_deterministic(&GENERATED_SK_BYTES, &authenticator_data, &client_data_json);
+    WebAuthnEnvelopeVector {
+        pk,
+        rp_id_hash,
+        challenge,
+        client_data_json,
+        authenticator_data,
+        r,
+        s,
+    }
+}
+
+/// Signs the WebAuthn envelope `authenticator_data || SHA-256(client_data)`
+/// deterministically, returning `(pk, r, s)`. Used by the envelope vector
+/// and by the negative tests that need a re-signed tampered envelope.
+pub fn sign_envelope_deterministic(
+    sk_bytes: &[u8; 32],
+    authenticator_data: &[u8; AUTHENTICATOR_DATA_LEN],
+    client_data_json: &[u8],
+) -> (P256, Fq, Fq) {
+    let client_data_hash: [u8; DIGEST_LEN] = Sha256::digest(client_data_json).into();
+    let mut signed_bytes = Vec::with_capacity(AUTHENTICATOR_DATA_LEN + DIGEST_LEN);
+    signed_bytes.extend_from_slice(authenticator_data);
+    signed_bytes.extend_from_slice(&client_data_hash);
+    let hash: [u8; DIGEST_LEN] = Sha256::digest(&signed_bytes).into();
+    sign_prehash_deterministic(sk_bytes, &hash)
 }
 
 // ---------------------------------------------------------------------------

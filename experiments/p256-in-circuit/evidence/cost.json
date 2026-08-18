@@ -105,5 +105,19 @@
     "point_sets": 4,
     "rows": 32686,
     "table_rows": 30979
+  },
+  "webauthn_envelope": {
+    "advice_columns": 9,
+    "column_queries": 44,
+    "estimated_proof_size_bytes": 4064,
+    "fixed_columns": 54,
+    "lookups": 3,
+    "max_deg": 5,
+    "nb_unusable_rows": 10,
+    "optimal_k": 16,
+    "permutations": 12,
+    "point_sets": 4,
+    "rows": 36466,
+    "table_rows": 61699
   }
 }

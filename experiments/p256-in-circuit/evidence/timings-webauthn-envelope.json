@@ -1,0 +1,27 @@
+[
+  {
+    "environment": {
+      "arch": "aarch64",
+      "cpu": "Apple M4 Max",
+      "memory_bytes": "68719476736",
+      "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
+      "os": "macos",
+      "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)"
+    },
+    "k": 16,
+    "k_override": null,
+    "proof_bytes": 4064,
+    "prove_ms": [
+      1096,
+      1231,
+      1234
+    ],
+    "relation": "webauthn-envelope",
+    "runs": 3,
+    "setup_pk_ms": 447,
+    "setup_vk_ms": 730,
+    "srs_load_ms": 67,
+    "timestamp_utc": "2026-08-18T13:32:10Z",
+    "verify_ms": 2
+  }
+]

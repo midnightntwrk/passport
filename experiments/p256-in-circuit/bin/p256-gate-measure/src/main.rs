@@ -38,15 +38,17 @@ use p256::{
 };
 use p256_gate_circuit::{
     ed25519::Ed25519Verify,
+    envelope::{P256EcdsaWebAuthnEnvelope, MIN_CLIENT_DATA_LEN},
     jubjub_schnorr::JubjubSchnorrVerify,
     relations::{
         P256EcdsaPreHashed, P256EcdsaPrivatePk, P256EcdsaWebAuthn, AUTHENTICATOR_DATA_LEN, F,
     },
     vectors::{
         cavp_prehashed, dalek_verify_strict, generated_ed25519, generated_jubjub_schnorr,
-        generated_prehashed, generated_webauthn, generated_witness_preimage, high_s_twin,
-        jubjub_schnorr_verify, point_from_xy_bytes, point_to_xy_bytes, scalar_from_be_bytes,
-        scalar_to_be_bytes, witness_preimage_verify, wrong_pk, PreHashedVector, GENERATED_MESSAGE,
+        generated_prehashed, generated_webauthn, generated_webauthn_envelope,
+        generated_witness_preimage, high_s_twin, jubjub_schnorr_verify, point_from_xy_bytes,
+        point_to_xy_bytes, scalar_from_be_bytes, scalar_to_be_bytes, witness_preimage_verify,
+        wrong_pk, PreHashedVector, GENERATED_MESSAGE,
     },
     witness_preimage::{PoseidonPreimage, Sha256Preimage},
     wrapper::{
@@ -131,6 +133,7 @@ enum Command {
 enum RelationKind {
     Prehashed,
     Webauthn,
+    WebauthnEnvelope,
     Privatepk,
 }
 
@@ -139,6 +142,7 @@ impl RelationKind {
         match self {
             RelationKind::Prehashed => "prehashed",
             RelationKind::Webauthn => "webauthn",
+            RelationKind::WebauthnEnvelope => "webauthn-envelope",
             RelationKind::Privatepk => "privatepk",
         }
     }
@@ -351,6 +355,13 @@ fn cmd_mock(evidence_dir: &Path) -> Result<()> {
         "environment": environment_json(),
         "prehashed": relation_cost_json(&P256EcdsaPreHashed, "prehashed"),
         "webauthn": relation_cost_json(&P256EcdsaWebAuthn, "webauthn"),
+        "webauthn_envelope": relation_cost_json(
+            &P256EcdsaWebAuthnEnvelope::new(
+                generated_webauthn_envelope().client_data_json.len(),
+                true,
+            ),
+            "webauthn_envelope",
+        ),
         "privatepk": relation_cost_json(&P256EcdsaPrivatePk, "privatepk"),
         "ed25519": relation_cost_json(&Ed25519Verify, "ed25519"),
         "jubjub_schnorr": relation_cost_json(&JubjubSchnorrVerify, "jubjub_schnorr"),
@@ -517,6 +528,22 @@ fn cmd_prove(
                     vector.client_data_hash,
                 ),
                 &(vector.r, vector.s),
+                runs,
+                k,
+            )?
+        }
+        RelationKind::WebauthnEnvelope => {
+            let vector = generated_webauthn_envelope();
+            let relation = P256EcdsaWebAuthnEnvelope::new(vector.client_data_json.len(), true);
+            timed_prove_runs(
+                &relation,
+                &(vector.pk, vector.rp_id_hash, vector.challenge),
+                &(
+                    vector.client_data_json,
+                    vector.authenticator_data,
+                    vector.r,
+                    vector.s,
+                ),
                 runs,
                 k,
             )?
@@ -948,6 +975,58 @@ fn cmd_passkey(evidence_dir: &Path, input_path: &Path, rp_id: &str) -> Result<()
         )
     };
 
+    // Whole-envelope run: the same assertion proved through
+    // P256EcdsaWebAuthnEnvelope, where clientDataJSON and authenticatorData
+    // are witnesses and the challenge / ceremony-type / rpIdHash / flags
+    // checks all happen in-circuit. Requires the 37-byte (no-extensions)
+    // authenticator data shape and a client data at least as long as
+    // prefix + encoded challenge + closing quote.
+    let envelope = if authenticator_data.len() == AUTHENTICATOR_DATA_LEN
+        && client_data_json.len() >= MIN_CLIENT_DATA_LEN
+    {
+        let auth_data: [u8; AUTHENTICATOR_DATA_LEN] = authenticator_data
+            .as_slice()
+            .try_into()
+            .expect("length checked");
+        // Demand user verification exactly when the assertion carries it, so
+        // the run demonstrates the strictest policy this assertion can meet.
+        let require_uv = auth_data[32] & 0x04 != 0;
+        let relation = P256EcdsaWebAuthnEnvelope::new(client_data_json.len(), require_uv);
+        println!(
+            "whole-envelope run: P256EcdsaWebAuthnEnvelope over {} clientDataJSON bytes \
+             (require_uv = {require_uv}) — challenge, ceremony type, rpIdHash, and flags \
+             checked in-circuit",
+            client_data_json.len(),
+        );
+        let report = timed_prove_runs(
+            &relation,
+            &(pk, expected_rp_id_hash, challenge),
+            &(client_data_json.clone(), auth_data, r, s),
+            1,
+            None,
+        )?;
+        json!({
+            "relation": "webauthn-envelope",
+            "client_data_len": client_data_json.len(),
+            "require_user_verification": require_uv,
+            "k": report.k,
+            "srs_load_ms": report.srs_load_ms,
+            "setup_vk_ms": report.setup_vk_ms,
+            "setup_pk_ms": report.setup_pk_ms,
+            "prove_ms": report.prove_ms,
+            "verify_ms": report.verify_ms,
+            "proof_bytes": report.proof_bytes,
+            "outcome": "verified in-circuit (envelope checks in-circuit)",
+        })
+    } else {
+        println!(
+            "whole-envelope run skipped: authenticator data is {} bytes, client data {} bytes",
+            authenticator_data.len(),
+            client_data_json.len(),
+        );
+        Json::Null
+    };
+
     let record = json!({
         "timestamp_utc": utc_timestamp(),
         "format": input.format,
@@ -974,6 +1053,7 @@ fn cmd_passkey(evidence_dir: &Path, input_path: &Path, rp_id: &str) -> Result<()
         "verify_ms": report.verify_ms,
         "proof_bytes": report.proof_bytes,
         "outcome": "verified in-circuit",
+        "envelope": envelope,
         "environment": environment_json(),
     });
     write_pretty_json(&evidence_dir.join("passkey-run.json"), &record)

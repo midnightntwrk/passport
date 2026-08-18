@@ -29,6 +29,16 @@ first-class P-256 support in Compact.
     a WebAuthn authenticator signs when no extensions are present.
   - `P256EcdsaPrivatePk`: the public key is a witness (still constrained
     on-curve); only the message hash is public.
+  - `P256EcdsaWebAuthnEnvelope`: the whole-envelope relation. clientDataJSON
+    and authenticatorData are witnesses; the circuit checks the fixed
+    `{"type":"webauthn.get","challenge":"` prefix (pinning the ceremony
+    type), the base64url-encoded challenge and its closing quote, the
+    rpIdHash, and the flags policy (user presence, optionally user
+    verification), computes both SHA-256 layers, and verifies the
+    signature. The public interface is exactly what an account contract
+    knows: public key, rpIdHash, 32-byte challenge — so the proof alone
+    states "this passkey authorised exactly this challenge for this
+    relying party".
 - `crates/p256-gate-circuit` also carries the recursion leg (see the
   dedicated section below): two further inner relations
   (`Ed25519Verify`, ported from midnight-zk's `cardano_signature.rs`
@@ -63,7 +73,12 @@ high-S malleated twin `(r, n - s)` of the (low-S normalised) valid signature
 also satisfies the circuit (documented ECDSA malleability, feeding the low-S
 policy discussion in the MIP); the WebAuthn-shaped and private-pk variants
 accept their valid vectors and reject tampered authenticator data and a
-wrong hash respectively.
+wrong hash respectively. The whole-envelope relation accepts its valid
+vector and rejects: a different public challenge, a tampered ceremony type
+even when the tampered envelope is re-signed (isolating the prefix check
+from the signature check), an assertion made for a different relying party,
+flags without user verification under a require-UV relation (again
+re-signed), and a flipped signature scalar.
 
 The recursion-leg tests (`tests/mock.rs` additions and `tests/wrapper.rs`)
 additionally check: valid Ed25519 and JubJub Schnorr vectors are accepted
@@ -239,7 +254,17 @@ reported by the cost model (median shown).
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `P256EcdsaPreHashed` | 15 | 28,953 | 402 ms | 229 ms | 0.479 s | 1 ms | 3,664 B |
 | `P256EcdsaWebAuthn` | 15 | 32,686 | 416 ms | 256 ms | 0.542 s | 2 ms | 4,064 B |
+| `P256EcdsaWebAuthnEnvelope`* | 16 | 36,466 | 730 ms | 447 ms | 1.231 s | 2 ms | 4,064 B |
 | `P256EcdsaPrivatePk` | 15 | 28,951 | 400 ms | 231 ms | 0.493 s | 1 ms | 3,664 B |
+
+\* Whole-envelope relation measured 2026/08/18 over a 118-byte synthetic
+clientDataJSON; the whole envelope costs about 3,800 rows over
+`P256EcdsaWebAuthn`, which crosses the 2^15 row boundary and lands at
+k = 16. The clientDataJSON byte length is a structural parameter (the
+verifying key is specific to one length); real lengths vary only with the
+origin string and per-browser extras, so a deployment pins one length per
+supported client shape, or graduates to the stdlib's variable-length
+SHA-256 gadget (`sha2_256_varlen`) as the follow-up measurement.
 
 For context, the upstream secp256k1 + Keccak example
 (`zk_stdlib/examples/ethereum_signature.rs`) runs at k = 15 on this same
@@ -256,10 +281,19 @@ midnight-zk rev `cd2c27b2659de157409a9b96dba0dbaf1218f00b`. Raw numbers in
 WebAuthn assertion from an Apple platform authenticator (flags `0x1d`:
 user present, user verified, backup eligible, and backed up), captured with
 the `webauthn/` harness and committed as `webauthn/vector.json`. The
-assertion verified in-circuit through `P256EcdsaWebAuthn` at k = 15 in
-544 ms (4,064 byte proof, 2 ms verification), with the challenge, ceremony
-type, and rpIdHash bindings all checked. Notably, the authenticator emitted
-a high-S signature; raw ECDSA accepts both forms, so any low-S-only policy
-in a future standard would require client-side normalisation to remain
-compatible with real platform authenticators. The credential is a
-throwaway scoped to `localhost`.
+assertion verified in-circuit twice:
+
+- through `P256EcdsaWebAuthn` at k = 15 in 644 ms (4,064 byte proof, 2 ms
+  verification), with the challenge, ceremony-type, and rpIdHash bindings
+  checked natively on the public inputs by the harness; and
+- through `P256EcdsaWebAuthnEnvelope` at k = 16 in 1.08 s (4,064 byte
+  proof, 2 ms verification), with the full 134-byte clientDataJSON and the
+  authenticator data as witnesses and every binding — challenge encoding,
+  ceremony type, rpIdHash, user presence, and user verification — enforced
+  inside the circuit. The proof's public inputs are only the public key,
+  the rpIdHash, and the challenge: the account-contract-shaped statement.
+
+Notably, the authenticator emitted a high-S signature; raw ECDSA accepts
+both forms, so any low-S-only policy in a future standard would require
+client-side normalisation to remain compatible with real platform
+authenticators. The credential is a throwaway scoped to `localhost`.

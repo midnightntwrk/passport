@@ -13,17 +13,21 @@ use midnight_zk_stdlib::{optimal_k, MidnightCircuit, Relation};
 use p256::elliptic_curve::scalar::IsHigh;
 use p256_gate_circuit::{
     ed25519::Ed25519Verify,
+    envelope::P256EcdsaWebAuthnEnvelope,
     jubjub_schnorr::JubjubSchnorrVerify,
     relations::{P256EcdsaPreHashed, P256EcdsaPrivatePk, P256EcdsaWebAuthn},
     vectors::{
         cavp_prehashed, dalek_verify_strict, generated_ed25519, generated_jubjub_schnorr,
-        generated_prehashed, generated_webauthn, generated_witness_preimage, high_s_twin,
-        jubjub_schnorr_verify, rustcrypto_verify, scalar_from_be_bytes, scalar_to_be_bytes,
+        generated_prehashed, generated_webauthn, generated_webauthn_envelope,
+        generated_witness_preimage, high_s_twin, jubjub_schnorr_verify, rustcrypto_verify,
+        scalar_from_be_bytes, scalar_to_be_bytes, sign_envelope_deterministic,
         witness_preimage_verify, wrong_ed25519_pk_bytes, wrong_pk, Ed25519Vector,
-        JubjubSchnorrVector, PreHashedVector, WitnessPreimageVector,
+        JubjubSchnorrVector, PreHashedVector, WebAuthnEnvelopeVector, WitnessPreimageVector,
+        GENERATED_SK_BYTES,
     },
     witness_preimage::{PoseidonPreimage, Sha256Preimage},
 };
+use sha2::Digest;
 
 /// Runs the MockProver on `relation` for the given instance/witness pair.
 /// Returns `Err` if synthesis fails or any constraint is unsatisfied.
@@ -273,6 +277,128 @@ fn private_pk_rejects_wrong_hash() {
         )
         .is_err(),
         "wrong hash must not satisfy the private-pk circuit"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Whole-envelope relation (P256EcdsaWebAuthnEnvelope)
+// ---------------------------------------------------------------------------
+
+/// The envelope relation for the generated vector's clientDataJSON length,
+/// with user verification required (the vector's flags carry UV).
+fn envelope_relation() -> P256EcdsaWebAuthnEnvelope {
+    let vector = generated_webauthn_envelope();
+    P256EcdsaWebAuthnEnvelope::new(vector.client_data_json.len(), true)
+}
+
+fn envelope_k() -> u32 {
+    static K: OnceLock<u32> = OnceLock::new();
+    *K.get_or_init(|| optimal_k(&envelope_relation()))
+}
+
+fn check_envelope(vector: &WebAuthnEnvelopeVector) -> Result<(), String> {
+    mock_check(
+        &envelope_relation(),
+        envelope_k(),
+        &(vector.pk, vector.rp_id_hash, vector.challenge),
+        &(
+            vector.client_data_json.clone(),
+            vector.authenticator_data,
+            vector.r,
+            vector.s,
+        ),
+    )
+}
+
+// (m) A valid whole-envelope vector satisfies the relation: prefix,
+// challenge encoding, rpIdHash, flags, both hashes, and the signature all
+// verified in-circuit.
+#[test]
+fn envelope_accepts_valid_assertion() {
+    let vector = generated_webauthn_envelope();
+    check_envelope(&vector).expect("valid whole-envelope vector must satisfy the circuit");
+}
+
+// (n) A different public challenge must be rejected even though the
+// witnessed envelope is genuinely signed: the challenge binding is the
+// constraint that fails, not the signature.
+#[test]
+fn envelope_rejects_wrong_challenge() {
+    let mut vector = generated_webauthn_envelope();
+    vector.challenge[0] ^= 0x01;
+    assert!(
+        check_envelope(&vector).is_err(),
+        "a different challenge must not satisfy the circuit"
+    );
+}
+
+// (o) A tampered ceremony type must be rejected even when the tampered
+// envelope is RE-SIGNED (so the signature constraint alone would pass):
+// this isolates the fixed-prefix check, which is what stops a
+// create-ceremony attestation passing as an assertion.
+#[test]
+fn envelope_rejects_tampered_ceremony_type() {
+    let mut vector = generated_webauthn_envelope();
+    // {"type":"webauthn.get" -> {"type":"webauthn.gew" (same length).
+    vector.client_data_json[20] = b'w';
+    let (pk, r, s) = sign_envelope_deterministic(
+        &GENERATED_SK_BYTES,
+        &vector.authenticator_data,
+        &vector.client_data_json,
+    );
+    vector.pk = pk;
+    vector.r = r;
+    vector.s = s;
+    assert!(
+        check_envelope(&vector).is_err(),
+        "a tampered ceremony type must not satisfy the circuit even re-signed"
+    );
+}
+
+// (p) An assertion made for a different relying party must be rejected:
+// the witnessed authenticatorData is internally consistent and the
+// signature over it is valid, but its rpIdHash differs from the public
+// expectation.
+#[test]
+fn envelope_rejects_wrong_relying_party() {
+    let mut vector = generated_webauthn_envelope();
+    vector.rp_id_hash = sha2::Sha256::digest(b"other.example").into();
+    assert!(
+        check_envelope(&vector).is_err(),
+        "an assertion for a different relying party must not satisfy the circuit"
+    );
+}
+
+// (q) Flags without user verification must be rejected by a relation built
+// with require_user_verification, even re-signed: the flag-bit constraint
+// is what fails.
+#[test]
+fn envelope_rejects_missing_user_verification() {
+    let mut vector = generated_webauthn_envelope();
+    vector.authenticator_data[32] = 0x01; // user present only
+    let (pk, r, s) = sign_envelope_deterministic(
+        &GENERATED_SK_BYTES,
+        &vector.authenticator_data,
+        &vector.client_data_json,
+    );
+    vector.pk = pk;
+    vector.r = r;
+    vector.s = s;
+    assert!(
+        check_envelope(&vector).is_err(),
+        "flags without UV must not satisfy a require-UV relation"
+    );
+}
+
+// (r) A flipped signature scalar must be rejected: the ECDSA body is the
+// same as the other relations'.
+#[test]
+fn envelope_rejects_flipped_s() {
+    let mut vector = generated_webauthn_envelope();
+    vector.s = flip_low_bit(&vector.s);
+    assert!(
+        check_envelope(&vector).is_err(),
+        "a flipped s must not satisfy the circuit"
     );
 }
 

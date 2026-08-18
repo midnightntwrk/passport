@@ -18,6 +18,16 @@
 //!   public key itself is part of the witness (privacy variant: the verifying
 //!   key set stays private).
 //!
+//! A fourth relation closes the challenge binding entirely in-circuit:
+//!
+//! * [`envelope::P256EcdsaWebAuthnEnvelope`]: `clientDataJSON` and
+//!   `authenticatorData` are witnesses; the circuit checks the fixed prefix
+//!   (pinning the ceremony type), the base64url-encoded challenge and its
+//!   closing quote, the rpIdHash, and the flags policy, computes both
+//!   SHA-256 layers, and verifies the signature. The public interface is
+//!   exactly what an account contract knows: public key, rpIdHash,
+//!   challenge.
+//!
 //! All three verify textbook ECDSA (SEC 1, version 2.0, section 4.1.4):
 //! either of `(r, s)` and `(r, n - s)` satisfies the relation. This
 //! malleability is documented by an explicit test and feeds the low-S policy
@@ -53,6 +63,7 @@
 //! pairing check to the native side; see the `wrapper` module docs).
 
 pub mod ed25519;
+pub mod envelope;
 pub mod jubjub_schnorr;
 pub mod relations;
 pub mod vectors;

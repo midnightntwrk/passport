@@ -39,7 +39,7 @@ pub const DIGEST_LEN: usize = 32;
 /// scalar. The conversion reduces modulo the group order `n`, which matches
 /// the ECDSA specification: `z = int(hash) mod n` (SEC 1 truncates to the
 /// bit length of `n`, which is 256 for P-256, then reduces).
-fn digest_to_scalar(
+pub(crate) fn digest_to_scalar(
     std_lib: &ZkStdLib,
     layouter: &mut impl Layouter<F>,
     digest: &[AssignedByte<F>],
@@ -65,7 +65,7 @@ fn digest_to_scalar(
 /// 2. `R = (z * s^{-1}) * G + (r * s^{-1}) * pk` is not the identity.
 /// 3. `R.x mod n == r` (the mod-n reduction on recomposition is intended,
 ///    per the ECDSA spec).
-fn ecdsa_assert_valid(
+pub(crate) fn ecdsa_assert_valid(
     std_lib: &ZkStdLib,
     layouter: &mut impl Layouter<F>,
     pk: &AssignedPoint,
