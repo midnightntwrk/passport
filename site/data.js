@@ -562,7 +562,7 @@ window.PASSPORT_DATA = {
     {
       id: 'C16', name: 'Wallet local storage', category: 'wallet',
       serves: ['P1', 'P3', 'P6'],
-      outcome: 'Where the wallet persists private state on the user\'s device — wrapped seed (if applicable), per-device key material, sync state, name ownership cache, attestations, metadata. Includes the encryption envelope.',
+      outcome: 'Where the wallet persists private state on the user\'s device — per-device key material, the wallet-local coin store, sync state, name ownership cache, attestations, metadata. Includes the encryption envelope. No seed exists to store: device keys derive from the passkey (C9), and assets live in the account contract (C4).',
       hard_deps: ['C9'],
       associations: ['C5', 'C7', 'C17'],
       alternatives: [
