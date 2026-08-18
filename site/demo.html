@@ -410,7 +410,7 @@
       <p class="subtitle">One account is one contract on the Midnight ledger. No seed phrase exists anywhere: each device holds a secret derived from its passkey, the chain holds only hashes and proofs, and losing every device does not lose the account. This page shows the whole system on one screen, walks the account lifecycle in six steps, and ends with what the <a href="#demo">October demo</a> puts on a screen.</p>
 
       <div class="symbiosis-banner">
-        Parallel delivery — see <a href="standards.html">Standards &amp; v1.0 →</a>
+        The demo and the standards are one body of work at two speeds — the standards side lives at <a href="standards.html">Standards &amp; v1.0 →</a>
       </div>
     </div>
   </section>
@@ -558,7 +558,7 @@
             <div class="crosses"><b>Crosses</b> proofs · the scope is public, the grant secret is not</div>
           </div>
         </div>
-        <div class="step">
+        <div class="step" id="recover">
           <div class="step-n">6</div>
           <div>
             <h3>Recover</h3>
@@ -626,7 +626,7 @@
       <ul class="ships-list">
         <li><b>Passkey login<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>First visit registers a passkey (Face ID, Touch ID, Windows Hello). Subsequent visits authenticate biometrically. No seed phrase shown at any point. The demo&rsquo;s passkey authenticates to a managed signing service; the v1.0 path derives the device key on-device from the passkey.</span></li>
         <li><b>Name registration</b><span>User registers <code>alice.passport.night</code> against the deployed upstream name service (MIP-0007); on-chain confirmation visible. Name uniqueness enforced at the registry.</span></li>
-        <li><b>Wallet view<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>Three role addresses (Shielded, Night, Dust) with balances synced via view key and a hosted indexer. The v1.0 path is the substitutable multi-provider indexer model.</span></li>
+        <li><b>Wallet view<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>Three role addresses (Shielded, Night, and Dust — Midnight&rsquo;s fee resource) with balances synced via view key and a hosted indexer. The v1.0 path is the substitutable multi-provider indexer model.</span></li>
         <li><b>Signing primitive<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>User signs arbitrary data and a Night transfer through the managed committee; the contract verifies the same equation either way. The cross-implementation evidence (TypeScript signer ↔ Rust verifier) backs the standards path, not the demo&rsquo;s signer.</span></li>
         <li><b>Function-call key grants</b><span>User issues, rotates, and revokes scoped function-call keys for dApp authorisation. Multi-device peer behaviour is deferred.</span></li>
         <li><b>Sign-in with Passport</b><span>A pseudo third-party app requests scoped access; user approves with biometric; transaction signed; function-call key issued.</span></li>
@@ -680,7 +680,7 @@
 </aside>
 
 <footer class="landing-footer">
-  <span>ARC · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="standards.html">standards</a></span>
+  <span>ARC (Advanced Research and Creativity) · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="standards.html">standards</a></span>
   <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/01<!--/DEPLOY--></span>
 </footer>
 

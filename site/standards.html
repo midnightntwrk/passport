@@ -451,10 +451,10 @@
 
       <div class="kind">ARC · Delivery · Continuous</div>
       <h1>Standards &amp; feature-complete v1.0</h1>
-      <p class="subtitle">A standards-and-spec body that survives external review. Every MIP names an external co-author or committed reviewer from the start — a wallet partner or ecosystem reviewer — so what we ratify is a shared standard, portable across wallets. Cryptographer and formal-methods reviews are scheduled against component stability, not against a Passport-internal calendar.</p>
+      <p class="subtitle">Where the register stands: two standards published upstream (MIP-0012, contract custody; MIP-0013, multi-key account authorisation), two problem statements merged, three upstream standards adopted, and four proposals in the pipeline. Every MIP (Midnight Improvement Proposal) names an external co-author or committed reviewer from the start, so what we ratify is a shared standard, portable across wallets; cryptographer and formal-methods reviews are scheduled against component stability, not against a Passport-internal calendar.</p>
 
       <div class="symbiosis-banner">
-        Parallel delivery — see <a href="demo.html#demo">The October demo →</a>
+        The demo and the standards are one body of work at two speeds — the demo side lives at <a href="demo.html#demo">The October demo →</a>
       </div>
     </div>
   </section>
@@ -469,7 +469,7 @@
           <li><b>Clone the <a href="https://github.com/midnightntwrk/passport/tree/main/contract" target="_blank" rel="noopener">reference implementation</a></b> — both standards in one deployment, with the conformance suites the standards require and an independent bit-exact Rust signer.</li>
           <li><b>Build your signer first</b> — it needs only JubJub arithmetic and SHA-256, no Midnight stack, so approval is separable from proving from day one.</li>
         </ol>
-        <p class="implementers-note">A second, independent implementation is the standards&rsquo; remaining path-to-Active evidence — if you build one, say so in the upstream discussions.</p>
+        <p class="implementers-note">A second, independent implementation is the standards&rsquo; remaining path-to-Active evidence — if you build one, say so in the upstream discussions. Toolchain versions are pinned in the reference implementation&rsquo;s manifests; keep the prover and ledger payload formats version-paired, which is the first skew a fresh build hits.</p>
       </div>
     </div>
   </section>
@@ -484,7 +484,7 @@
 
       <div class="mips" id="mipsList"></div>
 
-      <p class="id-footnote">A note on identifiers: four-digit ids (MIP-0003, MIP-0007, MIP-0008, MIP-0012, MIP-0013) are upstream-assigned numbers. Short ids (MIP-4…) are workspace pipeline labels for proposals not yet filed, which carry the literal <code>mip-xxxx</code> filename until an upstream editor assigns a number at merge.</p>
+      <p class="id-footnote">A note on identifiers: four-digit ids (MIP-0003, MIP-0007, MIP-0008, MIP-0012, MIP-0013) are upstream-assigned numbers. Short ids (MIP-4…) are workspace pipeline labels for proposals not yet filed, which carry the literal <code>mip-xxxx</code> filename until an upstream editor assigns a number at merge. <code>STD-03</code> is likewise a workspace label: the domain-separation registry deliverable, whose problem statement is upstream as MPS-0027.</p>
     </div>
   </section>
 
@@ -560,7 +560,7 @@
 </aside>
 
 <footer class="landing-footer">
-  <span>ARC · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="demo.html">demo</a></span>
+  <span>ARC (Advanced Research and Creativity) · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="demo.html">demo</a></span>
   <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/01<!--/DEPLOY--></span>
 </footer>
 

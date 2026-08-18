@@ -457,11 +457,11 @@
 
       <div class="kind">ARC · Architecture · Discussion draft</div>
       <h1>Architecture context</h1>
-      <p class="subtitle">Where the 25 runtime components live, who they talk to, and what shape Passport's identity surface takes across the stack (C26, the agent-tooling meta-deliverable, has no runtime slot). Click any component for its canvas; click an actor for its role in the system. Use the category pills to focus one slice of the stack.</p>
+      <p class="subtitle">Where the 25 runtime components live, who they talk to, and what shape Passport's identity surface takes across the stack. Click any component for its canvas (its design record); click an actor for its role in the system. Use the category pills to focus one slice of the stack.</p>
 
       <div class="cat-pills" id="catPills" role="group" aria-label="Filter by category"></div>
       <div class="toolbar">
-        <span class="toolbar-hint">Click a pill to highlight that category · workstreams marked with a dashed outline · ?</span>
+        <span class="toolbar-hint">Click a pill to highlight that category · open-decision workstreams carry a dashed outline and a ? badge</span>
       </div>
     </div>
   </section>
@@ -603,7 +603,7 @@
 </aside>
 
 <footer class="landing-footer">
-  <span>ARC · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="standards.html">standards</a></span>
+  <span>ARC (Advanced Research and Creativity) · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="standards.html">standards</a></span>
   <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/07<!--/DEPLOY--></span>
 </footer>
 
@@ -793,7 +793,9 @@
     const host = document.getElementById('catPills');
     if (!host) return;
     const allPill = `<button class="cat-pill active" data-category="all" type="button">All</button>`;
-    const catPills = (data.categories || []).map(cat => `
+    // The tooling category (C26) has no runtime slot in this diagram, so its
+    // pill would highlight nothing — skip it.
+    const catPills = (data.categories || []).filter(cat => cat.id !== 'tooling').map(cat => `
       <button class="cat-pill" data-category="${cat.id}" type="button" aria-pressed="false">
         <span class="cat-dot" aria-hidden="true"></span>
         <span>${escapeHtml(cat.label)}</span>

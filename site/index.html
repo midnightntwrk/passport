@@ -447,6 +447,10 @@
     border-color: var(--iog-infared);
     color: var(--text);
   }
+  .progress-chip.progress-evi {
+    border-style: dashed;
+    color: var(--text-faint);
+  }
   details.timeline-more { margin-top: 4px; }
   details.timeline-more > summary {
     cursor: pointer;
@@ -639,6 +643,7 @@
           <div class="hero-ctas">
             <a class="cta primary" href="demo.html">See how it works →</a>
             <a class="cta" href="#status">Where the work stands</a>
+            <a class="cta" href="https://github.com/midnightntwrk/passport/tree/main/contract" target="_blank" rel="noopener">The reference implementation ↗</a>
           </div>
         </div>
 
@@ -690,13 +695,13 @@
           <p>MIP-0012 (contract custody) and MIP-0013 (multi-key authorisation) are published in the Midnight improvement-proposal repository as Proposed, with a reference implementation whose conformance suites pass.</p>
           <span class="fact-foot">Standards →</span>
         </a>
-        <a class="fact" href="plan.html#C24" data-component="C24">
+        <a class="fact" href="https://github.com/midnightntwrk/passport/tree/main/experiments/dust-sponsorship-feasibility" target="_blank" rel="noopener">
           <span class="fact-kicker">Validated</span>
           <h3>Zero-token onboarding works</h3>
           <p>A user holding no tokens at all had their account contract deployed and their first calls paid by a sponsor, end to end on a production node. No airdrop prerequisite exists.</p>
-          <span class="fact-foot">The fee canvas →</span>
+          <span class="fact-foot">The sponsorship experiment ↗</span>
         </a>
-        <a class="fact" href="demo.html">
+        <a class="fact" href="demo.html#recover">
           <span class="fact-kicker">Validated</span>
           <h3>Losing every device is survivable</h3>
           <p>Recovery uses guardians who store nothing between ceremonies, running in the working prototype. One transaction retires every old device and grant; the account, name, and balances never move.</p>
@@ -740,7 +745,7 @@
           <ul>
             <li><a href="standards.html">The MIP register</a> — every proposal, its upstream lifecycle, and its evidence.</li>
             <li><a href="#engage">Comment upstream</a> — review is what moves the keystone pair toward acceptance.</li>
-            <li><a href="plan.html">The full plan</a> — promises, canvases, dependencies, and open decisions.</li>
+            <li><a href="plan.html">The full plan</a> — the promises, each component&rsquo;s design record (its canvas), the dependencies, and the open decisions.</li>
           </ul>
         </div>
       </div>
@@ -759,7 +764,7 @@
       <div class="glance-map" id="glanceMap"></div>
 
       <h3 class="timeline-head">The evidence trail</h3>
-      <p class="timeline-hint">Newest first; every entry is backed by an artefact — an experiment against a real node, a merge in the upstream proposal repository, or a decision record. Component chips open the canvas in place.</p>
+      <p class="timeline-hint">Newest first; every entry is backed by an artefact — an experiment against a real node, a merge in the upstream proposal repository, or a decision record. Component chips open the component&rsquo;s design record (its canvas) in place; experiment links go to the code.</p>
       <ol class="progress-timeline" id="progressTimeline"></ol>
       <details class="timeline-more" id="timelineMore">
         <summary id="timelineMoreLabel">Show the earlier evidence</summary>
@@ -800,8 +805,8 @@
           <h3>Sponsors, committees, reviews</h3>
           <p>Zero-token onboarding needs a substitutable sponsor-operator model; the signing standard needs a FROST committee demonstration and its cryptographer review.</p>
           <span>
-            <button class="glance-chip" data-component="C24" type="button">C24</button>
-            <button class="glance-chip" data-component="C5" type="button">C5</button>
+            <button class="glance-chip" data-component="C24" type="button">C24 · Fee model</button>
+            <button class="glance-chip" data-component="C5" type="button">C5 · Signing primitive</button>
           </span>
         </div>
       </div>
@@ -852,7 +857,7 @@
 </aside>
 
 <footer class="landing-footer">
-  <span>ARC · Input Output Global · Midnight Passport planning workspace</span>
+  <span>ARC (Advanced Research and Creativity) · Input Output Global · Midnight Passport planning workspace</span>
   <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/01<!--/DEPLOY--></span>
 </footer>
 
@@ -951,7 +956,21 @@
 
   // ---- Evidence trail: newest first, earlier entries collapsed ----
   const KIND_LABEL = { validated: 'Validated', upstream: 'Upstream', standard: 'Standard drafted', decided: 'Decided' };
+  const compById = Object.fromEntries(comps.map(c => [c.id, c]));
+  const expById = Object.fromEntries((data.experiments || []).map(e => [e.id, e]));
   function timelineItem(m) {
+    const chips = (m.components || []).map(c => {
+      const comp = compById[c];
+      return `<a class="progress-chip" href="plan.html#${esc(c)}" data-component="${esc(c)}"
+                 title="${comp ? esc(comp.name) : esc(c)}">${esc(c)}</a>`;
+    });
+    const evidence = (m.evidence || []).map(eid => {
+      const ex = expById[eid];
+      if (!ex || !ex.url) return '';
+      return `<a class="progress-chip progress-evi" href="${esc(ex.url)}" target="_blank" rel="noopener"
+                 title="${esc(ex.summary || ex.name)}">${esc(ex.name)} ↗</a>`;
+    });
+    const trail = chips.concat(evidence).filter(Boolean);
     return `
       <li class="progress-item kind-${esc(m.kind)}">
         <div class="progress-when">${esc(m.when)}</div>
@@ -959,10 +978,7 @@
           <span class="progress-kind">${esc(KIND_LABEL[m.kind] || m.kind)}</span>
           <h4 class="progress-title">${esc(m.title)}</h4>
           <p class="progress-detail">${esc(m.detail)}</p>
-          ${(m.components || []).length
-            ? `<div class="progress-chips">${m.components.map(c =>
-                `<a class="progress-chip" href="plan.html#${esc(c)}" data-component="${esc(c)}">${esc(c)}</a>`).join('')}</div>`
-            : ''}
+          ${trail.length ? `<div class="progress-chips">${trail.join('')}</div>` : ''}
         </div>
       </li>`;
   }
