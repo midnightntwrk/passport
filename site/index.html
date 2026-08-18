@@ -526,90 +526,9 @@
     background: var(--bg);
     padding: 20px 24px;
   }
-  .engage h3 {
-    font-family: var(--font-display);
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--text);
-    margin: 0 0 8px;
-  }
-  .engage p { font-size: 0.94rem; color: var(--text-mute); margin: 0 0 12px; max-width: 72ch; }
-  .engage-links { display: flex; flex-wrap: wrap; gap: 10px; }
-  .engage-links a {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--iog-infared);
-    border: 1px solid var(--iog-infared);
-    border-radius: 6px;
-    padding: 8px 14px;
-    text-decoration: none;
-    transition: background .12s ease;
-  }
-  .engage-links a:hover { background: var(--bad-soft); }
-
-  /* ---------- Delivery teasers ---------- */
-
-  .delivery-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
-    gap: 18px;
-  }
-  .delivery-card {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 26px 28px;
-    background: var(--bg);
-    color: inherit;
-    text-decoration: none;
-    transition: border-color .15s ease, background .15s ease, transform .15s ease;
-  }
-  .delivery-card:hover {
-    border-color: var(--iog-infared);
-    background: var(--bg-soft);
-    transform: translateY(-1px);
-  }
-  .delivery-kind {
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--iog-infared);
-    font-weight: 600;
-  }
-  .delivery-title {
-    font-family: var(--font-display);
-    font-size: 1.5rem;
-    font-weight: 500;
-    letter-spacing: -0.015em;
-    color: var(--text);
-    margin: 0;
-  }
-  .delivery-summary {
-    font-size: 0.96rem;
-    color: var(--text-mute);
-    line-height: 1.55;
-    margin: 0;
-    flex: 1;
-  }
-  .delivery-open {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--iog-infared);
-    margin-top: 4px;
-  }
+  .engage p { font-size: 0.94rem; color: var(--text-mute); margin: 0; max-width: 80ch; }
+  .engage a { color: var(--iog-infared); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .engage a:hover { border-bottom-color: var(--iog-infared); }
 
 </style>
 </head>
@@ -821,38 +740,7 @@
       </div>
 
       <div class="engage" id="engage">
-        <h3>Engage</h3>
-        <p>Comment where the standards live; file issues where the plan lives. Both are public.</p>
-        <div class="engage-links">
-          <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/discussions" target="_blank" rel="noopener">Upstream discussions ↗</a>
-          <a href="https://github.com/midnightntwrk/passport/issues" target="_blank" rel="noopener">Workspace issues ↗</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section" id="delivery">
-    <div class="container">
-      <header class="section-head">
-        <div class="section-kind">Delivery</div>
-        <h2>One body of work, two surfaces</h2>
-        <p>Feature-complete v1.0 is a body of deliverables: ratified MIPs, cryptographer and formal-methods sign-off, and evidence. The October demo is an MVP that consumes those deliverables early; how the two converge, primitive by primitive, is documented on the <a href="standards.html">Standards page</a>.</p>
-      </header>
-
-      <div class="delivery-grid">
-        <a class="delivery-card" href="demo.html#demo">
-          <div class="delivery-kind">October 2026</div>
-          <h3 class="delivery-title">The demo</h3>
-          <p class="delivery-summary">An end-to-end Passport account on a screen, with a recovery sad-path. Six phases to October; every pick that departs from a decided standard is flagged with its migration plan.</p>
-          <span class="delivery-open">Open<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span>
-        </a>
-
-        <a class="delivery-card" href="standards.html">
-          <div class="delivery-kind">Continuous</div>
-          <h3 class="delivery-title">The v1.0 deliverables</h3>
-          <p class="delivery-summary">The MIP register with upstream lifecycles, the scheduled reviews, and the promise coverage map — the audit trail for calling v1.0 feature-complete.</p>
-          <span class="delivery-open">Open<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span>
-        </a>
+        <p>Engage: comment in the <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/discussions" target="_blank" rel="noopener">upstream discussions ↗</a> where the standards live, or open a <a href="https://github.com/midnightntwrk/passport/issues" target="_blank" rel="noopener">workspace issue ↗</a>. The full engagement surface, with direct links to each proposal, is on <a href="standards.html#engage">Standards</a>.</p>
       </div>
     </div>
   </section>

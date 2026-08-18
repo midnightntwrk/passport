@@ -55,6 +55,7 @@
 
   function buildComponentHtml(c) {
     const cat = categoryById[c.category];
+    const evidence = (data.experiments || []).filter(e => (e.validates || []).includes(c.id));
     return `
       <div class="panel-head">
         <div class="panel-kind">Component${c.status === 'specified' ? ' · specified' : c.status === 'decided' ? ' · decided' : ((data.workstreams || []).includes(c.id)) ? ' · open decision' : ''}${cat ? ' · ' + escapeHtml(cat.label) : ''}</div>
@@ -74,6 +75,20 @@
         <h4>Outcome</h4>
         <p>${escapeHtml(c.outcome)}</p>
       </section>
+
+      ${evidence.length ? `
+        <section class="panel-section">
+          <h4>Evidence</h4>
+          <ul class="panel-evidence">
+            ${evidence.map(e => `
+              <li>
+                ${e.url ? `<a href="${escapeHtml(e.url)}" target="_blank" rel="noopener">${escapeHtml(e.name)} ↗</a>` : escapeHtml(e.name)}
+                <span class="panel-evidence-status">${escapeHtml(e.status || '')}</span>
+              </li>
+            `).join('')}
+          </ul>
+        </section>
+      ` : ''}
 
       ${(c.hard_deps && c.hard_deps.length) ? `
         <section class="panel-section">

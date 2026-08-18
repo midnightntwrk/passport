@@ -35,6 +35,32 @@
     margin-bottom: 18px;
     color: var(--text);
   }
+  .plan-jump {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 14px;
+    margin-top: 22px;
+  }
+  .plan-jump-label {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+  }
+  .plan-jump a {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-mute);
+    text-decoration: none;
+    border-bottom: 1px solid var(--line);
+    transition: color .12s ease, border-color .12s ease;
+  }
+  .plan-jump a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
+
   p.subtitle {
     font-size: 1.1rem;
     color: var(--text-mute);
@@ -142,23 +168,34 @@
   .promise-arrow { transition: transform .12s ease; }
   .promise-card:hover .promise-arrow { transform: translateX(2px); }
 
-  /* ---------- Principle history (below promises) ---------- */
+  /* ---------- Principle history (below promises, collapsed) ---------- */
 
-  .principle-history {
-    margin-top: 48px;
-    padding-top: 36px;
+  details.history-details {
+    margin-top: 40px;
+    padding-top: 28px;
     border-top: 1px dashed var(--line);
   }
-  .history-head { margin-bottom: 24px; }
-  .history-head .section-kind { margin-bottom: 8px; }
-  .history-head h3 {
-    font-family: var(--font-display);
-    font-size: 1.4rem;
-    font-weight: 500;
-    letter-spacing: -0.015em;
-    color: var(--text);
-    margin-bottom: 12px;
+  details.history-details > summary {
+    cursor: pointer;
+    list-style: none;
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-mute);
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    padding: 10px 16px;
+    transition: border-color .12s ease, color .12s ease;
   }
+  details.history-details > summary::-webkit-details-marker { display: none; }
+  details.history-details > summary:hover { border-color: var(--iog-infared); color: var(--iog-infared); }
+  .principle-history {
+    margin-top: 24px;
+  }
+  .history-head { margin-bottom: 24px; }
   .history-head p {
     font-size: 0.96rem;
     color: var(--text-mute);
@@ -1034,6 +1071,16 @@
       <div class="kind">ARC · Working surface</div>
       <h1>The plan</h1>
       <p class="subtitle">The working surface behind the site: the ten promises v1.0 must hold, the twenty-six component canvases that keep them, the dependency structure between them, the decision spaces still open, and how the work splits across teams. Newcomers should start at the <a href="index.html">overview</a>; this page is for working the plan.</p>
+
+      <nav class="plan-jump" aria-label="On this page">
+        <span class="plan-jump-label">On this page</span>
+        <a href="#promises">Promises</a>
+        <a href="#components">Components</a>
+        <a href="#dependencies-graph">Graph</a>
+        <a href="#decisions">Decisions</a>
+        <a href="#what-remains">What remains</a>
+        <a href="#parallelisation">Parallelisation</a>
+      </nav>
     </div>
   </section>
 
@@ -1046,10 +1093,10 @@
       </header>
       <div id="promisesGrid" class="promises-grid"></div>
 
+      <details class="history-details">
+        <summary>How we got here — from the secure-onboarding six to the working ten</summary>
       <div class="principle-history">
         <header class="history-head">
-          <div class="section-kind">How we got here</div>
-          <h3>From the secure-onboarding six to the working ten</h3>
           <p>
             Pass 1 of the planning work started from the six principles in the secure-onboarding document — <em>Key-bound TEE; ZK witnesses</em>, <em>Single seed, three wallets</em>, <em>Chain abstraction via intent</em>, <em>One key per device</em>, <em>Privacy-by-design identity</em>, and <em>Seedless UX</em>. The ten promises above are not a different vision — they are the same six pressure-tested for falsifiability, with mechanism statements peeled off and previously-implicit assumptions made explicit so each can be individually tested. Every promise traces back to something the original document said or assumed; nothing here is invented.
           </p>
@@ -1125,10 +1172,11 @@
           <li><button class="map-pill" data-promise="P8" type="button">P8</button><span class="imp-name">Chain-only</span><span class="imp-source">— assumed throughout the document (no operator was required for any flow), but never stated as a constraint.</span></li>
         </ul>
       </div>
+      </details>
     </div>
   </section>
 
-  <section class="components-table">
+  <section class="components-table" id="components">
     <div class="container wide">
       <header class="section-head">
         <div class="section-kind">Section 2</div>

@@ -505,12 +505,30 @@ html[data-theme="dark"] .panel { box-shadow: -8px 0 28px rgba(0,0,0,0.4); }
 .panel-deps,
 .panel-list,
 .panel-alternatives,
-.panel-invariants {
+.panel-invariants,
+.panel-evidence {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   gap: 8px;
+}
+.panel-evidence li {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.panel-evidence a {
+  color: var(--iog-infared);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+.panel-evidence a:hover { border-bottom-color: var(--iog-infared); }
+.panel-evidence-status {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  margin-top: 2px;
 }
 .panel-list li {
   font-size: 0.92rem;
