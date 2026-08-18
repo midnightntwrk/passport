@@ -225,7 +225,11 @@
     if (!host) return;
     const couplings = data.decision_couplings || [];
     host.innerHTML = (data.decisions || []).map(d => {
-      const resolved = /resolved/i.test(d.question) || /^Resolved/.test(d.detail || '');
+      const badge = d.resolution === 'resolved'
+        ? '<span class="decision-resolved">Resolved</span>'
+        : d.resolution === 'partial'
+          ? '<span class="decision-partial">Partially resolved</span>'
+          : '<span class="decision-open">Open</span>';
       const coupled = couplings
         .filter(cp => cp.a === d.id || cp.b === d.id)
         .map(cp => (cp.a === d.id ? cp.b : cp.a) + ' — ' + cp.note);
@@ -234,9 +238,10 @@
           <div class="decision-card-head">
             <span class="decision-id">${d.id}</span>
             <span class="decision-ws">${escapeHtml(d.workstream)}</span>
-            ${resolved ? '<span class="decision-resolved">Resolved</span>' : '<span class="decision-open">Open</span>'}
+            ${badge}
           </div>
           <h3 class="decision-q">${escapeHtml(d.question)}</h3>
+          ${d.venue ? `<p class="decision-venue">${escapeHtml(d.venue)}</p>` : ''}
           <div class="decision-cascade">
             <span class="decision-cascade-label">Cascades to</span>
             ${(d.cascade_to || []).map(id => `<span class="serves-pill">${id}</span>`).join('')}

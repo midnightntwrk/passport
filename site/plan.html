@@ -713,7 +713,7 @@
     font-size: 0.72rem;
     color: var(--text-faint);
   }
-  .decision-resolved, .decision-open {
+  .decision-resolved, .decision-open, .decision-partial {
     margin-left: auto;
     font-family: var(--font-mono);
     font-size: 0.66rem;
@@ -726,6 +726,7 @@
   }
   .decision-resolved { color: var(--good); background: var(--good-soft); border: 1px solid var(--good); }
   .decision-open { color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn); }
+  .decision-partial { color: var(--info); background: var(--info-soft); border: 1px solid var(--info); }
   .decision-q {
     font-family: var(--font-display);
     font-size: 1.05rem;
@@ -733,6 +734,12 @@
     color: var(--text);
     margin: 0;
     flex: 1;
+  }
+  .decision-venue {
+    font-size: 0.84rem;
+    color: var(--text-faint);
+    line-height: 1.5;
+    margin: 0;
   }
   .decision-cascade {
     display: flex;
@@ -1164,7 +1171,7 @@
       <header class="section-head">
         <div class="section-kind">Section 4</div>
         <h2>The decision spaces</h2>
-        <p>Five decision spaces whose answers cascade into multiple component canvases — two now resolved, three open. The bigger the fan-out, the more downstream design unlocks once the question is answered. Click a card for the full framing, its cascade, and its cross-couplings.</p>
+        <p>Five decision spaces whose answers cascade into multiple component canvases — one resolved, one partially resolved (the fee mechanism is settled, the operator model is open), three open. Each open card names where the decision actually gets made. The bigger the fan-out, the more downstream design unlocks once the question is answered. Click a card for the full framing, its cascade, and its cross-couplings.</p>
       </header>
 
       <div class="decision-cards" id="decisionCards"></div>
@@ -1208,7 +1215,7 @@
           <!-- Populated at runtime from window.PASSPORT_DATA -->
         </svg>
       </div>
-      <p class="footnote">Components in the identity-and-account core (see <code>data.js</code> <code>core_scc</code>) all sit at the same depth — their internal ordering is a build-order choice, not a strict precedence. The critical path's representative through the core is <strong>C1</strong>. The chart auto-recomputes whenever <code>data.js</code> changes; redraw is data-driven.</p>
+      <p class="footnote">Components in the identity-and-account core (see <code>data.js</code> <code>core_scc</code>) all sit at the same depth — their internal ordering is a build-order choice, not a strict precedence. The critical path's representative through the core is <strong>C1</strong>. Node positions and depths recompute whenever <code>data.js</code> changes; the critical-path ribbon itself is a hand-maintained representative chain, revisited whenever the dependency data moves.</p>
     </div>
   </section>
 

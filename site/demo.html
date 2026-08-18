@@ -620,14 +620,14 @@
       <header class="section-head">
         <div class="section-kind">Delivery · October 2026</div>
         <h2>The October demo</h2>
-        <p>The lifecycle above, made watchable: an end-to-end Passport account on a screen, with a recovery sad-path. Where the demo takes a shortcut (single device, managed signing through a partner-operated MPC committee), the shortcut is flagged below with its migration plan; how the demo and the v1.0 deliverables converge, primitive by primitive, is documented on the <a href="standards.html">Standards page</a>. A step-by-step <a href="archive/onboarding-mockup.html">onboarding click-through</a> of the first-run experience is kept in the archive.</p>
+        <p>The lifecycle above, made watchable: an end-to-end Passport account on a screen, with a recovery sad-path. Where the demo departs from a decided standard (single device, managed signing through a partner-operated MPC committee), the departure carries a <span class="shortcut-chip" style="margin-left:0;">Shortcut</span> chip and a migration plan in the <a href="#picks">picks table</a>; how the demo and the v1.0 deliverables converge, primitive by primitive, is documented on the <a href="standards.html">Standards page</a>. A step-by-step <a href="archive/onboarding-mockup.html">onboarding click-through</a> of the first-run experience is kept in the archive.</p>
       </header>
 
       <ul class="ships-list">
-        <li><b>Passkey login</b><span>First visit registers a passkey (Face ID, Touch ID, Windows Hello). Subsequent visits authenticate biometrically. No seed phrase shown at any point.</span></li>
+        <li><b>Passkey login<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>First visit registers a passkey (Face ID, Touch ID, Windows Hello). Subsequent visits authenticate biometrically. No seed phrase shown at any point. The demo&rsquo;s passkey authenticates to a managed signing service; the v1.0 path derives the device key on-device from the passkey.</span></li>
         <li><b>Name registration</b><span>User registers <code>alice.passport.night</code> against the deployed upstream name service (MIP-0007); on-chain confirmation visible. Name uniqueness enforced at the registry.</span></li>
         <li><b>Wallet view<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>Three role addresses (Shielded, Night, Dust) with balances synced via view key and a hosted indexer. The v1.0 path is the substitutable multi-provider indexer model.</span></li>
-        <li><b>Signing primitive</b><span>User signs arbitrary data and a Night transfer. Signatures verify cross-implementation (TypeScript signer ↔ Rust verifier).</span></li>
+        <li><b>Signing primitive<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>User signs arbitrary data and a Night transfer through the managed committee; the contract verifies the same equation either way. The cross-implementation evidence (TypeScript signer ↔ Rust verifier) backs the standards path, not the demo&rsquo;s signer.</span></li>
         <li><b>Function-call key grants</b><span>User issues, rotates, and revokes scoped function-call keys for dApp authorisation. Multi-device peer behaviour is deferred.</span></li>
         <li><b>Sign-in with Passport</b><span>A pseudo third-party app requests scoped access; user approves with biometric; transaction signed; function-call key issued.</span></li>
         <li><b>Recovery walkthrough<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>User &quot;loses&quot; their passkey. Recovery via the auth provider&rsquo;s flow: alt-passkey on a fallback device or backup credential. On-chain account state unchanged. The v1.0 path is the guardian recovery of lifecycle step 6, already running in the prototype.</span></li>
@@ -647,12 +647,12 @@
     </div>
   </section>
 
-  <section class="section">
+  <section class="section" id="picks">
     <div class="container">
       <header class="section-head">
         <div class="section-kind">Picks</div>
         <h2>Component picks for the demo build</h2>
-        <p><b>Picks are MVP shortcuts, never the specification.</b> Each component has alternatives in its canvas; this table records which alternative the demo build runs, and flags every pick that departs from a decided standard with its migration plan. Click any ID to open its full design space.</p>
+        <p><b>Picks are MVP shortcuts, never the specification.</b> Each component has alternatives in its canvas; this table records which alternative the demo build runs, and flags every pick that departs from a decided standard with its migration plan. <span id="picksCount"></span> Click any ID to open its full design space.</p>
       </header>
 
       <div class="picks-table-wrap">
@@ -733,6 +733,12 @@
   // Picks
   const picksHost = document.getElementById('picksBody');
   if (picksHost) {
+    const picksCount = document.getElementById('picksCount');
+    if (picksCount) {
+      const total = (data.demo_selections || []).length;
+      const div = (data.demo_selections || []).filter(s => s.diverges).length;
+      picksCount.textContent = `${div} of the ${total} picks currently diverge.`;
+    }
     picksHost.innerHTML = (data.demo_selections || []).map(s => {
       const c = componentById[s.component];
       return `

@@ -181,6 +181,7 @@ window.PASSPORT_DATA = {
         { label: 'A — One Compact contract per account', description: 'Chosen — normative in MIP-0012. Per-user schema evolution, isolated failure; the deploy-cost question moves to onboarding projections.' },
         { label: 'B — Single registry contract with accounts as entries', description: 'Rejected: ecosystem-wide schema freeze, concentrated upgrade risk, and a single censorship / correlation point. A witness-private shared-custody profile is left to a successor proposal for the anonymity-set benefit.' },
         { label: 'C — Hybrid', description: 'Superseded: discovery belongs to the name service (MIP-0007); custody to per-account instances.' },
+        { label: 'D — Native protocol account primitive', description: 'Not available: the current ledger ships no native account or multi-key verification primitive, so the contract standard is the adoptable path today. The authorisation seam keeps a native migration open; revisit if a ledger release ships native account primitives.' },
       ],
       open_questions: [
         'Deploy cost at user-base scale — onboarding-cost projections still to gather for the chosen per-account shape.',
@@ -224,7 +225,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'C3', name: 'DID surface', category: 'identity',
-      serves: ['P2'], workstream: true,
+      serves: ['P2'],
       outcome: 'A clear position on how Passport accounts interoperate with W3C DID standards: what the canonical public Passport DID is, how it relates to the name service, whether one account can maintain several DIDs for different profiles, how names are linked and proven, and whether DID-facing behaviour is embedded in Passport or delegated to Identity Wallet.',
       hard_deps: ['C2', 'C8', 'C9'],
       associations: ['C18', 'C19', 'C20', 'C21'],
@@ -260,7 +261,7 @@ window.PASSPORT_DATA = {
       id: 'C4', name: 'Asset custody model', category: 'crypto',
       status: 'specified',
       status_note: 'Resolved 2026/07 — stateless contract custody, validated on a production node and normative in the custody MIP, published upstream as MIP-0012 and realised by the reference implementation. Custody is exclusive: assets at rest live only in the account contract; user-held coins exist only transiently inside the one-hop payment flow. Dust is the fee-path exception (C24).',
-      serves: ['P3', 'P4', 'P5', 'P6'], workstream: true,
+      serves: ['P3', 'P4', 'P5', 'P6'],
       outcome: 'Resolved and standardised. Contract custody of shielded assets does not require publishing holdings: the stateless pattern (coin info wallet-local, supplied to the spend circuit as a witness, discovered via an encrypted on-contract inbox) is validated end-to-end on a production node and is normative in the custody MIP, published upstream as MIP-0012 and realised by the reference implementation. Custody is exclusive: the user holds assets no other way than through the account custody contract — assets at rest are always in the contract, and the user-held coins the one-hop payment rule creates are in-flight plumbing the client sweeps into the account, never a holding location. Dust is the one exception, forced by the ledger (the contract holds no Dust; fees are C24\'s subject). The change-handling defect the experiment surfaced is fixed upstream. Payments between custody accounts have two normative modes: one-hop counterparty-private routing, and linking-accepted direct transfer (validated by the contract-to-contract experiment: one client-composed transaction, both contract addresses exposed together, value, color, and nonce hidden). The residual metadata profile — contract-address activity and depositor first-hop traceability — is documented and accepted in the MIP\'s security considerations. A bonus finding: the encryption secret is a pure viewing capability, so read-only delegation (accountant, auditor) works without ceding custody.',
       hard_deps: ['C1'],
       associations: [],
@@ -300,6 +301,7 @@ window.PASSPORT_DATA = {
         { label: 'B — FROST committee under user control', description: 'Subsumed by A: the MIP\'s threshold profile registers any t-of-n FROST committee as a single device entry; the verifier is unchanged and the key is never reconstructed.' },
         { label: 'C — Per-device with periodic rotation', description: 'Available under A via the add / remove-device ceremonies; no protocol change needed.' },
         { label: 'D — FROST-Jubjub via partner-operated MPC committee with DKG', description: 'MVP model (managed signing). Same verification equation as A, so the contract cannot tell the difference; retired in favour of A for v1.0.' },
+        { label: 'E — Threshold ECDSA', description: 'Rejected. ECDSA nonce generation has no non-interactive threshold analogue, and interactive nonce protocols are the failure class behind the published MPC-wallet key-extraction attacks. FROST over JubJub avoids that class by construction.' },
       ],
       open_questions: [
         'Cryptographer review of the SHA-256 Fiat–Shamir substitution, challenge grinding, and subgroup semantics — an explicit acceptance criterion of the MIP.',
@@ -311,6 +313,7 @@ window.PASSPORT_DATA = {
         'Signing surface leaks beyond the trusted boundary.',
         'Nonce reuse or bias in a signer implementation reveals the device key.',
         'Toolchain hazard — JubjubPoint equality compiled to reference equality (compact#278); guarded by the MIP\'s rejection-matrix conformance tests.',
+        'Managed-path dependency — no MPC provider has yet demonstrated the FROST ciphersuite over JubJub with the persistentHash challenge. The committee demonstration tracked in the MIP\'s Path to Active gates the demo\'s managed signing pick.',
       ],
     },
     {
@@ -318,7 +321,7 @@ window.PASSPORT_DATA = {
       status: 'decided',
       status_note: 'Decided 2026/07 — browser WASM proving is the promoted path, validated end-to-end in the account-custody prototype (2026/06/10): every proof in the stack computed in the tab with the proof server stopped. The Midnight Foundation\'s third-party proving provider is the bounded-trust hosted fallback.',
       serves: ['P6', 'P8'],
-      outcome: 'Client-side ZK proof generation — decided: the user proves in the browser. The account-custody prototype runs the full stack in the tab via the upstream WASM prover (zkir-v2, version-paired with the ledger): with the proof-server container stopped, contract circuits, zswap balancing, dust fees, and signing all prove in a dedicated Web Worker. Measured envelope ~3.5 s at k=12 to ~44 s at k=16 single-threaded; ≈50 MB (Night path) to ≈109 MB (with shielded) of keys and SRS cached once per origin. For those who cannot prove locally, the Midnight Foundation has a third-party proving provider as a hosted fallback — bounded trust under the account-authorisation MIP (the delegate gets a one-call signature and spend witnesses, never a device key), but bounded is not blind, so the promoted path stays on-device.',
+      outcome: 'Client-side ZK proof generation — decided: the user proves in the browser. The account-custody prototype runs the full stack in the tab via the upstream WASM prover (zkir-v2, version-paired with the ledger): with the proof-server container stopped, contract circuits, zswap balancing, dust fees, and signing all prove in a dedicated Web Worker. Measured envelope ~3.5 s at k=12 to ~44 s at k=16 single-threaded; ≈50 MB (Night path) to ≈109 MB (with shielded) of keys and SRS cached once per origin (workspace measurements; a citable benchmark artefact is pending publication). For those who cannot prove locally, the Midnight Foundation has a third-party proving provider as a hosted fallback — bounded trust under the account-authorisation MIP (the delegate gets a one-call signature and spend witnesses, never a device key), but bounded is not blind, so the promoted path stays on-device.',
       hard_deps: ['C5', 'C7'],
       associations: ['C7', 'C16'],
       alternatives: [
@@ -692,7 +695,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'C22', name: 'Intent surface', category: 'network',
-      serves: ['P7', 'P8', 'P10'], workstream: true,
+      serves: ['P7', 'P8', 'P10'],
       outcome: 'Passport\'s wallet-side intent surface: how the user-facing trade intent is translated into the ledger Intent struct that the user authorises by signing, what the wallet UI presents before signing, and what shape the dApp connection protocol passes between dApps and the wallet. The ledger Intent format and any trade-intent semantics are defined upstream in the Midnight ecosystem; Passport integrates with what exists, contributing only what is needed for the wallet- and dApp-side surfaces, and inventing a stop-gap shape only if no upstream format is available in time.',
       hard_deps: ['C5', 'C6', 'C7', 'C10', 'C20', 'C25'],
       associations: ['C11', 'C12', 'C23'],
@@ -726,7 +729,7 @@ window.PASSPORT_DATA = {
       id: 'C23', name: 'dApp connection protocol', category: 'dapp',
       status: 'decided',
       status_note: 'Direction decided 2026/05/13: Open Wallet Standard, with CAIP-25 / EIP-6963 / WalletConnect as underlying transport. Protocol specification pending upstream OWS progress.',
-      serves: ['P7', 'P8', 'P10'], workstream: true,
+      serves: ['P7', 'P8', 'P10'],
       outcome: 'The protocol surface that lets third-party dApps request scoped grants — including the Sign-In-with-Passport authentication half of the same surface. Open Wallet Standard (OWS) is the chosen direction for the Cardano + Midnight workflow (approved 2026/05/13, in progress upstream); CAIP-25, EIP-6963, and WalletConnect v2 sit beneath as underlying transport / discovery layers.',
       hard_deps: ['C10', 'C20', 'C22'],
       associations: [],
@@ -755,7 +758,7 @@ window.PASSPORT_DATA = {
       id: 'C24', name: 'Fee model', category: 'network',
       status: 'decided',
       status_note: 'Mechanism resolved — wallet-level fee splitting confirmed end-to-end (F1–F6 on node 1.0.0), including a sponsored contract deployment by a zero-token user: zero-token onboarding is confirmed outright. What remains open is the sponsor service contract and operator model.',
-      serves: ['P1', 'P3', 'P5', 'P8'], workstream: true,
+      serves: ['P1', 'P3', 'P5', 'P8'],
       outcome: 'A fee model that lets users transact from the moment they receive their account — including from a zero-NIGHT, zero-DUST starting state — without requiring a single named sponsor and without requiring the user to acquire or manage DUST themselves. The mechanism is confirmed: the dust-sponsorship-feasibility experiment (F1–F6) landed a two-balanced Night transfer, a sponsored circuit call from a zero-token user, and — decisively for onboarding — a sponsored contract deployment. No NIGHT prerequisite exists; the NIGHT airdrop is demoted to an optional follow-up for long-term self-sufficiency. The negative probes failed operably: capacity exhaustion fails locally before submission, and a TTL-expired round-trip is rejected at the node, making the user\'s TTL the sponsor\'s hard latency budget.',
       hard_deps: ['C16'],
       associations: [],
@@ -783,7 +786,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'C25', name: 'Cross-chain integration interface', category: 'network',
-      serves: ['P3', 'P5', 'P7', 'P8', 'P10'], workstream: true,
+      serves: ['P3', 'P5', 'P7', 'P8', 'P10'],
       // The interface contract is upstream-owned; canvas is held minimal
       // until the contract is defined.
       outcome: 'The boundary between Passport and the upstream cross-chain architecture (solver network, MPC vaults, escrow contract). Defines what Passport hands off (user-signed trade intents, account identity, selective-disclosure proofs for compliance) and what Passport consumes (settlement confirmations).',
@@ -852,6 +855,7 @@ window.PASSPORT_DATA = {
     {
       id: 'Q4',
       workstream: 'C4',
+      resolution: 'resolved',
       question: 'Shielded custody privacy — resolved into the custody MIP',
       detail: 'Resolved. The stateless pattern (A″) is adopted and now normative in the drafted custody MIP: no coin material in public ledger state, encrypted-inbox discovery, witness-supplied spends, and the surviving-coin change rule (its defect fixed upstream). The residual metadata profile — contract-address activity and depositor first-hop traceability — is documented and accepted in the MIP\'s security considerations, with a shared-custody successor profile deferred. The six cascade targets now consume specified constraints rather than an open question.',
       cascade_to: ['C1', 'C5', 'C12', 'C14', 'C16', 'C24'],
@@ -860,6 +864,8 @@ window.PASSPORT_DATA = {
     {
       id: 'Q3',
       workstream: 'C3',
+      resolution: 'open',
+      venue: 'Decided through engagement with the active upstream Midnight DID effort; Passport profiles what exists rather than defining a method.',
       question: 'What is the canonical Passport DID profile?',
       detail: 'No longer a pure yes/no call. The core decision is how Passport profiles the active midnight-did effort: what the canonical public DID is, how alice.passport.night is linked and proven, whether one account can maintain several DIDs, and whether DID-facing behaviour is embedded in Passport or delegated to Identity Wallet. "No DID layer" remains a fallback, but it is no longer the most informative framing of the workstream.',
       cascade_to: ['C2', 'C9', 'C18', 'C19', 'C20', 'C21'],
@@ -868,6 +874,8 @@ window.PASSPORT_DATA = {
     {
       id: 'Q25',
       workstream: 'C25',
+      resolution: 'open',
+      venue: 'Decided by the upstream cross-chain provider engagement; Passport consumes the interface contract once it is defined.',
       question: 'Cross-chain interface contract',
       detail: 'What Passport hands off to the upstream cross-chain layer (signed trade intents, account identity, compliance proofs) and what Passport consumes (settlement confirmations). Externally gated on provider engagement.',
       cascade_to: ['C2', 'C10', 'C12', 'C22'],
@@ -876,6 +884,8 @@ window.PASSPORT_DATA = {
     {
       id: 'Q22',
       workstream: 'C22',
+      resolution: 'open',
+      venue: 'Decided against the upstream trade-intent definition as it lands; the wallet-side wrapper shape is a Passport-side call.',
       question: 'Wallet integration with the upstream trade-intent format',
       detail: 'How tightly Passport\'s wallet surface tracks the upstream trade-intent format — verbatim, with a thin wallet-side wrapper, or with a stop-gap shape if no upstream format is available in time. Shapes downstream dApp interchange, UI presentation, and compliance binding. Externally gated where the upstream format is being defined elsewhere in the ecosystem.',
       cascade_to: ['C16', 'C20', 'C23'],
@@ -884,6 +894,8 @@ window.PASSPORT_DATA = {
     {
       id: 'Q24',
       workstream: 'C24',
+      resolution: 'partial',
+      venue: 'Decided by sponsor-operator engagement plus a Passport-side sponsor-service specification.',
       question: 'Fee model — sponsor operator model (mechanism resolved)',
       detail: 'The mechanism half is resolved: wallet-level fee splitting is confirmed end-to-end (F1–F6), including sponsored contract deployment from a zero-token start. What remains is the sponsor operator model (directory of substitutable sponsors, self-host, or single sponsor) and the sponsor service contract. Without a substitutable path, the no-required-operator promise is at risk.',
       cascade_to: ['C16', 'C22'],
@@ -920,6 +932,12 @@ window.PASSPORT_DATA = {
       title: 'Contract-custody feasibility mapped (S1–S6)',
       detail: 'Six probes establish what the contract layer can custody today, and where the SDK gates sit.',
       components: ['C1', 'C4'],
+    },
+    {
+      when: '2026/05', kind: 'validated',
+      title: 'Contract upgradability probed on devnet',
+      detail: 'Circuits are evolvable in place through the contract maintenance authority (remove, rewrite, add — same address, ledger preserved), while the ledger state schema is fixed at deploy and authority-key loss is terminal. Feeds the fleet-migration question every deployed account contract carries.',
+      components: ['C1'],
     },
     {
       when: '2026/06', kind: 'upstream',
@@ -1031,6 +1049,12 @@ window.PASSPORT_DATA = {
       title: 'Domain-separation registry document',
       detail: 'MPS-0027 is upstream; the registry itself, seeded with the custody and account tags, is the pending deliverable.',
       components: ['C8'],
+    },
+    {
+      lane: 'Standards',
+      title: 'Inbound-transfer compliance posture',
+      detail: 'The receiver of a shielded deposit knows the amount but not the sender, so source-of-funds regimes cannot be satisfied receiver-side. The mitigation lives in a sender-side selective-disclosure credential (C20), a custody-side acceptance policy (C4), or both — a position to specify, not an implementation task.',
+      components: ['C4', 'C20'],
     },
     {
       lane: 'Reviews',
@@ -1255,7 +1279,7 @@ window.PASSPORT_DATA = {
     { id: 'C', name: 'Authorisation surface', window: 'July 2026', status: 'done',
       focus: 'Grant primitive, lifecycle, chain-side enforcement; lost-device flow; trade-intent layer.',
       components: ['C10', 'C11', 'C12', 'C13', 'C22'],
-      artefact: 'Authorisation key rotation lands; lost-device revocation works end-to-end.',
+      artefact: 'Authorisation key rotation lands; lost-device revocation demonstrated at the auth-provider layer (a demo shortcut — the account-level remove_device flow is the standards path, implemented in the prototype).',
     },
     { id: 'D', name: 'Integration & recovery', window: 'August 2026', status: 'current',
       focus: 'Pseudo third-party app; dApp connection protocol; total-loss recovery happy path.',
@@ -1309,9 +1333,9 @@ window.PASSPORT_DATA = {
     {
       id: 'X-shared',
       title: 'Shared primitives',
-      summary: 'Components where the MVP\'s implementation IS the v1.0 deliverable — same code, evolving in lockstep.',
+      summary: 'Components where the MVP\'s implementation IS the v1.0 deliverable — same code, evolving in lockstep. The demo\'s signing and storage picks diverge (see the picks table), so C5 and C16 are shared at the interface only.',
       kind: 'components',
-      items: ['C8', 'C16', 'C1', 'C5'],
+      items: ['C8', 'C1'],
     },
     {
       id: 'X-std-to-demo',

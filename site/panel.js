@@ -173,9 +173,12 @@
 
   function buildDecisionHtml(d) {
     const ws = componentById[d.workstream];
+    const state = d.resolution === 'resolved' ? ' · resolved'
+      : d.resolution === 'partial' ? ' · partially resolved'
+      : ' · open';
     return `
       <div class="panel-head">
-        <div class="panel-kind">Decision space · ${escapeHtml(d.workstream)}</div>
+        <div class="panel-kind">Decision space · ${escapeHtml(d.workstream)}${state}</div>
         <h3 class="panel-title">${escapeHtml(d.question)}</h3>
       </div>
 
@@ -184,6 +187,13 @@
         <p>${escapeHtml(d.detail)}</p>
         ${d.leverage ? `<p class="panel-hint">${escapeHtml(d.leverage)}</p>` : ''}
       </section>
+
+      ${d.venue ? `
+        <section class="panel-section">
+          <h4>Where this gets decided</h4>
+          <p>${escapeHtml(d.venue)}</p>
+        </section>
+      ` : ''}
 
       ${(d.cascade_to && d.cascade_to.length) ? `
         <section class="panel-section">
