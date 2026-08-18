@@ -343,7 +343,108 @@
     font-style: italic;
   }
 
-  /* Crossovers (shared with demo.html) */
+  /* Implementer quick-start */
+  .implementers-box {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--iog-infared);
+    border-radius: 8px;
+    background: var(--bg);
+    padding: 22px 26px;
+  }
+  .implementers-box h2 {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 10px;
+  }
+  .implementers-box ol {
+    margin: 0 0 12px;
+    padding-left: 22px;
+    display: grid;
+    gap: 8px;
+  }
+  .implementers-box li {
+    font-size: 0.95rem;
+    color: var(--text-mute);
+    line-height: 1.55;
+  }
+  .implementers-box li b { color: var(--text); }
+  .implementers-box a { color: var(--iog-infared); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .implementers-box a:hover { border-bottom-color: var(--iog-infared); }
+  .implementers-note {
+    font-size: 0.88rem;
+    color: var(--text-faint);
+    margin: 0;
+  }
+
+  /* Identifier footnote */
+  .id-footnote {
+    font-size: 0.86rem;
+    color: var(--text-faint);
+    line-height: 1.55;
+    margin-top: 16px;
+    max-width: 80ch;
+  }
+  .id-footnote code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+
+  /* Evidence chips inside MIP cards */
+  .evi-chip {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--iog-infared);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 2px 8px;
+    text-decoration: none;
+    margin: 0 4px 4px 0;
+    transition: border-color .12s ease, background .12s ease;
+  }
+  .evi-chip:hover { border-color: var(--iog-infared); background: var(--bad-soft); }
+
+  /* Engage block */
+  .engage {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--iog-infared);
+    border-radius: 8px;
+    background: var(--bg);
+    padding: 22px 26px;
+  }
+  .engage h2 {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 8px;
+  }
+  .engage p { font-size: 0.94rem; color: var(--text-mute); margin: 0 0 14px; max-width: 74ch; }
+  .engage-links { display: flex; flex-wrap: wrap; gap: 10px; }
+  .engage-links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--iog-infared);
+    border: 1px solid var(--iog-infared);
+    border-radius: 6px;
+    padding: 8px 14px;
+    text-decoration: none;
+    transition: background .12s ease;
+  }
+  .engage-links a:hover { background: var(--bad-soft); }
+
+  /* Crossovers (shared story — this page owns it) */
   .crossovers-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -454,15 +555,32 @@
     </div>
   </section>
 
+  <section class="section" id="implementers">
+    <div class="container">
+      <div class="implementers-box">
+        <h2>For implementers: start here</h2>
+        <ol>
+          <li><b>Read <a href="#MIP-0012">MIP-0012</a></b> — how a contract holds and releases unshielded and shielded value, with authorisation abstracted to one seam.</li>
+          <li><b>Then <a href="#MIP-0013">MIP-0013</a></b> — the device set, revocation epochs, the bootstrap, and the seam instantiated with in-circuit Schnorr over JubJub.</li>
+          <li><b>Clone the <a href="https://github.com/midnightntwrk/passport/tree/main/contract" target="_blank" rel="noopener">reference implementation</a></b> — both standards in one deployment, with the conformance suites the standards require and an independent bit-exact Rust signer.</li>
+          <li><b>Build your signer first</b> — it needs only JubJub arithmetic and SHA-256, no Midnight stack, so approval is separable from proving from day one.</li>
+        </ol>
+        <p class="implementers-note">A second, independent implementation is the standards&rsquo; remaining path-to-Active evidence — if you build one, say so in the upstream discussions.</p>
+      </div>
+    </div>
+  </section>
+
   <section class="section">
     <div class="container">
       <header class="section-head">
         <div class="section-kind">Pipeline</div>
         <h2>The MIP pipeline</h2>
-        <p>Sequenced by dependency. Every MIP names an external co-author or committed reviewer from the start — that is what makes it portable across wallets rather than a Passport-shaped specification. STD-03 is a cryptographic prerequisite that ships before any MIP that hashes user state. A note on identifiers: four-digit ids (MIP-0003, MIP-0007, MIP-0012, MIP-0013) are upstream-assigned numbers — the account keystone pair now carries them; short ids (MIP-4…) are workspace pipeline labels for proposals not yet filed, which carry the literal <code>mip-xxxx</code> filename until an upstream editor assigns a number at merge.</p>
+        <p>Sequenced by dependency. Every MIP names an external co-author or committed reviewer from the start — that is what makes it portable across wallets rather than a Passport-shaped specification. STD-03 is a cryptographic prerequisite that ships before any MIP that hashes user state. Each card carries its upstream lifecycle state and links its evidence.</p>
       </header>
 
       <div class="mips" id="mipsList"></div>
+
+      <p class="id-footnote">A note on identifiers: four-digit ids (MIP-0003, MIP-0007, MIP-0008, MIP-0012, MIP-0013) are upstream-assigned numbers. Short ids (MIP-4…) are workspace pipeline labels for proposals not yet filed, which carry the literal <code>mip-xxxx</code> filename until an upstream editor assigns a number at merge.</p>
     </div>
   </section>
 
@@ -507,10 +625,25 @@
       <header class="section-head">
         <div class="section-kind">Symbiosis</div>
         <h2>Shared with the MVP</h2>
-        <p>Where the v1.0 deliverable and the October MVP converge. Same primitives, same evidence, same direction.</p>
+        <p>Where the v1.0 deliverable and the October MVP converge — one body of work, not two. Same primitives, same evidence, same direction; the <a href="demo.html#demo">demo picks table</a> flags every temporary departure with its migration plan.</p>
       </header>
 
       <div class="crossovers-grid" id="crossovers"></div>
+    </div>
+  </section>
+
+  <section class="section" id="engage">
+    <div class="container">
+      <div class="engage">
+        <h2>Engage</h2>
+        <p>Both keystone MIPs are Proposed upstream and open for review; the errata implementation surfaced are already merged, so what remains is exactly the ecosystem scrutiny that moves a proposal toward acceptance. Comment where the standards live; file issues where the plan lives.</p>
+        <div class="engage-links">
+          <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/discussions" target="_blank" rel="noopener">Upstream discussions ↗</a>
+          <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0012.md" target="_blank" rel="noopener">MIP-0012 upstream ↗</a>
+          <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0013.md" target="_blank" rel="noopener">MIP-0013 upstream ↗</a>
+          <a href="https://github.com/midnightntwrk/passport/issues" target="_blank" rel="noopener">Workspace issues ↗</a>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -555,7 +688,7 @@
       const compHtml = comps.map(cid => {
         const cc = componentById[cid];
         return cc
-          ? `<a href="index.html#${cid}" data-component="${cid}">${cid} · ${escapeHtml(cc.name)}</a>`
+          ? `<a href="plan.html#${cid}" data-component="${cid}">${cid} · ${escapeHtml(cc.name)}</a>`
           : escapeHtml(cid);
       }).join(' · ') || '—';
       const badge = m.kind === 'prerequisite' ? '<span class="mip-prereq-badge">Prerequisite</span>'
@@ -566,6 +699,18 @@
         : `<dt>Co-author target</dt><dd>${escapeHtml(m.co_author || '—')}</dd>`;
       const upstreamExtra = (m.kind !== 'upstream' && m.upstream)
         ? `<div><dt>Upstream</dt><dd><a href="${escapeHtml(m.upstream)}" target="_blank" rel="noopener">${escapeHtml(m.upstream_label || m.id)}</a></dd></div>`
+        : '';
+      const lifecycleExtra = m.lifecycle
+        ? `<div><dt>Upstream lifecycle</dt><dd>${escapeHtml(m.lifecycle)}</dd></div>`
+        : '';
+      const evidenceExtra = (m.evidence && m.evidence.length)
+        ? `<div><dt>Evidence</dt><dd>${m.evidence.map(eid => {
+            const ex = expById[eid];
+            if (!ex) return escapeHtml(eid);
+            return ex.url
+              ? `<a class="evi-chip" href="${escapeHtml(ex.url)}" target="_blank" rel="noopener" title="${escapeHtml(ex.summary || ex.name)}">${escapeHtml(ex.name)}</a>`
+              : `<span class="evi-chip" title="${escapeHtml(ex.summary || '')}">${escapeHtml(ex.name)}</span>`;
+          }).join('')}</dd></div>`
         : '';
       return `
         <div class="mip-card" id="${m.id}">
@@ -580,10 +725,12 @@
               <dt>Status</dt>
               <dd>${escapeHtml(m.status || '—')}</dd>
             </div>
+            ${lifecycleExtra}
             <div>
               ${secondMeta}
             </div>
             ${upstreamExtra}
+            ${evidenceExtra}
             <div>
               <dt>Component</dt>
               <dd>${compHtml}</dd>
@@ -592,7 +739,7 @@
               <dt>Promises</dt>
               <dd>${(m.promises || []).map(p => {
                 const pr = promiseById[p];
-                return pr ? `<a href="index.html#${p}" data-promise="${p}" title="${escapeHtml(pr.name)}">${p}</a>` : p;
+                return pr ? `<a href="plan.html#${p}" data-promise="${p}" title="${escapeHtml(pr.name)}">${p}</a>` : p;
               }).join(' · ') || '—'}</dd>
             </div>
           </dl>
@@ -608,7 +755,7 @@
       const c = componentById[r.target];
       return `
         <tr>
-          <td><a class="reviews-id" href="index.html#${r.target}" data-component="${r.target}">${r.target}</a></td>
+          <td><a class="reviews-id" href="plan.html#${r.target}" data-component="${r.target}">${r.target}</a></td>
           <td>${escapeHtml(r.label)}${r.note ? ` <span style="color:var(--text-faint);">— ${escapeHtml(r.note)}</span>` : ''}</td>
           <td><span class="review-kind">${escapeHtml(r.kind)}</span></td>
           <td>${escapeHtml(r.trigger)}</td>
@@ -658,13 +805,16 @@
     cxHost.innerHTML = (data.crossovers || []).map(cx => {
       const items = (cx.items || []).map(id => {
         if (cx.kind === 'components' && componentById[id]) {
-          return `<a class="cx-chip" href="index.html#${id}" data-component="${id}" title="${escapeHtml(componentById[id].name)}">${id}</a>`;
+          return `<a class="cx-chip" href="plan.html#${id}" data-component="${id}" title="${escapeHtml(componentById[id].name)}">${id}</a>`;
         }
         if (cx.kind === 'mips' && mipById[id]) {
           return `<a class="cx-chip" href="#${id}" title="${escapeHtml(mipById[id].title)}">${id}</a>`;
         }
         if (cx.kind === 'experiments' && expById[id]) {
-          return `<span class="cx-chip" title="${escapeHtml(expById[id].name)}">${id}</span>`;
+          const ex = expById[id];
+          return ex.url
+            ? `<a class="cx-chip" href="${escapeHtml(ex.url)}" target="_blank" rel="noopener" title="${escapeHtml(ex.name)}">${id}</a>`
+            : `<span class="cx-chip" title="${escapeHtml(ex.name)}">${id}</span>`;
         }
         return `<span class="cx-chip">${escapeHtml(id)}</span>`;
       }).join('');

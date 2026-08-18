@@ -351,6 +351,52 @@
     border-top: 1px dashed var(--line);
   }
   .phase-artefact b { color: var(--iog-infared); margin-right: 6px; }
+  .phase-status {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin-top: 6px;
+    white-space: nowrap;
+  }
+  .phase-status.done    { color: var(--good); background: var(--good-soft); border: 1px solid var(--good); }
+  .phase-status.current { color: var(--iog-infared); background: var(--bad-soft); border: 1px solid var(--iog-infared); }
+  .phase-status.planned { color: var(--text-faint); background: var(--bg-soft); border: 1px solid var(--line-strong); }
+
+  /* MVP-shortcut markers */
+  .shortcut-chip {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--warn);
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    border-radius: 4px;
+    padding: 1px 7px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .diverges-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--warn);
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    border-radius: 4px;
+    padding: 1px 7px;
+    white-space: nowrap;
+  }
 
   /* Picks table */
   .picks-table-wrap {
@@ -626,7 +672,7 @@
       <header class="section-head">
         <div class="section-kind">Evidence</div>
         <h2>Why we can claim this works</h2>
-        <p>Nothing above is speculative. Every mechanism runs for real: the reference implementation at <code>contract/</code> realises the two published standards in one deployment, with both conformance suites passing against a local Midnight network.</p>
+        <p>Nothing above is speculative. Every mechanism runs for real: the <a href="https://github.com/midnightntwrk/passport/tree/main/contract" target="_blank" rel="noopener">reference implementation at <code>contract/</code></a> realises the two published standards in one deployment, with both conformance suites passing against a local Midnight network.</p>
       </header>
 
       <div class="evidence">
@@ -670,17 +716,17 @@
       <header class="section-head">
         <div class="section-kind">Delivery · October 2026</div>
         <h2>The October demo</h2>
-        <p>The lifecycle above, made watchable: an end-to-end Passport account on a screen, with a recovery sad-path. The demo is an MVP that consumes the standards early. Where it takes a shortcut (single device, managed signing through a partner-operated MPC committee), the shortcut carries a migration plan back to the principled path; the <a href="standards.html">standards body</a> lands that path on a continuous timeline.</p>
+        <p>The lifecycle above, made watchable: an end-to-end Passport account on a screen, with a recovery sad-path. The demo is an MVP that consumes the standards early. Where it takes a shortcut (single device, managed signing through a partner-operated MPC committee), the shortcut is flagged below and carries a migration plan back to the principled path; the <a href="standards.html">standards body</a> lands that path on a continuous timeline. A step-by-step <a href="archive/onboarding-mockup.html">onboarding click-through</a> of the first-run experience is kept in the archive.</p>
       </header>
 
       <ul class="ships-list">
         <li><b>Passkey login</b><span>First visit registers a passkey (Face ID, Touch ID, Windows Hello). Subsequent visits authenticate biometrically. No seed phrase shown at any point.</span></li>
         <li><b>Name registration</b><span>User registers <code>alice.passport.night</code> against the deployed upstream name service (MIP-0007); on-chain confirmation visible. Name uniqueness enforced at the registry.</span></li>
-        <li><b>Wallet view</b><span>Three role addresses (Shielded, Night, Dust) with balances synced via view key and a hosted indexer.</span></li>
+        <li><b>Wallet view<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>Three role addresses (Shielded, Night, Dust) with balances synced via view key and a hosted indexer. The v1.0 path is the substitutable multi-provider indexer model.</span></li>
         <li><b>Signing primitive</b><span>User signs arbitrary data and a Night transfer. Signatures verify cross-implementation (TypeScript signer ↔ Rust verifier).</span></li>
         <li><b>Function-call key grants</b><span>User issues, rotates, and revokes scoped function-call keys for dApp authorisation. Multi-device peer behaviour is deferred.</span></li>
         <li><b>Sign-in with Passport</b><span>A pseudo third-party app requests scoped access; user approves with biometric; transaction signed; function-call key issued.</span></li>
-        <li><b>Recovery walkthrough</b><span>User &quot;loses&quot; their passkey. Recovery via the auth provider&rsquo;s flow: alt-passkey on a fallback device or backup credential. On-chain account state unchanged; passkey-to-account binding re-established.</span></li>
+        <li><b>Recovery walkthrough<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>User &quot;loses&quot; their passkey. Recovery via the auth provider&rsquo;s flow: alt-passkey on a fallback device or backup credential. On-chain account state unchanged. The v1.0 path is the guardian recovery of lifecycle step 6, already running in the prototype.</span></li>
       </ul>
     </div>
   </section>
@@ -702,7 +748,7 @@
       <header class="section-head">
         <div class="section-kind">Picks</div>
         <h2>Component picks for the demo build</h2>
-        <p>Each component has alternatives in its canvas; this table records which alternative the demo build runs. Click any ID to open its full design space.</p>
+        <p><b>Picks are MVP shortcuts, never the specification.</b> Each component has alternatives in its canvas; this table records which alternative the demo build runs, and flags every pick that departs from a decided standard with its migration plan. Click any ID to open its full design space.</p>
       </header>
 
       <div class="picks-table-wrap">
@@ -759,6 +805,7 @@
         <div>
           <div class="phase-marker">Phase ${p.id}</div>
           <div class="phase-window">${escapeHtml(p.window)}</div>
+          ${p.status ? `<span class="phase-status ${escapeHtml(p.status)}">${escapeHtml(p.status)}</span>` : ''}
         </div>
         <div>
           <div class="phase-name">${escapeHtml(p.name)}</div>
@@ -768,7 +815,7 @@
               ${p.components.map(cid => {
                 const c = componentById[cid];
                 return c
-                  ? `<a class="comp-chip" href="index.html#${cid}" data-component="${cid}" title="${escapeHtml(c.name)}">${cid}</a>`
+                  ? `<a class="comp-chip" href="plan.html#${cid}" data-component="${cid}" title="${escapeHtml(c.name)}">${cid}</a>`
                   : `<span class="comp-chip">${cid}</span>`;
               }).join('')}
             </div>
@@ -786,10 +833,10 @@
       const c = componentById[s.component];
       return `
         <tr>
-          <td><a class="picks-id" href="index.html#${s.component}" data-component="${s.component}">${s.component}</a></td>
+          <td><a class="picks-id" href="plan.html#${s.component}" data-component="${s.component}">${s.component}</a></td>
           <td>${c ? escapeHtml(c.name) : ''}</td>
           <td class="picks-alt">${escapeHtml(s.alt || '—')}</td>
-          <td class="picks-note">${escapeHtml(s.note || '')}</td>
+          <td class="picks-note">${s.diverges ? '<span class="diverges-badge" title="Departs from the decided standard; a migration plan applies">Shortcut</span> ' : ''}${escapeHtml(s.note || '')}</td>
         </tr>
       `;
     }).join('');

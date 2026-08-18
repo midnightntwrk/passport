@@ -1158,6 +1158,7 @@ window.PASSPORT_DATA = {
       upstream: 'https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0012.md',
       upstream_label: 'MIP-0012 — published upstream',
       lifecycle: 'MIP Proposed',
+      evidence: ['stateless-shielded-custody', 'contract-to-contract-transfer', 'account-custody-reference'],
       components: ['C4', 'C1'],
       co_author: 'Partner wallet review invited; cryptographer review an acceptance criterion',
       status: 'Published upstream — Proposed; errata from implementation merged',
@@ -1170,6 +1171,7 @@ window.PASSPORT_DATA = {
       upstream: 'https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0013.md',
       upstream_label: 'MIP-0013 — published upstream',
       lifecycle: 'MIP Proposed',
+      evidence: ['redjubjub-wallet', 'redjubjub-wallet-rs', 'account-custody-reference'],
       components: ['C1', 'C5'],
       co_author: 'Cryptographer review (acceptance criterion); partner wallet review invited',
       status: 'Published upstream — Proposed; errata from implementation merged',
@@ -1191,6 +1193,7 @@ window.PASSPORT_DATA = {
       title: 'Recovery paths',
       detail: 'Building block three: total-loss recovery behind the account standard\'s recovery seam, whose interface MIP-0013 fixes (epoch bump, single fresh device). Mechanism decided: BUSS / ANARKey stateless guardians plus paper keys (EPRINT 2025/551) — assessed, and implemented in the account-custody prototype (buss-wasm, shared guardian wire formats). Drafting is the next step; DeRec and encrypted-blob backup remain substitutable profiles behind the same seam.',
       components: ['C14', 'C15', 'C13'],
+      evidence: ['account-custody-prototype'],
       co_author: 'ANARKey / Pleiades authors; cryptographer review of the integration',
       lifecycle: 'Not yet filed',
       status: 'Mechanism decided 2026/07 — drafting next',
@@ -1336,6 +1339,7 @@ window.PASSPORT_DATA = {
   experiments: [
     {
       id: 'redjubjub-wallet',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/redjubjub-wallet',
       name: 'Schnorr-on-Jubjub end-to-end',
       summary: 'In-circuit Schnorr verification gating token release from a Compact contract on devnet — TypeScript client with a Rust CLI signer, replay counter bound into the challenge. The evidence base for the MIP-0013 signature scheme.',
       validates: ['C5', 'C7', 'C1'],
@@ -1343,6 +1347,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'redjubjub-wallet-rs',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/redjubjub-wallet-rs',
       name: 'Schnorr wallet — pure Rust',
       summary: 'The same signing and verification reproduced directly on the midnight-ledger crates, with no TypeScript, WASM, or npm dependency — signatures interchangeable with the TypeScript rig. Demonstrates the client-agnostic signing boundary MIP-0013 standardises, and pins the challenge hash as persistentHash: SHA-256 over the field-aligned encoding, stable across toolchain upgrades.',
       validates: ['C5', 'C7'],
@@ -1350,6 +1355,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'account-custody-prototype',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/account-custody-prototype',
       name: 'Account-custody prototype (passkey wallet)',
       summary: 'Passkey-authenticated wallet app driving a device-set account contract on devnet: add and remove devices, epoch revocation, Night custody, on-device proving, and BUSS / ANARKey recovery behind the recovery seam. Its hash-preimage authorisation placeholder has since been superseded by the reference implementation\'s in-circuit Schnorr per MIP-0013.',
       validates: ['C1', 'C9', 'C16'],
@@ -1357,6 +1363,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'contract-custody-feasibility',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/contract-custody-feasibility',
       name: 'Contract-vs-address custody (S1–S6)',
       summary: 'Six probes establishing what is feasible for shielded and unshielded asset custody at the contract layer, and what remains gated on SDK fixes.',
       validates: ['C1', 'C4'],
@@ -1364,6 +1371,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'stateless-shielded-custody',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/stateless-shielded-custody',
       name: 'Stateless shielded custody (W1–W6)',
       summary: 'Six probes validating contract custody of shielded coins without public coin state: witness-supplied coin info is accepted by the node, deposits are discovered via an encrypted on-contract inbox, and observer surfaces carry zero coin artefacts where the public-state control leaks nonce and color verbatim. Also surfaced the change-handling rule (persist the re-owned coin, not the pre-transient change) that the reference pattern in circulation gets wrong.',
       validates: ['C4', 'C1', 'C16', 'C17'],
@@ -1371,6 +1379,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'dust-sponsorship-feasibility',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/dust-sponsorship-feasibility',
       name: 'Wallet-level fee splitting (F1–F6)',
       summary: 'End-to-end confirmation on a production node that the wallet SDK\'s fee-splitting parameter lands sponsored transactions: a two-balanced transfer, a sponsored circuit call from a zero-token user, and a sponsored contract deployment. The negative probes (TTL expiry, sponsor exhaustion) fail in ways a sponsor service can detect; the tutorial\'s corruption warning is refuted.',
       validates: ['C24'],
@@ -1378,6 +1387,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'contract-to-contract-transfer',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/contract-to-contract-transfer',
       name: 'Direct contract-to-contract shielded transfer (P1–P3)',
       summary: 'One client-composed transaction pairs a custody contract\'s witness-supplied spend with another custody contract\'s claim — no Compact cross-contract calls. The received coin is first-class, and the measured privacy cost is exactly the predicted address linking, with value, color, and nonce hidden. The technical leg of the one-hop rule falls; the privacy leg stands, and both payment modes are now normative in MIP-0012.',
       validates: ['C4', 'C22'],
@@ -1385,6 +1395,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'account-custody-reference',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/contract',
       name: 'Account custody reference implementation',
       summary: 'The standard to build against: MIP-0012 and MIP-0013 realised in one deployment at contract/, with every conformance suite the standards require passing on a live stack, an independent bit-exact Rust signer on the published ledger crates, a byte-level leak audit, and the discovery walk exercised end to end from the contract address alone.',
       validates: ['C1', 'C4', 'C5', 'C17'],
