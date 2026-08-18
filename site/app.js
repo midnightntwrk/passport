@@ -248,6 +248,25 @@
   }
 
   // -------------------------------------------------------------------------
+  // What remains — the open work, by lane.
+  // -------------------------------------------------------------------------
+
+  function renderNextSteps() {
+    const host = document.getElementById('nextSteps');
+    if (!host) return;
+    host.innerHTML = (data.next_steps || []).map(n => `
+      <div class="next-card">
+        <span class="next-lane">${escapeHtml(n.lane)}</span>
+        <h3 class="next-title">${escapeHtml(n.title)}</h3>
+        <p class="next-detail">${escapeHtml(n.detail)}</p>
+        ${(n.components || []).length
+          ? `<div class="next-chips">${n.components.map(c =>
+              `<button class="next-chip" data-component="${escapeHtml(c)}" type="button">${escapeHtml(c)}</button>`).join('')}</div>`
+          : ''}
+      </div>`).join('');
+  }
+
+  // -------------------------------------------------------------------------
   // Macro graph — Cytoscape.
   // -------------------------------------------------------------------------
 
@@ -582,6 +601,7 @@
     renderCategoryOptions();
     renderComponentsTable();
     renderDecisions();
+    renderNextSteps();
     applyComponentFilters();
 
     const search = document.getElementById('compSearch');

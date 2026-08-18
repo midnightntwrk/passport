@@ -174,7 +174,7 @@ window.PASSPORT_DATA = {
       status: 'specified',
       status_note: 'Specified by upstream MIP-0012 (contract custody) and MIP-0013 (account authorisation), realised by the reference implementation with passing conformance suites. Onboarding cost and deployment flow remain implementation questions.',
       serves: ['P1', 'P3', 'P4', 'P5', 'P8'],
-      outcome: 'The on-chain Compact contract representing a Passport account. Holds the device set, name binding, active scoped grants, and — per C4\'s resolved custody choice — the user\'s Midnight-native assets. Specified by two standards published upstream: MIP-0012 (the asset surface plus an abstract authorisation seam) and MIP-0013 (rolling single-use device entries, revocation epochs, the post-deploy bootstrap, in-circuit Schnorr seam instantiation). The reference implementation realises both in one deployment, with conformance suites passing and an independent bit-exact Rust signer; the errata implementation surfaced are folded back into the upstream texts. Per-account instances are chosen over a registry.',
+      outcome: 'The on-chain Compact contract representing a Passport account. Holds the device set, name binding, active scoped grants, and — per C4\'s resolved custody choice — the user\'s Midnight-native assets. Specified by two standards published upstream: MIP-0012 (the asset surface plus an abstract authorisation seam) and MIP-0013 (rolling single-use device entries, revocation epochs, the post-deploy bootstrap, in-circuit Schnorr seam instantiation). The reference implementation realises both in one deployment, with conformance suites passing and an independent bit-exact Rust signer; the errata the implementation surfaced are folded back into the upstream texts. Per-account instances are chosen over a registry.',
       hard_deps: ['C2', 'C4', 'C9', 'C10'],
       associations: ['C11', 'C12'],
       alternatives: [
@@ -570,7 +570,7 @@ window.PASSPORT_DATA = {
       open_questions: [
         'Storage substrate per platform.',
         'Sync across devices, or per-device independent storage?',
-        'What user-recoverable state lives here that\'s not on chain?',
+        'What user-recoverable state lives here that is not on chain?',
       ],
       failure_modes: [
         'Wrapping-key unavailable from platform secure storage.',
@@ -996,7 +996,7 @@ window.PASSPORT_DATA = {
     {
       when: '2026/07', kind: 'upstream',
       title: 'Custody and authorisation MIPs published upstream',
-      detail: 'The keystone pair carries upstream numbers — MIP-0012 (contract custody) and MIP-0013 (multi-key account authorisation), both Proposed — and the name service standard (MIP-0007) merged the forward-looking authorisation arms Passport\'s multi-key accounts need. The errata implementation surfaced (direct-transfer return signature, DST derivation, post-deploy bootstrap) are merged into the upstream texts.',
+      detail: 'The keystone pair carries upstream numbers — MIP-0012 (contract custody) and MIP-0013 (multi-key account authorisation), both Proposed — and the name service standard (MIP-0007) merged the forward-looking authorisation arms Passport\'s multi-key accounts need. The errata the implementation surfaced (direct-transfer return signature, DST derivation, post-deploy bootstrap) are merged into the upstream texts.',
       components: ['C4', 'C1', 'C5', 'C2'],
     },
     {
@@ -1009,7 +1009,7 @@ window.PASSPORT_DATA = {
 
   // ---------------------------------------------------------------------------
   // What remains — the open work, by lane. Rendered under the progress
-  // timeline as the "what's left" map. Lanes: Standards | Reviews |
+  // timeline as the "what remains" map. Lanes: Standards | Reviews |
   // Evidence | Client | Workstreams | Delivery.
   // ---------------------------------------------------------------------------
 

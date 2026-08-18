@@ -577,6 +577,15 @@
     width: 100%;
     height: 100%;
   }
+  .graph-fallback {
+    margin: 24px;
+    padding: 14px 18px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 8px;
+    color: var(--text-mute);
+    font-size: 0.92rem;
+    max-width: 60ch;
+  }
 
   .graph-controls {
     position: absolute;
@@ -747,6 +756,65 @@
     font-size: 0.72rem;
     color: var(--text-faint);
     line-height: 1.6;
+  }
+
+  /* ---------- What remains ---------- */
+
+  section.what-remains {
+    padding: 48px 0 56px;
+    border-top: 1px solid var(--line);
+  }
+  .next-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+    gap: 14px;
+  }
+  .next-card {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px 18px;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .next-lane {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--iog-infared);
+  }
+  .next-title {
+    font-family: var(--font-display);
+    font-size: 1.02rem;
+    font-weight: 500;
+    color: var(--text);
+    margin: 0;
+  }
+  .next-detail {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--text-mute);
+    margin: 0;
+    flex: 1;
+  }
+  .next-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .next-chip {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--text-mute);
+    background: transparent;
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease;
+  }
+  .next-chip:hover {
+    border-color: var(--iog-infared);
+    color: var(--text);
   }
 
   /* ---------- Parallelisation (streams × sequence) ---------- */
@@ -1067,7 +1135,9 @@
       </header>
 
       <div class="graph-shell">
-        <div id="cy" class="cy-canvas"></div>
+        <div id="cy" class="cy-canvas">
+          <p class="graph-fallback">The interactive graph needs its CDN-loaded layout library, which did not load here. The component table above and the parallelisation chart below carry the same dependency data.</p>
+        </div>
 
         <div class="graph-controls">
           <button class="graph-toggle" id="toggleAssoc" type="button" aria-pressed="false"
@@ -1101,10 +1171,21 @@
     </div>
   </section>
 
-  <section class="chart-section" id="parallelisation">
+  <section class="what-remains" id="what-remains">
     <div class="container wide">
       <header class="section-head">
         <div class="section-kind">Section 5</div>
+        <h2>What remains, by lane</h2>
+        <p>Everything still between here and a ratified, feature-complete v1.0 — standards to draft, reviews commissioned as acceptance criteria, evidence still to gather, client policies to pin down, and the workstreams that remain open decision spaces. Component chips open the canvas in place.</p>
+      </header>
+      <div class="next-grid" id="nextSteps"></div>
+    </div>
+  </section>
+
+  <section class="chart-section" id="parallelisation">
+    <div class="container wide">
+      <header class="section-head">
+        <div class="section-kind">Section 6</div>
         <h2>Parallelisation — streams &times; sequence</h2>
         <p>How v1.0 work splits across teams: six streams plus a discovery lane, laid out left-to-right by global dep-depth (longest chain to each component, computed from <code>data.js</code>). Streams are not synchronised — gaps are real, indicating where a stream is idle waiting on something elsewhere. The thick red ribbon traces the longest dependency chain (the critical path); whatever sits on it sets the project's minimum duration. Two pivots are flagged: <strong>C1</strong> (the bidirectional core that everything identity-shaped flows through) and <strong>C8</strong> (the cross-cutting hash-discipline gate). Below the streams sits the <strong>Demo phases</strong> lane; click a phase bar to spotlight its components.</p>
       </header>

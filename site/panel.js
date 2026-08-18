@@ -180,7 +180,7 @@
       </div>
 
       <section class="panel-section">
-        <h4>What's at stake</h4>
+        <h4>What is at stake</h4>
         <p>${escapeHtml(d.detail)}</p>
         ${d.leverage ? `<p class="panel-hint">${escapeHtml(d.leverage)}</p>` : ''}
       </section>

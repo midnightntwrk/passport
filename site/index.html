@@ -739,7 +739,7 @@
           <h3>Standards community</h3>
           <ul>
             <li><a href="standards.html">The MIP register</a> — every proposal, its upstream lifecycle, and its evidence.</li>
-            <li><a href="#engage">Comment upstream</a> — both keystone MIPs are Proposed and open for review.</li>
+            <li><a href="#engage">Comment upstream</a> — review is what moves the keystone pair toward acceptance.</li>
             <li><a href="plan.html">The full plan</a> — promises, canvases, dependencies, and open decisions.</li>
           </ul>
         </div>
@@ -786,7 +786,7 @@
         <div class="ask">
           <span class="ask-who">Everyone</span>
           <h3>Review MIP-0012 and MIP-0013</h3>
-          <p>Both keystone standards are Proposed upstream and open for comment. Implementation errata are already folded in; ecosystem review is what moves them toward acceptance.</p>
+          <p>Both keystone standards are open for comment upstream, with the errata the implementation surfaced already folded in; ecosystem review is what moves them toward acceptance.</p>
           <span><a href="standards.html">The register, with upstream links →</a></span>
         </div>
         <div class="ask">
@@ -822,7 +822,7 @@
       <header class="section-head">
         <div class="section-kind">Delivery</div>
         <h2>One body of work, two surfaces</h2>
-        <p>Feature-complete v1.0 is a body of deliverables: ratified MIPs, cryptographer and formal-methods sign-off, and evidence. The October demo is an MVP that consumes those deliverables early; where a deliverable is not yet mature, the demo picks the simplest workable mechanism and records a migration plan back to the principled specification.</p>
+        <p>Feature-complete v1.0 is a body of deliverables: ratified MIPs, cryptographer and formal-methods sign-off, and evidence. The October demo is an MVP that consumes those deliverables early; how the two converge, primitive by primitive, is documented on the <a href="standards.html">Standards page</a>.</p>
       </header>
 
       <div class="delivery-grid">
@@ -857,13 +857,22 @@
 </footer>
 
 <script>
-  // Deep links to canvases moved with them to the Plan page: forward
-  // index.html#C4 / #P3 / #Q4 style fragments so old links keep working.
+  // Deep links to sections that moved with the restructure keep working:
+  // canvas fragments (#C4 / #P3 / #Q4) and the planning sections forward
+  // to the Plan page; the old status anchors map to the status board.
   (function () {
     var h = window.location.hash || '';
     if (/^#(C\d+|P\d+|Q\d+)$/.test(h)) {
       window.location.replace('plan.html' + h);
+      return;
     }
+    var moved = {
+      '#promises': 'plan.html#promises',
+      '#dependencies-graph': 'plan.html#dependencies-graph',
+      '#glance': '#status',
+      '#progress': '#status',
+    };
+    if (moved[h]) window.location.replace(moved[h]);
   })();
 </script>
 <script src="data.js"></script>
