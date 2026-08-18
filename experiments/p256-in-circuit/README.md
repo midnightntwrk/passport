@@ -78,7 +78,10 @@ vector and rejects: a different public challenge, a tampered ceremony type
 even when the tampered envelope is re-signed (isolating the prefix check
 from the signature check), an assertion made for a different relying party,
 flags without user verification under a require-UV relation (again
-re-signed), and a flipped signature scalar.
+re-signed), and a flipped signature scalar. Its high-S malleated twin is
+accepted, mirroring the pre-hashed relation's malleability test: the
+envelope checks constrain the message, not the signature form, and the
+committed Apple assertion is itself high-S.
 
 The recursion-leg tests (`tests/mock.rs` additions and `tests/wrapper.rs`)
 additionally check: valid Ed25519 and JubJub Schnorr vectors are accepted

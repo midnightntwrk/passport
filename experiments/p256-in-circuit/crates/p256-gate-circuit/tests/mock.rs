@@ -402,6 +402,30 @@ fn envelope_rejects_flipped_s() {
     );
 }
 
+// (s) The high-S malleated twin (r, n - s) ALSO satisfies the whole-envelope
+// relation: the envelope checks constrain the message, not the signature
+// form, and the shared ECDSA body accepts both per SEC 1. Documented here
+// for the same reason as (f) — the real Apple assertion in
+// webauthn/vector.json is itself high-S, so a low-S-only policy at the
+// standard level would need client-side normalisation.
+#[test]
+fn envelope_accepts_high_s_twin_documenting_malleability() {
+    let mut vector = generated_webauthn_envelope();
+    vector.s = high_s_twin(&vector.s);
+    // Guard the labelling: the generated vector is low-S normalised, so the
+    // twin must be the genuinely high-S form.
+    let twin = Option::<p256::Scalar>::from(p256::Scalar::from_repr(
+        scalar_to_be_bytes(&vector.s).into(),
+    ))
+    .expect("twin scalar is canonical");
+    assert!(
+        bool::from(twin.is_high()),
+        "the twin of a low-S signature must be high-S"
+    );
+    check_envelope(&vector)
+        .expect("the high-S twin satisfies textbook ECDSA, hence the whole-envelope circuit");
+}
+
 // ---------------------------------------------------------------------------
 // Recursion-leg inner relations
 // ---------------------------------------------------------------------------
