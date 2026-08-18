@@ -214,6 +214,9 @@
     panel.setAttribute('aria-hidden', 'false');
     if (backdrop) backdrop.classList.add('show');
     panel.scrollTop = 0;
+    // Move keyboard focus into the panel so ESC/tab work immediately.
+    panel.setAttribute('tabindex', '-1');
+    panel.focus({ preventScroll: true });
   }
 
   function closePanel() {

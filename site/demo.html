@@ -3,20 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23E52321'/><text x='50' y='74' font-size='68' font-weight='700' font-family='Arial,Helvetica,sans-serif' fill='%23FFFFFF' text-anchor='middle'>P</text></svg>">
+<meta name="description" content="How a Midnight Passport account works: the whole system on one screen, the six-step lifecycle, the evidence, and the October 2026 demo plan.">
 <title>Midnight Passport — How it works</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="shared.css">
 <style>
-  body {
-    font-size: 17px;
-    line-height: 1.65;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-  main { flex: 1; }
   .container {
     max-width: clamp(820px, 80vw, 1280px);
     margin: 0 auto;
@@ -26,50 +20,9 @@
 
   section.hero { padding: 64px 0 40px; }
 
-  .doc-logo, .doc-logo-dark {
-    height: clamp(40px, 4vw, 72px);
-    width: auto;
-    display: block;
-    margin-bottom: 36px;
-  }
-  .doc-logo-dark { display: none; }
-  html[data-theme="dark"] .doc-logo { display: none; }
-  html[data-theme="dark"] .doc-logo-dark { display: block; }
-  @media (not (prefers-color-scheme: light)) {
-    html:not([data-theme="light"]) .doc-logo { display: none; }
-    html:not([data-theme="light"]) .doc-logo-dark { display: block; }
-  }
+  .doc-logo, .doc-logo-dark { height: clamp(40px, 4vw, 72px); margin-bottom: 36px; }
 
-  .breadcrumb {
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-faint);
-    margin-bottom: 16px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: center;
-  }
-  .breadcrumb a {
-    color: var(--text-mute);
-    text-decoration: none;
-    border-bottom: 1px solid var(--line);
-    transition: color .12s ease, border-color .12s ease;
-  }
-  .breadcrumb a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
-  .breadcrumb .sep { opacity: 0.5; }
 
-  .kind {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--iog-infared);
-    font-weight: 600;
-    margin-bottom: 14px;
-  }
   h1 {
     font-family: var(--font-display);
     font-size: clamp(2.2rem, 4.6vw, 3.4rem);
@@ -88,27 +41,6 @@
     margin: 0;
   }
 
-  .symbiosis-banner {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 28px;
-    padding: 10px 16px;
-    border: 1px dashed var(--line-strong);
-    border-radius: 4px;
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    color: var(--text-mute);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-  .symbiosis-banner a {
-    color: var(--iog-infared);
-    text-decoration: none;
-    font-weight: 600;
-    border-bottom: 1px solid currentColor;
-  }
-  .symbiosis-banner a:hover { color: var(--iog-dawn); }
 
   /* Sections */
   section.section {
@@ -116,15 +48,6 @@
     border-top: 1px solid var(--line);
   }
   .section-head { margin-bottom: 28px; }
-  .section-kind {
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--iog-infared);
-    font-weight: 600;
-    margin-bottom: 12px;
-  }
   .section-head h2 {
     font-family: var(--font-display);
     font-size: clamp(1.6rem, 2.6vw, 2.1rem);
@@ -444,25 +367,6 @@
   }
   .picks-note { color: var(--text-mute); }
 
-  /* Footer */
-  footer.landing-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 16px;
-    flex-wrap: wrap;
-    border-top: 1px solid var(--line);
-    padding: 28px clamp(24px, 5vw, 80px);
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: var(--text-faint);
-    max-width: clamp(820px, 80vw, 1280px);
-    margin: 0 auto;
-    width: 100%;
-  }
-  footer.landing-footer a { color: var(--text-mute); text-decoration: none; border-bottom: 1px solid var(--line); }
-  footer.landing-footer a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
-  .footer-meta { font-size: 0.74rem; color: var(--text-faint); }
 </style>
 </head>
 <body>

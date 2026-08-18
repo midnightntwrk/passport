@@ -3,20 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23E52321'/><text x='50' y='74' font-size='68' font-weight='700' font-family='Arial,Helvetica,sans-serif' fill='%23FFFFFF' text-anchor='middle'>P</text></svg>">
+<meta name="description" content="The Midnight Passport architecture map: trust zones, where the 25 runtime components live, and who they talk to.">
 <title>Midnight Passport — Architecture</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="shared.css">
 <style>
-  body {
-    font-size: 17px;
-    line-height: 1.65;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-  main { flex: 1; }
   .container {
     max-width: clamp(1100px, 92vw, 1500px);
     margin: 0 auto;
@@ -25,38 +19,9 @@
   }
 
   section.hero { padding: 56px 0 24px; }
-  .doc-logo, .doc-logo-dark {
-    height: clamp(40px, 4vw, 64px);
-    margin-bottom: 18px;
-  }
-  html[data-theme="dark"] .doc-logo { display: none; }
-  html[data-theme="light"] .doc-logo-dark { display: none; }
-  @media (prefers-color-scheme: dark) {
-    html:not([data-theme="light"]) .doc-logo { display: none; }
-  }
-  @media (prefers-color-scheme: light) {
-    html:not([data-theme="dark"]) .doc-logo-dark { display: none; }
-  }
+  .doc-logo, .doc-logo-dark { height: clamp(40px, 4vw, 64px); margin-bottom: 18px; }
 
-  .breadcrumb {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: var(--text-faint);
-    margin-bottom: 18px;
-  }
-  .breadcrumb a { color: var(--text-mute); text-decoration: none; }
-  .breadcrumb a:hover { color: var(--iog-infared); }
-  .breadcrumb .sep { margin: 0 8px; color: var(--text-faint); }
 
-  .kind {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--iog-infared);
-    font-weight: 700;
-    margin-bottom: 10px;
-  }
   h1 {
     font-family: var(--font-display);
     font-size: clamp(2rem, 4vw, 3rem);
@@ -396,7 +361,7 @@
     border-radius: 12px;
     background: var(--card-soft-fill);
   }
-  .legend h3, .notes h3 {
+  .legend h2, .notes h2 {
     font-family: var(--font-display);
     font-size: 0.92rem;
     font-weight: 600;
@@ -447,25 +412,11 @@
     font-weight: 700;
   }
 
-  /* Footer */
+  /* Footer (wide container override) */
   footer.landing-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 16px;
-    flex-wrap: wrap;
-    border-top: 1px solid var(--line);
-    padding: 28px clamp(20px, 5vw, 60px);
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: var(--text-faint);
     max-width: clamp(1100px, 92vw, 1500px);
-    margin: 0 auto;
-    width: 100%;
+    padding: 28px clamp(20px, 5vw, 60px);
   }
-  footer.landing-footer a { color: var(--text-mute); text-decoration: none; border-bottom: 1px solid var(--line); }
-  footer.landing-footer a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
-  .footer-meta { font-size: 0.74rem; color: var(--text-faint); }
 </style>
 </head>
 <body>
@@ -603,7 +554,7 @@
       </div>
 
       <div class="legend">
-        <h3>Legend</h3>
+        <h2>Legend</h2>
         <div class="legend-grid">
           <div class="legend-row">
             <span class="swatch-chip"><span>Cn</span></span>
@@ -628,7 +579,7 @@
       </div>
 
       <div class="notes">
-        <h3>Notes for reviewers</h3>
+        <h2>Notes for reviewers</h2>
         <ul>
           <li><strong>This is a context + container view.</strong> It shows where components live and who they talk to, not the data flow for any specific operation. The <a href="demo.html">How it works</a> page walks the account lifecycle end to end.</li>
           <li><strong>How authority flows.</strong> The user authorises with a biometric on a device-bound passkey; the derived device key signs each call with JubJub Schnorr (C5, C9). Witnesses never leave the device — proving happens in-tab (C6, C7) — and the account custody contract verifies the proof in-circuit and is the sole authority over the account's assets (C1, C4). Recovery guardians reach the account only through the epoch-bump seam (C14, C15); the name binds to the account through the upstream registry (C2), and the DID linkage is a live C3 question.</li>

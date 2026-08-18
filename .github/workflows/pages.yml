@@ -25,6 +25,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Check site integrity
+        run: |
+          set -euo pipefail
+          for f in site/*.js; do node --check "$f"; done
+          node site/check.js
+
       - name: Stage Pages artefact
         run: |
           set -euo pipefail
