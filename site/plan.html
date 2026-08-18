@@ -771,6 +771,47 @@
     padding: 48px 0 56px;
     border-top: 1px solid var(--line);
   }
+  .waiting-on-block { margin-bottom: 32px; }
+  .waiting-on-head {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 12px;
+  }
+  .waiting-on {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .waiting-row {
+    display: grid;
+    grid-template-columns: 190px 1fr auto;
+    gap: 16px;
+    align-items: baseline;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .waiting-row:last-child { border-bottom: none; }
+  .waiting-party {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--iog-infared);
+  }
+  .waiting-item {
+    font-size: 0.92rem;
+    color: var(--text-mute);
+    line-height: 1.5;
+    margin: 0;
+  }
+  .waiting-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  @media (max-width: 720px) {
+    .waiting-row { grid-template-columns: 1fr; gap: 6px; }
+  }
   .next-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
@@ -859,6 +900,7 @@
     border: 2px solid var(--iog-infared);
   }
   .legend .legend-swatch.demo-phase { background: #FFBA36; }
+  .legend .legend-swatch.dimmed { background: var(--card-fill); border-color: var(--card-stroke-soft); opacity: 0.45; }
 
   .chart-wrap {
     background: var(--card-soft-fill);
@@ -902,6 +944,10 @@
   svg.streams .stream-node.selected .node { stroke: var(--iog-infared); stroke-width: 2.5; }
   .stream-node .node { stroke: var(--card-stroke); stroke-width: 1; }
   .stream-node.pivot .node { stroke: var(--iog-infared); stroke-width: 2.5; }
+  /* Specified / decided components are settled — dim them so the
+     un-started band reads as the staffable frontier. */
+  svg.streams:not(.has-selection) .stream-node.st-specified { opacity: 0.42; }
+  svg.streams:not(.has-selection) .stream-node.st-decided { opacity: 0.62; }
   .stream-edge { fill: none; stroke: var(--text-mute); stroke-width: 1; opacity: 0.18; }
   .critical-path-line {
     fill: none;
@@ -1185,6 +1231,12 @@
         <h2>What remains, by lane</h2>
         <p>Everything still between here and a ratified, feature-complete v1.0 — standards to draft, reviews commissioned as acceptance criteria, evidence still to gather, client policies to pin down, and the workstreams that remain open decision spaces. Component chips open the canvas in place.</p>
       </header>
+
+      <div class="waiting-on-block">
+        <h3 class="waiting-on-head">Waiting on — one row per external party</h3>
+        <div class="waiting-on" id="waitingOn"></div>
+      </div>
+
       <div class="next-grid" id="nextSteps"></div>
     </div>
   </section>
@@ -1194,7 +1246,7 @@
       <header class="section-head">
         <div class="section-kind">Section 6</div>
         <h2>Parallelisation — streams &times; sequence</h2>
-        <p>How v1.0 work splits across teams: six streams plus a discovery lane, laid out left-to-right by global dep-depth (longest chain to each component, computed from <code>data.js</code>). Streams are not synchronised — gaps are real, indicating where a stream is idle waiting on something elsewhere. The thick red ribbon traces the longest dependency chain (the critical path); whatever sits on it sets the project's minimum duration. Two pivots are flagged: <strong>C1</strong> (the bidirectional core that everything identity-shaped flows through) and <strong>C8</strong> (the cross-cutting hash-discipline gate). Below the streams sits the <strong>Demo phases</strong> lane; click a phase bar to spotlight its components.</p>
+        <p>How v1.0 work splits across teams: six streams plus a discovery lane, laid out left-to-right by global dep-depth (longest chain to each component, computed from <code>data.js</code>). Streams are not synchronised — gaps are real, indicating where a stream is idle waiting on something elsewhere. The thick red ribbon traces the longest dependency chain (the critical path); whatever sits on it sets the project's minimum duration. Two pivots are flagged: <strong>C1</strong> (the bidirectional core that everything identity-shaped flows through) and <strong>C8</strong> (the cross-cutting hash-discipline gate). Specified and decided components render dimmed, so the bright band is the staffable frontier. Below the streams sits the <strong>Demo phases</strong> lane; click a phase bar to spotlight its components.</p>
       </header>
 
       <div class="legend">
@@ -1208,6 +1260,7 @@
         <span class="legend-item"><span class="legend-swatch critical"></span>Critical path</span>
         <span class="legend-item"><span class="legend-swatch pivot-marker"></span>Pivot</span>
         <span class="legend-item"><span class="legend-swatch demo-phase"></span>Demo phase</span>
+        <span class="legend-item"><span class="legend-swatch dimmed"></span>Specified / decided (dimmed)</span>
       </div>
 
       <div class="chart-wrap">
@@ -1491,8 +1544,13 @@
       const pos = POS[id];
       const stream = STREAMS[pos.stream];
       const isPivot = PIVOTS.has(id);
+      const comp = components.find(c => c.id === id);
+      // Specified / decided components render dimmed so the un-started
+      // band reads directly as the staffable frontier.
+      const statusCls = comp && comp.status === 'specified' ? ' st-specified'
+        : comp && comp.status === 'decided' ? ' st-decided' : '';
       const g = el('g', {
-        class: 'stream-node' + (isPivot ? ' pivot' : ''),
+        class: 'stream-node' + (isPivot ? ' pivot' : '') + statusCls,
         'data-id': id,
         'data-component': id,
       });
@@ -1511,7 +1569,6 @@
       const idSpan = el('tspan', { x: pos.cx, class: 'node-id' });
       idSpan.textContent = id;
       label.appendChild(idSpan);
-      const comp = components.find(c => c.id === id);
       const nameSpan = el('tspan', { x: pos.cx, dy: '14' });
       nameSpan.textContent = shortName(comp ? comp.name : id);
       label.appendChild(nameSpan);

@@ -193,6 +193,14 @@
     color: var(--text-mute);
     max-width: 72ch;
   }
+  .status-updated {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    margin-top: 10px;
+  }
 
   /* ---------- Facts strip ---------- */
 
@@ -758,6 +766,7 @@
         <div class="section-kind">Status</div>
         <h2>Where the work stands</h2>
         <p>One vocabulary throughout: a component is <b>specified</b> when a published standard covers it, <b>decided</b> when the choice is set in stone but the specification is pending, an <b>open decision</b> when the design space is still live, and <b>in design</b> otherwise. Standards are counted separately from components.</p>
+        <p class="status-updated" id="statusUpdated"></p>
       </header>
 
       <div class="status-tiles" id="statusTiles"></div>
@@ -902,6 +911,12 @@
     }
   }
 
+  // ---- Status board freshness stamp ----
+  const updated = document.getElementById('statusUpdated');
+  if (updated && data.meta && data.meta.updated) {
+    updated.textContent = 'Data updated ' + data.meta.updated;
+  }
+
   // ---- Status tiles: standards counted separately from components ----
   const comps = data.components || [];
   const wsSet = new Set(data.workstreams || []);
@@ -924,7 +939,7 @@
       { v: publishedOurs, label: 'MIPs published upstream — ours', dot: 's-specified' },
       { v: mergedMps,     label: 'Problem statements merged upstream — ours', dot: 's-specified' },
       { v: adopted,       label: 'Upstream standards adopted', dot: 's-decided' },
-      { v: pipeline,      label: 'MIPs in the pipeline', dot: 's-neutral' },
+      { v: pipeline,      label: 'MIPs drafted, not yet filed', dot: 's-neutral' },
       { v: (data.experiments || []).filter(e => /^Complete/.test(e.status || '')).length,
         label: 'Experiments complete', dot: 's-neutral' },
     ];

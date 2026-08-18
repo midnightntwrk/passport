@@ -926,12 +926,14 @@ window.PASSPORT_DATA = {
       title: 'Schnorr-on-JubJub verified in-circuit',
       detail: 'A Compact contract verifies a JubJub Schnorr signature and releases tokens on devnet, with replay protection bound into the challenge. TypeScript and pure-Rust signers produce interchangeable signatures against the same deployed verifier — the signing boundary is client-agnostic.',
       components: ['C5', 'C7'],
+      evidence: ['redjubjub-wallet', 'redjubjub-wallet-rs'],
     },
     {
       when: '2026/04', kind: 'validated',
       title: 'Contract-custody feasibility mapped (S1–S6)',
       detail: 'Six probes establish what the contract layer can custody today, and where the SDK gates sit.',
       components: ['C1', 'C4'],
+      evidence: ['contract-custody-feasibility'],
     },
     {
       when: '2026/05', kind: 'validated',
@@ -950,30 +952,35 @@ window.PASSPORT_DATA = {
       title: 'Account-custody prototype end-to-end',
       detail: 'Passkey-authenticated wallet app driving a device-set account contract on devnet: add and remove devices, epoch revocation, Night custody, on-device proving.',
       components: ['C1', 'C9', 'C16'],
+      evidence: ['account-custody-prototype'],
     },
     {
       when: '2026/06', kind: 'validated',
       title: 'Every proof computed in the browser',
       detail: 'The prototype\'s end-to-end check passes with the proof-server container stopped: contract circuits, zswap balancing, dust fees, and signing all prove in-tab via the upstream WASM prover, in a dedicated Web Worker. "The user is the prover" demonstrated rather than asserted.',
       components: ['C6', 'C7'],
+      evidence: ['account-custody-prototype'],
     },
     {
       when: '2026/06', kind: 'validated',
       title: 'Zero-token onboarding confirmed (F1–F6)',
       detail: 'Wallet-level DUST sponsorship lands end-to-end on a production node: a two-balanced transfer, a sponsored circuit call from a zero-NIGHT, zero-DUST user, and — decisively for onboarding — a sponsored contract deployment. No NIGHT prerequisite exists; the negative probes fail in ways a sponsor service can detect and handle.',
       components: ['C24'],
+      evidence: ['dust-sponsorship-feasibility'],
     },
     {
       when: '2026/07', kind: 'validated',
       title: 'Stateless shielded custody validated (W1–W6)',
       detail: 'The headline privacy question resolved: contract-held shielded coins with zero coin artefacts on observer surfaces, validated on a production node with a byte-level leak audit. The change-handling defect it surfaced was reported and is fixed upstream. Bonus finding: the account encryption secret proved out as a pure viewing capability — read/spend separation by construction, so third-party deposit, owner discovery, and owner spend all worked from chain data alone.',
       components: ['C4', 'C1', 'C17'],
+      evidence: ['stateless-shielded-custody'],
     },
     {
       when: '2026/07', kind: 'validated',
       title: 'Recovery via BUSS / ANARKey assessed and prototyped',
       detail: 'Stateless-guardian recovery with paper keys (EPRINT 2025/551), assessed and then implemented in the account-custody prototype: recovery commitment plus provably-simulatable BUSS vector on-chain, guardians storing nothing, epoch-bump recovery through the account seam, one wire format across CLI and app.',
       components: ['C14', 'C15'],
+      evidence: ['account-custody-prototype'],
     },
     {
       when: '2026/07', kind: 'standard',
@@ -1010,6 +1017,7 @@ window.PASSPORT_DATA = {
       title: 'Direct contract-to-contract transfer validated',
       detail: 'A custody contract pays another custody contract in one client-composed transaction, with no Compact cross-contract calls: the sender\'s witness-supplied spend and the recipient\'s claim compose into a single submission, and the received coin is first-class. The privacy cost is exactly as predicted — the two contract addresses appear together while value, color, and nonce stay hidden — so the one-hop rule is now motivated by privacy alone.',
       components: ['C4', 'C22'],
+      evidence: ['contract-to-contract-transfer'],
     },
     {
       when: '2026/07', kind: 'upstream',
@@ -1022,6 +1030,7 @@ window.PASSPORT_DATA = {
       title: 'Reference implementation with conformance suites',
       detail: 'One deployment realises both MIPs — stateless custody, encrypted inbox, rolling device entries, in-circuit Schnorr — with every conformance suite the standards require passing on a live stack, an independent bit-exact Rust signer built on the published ledger crates, and a byte-level leak audit. The standard to build against going forward; the experiments remain the historical evidence base.',
       components: ['C1', 'C4', 'C5', 'C17'],
+      evidence: ['account-custody-reference'],
     },
   ],
 
@@ -1255,14 +1264,27 @@ window.PASSPORT_DATA = {
     },
   ],
 
+  // Review states: 'Awaiting trigger' (precondition not yet met) |
+  // 'To schedule' (trigger met, not yet booked) | 'Scheduling' |
+  // 'In progress' | 'Complete'.
   reviews: [
-    { target: 'C8',  label: 'Domain-separation registry',         kind: 'Cryptographer', trigger: 'Spec stable' },
-    { target: 'C5',  label: 'Account-authorisation signature scheme', kind: 'Cryptographer', trigger: 'MIP-0013 published — review is an acceptance criterion', note: 'SHA-256 Fiat–Shamir substitution, challenge grinding, subgroup semantics, nonce guidance.' },
-    { target: 'C4',  label: 'Stateless custody (secretless coins, inbox construction, disclosure bounds)', kind: 'Cryptographer', trigger: 'MIP-0012 published — review is an acceptance criterion' },
-    { target: 'C5',  label: 'FROST ciphersuite for JubJub with the persistentHash challenge', kind: 'Cryptographer', trigger: 'Ciphersuite specified (MIP-0013 Path to Active)' },
-    { target: 'C20', label: 'Selective-disclosure proof primitive', kind: 'Cryptographer', trigger: 'Proof primitive stable' },
-    { target: 'C1',  label: 'Multi-key account contract',          kind: 'Formal methods', trigger: 'Trigger met — MIP-0012 / MIP-0013 numbered upstream; scheduling' },
-    { target: 'C12', label: 'Chain-side enforcement verifier',     kind: 'Formal methods', trigger: 'Verifier circuits stable' },
+    { target: 'C8',  label: 'Domain-separation registry',         kind: 'Cryptographer', trigger: 'Registry spec stable', state: 'Awaiting trigger' },
+    { target: 'C5',  label: 'Account-authorisation signature scheme', kind: 'Cryptographer', trigger: 'MIP-0013 published — review is an acceptance criterion', state: 'To schedule', note: 'SHA-256 Fiat–Shamir substitution, challenge grinding, subgroup semantics, nonce guidance.' },
+    { target: 'C4',  label: 'Stateless custody (secretless coins, inbox construction, disclosure bounds)', kind: 'Cryptographer', trigger: 'MIP-0012 published — review is an acceptance criterion', state: 'To schedule' },
+    { target: 'C5',  label: 'FROST ciphersuite for JubJub with the persistentHash challenge', kind: 'Cryptographer', trigger: 'Ciphersuite specified (MIP-0013 Path to Active)', state: 'Awaiting trigger' },
+    { target: 'C20', label: 'Selective-disclosure proof primitive', kind: 'Cryptographer', trigger: 'Proof primitive stable', state: 'Awaiting trigger' },
+    { target: 'C1',  label: 'Multi-key account contract',          kind: 'Formal methods', trigger: 'MIP-0012 / MIP-0013 numbered upstream', state: 'Scheduling' },
+    { target: 'C12', label: 'Chain-side enforcement verifier',     kind: 'Formal methods', trigger: 'Verifier circuits stable', state: 'Awaiting trigger' },
+  ],
+
+  // What ARC is waiting on from each external party — the blocked-on view,
+  // one row per party. Rendered on the plan page's "What remains" section.
+  waiting_on: [
+    { party: 'Midnight Foundation', item: 'Acquire passport.night and settle the sub-domain issuance policy.', components: ['C2'] },
+    { party: 'Partner wallets', item: 'A second independent implementation of MIP-0012 / MIP-0013 — the remaining path-to-Active evidence.', components: ['C1', 'C4', 'C5'] },
+    { party: 'Cryptographer', item: 'The stateless-custody and signature-scheme reviews, both acceptance criteria of the keystone pair.', components: ['C4', 'C5'] },
+    { party: 'MPC providers', item: 'A FROST-over-JubJub committee demonstration against an unmodified contract.', components: ['C5'] },
+    { party: 'Upstream ecosystem', item: 'The trade-intent format, the cross-chain interface contract, and the Open Wallet Standard draft.', components: ['C22', 'C25', 'C23'] },
   ],
 
   demo_phases: [

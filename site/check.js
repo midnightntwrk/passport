@@ -39,11 +39,20 @@ for (const w of data.core_scc) if (!componentIds.has(w)) fail(`data: core_scc ${
 for (const d of data.decisions) {
   if (!componentIds.has(d.workstream)) fail(`data: decision ${d.id} workstream ${d.workstream}`);
   for (const c of (d.cascade_to || [])) if (!componentIds.has(c)) fail(`data: decision ${d.id} cascade ${c}`);
+  if (!['resolved', 'partial', 'open'].includes(d.resolution)) fail(`data: decision ${d.id} resolution "${d.resolution}"`);
 }
+// The workstreams array is the single authority for open decisions; a
+// per-component workstream flag would silently drift — reject it.
+for (const c of data.components) if ('workstream' in c) fail(`data: ${c.id} carries a workstream flag (use data.workstreams)`);
+for (const w of (data.waiting_on || [])) for (const c of (w.components || [])) if (!componentIds.has(c)) fail(`data: waiting_on "${w.party}" component ${c}`);
+for (const r of data.reviews) if (!r.state) fail(`data: review "${r.label}" missing state`);
 for (const cp of data.decision_couplings) {
   if (!decisionIds.has(cp.a) || !decisionIds.has(cp.b)) fail(`data: coupling ${cp.a}-${cp.b}`);
 }
-for (const m of data.milestones) for (const c of (m.components || [])) if (!componentIds.has(c)) fail(`data: milestone "${m.title}" component ${c}`);
+for (const m of data.milestones) {
+  for (const c of (m.components || [])) if (!componentIds.has(c)) fail(`data: milestone "${m.title}" component ${c}`);
+  for (const e of (m.evidence || [])) if (!expIds.has(e)) fail(`data: milestone "${m.title}" evidence ${e}`);
+}
 for (const n of data.next_steps) for (const c of (n.components || [])) if (!componentIds.has(c)) fail(`data: next_step "${n.title}" component ${c}`);
 for (const m of data.mips) {
   const comps = m.components || (m.component ? [m.component] : []);

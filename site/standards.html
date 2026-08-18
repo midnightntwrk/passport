@@ -200,6 +200,25 @@
     font-weight: 600;
     color: var(--text);
   }
+  .review-state {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-radius: 4px;
+    padding: 2px 8px;
+    white-space: nowrap;
+    color: var(--text-faint);
+    background: var(--bg-soft);
+    border: 1px solid var(--line-strong);
+  }
+  .review-state.active {
+    color: var(--info);
+    background: var(--info-soft);
+    border-color: var(--info);
+  }
 
   /* Promise → MIP map */
   .promise-map {
@@ -502,8 +521,9 @@
             <tr>
               <th style="width:80px;">Component</th>
               <th>Touch point</th>
-              <th style="width:160px;">Reviewer</th>
+              <th style="width:140px;">Reviewer</th>
               <th>Trigger</th>
+              <th style="width:130px;">State</th>
             </tr>
           </thead>
           <tbody id="reviewsBody"></tbody>
@@ -656,12 +676,15 @@
   const reviewsHost = document.getElementById('reviewsBody');
   if (reviewsHost) {
     reviewsHost.innerHTML = (data.reviews || []).map(r => {
+      const stateClass = /^(Scheduling|In progress|Complete|To schedule)/.test(r.state || '')
+        ? 'review-state active' : 'review-state';
       return `
         <tr>
           <td><a class="reviews-id" href="plan.html#${r.target}" data-component="${r.target}">${r.target}</a></td>
           <td>${escapeHtml(r.label)}${r.note ? ` <span style="color:var(--text-faint);">— ${escapeHtml(r.note)}</span>` : ''}</td>
           <td><span class="review-kind">${escapeHtml(r.kind)}</span></td>
           <td>${escapeHtml(r.trigger)}</td>
+          <td><span class="${stateClass}">${escapeHtml(r.state || '—')}</span></td>
         </tr>
       `;
     }).join('');

@@ -272,6 +272,22 @@
   }
 
   // -------------------------------------------------------------------------
+  // Waiting on — one row per external party (the blocked-on view).
+  // -------------------------------------------------------------------------
+
+  function renderWaitingOn() {
+    const host = document.getElementById('waitingOn');
+    if (!host) return;
+    host.innerHTML = (data.waiting_on || []).map(w => `
+      <div class="waiting-row">
+        <span class="waiting-party">${escapeHtml(w.party)}</span>
+        <p class="waiting-item">${escapeHtml(w.item)}</p>
+        <div class="waiting-chips">${(w.components || []).map(c =>
+          `<button class="next-chip" data-component="${escapeHtml(c)}" type="button">${escapeHtml(c)}</button>`).join('')}</div>
+      </div>`).join('');
+  }
+
+  // -------------------------------------------------------------------------
   // Macro graph — Cytoscape.
   // -------------------------------------------------------------------------
 
@@ -606,6 +622,7 @@
     renderCategoryOptions();
     renderComponentsTable();
     renderDecisions();
+    renderWaitingOn();
     renderNextSteps();
     applyComponentFilters();
 
