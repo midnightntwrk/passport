@@ -14,10 +14,6 @@ concurrency:
     ${{ github.event_name != 'merge_group' && format('{0}-{1}', github.workflow, github.head_ref) || github.run_id }}
   cancel-in-progress: true
 
-env:
-  # needed to stop rate limiting of downloads during scan
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 jobs:
   scan:
     runs-on: ubuntu-24.04
@@ -33,5 +29,9 @@ jobs:
 
       - name: Scan code
         uses: midnightntwrk/upload-sarif-github-action@07dad711370cc5985885ebcf07cb8c9264bc4167
+        env:
+          # step-scoped: avoids exposing the token to every step (rate-limit
+          # relief for scanner downloads only)
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
