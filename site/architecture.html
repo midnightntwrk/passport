@@ -816,7 +816,7 @@
 
       <div class="kind">ARC · Architecture · Discussion draft</div>
       <h1>Architecture context</h1>
-      <p class="subtitle">Where the 26 components live, who they talk to, and what shape Passport's identity surface takes across the stack. Click any component for its canvas; click an actor for its role in the system. Use the category pills to focus one slice of the stack.</p>
+      <p class="subtitle">Where the 25 runtime components live, who they talk to, and what shape Passport's identity surface takes across the stack (C26, the agent-tooling meta-deliverable, has no runtime slot). Click any component for its canvas; click an actor for its role in the system. Use the category pills to focus one slice of the stack.</p>
 
       <div class="cat-pills" id="catPills" role="group" aria-label="Filter by category"></div>
       <div class="toolbar">
@@ -1268,7 +1268,7 @@
     'zone-wallet':   ['C9', 'C13', 'C14', 'C17', 'C22', 'C23', 'C24'],
     'zone-prover':   ['C5', 'C6', 'C7', 'C20'],
     'zone-storage':  ['C16'],
-    'zone-onchain':  ['C1', 'C2', 'C3', 'C10', 'C11', 'C12', 'C18', 'C21'],
+    'zone-onchain':  ['C1', 'C2', 'C3', 'C4', 'C10', 'C11', 'C12', 'C18', 'C21'],
     'zone-offchain': ['C15', 'C19'],
   };
 
@@ -1303,6 +1303,66 @@
     'user': {
       label: 'User',
       body: 'The Passport account owner. Authorises operations via biometric (passkey) on any of their authorised devices. On total device loss, recovers via helpers (P5). One account, multiple devices (P3 — peer-device).',
+    },
+    'end-user': {
+      label: 'End user',
+      body: 'The human owner of a Passport account. Interacts through a passkey (Face ID, Touch ID, security key) on any authorised device, never sees seed material (P1), and never depends on a single named operator (P8). On total device loss, recovers through guardians (P5).',
+    },
+    'dapp': {
+      label: 'dApp partner',
+      body: 'A third-party application requesting scoped access. It receives its own grant secret, scoped on-chain to operation, object, and quantitative caps (C10–C12) and enforced by the circuit, never by the dApp\'s goodwill. It connects through the dApp connection protocol (C23); revocation makes its secret worthless.',
+    },
+    'issuer': {
+      label: 'Credential issuer',
+      body: 'Verifies user attributes off-chain and contributes leaves to the on-chain attestation tree (C18, C19). A compromised issuer can mint bogus credentials, so issuer onboarding, revocation, and multi-issuer support are open C19 questions.',
+    },
+    'verifier': {
+      label: 'Credential verifier',
+      body: 'Consumes selective-disclosure proofs (C20): it learns the proven property and nothing else. Replay is prevented by nullifiers (C21) that cannot be linked back to the underlying credential, and verification requires no real-time contact with the issuer.',
+    },
+    'helper': {
+      label: 'Recovery helper',
+      body: 'A recovery guardian under the decided BUSS design (C14, C15). Guardians store nothing between ceremonies and derive their share on demand from a key they already hold; any quorum plus the on-chain public vector reconstructs the recovery secret off-chain. Paper keys count as guardians too, so no social graph is required.',
+    },
+    'sponsor': {
+      label: 'Sponsor service',
+      body: 'Pays Dust fees for users who have none, through the confirmed wallet-level fee-splitting mechanism (C24, F1–F6): the sponsor balances only the dust token kind, signs, and submits. Zero-token onboarding is a confirmed capability; the open half of C24 is the substitutable operator model P8 requires.',
+    },
+    'indexer-provider': {
+      label: 'Indexer provider',
+      body: 'Serves the read half of the wallet (C17): contract-action enumeration and state projection for the UI. For account-held assets it never receives a viewing key — discovery needs only public chain data plus local decryption. Substitutable per P8, with a documented block-scan fallback for indexer-less operation.',
+    },
+    'prd-trade-intent': {
+      label: 'PRD trade intent',
+      body: 'The upstream declarative trade-intent format that Passport\'s wallet surface presents and the user signs (C22). The format is owned in the wider Midnight ecosystem; Passport tracks it rather than defining it, and contributes a stop-gap shape only if nothing upstream is available in time.',
+    },
+    'mcs': {
+      label: 'MCS · threshold-Schnorr',
+      body: 'The upstream cross-chain signing service. It sits behind the cross-chain interface (C25): Passport hands off user-signed trade intents and account identity, and consumes settlement confirmations. Its signature-scheme internals are deliberately outside Passport\'s authorising surface (I-10.5).',
+    },
+    'intent-escrow': {
+      label: 'Intent Escrow Contract',
+      body: 'The upstream escrow contract on Midnight that holds funds while a cross-chain intent settles. Part of the C25 boundary; upstream-owned, consumed by Passport.',
+    },
+    'pmr': {
+      label: 'PMR · private message relay',
+      body: 'The upstream relay carrying private intent traffic between wallet and solver network. It must remain substitutable (P8) rather than becoming a required operator on any critical path.',
+    },
+    'solver': {
+      label: 'Solver network',
+      body: 'Fills user trade intents across chains. Passport\'s authorising surface (the trade intent plus signature) is independent of solver implementation: a different conforming solver produces the same authorisation result (I-10.5).',
+    },
+    'midnight-did': {
+      label: 'midnight-did',
+      body: 'The Midnight DID effort (partner repository) defining did:midnight and its reference implementation. C3\'s resolution runs through engagement with it: what the canonical public Passport DID is, how alice.passport.night is linked and proven, and where DID-facing behaviour lives.',
+    },
+    'iamx': {
+      label: 'IAMX',
+      body: 'Holder of the did:midnight method registration. Method-name negotiation is a live C3 sub-question — Passport\'s DID surface must either fit the registered method or agree an evolution with its holder.',
+    },
+    'w3c-vc': {
+      label: 'W3C DID / VC ecosystem',
+      body: 'The wider decentralised-identity ecosystem (DID resolvers, verifiable-credential verifiers) that Passport\'s credentials surface (C18–C21) and DID position (C3) must interoperate with, so proofs and identifiers are portable beyond Midnight.',
     },
   };
 

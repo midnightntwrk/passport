@@ -644,6 +644,13 @@
         </div>
       `;
     }).join('');
+    promiseMapHost.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const head = e.target.closest('.promise-map-head');
+      if (!head) return;
+      e.preventDefault();
+      head.click();
+    });
   }
 
   // Crossovers

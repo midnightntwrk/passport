@@ -1014,7 +1014,7 @@
   /* Crossover grid — 4 primitives, each split demo / standards */
   .cx-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
     gap: 16px;
   }
 
@@ -1454,7 +1454,7 @@
             <div class="cx-roles">
               <div class="cx-role cx-role-demo">
                 <span class="cx-role-label">MVP</span>
-                <p class="cx-role-text">Deploys one Compact contract per account. Mirrors the reference implementation; on-chain by Phase A.</p>
+                <p class="cx-role-text">Deploys one Compact contract per account — on-chain since Phase A, now converging on the reference implementation.</p>
               </div>
               <div class="cx-role cx-role-std">
                 <span class="cx-role-label">v1.0 spec</span>

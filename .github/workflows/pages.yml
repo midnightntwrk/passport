@@ -49,7 +49,7 @@ jobs:
           SHORT_SHA="${GITHUB_SHA:0:7}"
           COMMIT_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
           DEPLOY_META="Updated ${LAST_COMMIT_DATE}<br>commit <a href=\"${COMMIT_URL}\">${SHORT_SHA}</a>"
-          for f in _site/site/index.html _site/site/demo.html _site/site/standards.html; do
+          for f in _site/site/*.html; do
             sed -i "s|<!--DEPLOY-->.*<!--/DEPLOY-->|${DEPLOY_META}|" "$f"
           done
 
