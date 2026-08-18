@@ -24,7 +24,7 @@ passport/
 │   └── mn-passport-foundations/ End-to-end MN Passport foundations demo
 ├── site/                        Static web artefacts deployed to GitHub Pages
 │   ├── index.html               Landing page and unified entry point
-│   ├── demo.html                The October MVP — what the team builds toward October 2026
+│   ├── demo.html                How Passport works, plus the October demo plan
 │   ├── standards.html           The v1.0 deliverables — promises ↔ MIPs map
 │   └── archive/                 Earlier plan artefacts kept for historical reference
 ├── docs/
