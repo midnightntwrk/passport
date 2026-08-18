@@ -1296,7 +1296,7 @@ window.PASSPORT_DATA = {
     { id: 'B', name: 'Core flows', window: 'June 2026', status: 'done',
       focus: 'Wallet local storage; name registration against the upstream registry (MIP-0007) — the demo builds no name contract; proof-generation pipeline; view-key + indexer integration.',
       components: ['C16', 'C2', 'C6', 'C7', 'C17'],
-      artefact: 'Name registered; wallet shows role balances synced from a hosted indexer.',
+      artefact: 'Name registered; wallet shows role balances synced from a hosted indexer (the address-custody wallet view demonstrated then, since retired — the wallet view now reads the account contract).',
     },
     { id: 'C', name: 'Authorisation surface', window: 'July 2026', status: 'done',
       focus: 'Grant primitive, lifecycle, chain-side enforcement; lost-device flow; trade-intent layer.',
