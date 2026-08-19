@@ -611,3 +611,34 @@
   border-color: transparent;
 }
 .mnid-chip:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------------------------------------------------------------- */
+/* Backup — password hint and file picker                            */
+/* ---------------------------------------------------------------- */
+
+/* The hint says what it measured (length, variety) and nothing more, so its
+   colours stay deliberately quiet: no green "secure" badge, because no
+   client-side check can know that. */
+.mnid-hint-too-short,
+.mnid-hint-weak { color: var(--mn-text-secondary); }
+.mnid-hint-too-short .mnid-status-dot,
+.mnid-hint-weak .mnid-status-dot { background: var(--mn-border-medium); }
+.mnid-hint-fair { color: var(--mn-text-secondary); }
+.mnid-hint-fair .mnid-status-dot { background: var(--mn-text-muted); }
+.mnid-hint-strong { color: var(--mn-accent-ink); font-weight: 600; }
+.mnid-hint-strong .mnid-status-dot { background: var(--mn-accent); }
+
+/* The real file input is driven by the button beside it; it stays in the
+   accessibility tree rather than being display:none, so a keyboard user can
+   still reach it directly. */
+.mnid-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

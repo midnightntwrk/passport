@@ -33,7 +33,7 @@ import {
   PassportStateInjection,
   WebAuthnPrfKeyProvider,
 } from './backend.js';
-import type { DiscoveredPassportPasskey } from './backend.js';
+import type { DiscoveredPassportPasskey, PassportAccountBlob } from './backend.js';
 
 import {
   compactAddress,
@@ -1696,6 +1696,156 @@ export default function PassportDemo() {
     };
   }, [closeLocalWallet, refreshLocalBalances]);
 
+  /* ---------------------------------------------------------------------- */
+  /* largeBlob — account metadata that travels with the passkey              */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Records what the platform proved about largeBlob on this credential, in
+   * BOTH places that read it: the stored profile, so the next session knows,
+   * and this session's state, so a second claim in the same session does not
+   * re-ask a question already answered. A storage failure is a non-event —
+   * the worst it costs is one more prompt next time.
+   */
+  const rememberLargeBlobSupport = useCallback(
+    async (activeProfile: DemoPassportProfile, supported: boolean): Promise<void> => {
+      const updated: DemoPassportProfile = { ...activeProfile, largeBlobSupported: supported };
+      setProfile((current) =>
+        current && current.subjectId === activeProfile.subjectId ? updated : current,
+      );
+      await saveDemoProfile(updated).catch(() => {});
+    },
+    [],
+  );
+
+  /**
+   * Writes this Passport's account-custody contract onto the passkey itself,
+   * so a device that has never seen this Passport can find it again.
+   *
+   * ALWAYS BEST EFFORT, NEVER BLOCKING. The claim it follows has already
+   * succeeded on chain; nothing about it depends on this. So the whole thing
+   * is fire-and-forget: `writeAccountBlob` does not throw, whatever the
+   * platform does, and the outcome is recorded in the activity feed in the
+   * platform's own words rather than surfaced as a failure the user cannot act
+   * on.
+   *
+   * WHY IT IS A SEPARATE CEREMONY. The WebAuthn specification allows a
+   * largeBlob write only during an assertion, and forbids pairing it with a
+   * read in the same one. The claim's own assertion happened before the
+   * contract existed and minutes of chain work ago, so there is no live user
+   * gesture left to ride on: this is a second prompt or it is nothing.
+   *
+   * WHICH IS WHY IT IS NOT ALWAYS ATTEMPTED. On a credential the platform said
+   * cannot hold a blob, the write is skipped entirely — it would cost a real
+   * prompt and achieve nothing. The first attempt that reports the extension
+   * missing writes that fact back to the profile, so nobody is asked twice for
+   * nothing.
+   */
+  const rememberAccountOnPasskey = useCallback(
+    async (
+      activeProfile: DemoPassportProfile,
+      account: { address: string; network: string },
+      alias?: string,
+    ): Promise<void> => {
+      if (activeProfile.largeBlobSupported === false) return;
+      const result = await WebAuthnPrfKeyProvider.writeAccountBlob(activeProfile.passkey, {
+        v: 1,
+        acc: { address: account.address, network: account.network },
+        ...(alias ? { alias } : {}),
+      });
+      if (result.written) {
+        addActivity({
+          label: 'Passport attached to your passkey',
+          detail: `Your account contract ${compactAddress(account.address)} on ${account.network} is now stored on the passkey itself, so a new device can find it. No key material is in it — the address is public.`,
+          status: 'complete',
+          source: 'local',
+        });
+        if (activeProfile.largeBlobSupported !== true) {
+          await rememberLargeBlobSupport(activeProfile, true);
+        }
+        return;
+      }
+      addActivity({
+        label: 'Passport not attached to your passkey',
+        detail: `${result.reason ?? 'The write did not happen.'} Nothing else is affected: your name and contract are on chain either way.`,
+        status: 'blocked',
+        source: 'local',
+      });
+      /* A platform without the extension is a permanent answer for this
+         credential; a refusal or a cancellation is not, and must stay
+         retryable. */
+      if (result.reason?.includes('does not implement')) {
+        await rememberLargeBlobSupport(activeProfile, false);
+      }
+    },
+    [addActivity, rememberLargeBlobSupport],
+  );
+
+  /**
+   * Sign-in recovery: turn a blob read off the passkey into a contract record,
+   * but ONLY once the chain has answered for the address.
+   *
+   * The three conditions, all required:
+   *
+   *   1. the assertion actually returned a blob (`null` on every platform
+   *      without largeBlob, which is most of them — and not an error);
+   *   2. this browser holds NO record for that credential and network. A
+   *      device that already knows its own contract is not recovering
+   *      anything, and a blob must never overwrite a locally observed record;
+   *   3. the indexer answers for the address. Until it does, all we have is a
+   *      claim by a file; `confirmPassportContractOnLedger` is what turns it
+   *      into a fact. If it does not confirm, NOTHING is written and nothing
+   *      is said — the user is simply where they were.
+   *
+   * The record it writes carries `recovered: true` precisely so no surface
+   * ever shows a deployment transaction this device never saw.
+   */
+  const recoverAccountFromPasskey = useCallback(
+    async (credentialId: string, blob: PassportAccountBlob | null): Promise<void> => {
+      if (!blob) return;
+      const handle = localWalletRef.current;
+      // The read-back has to happen against the network the blob names, and
+      // the only indexer this session holds is the open wallet's.
+      if (!handle || handle.network.networkId !== blob.acc.network) return;
+      if (loadPassportContractRecord(credentialId, blob.acc.network)) return;
+      const { confirmPassportContractOnLedger } = await import('./identity/passportContract.js');
+      const confirmed = await confirmPassportContractOnLedger(
+        handle.network.indexerHttpUrl,
+        blob.acc.address,
+      );
+      if (!confirmed) {
+        addActivity({
+          label: 'Passport contract not recovered',
+          detail: `Your passkey names a contract on ${blob.acc.network}, but the indexer does not answer for ${compactAddress(blob.acc.address)}, so nothing was restored.`,
+          status: 'blocked',
+          source: 'chain',
+        });
+        return;
+      }
+      savePassportContractRecord({
+        credentialId,
+        network: blob.acc.network,
+        status: 'deployed',
+        address: blob.acc.address,
+        recovered: true,
+        ledgerConfirmed: true,
+        updatedAt: new Date().toISOString(),
+      });
+      addActivity({
+        label: 'Passport contract recovered',
+        detail: `${compactAddress(blob.acc.address)} was read from your passkey and confirmed on ${blob.acc.network} by the indexer. This device never saw its deployment, so no transaction is shown for it.`,
+        status: 'complete',
+        source: 'chain',
+      });
+      pushToast({
+        tone: 'success',
+        title: 'Your Passport contract is back',
+        body: 'Read from your passkey and confirmed on chain.',
+      });
+    },
+    [addActivity],
+  );
+
   /**
    * A private-state store bound to ONE already-made assertion.
    *
@@ -1752,6 +1902,12 @@ export default function PassportDemo() {
         passkey,
         accountId,
         createdAt: new Date().toISOString(),
+        /* Recorded only when the platform gave a definite answer. `null` — an
+           older client that ignored the extension — stays absent, so the first
+           write attempt is still allowed to find out for itself. */
+        ...(typeof enrolled.largeBlobSupported === 'boolean'
+          ? { largeBlobSupported: enrolled.largeBlobSupported }
+          : {}),
       };
       const state: PassportDemoState = {
         deviceSecret: newDeviceSecret(),
@@ -1804,6 +1960,10 @@ export default function PassportDemo() {
       setLocalPassportKnown(true);
       const seed = await handle.deriveWalletSeed(unlockScope);
       await openLocalWalletWithSeed(seed, unlockScope, existing.passkey.credentialId);
+      /* The blob rode in on the assertion above, so this costs no prompt. It
+         does nothing at all unless this browser has no record of the contract
+         AND the indexer confirms the address. */
+      await recoverAccountFromPasskey(existing.passkey.credentialId, handle.accountBlob);
       return existing;
     } finally {
       handle.dispose();
@@ -1917,6 +2077,7 @@ export default function PassportDemo() {
         setProfileStatus('ready');
         setLocalPassportKnown(true);
         await openLocalWalletWithSeed(seed, scope, known.passkey.credentialId);
+        await recoverAccountFromPasskey(known.passkey.credentialId, discovered.accountBlob);
         addActivity({
           label: 'Passport passkey unlocked',
           detail: 'Signed in with a passkey chosen from the device picker.',
@@ -1959,6 +2120,10 @@ export default function PassportDemo() {
         identityStepArmed.current = true;
         const seed = await discovered.deriveWalletSeed(scope);
         await openLocalWalletWithSeed(seed, scope, discovered.credentialId);
+        /* The fresh-device case this whole mechanism exists for: a passkey
+           synced here from another device, no local records at all, and its
+           blob naming the contract to look for. */
+        await recoverAccountFromPasskey(discovered.credentialId, discovered.accountBlob);
         addActivity({
           label: 'Passport bound to passkey',
           detail:
@@ -2524,19 +2689,33 @@ export default function PassportDemo() {
 
         /* (4) The claim itself, bound to the contract address the chain gave
            us — never to a value assembled from anything else. */
-        return await claimAlias(
+        const claimed = await claimAlias(
           handle,
           ownerSecret,
           alias,
           { kind: 'contract', contractAddress },
           (progress) => onPhase(progress.phase),
         );
+
+        /* (5) Attach the account to the passkey, so a device that has never
+           seen this Passport can find the contract again. Deliberately NOT
+           awaited: the name is registered and the contract is deployed, and a
+           largeBlob write is a separate assertion the specification will not
+           let us fold into either of them. It must never hold the claim open
+           or be able to fail it — see `rememberAccountOnPasskey`, which does
+           not throw. */
+        void rememberAccountOnPasskey(
+          activeProfile,
+          { address: contractAddress, network },
+          alias,
+        );
+        return claimed;
       } finally {
         ownerSecret.fill(0);
         contractRootSecret.fill(0);
       }
     },
-    [addActivity],
+    [addActivity, rememberAccountOnPasskey],
   );
 
   /**
@@ -4750,6 +4929,48 @@ export default function PassportDemo() {
   );
 
   /**
+   * Private-state backup, both directions.
+   *
+   * The module is imported on demand for the same reason the identity modules
+   * are: nothing about a session that never opens the Backup screen should pay
+   * for it. Neither callback takes anything from this component beyond the
+   * password the user typed — `collectPassportBackup` reads its own three
+   * stores and accepts no data, which is what makes "no key material in the
+   * file" a property of the shape rather than a promise. See
+   * `./identity/backup.ts`.
+   *
+   * Restoring writes through the stores' own save functions, and those publish
+   * to the subscriptions this component already holds, so Home reflects a
+   * restored name or contract without any refresh wiring here.
+   */
+  const exportPassportState = useCallback(async (password: string) => {
+    const { exportPassportBackup } = await import('./identity/backup.js');
+    const result = await exportPassportBackup(password);
+    addActivity({
+      label: 'Passport backup exported',
+      detail: `${result.fileName} holds ${result.counts.aliases} name claim(s), ${result.counts.passportContracts} contract record(s), and ${result.counts.incentives} reward(s), encrypted under a password Passport never stores. No key material is in the file.`,
+      status: 'complete',
+      source: 'local',
+    });
+    return result;
+  }, [addActivity]);
+
+  const restorePassportState = useCallback(
+    async (file: File, password: string) => {
+      const { importPassportBackup } = await import('./identity/backup.js');
+      const summary = await importPassportBackup(file, password);
+      addActivity({
+        label: 'Passport backup restored',
+        detail: `From a backup taken ${summary.createdAt}: ${summary.aliases.restored}/${summary.aliases.found} name claim(s), ${summary.passportContracts.restored}/${summary.passportContracts.found} contract record(s), ${summary.incentives.restored}/${summary.incentives.found} reward(s) written to this browser.`,
+        status: 'complete',
+        source: 'local',
+      });
+      return summary;
+    },
+    [addActivity],
+  );
+
+  /**
    * The display name Passport is willing to SHARE — the `displayName` field of
    * the profile a dApp may ask for, and the row the consent sheet offers.
    *
@@ -5111,13 +5332,16 @@ export default function PassportDemo() {
             error={aliasError}
           />
         ) : identityStep === 'backup' ? (
-          /* Off the onboarding chain since 2026/08/06 — reached only when
-             something routes here deliberately. Backup and recovery proper is
-             flagged for later, not built. */
+          /* Off the onboarding chain since 2026/08/06 — reached on demand from
+             Home. Since 2026/08/19 it also exports and restores the private
+             state as one password-encrypted file; see
+             `./identity/backup.ts` for what that file holds and what it
+             deliberately cannot. */
           <BackupScreen
             hasEncryptedRecord={Boolean(profile)}
-            onUnderstood={() => setIdentityStep(null)}
-            onLater={() => setIdentityStep(null)}
+            onExport={exportPassportState}
+            onRestore={restorePassportState}
+            onDone={() => setIdentityStep(null)}
           />
         ) : identityStep === 'ecosystem' ? (
           /* Entry to the ecosystem: the name, its real transactions, and
@@ -5178,6 +5402,10 @@ export default function PassportDemo() {
                 transferContext={appTransferContext}
                 onIncentiveRedeemed={handleIncentiveRedeemed}
                 supportUrl={(import.meta.env.VITE_TELEGRAM_URL as string | undefined) ?? null}
+                /* The only route to the Backup screen. It is offered whenever a
+                   Passport exists here, because restoring is exactly what a
+                   browser with no records needs. */
+                onOpenBackup={profile ? () => setIdentityStep('backup') : undefined}
                 onOpenClassic={openClassicExperience}
                 onSignOut={() => void signOutPassport()}
               />

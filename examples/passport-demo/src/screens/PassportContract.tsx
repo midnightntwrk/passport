@@ -141,6 +141,18 @@ export default function PassportContractCard(props: PassportContractCardProps) {
         </p>
       ) : null}
 
+      {/* Recovered from the passkey rather than deployed here. There is no
+          transaction to show because this device never saw one, and saying so
+          is the whole point — the address above was confirmed by the indexer
+          before this record was allowed to exist. */}
+      {deployed && record.recovered ? (
+        <p className="mnid-reason">
+          This contract was read from your passkey when you signed in here, and the indexer
+          confirmed it on {NETWORK_LABELS[network]}. Its deployment happened on another device,
+          so there is no transaction to link from this one.
+        </p>
+      ) : null}
+
       {/* Submitted, but the indexer had not caught up. The transaction id and
           address are real either way; this says which claim is being made. */}
       {deployed && record.ledgerConfirmed === false ? (
@@ -208,9 +220,13 @@ function StatusPill({
   if (record?.status === 'deployed') {
     return (
       <span className="mnid-pill mnid-pill-registered">
-        {record.ledgerConfirmed === false
-          ? 'Submitted — awaiting the indexer'
-          : `Active on ${NETWORK_LABELS[network]}`}
+        {record.recovered
+          ? /* Never "submitted": this device submitted nothing. A recovered
+               record only exists once the indexer answered for it. */
+            `Recovered on ${NETWORK_LABELS[network]}`
+          : record.ledgerConfirmed === false
+            ? 'Submitted — awaiting the indexer'
+            : `Active on ${NETWORK_LABELS[network]}`}
       </span>
     )
   }

@@ -1,12 +1,27 @@
-import { ArrowRight, Database, Info, KeyRound } from 'lucide-react'
+import { useRef, useState } from 'react'
+import {
+  ArrowRight,
+  Database,
+  Download,
+  Info,
+  KeyRound,
+  LoaderCircle,
+  TriangleAlert,
+  Upload,
+} from 'lucide-react'
 
+import { describeBackupPassword } from '../identity/backup.js'
+import type { PassportBackupExport, PassportBackupSummary } from '../identity/backup.js'
 import ThemeToggle from './ThemeToggle.js'
 import './identity.css'
 
 /**
- * Backup — onboarding step 3, optional.
+ * Backup — reached on demand from Home, and optional.
  *
- * What backup HONESTLY is today, and nothing more:
+ * WHAT THIS SCREEN HONESTLY DOES, AND NOTHING MORE
+ * ------------------------------------------------
+ * Two things already stand between the user and losing access, and the screen
+ * still explains both because they are the parts that need no action:
  *
  *   1. the passkey is a platform credential, so it follows the user's devices
  *      wherever the platform syncs it (iCloud Keychain, Google Password
@@ -14,20 +29,92 @@ import './identity.css'
  *   2. the encrypted Passport record already written in this browser
  *      (`IndexedDbPassportEncryptedRecordStore`), unlocked by that passkey.
  *
- * There is deliberately no cloud backup, no seed phrase, no export, and no
- * "backup complete" claim — because none of those things happen here. The
- * screen's only job is to tell the truth about where recovery stands.
+ * What is NEW here (2026/08/19) is the third thing, and it is the only one the
+ * user has to do: exporting the private state this browser holds as ONE
+ * password-encrypted file, and restoring it. See `../identity/backup.ts` for
+ * exactly what goes in the file, what deliberately does not, and why.
+ *
+ * The two sentences this screen must never soften:
+ *
+ *   - lose the password and the backup is gone. Nothing stores it, nothing
+ *     escrows it, and no part of Passport ever sees it;
+ *   - the passkey is NOT in the file and cannot be. The file restores what
+ *     this Passport did; it does not restore the ability to act as it.
+ *
+ * There is still no cloud backup and no seed phrase, because neither exists.
  */
 
 export interface BackupProps {
   /** True when an encrypted Passport record genuinely exists in this browser. */
   hasEncryptedRecord: boolean
-  onUnderstood: () => void
-  onLater: () => void
+  /**
+   * Seals the allow-listed stores under `password` and hands the envelope to
+   * the configured backend. Rejects with a message this screen shows verbatim.
+   */
+  onExport: (password: string) => Promise<PassportBackupExport>
+  /** Opens a picked backup file and writes it into this browser. */
+  onRestore: (file: File, password: string) => Promise<PassportBackupSummary>
+  /** Leaves the screen. Nothing is uploaded, exported, or discarded by it. */
+  onDone: () => void
+}
+
+type Busy = 'export' | 'restore' | null
+
+function errorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause)
 }
 
 export default function BackupScreen(props: BackupProps) {
-  const { hasEncryptedRecord, onUnderstood, onLater } = props
+  const { hasEncryptedRecord, onExport, onRestore, onDone } = props
+
+  const [busy, setBusy] = useState<Busy>(null)
+
+  const [password, setPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [exported, setExported] = useState<PassportBackupExport | null>(null)
+
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [picked, setPicked] = useState<File | null>(null)
+  const [restorePassword, setRestorePassword] = useState('')
+  const [restoreError, setRestoreError] = useState<string | null>(null)
+  const [restored, setRestored] = useState<PassportBackupSummary | null>(null)
+
+  const hint = password ? describeBackupPassword(password) : null
+  const mismatch = confirmation.length > 0 && confirmation !== password
+  const canExport =
+    !busy && password.length >= 8 && confirmation === password && hasEncryptedRecord
+
+  const runExport = async () => {
+    setBusy('export')
+    setExportError(null)
+    setExported(null)
+    try {
+      setExported(await onExport(password))
+      // The password is not kept a moment longer than the operation needs it.
+      setPassword('')
+      setConfirmation('')
+    } catch (cause) {
+      setExportError(errorMessage(cause))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const runRestore = async () => {
+    if (!picked) return
+    setBusy('restore')
+    setRestoreError(null)
+    setRestored(null)
+    try {
+      setRestored(await onRestore(picked, restorePassword))
+      setRestorePassword('')
+    } catch (cause) {
+      setRestoreError(errorMessage(cause))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <section className="mnid-screen">
@@ -43,8 +130,8 @@ export default function BackupScreen(props: BackupProps) {
         <p className="mnid-kicker">Optional</p>
         <h1 className="mnid-title">Where your Passport lives</h1>
         <p className="mnid-lede">
-          Two things stand between you and losing access. Both already exist — this step
-          only explains them, and neither depends on Passport holding a copy of anything.
+          Two things already stand between you and losing access, and neither needs anything
+          from you. The third — a file you keep — is below.
         </p>
 
         <ul className="mnid-bullets">
@@ -55,7 +142,7 @@ export default function BackupScreen(props: BackupProps) {
             <div>
               <strong>Your passkey follows your devices</strong>
               <small>
-                The passkey you just created is a platform credential. If your device syncs
+                The passkey you created is a platform credential. If your device syncs
                 passkeys — iCloud Keychain on Apple devices, Google Password Manager on
                 Android and Chrome — it is already on your other devices, and signing in
                 there re-derives the same Midnight wallet. Passport does not run that sync
@@ -84,25 +171,226 @@ export default function BackupScreen(props: BackupProps) {
           </li>
         </ul>
 
-        <div className="mnid-panel">
-          <p className="mnid-panel-head">
-            <Info size={15} aria-hidden="true" />
-            What this step does not do
+        {/* --- Export ------------------------------------------------------ */}
+        <div className="mnid-card">
+          <div className="mnid-card-head">
+            <p className="mnid-kicker">Back up this Passport</p>
+          </div>
+          <p className="mnid-lede">
+            One encrypted file holding what this browser knows and cannot work out again:
+            the name you claimed, your account contract, and anything apps have granted you.
+            Your wallet&apos;s sync state is left out — a new device rebuilds it from the
+            chain.
           </p>
-          <p>
-            Nothing is uploaded or exported by pressing Understood. There is no recovery phrase to
-            write down in this demo, and Passport will never claim your Passport has been copied to
-            a cloud service — because it has not been.
+
+          <div className="mnid-field">
+            <input
+              type="password"
+              autoComplete="new-password"
+              placeholder="Password for this backup"
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value)
+                setExportError(null)
+              }}
+              disabled={busy !== null}
+              aria-label="Password for this backup"
+            />
+          </div>
+          <div className={mismatch ? 'mnid-field mnid-field-invalid' : 'mnid-field'}>
+            <input
+              type="password"
+              autoComplete="new-password"
+              placeholder="Type it again"
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              disabled={busy !== null}
+              aria-label="Confirm the backup password"
+            />
+          </div>
+
+          {mismatch ? (
+            <p className="mnid-status mnid-status-taken">
+              <span className="mnid-status-dot" aria-hidden="true" />
+              The two passwords do not match yet.
+            </p>
+          ) : hint ? (
+            <p className={`mnid-status mnid-hint-${hint.level}`}>
+              <span className="mnid-status-dot" aria-hidden="true" />
+              {hint.message}
+            </p>
+          ) : null}
+
+          <div className="mnid-panel">
+            <p className="mnid-panel-head">
+              <TriangleAlert size={15} aria-hidden="true" />
+              Lose this password and the backup is gone
+            </p>
+            <p>
+              The password is used on this device and nowhere else. Passport does not store
+              it, cannot recover it, and never sends it anywhere. If you forget it, the file
+              is unreadable — by you and by everyone else.
+            </p>
+            <p>
+              Your passkey is not in this file and cannot be. The file restores what your
+              Passport did; it does not restore the ability to act as it. That still comes
+              from your passkey.
+            </p>
+          </div>
+
+          <div className="mnid-actions">
+            <button
+              type="button"
+              className="mnid-primary"
+              onClick={() => void runExport()}
+              disabled={!canExport}
+            >
+              {busy === 'export' ? (
+                <LoaderCircle className="mnid-spin" size={17} aria-hidden="true" />
+              ) : (
+                <Download size={17} aria-hidden="true" />
+              )}
+              {busy === 'export' ? 'Encrypting' : 'Export encrypted backup'}
+            </button>
+          </div>
+
+          {!hasEncryptedRecord ? (
+            <p className="mnid-foot">
+              <Info size={13} aria-hidden="true" />
+              There is no Passport in this browser yet, so there is nothing to back up.
+            </p>
+          ) : null}
+
+          {exportError ? (
+            <p className="mnid-status mnid-status-error">
+              <span className="mnid-status-dot" aria-hidden="true" />
+              {exportError}
+            </p>
+          ) : null}
+
+          {exported ? (
+            <div className="mnid-panel">
+              <p className="mnid-panel-head">
+                <Info size={15} aria-hidden="true" />
+                Saved as {exported.fileName}
+              </p>
+              <p>
+                Written to {exported.location}. It carries {exported.counts.aliases}{' '}
+                {exported.counts.aliases === 1 ? 'name claim' : 'name claims'},{' '}
+                {exported.counts.passportContracts}{' '}
+                {exported.counts.passportContracts === 1 ? 'contract record' : 'contract records'},
+                and {exported.counts.incentives}{' '}
+                {exported.counts.incentives === 1 ? 'reward' : 'rewards'}.
+              </p>
+            </div>
+          ) : null}
+        </div>
+
+        {/* --- Restore ----------------------------------------------------- */}
+        <div className="mnid-card">
+          <div className="mnid-card-head">
+            <p className="mnid-kicker">Restore a backup</p>
+          </div>
+          <p className="mnid-lede">
+            Choose a backup file and give its password. Records already in this browser that
+            are newer than the ones in the file are kept, and the summary says exactly what
+            was written.
           </p>
+
+          <input
+            ref={fileInput}
+            type="file"
+            accept="application/json,.json"
+            className="mnid-file-input"
+            onChange={(event) => {
+              setPicked(event.target.files?.[0] ?? null)
+              setRestoreError(null)
+              setRestored(null)
+            }}
+            aria-label="Backup file to restore"
+          />
+          <div className="mnid-actions">
+            <button
+              type="button"
+              className="mnid-secondary"
+              onClick={() => fileInput.current?.click()}
+              disabled={busy !== null}
+            >
+              <Upload size={17} aria-hidden="true" />
+              {picked ? picked.name : 'Choose a backup file'}
+            </button>
+          </div>
+
+          <div className="mnid-field">
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder="Password for that backup"
+              value={restorePassword}
+              onChange={(event) => {
+                setRestorePassword(event.target.value)
+                setRestoreError(null)
+              }}
+              disabled={busy !== null}
+              aria-label="Password for the backup being restored"
+            />
+          </div>
+
+          <div className="mnid-actions">
+            <button
+              type="button"
+              className="mnid-primary"
+              onClick={() => void runRestore()}
+              disabled={busy !== null || !picked || restorePassword.length === 0}
+            >
+              {busy === 'restore' ? (
+                <LoaderCircle className="mnid-spin" size={17} aria-hidden="true" />
+              ) : (
+                <Download size={17} aria-hidden="true" />
+              )}
+              {busy === 'restore' ? 'Opening' : 'Restore from this file'}
+            </button>
+          </div>
+
+          {restoreError ? (
+            <p className="mnid-status mnid-status-error">
+              <span className="mnid-status-dot" aria-hidden="true" />
+              {restoreError}
+            </p>
+          ) : null}
+
+          {restored ? (
+            <div className="mnid-panel">
+              <p className="mnid-panel-head">
+                <Info size={15} aria-hidden="true" />
+                Restored from the backup taken {new Date(restored.createdAt).toLocaleString()}
+              </p>
+              <p>
+                Names: {restored.aliases.restored} of {restored.aliases.found}. Contracts:{' '}
+                {restored.passportContracts.restored} of {restored.passportContracts.found}.
+                Rewards: {restored.incentives.restored} of {restored.incentives.found}.
+              </p>
+              {[
+                ...restored.aliases.skipped,
+                ...restored.passportContracts.skipped,
+                ...restored.incentives.skipped,
+              ].map((skipped) => (
+                <p key={`${skipped.key}:${skipped.reason}`}>
+                  <code>{skipped.key}</code> was not written: {skipped.reason}.
+                </p>
+              ))}
+              <p>
+                A restored contract is confirmed against the chain the next time this screen
+                is left — until the indexer answers for it, it is a record, not a proof.
+              </p>
+            </div>
+          ) : null}
         </div>
 
         <div className="mnid-actions">
-          <button type="button" className="mnid-primary" onClick={onUnderstood}>
+          <button type="button" className="mnid-secondary" onClick={onDone}>
             <ArrowRight size={17} aria-hidden="true" />
-            Understood
-          </button>
-          <button type="button" className="mnid-secondary" onClick={onLater}>
-            Do this later
+            Done
           </button>
         </div>
       </div>

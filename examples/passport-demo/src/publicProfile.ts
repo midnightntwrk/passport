@@ -15,6 +15,20 @@ export interface DemoPassportProfile {
    * existing encrypted state or wallet address changes.
    */
   accountId?: string;
+  /**
+   * What the platform said about the WebAuthn largeBlob extension when this
+   * credential was enrolled: `true` when the credential can carry a blob,
+   * `false` when it said it cannot, absent when it said nothing (an older
+   * client, or a profile bound to a credential this browser did not enrol).
+   *
+   * Read only to decide whether attempting a blob WRITE is worth a user
+   * prompt — a write on an unsupported credential costs a full assertion and
+   * achieves nothing. It is set to `false` after any attempt that reports the
+   * extension missing, so no user is prompted twice for nothing. Nothing else
+   * in the app depends on it, and recovery never requires it: the blob READ
+   * rides on the sign-in assertion either way.
+   */
+  largeBlobSupported?: boolean;
   /** Public retry metadata. The transaction itself remains encrypted. */
   passportPreparation?: {
     address: string;

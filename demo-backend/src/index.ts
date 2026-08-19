@@ -1,5 +1,10 @@
 export { PassportStateInjection, joinWithPassportState } from './injection.js';
-export { WebAuthnPrfKeyProvider } from './passkey.js';
+export {
+  MAX_ACCOUNT_BLOB_BYTES,
+  WebAuthnPrfKeyProvider,
+  decodeAccountBlob,
+  encodeAccountBlob,
+} from './passkey.js';
 export {
   PASSPORT_PROFILE_FIELDS,
   PASSPORT_PROFILE_PROTOCOL,
@@ -29,6 +34,8 @@ export type {
   DiscoveredPassportPasskey,
   EnrollPassportPasskeyOptions,
   EnrolledPassportPasskey,
+  PassportAccountBlob,
+  PassportAccountBlobWriteResult,
   PassportPasskeyReference,
 } from './passkey.js';
 export type {

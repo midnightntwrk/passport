@@ -46,6 +46,20 @@ export interface PassportContractRecord {
   feePaidBy?: 'sponsored' | 'own-dust';
   /** Present on every `'failed'` record — never a bare status. */
   failureReason?: string;
+  /**
+   * True when this record was NOT written by a deployment this device
+   * performed, but seeded from the contract address the passkey itself carries
+   * in its WebAuthn largeBlob (see `demo-backend/src/passkey.ts`) on a browser
+   * that had never seen this Passport.
+   *
+   * A recovered record therefore has NO deployment transaction — this device
+   * never saw one, and inventing a plausible id would be exactly the lie the
+   * rest of this store exists to prevent. What it does have is an address the
+   * indexer answered for: {@link savePassportContractRecord} refuses a
+   * recovered record whose {@link ledgerConfirmed} is not `true`, so "recovered"
+   * can never be written on the strength of the blob alone.
+   */
+  recovered?: boolean;
   updatedAt: string;
 }
 
@@ -114,7 +128,17 @@ export function loadPassportContractRecord(
  * would-be silent falsehood into a visible bug.
  */
 export function savePassportContractRecord(record: PassportContractRecord): void {
-  if (record.status === 'deployed' && (!record.address || !record.deployTxId)) {
+  if (record.status === 'deployed' && record.recovered) {
+    /* The recovered case, and the only one exempt from the transaction-id
+       rule: this device did not witness the deployment, so it has no id to
+       carry. In exchange the bar is higher — the address must have been
+       confirmed against the chain before the record may exist at all. */
+    if (!record.address || record.ledgerConfirmed !== true) {
+      throw new Error(
+        'A recovered Passport contract record must carry the contract address and a confirmed on-chain read-back.',
+      );
+    }
+  } else if (record.status === 'deployed' && (!record.address || !record.deployTxId)) {
     throw new Error(
       'A deployed Passport contract record must carry both the contract address and the deployment transaction id.',
     );

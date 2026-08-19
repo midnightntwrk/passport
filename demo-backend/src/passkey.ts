@@ -50,6 +50,16 @@ export interface EnrolledPassportPasskey {
   reference: PassportPasskeyReference;
   /** Non-null only where the authenticator returned a PRF result at creation. */
   prf: DiscoveredPassportPasskey | null;
+  /**
+   * What the platform said about `largeBlob` at creation: `true` when the
+   * credential can hold a blob, `false` when it said it cannot, `null` when it
+   * said nothing at all (an older client that ignores the extension).
+   *
+   * Enrolment asks with `support: 'preferred'`, which by specification NEVER
+   * fails creation, so all three answers are ordinary. Nothing in the demo
+   * depends on this being `true`.
+   */
+  largeBlobSupported: boolean | null;
 }
 
 /**
@@ -64,12 +74,127 @@ export interface EnrolledPassportPasskey {
 export interface DiscoveredPassportPasskey {
   /** Base64 of the answering credential's rawId — the same encoding `enroll` returns. */
   credentialId: string;
+  /**
+   * The account metadata the authenticator had stored against this credential
+   * under the WebAuthn `largeBlob` extension, or `null`.
+   *
+   * `null` covers every ordinary case and is NEVER an error: the platform does
+   * not implement largeBlob, the credential was enrolled without it, nothing
+   * has been written yet, or the stored bytes did not parse. See
+   * {@link PassportAccountBlob}. The read costs no extra ceremony — it rides
+   * on the same assertion that produced the PRF output.
+   */
+  accountBlob: PassportAccountBlob | null;
   /** Same bytes {@link WebAuthnPrfKeyProvider.deriveWalletSeed} would produce for `scope`. */
   deriveWalletSeed(scope: PassportStateScope): Promise<Uint8Array>;
   /** Same key {@link WebAuthnPrfKeyProvider.getKey} would derive for `scope` (uncached). */
   deriveStateKey(scope: PassportStateScope): Promise<CryptoKey>;
   /** Zeroes and releases the retained PRF output. */
   dispose(): void;
+}
+
+/**
+ * ACCOUNT METADATA RECOVERY VIA THE WebAuthn largeBlob EXTENSION
+ * -------------------------------------------------------------
+ * A passkey can carry a small blob of opaque bytes that travels with it
+ * wherever the platform syncs the credential. Passport uses that to answer one
+ * question on a device that has never seen this Passport before: WHICH
+ * account-custody contract is mine?
+ *
+ * The blob is metadata, never key material — the same rule the private-state
+ * backup keeps. A contract address is public: it is on the ledger, and anyone
+ * who has it can read the contract's public state and nothing else. Acting as
+ * the Passport still needs the PRF-derived secrets, which are not in here and
+ * never will be.
+ *
+ * What the blob is NOT: proof. A blob says a contract address was written here
+ * once. It does not say the contract exists, and a caller that seeds a record
+ * from it MUST confirm the address against the chain before telling the user
+ * anything was recovered.
+ *
+ * SIZE. CTAP 2.1 obliges an authenticator to store only about a kilobyte for
+ * the whole large-blob array, and the platform compresses each entry, so the
+ * budget is small and shared. {@link MAX_ACCOUNT_BLOB_BYTES} caps one entry at
+ * 2 KB — Hector's figure, and comfortably above what this payload needs — and
+ * {@link encodeAccountBlob} refuses anything larger rather than letting the
+ * authenticator fail opaquely.
+ *
+ * SUPPORT IS PATCHY. Chrome and Safari implement largeBlob for platform
+ * authenticators; other combinations do not, and a credential enrolled before
+ * this code existed cannot hold a blob at all. Every path here therefore
+ * degrades to exactly today's behaviour: reads return `null`, writes report
+ * `written: false` with a reason, and nothing throws.
+ */
+export interface PassportAccountBlob {
+  /** Format version. Only `1` is written or read today. */
+  v: 1;
+  /** The Passport account-custody contract this passkey is bound to. */
+  acc: {
+    /** Raw 64-hex contract address, as the deployment reported it. */
+    address: string;
+    /** The network it was deployed on, e.g. `preview`. */
+    network: string;
+  };
+  /** The `.night` name claimed alongside it, when there is one. */
+  alias?: string;
+}
+
+/**
+ * The ceiling one credential's blob may occupy, before the platform's own
+ * compression. Two kilobytes, deliberately generous against a payload that
+ * runs to a couple of hundred bytes.
+ */
+export const MAX_ACCOUNT_BLOB_BYTES = 2048;
+
+/** What one write attempt did, and — when it did nothing — why. */
+export interface PassportAccountBlobWriteResult {
+  /** True ONLY when the authenticator reported `written: true`. */
+  written: boolean;
+  /**
+   * Why not, in words fit for a log line. `null` when {@link written} is true.
+   * A write that did not happen is never an error condition here: the Passport
+   * works exactly as it did before largeBlob existed.
+   */
+  reason: string | null;
+}
+
+/** Serialises a blob, refusing anything the authenticator would not hold. */
+export function encodeAccountBlob(blob: PassportAccountBlob): Uint8Array {
+  const bytes = utf8(JSON.stringify(blob));
+  if (bytes.byteLength > MAX_ACCOUNT_BLOB_BYTES) {
+    throw new Error(
+      `A Passport account blob may not exceed ${MAX_ACCOUNT_BLOB_BYTES} bytes; this one is ${bytes.byteLength}.`,
+    );
+  }
+  return bytes;
+}
+
+/**
+ * Parses bytes an authenticator handed back. Returns `null` for anything that
+ * is not a version-1 blob with a real address and network — a blob written by
+ * a future Passport, or by something else entirely, must read as "nothing
+ * here" rather than as a half-understood record.
+ */
+export function decodeAccountBlob(bytes: ArrayBuffer | Uint8Array | null | undefined): PassportAccountBlob | null {
+  if (!bytes) return null;
+  try {
+    const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    if (view.byteLength === 0 || view.byteLength > MAX_ACCOUNT_BLOB_BYTES) return null;
+    const parsed = JSON.parse(new TextDecoder().decode(view)) as Partial<PassportAccountBlob>;
+    if (!parsed || parsed.v !== 1) return null;
+    const account = parsed.acc;
+    if (!account || typeof account.address !== 'string' || typeof account.network !== 'string') {
+      return null;
+    }
+    if (!account.address || !account.network) return null;
+    return {
+      v: 1,
+      acc: { address: account.address, network: account.network },
+      ...(typeof parsed.alias === 'string' && parsed.alias ? { alias: parsed.alias } : {}),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function getNavigator(): Navigator {
@@ -162,7 +287,11 @@ async function deriveWalletSeedBytes(
  * credential and scope: same {@link deriveKey}, same
  * {@link deriveWalletSeedBytes}, same HKDF salts and info strings.
  */
-function oneShotFromPrf(credentialId: string, prfResult: ArrayBuffer): DiscoveredPassportPasskey {
+function oneShotFromPrf(
+  credentialId: string,
+  prfResult: ArrayBuffer,
+  accountBlob: PassportAccountBlob | null = null,
+): DiscoveredPassportPasskey {
   let output: Uint8Array | null = new Uint8Array(prfResult);
   const take = (): Uint8Array => {
     if (!output) throw new Error('This discovered passkey has already been disposed.');
@@ -170,6 +299,7 @@ function oneShotFromPrf(credentialId: string, prfResult: ArrayBuffer): Discovere
   };
   return {
     credentialId,
+    accountBlob,
     deriveWalletSeed: async (scope) => deriveWalletSeedBytes(take(), scope),
     deriveStateKey: async (scope) => deriveKey(take(), scope),
     dispose: () => {
@@ -179,10 +309,31 @@ function oneShotFromPrf(credentialId: string, prfResult: ArrayBuffer): Discovere
   };
 }
 
-/** The PRF slice of a client-extension results bag, however it was obtained. */
+/**
+ * The PRF and largeBlob slices of a client-extension results bag, however it
+ * was obtained. Every field is optional because every one of them is absent on
+ * some real platform, and absence is never an error.
+ */
 type PrfExtensionResults = AuthenticationExtensionsClientOutputs & {
   prf?: { enabled?: boolean; results?: { first?: ArrayBuffer } };
+  largeBlob?: { supported?: boolean; blob?: ArrayBuffer; written?: boolean };
 };
+
+/**
+ * The extension bag every read-side ceremony sends: evaluate the PRF, and — in
+ * the SAME assertion, so it costs no extra prompt — hand back the stored
+ * account blob if this credential has one.
+ *
+ * A write cannot ride along: the specification forbids `read` and `write` in
+ * one assertion, which is why {@link WebAuthnPrfKeyProvider.writeAccountBlob}
+ * is a ceremony of its own.
+ */
+function readExtensions(): AuthenticationExtensionsClientInputs {
+  return {
+    prf: { eval: { first: asArrayBuffer(PRF_SALT) } },
+    largeBlob: { read: true },
+  } as AuthenticationExtensionsClientInputs;
+}
 
 /**
  * Browser-only WebAuthn PRF adapter. The PRF output is immediately turned
@@ -252,8 +403,16 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
           // Enable the extension AND ask for the salt to be evaluated now.
           // Platforms that honour the eval hand back everything this profile
           // needs without a single assertion; the rest just report `enabled`.
+          //
+          // `largeBlob: { support: 'preferred' }` asks for a credential with
+          // room for a blob. 'preferred' is the only value
+          // that may be used here: 'required' makes creation FAIL on every
+          // platform without largeBlob, which is most of them, and a passkey
+          // that cannot be created is a far worse outcome than a passkey that
+          // cannot carry metadata. Nothing downstream depends on the answer.
           extensions: {
             prf: { eval: { first: asArrayBuffer(PRF_SALT) } },
+            largeBlob: { support: 'preferred' },
           } as AuthenticationExtensionsClientInputs,
         },
       })) as PublicKeyCredential | null;
@@ -271,6 +430,10 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
       return {
         reference: { credentialId, label: options.label, rpId },
         prf: evaluated ? oneShotFromPrf(credentialId, evaluated) : null,
+        largeBlobSupported:
+          typeof extension.largeBlob?.supported === 'boolean'
+            ? extension.largeBlob.supported
+            : null,
       };
     } catch (error) {
       throw new Error(errorMessage(error));
@@ -316,9 +479,7 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
             { type: 'public-key', id: asArrayBuffer(fromBase64(reference.credentialId)) },
           ],
           userVerification: 'required',
-          extensions: {
-            prf: { eval: { first: asArrayBuffer(PRF_SALT) } },
-          } as AuthenticationExtensionsClientInputs,
+          extensions: readExtensions(),
           ...(reference.rpId ? { rpId: reference.rpId } : {}),
         },
       })) as PublicKeyCredential | null;
@@ -326,7 +487,11 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
       const extension = assertion.getClientExtensionResults() as PrfExtensionResults;
       const result = extension.prf?.results?.first;
       if (!result) throw new Error('The authenticator did not return a PRF result.');
-      return oneShotFromPrf(toBase64(new Uint8Array(assertion.rawId)), result);
+      return oneShotFromPrf(
+        toBase64(new Uint8Array(assertion.rawId)),
+        result,
+        decodeAccountBlob(extension.largeBlob?.blob),
+      );
     } catch (error) {
       throw new Error(errorMessage(error));
     }
@@ -357,9 +522,7 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
           // makes the authenticator offer every resident credential for this
           // rpId instead of demanding one we name in advance.
           userVerification: 'required',
-          extensions: {
-            prf: { eval: { first: asArrayBuffer(PRF_SALT) } },
-          } as AuthenticationExtensionsClientInputs,
+          extensions: readExtensions(),
           ...(rpId ? { rpId } : {}),
         },
       })) as PublicKeyCredential | null;
@@ -367,9 +530,115 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
       const extension = assertion.getClientExtensionResults() as PrfExtensionResults;
       const result = extension.prf?.results?.first;
       if (!result) throw new Error('The authenticator did not return a PRF result.');
-      return oneShotFromPrf(toBase64(new Uint8Array(assertion.rawId)), result);
+      return oneShotFromPrf(
+        toBase64(new Uint8Array(assertion.rawId)),
+        result,
+        decodeAccountBlob(extension.largeBlob?.blob),
+      );
     } catch (error) {
       throw new Error(errorMessage(error));
+    }
+  }
+
+  /**
+   * Writes the account blob onto a credential — ONE targeted assertion, and a
+   * best effort that NEVER throws.
+   *
+   * WHY A SEPARATE CEREMONY. The specification forbids `largeBlob.read` and
+   * `largeBlob.write` in the same assertion, and a write is only possible
+   * during `credentials.get` — never during `credentials.create`. So the blob
+   * cannot be written as part of the enrolment or the sign-in that reads it;
+   * it costs its own user-verified assertion. Callers should run it inside the
+   * user gesture that already earned a prompt (immediately after a successful
+   * claim), so the user experiences one continuous action rather than a prompt
+   * out of nowhere.
+   *
+   * WHY IT NEVER THROWS. Everything this write buys is a nicety on a future
+   * device. Nothing that has already happened — the deployed contract, the
+   * registered name — depends on it, so a platform without largeBlob, a
+   * cancelled prompt, and a refused write all resolve with `written: false`
+   * and the reason, for the caller to log. Making this path throw would invite
+   * a caller to surface a failure the user cannot act on and need not care
+   * about.
+   *
+   * WHAT GOES IN. Public metadata only: a contract address, its network, and
+   * the name. Never key material — see {@link PassportAccountBlob}.
+   */
+  static async writeAccountBlob(
+    reference: PassportPasskeyReference,
+    blob: PassportAccountBlob,
+  ): Promise<PassportAccountBlobWriteResult> {
+    let payload: Uint8Array;
+    try {
+      payload = encodeAccountBlob(blob);
+    } catch (error) {
+      return { written: false, reason: errorMessage(error) };
+    }
+    try {
+      const navigator = getNavigator();
+      const assertion = (await navigator.credentials.get({
+        publicKey: {
+          challenge: asArrayBuffer(randomChallenge()),
+          allowCredentials: [
+            { type: 'public-key', id: asArrayBuffer(fromBase64(reference.credentialId)) },
+          ],
+          userVerification: 'required',
+          // Write only. No `prf` eval here: this ceremony derives nothing, so
+          // asking for PRF output would put a secret on the wire for no reason.
+          extensions: {
+            largeBlob: { write: asArrayBuffer(payload) },
+          } as AuthenticationExtensionsClientInputs,
+          ...(reference.rpId ? { rpId: reference.rpId } : {}),
+        },
+      })) as PublicKeyCredential | null;
+      if (!assertion) return { written: false, reason: 'The user cancelled the write.' };
+      const extension = assertion.getClientExtensionResults() as PrfExtensionResults;
+      if (extension.largeBlob?.written === true) return { written: true, reason: null };
+      return {
+        written: false,
+        reason:
+          extension.largeBlob === undefined
+            ? 'This platform does not implement the WebAuthn largeBlob extension.'
+            : 'The authenticator refused to store the blob on this credential.',
+      };
+    } catch (error) {
+      return { written: false, reason: errorMessage(error) };
+    }
+  }
+
+  /**
+   * Reads the account blob on its own — ONE targeted assertion, and never
+   * throws.
+   *
+   * The sign-in paths do NOT need this: {@link assertOnce} and
+   * {@link discover} already carry `accountBlob` from the assertion they were
+   * going to run anyway. This exists for the case where a caller holds a
+   * credential reference and wants the metadata without deriving anything.
+   */
+  static async readAccountBlob(
+    reference: PassportPasskeyReference,
+  ): Promise<PassportAccountBlob | null> {
+    try {
+      const navigator = getNavigator();
+      const assertion = (await navigator.credentials.get({
+        publicKey: {
+          challenge: asArrayBuffer(randomChallenge()),
+          allowCredentials: [
+            { type: 'public-key', id: asArrayBuffer(fromBase64(reference.credentialId)) },
+          ],
+          userVerification: 'required',
+          extensions: { largeBlob: { read: true } } as AuthenticationExtensionsClientInputs,
+          ...(reference.rpId ? { rpId: reference.rpId } : {}),
+        },
+      })) as PublicKeyCredential | null;
+      if (!assertion) return null;
+      const extension = assertion.getClientExtensionResults() as PrfExtensionResults;
+      return decodeAccountBlob(extension.largeBlob?.blob);
+    } catch {
+      // A credential without largeBlob, a cancelled prompt, and an unavailable
+      // authenticator are all "no metadata here" — the caller's fallback is
+      // exactly the behaviour that existed before this extension.
+      return null;
     }
   }
 

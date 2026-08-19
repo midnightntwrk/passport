@@ -505,6 +505,32 @@ export async function resolveDeployTxHashOnce(
 }
 
 /**
+ * One read of a contract's public state through the indexer: `true` when the
+ * indexer answers for `address`, `false` when it does not or cannot be reached.
+ *
+ * This is the read-back behind largeBlob account recovery. A passkey blob says
+ * an address was written there once; it is not evidence the contract exists,
+ * and nothing may be recorded as recovered until this returns `true`. One
+ * attempt, no retry loop: a sign-in must not stall on an indexer that is down,
+ * and "we could not tell" and "it is not there" are the same answer here — do
+ * not claim recovery.
+ */
+export async function confirmPassportContractOnLedger(
+  indexerHttpUrl: string,
+  address: string,
+): Promise<boolean> {
+  try {
+    const { indexerPublicDataProvider } = await import(
+      '@midnight-ntwrk/midnight-js-indexer-public-data-provider'
+    );
+    const reader = indexerPublicDataProvider(indexerHttpUrl, indexerWsFrom(indexerHttpUrl));
+    return Boolean(await reader.queryContractState(address));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The ids midnight-js reports are transaction *identifiers* (33 bytes), not the
  * 32-byte block-level hashes explorers resolve — the same trap documented in
  * `./midnames.ts`. The indexer maps one to the other. The transaction is

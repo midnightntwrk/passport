@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Send,
   SendHorizontal,
+  ShieldCheck,
   Wallet,
   X,
   Zap,
@@ -149,6 +150,14 @@ export interface HomeScreenProps {
    */
   supportUrl?: string | null
   /**
+   * Opens the Backup screen — where the private state is exported as one
+   * password-encrypted file, and restored from one. Rendered in the footer
+   * area beside the support link because it is a thing done rarely and
+   * deliberately, not part of the everyday surface. Omit it and no control
+   * appears.
+   */
+  onOpenBackup?: () => void
+  /**
    * @deprecated Ignored since 2026/08/19.
    *
    * The classic dashboard is the Dynamic-hosted view, and the demo flow runs
@@ -215,6 +224,7 @@ export default function HomeScreen(props: HomeScreenProps) {
     transferContext,
     onIncentiveRedeemed,
     supportUrl,
+    onOpenBackup,
     onSignOut,
   } = props
 
@@ -771,6 +781,13 @@ export default function HomeScreen(props: HomeScreenProps) {
             demo runs local-only, so the mobile experience offers no route to
             the Dynamic-hosted classic view at all. `onOpenClassic` stays on
             the props so the integrator needs no change; nothing renders it. */}
+
+        {onOpenBackup ? (
+          <button type="button" className="mnhome-support" onClick={onOpenBackup}>
+            <ShieldCheck size={14} aria-hidden="true" />
+            <span>Back up or restore</span>
+          </button>
+        ) : null}
 
         {supportUrl ? (
           <a className="mnhome-support" href={supportUrl} target="_blank" rel="noreferrer">

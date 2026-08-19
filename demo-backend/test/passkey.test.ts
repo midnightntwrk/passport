@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { WebAuthnPrfKeyProvider } from '../src/index.js';
+import {
+  MAX_ACCOUNT_BLOB_BYTES,
+  WebAuthnPrfKeyProvider,
+  decodeAccountBlob,
+  encodeAccountBlob,
+} from '../src/index.js';
+import type { PassportAccountBlob } from '../src/index.js';
 
 const scope = { appId: 'org.midnight.passport.demo', accountId: 'passport-account' };
 const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
@@ -249,5 +255,221 @@ describe('WebAuthnPrfKeyProvider', () => {
     expect(third).not.toBe(first);
     expect(first.extractable).toBe(false);
     expect(assertions).toBe(2);
+  });
+});
+
+/**
+ * largeBlob — account metadata recovery.
+ *
+ * WebAuthn cannot be driven headlessly, so these drills stand in for the
+ * ceremony, not for the authenticator: they pin the request this module BUILDS
+ * and the way it reads the answer, including every "this platform does not do
+ * largeBlob" shape a real client returns. The two legs that need a human are
+ * named in the module header.
+ */
+describe('WebAuthn largeBlob account metadata', () => {
+  const reference = { credentialId: 'AQIDBA==', label: 'Midnight Passport', rpId: 'localhost' };
+  const blob: PassportAccountBlob = {
+    v: 1,
+    acc: { address: 'ab'.repeat(32), network: 'preview' },
+    alias: 'alice',
+  };
+
+  it('round-trips a blob and refuses one too large for an authenticator', () => {
+    expect(decodeAccountBlob(encodeAccountBlob(blob))).toEqual(blob);
+    expect(encodeAccountBlob(blob).byteLength).toBeLessThan(MAX_ACCOUNT_BLOB_BYTES);
+    expect(() =>
+      encodeAccountBlob({ ...blob, alias: 'a'.repeat(MAX_ACCOUNT_BLOB_BYTES) }),
+    ).toThrow(/may not exceed 2048 bytes/);
+  });
+
+  it('reads anything it does not fully understand as no metadata at all', () => {
+    expect(decodeAccountBlob(null)).toBeNull();
+    expect(decodeAccountBlob(new Uint8Array(0))).toBeNull();
+    expect(decodeAccountBlob(new TextEncoder().encode('not json'))).toBeNull();
+    // A future format, and a blob with nothing usable in it.
+    expect(decodeAccountBlob(new TextEncoder().encode('{"v":2,"acc":{}}'))).toBeNull();
+    expect(
+      decodeAccountBlob(new TextEncoder().encode('{"v":1,"acc":{"address":"","network":"x"}}')),
+    ).toBeNull();
+  });
+
+  it('asks for the blob on the same assertion that evaluates the PRF', async () => {
+    let capturedOptions: CredentialRequestOptions | undefined;
+    let assertions = 0;
+    replaceNavigator({
+      credentials: {
+        get: async (options: CredentialRequestOptions) => {
+          assertions += 1;
+          capturedOptions = options;
+          return {
+            rawId: new Uint8Array([1, 2, 3, 4]).buffer,
+            getClientExtensionResults: () => ({
+              prf: { results: { first: new Uint8Array(32).fill(4).buffer } },
+              largeBlob: { blob: encodeAccountBlob(blob).slice().buffer },
+            }),
+          };
+        },
+      },
+    });
+
+    const once = await WebAuthnPrfKeyProvider.assertOnce(reference);
+    const publicKey = capturedOptions?.publicKey as Record<string, unknown>;
+    const extensions = publicKey.extensions as {
+      prf?: unknown;
+      largeBlob?: { read?: boolean; write?: unknown };
+    };
+    // Read and PRF ride together; a write may never be in the same bag.
+    expect(extensions.largeBlob?.read).toBe(true);
+    expect('write' in (extensions.largeBlob ?? {})).toBe(false);
+    expect(extensions.prf).toBeDefined();
+    expect(once.accountBlob).toEqual(blob);
+    // No second ceremony was needed to obtain it.
+    expect(assertions).toBe(1);
+    once.dispose();
+  });
+
+  it('reports no blob, and never fails, on a platform without the extension', async () => {
+    replaceNavigator({
+      credentials: {
+        get: async () => ({
+          rawId: new Uint8Array([9]).buffer,
+          // Exactly what a client that ignores largeBlob returns.
+          getClientExtensionResults: () => ({
+            prf: { results: { first: new Uint8Array(32).fill(1).buffer } },
+          }),
+        }),
+      },
+    });
+    const discovered = await WebAuthnPrfKeyProvider.discover({ rpId: 'localhost' });
+    expect(discovered.accountBlob).toBeNull();
+    // The secrets are unaffected: today's behaviour, exactly.
+    expect(await discovered.deriveWalletSeed(scope)).toHaveLength(32);
+    discovered.dispose();
+  });
+
+  it('writes the blob in its own assertion and reports that it was written', async () => {
+    let capturedOptions: CredentialRequestOptions | undefined;
+    replaceNavigator({
+      credentials: {
+        get: async (options: CredentialRequestOptions) => {
+          capturedOptions = options;
+          return {
+            rawId: new Uint8Array([1, 2, 3, 4]).buffer,
+            getClientExtensionResults: () => ({ largeBlob: { written: true } }),
+          };
+        },
+      },
+    });
+
+    const result = await WebAuthnPrfKeyProvider.writeAccountBlob(reference, blob);
+    expect(result).toEqual({ written: true, reason: null });
+    const publicKey = capturedOptions?.publicKey as Record<string, unknown>;
+    const extensions = publicKey.extensions as { largeBlob?: { write?: ArrayBuffer } };
+    expect(extensions.largeBlob?.write).toBeInstanceOf(ArrayBuffer);
+    // The write ceremony derives nothing, so no PRF salt goes on the wire.
+    expect('prf' in (publicKey.extensions as Record<string, unknown>)).toBe(false);
+    expect(publicKey.allowCredentials).toHaveLength(1);
+  });
+
+  it('never throws on a write the platform will not do, and says why', async () => {
+    replaceNavigator({
+      credentials: {
+        get: async () => ({
+          rawId: new Uint8Array([1]).buffer,
+          getClientExtensionResults: () => ({}),
+        }),
+      },
+    });
+    await expect(WebAuthnPrfKeyProvider.writeAccountBlob(reference, blob)).resolves.toEqual({
+      written: false,
+      reason: 'This platform does not implement the WebAuthn largeBlob extension.',
+    });
+
+    replaceNavigator({
+      credentials: {
+        get: async () => ({
+          rawId: new Uint8Array([1]).buffer,
+          getClientExtensionResults: () => ({ largeBlob: { written: false } }),
+        }),
+      },
+    });
+    await expect(WebAuthnPrfKeyProvider.writeAccountBlob(reference, blob)).resolves.toMatchObject({
+      written: false,
+      reason: 'The authenticator refused to store the blob on this credential.',
+    });
+
+    replaceNavigator({ credentials: { get: async () => null } });
+    await expect(WebAuthnPrfKeyProvider.writeAccountBlob(reference, blob)).resolves.toMatchObject({
+      written: false,
+      reason: 'The user cancelled the write.',
+    });
+
+    replaceNavigator({});
+    await expect(WebAuthnPrfKeyProvider.writeAccountBlob(reference, blob)).resolves.toMatchObject({
+      written: false,
+    });
+  });
+
+  it('asks for largeBlob support at enrolment without ever making it a condition', async () => {
+    let capturedOptions: CredentialCreationOptions | undefined;
+    replaceNavigator({
+      credentials: {
+        create: async (options: CredentialCreationOptions) => {
+          capturedOptions = options;
+          return {
+            rawId: new Uint8Array([5, 5]).buffer,
+            getClientExtensionResults: () => ({
+              prf: { enabled: true },
+              largeBlob: { supported: true },
+            }),
+          };
+        },
+      },
+    });
+
+    const enrolled = await WebAuthnPrfKeyProvider.enrollWithPrf({
+      label: 'Midnight Passport',
+      userId: 'local-blob',
+    });
+    const publicKey = capturedOptions?.publicKey as Record<string, unknown>;
+    const extensions = publicKey.extensions as { largeBlob?: { support?: string } };
+    // 'required' would make enrolment fail on every platform without
+    // largeBlob, which is most of them. It must always be 'preferred'.
+    expect(extensions.largeBlob?.support).toBe('preferred');
+    expect(enrolled.largeBlobSupported).toBe(true);
+  });
+
+  it('reports unknown largeBlob support as null rather than guessing', async () => {
+    replaceNavigator({
+      credentials: {
+        create: async () => ({
+          rawId: new Uint8Array([6, 6]).buffer,
+          getClientExtensionResults: () => ({ prf: { enabled: true } }),
+        }),
+      },
+    });
+    const enrolled = await WebAuthnPrfKeyProvider.enrollWithPrf({
+      label: 'Midnight Passport',
+      userId: 'local-blob-2',
+    });
+    expect(enrolled.largeBlobSupported).toBeNull();
+  });
+
+  it('reads a blob on its own without deriving anything, and degrades to null', async () => {
+    replaceNavigator({
+      credentials: {
+        get: async () => ({
+          rawId: new Uint8Array([1, 2, 3, 4]).buffer,
+          getClientExtensionResults: () => ({
+            largeBlob: { blob: encodeAccountBlob(blob).slice().buffer },
+          }),
+        }),
+      },
+    });
+    await expect(WebAuthnPrfKeyProvider.readAccountBlob(reference)).resolves.toEqual(blob);
+
+    replaceNavigator({});
+    await expect(WebAuthnPrfKeyProvider.readAccountBlob(reference)).resolves.toBeNull();
   });
 });

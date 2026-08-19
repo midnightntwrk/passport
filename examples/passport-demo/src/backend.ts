@@ -18,6 +18,8 @@ export {
 export type {
   DiscoveredPassportPasskey,
   EnrolledPassportPasskey,
+  PassportAccountBlob,
+  PassportAccountBlobWriteResult,
   PassportIncentiveReport,
   PassportPasskeyReference,
   PassportProfileField,

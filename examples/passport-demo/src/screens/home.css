@@ -507,6 +507,9 @@
 }
 .mnhome-support:active { background: var(--mn-surface-active); }
 .mnhome-support svg { flex: 0 0 auto; }
+/* The Backup entry point reuses the pill, but it is a button rather than a
+   link, so it needs the two things a button does not inherit. */
+button.mnhome-support { font-family: inherit; cursor: pointer; }
 
 /* The .mnhome-foot "passport location" line was removed on 2026/08/06. Its
    `margin: auto 0 0` was also what sank the column's last row to the bottom of
