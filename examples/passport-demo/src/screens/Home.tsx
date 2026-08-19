@@ -25,6 +25,7 @@ import type { FeeReadiness, SendNightResult } from '../lib/localWallet.js'
 import { FeaturedApps, type AppsScreenProps, type FeaturedAppsProps } from './Apps.js'
 import { EcosystemIdentity } from './Ecosystem.js'
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
+import PassportContractCard, { type PassportContractCardProps } from './PassportContract.js'
 import SendSheet from './SendSheet.js'
 import SyncRing from './SyncRing.js'
 import ThemeToggle from './ThemeToggle.js'
@@ -52,6 +53,17 @@ export interface HomeScreenProps {
     registerNowBusy?: boolean
     registerNowPhase?: 'activating' | 'deploying-resolver' | 'registering' | 'confirming' | null
   } | null
+  /**
+   * The Passport account-custody contract (C1) on the active network: its
+   * status, its real address and deployment transaction, and the deploy action.
+   *
+   * Omit to hide the card. It is omitted rather than disabled whenever no
+   * passkey wallet session is open, on the same principle as the Send seam: a
+   * surface that cannot act should not be on screen implying it nearly could.
+   * Deploying is NOT part of onboarding — the card simply sits below the
+   * identity card, doing nothing until the user asks.
+   */
+  passportContract?: Omit<PassportContractCardProps, 'network'> | null
   /** Formatted NIGHT. `null` means unknown, `'0'` means a real zero. */
   unshieldedBalance: string | null
   shieldedTokenCount: number | null
@@ -162,6 +174,7 @@ export default function HomeScreen(props: HomeScreenProps) {
     displayName,
     aliasLabel,
     identity,
+    passportContract,
     unshieldedBalance,
     shieldedTokenCount,
     dustBalance,
@@ -542,6 +555,12 @@ export default function HomeScreen(props: HomeScreenProps) {
             registerNowBusy={identity.registerNowBusy}
             registerNowPhase={identity.registerNowPhase}
           />
+        ) : null}
+
+        {/* The account-custody contract, directly beneath the name it belongs
+            to: same card language, same status-pill discipline. */}
+        {passportContract ? (
+          <PassportContractCard network={network} {...passportContract} />
         ) : null}
 
         {/* The applications, directly below the wallet summary — the same
