@@ -90,6 +90,12 @@ import {
   type DemoPassportProfile,
 } from './publicProfile.js';
 import { PassportProfileConsent } from './profileConsent.js';
+/* The URL-callback flow. `callbackLaunch.js` reads the launch parameters at
+   MODULE IMPORT time — before the first render, so the request is recorded
+   before onboarding decides what to show — and keeps them alive across the
+   reloads and redirects onboarding performs. */
+import { passportCallbackLaunch } from './identity/callbackLaunch.js';
+import { PassportCallbackConsent } from './screens/callbackConsent.js';
 import { PassportTxConsent } from './txConsent.js';
 import OnboardingScreen from './screens/Onboarding.js';
 import HomeScreen from './screens/Home.js';
@@ -110,6 +116,13 @@ import {
   type PassportIncentiveRecord,
 } from './identity/incentiveStore.js';
 import type { AliasAvailability, AliasClaimProgress } from './identity/midnames.js';
+import {
+  loadPassportContractRecords,
+  savePassportContractRecord,
+  subscribePassportContractRecords,
+  type PassportContractRecord,
+} from './identity/passportContractStore.js';
+import type { PassportContractProgress } from './identity/passportContract.js';
 import {
   NETWORK_LABELS,
   loadStoredNetwork,
@@ -337,6 +350,19 @@ async function resolveDefaultLocalProfile(): Promise<DemoPassportProfile | null>
  * scope per purpose.
  */
 const MIDNAMES_OWNER_SCOPE = { appId: APP_ID, accountId: 'midnames-owner-v1' };
+
+/**
+ * The account-custody contract's derivation scope — a third distinct scope, on
+ * the same principle as {@link MIDNAMES_OWNER_SCOPE}: the contract's device
+ * authority must not be derivable from the wallet seed or the Midnames owner
+ * key, even though all three come from the one enrolled passkey.
+ *
+ * One assertion against this scope yields ONE 32-byte root, which
+ * `derivePassportContractSecrets` splits by domain into the device secret and
+ * the recovery secret. Two scopes would mean two WebAuthn prompts for one user
+ * action, which is exactly what the approval convention forbids.
+ */
+const PASSPORT_CONTRACT_SCOPE = { appId: APP_ID, accountId: 'passport-contract-v1' };
 
 /**
  * The onboarding steps that follow a successful passkey + wallet open.
@@ -614,8 +640,37 @@ async function clearPersistedWalletSession(): Promise<void> {
   }
 }
 
+/**
+ * Which experience this launch opens in. Mobile unless the user has explicitly
+ * chosen classic, in which case that choice survives reloads.
+ *
+ * `?demoMode=local` is the ONE launch that overrides the stored choice, and the
+ * reason is a bug it used to cause. Until the passkey wallet could deploy the
+ * account-custody contract, the ONLY route to a deployed contract was the
+ * classic desktop dashboard: `deployPassport` refuses without a Dynamic
+ * `user` and `midnightWallet`, its entry point renders only in the classic
+ * branch, and every adapter in `src/localC1.ts` demands a Dynamic
+ * `MidnightWallet` plus `?demoMode=local`. So a demo operator had to click
+ * through to classic — which pins `passport-experience=classic` in localStorage
+ * (see the effect below) — and from then on EVERY `?demoMode=local` launch
+ * opened the desktop site instead of the PWA. That is the behaviour reported as
+ * "the version with the deployed contract works only with ?demoMode=local but
+ * that does not render the PWA".
+ *
+ * The contract flow now lives on Home, on the passkey wallet, on whatever
+ * network that wallet signs on — so `demoMode=local` is nothing more than the
+ * localnet flavour of the mobile flow and must land there like any other launch.
+ * Clearing the stale pin (rather than merely ignoring it) means a subsequent
+ * launch without the flag is not surprised back into classic either. The classic
+ * view stays reachable through its own explicit entry point: the "Full
+ * dashboard" link in the onboarding footer.
+ */
 function storedExperience(): Experience {
   try {
+    if (new URLSearchParams(window.location.search).get('demoMode') === 'local') {
+      window.localStorage.removeItem(EXPERIENCE_STORAGE_KEY);
+      return 'mobile';
+    }
     return window.localStorage.getItem(EXPERIENCE_STORAGE_KEY) === 'classic' ? 'classic' : 'mobile';
   } catch {
     // Private browsing can deny localStorage entirely; the mobile default stands.
@@ -1058,6 +1113,21 @@ export default function PassportDemo() {
   const [feesSponsored, setFeesSponsored] = useState(false);
   /** True while a queued name's "Register now" re-run is in flight. */
   const [registerNowBusy, setRegisterNowBusy] = useState(false);
+  /* ---------------------------------------------------------------------- */
+  /* The account-custody contract (C1), per credential and network          */
+  /* ---------------------------------------------------------------------- */
+  const [contractRecords, setContractRecords] = useState<Record<string, PassportContractRecord>>(
+    loadPassportContractRecords,
+  );
+  /** The live phase of a deployment in flight; null when none is running. */
+  const [contractPhase, setContractPhase] = useState<PassportContractProgress['phase'] | null>(null);
+  const [contractBusy, setContractBusy] = useState(false);
+  /**
+   * How the deployment fee would be paid, in the send sheet's own words. Read
+   * from the wallet's advisory `feeReadiness()` probe — never assumed, and
+   * cleared to null when the wallet could not tell us.
+   */
+  const [contractFeeNote, setContractFeeNote] = useState<string | null>(null);
   /** The pending per-network reclaim conflict, when the target says "taken". */
   const [reclaim, setReclaim] = useState<{ target: PassportNetwork; alias: string } | null>(null);
   const [reclaimBusy, setReclaimBusy] = useState(false);
@@ -1995,6 +2065,45 @@ export default function PassportDemo() {
   // `saveIncentive` directly, and this subscription is what re-renders Home.
   useEffect(() => subscribeAliasRecords(setAliasRecords), []);
   useEffect(() => subscribeIncentives(setIncentives), []);
+  useEffect(() => subscribePassportContractRecords(setContractRecords), []);
+
+  /**
+   * The contract card's fee sentence, read from the wallet's own advisory
+   * `feeReadiness()` probe — the SAME probe the send sheet quotes, so the two
+   * surfaces can never tell different stories about who pays.
+   *
+   * Deliberately the send sheet's wording, including its hedging: `sponsored`
+   * earns "expected to be covered" because the probe is a prediction and a
+   * sponsor can drain between this quote and the submit. A wallet that cannot
+   * answer leaves the note null rather than guessing at a mode.
+   */
+  useEffect(() => {
+    /* The same condition `localSessionActive` expresses, spelled out because
+       that binding is derived further down the component than this effect. */
+    if (localWalletStatus !== 'ready' || localSurfaces === null || contractBusy) return undefined;
+    const handle = localWalletRef.current;
+    if (!handle) return undefined;
+    let live = true;
+    void (async () => {
+      try {
+        const readiness = await handle.feeReadiness();
+        if (!live) return;
+        setContractFeeNote(
+          readiness.mode === 'sponsored'
+            ? 'Network fee expected to be covered by the fee sponsor.'
+            : readiness.mode === 'own-dust'
+              ? `Network fee paid from your DUST (${readiness.dustBalance} DUST available).`
+              : /* The wallet's own refusal sentence, verbatim. */ readiness.reason,
+        );
+      } catch {
+        // "We could not tell" must not be printed as a fee mode.
+        if (live) setContractFeeNote(null);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [contractBusy, localSurfaces, localWalletNetworkId, localWalletStatus]);
 
   /** A live availability probe against one network's own registry. */
   const probeAlias = useCallback(
@@ -2414,6 +2523,120 @@ export default function PassportDemo() {
       setRegisterNowBusy(false);
     }
   }, [activateWalletViaFunder, addActivity, claimNightShortfall, keyProviderFor, profile, refreshLocalBalances, registerNowBusy, selectedNetwork]);
+
+  /**
+   * Deploys this Passport's account-custody contract (C1) on the network the
+   * OPEN PASSKEY WALLET actually signs on.
+   *
+   * This is the mobile counterpart to `deployPassport`, and deliberately shares
+   * none of its machinery: that path takes a Dynamic `MidnightWallet`, needs a
+   * Dynamic session, and — through `src/localC1.ts` — refuses to run unless the
+   * launch carries `?demoMode=local`. None of that is available or wanted here.
+   * The localnet is reached the same way every other network is: by the wallet
+   * being pointed at it.
+   *
+   * The approval convention is the name claim's, exactly: `deriveWalletSeed`
+   * against {@link PASSPORT_CONTRACT_SCOPE} costs ONE fresh user-verified
+   * WebAuthn assertion, and that assertion IS this transaction's ceremony. A
+   * `confirmPresence` on top would double-prompt for one user action.
+   *
+   * Nothing is recorded as deployed without an address and a transaction id that
+   * came back from the chain; a failure is stored as a failure, with its reason.
+   */
+  const deployPassportContractOnChain = useCallback(async (): Promise<void> => {
+    if (contractBusy) return;
+    const handle = localWalletRef.current;
+    const activeProfile = profile;
+    if (!handle || !activeProfile) return; // The card disables the action first.
+    const credentialId = activeProfile.passkey.credentialId;
+    const network = handle.network.networkId;
+    setContractBusy(true);
+    setError(null);
+    setContractPhase('deriving');
+    try {
+      const [{ deployPassportContract, checkPassportContractFunds }, { deriveWalletSeed }] =
+        await Promise.all([
+          import('./identity/passportContract.js'),
+          import('./lib/localWallet.js'),
+        ]);
+      // Funds first, before any passkey prompt: a wallet that cannot pay should
+      // be told so rather than asked to touch its authenticator and then fail.
+      const funds = await checkPassportContractFunds(handle);
+      if (!funds.ok) {
+        savePassportContractRecord({
+          credentialId,
+          network,
+          status: 'failed',
+          failureReason: funds.reason,
+          updatedAt: new Date().toISOString(),
+        });
+        return;
+      }
+      const rootSecret = await deriveWalletSeed(
+        keyProviderFor(activeProfile.passkey),
+        PASSPORT_CONTRACT_SCOPE,
+      );
+      let deployment;
+      try {
+        deployment = await deployPassportContract(handle, rootSecret, (progress) =>
+          setContractPhase(progress.phase),
+        );
+      } finally {
+        // The root secret's only job is done; nothing retains it.
+        rootSecret.fill(0);
+        passportKeyProviders.current.get(credentialId)?.lock(PASSPORT_CONTRACT_SCOPE);
+      }
+      savePassportContractRecord({
+        credentialId,
+        network: deployment.network,
+        status: 'deployed',
+        address: deployment.address,
+        deployTxId: deployment.deployTxId,
+        deviceCommitment: deployment.deviceCommitment,
+        ledgerConfirmed: deployment.ledgerConfirmed,
+        feePaidBy: deployment.feePaidBy,
+        updatedAt: deployment.deployedAt,
+      });
+      addActivity({
+        label: 'Passport contract deployed',
+        detail: `${compactAddress(deployment.address)} is ${
+          deployment.ledgerConfirmed ? 'live' : 'submitted'
+        } on ${deployment.network}.`,
+        status: 'complete',
+        source: 'chain',
+        txHash: deployment.deployTxId,
+      });
+      pushToast({
+        tone: 'success',
+        title: 'Your Passport contract is deployed',
+        body: deployment.ledgerConfirmed
+          ? 'The indexer is serving its state.'
+          : 'Submitted — the indexer has not reported it yet.',
+        link: explorerTxLink(deployment.deployTxId, deployment.network),
+      });
+      void refreshLocalBalances();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      const detail = (cause as { detail?: string })?.detail;
+      const reason = detail ? `${message} (${detail})` : message;
+      savePassportContractRecord({
+        credentialId,
+        network,
+        status: 'failed',
+        failureReason: reason,
+        updatedAt: new Date().toISOString(),
+      });
+      addActivity({
+        label: 'Passport contract',
+        detail: reason,
+        status: 'error',
+        source: 'chain',
+      });
+    } finally {
+      setContractPhase(null);
+      setContractBusy(false);
+    }
+  }, [addActivity, contractBusy, keyProviderFor, profile, refreshLocalBalances]);
 
   /**
    * Network switch. The passkey and the wallet session are untouched — no
@@ -4323,6 +4546,51 @@ export default function PassportDemo() {
     },
     ...registerNowProps,
   };
+
+  /* ---------------------------------------------------------------------- */
+  /* The account-custody contract card on Home                              */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * The stored record for THIS credential on the network the card is showing.
+   * Read per credential as well as per network: a second passkey in the same
+   * browser must never be shown the first one's contract.
+   */
+  const activeContractRecord =
+    profile && localWalletNetworkId
+      ? contractRecords[`${profile.passkey.credentialId}::${localWalletNetworkId}`] ?? null
+      : null;
+  /**
+   * Why the deploy action cannot run right now, or null when it can. Same
+   * discipline as `registerNowDisabledReason`: every case renders the action
+   * disabled with its honest sentence rather than leaving a live button to fail.
+   *
+   * Note what is NOT here: the network the user is *browsing*. The card is about
+   * the network the wallet signs on, so a browsing switch cannot make it lie.
+   */
+  const contractDeployDisabledReason = !localSessionActive
+    ? 'Sign in with your passkey to open the wallet before deploying your contract.'
+    : selectedNetwork !== localWalletNetworkId
+      ? `This Passport's wallet signs on ${signingNetworkLabel}, so its contract can only be deployed there.`
+      : walletStillSyncing
+        ? 'The wallet is still syncing. Deployment opens once the sync completes.'
+        : null;
+  /**
+   * The card. Present only when a passkey wallet session is genuinely open and
+   * the network being shown is the one it signs on — omitted rather than
+   * disabled otherwise, on the same principle as the Send seam.
+   */
+  const homePassportContract =
+    localSessionActive && localWalletNetworkId && selectedNetwork === localWalletNetworkId
+      ? {
+          record: activeContractRecord,
+          onDeploy: () => void deployPassportContractOnChain(),
+          busy: contractBusy,
+          phase: contractPhase,
+          disabledReason: contractDeployDisabledReason,
+          feeNote: contractFeeNote,
+        }
+      : null;
   /**
    * Queue from the claim screen. Queuing IS a resolution of the name step —
    * the name is chosen, it just is not on chain yet — so it lands on the
@@ -4434,6 +4702,34 @@ export default function PassportDemo() {
             : null
         }
       />
+      {/* The redirect half of the profile bridge, and the deliberate sibling of
+          the popup consent above: armed only by a launch carrying
+          ?passportCallback, and rendering nothing on every other launch. It
+          answers by NAVIGATING rather than by posting, because the tab that
+          sent the user here may no longer exist — which is the whole reason
+          the contract in identity/callbackProtocol.ts exists. The signing seam
+          is a getter, not a value: the wallet lives in a ref and may open
+          after this component first renders. */}
+      <PassportCallbackConsent
+        launch={passportCallbackLaunch}
+        sessionActive={sessionActive}
+        displayName={sessionActive ? sessionDisplayName : null}
+        passportContract={
+          passportContract
+            ? { address: passportContract.address, network: passportContract.network }
+            : null
+        }
+        midnightAddresses={
+          activeSurfaces?.unshieldedAddress
+            ? {
+                unshielded: activeSurfaces.unshieldedAddress,
+                ...(activeSurfaces.shieldedAddress ? { shielded: activeSurfaces.shieldedAddress } : {}),
+                ...(activeSurfaces.dustAddress ? { dust: activeSurfaces.dustAddress } : {}),
+              }
+            : null
+        }
+        getSigningKeystore={() => localWalletRef.current?.keys.unshieldedKeystore ?? null}
+      />
       {/* The popup half of the transaction bridge, and the deliberate sibling
           of the profile consent above: armed only by a launch carrying
           ?passportTxRequestId and ?passportTxNonce, and rendering nothing on
@@ -4524,6 +4820,7 @@ export default function PassportDemo() {
                 displayName={homeDisplayName}
                 aliasLabel={aliasLabel}
                 identity={homeIdentity}
+                passportContract={homePassportContract}
                 network={selectedNetwork}
                 onSelectNetwork={handleSelectNetwork}
                 syncPercent={walletMode === 'local' ? localSyncPercent : null}
