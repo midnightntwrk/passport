@@ -8,6 +8,18 @@ import './identity.css'
 /**
  * The Passport account-custody contract card — the C1 surface on Home.
  *
+ * STATUS, NOT A CHOICE (2026/08/19)
+ * ---------------------------------
+ * Hector, at the check-in: "this has to be completely transparent for the user.
+ * The user shouldn't choose to deploy the contract. It should automatically
+ * happen." So the "Deploy contract" button is gone. Claiming a `.night` name
+ * deploys this contract as part of the same single user action, and binds the
+ * name to its address; this card reports what that produced.
+ *
+ * The one action that remains is a RETRY, and only on a record that says a
+ * previous automatic deploy FAILED — the single state where the user has a
+ * genuine decision rather than a chore the app should have done for them.
+ *
  * Deliberately the identity card's sibling: same `identity.css`, same status
  * pill, same transaction row, so the contract reads as part of the same
  * identity story rather than as a developer panel bolted on. It sits directly
@@ -34,18 +46,19 @@ export interface PassportContractCardProps {
   /** The stored record for this credential and network, or null when none. */
   record: PassportContractRecord | null
   /**
-   * Runs the real deployment. Omit (with no disabled reason) to hide the
-   * action entirely — a button that cannot work should not be on screen.
+   * Re-runs a deployment that FAILED automatically. Offered on nothing else:
+   * there is no first-run deploy action, because the first run is the name
+   * claim's job. Omit (with no disabled reason) to hide the affordance.
    */
-  onDeploy?: () => void
+  onRetry?: () => void
   /** True while a deployment is genuinely in flight. */
   busy?: boolean
   /** Live phase while the deployment is in flight. */
   phase?: PassportContractPhase | null
   /**
-   * When set, the deploy action renders disabled with this sentence beneath
-   * it — the honest reason it cannot run right now (wallet still opening, no
-   * DUST and no sponsor, unsupported network).
+   * When set, the retry renders disabled with this sentence beneath it — the
+   * honest reason it cannot run right now (wallet still opening, no DUST and no
+   * sponsor, unsupported network).
    */
   disabledReason?: string | null
   /**
@@ -60,7 +73,7 @@ function shortHash(value: string): string {
 }
 
 export default function PassportContractCard(props: PassportContractCardProps) {
-  const { network, record, onDeploy, busy, phase, disabledReason, feeNote } = props
+  const { network, record, onRetry, busy, phase, disabledReason, feeNote } = props
 
   const deployed = record?.status === 'deployed'
   const explorer = deployed && record.deployTxId ? explorerTxUrl(record.network, record.deployTxId) : null
@@ -71,9 +84,10 @@ export default function PassportContractCard(props: PassportContractCardProps) {
      built from it lands on "transaction not found". So it is rendered as text
      with the reason, and `App.tsx` asks the indexer again in the background. */
   const txIdUnresolved = Boolean(deployed && record.deployTxId && !isLedgerTxHash(record.deployTxId))
-  /* The action is offered whenever there is no deployed contract. A failed
-     record keeps it, because retrying is exactly what the user wants there. */
-  const showAction = !deployed && (Boolean(onDeploy) || Boolean(disabledReason))
+  const failed = record?.status === 'failed'
+  /* The ONLY action: retrying an automatic deploy that failed. A Passport with
+     no contract yet gets no button at all — the claim will deploy it. */
+  const showRetry = failed && !busy && (Boolean(onRetry) || Boolean(disabledReason))
 
   return (
     <article className="mnid-card mnid-card-embedded">
@@ -88,7 +102,16 @@ export default function PassportContractCard(props: PassportContractCardProps) {
         </p>
       ) : (
         <p className="mnid-alias mnid-alias-muted">
-          {busy ? 'Deploying…' : 'No contract on this network yet'}
+          {busy ? (
+            <Loader2 className="mnid-register-spinner" size={14} aria-hidden="true" />
+          ) : null}
+          {busy
+            ? PHASE_LABELS[phase ?? 'deploying']
+            : failed
+              ? 'No contract on this network yet'
+              : /* Not an instruction and not a promise about timing — just what
+                   will actually cause it to exist. */
+                'Deploys with your Midnight name'}
         </p>
       )}
 
@@ -136,30 +159,32 @@ export default function PassportContractCard(props: PassportContractCardProps) {
         </p>
       ) : null}
 
-      {record?.status === 'failed' ? <p className="mnid-reason">{record.failureReason}</p> : null}
+      {failed ? <p className="mnid-reason">{record.failureReason}</p> : null}
 
-      {showAction ? (
+      {/* What makes the contract appear, said once, where a button used to be.
+          Only in the state it is true of: no record at all, and nothing in
+          flight. */}
+      {!record && !busy ? (
+        <p className="mnid-reason">
+          Your Passport deploys this contract for you the first time you claim a Midnight name, and
+          the name is registered pointing at it. There is nothing to press.
+        </p>
+      ) : null}
+
+      {showRetry ? (
         <div className="mnid-panel-actions mnid-register-row">
           <button
             type="button"
             className="mnid-register"
-            onClick={onDeploy}
-            disabled={Boolean(busy || disabledReason || !onDeploy)}
+            onClick={onRetry}
+            disabled={Boolean(disabledReason || !onRetry)}
           >
-            {busy ? (
-              <Loader2 className="mnid-register-spinner" size={14} aria-hidden="true" />
-            ) : (
-              <ShieldCheck size={14} aria-hidden="true" />
-            )}
-            {busy
-              ? PHASE_LABELS[phase ?? 'deploying']
-              : record?.status === 'failed'
-                ? 'Try deploying again'
-                : 'Deploy contract'}
+            <ShieldCheck size={14} aria-hidden="true" />
+            Try deploying again
           </button>
           {disabledReason ? (
             <p className="mnid-reason mnid-register-reason">{disabledReason}</p>
-          ) : feeNote && !busy ? (
+          ) : feeNote ? (
             <p className="mnid-reason mnid-register-reason">{feeNote}</p>
           ) : null}
         </div>
@@ -177,6 +202,8 @@ function StatusPill({
   busy: boolean
   network: PassportNetwork
 }) {
+  /* "via a claim" is the truthful attribution now: nothing else starts a
+     deployment except a retry, which the failed record's own pill precedes. */
   if (busy) return <span className="mnid-pill mnid-pill-queued">Deploying…</span>
   if (record?.status === 'deployed') {
     return (
@@ -190,5 +217,5 @@ function StatusPill({
   if (record?.status === 'failed') {
     return <span className="mnid-pill mnid-pill-failed">Deployment failed</span>
   }
-  return <span className="mnid-pill mnid-pill-queued">Not deployed</span>
+  return <span className="mnid-pill mnid-pill-queued">Not deployed yet</span>
 }

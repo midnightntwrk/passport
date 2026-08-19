@@ -117,6 +117,10 @@ function atomicNightFrom(formatted: string | null): bigint | null {
 
 const PHASE_COPY: Record<AliasClaimProgress['phase'], (domain: string) => string> = {
   activating: () => 'Activating this Passport…',
+  /* The account contract is deployed as part of claiming, so the button names
+     it. A step the user is paying for and waiting on is a step they are told
+     about — silence here would be the "transparent" that means hidden. */
+  'attaching-account': () => 'Deploying your Passport account contract…',
   'deploying-resolver': () => "Deploying your name's resolver…",
   registering: (domain) => `Registering ${domain}…`,
   confirming: () => 'Waiting for the registry to confirm…',

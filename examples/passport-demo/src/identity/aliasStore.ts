@@ -23,6 +23,20 @@ export interface AliasRecord {
   queuedReason?: string;
   /** Whether the registry itself was seen carrying the name. */
   registryConfirmed?: boolean;
+  /**
+   * What the resolver leaf this record's claim deployed actually points at.
+   *
+   * OPTIONAL, and absent on every record written before 2026/08/19 — those
+   * claims all bound the name to the wallet's unshielded address, because that
+   * was the only path the code had. The field is not back-filled: a reader
+   * that finds it missing knows only that the record predates the choice, and
+   * the identity card says exactly that rather than asserting a value nobody
+   * recorded. `'contract'` means the name resolves to this Passport's
+   * account-custody contract.
+   */
+  resolverTarget?: 'wallet' | 'contract';
+  /** The raw 64-hex bytes {@link resolverTarget} resolves to, when recorded. */
+  resolverTargetHex?: string;
   updatedAt: string;
 }
 

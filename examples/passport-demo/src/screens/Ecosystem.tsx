@@ -44,14 +44,21 @@ export interface EcosystemProps {
   /** True while the re-run claim is in flight. */
   registerNowBusy?: boolean
   /** Live claim phase while the re-run is in flight. */
-  registerNowPhase?: 'activating' | 'deploying-resolver' | 'registering' | 'confirming' | null
+  registerNowPhase?:
+    | 'activating'
+    | 'attaching-account'
+    | 'deploying-resolver'
+    | 'registering'
+    | 'confirming'
+    | null
 }
 
 const REGISTER_PHASE_LABELS: Record<
-  'activating' | 'deploying-resolver' | 'registering' | 'confirming',
+  'activating' | 'attaching-account' | 'deploying-resolver' | 'registering' | 'confirming',
   string
 > = {
   activating: 'Activating this Passport…',
+  'attaching-account': 'Deploying your account contract…',
   'deploying-resolver': 'Deploying resolver…',
   registering: 'Registering on-chain…',
   confirming: 'Confirming…',
@@ -113,6 +120,28 @@ export function EcosystemIdentity(props: EcosystemProps) {
             />
             <TxRow label="Registration" txId={record.registerTxId} network={record.network} />
           </ul>
+        ) : null}
+
+        {/* WHAT THE NAME POINTS AT — stated for every registered record, and
+            stated differently for the ones that predate the choice.
+
+            A name claimed from 2026/08/19 resolves to this Passport's
+            account-custody contract. Names claimed before that resolve to the
+            wallet's unshielded address, because that was the only path the code
+            had; those records carry no `resolverTarget` at all and are NOT
+            back-filled. Saying so plainly is the point: an older record is not
+            broken, it is simply bound to a different thing. */}
+        {record?.status === 'registered' ? (
+          <p className="mnid-reason">
+            {record.resolverTarget === 'contract'
+              ? `Resolves to your Passport account contract${
+                  record.resolverTargetHex ? ` (${shortHash(record.resolverTargetHex)})` : ''
+                }.`
+              : record.resolverTarget === 'wallet'
+                ? "Resolves to this wallet's unshielded address."
+                : 'Claimed before names bound to the account contract, so it resolves to this ' +
+                  "wallet's unshielded address."}
+          </p>
         ) : null}
 
         {record?.status === 'registered' && record.registryConfirmed === false ? (

@@ -5,8 +5,10 @@
  * simulates a registry: availability is decoded from the deployed top-level
  * domain contract's own ledger, and a claim is two real transactions —
  *
- *   1. a resolver "leaf" contract deployed with this Passport's unshielded
- *      address as its DOMAIN_TARGET, and
+ *   1. a resolver "leaf" contract deployed with this Passport's DOMAIN_TARGET —
+ *      since 2026/08/19 the account-custody contract's ADDRESS where the caller
+ *      supplies one, and the wallet's unshielded address only where it does
+ *      not (see {@link AliasResolverTarget}) — and
  *   2. a paid `register_domain_for` call on the shared `.night` TLD, which
  *      pays COST in unshielded NIGHT to the TLD owner and asserts the name is
  *      still free.
@@ -272,14 +274,27 @@ type MidnamesModule = {
   AddressType: { ContractAddr: number; ZswapCPKAddr: number; UnshieldedAddr: number };
 };
 
-interface MidnamesLedger {
+export interface MidnamesLedger {
   readonly BUY_ENABLED: boolean;
   readonly COST_SHORT: bigint;
   readonly COST_MED: bigint;
   readonly COST_LONG: bigint;
+  /**
+   * The leaf's target, as the generated module decodes it:
+   * `Either<ContractAddress, Either<ZswapCoinPublicKey, UserAddress>>`.
+   * Which of the three it is decides which `bytes` mean anything — see
+   * {@link decodeDomainTarget}. Reading `.left.bytes` unconditionally (as this
+   * module did until 2026/08/19) reports 32 zero bytes for every
+   * wallet-targeted name, because that branch is the CONTRACT one.
+   */
   readonly DOMAIN_TARGET: {
     is_left: boolean;
     left: { bytes: Uint8Array };
+    right: {
+      is_left: boolean;
+      left: { bytes: Uint8Array };
+      right: { bytes: Uint8Array };
+    };
   };
   domains: {
     size(): bigint;
@@ -300,7 +315,20 @@ async function loadMidnames(): Promise<MidnamesModule> {
 
 /** Where the browser fetches the leaf's prover keys, verifier keys, and ZKIR. */
 function midnamesAssetBase(): string {
-  return `${window.location.origin}/zk/midnames`;
+  /* The PWA serves the staged artefacts from its own origin. A Node harness
+     has no window — and must NOT fake one: a partial window stub flips the
+     wasm runtime's environment sniffing into browser paths and circuit
+     execution dies in an `unreachable` trap. Harnesses name their static
+     server with PASSPORT_ZK_ORIGIN, exactly as `./passportContract.ts` does. */
+  if (typeof window !== 'undefined') return `${window.location.origin}/zk/midnames`;
+  const harnessOrigin =
+    typeof process !== 'undefined' ? process.env.PASSPORT_ZK_ORIGIN : undefined;
+  if (!harnessOrigin) {
+    throw new Error(
+      'No origin to load Midnames artefacts from: neither window nor PASSPORT_ZK_ORIGIN.',
+    );
+  }
+  return `${harnessOrigin}/zk/midnames`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -384,14 +412,40 @@ export async function checkAliasAvailability(
 }
 
 /**
- * Resolves a claimed alias back to the address it points at, straight from the
- * registry — the check that proves a claim landed. Returns null when the name
- * is not registered.
+ * What a resolver leaf points at, decoded from its `DOMAIN_TARGET`.
+ *
+ * The Compact type is `Either<ContractAddress, Either<ZswapCoinPublicKey,
+ * UserAddress>>` — a three-way tagged union flattened into nested `Either`s,
+ * built by the leaf's constructor from the `[bytes, AddressType]` pair it is
+ * deployed with (`ContractAddr = 0`, `ZswapCPKAddr = 1`, `UnshieldedAddr = 2`;
+ * see the generated `contracts/managed/midnames/contract/index.js`). Only the
+ * branch the tag selects carries real bytes; the other two are 32 zeros.
+ */
+export type ResolvedDomainTarget =
+  | { kind: 'contract'; hex: string }
+  | { kind: 'shielded'; hex: string }
+  | { kind: 'wallet'; hex: string };
+
+/** Reads the selected branch of a leaf's `DOMAIN_TARGET`, and only that one. */
+export function decodeDomainTarget(
+  target: MidnamesLedger['DOMAIN_TARGET'],
+): ResolvedDomainTarget {
+  if (target.is_left) return { kind: 'contract', hex: bytesToHex(target.left.bytes) };
+  if (target.right.is_left) {
+    return { kind: 'shielded', hex: bytesToHex(target.right.left.bytes) };
+  }
+  return { kind: 'wallet', hex: bytesToHex(target.right.right.bytes) };
+}
+
+/**
+ * Resolves a claimed alias back to what it points at, straight from the
+ * registry — the check that proves a claim landed AND that it landed on the
+ * right kind of target. Returns null when the name is not registered.
  */
 export async function resolveAliasTarget(
   network: MidnamesNetwork,
   alias: string,
-): Promise<{ resolverAddress: string; targetHex: string } | null> {
+): Promise<{ resolverAddress: string; target: ResolvedDomainTarget } | null> {
   const label = normalizePassportAlias(alias);
   const availability = await checkAliasAvailability(network, label, { fresh: true });
   if (availability.status !== 'taken') return null;
@@ -406,7 +460,7 @@ export async function resolveAliasTarget(
   const leaf = ledger((state as { data: unknown }).data);
   return {
     resolverAddress: availability.resolverAddress,
-    targetHex: bytesToHex(leaf.DOMAIN_TARGET.left.bytes),
+    target: decodeDomainTarget(leaf.DOMAIN_TARGET),
   };
 }
 
@@ -416,6 +470,12 @@ export async function resolveAliasTarget(
 
 export type AliasClaimErrorCode =
   | 'taken'
+  /**
+   * The account-custody contract this name must bind to could not be
+   * deployed. The claim STOPS here — a name is never registered against a
+   * wallet address as a silent consolation prize for a failed contract.
+   */
+  | 'account-contract-failed'
   | 'insufficient-night'
   | 'insufficient-dust'
   | 'deploy-failed'
@@ -436,12 +496,40 @@ export class AliasClaimError extends Error {
 
 export interface AliasClaimProgress {
   /**
-   * `activating` belongs to the caller, not to `claimAlias`: it covers the
-   * activation grant a funder sends an empty wallet before the registration
-   * itself can start. The three that follow are this module's own.
+   * `activating` and `attaching-account` both belong to the CALLER, not to
+   * `claimAlias`: the first covers the activation grant a funder sends an empty
+   * wallet, the second covers deploying this Passport's account-custody
+   * contract so the name has a contract to bind to. They are named here because
+   * the button that narrates a claim narrates all of it — a user watching one
+   * action should not be shown a vocabulary that skips two of its steps. The
+   * three that follow are this module's own.
    */
-  phase: 'activating' | 'deploying-resolver' | 'registering' | 'confirming';
+  phase:
+    | 'activating'
+    | 'attaching-account'
+    | 'deploying-resolver'
+    | 'registering'
+    | 'confirming';
 }
+
+/**
+ * What the resolver leaf this claim deploys will point at.
+ *
+ * `contract` is the shape Passport ships: the name resolves to this Passport's
+ * account-custody contract, so "who is alice.night" and "which account is
+ * alice.night" are the same answer. It is expressed in the leaf's constructor
+ * as `[address, AddressType.ContractAddr]`, which the generated contract turns
+ * into the LEFT branch of `DOMAIN_TARGET` — see {@link decodeDomainTarget}.
+ *
+ * `wallet` is the pre-2026/08/19 shape, kept because it is what every already
+ * registered Passport name carries and because a claim must still be possible
+ * (and honest) on a Passport with no contract. Nothing in this module picks
+ * between them: the caller says which, so a name can never be bound to a
+ * contract address that the caller did not watch land on chain.
+ */
+export type AliasResolverTarget =
+  | { kind: 'contract'; contractAddress: string }
+  | { kind: 'wallet' };
 
 export interface AliasClaimResult {
   alias: string;
@@ -451,12 +539,25 @@ export interface AliasClaimResult {
   resolverAddress: string;
   resolverDeployTxId: string;
   registerTxId: string;
+  /** This Passport's unshielded address — the leaf's DOMAIN_OWNER, always. */
   targetUnshieldedAddress: string;
+  /** Which kind of address the resolver leaf was actually deployed pointing at. */
+  resolverTarget: AliasResolverTarget['kind'];
+  /**
+   * The raw 64-hex bytes that target resolves to: the account-custody contract
+   * address for `'contract'`, the unshielded address's 32 target bytes for
+   * `'wallet'`. Not a restatement of the request — it is the value that was put
+   * into the constructor argument.
+   */
+  resolverTargetHex: string;
   claimedAt: string;
   /**
-   * Whether the registry itself was observed carrying the name before this
-   * resolved. Both transaction ids are real either way; `false` means the
-   * indexer had not caught up inside the confirmation window, and the UI says
+   * Whether the WHOLE binding was observed on chain before this resolved: the
+   * TLD mapping `<alias>` to this resolver, AND that resolver's own
+   * `DOMAIN_TARGET` reporting {@link resolverTargetHex}. Both halves, because
+   * a name confirmed to exist but pointing somewhere else is not a confirmed
+   * claim. Both transaction ids are real either way; `false` means the indexer
+   * had not caught up inside the confirmation window, and the UI says
    * "awaiting the registry" rather than claiming a confirmed lookup.
    */
   registryConfirmed: boolean;
@@ -687,7 +788,9 @@ async function createMidnamesProviders(
 
   const zkConfigProvider = new FetchZkConfigProvider(
     midnamesAssetBase(),
-    window.fetch.bind(window),
+    /* `globalThis`, not `window`: the identical call has to work under the
+       Node drill harness, which deliberately has no window. */
+    globalThis.fetch.bind(globalThis),
   );
 
   return {
@@ -770,8 +873,13 @@ export async function checkAliasClaimFunds(
 }
 
 /**
- * Claims `alias` as `<alias>.night` for this Passport's unshielded address, on
- * whichever network the open wallet is actually on.
+ * Claims `alias` as `<alias>.night` on whichever network the open wallet is
+ * actually on, resolving to whatever `target` names.
+ *
+ * `target` is REQUIRED and has no default. The caller decides — and can only
+ * decide `{ kind: 'contract' }` by holding a contract address the chain gave
+ * it — so this function can never quietly bind a name to a wallet address
+ * because a contract deploy went missing.
  *
  * The registration always happens on `wallet.network.networkId` and nowhere
  * else: the wallet's keys, its NIGHT, and its proof server all belong to that
@@ -787,6 +895,7 @@ export async function claimAlias(
   wallet: LocalMidnightWallet,
   ownerSecret: Uint8Array,
   alias: string,
+  target: AliasResolverTarget,
   onProgress?: (progress: AliasClaimProgress) => void,
 ): Promise<AliasClaimResult> {
   const label = normalizePassportAlias(alias);
@@ -818,6 +927,9 @@ export async function claimAlias(
       resolverDeployTxId: fakeId(),
       registerTxId: fakeId(),
       targetUnshieldedAddress: wallet.unshieldedAddress,
+      resolverTarget: target.kind,
+      resolverTargetHex:
+        target.kind === 'contract' ? rawContractAddress(target.contractAddress) : fakeId(),
       registryConfirmed: true,
       claimedAt: new Date().toISOString(),
     } as AliasClaimResult;
@@ -884,7 +996,21 @@ export async function claimAlias(
   );
 
   const tldAddress = MIDNAMES_TLD_ADDRESSES[network];
-  const targetBytes = unshieldedAddressBytes(wallet);
+  /* The leaf's OWNER address stays this wallet's, always: `DOMAIN_OWNER` is who
+     may later call `set_resolver` / `transfer_domain`, and that authority
+     belongs to the passkey wallet whichever way the name resolves. */
+  const ownerAddressBytes = unshieldedAddressBytes(wallet);
+  /* The leaf's TARGET is what the name RESOLVES to, and is the caller's
+     choice. `AddressType.ContractAddr` puts the account-custody contract's
+     address in the LEFT branch of `DOMAIN_TARGET`; `UnshieldedAddr` puts the
+     wallet's 32 target bytes in the innermost RIGHT branch. Both are real
+     constructor arguments to a contract we deploy ourselves — the deployed
+     `.night` TLD is never asked to represent either, it only records which
+     leaf address a name points at. */
+  const [targetBytes, targetType] =
+    target.kind === 'contract'
+      ? ([contractAddressBytes(target.contractAddress), AddressType.ContractAddr] as const)
+      : ([ownerAddressBytes, AddressType.UnshieldedAddr] as const);
   const { key: labelKey, len } = domainToKey(label);
 
   onProgress?.({ phase: 'deploying-resolver' });
@@ -898,7 +1024,7 @@ export async function claimAlias(
       args: [
         maybeBytes(domainToKey(MIDNAMES_TLD).key),
         { bytes: contractAddressBytes(tldAddress) },
-        [targetBytes, AddressType.UnshieldedAddr],
+        [targetBytes, targetType],
         maybeBytes(labelKey),
         nativeColourBytes(),
         0n,
@@ -907,7 +1033,7 @@ export async function claimAlias(
         maybeString(),
         false,
         ownerKey,
-        { bytes: targetBytes },
+        { bytes: ownerAddressBytes },
         emptyKvs(),
       ],
     } as never);
@@ -955,12 +1081,25 @@ export async function claimAlias(
     resolveTransactionHash(network, registerTxId),
   ]);
   invalidateAliasRegistry(network);
+  const expectedTargetHex = bytesToHex(targetBytes);
   let registryConfirmed = false;
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const confirmation = await checkAliasAvailability(network, label, { fresh: true });
     if (confirmation.status === 'taken' && confirmation.resolverAddress === resolverAddress) {
-      registryConfirmed = true;
-      break;
+      /* The name is in the registry. The decisive question is what it points
+         at, so the leaf is read back too — the same decode any resolver would
+         run. A mismatch is not "not yet": it leaves `registryConfirmed` false
+         rather than asserting a binding we did not observe. */
+      const resolved = await resolveAliasTarget(network, label);
+      const expectedKind = target.kind === 'contract' ? 'contract' : 'wallet';
+      if (
+        resolved &&
+        resolved.target.kind === expectedKind &&
+        resolved.target.hex === expectedTargetHex
+      ) {
+        registryConfirmed = true;
+        break;
+      }
     }
     await wait(2_000);
   }
@@ -974,6 +1113,8 @@ export async function claimAlias(
     resolverDeployTxId,
     registerTxId,
     targetUnshieldedAddress: wallet.unshieldedAddress,
+    resolverTarget: target.kind,
+    resolverTargetHex: bytesToHex(targetBytes),
     claimedAt: new Date().toISOString(),
     registryConfirmed,
   };

@@ -115,8 +115,14 @@ import {
   subscribeIncentives,
   type PassportIncentiveRecord,
 } from './identity/incentiveStore.js';
-import type { AliasAvailability, AliasClaimProgress } from './identity/midnames.js';
+import type {
+  AliasAvailability,
+  AliasClaimProgress,
+  AliasClaimResult,
+  MidnamesNetwork,
+} from './identity/midnames.js';
 import {
+  loadPassportContractRecord,
   loadPassportContractRecords,
   passportContractRecordKey,
   savePassportContractRecord,
@@ -136,6 +142,7 @@ import PassportToasts, { pushToast } from './screens/ToastStack.js';
 import { fetchRecentTransactions, type RecentTransaction } from './lib/indexerTx.js';
 import { PasskeyPresenceError, confirmPresence } from './lib/passkeyPresence.js';
 import {
+  CLAIMABLE_NETWORKS,
   aliasRegistrationSupported,
   configuredNetworkId,
   defaultSelectedNetwork,
@@ -2351,10 +2358,192 @@ export default function PassportDemo() {
   );
 
   /**
-   * The real claim: derives the Midnames owner secret from the passkey (a
-   * distinct scope from the wallet seed), deploys the resolver, and pays
-   * `register_domain_for` on the shared `.night` TLD. Both transaction ids are
-   * real or nothing is recorded as registered.
+   * ONE user action, from the passkey prompt to the registered name.
+   *
+   * Hector, 2026/08/19: "which account is basically being related? … this needs
+   * to deploy the account custody and then we need to come to this", and "this
+   * has to be completely transparent for the user. The user shouldn't choose to
+   * deploy the contract. It should automatically happen." So a claim now owns
+   * the account-custody contract's deployment: the name binds to the CONTRACT,
+   * and the contract comes into existence as part of claiming, not as a button
+   * the user has to know to press first.
+   *
+   * ONE PASSKEY CEREMONY, and the reason it is one
+   * ----------------------------------------------
+   * The two secrets involved live in deliberately different derivation scopes —
+   * {@link MIDNAMES_OWNER_SCOPE} for the domain owner key, and
+   * {@link PASSPORT_CONTRACT_SCOPE} for the contract root that
+   * `derivePassportContractSecrets` splits into the device and recovery
+   * secrets. Calling `deriveWalletSeed` twice on the cached provider would cost
+   * TWO user-verified assertions, and therefore two prompts for one action.
+   *
+   * `assertOnce` runs exactly one assertion and hands back a one-shot handle
+   * over that assertion's PRF output, from which BOTH scopes derive — and,
+   * because the HKDF salts and info strings are the same either way (see
+   * `demo-backend/src/passkey.ts`), byte-identically to what two prompts would
+   * have produced. So a contract deployed here and a contract deployed by the
+   * card's retry carry the same device commitment. The handle is disposed the
+   * moment both derivations are done: the PRF output never outlives this flow,
+   * and nothing caches it.
+   *
+   * ORDER, AND WHERE IT STOPS
+   * -------------------------
+   * Availability and funds are re-checked BEFORE the prompt, so a doomed claim
+   * never asks the user to touch their authenticator. Then the contract, then
+   * the resolver, then the registration. If the contract deploy fails the claim
+   * STOPS with that failure's real words — it does not fall back to binding the
+   * name to the wallet address, because a name that silently points somewhere
+   * other than where the user was told is the one outcome worth failing for.
+   */
+  const claimAliasBoundToAccount = useCallback(
+    async (
+      handle: LocalMidnightWallet,
+      activeProfile: DemoPassportProfile,
+      alias: string,
+      onPhase: (phase: AliasClaimProgress['phase']) => void,
+    ): Promise<AliasClaimResult> => {
+      const credentialId = activeProfile.passkey.credentialId;
+      const network = handle.network.networkId;
+      const [
+        { AliasClaimError, checkAliasAvailability, checkAliasClaimFunds, claimAlias },
+        { deployPassportContract },
+        { deriveWalletSeed },
+      ] = await Promise.all([
+        import('./identity/midnames.js'),
+        import('./identity/passportContract.js'),
+        import('./lib/localWallet.js'),
+      ]);
+
+      /* The registry probes below need the network as a Midnames network, and
+         the only thing that makes that cast true is the same gate `claimAlias`
+         applies. Refusing here means the contract is never deployed for a claim
+         that could not have been made on this network at all. */
+      if (!aliasRegistrationSupported(network)) {
+        throw new AliasClaimError(
+          'unsupported-network',
+          `Passport registers names on ${CLAIMABLE_NETWORKS.join(' and ')} only; this wallet is on ${network}.`,
+        );
+      }
+      const registryNetwork = network as MidnamesNetwork;
+
+      /* (1) Both gates before the prompt. `claimAlias` runs them again for
+         itself; running them here as well is what keeps the ACCOUNT CONTRACT
+         from being deployed for a claim that was never going to land. */
+      const availability = await checkAliasAvailability(registryNetwork, alias, { fresh: true });
+      if (availability.status === 'taken') {
+        throw new AliasClaimError(
+          'taken',
+          `${alias}.night is already registered on ${registryNetwork}.`,
+          availability.resolverAddress,
+        );
+      }
+      if (availability.status === 'unreachable') {
+        throw new AliasClaimError(
+          'network-unreachable',
+          'The .night registry could not be reached, so the name cannot be claimed right now.',
+          availability.detail,
+        );
+      }
+      const funds = await checkAliasClaimFunds(handle, alias);
+      if (!funds.ok) throw new AliasClaimError('insufficient-night', funds.reason);
+
+      /* (2) The one ceremony. Both secrets, one assertion, handle disposed. */
+      const oneShot = await withPasskeyWatchdog(() =>
+        WebAuthnPrfKeyProvider.assertOnce(activeProfile.passkey),
+      );
+      let ownerSecret: Uint8Array;
+      let contractRootSecret: Uint8Array;
+      try {
+        ownerSecret = await deriveWalletSeed(oneShot, MIDNAMES_OWNER_SCOPE);
+        contractRootSecret = await deriveWalletSeed(oneShot, PASSPORT_CONTRACT_SCOPE);
+      } finally {
+        // The PRF output is zeroed here and never reaches any cache.
+        oneShot.dispose();
+      }
+
+      try {
+        /* (3) The account-custody contract. An existing DEPLOYED record for
+           this credential and network is reused — a Passport has one contract
+           per network, not one per name. */
+        const existing = loadPassportContractRecord(credentialId, network);
+        let contractAddress = existing?.status === 'deployed' ? existing.address : undefined;
+        if (!contractAddress) {
+          onPhase('attaching-account');
+          setContractBusy(true);
+          try {
+            const deployment = await deployPassportContract(
+              handle,
+              contractRootSecret,
+              (progress) => setContractPhase(progress.phase),
+            );
+            savePassportContractRecord({
+              credentialId,
+              network: deployment.network,
+              status: 'deployed',
+              address: deployment.address,
+              deployTxId: deployment.deployTxId,
+              txIdResolved: isLedgerTxHash(deployment.deployTxId),
+              deviceCommitment: deployment.deviceCommitment,
+              ledgerConfirmed: deployment.ledgerConfirmed,
+              feePaidBy: deployment.feePaidBy,
+              updatedAt: deployment.deployedAt,
+            });
+            addActivity({
+              label: 'Passport contract deployed',
+              detail: `${compactAddress(deployment.address)} is ${
+                deployment.ledgerConfirmed ? 'live' : 'submitted'
+              } on ${deployment.network}, ready for ${alias}.night to point at it.`,
+              status: 'complete',
+              source: 'chain',
+              txHash: deployment.deployTxId,
+            });
+            contractAddress = deployment.address;
+          } catch (cause) {
+            /* The failure is recorded as a failure — that record is what puts
+               the "Try deploying again" affordance on the Home card — and then
+               re-thrown, because the claim must not continue. */
+            const message = cause instanceof Error ? cause.message : String(cause);
+            const detail = (cause as { detail?: string })?.detail;
+            savePassportContractRecord({
+              credentialId,
+              network,
+              status: 'failed',
+              failureReason: detail ? `${message} (${detail})` : message,
+              updatedAt: new Date().toISOString(),
+            });
+            throw new AliasClaimError(
+              'account-contract-failed',
+              `${alias}.night was not registered: your Passport's account contract could not be deployed, and the name would have had nothing to point at.`,
+              detail ? `${message} (${detail})` : message,
+            );
+          } finally {
+            setContractPhase(null);
+            setContractBusy(false);
+          }
+        }
+
+        /* (4) The claim itself, bound to the contract address the chain gave
+           us — never to a value assembled from anything else. */
+        return await claimAlias(
+          handle,
+          ownerSecret,
+          alias,
+          { kind: 'contract', contractAddress },
+          (progress) => onPhase(progress.phase),
+        );
+      } finally {
+        ownerSecret.fill(0);
+        contractRootSecret.fill(0);
+      }
+    },
+    [addActivity],
+  );
+
+  /**
+   * The real claim, as ONE user action: the account-custody contract is
+   * deployed if this Passport has none on this network, and then the name is
+   * registered pointing AT it. See {@link claimAliasBoundToAccount} for the
+   * single-ceremony derivation and the order the steps run in.
    */
   const claimAliasOnChain = useCallback(
     async (alias: string): Promise<void> => {
@@ -2365,33 +2554,12 @@ export default function PassportDemo() {
         return;
       }
       setAliasError(null);
+      /* The first phase the button narrates is the first thing that really
+         happens — the availability and funds re-checks — so it stays on
+         'deploying-resolver' only until the ceremony reports otherwise. */
       setClaimPhase('deploying-resolver');
       try {
-        const [{ claimAlias }, { deriveWalletSeed }] = await Promise.all([
-          import('./identity/midnames.js'),
-          import('./lib/localWallet.js'),
-        ]);
-        // The owner-secret derivation below costs one fresh user-verified
-        // WebAuthn assertion (`deriveWalletSeed` is deliberately uncached), so
-        // it IS this approval's ceremony. One approval, one prompt, and both
-        // chain transactions ride on it — a `confirmPresence` here as well
-        // would double-prompt.
-        const ownerSecret = await deriveWalletSeed(
-          keyProviderFor(activeProfile.passkey),
-          MIDNAMES_OWNER_SCOPE,
-        );
-        let result;
-        try {
-          result = await claimAlias(handle, ownerSecret, alias, (progress) =>
-            setClaimPhase(progress.phase),
-          );
-        } finally {
-          // The owner secret's only job is done; nothing retains it.
-          ownerSecret.fill(0);
-          passportKeyProviders.current
-            .get(activeProfile.passkey.credentialId)
-            ?.lock(MIDNAMES_OWNER_SCOPE);
-        }
+        const result = await claimAliasBoundToAccount(handle, activeProfile, alias, setClaimPhase);
         saveAliasRecord({
           alias: result.alias,
           domain: result.domain,
@@ -2401,11 +2569,15 @@ export default function PassportDemo() {
           resolverDeployTxId: result.resolverDeployTxId,
           registerTxId: result.registerTxId,
           registryConfirmed: result.registryConfirmed,
+          resolverTarget: result.resolverTarget,
+          resolverTargetHex: result.resolverTargetHex,
           updatedAt: result.claimedAt,
         });
         addActivity({
           label: 'Midnight name registered',
-          detail: `${result.domain} now resolves to this Passport on ${result.network}.`,
+          detail: `${result.domain} now resolves to this Passport's account contract (${compactAddress(
+            result.resolverTargetHex,
+          )}) on ${result.network}.`,
           status: 'complete',
           source: 'chain',
           txHash: result.registerTxId,
@@ -2440,7 +2612,7 @@ export default function PassportDemo() {
         setClaimPhase(null);
       }
     },
-    [addActivity, keyProviderFor, profile, refreshLocalBalances],
+    [addActivity, claimAliasBoundToAccount, profile, refreshLocalBalances],
   );
 
   /**
@@ -2514,7 +2686,7 @@ export default function PassportDemo() {
         updatedAt: new Date().toISOString(),
       });
     try {
-      const { checkAliasAvailability, checkAliasClaimFunds, claimAlias } = await import(
+      const { checkAliasAvailability, checkAliasClaimFunds } = await import(
         './identity/midnames.js'
       );
       // (1) The name may have been taken while it sat in the queue. It is
@@ -2556,26 +2728,17 @@ export default function PassportDemo() {
           return;
         }
       }
-      // (3) The same two real transactions the onboarding claim runs. The
-      // owner-secret derivation costs one fresh user-verified WebAuthn
-      // assertion, which IS this approval's ceremony — see `claimAliasOnChain`.
+      // (3) The onboarding claim's exact path, contract and all: one passkey
+      // ceremony, the account contract deployed if this Passport has none on
+      // this network, then the two Midnames transactions with the name bound
+      // to that contract. See `claimAliasBoundToAccount`.
       setClaimPhase('deploying-resolver');
-      const { deriveWalletSeed } = await import('./lib/localWallet.js');
-      const ownerSecret = await deriveWalletSeed(
-        keyProviderFor(activeProfile.passkey),
-        MIDNAMES_OWNER_SCOPE,
+      const result = await claimAliasBoundToAccount(
+        handle,
+        activeProfile,
+        record.alias,
+        setClaimPhase,
       );
-      let result;
-      try {
-        result = await claimAlias(handle, ownerSecret, record.alias, (progress) =>
-          setClaimPhase(progress.phase),
-        );
-      } finally {
-        ownerSecret.fill(0);
-        passportKeyProviders.current
-          .get(activeProfile.passkey.credentialId)
-          ?.lock(MIDNAMES_OWNER_SCOPE);
-      }
       saveAliasRecord({
         alias: result.alias,
         domain: result.domain,
@@ -2585,11 +2748,15 @@ export default function PassportDemo() {
         resolverDeployTxId: result.resolverDeployTxId,
         registerTxId: result.registerTxId,
         registryConfirmed: result.registryConfirmed,
+        resolverTarget: result.resolverTarget,
+        resolverTargetHex: result.resolverTargetHex,
         updatedAt: result.claimedAt,
       });
       addActivity({
         label: 'Midnight name registered',
-        detail: `${result.domain} now resolves to this Passport on preview.`,
+        detail: `${result.domain} now resolves to this Passport's account contract (${compactAddress(
+          result.resolverTargetHex,
+        )}) on ${result.network}.`,
         status: 'complete',
         source: 'chain',
         txHash: result.registerTxId,
@@ -2620,11 +2787,22 @@ export default function PassportDemo() {
       setClaimPhase(null);
       setRegisterNowBusy(false);
     }
-  }, [activateWalletViaFunder, addActivity, claimNightShortfall, keyProviderFor, profile, refreshLocalBalances, registerNowBusy, selectedNetwork]);
+  }, [activateWalletViaFunder, addActivity, claimAliasBoundToAccount, claimNightShortfall, profile, refreshLocalBalances, registerNowBusy, selectedNetwork]);
 
   /**
-   * Deploys this Passport's account-custody contract (C1) on the network the
-   * OPEN PASSKEY WALLET actually signs on.
+   * RETRY ONLY, since 2026/08/19. Deploys this Passport's account-custody
+   * contract (C1) on the network the OPEN PASSKEY WALLET actually signs on.
+   *
+   * Deploying is no longer something a user chooses: a name claim deploys the
+   * contract automatically (see {@link claimAliasBoundToAccount}), and the Home
+   * card is a status surface. What survives here is the one case where a person
+   * genuinely has a decision to make — an automatic deploy that FAILED, whose
+   * record puts a "Try deploying again" affordance on that card.
+   *
+   * The derivation is unchanged and must stay unchanged: `deriveWalletSeed`
+   * against {@link PASSPORT_CONTRACT_SCOPE} produces the same 32 bytes the
+   * claim's single-assertion path derives for that scope, so a retry rebuilds
+   * the same device commitment rather than a second, different contract.
    *
    * This is the mobile counterpart to `deployPassport`, and deliberately shares
    * none of its machinery: that path takes a Dynamic `MidnightWallet`, needs a
@@ -4728,11 +4906,18 @@ export default function PassportDemo() {
     localSessionActive && localWalletNetworkId && selectedNetwork === walletPresentedNetwork
       ? {
           record: activeContractRecord,
-          onDeploy: () => void deployPassportContractOnChain(),
+          /* The ONLY action the card offers, and only where there is a real
+             decision to make: a previous AUTOMATIC deploy failed, and the user
+             may want to run it again. Every other state is status. */
+          onRetry:
+            activeContractRecord?.status === 'failed'
+              ? () => void deployPassportContractOnChain()
+              : undefined,
           busy: contractBusy,
           phase: contractPhase,
-          disabledReason: contractDeployDisabledReason,
-          feeNote: contractFeeNote,
+          disabledReason:
+            activeContractRecord?.status === 'failed' ? contractDeployDisabledReason : null,
+          feeNote: activeContractRecord?.status === 'failed' ? contractFeeNote : null,
         }
       : null;
   /**
