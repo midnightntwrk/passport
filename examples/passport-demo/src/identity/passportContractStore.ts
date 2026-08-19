@@ -29,6 +29,15 @@ export interface PassportContractRecord {
   address?: string;
   /** The deployment transaction. Present on every `'deployed'` record. */
   deployTxId?: string;
+  /**
+   * Whether {@link deployTxId} is the 32-byte ledger HASH an explorer can
+   * resolve, rather than the 33-byte identifier `submitTransaction` answers
+   * with. `false` means the indexer had not yet mapped it when the deployment
+   * was written — the id is real either way, but nothing may link it until
+   * this is `true`. Absent on records written before this field existed; a
+   * reader should treat that as "unknown" and check the value itself.
+   */
+  txIdResolved?: boolean;
   /** The device commitment the contract carries, as a decimal Field. */
   deviceCommitment?: string;
   /** Whether the indexer was seen serving state at {@link address}. */
@@ -42,8 +51,15 @@ export interface PassportContractRecord {
 
 const STORAGE_KEY = 'passport-contract:v1';
 
-/** `credentialId` and `network` both, so neither can shadow the other. */
-function recordKey(credentialId: string, network: string): string {
+/**
+ * The storage key for one credential's contract on one network — `credentialId`
+ * and `network` both, so neither can shadow the other.
+ *
+ * Exported because callers hold the whole record map (through
+ * {@link subscribePassportContractRecords}) and have to index into it. Spelling
+ * the key out at the call site is how a reader and a writer drift apart.
+ */
+export function passportContractRecordKey(credentialId: string, network: string): string {
   return `${credentialId}::${network}`;
 }
 
@@ -88,7 +104,7 @@ export function loadPassportContractRecord(
   credentialId: string,
   network: string,
 ): PassportContractRecord | null {
-  return readAll()[recordKey(credentialId, network)] ?? null;
+  return readAll()[passportContractRecordKey(credentialId, network)] ?? null;
 }
 
 /**
@@ -108,34 +124,13 @@ export function savePassportContractRecord(record: PassportContractRecord): void
   }
   try {
     const records = readAll();
-    records[recordKey(record.credentialId, record.network)] = {
+    records[passportContractRecordKey(record.credentialId, record.network)] = {
       ...record,
       updatedAt: record.updatedAt || new Date().toISOString(),
     };
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
   } catch {
     // The deployment still happened; only the memory of it is lost on reload.
-  }
-  publish();
-}
-
-/** Forgets one record — used when a deploy is retried after a failure. */
-export function clearPassportContractRecord(credentialId: string, network: string): void {
-  try {
-    const records = readAll();
-    delete records[recordKey(credentialId, network)];
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-  } catch {
-    // Nothing stored to clear.
-  }
-  publish();
-}
-
-export function clearPassportContractRecords(): void {
-  try {
-    window.localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // Nothing stored to clear.
   }
   publish();
 }

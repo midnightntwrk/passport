@@ -129,7 +129,43 @@ type Status =
   | { kind: 'anonymous' }
   | { kind: 'member'; member: Member }
   | { kind: 'declined'; code: string }
+  /** A reply arrived, but this browser no longer holds the token it was sent with. */
+  | { kind: 'lost-token' }
   | { kind: 'rejected'; reason: string; checks: PassportCallbackCheck[] };
+
+/**
+ * Reads a remembered member, refusing anything that is not shaped like one.
+ *
+ * `sessionStorage` is not a schema. A record written by an older build, a
+ * half-written value, or an entry another script put under the same key would
+ * otherwise reach the render as a `Member` and take the page down on the first
+ * property access — a stored value must never be able to do that.
+ */
+function readStoredMember(): Member | null {
+  const raw = readStorage(MEMBER_KEY);
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== 'object') return null;
+    const candidate = value as Partial<Member>;
+    const payload = candidate.payload as PassportCallbackPayload | undefined;
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      typeof payload.audience !== 'string' ||
+      typeof payload.nonce !== 'string' ||
+      typeof payload.issuedAt !== 'number' ||
+      !payload.profile ||
+      typeof payload.profile !== 'object' ||
+      !Array.isArray(candidate.checks)
+    ) {
+      return null;
+    }
+    return { payload, signed: candidate.signed === true, checks: candidate.checks };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The callback URL this app hands Passport. Origin plus path, with no query and
@@ -170,14 +206,9 @@ function ClubCoin() {
 
     if (arrival.kind === 'absent') {
       /* No reply, but possibly a member from earlier in this session. */
-      const stored = readStorage(MEMBER_KEY);
-      if (stored) {
-        try {
-          setStatus({ kind: 'member', member: JSON.parse(stored) as Member });
-        } catch {
-          clearStorage(MEMBER_KEY);
-        }
-      }
+      const stored = readStoredMember();
+      if (stored) setStatus({ kind: 'member', member: stored });
+      else clearStorage(MEMBER_KEY);
       return;
     }
 
@@ -196,9 +227,17 @@ function ClubCoin() {
     }
 
     const expectedState = readStorage(STATE_KEY);
-    /* Consumed on arrival, before the verdict. A state token that survives one
-       use is a state token that can be replayed. */
-    clearStorage(STATE_KEY);
+    /* NO TOKEN, but a reply. This app always writes one before it navigates,
+       so its absence is almost never tampering — it is this browser having
+       lost the token: storage partitioned or blocked by the browser's own
+       restrictions, a return landing in a different tab, or the session
+       storage cleared under the page. Calling that "the reply does not echo
+       the state that was sent" accused the user of an attack for a browser
+       behaviour they did not choose, so it gets its own message. */
+    if (expectedState === null) {
+      setStatus({ kind: 'lost-token' });
+      return;
+    }
 
     const verdict = verifyPassportCallbackReply(arrival.envelope, {
       expectedAudience: window.location.origin,
@@ -208,9 +247,16 @@ function ClubCoin() {
     });
 
     if (!verdict.ok) {
+      /* The token stays put on a refusal. Consuming it before the verdict
+         meant a reply that failed for any reason — a clock skew, a stale
+         nonce — left the next attempt with nothing to compare against, so the
+         retry was refused as tampering too. */
       setStatus({ kind: 'rejected', reason: verdict.reason, checks: verdict.checks });
       return;
     }
+    /* Consumed only now, on a verdict that passed. A state token that survives
+       a SUCCESSFUL use is a state token that can be replayed. */
+    clearStorage(STATE_KEY);
     rememberNonce(verdict.payload.nonce);
     const member: Member = {
       payload: verdict.payload,
@@ -368,7 +414,9 @@ function ClubCoin() {
               ? 'Not shared'
               : status.kind === 'rejected'
                 ? 'Reply refused'
-                : 'Members only'}
+                : status.kind === 'lost-token'
+                  ? 'Launch token lost'
+                  : 'Members only'}
           </p>
           <h2>
             {status.kind === 'declined'
@@ -377,13 +425,23 @@ function ClubCoin() {
                 : 'You chose not to share your Passport.'
               : status.kind === 'rejected'
                 ? 'ClubCoin would not accept that reply.'
-                : 'Join with your Midnight Passport.'}
+                : status.kind === 'lost-token'
+                  ? 'This browser lost the launch token.'
+                  : 'Join with your Midnight Passport.'}
           </h2>
           <p className="lede">
             {status.kind === 'rejected' ? (
               <>
                 The reply came back but failed verification: <strong>{status.reason}</strong>. Nothing
                 was stored. This is the correct outcome for an altered or replayed fragment.
+              </>
+            ) : status.kind === 'lost-token' ? (
+              <>
+                Your Passport replied, but the token this page minted before sending you there is no
+                longer in this browser&rsquo;s session storage — most likely storage restrictions, or
+                a return that landed in a different tab. Nothing was stored and nothing is wrong with
+                the reply itself; it simply cannot be matched to a launch from here. Try again from
+                this page.
               </>
             ) : (
               <>

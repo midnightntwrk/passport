@@ -153,8 +153,24 @@ export function explorerUrlFor(networkId: string | null | undefined): string | n
 }
 
 /**
- * A link to one transaction on a network's explorer, or `null` when either the
- * hash or the explorer is missing. Never a link that resolves to nothing.
+ * Whether a value is a 32-byte ledger transaction HASH — the only thing an
+ * explorer's `/tx/{hash}` route resolves.
+ *
+ * midnight-js answers a submit with a 33-byte transaction IDENTIFIER, and the
+ * indexer is what maps one to the other. When that mapping has not happened
+ * yet (indexer lag), the identifier is what we hold, and it is 66 hex
+ * characters rather than 64. Linking it produced an explorer page that says
+ * the transaction does not exist — a dead link presented as proof. So every
+ * link goes through this gate, and an unresolved id is rendered as text.
+ */
+export function isLedgerTxHash(value: string | null | undefined): boolean {
+  return typeof value === 'string' && /^[0-9a-fA-F]{64}$/.test(value);
+}
+
+/**
+ * A link to one transaction on a network's explorer, or `null` when the
+ * explorer is missing or the value is not a ledger transaction hash. Never a
+ * link that resolves to nothing.
  */
 export function explorerTxUrl(
   networkId: string | null | undefined,
@@ -162,6 +178,6 @@ export function explorerTxUrl(
 ): string | null {
   const network = asPassportNetwork(networkId);
   const origin = explorerUrlFor(networkId);
-  if (!network || !origin || !txHash) return null;
-  return `${origin}/tx/${encodeURIComponent(txHash)}?network=${network}`;
+  if (!network || !origin || !isLedgerTxHash(txHash)) return null;
+  return `${origin}/tx/${encodeURIComponent(txHash as string)}?network=${network}`;
 }

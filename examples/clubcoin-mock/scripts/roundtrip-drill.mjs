@@ -203,6 +203,17 @@ test('the field list must be present and inside the profile vocabulary', () => {
     passport.parsePassportCallbackLaunch(launchSearch({ passportFields: '  ' })).problem,
     'fields-missing',
   );
+  /* A list that is non-empty as a STRING but empty once split and trimmed.
+     It used to survive parsing and produce a signed reply with no fields —
+     which every receiver refuses — so it is rejected at the launch instead. */
+  assert.equal(
+    passport.parsePassportCallbackLaunch(launchSearch({ passportFields: ',' })).problem,
+    'fields-missing',
+  );
+  assert.equal(
+    passport.parsePassportCallbackLaunch(launchSearch({ passportFields: ' , ' })).problem,
+    'fields-missing',
+  );
   const unknown = passport.parsePassportCallbackLaunch(
     launchSearch({ passportFields: 'displayName,privateState' }),
   );

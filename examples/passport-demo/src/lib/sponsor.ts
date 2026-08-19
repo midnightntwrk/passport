@@ -63,6 +63,19 @@ const SPONSOR_PENDING_RETRY_MIN_DELAY_MS = 250;
 const SPONSOR_PENDING_RETRY_DEFAULT_DELAY_MS = 2_000;
 /** A readiness probe must not hold a send hostage. */
 const SPONSOR_STATUS_TIMEOUT_MS = 6_000;
+/**
+ * The SECOND probe attempt's timeout, deliberately much shorter than the
+ * first. The incident that motivated retrying at all was a fast unparseable
+ * `200`, not a slow host, so a retry that could itself burn six seconds would
+ * buy nothing and double the worst case a caller has to wait through.
+ */
+const SPONSOR_STATUS_RETRY_TIMEOUT_MS = 2_000;
+/**
+ * The wait between a transport-failed sponsor call and its one retry. Driven
+ * through `SponsorClientOptions.sleep` so a test never really waits; used by
+ * both retrying paths — the readiness probe and the `/balance-only` POST.
+ */
+export const SPONSOR_PROBE_RETRY_DELAY_MS = 500;
 /** Balancing proves a dust segment server-side, so it gets real room. */
 const SPONSOR_BALANCE_TIMEOUT_MS = 90_000;
 
@@ -390,6 +403,18 @@ export type SponsorReadiness =
   | { state: 'ready'; url: string; available: number }
   | { state: 'unavailable'; url: string; reason: string };
 
+/**
+ * Why one probe attempt produced no verdict, tagged so the final reason can
+ * say WHICH thing went wrong.
+ *
+ *   `transport` — nothing was received: DNS, TLS, an abort, a dead host.
+ *   `schema`    — something was received and it was not a wallet status.
+ */
+interface ProbeFailure {
+  kind: 'transport' | 'schema';
+  message: string;
+}
+
 interface CachedReadiness {
   url: string;
   at: number;
@@ -425,14 +450,21 @@ export async function sponsorReadiness(
   if (readinessInFlight) return readinessInFlight;
 
   const fetchRequest = options.fetch ?? globalThis.fetch;
+  const sleep = options.sleep ?? defaultSleep;
 
-  /** One probe attempt; `null` for a TRANSPORT failure (worth one retry). */
-  const attempt = async (): Promise<SponsorReadiness | null> => {
+  /**
+   * One probe attempt: a readiness verdict, or the reason it produced none.
+   *
+   * The two failure kinds are kept apart because they are different bugs and
+   * a single "could not be fetched or parsed" reason sent an operator hunting
+   * a network problem that was really a body the parser did not recognise.
+   */
+  const attempt = async (timeoutMs: number): Promise<SponsorReadiness | ProbeFailure> => {
     try {
       const response = await fetchRequest(`${config.url}/wallet-status`, {
         method: 'GET',
         headers: authHeaders(config),
-        signal: AbortSignal.timeout(SPONSOR_STATUS_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
@@ -443,7 +475,9 @@ export async function sponsorReadiness(
         };
       }
       const status = parseSponsorWalletStatus(body);
-      if (!status) return null;
+      /* A 200 whose body is not a wallet status: the service answered, so
+         this is a SCHEMA failure, not a transport one. */
+      if (!status) return { kind: 'schema', message: 'the body was not a wallet status' };
       if (sponsorWalletIsAvailable(status)) {
         return { state: 'ready', url: config.url, available: status.available };
       }
@@ -452,27 +486,41 @@ export async function sponsorReadiness(
         url: config.url,
         reason: describeSponsorWalletStatus(status),
       };
-    } catch {
-      return null;
+    } catch (cause) {
+      return {
+        kind: 'transport',
+        message: cause instanceof Error ? cause.message : String(cause),
+      };
     }
   };
 
   const probe = (async (): Promise<SponsorReadiness> => {
     /* A readiness verdict is cached and read by fee gates downstream, so one
-       transient transport failure must not poison it: measured live on
-       2026/08/19, a single unparseable answer mid-drill turned a ready
-       sponsor into a refused contract deploy. Transport failures get exactly
-       one retry; a well-formed "unavailable" answer is believed first time. */
-    let value = await attempt();
-    if (value === null) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      value = await attempt();
+       transient failure must not poison it: measured live on 2026/08/19, a
+       single unparseable answer mid-drill turned a ready sponsor into a
+       refused contract deploy. A failed attempt gets exactly one retry; a
+       well-formed "unavailable" answer is believed first time.
+
+       WORST CASE, asserted here because a fee optimiser must never be the
+       slowest thing on a send: SPONSOR_STATUS_TIMEOUT_MS (6 s) +
+       SPONSOR_PROBE_RETRY_DELAY_MS (0.5 s) + SPONSOR_STATUS_RETRY_TIMEOUT_MS
+       (2 s) = 8.5 s, and only when both attempts time out. */
+    let value = await attempt(SPONSOR_STATUS_TIMEOUT_MS);
+    if ('kind' in value) {
+      await sleep(SPONSOR_PROBE_RETRY_DELAY_MS);
+      value = await attempt(SPONSOR_STATUS_RETRY_TIMEOUT_MS);
     }
-    if (value === null) {
+    if ('kind' in value) {
       value = {
         state: 'unavailable',
         url: config.url,
-        reason: 'wallet-status could not be fetched or parsed, twice',
+        /* The SECOND attempt's kind names the failure, and a transport
+           failure carries the error it actually hit — "twice" alone told an
+           operator nothing about what to go and look at. */
+        reason:
+          value.kind === 'schema'
+            ? 'wallet-status returned an unrecognised body, twice'
+            : `wallet-status could not be fetched, twice: ${value.message}`,
       };
     }
     readinessCache = { url: config.url, at: now(), value };
@@ -514,11 +562,8 @@ export async function sponsorBalanceOnly(
   const retryWindowMs = options.pendingRetryWindowMs ?? SPONSOR_PENDING_RETRY_WINDOW_MS;
   const deadline = now() + retryWindowMs;
 
-  for (;;) {
-    let body: unknown;
-    let ok: boolean;
-    let status: number;
-    const response = await fetchRequest(`${config.url}/balance-only`, {
+  const post = (): Promise<Response> =>
+    fetchRequest(`${config.url}/balance-only`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream', ...authHeaders(config) },
       // A fresh view over the exact bytes: `BodyInit` will not take a
@@ -526,6 +571,24 @@ export async function sponsorBalanceOnly(
       body: provenTxBytes.slice().buffer as ArrayBuffer,
       signal: AbortSignal.timeout(SPONSOR_BALANCE_TIMEOUT_MS),
     });
+
+  for (;;) {
+    let body: unknown;
+    let ok: boolean;
+    let status: number;
+    let response: Response;
+    try {
+      response = await post();
+    } catch {
+      /* Exactly one retry, and ONLY for a thrown fetch. A throw means no
+         response reached us at all, so re-posting cannot act twice on a
+         transaction the service already balanced. The moment a response
+         exists — any status — its body is the thing to act on and the POST is
+         never repeated: that is what keeps a 503, a 429, or a balanced
+         transaction from being sent through the service twice. */
+      await sleep(SPONSOR_PROBE_RETRY_DELAY_MS);
+      response = await post();
+    }
     ok = response.ok;
     status = response.status;
     body = await response.json().catch(() => null);

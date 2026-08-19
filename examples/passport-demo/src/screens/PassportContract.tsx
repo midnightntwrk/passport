@@ -1,7 +1,7 @@
 import { ExternalLink, Loader2, ShieldCheck } from 'lucide-react'
 
 import type { PassportContractRecord } from '../identity/passportContractStore.js'
-import { explorerTxUrl } from '../lib/networks.js'
+import { explorerTxUrl, isLedgerTxHash } from '../lib/networks.js'
 import { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
 import './identity.css'
 
@@ -64,6 +64,13 @@ export default function PassportContractCard(props: PassportContractCardProps) {
 
   const deployed = record?.status === 'deployed'
   const explorer = deployed && record.deployTxId ? explorerTxUrl(record.network, record.deployTxId) : null
+  /* The id is real; whether it is the thing an EXPLORER can resolve is a
+     separate question. midnight-js answers a submit with a 33-byte transaction
+     identifier and the indexer maps it to the 32-byte ledger hash; when that
+     mapping had not happened yet, what is stored is the identifier, and a link
+     built from it lands on "transaction not found". So it is rendered as text
+     with the reason, and `App.tsx` asks the indexer again in the background. */
+  const txIdUnresolved = Boolean(deployed && record.deployTxId && !isLedgerTxHash(record.deployTxId))
   /* The action is offered whenever there is no deployed contract. A failed
      record keeps it, because retrying is exactly what the user wants there. */
   const showAction = !deployed && (Boolean(onDeploy) || Boolean(disabledReason))
@@ -95,12 +102,20 @@ export default function PassportContractCard(props: PassportContractCardProps) {
                 <ExternalLink size={12} aria-hidden="true" />
               </a>
             ) : (
-              /* No public explorer for this network — the hash is shown
-                 without pretending it resolves somewhere. */
+              /* No public explorer for this network, or an id the explorer
+                 cannot resolve — shown without pretending it goes somewhere. */
               <code title={record.deployTxId}>{shortHash(record.deployTxId)}</code>
             )}
           </li>
         </ul>
+      ) : null}
+
+      {txIdUnresolved ? (
+        <p className="mnid-reason">
+          This is the transaction identifier the deployment returned. The indexer had not yet mapped
+          it to the ledger hash an explorer resolves, so there is no link to it — reopen Passport to
+          re-check.
+        </p>
       ) : null}
 
       {/* Submitted, but the indexer had not caught up. The transaction id and

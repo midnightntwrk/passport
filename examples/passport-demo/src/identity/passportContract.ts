@@ -476,32 +476,49 @@ async function compiledAccountContract(witnesses: unknown) {
 /* -------------------------------------------------------------------------- */
 
 /**
+ * ONE indexer lookup of the ledger hash for a transaction identifier, or
+ * `null` when the indexer has no answer yet (or could not be asked).
+ *
+ * Exported so a surface holding an UNRESOLVED id — one stored while the
+ * indexer was still lagging — can ask again later without re-running the whole
+ * retry window on a render.
+ */
+export async function resolveDeployTxHashOnce(
+  indexerHttpUrl: string,
+  identifier: string,
+): Promise<string | null> {
+  const query = `{ transactions(offset: { identifier: "${identifier}" }) { hash } }`;
+  try {
+    const response = await fetch(indexerHttpUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    const body = (await response.json()) as {
+      data?: { transactions?: Array<{ hash?: string }> };
+    };
+    return body.data?.transactions?.[0]?.hash ?? null;
+  } catch {
+    // Transient network or parse failure — indistinguishable from "not yet".
+    return null;
+  }
+}
+
+/**
  * The ids midnight-js reports are transaction *identifiers* (33 bytes), not the
  * 32-byte block-level hashes explorers resolve — the same trap documented in
  * `./midnames.ts`. The indexer maps one to the other. The transaction is
- * already finalized when this runs, so the retries only cover indexer lag; if
- * every attempt fails the identifier is returned unchanged.
+ * already finalised when this runs, so the retries only cover indexer lag; if
+ * every attempt fails the identifier is returned unchanged, and the caller
+ * records that it is UNRESOLVED rather than linking it.
  */
 async function resolveTransactionHash(
   indexerHttpUrl: string,
   identifier: string,
 ): Promise<string> {
-  const query = `{ transactions(offset: { identifier: "${identifier}" }) { hash } }`;
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      const response = await fetch(indexerHttpUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ query }),
-      });
-      const body = (await response.json()) as {
-        data?: { transactions?: Array<{ hash?: string }> };
-      };
-      const hash = body.data?.transactions?.[0]?.hash;
-      if (hash) return hash;
-    } catch {
-      // Transient network or parse failure — retried below.
-    }
+    const hash = await resolveDeployTxHashOnce(indexerHttpUrl, identifier);
+    if (hash) return hash;
     await wait(2_000);
   }
   return identifier;

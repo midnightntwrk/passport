@@ -27,6 +27,7 @@ import {
   sponsorRetryDelayMs,
   sponsorWalletIsAvailable,
   validateSponsorBalanceResult,
+  SPONSOR_PROBE_RETRY_DELAY_MS,
   SponsorError,
 } from './sponsor.js';
 
@@ -53,9 +54,23 @@ const LIVE_PREVIEW_WALLET_STATUS = {
 };
 
 describe('sponsorConfig', () => {
-  it('is disabled when VITE_SPONSOR_URL is unset', () => {
-    expect(sponsorConfig({})).toBeNull();
-    expect(sponsorConfig({ VITE_SPONSOR_URL: '   ' })).toBeNull();
+  /* Sponsorship is ON BY DEFAULT since 2026/08/07 — a fresh passkey wallet
+     holds no DUST, so default-off failed every first transaction. An unset URL
+     therefore means "this network's default gateway", `off` means disabled,
+     and a network with no gateway entry stays unsponsored. */
+  it('falls back to the network gateway when VITE_SPONSOR_URL is unset', () => {
+    expect(sponsorConfig({})).toEqual({ url: 'https://api-preview.1am.xyz' });
+    expect(sponsorConfig({ VITE_SPONSOR_URL: '   ' })).toEqual({
+      url: 'https://api-preview.1am.xyz',
+    });
+    expect(sponsorConfig({ VITE_MIDNIGHT_NETWORK_ID: 'preprod' })).toEqual({
+      url: 'https://api-preprod.1am.xyz',
+    });
+  });
+
+  it('is disabled by the literal `off`, and on a network with no gateway', () => {
+    expect(sponsorConfig({ VITE_SPONSOR_URL: 'off' })).toBeNull();
+    expect(sponsorConfig({ VITE_MIDNIGHT_NETWORK_ID: 'undeployed' })).toBeNull();
   });
 
   it('trims the trailing slash and carries optional auth headers', () => {
@@ -220,20 +235,86 @@ describe('sponsorReadiness', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('reports unavailable — never throws — when the service is unreachable', async () => {
+  it('retries a transport failure once, then names the error it hit', async () => {
     resetSponsorReadinessCache();
+    const slept: number[] = [];
     const fetchSpy = vi.fn(async () => {
       throw new TypeError('fetch failed');
     });
     const readiness = await sponsorReadiness({
       config: { url: 'https://api-preview.1am.xyz' },
       fetch: fetchSpy as never,
+      sleep: async (ms) => {
+        slept.push(ms);
+      },
+    });
+    // Never throws: a send must not fail because a FEE OPTIMISER was down.
+    expect(readiness).toEqual({
+      state: 'unavailable',
+      url: 'https://api-preview.1am.xyz',
+      reason: 'wallet-status could not be fetched, twice: fetch failed',
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    // The injectable seam is what the retry waits on — the test never really
+    // sleeps, and a real 500 ms delay would otherwise be spent here.
+    expect(slept).toEqual([SPONSOR_PROBE_RETRY_DELAY_MS]);
+  });
+
+  it('retries an unparseable 200 once, with its own distinct reason', async () => {
+    resetSponsorReadinessCache();
+    const slept: number[] = [];
+    // The incident behind the retry: the service answered, fast, with a body
+    // the parser did not recognise. That is a schema failure, not a network one.
+    const fetchSpy = vi.fn(async () => new Response('<html>maintenance</html>', { status: 200 }));
+    const readiness = await sponsorReadiness({
+      config: { url: 'https://api-preview.1am.xyz' },
+      fetch: fetchSpy as never,
+      sleep: async (ms) => {
+        slept.push(ms);
+      },
     });
     expect(readiness).toEqual({
       state: 'unavailable',
       url: 'https://api-preview.1am.xyz',
-      reason: 'fetch failed',
+      reason: 'wallet-status returned an unrecognised body, twice',
     });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(slept).toEqual([SPONSOR_PROBE_RETRY_DELAY_MS]);
+  });
+
+  it('believes a well-formed unavailable answer the first time', async () => {
+    resetSponsorReadinessCache();
+    const slept: number[] = [];
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify(LIVE_PREVIEW_WALLET_STATUS), { status: 200 }),
+    );
+    const readiness = await sponsorReadiness({
+      config: { url: 'https://api-preview.1am.xyz' },
+      fetch: fetchSpy as never,
+      sleep: async (ms) => {
+        slept.push(ms);
+      },
+    });
+    expect(readiness.state).toBe('unavailable');
+    // A verdict is a verdict: only a FAILURE to reach one is worth retrying.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(slept).toEqual([]);
+  });
+
+  it('believes an HTTP error answer the first time too', async () => {
+    resetSponsorReadinessCache();
+    const fetchSpy = vi.fn(async () => new Response('nope', { status: 502 }));
+    const readiness = await sponsorReadiness({
+      config: { url: 'https://api-preview.1am.xyz' },
+      fetch: fetchSpy as never,
+      sleep: async () => {},
+    });
+    expect(readiness).toEqual({
+      state: 'unavailable',
+      url: 'https://api-preview.1am.xyz',
+      reason: 'wallet-status returned HTTP 502',
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it('reports ready only when a wallet is genuinely available', async () => {
@@ -332,6 +413,56 @@ describe('sponsorBalanceOnly', () => {
     // 20 s budget, 6 s per wait: four attempts, three waits, then the deadline.
     expect(slept).toEqual([6_000, 6_000, 6_000, 2_000]);
     expect(fetchSpy).toHaveBeenCalledTimes(5);
+  });
+
+  it('retries a thrown POST exactly once, and never a POST that answered', async () => {
+    const slept: number[] = [];
+    let calls = 0;
+    const fetchSpy = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError('fetch failed');
+      return new Response(JSON.stringify({ txHash: 'aa', txBytes: 'bbcc' }), { status: 200 });
+    });
+    const result = await sponsorBalanceOnly(bytes, {
+      config,
+      fetch: fetchSpy as never,
+      sleep: async (ms) => {
+        slept.push(ms);
+      },
+    });
+    expect(result.txBytes).toBe('bbcc');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(slept).toEqual([SPONSOR_PROBE_RETRY_DELAY_MS]);
+  });
+
+  it('gives up after a second thrown POST rather than posting a third time', async () => {
+    const fetchSpy = vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    });
+    await expect(
+      sponsorBalanceOnly(bytes, { config, fetch: fetchSpy as never, sleep: async () => {} }),
+    ).rejects.toThrow(/fetch failed/);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a 503 the transport delivered', async () => {
+    const slept: number[] = [];
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({ error: 'WALLETS_UNAVAILABLE' }), { status: 503 }),
+    );
+    await expect(
+      sponsorBalanceOnly(bytes, {
+        config,
+        fetch: fetchSpy as never,
+        sleep: async (ms) => {
+          slept.push(ms);
+        },
+      }),
+    ).rejects.toThrow(/WALLETS_UNAVAILABLE/);
+    // A body that arrived is a body to act on — re-posting it could balance
+    // the same transaction twice.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(slept).toEqual([]);
   });
 
   it('refuses to run at all when sponsorship is not configured', async () => {

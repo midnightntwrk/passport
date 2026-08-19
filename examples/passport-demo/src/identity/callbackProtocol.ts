@@ -406,6 +406,19 @@ export function parsePassportCallbackLaunch(search: string): PassportCallbackLau
     .split(',')
     .map((field) => field.trim())
     .filter((field) => field.length > 0);
+  /* `,` and ` , ` survive the emptiness check above and then vanish in the
+     filter. A launch whose field list is empty AFTER trimming is the same bug
+     as a launch that named no fields at all, so it gets the same rejection:
+     letting it through produced a consent sheet offering nothing and a SIGNED
+     reply with an empty `fields` array, which every receiver refuses
+     (`parsePayload` requires a non-empty list). */
+  if (requested.length === 0) {
+    return {
+      kind: 'malformed',
+      problem: 'fields-missing',
+      message: 'The request did not say which profile fields it wants.',
+    };
+  }
   const unknown = requested.filter((field) => !isCallbackField(field));
   if (unknown.length > 0) {
     return {

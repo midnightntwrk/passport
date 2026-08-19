@@ -118,6 +118,7 @@ import {
 import type { AliasAvailability, AliasClaimProgress } from './identity/midnames.js';
 import {
   loadPassportContractRecords,
+  passportContractRecordKey,
   savePassportContractRecord,
   subscribePassportContractRecords,
   type PassportContractRecord,
@@ -134,7 +135,14 @@ import PassportNav, { type MobileTab } from './screens/Nav.js';
 import PassportToasts, { pushToast } from './screens/ToastStack.js';
 import { fetchRecentTransactions, type RecentTransaction } from './lib/indexerTx.js';
 import { PasskeyPresenceError, confirmPresence } from './lib/passkeyPresence.js';
-import { aliasRegistrationSupported, configuredNetworkId, explorerTxUrl, walletNetwork } from './lib/networks.js';
+import {
+  aliasRegistrationSupported,
+  configuredNetworkId,
+  defaultSelectedNetwork,
+  explorerTxUrl,
+  isLedgerTxHash,
+  walletNetwork,
+} from './lib/networks.js';
 // The local wallet drags the whole Midnight wallet SDK in with it. It is loaded
 // on demand, from the passkey routes only, so a Dynamic-only session never pays
 // for it. Types are erased at build time and cost nothing here.
@@ -235,6 +243,15 @@ const APP_ID = 'org.midnight.passport.demo';
  * name is honestly queued.
  */
 const configuredWalletNetwork = walletNetwork();
+/**
+ * The public network this build PRESENTS as, which is the only vocabulary the
+ * network switcher speaks. Identical to `configuredWalletNetwork` on a public
+ * build; on a devnet build — where the wallet's raw network id is `undeployed`
+ * and matches nothing the switcher can show — it is the documented default the
+ * UI opens on. Anything comparing `selectedNetwork` against "the wallet's
+ * network" must compare against this.
+ */
+const walletPresentedNetwork = defaultSelectedNetwork();
 const signingNetworkLabel = configuredWalletNetwork
   ? NETWORK_LABELS[configuredWalletNetwork]
   : 'its configured network';
@@ -664,10 +681,32 @@ async function clearPersistedWalletSession(): Promise<void> {
  * launch without the flag is not surprised back into classic either. The classic
  * view stays reachable through its own explicit entry point: the "Full
  * dashboard" link in the onboarding footer.
+ *
+ * ONCE PER TAB, though, and that is what the session marker is for. The flag
+ * is carried by RELOADS, not only by the operator's first click:
+ *
+ *   - `pwa.tsx` reloads on the service worker's `controllerchange` when a new
+ *     build takes over, and
+ *   - the portal's "Retry Dynamic" control reloads when
+ *     `dynamicInitializationBlocked` is set.
+ *
+ * Both keep the query string. Clearing the pin on EVERY such launch meant an
+ * operator who had deliberately opened the classic dashboard — which re-pins
+ * `passport-experience=classic` — was thrown back to the PWA by the next
+ * service-worker update or Dynamic retry, losing the localnet session they
+ * were mid-way through. So the flag forces mobile on the launch that first
+ * sees it in this tab and marks that it did; a later reload carrying the same
+ * flag finds the marker and respects whatever the pin now says.
  */
+const MOBILE_FORCED_SESSION_KEY = 'passport-demo-mobile-forced';
+
 function storedExperience(): Experience {
   try {
-    if (new URLSearchParams(window.location.search).get('demoMode') === 'local') {
+    if (
+      new URLSearchParams(window.location.search).get('demoMode') === 'local' &&
+      window.sessionStorage.getItem(MOBILE_FORCED_SESSION_KEY) === null
+    ) {
+      window.sessionStorage.setItem(MOBILE_FORCED_SESSION_KEY, '1');
       window.localStorage.removeItem(EXPERIENCE_STORAGE_KEY);
       return 'mobile';
     }
@@ -2083,6 +2122,19 @@ export default function PassportDemo() {
     if (localWalletStatus !== 'ready' || localSurfaces === null || contractBusy) return undefined;
     const handle = localWalletRef.current;
     if (!handle) return undefined;
+    /* A deployed contract has no deploy action, so it has no fee sentence —
+       and `feeReadiness()` probes the sponsor over the network. Asking who
+       would pay for a deployment that already happened is a request nobody
+       reads the answer to. */
+    if (
+      profile &&
+      contractRecords[
+        passportContractRecordKey(profile.passkey.credentialId, handle.network.networkId)
+      ]?.status === 'deployed'
+    ) {
+      setContractFeeNote(null);
+      return undefined;
+    }
     let live = true;
     void (async () => {
       try {
@@ -2103,7 +2155,53 @@ export default function PassportDemo() {
     return () => {
       live = false;
     };
-  }, [contractBusy, localSurfaces, localWalletNetworkId, localWalletStatus]);
+  }, [contractBusy, contractRecords, localSurfaces, localWalletNetworkId, localWalletStatus, profile]);
+
+  /**
+   * Re-asks the indexer, ONCE, for the ledger hash of a deployment whose
+   * transaction identifier was still unmapped when it was written.
+   *
+   * `resolveTransactionHash` gives the indexer a bounded window at deploy time
+   * and then stores the identifier unchanged rather than inventing a hash. That
+   * record is honest but unlinkable, and it would stay unlinkable forever even
+   * though the indexer catches up within seconds. So the next time the wallet
+   * is open with such a record in hand, one query upgrades it in place — and
+   * the explorer link the user was owed appears without a redeploy.
+   *
+   * A ref, not state: once per identifier per session. A record that re-renders
+   * must not become a poll, and an indexer that still has no answer is left
+   * alone until the next launch.
+   */
+  const attemptedTxHashResolves = useRef(new Set<string>());
+  useEffect(() => {
+    const handle = localWalletRef.current;
+    if (localWalletStatus !== 'ready' || !handle || !profile) return;
+    const record =
+      contractRecords[
+        passportContractRecordKey(profile.passkey.credentialId, handle.network.networkId)
+      ];
+    if (!record || record.status !== 'deployed' || !record.deployTxId) return;
+    /* `txIdResolved` is absent on records written before the field existed —
+       the value itself is then the only evidence, and it is enough. */
+    if (record.txIdResolved === true || isLedgerTxHash(record.deployTxId)) return;
+    const identifier = record.deployTxId;
+    if (attemptedTxHashResolves.current.has(identifier)) return;
+    attemptedTxHashResolves.current.add(identifier);
+    void (async () => {
+      const { resolveDeployTxHashOnce } = await import('./identity/passportContract.js');
+      const hash = await resolveDeployTxHashOnce(handle.network.indexerHttpUrl, identifier);
+      /* Deliberately not guarded by an effect-cleanup flag: this write is to
+         localStorage, the answer is as true after a re-render as before it,
+         and dropping it would waste the one attempt this session gets. */
+      if (!isLedgerTxHash(hash)) return;
+      savePassportContractRecord({
+        ...record,
+        deployTxId: hash as string,
+        txIdResolved: true,
+        updatedAt: new Date().toISOString(),
+      });
+    })();
+  }, [contractRecords, localWalletStatus, profile]);
 
   /** A live availability probe against one network's own registry. */
   const probeAlias = useCallback(
@@ -2586,12 +2684,19 @@ export default function PassportDemo() {
         rootSecret.fill(0);
         passportKeyProviders.current.get(credentialId)?.lock(PASSPORT_CONTRACT_SCOPE);
       }
+      /* `deployTxId` is whatever the resolution loop ended with: the ledger
+         HASH when the indexer had caught up, and the raw 33-byte identifier
+         when it had not. Which of the two it is gets recorded, because an
+         identifier must never be dressed up as an explorer link — and because
+         a record that knows it is unresolved can be upgraded later. */
+      const txIdResolved = isLedgerTxHash(deployment.deployTxId);
       savePassportContractRecord({
         credentialId,
         network: deployment.network,
         status: 'deployed',
         address: deployment.address,
         deployTxId: deployment.deployTxId,
+        txIdResolved,
         deviceCommitment: deployment.deviceCommitment,
         ledgerConfirmed: deployment.ledgerConfirmed,
         feePaidBy: deployment.feePaidBy,
@@ -2609,9 +2714,17 @@ export default function PassportDemo() {
       pushToast({
         tone: 'success',
         title: 'Your Passport contract is deployed',
-        body: deployment.ledgerConfirmed
-          ? 'The indexer is serving its state.'
-          : 'Submitted — the indexer has not reported it yet.',
+        body: `${
+          deployment.ledgerConfirmed
+            ? 'The indexer is serving its state.'
+            : 'Submitted — the indexer has not reported it yet.'
+        }${
+          txIdResolved
+            ? ''
+            : /* No link, and the reason said out loud rather than a link that
+                 resolves to nothing on the explorer. */
+              ' The indexer has not yet mapped the transaction identifier to a ledger hash, so there is no explorer link yet.'
+        }`,
         link: explorerTxLink(deployment.deployTxId, deployment.network),
       });
       void refreshLocalBalances();
@@ -4558,8 +4671,32 @@ export default function PassportDemo() {
    */
   const activeContractRecord =
     profile && localWalletNetworkId
-      ? contractRecords[`${profile.passkey.credentialId}::${localWalletNetworkId}`] ?? null
+      ? contractRecords[
+          passportContractRecordKey(profile.passkey.credentialId, localWalletNetworkId)
+        ] ?? null
       : null;
+  /**
+   * What the two consent sheets may offer as "your Passport contract".
+   *
+   * Two writers, one field. `profile.passportContract` is the Dynamic-deployed
+   * C1 record; the contract the passkey wallet deploys from the Home card
+   * lands in the contract STORE instead and never touches the profile. Reading
+   * only the profile meant a Passport whose contract was deployed the new way
+   * told every relying app it had none — the field was simply missing from an
+   * otherwise correct, signed reply.
+   *
+   * The Dynamic record wins when both exist, because that is the one the rest
+   * of the classic flow acts on. The stored record is offered only when it is
+   * genuinely `'deployed'` with a real address: a failed deploy is not a
+   * contract, and both address and network come from the record itself so the
+   * pair can never be assembled from two different networks.
+   */
+  const consentPassportContract = passportContract
+    ? { address: passportContract.address, network: passportContract.network }
+    : activeContractRecord?.status === 'deployed' && activeContractRecord.address
+      ? { address: activeContractRecord.address, network: activeContractRecord.network }
+      : null;
+
   /**
    * Why the deploy action cannot run right now, or null when it can. Same
    * discipline as `registerNowDisabledReason`: every case renders the action
@@ -4570,7 +4707,7 @@ export default function PassportDemo() {
    */
   const contractDeployDisabledReason = !localSessionActive
     ? 'Sign in with your passkey to open the wallet before deploying your contract.'
-    : selectedNetwork !== localWalletNetworkId
+    : selectedNetwork !== walletPresentedNetwork
       ? `This Passport's wallet signs on ${signingNetworkLabel}, so its contract can only be deployed there.`
       : walletStillSyncing
         ? 'The wallet is still syncing. Deployment opens once the sync completes.'
@@ -4579,9 +4716,16 @@ export default function PassportDemo() {
    * The card. Present only when a passkey wallet session is genuinely open and
    * the network being shown is the one it signs on — omitted rather than
    * disabled otherwise, on the same principle as the Send seam.
+   *
+   * Compared against the wallet's PUBLIC PRESENTATION, not its raw network id,
+   * exactly as the alias-claim gate above is (`selectedNetwork !==
+   * configuredWalletNetwork`). On a localnet build the raw id is `undeployed`
+   * while the switcher can only ever show one of the three public networks, so
+   * the raw comparison was false on every render and the card never appeared
+   * on the very builds the contract flow is demonstrated on.
    */
   const homePassportContract =
-    localSessionActive && localWalletNetworkId && selectedNetwork === localWalletNetworkId
+    localSessionActive && localWalletNetworkId && selectedNetwork === walletPresentedNetwork
       ? {
           record: activeContractRecord,
           onDeploy: () => void deployPassportContractOnChain(),
@@ -4687,11 +4831,7 @@ export default function PassportDemo() {
       <PassportProfileConsent
         sessionActive={sessionActive}
         displayName={sessionActive ? sessionDisplayName : null}
-        passportContract={
-          passportContract
-            ? { address: passportContract.address, network: passportContract.network }
-            : null
-        }
+        passportContract={consentPassportContract}
         midnightAddresses={
           activeSurfaces?.unshieldedAddress
             ? {
@@ -4714,11 +4854,7 @@ export default function PassportDemo() {
         launch={passportCallbackLaunch}
         sessionActive={sessionActive}
         displayName={sessionActive ? sessionDisplayName : null}
-        passportContract={
-          passportContract
-            ? { address: passportContract.address, network: passportContract.network }
-            : null
-        }
+        passportContract={consentPassportContract}
         midnightAddresses={
           activeSurfaces?.unshieldedAddress
             ? {
