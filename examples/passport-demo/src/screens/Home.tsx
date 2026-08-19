@@ -51,7 +51,13 @@ export interface HomeScreenProps {
     onRegisterNow?: () => void
     registerNowDisabledReason?: string | null
     registerNowBusy?: boolean
-    registerNowPhase?: 'activating' | 'deploying-resolver' | 'registering' | 'confirming' | null
+    registerNowPhase?:
+      | 'activating'
+      | 'attaching-account'
+      | 'deploying-resolver'
+      | 'registering'
+      | 'confirming'
+      | null
   } | null
   /**
    * The Passport account-custody contract (C1) on the active network: its
@@ -142,6 +148,13 @@ export interface HomeScreenProps {
    * pill renders in the footer area; when null, no support link is shown.
    */
   supportUrl?: string | null
+  /**
+   * @deprecated Ignored since 2026/08/19.
+   *
+   * The classic dashboard is the Dynamic-hosted view, and the demo flow runs
+   * local-only, so no control on this screen opens it. The prop stays on the
+   * interface so the integrator needs no change, and nothing renders it.
+   */
   onOpenClassic: () => void
   onSignOut: () => void
 }
@@ -202,27 +215,29 @@ export default function HomeScreen(props: HomeScreenProps) {
     transferContext,
     onIncentiveRedeemed,
     supportUrl,
-    onOpenClassic,
     onSignOut,
   } = props
 
   const [copied, setCopied] = useState<AddressKind | null>(null)
-  /* Addresses are a power-user surface: collapsed by default behind the
-     disclosure below, per the 2026/08/05 declutter decision. This same portal
-     IS the Receive surface — the addresses to receive at, with their copy
-     buttons and the faucet beside them. No second sheet was invented for it. */
-  const [addressesOpen, setAddressesOpen] = useState(false)
+  const [copiedName, setCopiedName] = useState(false)
+  /* The Receive sheet, opened only from the Receive action in the money row.
+     The top-bar address pill that also opened it was cut on 2026/08/19: a
+     Passport user never sees their three addresses in the everyday UI — their
+     visible identity is their `.night` name, and everything else is registered
+     to that. Receiving still needs a real address until senders can resolve
+     names, so the address survives INSIDE this sheet, beneath the name. */
+  const [receiveOpen, setReceiveOpen] = useState(false)
   const [sendOpen, setSendOpen] = useState(false)
 
-  // Escape closes the address modal, mirroring the scrim click.
+  // Escape closes the Receive sheet, mirroring the scrim click.
   useEffect(() => {
-    if (!addressesOpen) return undefined
+    if (!receiveOpen) return undefined
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setAddressesOpen(false)
+      if (event.key === 'Escape') setReceiveOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [addressesOpen])
+  }, [receiveOpen])
 
   const handleCopy = useCallback(
     (kind: AddressKind) => {
@@ -232,6 +247,20 @@ export default function HomeScreen(props: HomeScreenProps) {
     },
     [onCopyAddress],
   )
+
+  /* The name is copied here rather than through `onCopyAddress`: that seam is
+     keyed by address kind, and giving it a 'name' kind would change the props
+     contract the integrator implements. A local clipboard write keeps the
+     interface untouched. No clipboard, no tick — nothing is claimed falsely. */
+  const handleCopyName = useCallback((name: string) => {
+    void navigator.clipboard?.writeText(name).then(
+      () => {
+        setCopiedName(true)
+        window.setTimeout(() => setCopiedName(false), 1_600)
+      },
+      () => undefined,
+    )
+  }, [])
 
   const balancesLoading = balanceStatus === 'loading'
   const fill = clampPercent(dustFillPercent)
@@ -301,11 +330,26 @@ export default function HomeScreen(props: HomeScreenProps) {
   /* Sending needs a seam AND an address to send from. Both, or no button. */
   const canSend = Boolean(send) && Boolean(unshieldedAddress)
 
-  const addressRows: { kind: AddressKind; label: string; value: string | null }[] = [
-    { kind: 'unshielded', label: 'Unshielded', value: unshieldedAddress },
+  /* The user's visible identity: the `.night` name held on this network. The
+     record carries it whole (`alice.night`); `aliasLabel` is only the bare
+     label, so the record is the source of truth and there is no suffix
+     guessed here. */
+  const nightName = identity?.record?.domain ?? null
+  /* Only a REGISTERED record actually resolves for a sender. A queued or
+     failed one still shows its name — hiding it would be its own confusion —
+     but says plainly that the address below is what works meanwhile. */
+  const nameResolves = identity?.record?.status === 'registered'
+
+  /* Shielded and DUST are out of the primary Receive surface entirely: they
+     sit behind one quiet disclosure, for the operator who needs them. The
+     unshielded address is handled on its own above — it is the one a sender
+     can actually use today. */
+  const technicalAddressRows: { kind: AddressKind; label: string; value: string | null }[] = [
     { kind: 'shielded', label: 'Shielded', value: shieldedAddress },
     { kind: 'dust', label: 'DUST', value: dustAddress },
-  ]
+  ].filter((row): row is { kind: AddressKind; label: string; value: string | null } =>
+    Boolean(row.value),
+  )
 
   return (
     <section className="mnhome-screen" aria-busy={balancesLoading}>
@@ -314,19 +358,9 @@ export default function HomeScreen(props: HomeScreenProps) {
         <span className="mn-beta-badge">Beta</span>
         <div className="mnhome-bar-actions">
           <NetworkSwitcher network={network} onSelect={onSelectNetwork} />
-          <button
-            type="button"
-            className="mnhome-address-pill"
-            onClick={() => setAddressesOpen(true)}
-            aria-haspopup="dialog"
-            aria-label="Show your Midnight addresses"
-            title="Your addresses"
-          >
-            <Wallet size={14} aria-hidden="true" />
-            <code>
-              {unshieldedAddress ? `${unshieldedAddress.slice(0, 9)}…${unshieldedAddress.slice(-4)}` : 'Addresses'}
-            </code>
-          </button>
+          {/* The address pill was cut 2026/08/19. A Passport user's visible
+              identity is their `.night` name, not a truncated address in the
+              chrome; the address they receive at lives inside Receive. */}
           {/* Standard 34px size, matching the icon buttons beside it. */}
           <ThemeToggle />
           <button
@@ -405,8 +439,8 @@ export default function HomeScreen(props: HomeScreenProps) {
 
         {/* The money row. Send is present only when a local wallet session is
             genuinely open and has an unshielded address to send from — see the
-            `send` prop. Receive opens the address portal below, which is the
-            receive surface: the addresses, their copy buttons, and the faucet. */}
+            `send` prop. Receive opens the sheet below: the `.night` name to be
+            paid at, the address beneath it, the faucet, and nothing else. */}
         {canSend || unshieldedAddress ? (
           <div className="mnhome-actions">
             {canSend ? (
@@ -424,7 +458,7 @@ export default function HomeScreen(props: HomeScreenProps) {
               <button
                 type="button"
                 className="mnhome-action"
-                onClick={() => setAddressesOpen(true)}
+                onClick={() => setReceiveOpen(true)}
                 aria-haspopup="dialog"
               >
                 <ArrowDownLeft size={16} aria-hidden="true" />
@@ -596,53 +630,86 @@ export default function HomeScreen(props: HomeScreenProps) {
           />
         ) : null}
 
-        {addressesOpen
+        {/* Receive. The name leads; the address is the technical detail under
+            it, because until senders resolve names an address is still what a
+            transfer needs. Shielded and DUST are behind the one disclosure at
+            the foot — off the everyday surface, not deleted from the build. */}
+        {receiveOpen
           ? createPortal(
               <div
                 className="mnhome-addr-scrim"
-                onClick={() => setAddressesOpen(false)}
+                onClick={() => setReceiveOpen(false)}
                 role="presentation"
               >
                 <div
                   className="mnhome-addr-modal"
                   role="dialog"
                   aria-modal="true"
-                  aria-label="Your Midnight addresses"
+                  aria-label="Receive to your Passport"
                   onClick={(event) => event.stopPropagation()}
                 >
                   <div className="mnhome-addr-head">
-                    <p className="mnhome-micro">Your addresses</p>
+                    <p className="mnhome-micro">Receive</p>
                     <button
                       type="button"
                       className="mnhome-icon-button"
-                      onClick={() => setAddressesOpen(false)}
+                      onClick={() => setReceiveOpen(false)}
                       aria-label="Close"
                     >
                       <X size={15} aria-hidden="true" />
                     </button>
                   </div>
-                  <ul className="mnhome-addresses">
-                    {addressRows.map((row) => (
-                      <li key={row.kind} className="mnhome-address">
-                        <span className="mnhome-address-label">{row.label}</span>
-                        <code className="mnhome-address-value">
-                          {row.value ? truncateHash(row.value) : 'Not available'}
-                        </code>
+
+                  {nightName ? (
+                    <div className="mnhome-recv-name">
+                      <p className="mnhome-recv-name-row">
+                        <span className="mnhome-recv-name-value">{nightName}</span>
                         <button
                           type="button"
                           className="mnhome-icon-button"
-                          onClick={() => handleCopy(row.kind)}
-                          disabled={!row.value}
-                          aria-label={`Copy ${row.label.toLowerCase()} address`}
+                          onClick={() => handleCopyName(nightName)}
+                          aria-label="Copy your Passport name"
                         >
-                          {copied === row.kind ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                          {copiedName ? (
+                            <Check size={14} aria-hidden="true" />
+                          ) : (
+                            <Copy size={14} aria-hidden="true" />
+                          )}
                         </button>
-                      </li>
-                    ))}
+                      </p>
+                      <p className="mnhome-recv-name-note">
+                        {nameResolves
+                          ? 'Send to this name from any Passport.'
+                          : 'This name is not registered on this network yet — use the address below until it is.'}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  <ul className="mnhome-addresses">
+                    <li className="mnhome-address">
+                      <span className="mnhome-address-label">Address</span>
+                      <code className="mnhome-address-value">
+                        {unshieldedAddress ? truncateHash(unshieldedAddress) : 'Not available'}
+                      </code>
+                      <button
+                        type="button"
+                        className="mnhome-icon-button"
+                        onClick={() => handleCopy('unshielded')}
+                        disabled={!unshieldedAddress}
+                        aria-label="Copy your receiving address"
+                      >
+                        {copied === 'unshielded' ? (
+                          <Check size={14} aria-hidden="true" />
+                        ) : (
+                          <Copy size={14} aria-hidden="true" />
+                        )}
+                      </button>
+                    </li>
                   </ul>
+
                   <div className="mnhome-addr-foot">
                     <p className="mnhome-addr-note">
-                      Public receiving addresses — never the keys behind them.
+                      A public receiving address — never the keys behind it.
                     </p>
                     {network !== 'mainnet' ? (
                       /* The faucet lives here, beside the address it funds.
@@ -661,17 +728,49 @@ export default function HomeScreen(props: HomeScreenProps) {
                       </a>
                     ) : null}
                   </div>
+
+                  {technicalAddressRows.length > 0 ? (
+                    /* One quiet native disclosure — `details`/`summary` carries
+                       its own keyboard and screen-reader behaviour, so no ARIA
+                       is re-implemented here. Closed on every open. */
+                    <details className="mnhome-recv-more">
+                      <summary className="mnhome-recv-more-summary">Technical details</summary>
+                      <ul className="mnhome-addresses">
+                        {technicalAddressRows.map((row) => (
+                          <li key={row.kind} className="mnhome-address">
+                            <span className="mnhome-address-label">{row.label}</span>
+                            <code className="mnhome-address-value">
+                              {row.value ? truncateHash(row.value) : 'Not available'}
+                            </code>
+                            <button
+                              type="button"
+                              className="mnhome-icon-button"
+                              onClick={() => handleCopy(row.kind)}
+                              disabled={!row.value}
+                              aria-label={`Copy ${row.label.toLowerCase()} address`}
+                            >
+                              {copied === row.kind ? (
+                                <Check size={14} aria-hidden="true" />
+                              ) : (
+                                <Copy size={14} aria-hidden="true" />
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
                 </div>
               </div>,
               document.body,
             )
           : null}
 
-        {/* The "Open full dashboard" button was cut 2026/08/06 — the classic
-            workspace remains reachable through the onboarding footer's "Full
-            dashboard" link, which keeps the Dynamic path available without a
-            competing call to action on Home. onOpenClassic stays in the props
-            for that wiring. */}
+        {/* The "Open full dashboard" button was cut 2026/08/06, and the
+            onboarding footer link that replaced it went on 2026/08/19: the
+            demo runs local-only, so the mobile experience offers no route to
+            the Dynamic-hosted classic view at all. `onOpenClassic` stays on
+            the props so the integrator needs no change; nothing renders it. */}
 
         {supportUrl ? (
           <a className="mnhome-support" href={supportUrl} target="_blank" rel="noreferrer">

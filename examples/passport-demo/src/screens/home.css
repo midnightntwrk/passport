@@ -549,27 +549,10 @@
    battery slot here. The static ring above remains for the word states. */
 .mnhome-battery .mnsync-ring { width: 100%; height: 100%; }
 
-/* Address pill in the top bar + the modal it opens. The old inline
-   disclosure block is gone — the addresses live in a dialog now. */
-.mnhome-address-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 12px;
-  border: var(--mn-hairline) solid var(--mn-border-medium);
-  border-radius: var(--mn-radius-pill);
-  color: var(--mn-text-primary);
-  background: var(--mn-surface-card);
-  cursor: pointer;
-}
-.mnhome-address-pill:hover { background: var(--mn-surface-hover); }
-.mnhome-address-pill code {
-  font-family: var(--mn-font-mono);
-  font-size: 11.5px;
-  letter-spacing: -0.01em;
-}
-
+/* The Receive sheet. `.mnhome-address-pill` was removed on 2026/08/19 with
+   the top-bar pill it styled: a Passport user's visible identity is their
+   `.night` name, so no address appears in the chrome. The sheet below is the
+   only place an address is shown, and it is reached from Receive alone. */
 .mnhome-addr-scrim {
   position: fixed;
   inset: 0;
@@ -643,6 +626,79 @@ a.mnhome-icon-button {
 }
 .mnhome-addr-faucet:hover { background: var(--mn-accent-soft); }
 
+/* The `.night` name at the head of Receive — the identity the user actually
+   hands out. It leads the sheet; the address below it is the fallback until
+   senders resolve names. */
+.mnhome-recv-name {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-card);
+}
+.mnhome-recv-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.mnhome-recv-name-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--mn-text-primary);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.mnhome-recv-name-note {
+  margin: 6px 0 0;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Shielded and DUST, behind one quiet native disclosure. Deliberately the
+   least prominent thing in the sheet — it is for an operator, not a user. */
+.mnhome-recv-more { margin-top: 12px; }
+.mnhome-recv-more-summary {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  color: var(--mn-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  list-style: none;
+}
+.mnhome-recv-more-summary::-webkit-details-marker { display: none; }
+.mnhome-recv-more-summary::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform .15s ease;
+}
+.mnhome-recv-more[open] > .mnhome-recv-more-summary::after {
+  transform: translateY(1px) rotate(225deg);
+}
+.mnhome-recv-more-summary:hover { color: var(--mn-text-secondary); }
+.mnhome-recv-more-summary:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+  border-radius: var(--mn-radius-pill);
+}
+.mnhome-recv-more > .mnhome-addresses { margin-top: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnhome-recv-more-summary::after { transition: none; }
+}
+
 /* Compact sync strip under the top bar — the sync percent's new home. */
 .mnhome-syncstrip {
   display: flex;
@@ -672,8 +728,6 @@ a.mnhome-icon-button {
   font-variant-numeric: var(--mn-numeric);
   letter-spacing: .02em;
 }
-
-.mnhome-address-pill { white-space: nowrap; }
 
 /* --- Send / Receive ------------------------------------------------------ */
 

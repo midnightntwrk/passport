@@ -218,22 +218,9 @@
   font-size: 11px;
   letter-spacing: .04em;
 }
-.mnob-foot-link {
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  border-bottom: var(--mn-hairline) solid var(--mn-text-muted);
-  border-radius: 0;
-  color: var(--mn-text-secondary);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  letter-spacing: inherit;
-}
-.mnob-foot-link:hover {
-  color: var(--mn-text-primary);
-  border-bottom-color: var(--mn-text-primary);
-}
+/* `.mnob-foot-link` was removed on 2026/08/19 with the "Full dashboard"
+   escape hatch it styled — the demo flow offers no route to the
+   Dynamic-hosted classic view, so the footer carries only its honesty note. */
 
 @keyframes mnob-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes mnob-stage-in {

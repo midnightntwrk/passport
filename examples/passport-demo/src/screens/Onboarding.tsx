@@ -11,9 +11,12 @@ import './onboarding.css'
  * create/enrol flow runs. WebAuthn discoverable credentials mean the
  * assertion path also covers a passkey synced from another device.
  *
- * The mobile onboarding no longer offers "Continue with Dynamic"; the classic
- * dashboard — still reachable through the "Full dashboard" footer link —
- * keeps the Dynamic path.
+ * The mobile onboarding offers no route to Dynamic at all. The "Full dashboard"
+ * footer link was cut on 2026/08/19: the demo runs "only with the local,
+ * without Dynamics", so the Dynamic-hosted classic view must have no
+ * user-visible entry point from this screen. The classic experience itself
+ * stays in the tree and stays reachable through its internal routes; only the
+ * door from onboarding is closed.
  */
 export interface OnboardingProps {
   stage: 'welcome' | 'working'
@@ -38,7 +41,13 @@ export interface OnboardingProps {
    */
   onUseDifferentPasskey?: () => void
   onDismissError?: () => void
-  /** Escape hatch to the classic dashboard, kept reachable before sign-in. */
+  /**
+   * @deprecated Ignored since 2026/08/19.
+   *
+   * This drove the footer's "Full dashboard" escape hatch into the classic
+   * Dynamic-hosted view. The demo flow must not offer it, so nothing renders
+   * it. The prop stays on the interface so the integrator needs no change.
+   */
   onOpenClassic?: () => void
 }
 
@@ -51,7 +60,6 @@ export default function OnboardingScreen(props: OnboardingProps) {
     onContinue,
     onUseDifferentPasskey,
     onDismissError,
-    onOpenClassic,
   } = props
 
   const continueHint =
@@ -146,13 +154,10 @@ export default function OnboardingScreen(props: OnboardingProps) {
         ) : null}
       </div>
 
+      {/* No "Full dashboard" link: the classic view is Dynamic-hosted, and the
+          demo runs local-only. The footer carries the honesty note alone. */}
       <footer className="mnob-foot">
         <span>Preview network demo — not production</span>
-        {onOpenClassic ? (
-          <button type="button" className="mnob-foot-link" onClick={onOpenClassic}>
-            Full dashboard
-          </button>
-        ) : null}
       </footer>
     </section>
   )
