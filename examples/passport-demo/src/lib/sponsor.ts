@@ -425,8 +425,9 @@ export async function sponsorReadiness(
   if (readinessInFlight) return readinessInFlight;
 
   const fetchRequest = options.fetch ?? globalThis.fetch;
-  const probe = (async (): Promise<SponsorReadiness> => {
-    let value: SponsorReadiness;
+
+  /** One probe attempt; `null` for a TRANSPORT failure (worth one retry). */
+  const attempt = async (): Promise<SponsorReadiness | null> => {
     try {
       const response = await fetchRequest(`${config.url}/wallet-status`, {
         method: 'GET',
@@ -435,34 +436,43 @@ export async function sponsorReadiness(
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
-        value = {
+        return {
           state: 'unavailable',
           url: config.url,
           reason: `wallet-status returned HTTP ${response.status}`,
         };
-      } else {
-        const status = parseSponsorWalletStatus(body);
-        if (!status) {
-          value = {
-            state: 'unavailable',
-            url: config.url,
-            reason: 'wallet-status returned an unrecognised body',
-          };
-        } else if (sponsorWalletIsAvailable(status)) {
-          value = { state: 'ready', url: config.url, available: status.available };
-        } else {
-          value = {
-            state: 'unavailable',
-            url: config.url,
-            reason: describeSponsorWalletStatus(status),
-          };
-        }
       }
-    } catch (cause) {
+      const status = parseSponsorWalletStatus(body);
+      if (!status) return null;
+      if (sponsorWalletIsAvailable(status)) {
+        return { state: 'ready', url: config.url, available: status.available };
+      }
+      return {
+        state: 'unavailable',
+        url: config.url,
+        reason: describeSponsorWalletStatus(status),
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const probe = (async (): Promise<SponsorReadiness> => {
+    /* A readiness verdict is cached and read by fee gates downstream, so one
+       transient transport failure must not poison it: measured live on
+       2026/08/19, a single unparseable answer mid-drill turned a ready
+       sponsor into a refused contract deploy. Transport failures get exactly
+       one retry; a well-formed "unavailable" answer is believed first time. */
+    let value = await attempt();
+    if (value === null) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      value = await attempt();
+    }
+    if (value === null) {
       value = {
         state: 'unavailable',
         url: config.url,
-        reason: cause instanceof Error ? cause.message : String(cause),
+        reason: 'wallet-status could not be fetched or parsed, twice',
       };
     }
     readinessCache = { url: config.url, at: now(), value };
