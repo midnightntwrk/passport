@@ -5,21 +5,26 @@
 ## Outcome
 
 The cryptographic operation by which a device authorises Passport
-account operations. **Set in stone by the account-authorisation MIP
-draft** (`docs/mps-mip/mips/mip-xxxx-account-authorisation.md`):
-Schnorr on JubJub per device, verified in-circuit, instantiating the
-custody MIP's authorisation seam. Independent of MCS /
-threshold-Schnorr at the cross-chain layer (which is owned upstream).
+account operations. **Set in stone by the account-authorisation MIP,
+published upstream as MIP-0013**: Schnorr on JubJub per device,
+verified in-circuit, instantiating the custody MIP's (MIP-0012)
+authorisation seam. Independent of MCS / threshold-Schnorr at the
+cross-chain layer (which is owned upstream).
 
 The specified shape, answering this canvas's former open question on
 the in-circuit variant:
 
-- **Challenge** — `persistentHash` over a preimage binding the
-  account's contract address, a per-circuit domain-separation tag, the
-  full argument list, and a dedicated authorisation counter
-  (`auth_nonce`, advanced only by seam-gated calls, so permissionless
-  deposits cannot invalidate a pending signature). A signature
-  authorises exactly one call on exactly one account.
+- **Challenge** — `persistentHash` over a preimage binding a
+  per-circuit domain-separation tag (derived unconditionally as
+  `persistentHash` of the tag zero-padded to 64 bytes), the account's
+  contract address, the signature announcement, the device public key,
+  the full argument list, the witness values the call will consume
+  (AUTH-10 — for a spend, the approver signs over the exact qualified
+  coin), a dedicated authorisation counter (`auth_nonce`, advanced
+  only by seam-gated calls, so permissionless deposits cannot
+  invalidate a pending signature), and the grinding nonce. A signature
+  authorises exactly one call, with exactly these inputs, on exactly
+  one account.
 - **Challenge hash** — `persistentHash` is **SHA-256 over the
   compiler's field-aligned encoding**, not Poseidon (`transientHash`
   is the Poseidon-family one). Chosen for its cross-upgrade stability
@@ -46,7 +51,11 @@ the in-circuit variant:
 Verified end-to-end across language boundaries: the TypeScript rig
 (`experiments/redjubjub-wallet/`) and the pure-Rust rig
 (`experiments/redjubjub-wallet-rs/`) produce interchangeable
-signatures against the same deployed in-circuit verifier.
+signatures against the same deployed in-circuit verifier. The
+reference implementation (`contract/`) carries this forward as
+MIP-0013 conformance test 7: an independent Rust signer built on the
+published ledger crates produces bit-exact challenges and accepted
+signatures against the deployed standard contract.
 
 ## Dependencies
 
@@ -84,6 +93,26 @@ the MIP's Path to Active.
 Cross-chain operations rely on the upstream MCS for foreign-chain
 signatures; the user signs the trade intent in JubJub, MCS handles the
 foreign-chain side.
+
+**Upstream convergence.** Two upstream twins of this primitive have
+appeared and need an alignment decision. The Compact 0.33.0 standard
+library ships `jubjubSchnorrVerify` and a `JubjubSchnorrSignature`
+type; the ledger's transient-crypto crate now carries its own JubJub
+Schnorr whose challenge is an **untagged** Poseidon `transientHash`
+over the announcement, public key, and message — diverging from
+MIP-0013's domain-separated, cross-upgrade-stable `persistentHash`
+challenge on exactly the two grounds the MIP argues (no
+domain-separation tag; a hash family that is unstable across
+upgrades). To check: whether the stdlib gadget can carry the MIP's
+challenge, and whether upstream will adopt the DST discipline.
+Related: the wallet SDK's next major makes every signing entry point
+asynchronous, citing threshold-MPC coordinators — the FROST-shaped
+seam the threshold profile needs is appearing upstream. Separately,
+the next ledger line adds native ECDSA-secp256k1 ledger keys, which
+together with the verified maintenance-authority upgrade path meets
+both preconditions of the earlier "ECDSA deferred until upgradability
+and native ECDSA" ruling — worth a deliberate re-visit, not an
+automatic switch.
 
 ## Failure modes
 

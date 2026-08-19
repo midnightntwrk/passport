@@ -103,7 +103,7 @@ Midnight Passport sits between users (and the wallets / dApps they operate) and 
 |---|---|---|
 | dApp connection | CAIP-25-shaped, EIP-6963-discoverable; covers Sign-In-with-Passport. | [C23](plans/components/C23-dapp-connection-protocol.md) |
 | Cross-chain | Trade-intent + identity hand-off to upstream cross-chain machinery. | [C25](plans/components/C25-cross-chain-integration-interface.md) |
-| Name resolution | `alice.midnight` → addresses + account anchor. | [C2](plans/components/C2-name-service.md) |
+| Name resolution | `alice.passport.night` → addresses + account anchor (upstream name service, MIP-0007). | [C2](plans/components/C2-name-service.md) |
 | Device authentication | WebAuthn / passkey, bound to the device's secure boundary. | [C9](plans/components/C9-device-bound-authentication.md) |
 
 ### Out of scope
@@ -116,7 +116,7 @@ Midnight Passport sits between users (and the wallets / dApps they operate) and 
 
 ## 4. Solution Strategy
 
-*Filled as the major architectural strategies land.* The high-level shape is set: `alice.midnight` names + passkey-bound devices + chain-only operation + scoped grants + selective disclosure. Specific mechanism choices land per component as workstreams resolve.
+The high-level shape is set: `alice.passport.night` names (upstream name service adopted) + passkey-bound devices (WebAuthn PRF → per-device JubJub keys) + stateless contract custody (assets in the account contract, no coin material in public ledger state) + in-circuit Schnorr authorisation (MIP-0012 / MIP-0013, reference implementation at `contract/`) + browser proving + BUSS / ANARKey recovery + chain-only operation + scoped grants + selective disclosure. Remaining mechanism choices land per component as the open workstreams resolve.
 
 See [`docs/plans/components/README.md`](plans/components/README.md) for the CAKE-vocabulary anchor (Applications · Permission · Solver · Settlement) the component inventory maps onto.
 
@@ -130,7 +130,7 @@ The component inventory **is** the building block view.
 - **26 component canvases (C1 – C26):** [`docs/plans/components/`](plans/components/)
 - **Visual:** [`site/parallelisation.html`](../site/parallelisation.html)
 
-Each canvas carries five fields — Outcome, Dependencies, Open questions, Failure modes, Alternatives — plus a Readings section that records the v1.0 path. Components in workstreams (C3, C4, C22, C24, C25) carry live decisions whose alternatives have not yet been selected.
+Each canvas carries five fields — Outcome, Dependencies, Open questions, Failure modes, Alternatives — plus a Readings section that records the v1.0 path. Components in open workstreams (C3, C22, C25, plus C24's sponsor-service half) carry live decisions whose alternatives have not yet been selected; C4 and C24's mechanism are resolved and retained for the record.
 
 ---
 
@@ -196,7 +196,7 @@ Quality scenarios derive from the invariants in [`docs/plans/PROMISES.md`](plans
 
 Component-level risks live in each canvas's Failure Modes section. Project-level risks:
 
-- **Workstream gating (5 of 26).** C3, C4, C22, C24, C25 carry live decisions. Downstream finalisation cannot precede the gating workstream's resolution.
+- **Workstream gating (3 of 26 open).** C3, C22, C25 carry live decisions (plus C24's sponsor-service half); C4 is resolved. Downstream finalisation cannot precede the gating workstream's resolution.
 - **`ownPublicKey()` ecosystem hazard.** Direct use of Compact's `ownPublicKey()` for access control is bypassable — an external audit reproduced impersonation against `example-bboard` and OpenZeppelin's `Ownable.compact` on devnet. Per upstream clarification ([LFDT-Minokawa/compact#283](https://github.com/LFDT-Minokawa/compact/issues/283)), the primitive was never intended for authentication; its intended use is providing a withdrawal address for shielded tokens. The upstream response is improved documentation, not removal — the misuse pattern will persist in third-party Compact code regardless, so Passport contracts use [C5](plans/components/C5-signing-primitive.md)'s in-circuit signature-verification pattern; see C5 failure modes.
 - **Private-state loss orphans public state ("zombie state").** Kachina / Compact does not link private and public state automatically. If [C16](plans/components/C16-wallet-local-storage.md) private state is destroyed or inaccessible, the user's on-chain state in C1 (and other per-account contracts) remains visible but becomes inoperable — no party can produce the witnesses needed to interact with it. Recovery flows ([C14](plans/components/C14-total-loss-recovery-flow.md)) must address this explicitly; pure chain-state inspection is insufficient. Bears on C14, C16, C19.
 - **Upstream coupling.** C25 is owned upstream; Passport-side integration is sequenced post-v1.0 initial release.
@@ -218,7 +218,7 @@ Component-level risks live in each canvas's Failure Modes section. Project-level
 | **CIP** | Cardano Improvement Proposal. Where Passport-relevant standards have Cardano-side counterparts. |
 | **Passkey** | WebAuthn credential bound to a device's secure boundary. |
 | **Compact** | Midnight's ZK DSL for contracts. |
-| **`alice.midnight`** | Example of the Passport account name shape (P2). |
+| **`alice.midnight`** | Illustrative short form of the Passport account name (P2). The decided shape is `alice.passport.night` — a free, first-come-first-served sub-domain of the Foundation-held `passport.night` under the upstream name service (MIP-0007). |
 | **QSCI** | Qualified Shielded Coin Info. On-ledger structure used by the OZ contract-vault pattern for shielded contract custody (C4). |
 | **Workstream** | A component carrying a live decision whose alternatives have not yet been selected. |
 | **Invariant** | A property the system must keep true to keep a promise. Numbered `I-N.M`. |

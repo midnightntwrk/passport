@@ -55,15 +55,15 @@ a candidate.
 *Detection:* upstream OWS change-log monitored; integration tests pinned
 to a specific draft version.
 
-**dApp can't integrate.** Protocol shape too Passport-specific for
+**dApp cannot integrate.** Protocol shape too Passport-specific for
 ecosystem dApps. *Detection:* third-party dApp integration partner
-can't construct conforming requests.
+cannot construct conforming requests.
 
 **Permission scope confusion.** A dApp asks for one scope but the
 wallet enforces a different one. *Detection:* differential test of scope
 translation.
 
-**Transport unavailable.** WalletConnect relay down; dApp can't reach
+**Transport unavailable.** WalletConnect relay down; dApp cannot reach
 wallet. *Detection:* fallback transport not configured.
 
 ## Alternatives

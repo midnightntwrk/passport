@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Midnight Passport — The October demo</title>
+<title>Midnight Passport — How it works</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -84,7 +84,7 @@
     color: var(--text-mute);
     font-weight: 300;
     line-height: 1.55;
-    max-width: 64ch;
+    max-width: 66ch;
     margin: 0;
   }
 
@@ -136,11 +136,121 @@
   }
   .section-head p {
     color: var(--text-mute);
-    max-width: 70ch;
+    max-width: 74ch;
     line-height: 1.55;
   }
 
-  /* "What ships" bulleted list */
+  /* ─────────────── The picture: static two-zone stage ─────────────── */
+
+  .stage-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-soft); }
+  .stage {
+    display: grid; grid-template-columns: 1fr 1.15fr;
+    min-width: 860px;
+  }
+  .zone { padding: 18px 20px 22px; }
+  .zone-label {
+    font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .zone-off { border-right: 2px dashed var(--line-strong); }
+  .zone-off .zone-label { color: var(--info); }
+  .zone-on  .zone-label { color: var(--iog-infared); }
+  .zone-label .sub { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-faint); }
+
+  .actors { display: grid; gap: 12px; }
+  .actor {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+    padding: 12px 14px;
+  }
+  .actor-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .actor-ico { width: 20px; height: 20px; flex: none; color: var(--text-mute); }
+  .actor-ico svg { width: 100%; height: 100%; }
+  .actor-name { font-family: var(--font-display); font-size: 0.92rem; font-weight: 600; color: var(--text); }
+  .actor-sub { font-size: 0.72rem; color: var(--text-faint); margin-left: auto; font-family: var(--font-mono); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .chip {
+    font-family: var(--font-mono); font-size: 0.68rem; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--text-mute); background: var(--bg-soft);
+  }
+  .chip.secret { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+  .chip.artefact { border-color: var(--info); color: var(--info); background: var(--info-soft); }
+  .actor-note { font-size: 0.84rem; color: var(--text-mute); line-height: 1.5; }
+
+  /* Contract ledger card */
+  .contract {
+    border: 1.5px solid var(--card-stroke); border-radius: 10px; background: var(--card-fill);
+    overflow: hidden;
+  }
+  .contract-head {
+    display: flex; align-items: baseline; gap: 10px; padding: 12px 16px;
+    border-bottom: 1px solid var(--line); background: var(--bg-alt);
+  }
+  .contract-head .t { font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; color: var(--text); }
+  .contract-head .a { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-faint); margin-left: auto; }
+  .lrow { padding: 10px 16px; border-bottom: 1px dashed var(--line); }
+  .lrow:last-child { border-bottom: none; }
+  .lrow-top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .lrow .k { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-mute); width: 128px; flex: none; }
+  .lrow .v { font-family: var(--font-mono); font-size: 0.76rem; color: var(--text); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+  .lchip {
+    border: 1px solid var(--line-strong); border-radius: 4px; padding: 1px 7px;
+    font-size: 0.7rem; background: var(--bg-soft);
+  }
+  .lrow .why { font-size: 0.8rem; color: var(--text-faint); line-height: 1.5; margin-top: 4px; padding-left: 140px; }
+  @media (max-width: 980px) { .lrow .why { padding-left: 0; } }
+
+  .golden-rule {
+    margin-top: 16px; border: 1px solid var(--line); border-left: 3px solid var(--iog-infared);
+    border-radius: 8px; padding: 14px 20px; background: var(--bg);
+    font-size: 0.95rem; color: var(--text); max-width: none;
+  }
+  .golden-rule b { color: var(--iog-infared); }
+
+  /* ─────────────── Lifecycle steps ─────────────── */
+
+  .steps { display: grid; gap: 14px; }
+  .step {
+    display: grid; grid-template-columns: 56px 1fr; gap: 18px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 18px 22px; background: var(--bg);
+  }
+  @media (max-width: 640px) { .step { grid-template-columns: 1fr; gap: 8px; } }
+  .step-n {
+    font-family: var(--font-mono); font-size: 1.4rem; font-weight: 600;
+    color: var(--iog-infared); line-height: 1;
+  }
+  .step h3 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .step p { font-size: 0.94rem; color: var(--text-mute); line-height: 1.6; margin-bottom: 10px; }
+  .step .crosses {
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-faint);
+    padding-top: 8px; border-top: 1px dashed var(--line);
+  }
+  .step .crosses b { color: var(--iog-infared); font-weight: 600; margin-right: 6px; }
+  .step .rule-note {
+    margin-top: 10px; padding: 10px 14px; border-radius: 6px; background: var(--warn-soft);
+    color: var(--text); font-size: 0.88rem; border: 1px solid var(--warn);
+  }
+  .step .rule-note strong { color: var(--warn); }
+
+  /* ─────────────── Evidence strip ─────────────── */
+
+  .evidence { display: grid; gap: 12px; }
+  .evi {
+    display: grid; grid-template-columns: 200px 1fr; gap: 18px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 16px 22px; background: var(--bg);
+  }
+  @media (max-width: 720px) { .evi { grid-template-columns: 1fr; gap: 6px; } }
+  .evi .ek {
+    font-family: var(--font-mono); font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--iog-infared);
+  }
+  .evi p { font-size: 0.92rem; color: var(--text-mute); line-height: 1.55; margin: 0; }
+  .evi .links { margin-top: 6px; font-size: 0.8rem; font-family: var(--font-mono); display: flex; flex-wrap: wrap; gap: 12px; }
+  .evi .links a { color: var(--text-mute); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .evi .links a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
+
+  /* ─────────────── Demo: what ships ─────────────── */
+
   .ships-list {
     list-style: none;
     padding: 0;
@@ -170,10 +280,7 @@
   }
 
   /* Phase cards */
-  .phases {
-    display: grid;
-    gap: 14px;
-  }
+  .phases { display: grid; gap: 14px; }
   .phase-card {
     display: grid;
     grid-template-columns: 100px 1fr;
@@ -291,50 +398,6 @@
   }
   .picks-note { color: var(--text-mute); }
 
-  /* Crossovers */
-  .crossovers-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 16px;
-  }
-  .crossover-card {
-    border: 1px dashed var(--line-strong);
-    border-radius: 8px;
-    padding: 20px 22px;
-    background: var(--bg-soft);
-  }
-  .crossover-title {
-    font-family: var(--font-display);
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 8px;
-  }
-  .crossover-summary {
-    font-size: 0.92rem;
-    color: var(--text-mute);
-    line-height: 1.55;
-    margin-bottom: 12px;
-  }
-  .crossover-items {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .cx-chip {
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    font-weight: 600;
-    color: var(--iog-infared);
-    border: 1px solid var(--iog-infared);
-    border-radius: 4px;
-    padding: 3px 9px;
-    text-decoration: none;
-    background: transparent;
-    transition: background .12s ease;
-  }
-  .cx-chip:hover { background: var(--bad-soft); }
-
   /* Footer */
   footer.landing-footer {
     display: flex;
@@ -362,9 +425,9 @@
   <a class="navbar-brand" href="index.html">Midnight Passport <span class="brand-tag">· ARC</span></a>
   <div class="navbar-links">
     <a href="index.html">Overview</a>
+    <a href="demo.html" class="active">How it works</a>
     <a href="parallelisation.html">Parallelisation</a>
     <a href="architecture.html">Architecture</a>
-    <a href="demo.html" class="active">Demo</a>
     <a href="standards.html">Standards</a>
     <a href="onboarding-mockup.html">Onboarding</a>
   </div>
@@ -390,12 +453,12 @@
       <nav class="breadcrumb" aria-label="Breadcrumb">
         <a href="index.html">Midnight Passport</a>
         <span class="sep">›</span>
-        <span>The October demo</span>
+        <span>How it works</span>
       </nav>
 
-      <div class="kind">Midnight Foundation · Delivery · October 2026</div>
-      <h1>The October demo</h1>
-      <p class="subtitle">An end-to-end Passport account on a screen, with a recovery sad-path. Six monthly phases, drawn against the components that exist by then. Architectural picks favour the cheapest path that works; the standards-and-spec body lands the principled path on a continuous timeline.</p>
+      <div class="kind">Explainer · The October demo</div>
+      <h1>How Passport works</h1>
+      <p class="subtitle">One account is one contract on the Midnight ledger. No seed phrase exists anywhere: each device holds a secret derived from its passkey, the chain holds only hashes and proofs, and losing every device does not lose the account. This page shows the whole system on one screen, walks the account lifecycle in six steps, and ends with what the <a href="#demo">October demo</a> puts on a screen.</p>
 
       <div class="symbiosis-banner">
         Parallel delivery — see <a href="standards.html">Standards &amp; v1.0 →</a>
@@ -406,9 +469,209 @@
   <section class="section">
     <div class="container">
       <header class="section-head">
-        <div class="section-kind">What ships</div>
-        <h2>What runs on the screen in October</h2>
-        <p>Seven walkthroughs covering the full account lifecycle, plus a managed-recovery sad-path. The demo runs single-device and uses managed signing through a partner-operated MPC committee — these are the architectural picks the demo accepts; the standards path retires them.</p>
+        <div class="section-kind">The picture</div>
+        <h2>The whole system on one screen</h2>
+        <p>The left side is yours: devices, people you trust, and paper. The right side is the public ledger: readable by anyone, forever. Everything Passport does is the discipline of that dashed line. The snapshot below is a healthy account mid-life; every annotation says why that field is safe to publish.</p>
+      </header>
+
+      <div class="stage-scroll">
+        <div class="stage">
+          <div class="zone zone-off">
+            <div class="zone-label">Off-chain · your world <span class="sub">· nothing here is published</span></div>
+            <div class="actors">
+              <div class="actor">
+                <div class="actor-head">
+                  <span class="actor-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg></span>
+                  <span class="actor-name">Your devices</span><span class="actor-sub">passkeys · peers</span>
+                </div>
+                <div class="chips"><span class="chip secret">⚿ device secret (one per device)</span></div>
+                <div class="actor-note">Each secret is re-derived from its passkey behind biometrics on every use, and never stored. Devices are peers: any enrolled device can act, enrol another, or revoke one.</div>
+              </div>
+              <div class="actor">
+                <div class="actor-head">
+                  <span class="actor-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg></span>
+                  <span class="actor-name">A connected dApp</span><span class="actor-sub">scoped, revocable</span>
+                </div>
+                <div class="chips"><span class="chip secret">⚿ grant secret</span></div>
+                <div class="actor-note">Holds its own secret, never your keys. Its scope (one token color, a spending cap) lives on-chain and is enforced by the circuit; revocation makes the secret worthless.</div>
+              </div>
+              <div class="actor">
+                <div class="actor-head">
+                  <span class="actor-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.4-3.4 4-5 7-5s5.6 1.6 7 5"/></svg></span>
+                  <span class="actor-name">Guardians</span><span class="actor-sub">people and paper slips</span>
+                </div>
+                <div class="chips"><span class="chip secret">⚿ their own key</span></div>
+                <div class="actor-note">Each guardian keeps only a key they already had and stores nothing for you between ceremonies. A paper slip with a random key counts as a guardian too.</div>
+              </div>
+              <div class="actor">
+                <div class="actor-head">
+                  <span class="actor-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 4a5 5 0 0 1 5 5c0 2-1 3-1 5h-8c0-2-1-3-1-5a5 5 0 0 1 5-5z"/><path d="M10 18h4M11 21h2"/></svg></span>
+                  <span class="actor-name">What you remember</span><span class="actor-sub">no app, no chain</span>
+                </div>
+                <div class="chips"><span class="chip artefact">three guardians, any two</span></div>
+                <div class="actor-note">The guardian roster (who, how many, what threshold) stays off-chain by design, so the ledger reveals nothing about your social graph.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="zone zone-on">
+            <div class="zone-label">On-chain · public ledger <span class="sub">· readable by anyone, forever</span></div>
+            <div class="contract">
+              <div class="contract-head">
+                <span class="t">Your account contract</span>
+                <span class="a">0a81…77d4</span>
+              </div>
+              <div class="lrow">
+                <div class="lrow-top"><span class="k">devices</span><span class="v"><span class="lchip">phone@e0</span><span class="lchip">laptop@e0</span></span></div>
+                <div class="why">Hashes of device secrets, stamped with the epoch they joined at. The contract can recognise an enrolled device; nothing here identifies you.</div>
+              </div>
+              <div class="lrow">
+                <div class="lrow-top"><span class="k">device_epoch</span><span class="v">0</span></div>
+                <div class="why">Bumping the epoch retires every device and grant in one step. Recovery leans on exactly this.</div>
+              </div>
+              <div class="lrow">
+                <div class="lrow-top"><span class="k">round</span><span class="v">6</span></div>
+                <div class="why">Bumped by every authorised call, so no transaction can be replayed.</div>
+              </div>
+              <div class="lrow">
+                <div class="lrow-top"><span class="k">night_balances</span><span class="v">NIGHT: 400</span></div>
+                <div class="why">Unshielded funds are public by design, and anyone may deposit.</div>
+              </div>
+              <div class="lrow">
+                <div class="lrow-top"><span class="k">coins (shielded)</span><span class="v"><span class="lchip">sealed ▓▓▓▓</span></span></div>
+                <div class="why">Shielded holdings are sealed commitments with an encrypted inbox for the owner. Amount and token type are not readable on-chain.</div>
+              </div>
+              <div class="lrow">
+                <div class="lrow-top"><span class="k">grants</span><span class="v"><span class="lchip">AMBER · cap 300 · spent 250</span></span></div>
+                <div class="why">The scope of each dApp grant: token color, cumulative cap, spend so far. The circuit enforces it, not the dApp&rsquo;s goodwill.</div>
+              </div>
+              <div class="lrow">
+                <div class="lrow-top"><span class="k">recovery</span><span class="v"><span class="lchip">commit(r₁)</span><span class="lchip">φ₁</span><span class="lchip">φ₂</span><span class="lchip">nonce</span></span></div>
+                <div class="why">One hash of the recovery secret plus a few public points, provably useless without a quorum of guardians. Ninety-six bytes covers a three-of-five setup.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="golden-rule">
+        <b>The golden rule.</b> The only things that ever cross the dashed line are commitments (hashes of secrets), zero-knowledge proofs about secrets, and public recovery points that leak nothing. No secret crosses, and neither does anything about who you are: no username, no biometrics, no identity.
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <header class="section-head">
+        <div class="section-kind">The lifecycle</div>
+        <h2>Six steps, one account</h2>
+        <p>The life of an account, in order. Each card ends with exactly what crossed the line to the chain, because that boundary is the whole design.</p>
+      </header>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-n">1</div>
+          <div>
+            <h3>Create</h3>
+            <p>Your first device makes a passkey, and the passkey output becomes the device secret. The device deploys your account contract carrying two hashes: a commitment to the device secret, and a commitment to a freshly generated recovery secret.</p>
+            <div class="crosses"><b>Crosses</b> commit(device) + commit(recovery) · both secrets stay on the device</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">2</div>
+          <div>
+            <h3>Add a device</h3>
+            <p>A second device makes its own passkey and secret. Any already-enrolled device authorises the addition with a proof, and the newcomer&rsquo;s commitment is enrolled at the current epoch. There is no primary device: all devices are equals.</p>
+            <div class="crosses"><b>Crosses</b> one proof + one commitment</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">3</div>
+          <div>
+            <h3>Receive</h3>
+            <p>Anyone may fund the account, no authority required. Night lands in the public balance. A shielded token lands as a sealed commitment: an observer learns that something arrived, but not the amount and not the token type. The belief that contract-held shielded coins must be public was proven wrong on a real node; the private pattern is the standard.</p>
+            <div class="crosses"><b>Crosses</b> the deposit itself · nothing about you</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">4</div>
+          <div>
+            <h3>Spend</h3>
+            <p>Money out always requires authority. The device proves knowledge of a secret whose commitment is enrolled at the current epoch; the circuit checks the proof, moves the funds, and bumps the round counter. An impostor cannot produce that proof, so the ledger itself rejects the call.</p>
+            <div class="crosses"><b>Crosses</b> one proof · the secret never moves</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">5</div>
+          <div>
+            <h3>Delegate</h3>
+            <p>Connecting to a dApp never hands over your keys. The device enrols a separate grant secret for the dApp, scoped on-chain to one token color and a cumulative cap. The circuit enforces the cap, refuses the spend that would exceed it, and revocation makes the dApp&rsquo;s secret worthless whatever it has stored.</p>
+            <div class="crosses"><b>Crosses</b> proofs · the scope is public, the grant secret is not</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">6</div>
+          <div>
+            <h3>Recover</h3>
+            <p>Guardians make total loss survivable. When asked, each guardian re-derives their share on demand from their own key: nothing was stored, so nothing could be lost or leaked. A replacement device reads the public points from the chain, collects a quorum of shares, rebuilds the recovery secret entirely off-chain, and finishes with one transaction: a fresh device commitment, a fresh recovery commitment, and an epoch bump that retires every old device and grant at once. Same account, same address, same name, same balances: only the authority over them changed.</p>
+            <div class="crosses"><b>Crosses</b> one proof + two fresh commitments · the guardian roster never appears</div>
+            <div class="rule-note"><strong>Load-bearing rule.</strong> Every published backup uses a fresh secret and a fresh session nonce, and any change to the guardian set is a full re-ceremony. Rotation is what makes removing a guardian real.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <header class="section-head">
+        <div class="section-kind">Evidence</div>
+        <h2>Why we can claim this works</h2>
+        <p>Nothing above is speculative. Every mechanism runs for real: the reference implementation at <code>contract/</code> realises the two published standards in one deployment, with both conformance suites passing against a local Midnight network.</p>
+      </header>
+
+      <div class="evidence">
+        <div class="evi">
+          <div class="ek">Private custody</div>
+          <div>
+            <p>Contract-held shielded coins do not have to expose amount or token type; the widely copied vault recipe did so as a bookkeeping choice (and silently lost change, a defect found and fixed along the way). The validated private pattern is normative in MIP-0012.</p>
+            <div class="links">
+              <a href="standards.html#MIP-0012">MIP-0012</a>
+              <a href="https://github.com/midnightntwrk/passport/pull/89" target="_blank" rel="noopener">the experiment</a>
+            </div>
+          </div>
+        </div>
+        <div class="evi">
+          <div class="ek">One authorisation seam</div>
+          <div>
+            <p>Every authorised circuit performs the same check through a single helper circuit, instantiated with in-circuit JubJub Schnorr per MIP-0013. One epoch bump retires every device and grant at once, which is exactly what recovery relies on.</p>
+            <div class="links">
+              <a href="standards.html#MIP-0013">MIP-0013</a>
+              <a href="architecture.html">architecture</a>
+            </div>
+          </div>
+        </div>
+        <div class="evi">
+          <div class="ek">Storage-free recovery</div>
+          <div>
+            <p>Recovery adopts BUSS, the bottom-up secret sharing construction from the ANARKey paper: guardians derive shares on demand and store nothing, and the on-chain footprint is a commitment plus a few public points.</p>
+            <div class="links">
+              <a href="https://eprint.iacr.org/2025/551" target="_blank" rel="noopener">ANARKey paper</a>
+              <a href="https://github.com/input-output-hk/arc-pleiades" target="_blank" rel="noopener">Pleiades library</a>
+              <a href="https://github.com/midnightntwrk/passport/pull/90" target="_blank" rel="noopener">prototype change</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="demo">
+    <div class="container">
+      <header class="section-head">
+        <div class="section-kind">Delivery · October 2026</div>
+        <h2>The October demo</h2>
+        <p>The lifecycle above, made watchable: an end-to-end Passport account on a screen, with a recovery sad-path. The demo is an MVP that consumes the standards early. Where it takes a shortcut (single device, managed signing through a partner-operated MPC committee), the shortcut carries a migration plan back to the principled path; the <a href="standards.html">standards body</a> lands that path on a continuous timeline.</p>
       </header>
 
       <ul class="ships-list">
@@ -418,7 +681,7 @@
         <li><b>Signing primitive</b><span>User signs arbitrary data and a Night transfer. Signatures verify cross-implementation (TypeScript signer ↔ Rust verifier).</span></li>
         <li><b>Function-call key grants</b><span>User issues, rotates, and revokes scoped function-call keys for dApp authorisation. Multi-device peer behaviour is deferred.</span></li>
         <li><b>Sign-in with Passport</b><span>A pseudo third-party app requests scoped access; user approves with biometric; transaction signed; function-call key issued.</span></li>
-        <li><b>Recovery walkthrough</b><span>User &quot;loses&quot; their passkey. Recovery via the auth provider's flow — alt-passkey on a fallback device or backup credential. On-chain account state unchanged; passkey-to-account binding re-established.</span></li>
+        <li><b>Recovery walkthrough</b><span>User &quot;loses&quot; their passkey. Recovery via the auth provider&rsquo;s flow: alt-passkey on a fallback device or backup credential. On-chain account state unchanged; passkey-to-account binding re-established.</span></li>
       </ul>
     </div>
   </section>
@@ -428,7 +691,7 @@
       <header class="section-head">
         <div class="section-kind">Phasing</div>
         <h2>Six phases, May to October</h2>
-        <p>Each phase ends with a demoable artefact — the smallest thing that proves that month's work landed. Component IDs link back to the canvas on the index page.</p>
+        <p>Each phase ends with a demoable artefact: the smallest thing that proves that month&rsquo;s work landed. The early phases are behind us; the remaining ones consume the published standards and the reference implementation as they firm up. Component IDs link back to the canvas on the index page.</p>
       </header>
 
       <div class="phases" id="phases"></div>
@@ -440,7 +703,7 @@
       <header class="section-head">
         <div class="section-kind">Picks</div>
         <h2>Component picks for the demo build</h2>
-        <p>Each component has alternatives in its canvas; the table below records which alternative the demo build runs. Click any component ID to open its full design space on the index page.</p>
+        <p>Each component has alternatives in its canvas; this table records which alternative the demo build runs. Click any ID to open its full design space.</p>
       </header>
 
       <div class="picks-table-wrap">
@@ -456,18 +719,6 @@
           <tbody id="picksBody"></tbody>
         </table>
       </div>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="container">
-      <header class="section-head">
-        <div class="section-kind">Symbiosis</div>
-        <h2>Shared with the v1.0 deliverables</h2>
-        <p>Where the MVP and the v1.0 deliverable converge. Same primitives, same evidence, same direction.</p>
-      </header>
-
-      <div class="crossovers-grid" id="crossovers"></div>
     </div>
   </section>
 
@@ -493,8 +744,6 @@
   if (!data) { console.error('PASSPORT_DATA not loaded'); return; }
 
   const componentById = Object.fromEntries(data.components.map(c => [c.id, c]));
-  const mipById = Object.fromEntries((data.mips || []).map(m => [m.id, m]));
-  const expById = Object.fromEntries((data.experiments || []).map(e => [e.id, e]));
 
   function escapeHtml(str) {
     if (str == null) return '';
@@ -543,32 +792,6 @@
           <td class="picks-alt">${escapeHtml(s.alt || '—')}</td>
           <td class="picks-note">${escapeHtml(s.note || '')}</td>
         </tr>
-      `;
-    }).join('');
-  }
-
-  // Crossovers
-  const cxHost = document.getElementById('crossovers');
-  if (cxHost) {
-    cxHost.innerHTML = (data.crossovers || []).map(cx => {
-      const items = (cx.items || []).map(id => {
-        if (cx.kind === 'components' && componentById[id]) {
-          return `<a class="cx-chip" href="index.html#${id}" data-component="${id}" title="${escapeHtml(componentById[id].name)}">${id}</a>`;
-        }
-        if (cx.kind === 'mips' && mipById[id]) {
-          return `<a class="cx-chip" href="standards.html#${id}" title="${escapeHtml(mipById[id].title)}">${id}</a>`;
-        }
-        if (cx.kind === 'experiments' && expById[id]) {
-          return `<span class="cx-chip" title="${escapeHtml(expById[id].name)}">${id}</span>`;
-        }
-        return `<span class="cx-chip">${escapeHtml(id)}</span>`;
-      }).join('');
-      return `
-        <div class="crossover-card">
-          <div class="crossover-title">${escapeHtml(cx.title)}</div>
-          <div class="crossover-summary">${escapeHtml(cx.summary)}</div>
-          ${items ? `<div class="crossover-items">${items}</div>` : ''}
-        </div>
       `;
     }).join('');
   }

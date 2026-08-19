@@ -25,7 +25,7 @@ third-party provider offering proof generation as a service. Under the
 account-authorisation MIP the trust cost of that path is bounded — the
 delegate receives a one-call signature and the circuit's witnesses,
 never a device key, so the worst it can do is execute or withhold the
-approved call (MIP-3B R5/S6; the trust framing is MPS-0004's subject).
+approved call (MIP-0013 R5/S6; the trust framing is MPS-0004's subject).
 The hosted path sees spend witnesses (e.g. coin descriptions), so it is
 bounded, not blind; the promoted path remains on-device.
 
@@ -37,7 +37,7 @@ ceiling. Assets cached once per origin: ≈50 MB for the Night-only path,
 
 ## Dependencies
 
-- **C7** — witnesses pass through to proof generation; with MIP-3B the
+- **C7** — witnesses pass through to proof generation; with MIP-0013 the
   device credential never enters (the signature does).
 - **C5** — the signature is a proving input, produced off-stack.
 - **C16** — wallet storage holds private state used as witness.
@@ -107,6 +107,12 @@ and large circuits; a native sidecar returns only if mobile
 measurements demand it.
 
 **D — Hosted third-party provider (Midnight Foundation ecosystem).**
-Fallback, not promoted: bounded trust under MIP-3B (signature-not-key
+Fallback, not promoted: bounded trust under MIP-0013 (signature-not-key
 witness), but the provider sees spend witnesses; subject to the
 substitutability requirement (I-8.2) and MPS-0004's trust analysis.
+MPS-0004 has since been amended with use cases for proof-server
+economics, discovery and trust (registry, attestation reputation,
+permissionless operator entry), and a TEE-unavailable degraded mode
+that names client-side proving as a legitimate fallback — the
+delegated-proving problem statement now explicitly accommodates the
+promoted on-device path.

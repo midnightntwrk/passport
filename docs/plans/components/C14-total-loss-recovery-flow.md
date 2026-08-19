@@ -96,7 +96,7 @@ UX confirms requests out of band.
 recovered secret must flow into the recover circuit's witness, never
 onto a screen. *Detection:* code review of the recovery flow.
 
-**Recovered identity doesn't match original.** Different name or
+**Recovered identity does not match original.** Different name or
 account anchor than registered. *Detection:* the end-to-end recovery
 test fails to restore visible balances and credentials.
 
@@ -123,5 +123,5 @@ account). Rejected: weaker security, introduces an identity operator.
 
 **E — BUSS / ANARKey stateless guardians + paper keys.** **Chosen
 2026/07** — assessed (PR #90), implemented in the account-custody
-prototype behind the MIP-3B recovery seam, and next to be specified as
+prototype behind the MIP-0013 recovery seam, and next to be specified as
 the recovery-paths MIP.

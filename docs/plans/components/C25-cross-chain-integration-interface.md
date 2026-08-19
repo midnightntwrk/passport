@@ -56,7 +56,7 @@ PRD.
 
 **Compliance binding across chains.** A selective-disclosure proof
 constructed on the Midnight side must remain bound to the trade intent
-all the way through cross-chain settlement. What's the cryptographic
+all the way through cross-chain settlement. What is the cryptographic
 binding mechanism — shared `binding_commitment`, separate proof in the
 Intent Escrow Contract, or per-chain re-attestation?
 
@@ -84,7 +84,7 @@ deterministically, or does the user pre-register per-chain receive
 addresses?
 
 **Intent Escrow trust assumptions.** The escrow contract holds user funds
-during the cross-chain leg. What's the trust model — fully on-chain
+during the cross-chain leg. What is the trust model — fully on-chain
 custody, MPC-controlled, time-locked? Affects what users sign and what
 they expose.
 
@@ -94,7 +94,7 @@ extend across the boundary?
 
 ## Failure modes
 
-**Upstream PRD never stabilises.** Passport-side construction code can't
+**Upstream PRD never stabilises.** Passport-side construction code cannot
 be written against a moving target. *Detection:* PRD release notes
 indicate ongoing breaking changes; Passport's C22 surface forced into
 adapter patterns.
@@ -116,7 +116,7 @@ its binding when handed to the upstream solver. *Detection:* the same
 proof can be replayed against unrelated cross-chain trades.
 
 **Settlement notification unreliable.** Wallet UX shows stale state
-because Passport doesn't reliably learn settlement outcomes. *Detection:*
+because Passport does not reliably learn settlement outcomes. *Detection:*
 user-visible settlement status disagrees with on-chain ground truth.
 
 **MCS becomes a required operator.** Despite P8, the MCS signing

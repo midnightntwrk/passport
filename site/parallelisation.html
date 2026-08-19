@@ -342,9 +342,9 @@
   <a class="navbar-brand" href="index.html">Midnight Passport <span class="brand-tag">· ARC</span></a>
   <div class="navbar-links">
     <a href="index.html">Overview</a>
+    <a href="demo.html">How it works</a>
     <a href="parallelisation.html" class="active">Parallelisation</a>
     <a href="architecture.html">Architecture</a>
-    <a href="demo.html">Demo</a>
     <a href="standards.html">Standards</a>
     <a href="onboarding-mockup.html">Onboarding</a>
   </div>
@@ -382,7 +382,7 @@
       <header class="section-head">
         <div class="section-kind">Section 1</div>
         <h2>Streams &times; sequence</h2>
-        <p>Six streams plus discovery, laid out left-to-right by global dep-depth (longest chain to each component, computed from <code>data.js</code>). Streams are not synchronised — gaps are real, indicating where a stream is idle waiting on something elsewhere. The thick red ribbon traces the longest dependency chain (the critical path); whatever's on it sets the project's minimum duration. Two pivots are flagged: <strong>C1</strong> (the bidirectional core that everything identity-shaped flows through) and <strong>C8</strong> (the upstream gate every cryptographic spec waits on). Below the streams sits the <strong>Demo phases</strong> lane — Phase A through D, each spanning the dep-depth range of the components it consumes; click a phase bar to spotlight its components.</p>
+        <p>Six streams plus discovery, laid out left-to-right by global dep-depth (longest chain to each component, computed from <code>data.js</code>). Streams are not synchronised — gaps are real, indicating where a stream is idle waiting on something elsewhere. The thick red ribbon traces the longest dependency chain (the critical path); whatever sits on it sets the project's minimum duration. Two pivots are flagged: <strong>C1</strong> (the bidirectional core that everything identity-shaped flows through) and <strong>C8</strong> (the cross-cutting hash-discipline gate: the problem statement is merged upstream as MPS-0027, and the registry document every cryptographic spec cites is the pending deliverable). Below the streams sits the <strong>Demo phases</strong> lane — Phase A through D, each spanning the dep-depth range of the components it consumes; click a phase bar to spotlight its components.</p>
       </header>
 
       <div class="legend">

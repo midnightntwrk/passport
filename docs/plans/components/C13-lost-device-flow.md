@@ -13,9 +13,10 @@ revokes, via the `remove_device` ceremony the account-authorisation
 MIP specifies (1-of-n, guarded so the last active device cannot be
 removed), with the epoch mechanism as the stronger fallback — one bump
 invalidates every credential and grant registered under prior epochs,
-which is also exactly the machinery the AnarKey recovery flow (C14)
+which is also exactly the machinery the ANARKey recovery flow (C14)
 executes on total loss. The prototype implements the flow end to end;
-the contract surface is already drafted (MIP-3B), so what remains here
+the contract surface is published upstream (MIP-0013) and exercised by
+the reference implementation's lifecycle suite, so what remains here
 is client-flow polish, not decisions of substance.
 
 ## Dependencies

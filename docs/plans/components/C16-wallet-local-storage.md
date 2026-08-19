@@ -4,10 +4,14 @@
 
 ## Outcome
 
-Where the wallet persists private state on the user's device — wrapped
-seed (if a seed exists per C4), per-device key material, sync state,
-name ownership cache, recently-issued attestations, arbitrary metadata.
-Includes the encryption envelope.
+Where the wallet persists private state on the user's device —
+per-device key material (no seed exists: C4 and MIP-0013 fix
+per-device keys with no derivation tree), the **wallet-local coin
+store** that stateless custody makes load-bearing (coin descriptions
+exist only here and in the encrypted inbox backup on the contract),
+the account encryption secret, sync state, name ownership cache,
+recently-issued attestations, arbitrary metadata. Includes the
+encryption envelope.
 
 ## Dependencies
 
@@ -30,9 +34,14 @@ wallet state sync between them, or does each device maintain independent
 storage with a shared chain-state-derived view? The latter is simpler
 and aligns with P3 (peer-device).
 
-**Backup of wallet state.** What user-recoverable information lives in
-C16 that's *not* in chain state? If anything, total-loss recovery (C14)
-needs to address it; otherwise C16 is stateless w.r.t. recovery.
+**Backup of wallet state (largely answered by the custody design).**
+The coin store reconstructs from the encrypted on-contract inbox plus
+chain data, so it needs no backup of its own. The one item that must
+survive total loss is the account encryption secret (the viewing
+capability that decrypts the inbox); whether it travels inside the
+BUSS-recovered material or as a separate paper-key item is C14's open
+question. Device keys are deliberately unrecoverable (re-derived from
+passkeys or replaced through the device ceremonies).
 
 ## Failure modes
 

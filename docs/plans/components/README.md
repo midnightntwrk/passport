@@ -31,16 +31,16 @@ ecosystem; Passport integrates against that architecture via C25.
 
 | ID | Component | Description | Serves |
 |----|-----------|-------------|--------|
-| [**C1**](C1-account-custody-contract.md) | Account-custody contract | The on-chain object representing an account — holds device set, name binding, grants, and (per C4's resolved choice) the user's Midnight-native assets. Drafted as two MIP building blocks: contract custody and multi-key authorisation. | P1 · P3 · P4 · P5 · P8 |
-| [**C2**](C2-name-service.md) | Name service | Name ↔ account binding plus resolution — decided: adopt the deployed upstream name service (MIP-0007); account names are free, first-come-first-served sub-domains of the Foundation-held `passport.night`. | P2 · P8 · P10 |
+| [**C1**](C1-account-custody-contract.md) | Account-custody contract | The on-chain object representing an account — holds device set, name binding, grants, and (per C4's resolved choice) the user's Midnight-native assets. Specified by two upstream standards (MIP-0012 contract custody, MIP-0013 multi-key authorisation) and realised by the reference implementation at `contract/`. | P1 · P3 · P4 · P5 · P8 |
+| [**C2**](C2-name-service.md) | Name service | Name ↔ account binding plus resolution — decided: adopt the deployed upstream name service (MIP-0007, now carrying the delegated-owner authorisation arms Passport needs); account names are free, first-come-first-served sub-domains of the Foundation-held `passport.night`. | P2 · P8 · P10 |
 | [**C3**](C3-did-surface.md) | DID surface | Interop with W3C DID standards — whether `alice.midnight` is itself the DID, or DID is a separate layer over Passport identity. **Workstream.** | P2 (tentative) |
 
 ### Asset custody and cryptographic operations
 
 | ID | Component | Description | Serves |
 |----|-----------|-------------|--------|
-| [**C4**](C4-asset-custody-model.md) | Asset custody model | How user assets are held and authorised — resolved: stateless contract custody, normative in the custody MIP draft, and exclusive (assets at rest live only in the account contract; Dust is the ledger-forced fee-path exception). Upstream of all key / derivation decisions. **Workstream — resolved.** | P3 · P4 · P5 · P6 |
-| [**C5**](C5-signing-primitive.md) | Signing primitive | Schnorr-on-Jubjub per device, verified in-circuit — set in stone by the account-authorisation MIP draft. Per-device keys, no derivation tree. | P6 |
+| [**C4**](C4-asset-custody-model.md) | Asset custody model | How user assets are held and authorised — resolved: stateless contract custody, normative in the custody MIP (upstream MIP-0012), and exclusive (assets at rest live only in the account contract; Dust is the ledger-forced fee-path exception). Upstream of all key / derivation decisions. **Workstream — resolved.** | P3 · P4 · P5 · P6 |
+| [**C5**](C5-signing-primitive.md) | Signing primitive | Schnorr-on-Jubjub per device, verified in-circuit — set in stone by the account-authorisation MIP (upstream MIP-0013). Per-device keys, no derivation tree. | P6 |
 | [**C6**](C6-proof-generation.md) | Proof generation | Client-side ZK proving — decided: browser WASM is the promoted path, validated end-to-end in the account-custody prototype (proof server stopped, every proof in-tab). The Foundation's third-party provider is the bounded-trust hosted fallback. | P6 · P8 |
 | [**C7**](C7-witness-handling.md) | Witness handling | Passing key material into proof generation safely — the boundary where C5 / C6 interact with key non-exfiltration. | P6 |
 | [**C8**](C8-domain-separation-registry.md) | Domain-separation registry | Cross-cutting hash-prefix discipline — every `persistentHash` use site gets a domain prefix. Prerequisite to credentials, signing, and naming. | P6 · P9 |
@@ -101,7 +101,7 @@ ecosystem; Passport integrates against that architecture via C25.
 
 | ID | Component | Description | Serves |
 |----|-----------|-------------|--------|
-| [**C26**](C26-ai-agent-skills.md) | AI agent skills | Claude-style agent rules and skills targeted at end-users, developers, and project managers. Meta-deliverable, built and maintained on the fly from day 1 to accumulate project context as the work moves. | (meta) |
+| [**C26**](C26-ai-agent-skills.md) | AI agent skills | Agent rules and skills targeted at end-users, developers, and project managers. Meta-deliverable, built and maintained on the fly from day 1 to accumulate project context as the work moves. | (meta) |
 
 ## Promises → components map
 
@@ -122,11 +122,11 @@ Every promise has at least one component serving it.
 
 ## Workstreams
 
-Four components carry live decisions whose alternatives have not yet
-been selected; a fifth (C4) is resolved and retained here for the
-record. Each open workstream canvas frames the decision space — the
-question the canvas answers is "what are the alternatives and what
-would force a choice", not "what is the answer".
+Three components carry live decisions whose alternatives have not yet
+been selected; two more (C4 fully, C24's mechanism) are resolved and
+retained here for the record. Each open workstream canvas frames the
+decision space — the question the canvas answers is "what are the
+alternatives and what would force a choice", not "what is the answer".
 
 - [**C3 — DID surface.**](C3-did-surface.md) Whether `alice.midnight` is
   the DID, whether DID is a separate identifier layer, and what DID method
@@ -134,7 +134,7 @@ would force a choice", not "what is the answer".
 - [**C4 — Asset custody model.**](C4-asset-custody-model.md)
   **Resolved 2026/07.** Stateless contract custody: assets live in the
   account contract with no coin material in public ledger state,
-  validated end-to-end and now normative in the custody MIP draft. The
+  validated end-to-end and now normative in the custody MIP (upstream MIP-0012). The
   QSCI publicity trade-off dissolved — the leak was a property of the
   storage pattern, not the ledger.
 - [**C22 — Intent surface.**](C22-intent-surface.md) Reframed against the
@@ -142,10 +142,12 @@ would force a choice", not "what is the answer".
   question is no longer "do we have intents" but "what abstraction does
   Passport present over the ledger Intent and trade-intent layers".
 - [**C24 — Fee model.**](C24-fee-model.md) How fees are paid given DUST's
-  non-transferability and the absence of a contract-paymaster. Wallet-level
-  fee splitting via `tokenKindsToBalance` looks viable at the SDK level;
-  end-to-end devnet confirmation pending. The protocol primitive is the
-  Intent struct's `dust_actions` field.
+  non-transferability and the absence of a contract-paymaster.
+  **Mechanism resolved:** wallet-level fee splitting via
+  `tokenKindsToBalance` is confirmed end to end (F1 – F6 on node 1.0.0,
+  including a sponsored contract deployment by a zero-token user). The
+  protocol primitive is the Intent struct's `dust_actions` field; what
+  remains open is the sponsor service contract and operator model.
 - [**C25 — Cross-chain integration interface.**](C25-cross-chain-integration-interface.md)
   Placeholder for the integration boundary with the upstream cross-chain
   architecture. Owned upstream; Passport-side integration sequenced

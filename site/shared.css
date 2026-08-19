@@ -1,5 +1,5 @@
 /* Midnight Passport — shared brand tokens, base reset, and theme toggle.
-   Imported by site/index.html, site/demo.html, and site/standards.html. */
+   Imported by every page under site/. */
 
 :root {
   /* IOG brand palette — identical in every theme */
@@ -8,6 +8,7 @@
   --iog-acid-green: #06FF89;
   --iog-electric-blue: #16E9D8;
   --iog-volt-yellow: #F2FF58;
+  --iog-solar-amber: #FFBA36;
   --iog-ember-orange: #FF532C;
   --iog-cobalt-pulse: #2C4FFA;
   --iog-ultraviolet: #A700FF;

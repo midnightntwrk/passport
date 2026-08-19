@@ -28,9 +28,12 @@ legacy or prototype flows.
 
 ## Open questions
 
-**Local IPC vs in-process.** Per design doc, the proof server runs
-locally and witnesses cross IPC. Is in-process safer? Different platforms
-(browser vs native) have different answers.
+**Local IPC vs in-process (settled by consequence).** C6's decision —
+browser in-process WASM proving in a dedicated Web Worker as the
+promoted path, the local proof server retired to a self-host and
+development harness — answers this for the browser: witnesses stay
+in-process and never cross an IPC boundary. Alternative C below is the
+de facto shape; the remaining per-platform question is native apps.
 
 **Zeroisation discipline.** Design doc says "immediately after
 derivation". Does the runtime guarantee this, or is it client-side
@@ -60,3 +63,4 @@ identifiable patterns in memory.
 **B — In-process proof generation** (no IPC; tighter coupling).
 
 **C — Per-platform** (browser uses in-process WASM; native uses IPC).
+**Chosen by consequence of C6's browser-proving decision.**

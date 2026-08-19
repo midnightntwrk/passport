@@ -940,9 +940,9 @@
   <a class="navbar-brand" href="index.html">Midnight Passport <span class="brand-tag">· ARC</span></a>
   <div class="navbar-links">
     <a href="index.html">Overview</a>
+    <a href="demo.html">How it works</a>
     <a href="parallelisation.html">Parallelisation</a>
     <a href="architecture.html">Architecture</a>
-    <a href="demo.html">Demo</a>
     <a href="standards.html">Standards</a>
     <a href="onboarding-mockup.html" class="active">Onboarding</a>
   </div>
@@ -1081,7 +1081,7 @@
       name: 'Dynamic',
       url: 'https://www.dynamic.xyz/',
       role: 'MPC key custody, used when on-device cryptography is unavailable.',
-      caveat: 'MPC primitives for this purpose remain nascent; engagement starting (Passport MPC spec to be shared shortly). Not ready for the June demo, plausible later.',
+      caveat: 'MPC primitives for this purpose remain nascent; engagement in progress. A candidate for the October demo\'s managed path rather than the standards path.',
       caveatKind: 'warn'
     },
     bcw: {
@@ -1094,7 +1094,7 @@
     midnames: {
       name: 'Midnames',
       url: 'https://midnames.com/',
-      role: 'Name registration service for `*.midnight` handles.',
+      role: 'Name service behind the upstream registry (MIP-0007); Passport names are sub-domains of passport.night.',
       caveat: 'Not audited; correctness unverified. Centralised dependency (counter to P8 / I-2.2).',
       caveatKind: 'warn'
     }
@@ -1138,7 +1138,7 @@
       id: 'name',
       counter: 'Step 4 of 8',
       title: 'Name your account',
-      subtitle: 'Optional. C2 is off the critical path (decision 2026/05/13) — accounts work nameless; a name is a human-readable handle the user can claim now or later.',
+      subtitle: 'Optional in this mockup\'s flow: accounts work nameless during onboarding, and C2 sits off the critical path. The v1.0 promise (P2, I-2.4) goes further — if the user does not choose a name, the system generates and assigns one before the account becomes operational; this screen shows the claim-or-defer variant under review against that invariant.',
       components: ['C2'],
       promises: ['P2'],
       vendors: ['midnames', 'bcw'],
@@ -1259,7 +1259,7 @@
       <div style="height: 20px;"></div>
       <div class="screen-eyebrow">Step 2 · Your handle <span class="opt-tag">Optional</span></div>
       <div class="screen-heading">Claim a name?</div>
-      <p class="screen-copy smaller">Your account works straight away with no name. Names are human-readable handles you can claim now, later, or never — they don't gate any operation.</p>
+      <p class="screen-copy smaller">Your account works straight away with no name. Names are human-readable handles you can claim now, later, or never — they do not gate any operation.</p>
       <div class="name-suggest">
         <div style="font-size: 0.74rem; color: rgba(244,244,242,0.5); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;">Your account</div>
         <div class="name-value" style="font-size: 0.84rem; color: rgba(244,244,242,0.75);">mn1q…7a4f</div>
@@ -1279,11 +1279,11 @@
       <div style="height: 16px;"></div>
       <div class="screen-eyebrow">Step 3 · Recovery <span class="opt-tag">Encouraged</span></div>
       <div class="screen-heading smaller">If you lose every device, this is how you get back in.</div>
-      <p class="screen-copy smaller">Pick one now, or do it later from settings — your account always has a recovery path underneath, but it needs a credential before it can be used. Helpers only hold encrypted shares; we never see anything.</p>
+      <p class="screen-copy smaller">Pick one now, or do it later from settings — your account always has a recovery anchor underneath. Guardians store nothing at all: they derive their piece only when you ask for help, and no one but you can put the pieces together.</p>
       <ul class="opt-list">
-        <li class="opt"><span class="opt-icon g">G</span><div class="opt-text"><span class="opt-name">Sign in with Google</span><span class="opt-hint">OAuth-anchored, encrypted shares</span></div></li>
-        <li class="opt"><span class="opt-icon a">A</span><div class="opt-text"><span class="opt-name">Sign in with Apple</span><span class="opt-hint">OAuth-anchored, encrypted shares</span></div></li>
-        <li class="opt"><span class="opt-icon r">R</span><div class="opt-text"><span class="opt-name">Recovery contacts</span><span class="opt-hint">3 of 5 trusted helpers</span></div></li>
+        <li class="opt"><span class="opt-icon r">R</span><div class="opt-text"><span class="opt-name">Recovery guardians</span><span class="opt-hint">people you trust; stateless, quorum-based</span></div></li>
+        <li class="opt"><span class="opt-icon a">A</span><div class="opt-text"><span class="opt-name">Paper key</span><span class="opt-hint">printable backstop; no social graph needed</span></div></li>
+        <li class="opt"><span class="opt-icon g">G</span><div class="opt-text"><span class="opt-name">Both</span><span class="opt-hint">guardians plus a paper key in a drawer</span></div></li>
       </ul>
       <div class="screen-spacer"></div>
       <button class="btn-primary">Continue</button>
@@ -1358,10 +1358,10 @@
         <span class="nf-user-pill"><span class="av"></span> alice-pebble</span>
       </div>
       <div class="screen-eyebrow">Welcome back</div>
-      <div class="nf-headline">You're in. Let's get trading.</div>
+      <div class="nf-headline">Welcome back. Ready to trade.</div>
       <p class="screen-copy smaller">Your account is named, recovery is set, and NightFi has a scoped grant valid for 30 days.</p>
       <div class="nf-card">
-        <div class="row"><span class="label">Account</span><span class="value">alice-pebble.midnight</span></div>
+        <div class="row"><span class="label">Account</span><span class="value">alice-pebble.passport.night</span></div>
         <div class="row"><span class="label">Balance</span><span class="value">— tDUST</span></div>
         <div class="row"><span class="label">Grant expires</span><span class="value">in 30 days</span></div>
       </div>

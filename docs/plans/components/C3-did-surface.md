@@ -1,7 +1,7 @@
 # C3 · DID surface
 
 > **Workstream.** What Passport's canonical public DID profile is within
-> the Midnight DID family, how `alice.midnight` links to it, whether one
+> the Midnight DID family, how the account name links to it, whether one
 > account may maintain several DIDs for different profiles, and whether
 > DID-facing behaviour is embedded in Passport or delegated to Identity
 > Wallet.
@@ -15,7 +15,7 @@ standards. Specifically: what the canonical public Passport DID is, how
 that DID relates to the name service (C2), whether additional
 profile-specific DIDs exist per account, what the DID Document exposes
 (verification methods, services, aliases), how name ownership is proven
-when a DID Document links to `alice.midnight`, and whether DID-facing
+when a DID Document links to `alice.passport.night`, and whether DID-facing
 behaviour is embedded in Passport or delegated to Identity Wallet.
 
 **Cross-chain consideration.** With P10 (Chain abstraction) in scope, a
@@ -54,10 +54,11 @@ This canvas frames the decision space, not the answer.
 - **External — active `midnight-did` effort.** The current spec and a
   growing Compact reference implementation live in
   [`midnightntwrk/midnight-did`](https://github.com/midnightntwrk/midnight-did)
-  (plus additional shielded repositories). The effort is led by **Yurii
-  (IOG)** — multiple months of focused work on Midnight DID, with prior
-  IOG DID background. Closing this workstream **runs through engagement
-  with that effort** — integration, wrapping, or co-authorship — rather
+  (plus additional shielded repositories). The effort is led from
+  within IOG's Midnight DID work, with months of focused development
+  and prior decentralised-identity background behind it. Closing this
+  workstream **runs through engagement with that effort** —
+  integration, wrapping, or co-authorship — rather
   than starting from scratch. Several Compact / Midnight ledger caveats
   have already been hit and worked around inside `midnight-did`; that
   hard-won knowledge is upstream of every component touching identity,
@@ -95,7 +96,8 @@ the W3C-published reference? (2) If yes, do we adopt the current
 DIDs for different profiles or user preferences? If yes, which one is
 the default public DID, and how are profile-specific DIDs selected?
 
-**Name linkage and proof.** Can `alice.midnight` be exposed as a stable
+**Name linkage and proof.** Can the account name (`alice.passport.night`
+per C2's decided shape) be exposed as a stable
 URI or URL and linked from the DID Document via `alsoKnownAs`? If yes,
 what proves that the DID subject actually controls that name, rather
 than merely asserting a link?
@@ -135,14 +137,14 @@ registered DID resolves to stale state; the name registry and the DID
 resolver disagree on identity.
 
 **Alias assertion mistaken for proof.** A relying party treats
-`alsoKnownAs` as proof that the DID subject owns `alice.midnight`, even
+`alsoKnownAs` as proof that the DID subject owns `alice.passport.night`, even
 though it is only an assertion. *Detection:* DID Document contains a
 name URL but the system cannot explain why that link is authoritative.
 
 **Multi-DID profile confusion.** One account controls several DIDs, but
 verifiers or user flows select the wrong one for the intended purpose.
 *Detection:* profile-specific integrations fail because the presented DID
-doesn't match the expected trust or privacy profile.
+does not match the expected trust or privacy profile.
 
 **DID-Document privacy leak.** Per-account DID Documents reveal too much
 device topology — every exposed device key becomes globally readable.
@@ -163,9 +165,10 @@ but not at the DID level.
 
 ## Alternatives
 
-**A — No DID layer.** Passport uses `alice.midnight` (C2) as the sole
-identifier. VCs use the name directly via a custom Passport-defined VC
-schema. Compatible with v1.0 today; punts W3C DID interop entirely.
+**A — No DID layer.** Passport uses the account name (C2,
+`alice.passport.night`) as the sole identifier. VCs use the name
+directly via a custom Passport-defined VC schema. Compatible with v1.0
+today; punts W3C DID interop entirely.
 
 **B — Companion `did:midnight`, embedded in Passport.** Passport adopts
 a companion public `did:midnight` identifier distinct from the name.
@@ -189,7 +192,7 @@ account has a canonical public `did:midnight` plus additional
 profile-specific DIDs, while Identity Wallet owns DID and VC lifecycle
 behaviour and Passport coordinates with it.
 
-**F — Defer.** Don't decide for v1.0. Track DID as a Milestone-2 concern;
+**F — Defer.** Do not decide for v1.0. Track DID as a Milestone-2 concern;
 ship v1.0 with no DID surface and revisit when credential interop
 demands it. Cost: external VC integrations during v1.0 must use the
 name directly, which they may not support.
