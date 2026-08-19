@@ -1,0 +1,24 @@
+[package]
+name = "account-custody-signer"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Independent Rust signer for the MIP-0013 account authorisation scheme (conformance test 7). No Midnight TypeScript, WASM, or npm dependency."
+
+[dependencies]
+# Midnight ledger crates — used ONLY for the field-aligned binary encoding
+# (fab) and the persistent hash, i.e. the fixed public definition of the
+# challenge function.
+midnight-base-crypto = "1.0.0"
+midnight-transient-crypto = "2.1.0"
+
+# Curve arithmetic (JubJub over BLS12-381, the ledger's own curve crate).
+midnight-curves = "0.2.0"
+ff = "0.13"
+group = "0.13"
+
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+anyhow = "1"

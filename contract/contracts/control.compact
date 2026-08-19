@@ -1,0 +1,71 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Leak-audit CONTROL contract — NOT part of the standard.
+//
+// Carries the public-map custody pattern (Map<color, QSCI> via insertCoin)
+// that MIP-0012 rules out (INV-2), verbatim in shape. Conformance test 5
+// (observer leak audit) runs identical deposit / partial-spend / change
+// lifecycles through this contract and through the account contract, then
+// byte-scans raw transactions and contract state: coin material MUST be
+// found here (validating the scanner — the positive control) and MUST NOT
+// be found on the conforming path.
+// ---------------------------------------------------------------------------
+
+export ledger round: Uint<64>;
+
+export ledger public_coins: Map<Bytes<32>, QualifiedShieldedCoinInfo>;
+// The publicity leak under audit: nonce, color, and value in the clear.
+
+constructor() {
+  round = 0 as Uint<64>;
+}
+
+circuit bump(): [] {
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}
+
+export circuit deposit_public(coin: ShieldedCoinInfo): [] {
+  receiveShielded(disclose(coin));
+  const c = disclose(coin.color);
+  if (public_coins.member(c)) {
+    const merged = mergeCoinImmediate(public_coins.lookup(c), disclose(coin));
+    public_coins.insertCoin(
+      c,
+      disclose(merged),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    );
+  } else {
+    public_coins.insertCoin(
+      c,
+      disclose(coin),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    );
+  }
+  bump();
+}
+
+export circuit spend_public(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): [] {
+  const coin = public_coins.lookup(disclose(color));
+  const result = sendShielded(
+    disclose(coin),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  if (disclose(result.change.is_some)) {
+    public_coins.insertCoin(
+      disclose(color),
+      disclose(result.change.value),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    );
+  } else {
+    public_coins.remove(disclose(color));
+  }
+  bump();
+}

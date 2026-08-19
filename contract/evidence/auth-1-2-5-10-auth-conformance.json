@@ -1,0 +1,33 @@
+{
+  "testId": "AUTH-1-2-5-10",
+  "name": "auth-conformance",
+  "description": "MIP-0013 happy path, rejection matrix, deposit independence, bootstrap",
+  "verdict": "PASS",
+  "note": "Gated call executes with a valid device signature; every single-fault variant aborts with no state change; a permissionless deposit between signing and submission does not invalidate the pending authorisation; double activation and commitment-mismatched activation abort, and the committed (pk, salt) installs the initial entry.",
+  "details": {
+    "account": "868413708393d60bef527dd3f9376c7842e04f3a66296e2b4504e1d71e9dace5",
+    "happyPathTx": "006a9f065176f075de59a945be7b7df1d286e1c82ff9e7d1186a10430f65c860ab",
+    "rejectionMatrix": {
+      "wrongSigS": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
+      "foreignSigR": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 362 char 13: byte vector [55,39,185,216,16,18,143,4,57,230,158,21,16,98,11,142,202,127,234,70,208,141,151,154,232,143,151,168,245,58,72,162] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
+      "unregisteredPk": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown device entry",
+      "wrongUseCounter": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown device entry",
+      "tamperedArg": "Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing circuit 'withdraw_unshielded'",
+      "staleNonce": "Unexpected error executing scoped transaction '<unnamed>': Error: range error at account.compact line 362 char 13: byte vector [193,30,117,238,45,142,112,108,102,188,160,210,76,1,14,61,129,222,50,183,149,65,162,255,246,103,238,171,250,85,105,237] exceeds maximum value 52435875175126190479447740508185965837690552500527637822603658699938581184512 of Field type",
+      "reusedSignature": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: unknown device entry"
+    },
+    "staleEpochFault": "N/A — no epoch-bump surface until the recovery-paths MIP instantiates MIP-0013 §8",
+    "depositIndependenceTx": "0027bf623e1109e91340b20a197af6ab1da50ee2f6e43d97588ff114a6fdbb2f9e",
+    "bootstrap": {
+      "secondActivation": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: already activated",
+      "wrongSalt": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: boot commitment mismatch",
+      "wrongKey": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: boot commitment mismatch"
+    }
+  },
+  "ranAt": "2026-07-17T15:50:38.061Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}
