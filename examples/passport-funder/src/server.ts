@@ -1,18 +1,39 @@
 /**
- * passport-funder — a small self-hosted activation service.
+ * passport-funder — a small self-hosted service that pays for onboarding.
  *
- * Drips an activation-sized NIGHT grant (default 1 000 atomic = 0.001 NIGHT,
- * roughly one hundred long-name Midnames registrations) to brand-new Passport
- * wallets, so a user's first `.night` claim executes immediately instead of
+ * It does two things, both of them so a brand-new Passport does not have to
+ * hold NIGHT before it can be useful:
+ *
+ *   POST /activate        { address }  →  { txHash, amount }
+ *   POST /register-alias  { alias, ownerKey, contractAddress }
+ *                                      →  { alias, resolverAddress,
+ *                                           resolverDeployTx, registerTx,
+ *                                           target }
+ *   GET  /status                       →  { network, address, balanceAtomic,
+ *                                           dripsServed, aliasesSponsored,
+ *                                           ready }
+ *
+ * `/activate` drips an activation-sized NIGHT grant (default 1 000 atomic =
+ * 0.001 NIGHT) so a user's own `.night` claim executes immediately instead of
  * queueing behind a captcha faucet.
  *
- *   POST /activate  { address }  →  { txHash, amount }
- *   GET  /status                 →  { network, address, balanceAtomic,
- *                                     dripsServed, ready }
+ * `/register-alias` goes further and removes the payment entirely: the funder
+ * registers the name FOR the user, paying the registry price from its own NIGHT
+ * and the fees from its own DUST. The user's wallet signs nothing and holds
+ * nothing; the registry records the user's own key as the owner. See
+ * `./midnames.ts` for how the deployed TLD makes that possible.
  *
- * Policy, in the order it is enforced: well-formed unshielded address on THIS
- * network → once-only per address (persisted ledger) → global hourly rate
- * limit → funder able to pay → recipient not already holding a drip's worth.
+ * Activation policy, in the order it is enforced: well-formed unshielded
+ * address on THIS network → once-only per address (persisted ledger) → global
+ * hourly rate limit → funder able to pay → recipient not already holding a
+ * drip's worth.
+ *
+ * Alias policy, in the order it is enforced: well-formed and unreserved label,
+ * owner key, and contract address on THIS network → no other registration for
+ * the same alias or the same contract in flight → the name is free on the
+ * registry → the contract really exists on chain → once-only per contract
+ * address (persisted ledger) → global hourly rate limit → funder able to pay.
+ *
  * Every refusal is a clear JSON error.
  */
 
@@ -26,7 +47,22 @@ import {
 } from '@midnight-ntwrk/wallet-sdk-address-format';
 
 import { applyEnvFile, loadConfig, type FunderConfig } from './config.js';
-import { DripLedger, HourlyRateLimiter } from './dripLedger.js';
+import {
+  HourlyRateLimiter,
+  JsonLedger,
+  type AliasEntry,
+  type DripEntry,
+} from './dripLedger.js';
+import {
+  AliasSponsorError,
+  aliasCostAtomicNight,
+  aliasDomain,
+  createMidnamesSponsor,
+  normalisePassportAlias,
+  ownerKeyBytes,
+  rawContractAddress,
+  type MidnamesSponsor,
+} from './midnames.js';
 import { recipientNightBalance } from './recipientBalance.js';
 import { formatNight, openFunderWallet, type FunderWallet } from './wallet.js';
 
@@ -55,10 +91,20 @@ async function main(): Promise<void> {
   console.log(`state     ${config.stateDir}`);
   console.log(`drip      ${config.dripAtomic} atomic NIGHT (${formatNight(config.dripAtomic)} NIGHT)`);
   console.log(`limit     ${config.maxPerHour} drips per rolling hour`);
+  console.log(
+    `alias     ${config.midnamesTldAddress ? `.night TLD ${config.midnamesTldAddress}` : 'no .night registry on this network — /register-alias disabled'}`,
+  );
+  console.log(`alias cap ${config.aliasMaxPerHour} sponsored registrations per rolling hour`);
   console.log(`origins   ${config.allowedOrigins.join(', ')}\n`);
 
-  const ledgerFile = await DripLedger.open(config.stateDir, config.networkId);
+  const ledgerFile = await JsonLedger.open<DripEntry>(config.stateDir, config.networkId, 'drips');
+  const aliasLedger = await JsonLedger.open<AliasEntry>(
+    config.stateDir,
+    config.networkId,
+    'aliases',
+  );
   const limiter = new HourlyRateLimiter(config.maxPerHour);
+  const aliasLimiter = new HourlyRateLimiter(config.aliasMaxPerHour);
   /**
    * Addresses with an activation in progress right now.
    *
@@ -75,6 +121,19 @@ async function main(): Promise<void> {
    * what survives a restart.
    */
   const inFlight = new Set<string>();
+  /**
+   * Alias registrations in progress, keyed BOTH ways: `alias:<label>` and
+   * `contract:<address>`.
+   *
+   * Two keys because two different requests can collide. Two people racing for
+   * the same name would both read it as free on the registry and both pay for a
+   * resolver, and only one of those registrations can land — so the second is
+   * refused, not queued. One person double-clicking would pass the once-only
+   * ledger twice for the same contract, because that ledger is written only
+   * after the second transaction confirms. Both keys are claimed together,
+   * before any ledger read, and released in a `finally`.
+   */
+  const aliasInFlight = new Set<string>();
   const nightTokenType = String(nativeToken().raw);
 
   process.stdout.write('opening the funder wallet');
@@ -109,7 +168,29 @@ async function main(): Promise<void> {
   }
   console.log(`[dust] spendable now: ${await wallet.dustBalance()} Specks\n`);
 
+  /**
+   * The alias sponsor, built once at start-up so a missing or unreadable
+   * Midnames build is a start-up log line rather than a user's first failure.
+   * `null` means `/register-alias` is off — either this network has no shared
+   * registry, or the artefacts could not be loaded, and the refusal says which.
+   */
+  let sponsor: MidnamesSponsor | null = null;
+  let sponsorUnavailableReason =
+    `The ${config.networkId} network has no known .night registry. Set FUNDER_MIDNAMES_TLD_ADDRESS to sponsor names against a locally deployed one.`;
+  if (config.midnamesTldAddress) {
+    try {
+      sponsor = await createMidnamesSponsor(config, wallet);
+      console.log(`[alias] sponsoring .night registrations against ${sponsor.tldAddress}`);
+    } catch (cause) {
+      sponsorUnavailableReason = cause instanceof Error ? cause.message : String(cause);
+      console.warn(`[alias] sponsorship is DISABLED: ${sponsorUnavailableReason}`);
+    }
+  } else {
+    console.warn(`[alias] sponsorship is DISABLED: ${sponsorUnavailableReason}`);
+  }
+
   let dripsServed = 0;
+  let aliasesSponsored = 0;
 
   /**
    * A spend consumes its whole UTxO and the change comes back in a new one, so
@@ -125,29 +206,36 @@ async function main(): Promise<void> {
   const CHANGE_SETTLE_MS = 90_000;
   const SETTLE_POLL_MS = 3_000;
 
-  /** When the last drip was sent, so `/status` can say "settling", not "empty". */
-  let lastDripAt = 0;
+  /**
+   * When the funder last spent — a drip or a sponsored registration — so
+   * `/status` can say "settling" rather than "empty" while the change is still
+   * in flight.
+   */
+  let lastSpendAt = 0;
 
   const readiness = async (
-    options: { settle?: boolean } = {},
+    options: { settle?: boolean; requireNight?: bigint } = {},
   ): Promise<{ ready: boolean; night: bigint; refuse: Refusal | null }> => {
+    /* What "ready" means depends on what is being asked for: a drip needs a
+       drip's worth, an alias needs the registry price. Both need DUST. */
+    const required = options.requireNight ?? config.dripAtomic;
     const deadline = Date.now() + (options.settle ? CHANGE_SETTLE_MS : 0);
     for (;;) {
       const state = await wallet.currentState();
       const heldNight = await wallet.nightBalance(state);
       const heldDust = await wallet.dustBalance(state);
-      if (heldNight >= config.dripAtomic && heldDust > 0n) {
+      if (heldNight >= required && heldDust > 0n) {
         return { ready: true, night: heldNight, refuse: null };
       }
       if (Date.now() >= deadline) {
-        if (heldNight < config.dripAtomic) {
+        if (heldNight < required) {
           return {
             ready: false,
             night: heldNight,
             refuse: refusal(
               503,
               'funder-empty',
-              `The funder holds ${formatNight(heldNight)} NIGHT, less than one ${formatNight(config.dripAtomic)} NIGHT drip. Its address (${wallet.address}) needs topping up from the ${config.networkId} faucet.`,
+              `The funder holds ${formatNight(heldNight)} NIGHT, less than the ${formatNight(required)} NIGHT this needs. Its address (${wallet.address}) needs topping up from the ${config.networkId} faucet.`,
             ),
           };
         }
@@ -261,7 +349,7 @@ async function main(): Promise<void> {
       try {
         const result = await wallet.drip(recipient, config.dripAtomic);
         dripsServed += 1;
-        lastDripAt = Date.now();
+        lastSpendAt = Date.now();
         await ledgerFile.record(normalized, {
           txHash: result.txHash,
           amountAtomic: result.amountAtomic.toString(),
@@ -278,6 +366,248 @@ async function main(): Promise<void> {
       /* Released on every path — recorded, refused, or thrown — so a failure
          can never leave an address permanently unactivatable. */
       inFlight.delete(normalized);
+    }
+  };
+
+  interface AliasRequestBody {
+    alias?: unknown;
+    ownerKey?: unknown;
+    contractAddress?: unknown;
+    /** Optional; when absent the leaf carries 32 zero bytes. See `./midnames.ts`. */
+    ownerAddress?: unknown;
+    /** Optional; when present it must name THIS funder's network. */
+    network?: unknown;
+  }
+
+  /**
+   * Sponsors one `.night` registration.
+   *
+   * Nothing is spent until every gate below has passed, and nothing is reported
+   * as registered until the registry has been read back and seen resolving the
+   * name to the requested contract.
+   */
+  const registerAlias = async (
+    body: AliasRequestBody,
+  ): Promise<{ status: number; body: Record<string, unknown> }> => {
+    const fail = (why: Refusal) => ({
+      status: why.status,
+      body: { error: why.error, message: why.message, ...(why.extra ?? {}) },
+    });
+
+    /* Captured, not re-read: `sponsor` is a `let`, and TypeScript's narrowing
+       does not survive into the closures below. */
+    const midnames = sponsor;
+    if (!midnames) {
+      return fail(refusal(503, 'alias-unsupported', sponsorUnavailableReason));
+    }
+
+    /* 1. Shape. Every field is validated before anything touches the chain, and
+          the alias rules are the demo's own — same regex, same reserved list —
+          so a name the browser would refuse is refused here too. */
+    if (typeof body.alias !== 'string' || !body.alias.trim()) {
+      return fail(
+        refusal(400, 'invalid-alias', 'POST a JSON body of the form {"alias": "…", "ownerKey": "64 hex", "contractAddress": "64 hex"}.'),
+      );
+    }
+    let label: string;
+    try {
+      label = normalisePassportAlias(body.alias);
+    } catch (cause) {
+      return fail(
+        refusal(400, 'invalid-alias', cause instanceof Error ? cause.message : String(cause)),
+      );
+    }
+
+    if (typeof body.ownerKey !== 'string') {
+      return fail(refusal(400, 'invalid-owner-key', 'ownerKey must be a 64-hex Midnames owner key.'));
+    }
+    let ownerKey: Uint8Array;
+    try {
+      ownerKey = ownerKeyBytes(body.ownerKey);
+    } catch (cause) {
+      return fail(
+        refusal(400, 'invalid-owner-key', cause instanceof Error ? cause.message : String(cause)),
+      );
+    }
+
+    if (typeof body.contractAddress !== 'string') {
+      return fail(
+        refusal(400, 'invalid-contract-address', 'contractAddress must be a 64-hex Midnight contract address.'),
+      );
+    }
+    let contractAddress: string;
+    try {
+      contractAddress = rawContractAddress(body.contractAddress);
+    } catch (cause) {
+      return fail(
+        refusal(400, 'invalid-contract-address', cause instanceof Error ? cause.message : String(cause)),
+      );
+    }
+
+    if (body.network !== undefined && body.network !== config.networkId) {
+      return fail(
+        refusal(400, 'wrong-network', `That request names the ${String(body.network)} network; this funder sponsors on ${config.networkId}.`),
+      );
+    }
+
+    /* The leaf's owner ADDRESS half is optional and is not the registry's
+       authority — see `AliasRegistrationRequest.ownerAddressBytes`. When one is
+       given it must be a real unshielded address on this network, because
+       silently discarding a malformed one would leave the user believing a
+       payment address was set. */
+    let ownerAddressBytes: Uint8Array | undefined;
+    if (body.ownerAddress !== undefined) {
+      if (typeof body.ownerAddress !== 'string' || !body.ownerAddress.trim()) {
+        return fail(refusal(400, 'invalid-owner-address', 'ownerAddress, when given, must be an mn_addr… unshielded address.'));
+      }
+      try {
+        const parsed = MidnightBech32m.parse(body.ownerAddress.trim());
+        if (parsedNetworkName(parsed.network) !== config.networkId) {
+          return fail(
+            refusal(400, 'wrong-network', `That owner address belongs to the ${parsedNetworkName(parsed.network)} network; this funder sponsors on ${config.networkId}.`),
+          );
+        }
+        ownerAddressBytes = new Uint8Array(parsed.decode(UnshieldedAddress, config.networkId).data);
+      } catch (cause) {
+        return fail(
+          refusal(400, 'invalid-owner-address', `That is not an unshielded Midnight address: ${cause instanceof Error ? cause.message : String(cause)}`),
+        );
+      }
+    }
+
+    /* 2. In flight. Claimed BEFORE any ledger or registry read, for the reason
+          `/activate` documents on its own set: those reads cannot see a
+          registration that is still in the air. */
+    const aliasKey = `alias:${label}`;
+    const contractKey = `contract:${contractAddress}`;
+    if (aliasInFlight.has(aliasKey) || aliasInFlight.has(contractKey)) {
+      return fail(
+        refusal(409, 'registration-in-flight', `A sponsored registration for ${aliasInFlight.has(aliasKey) ? aliasDomain(label) : 'this Passport'} is already in progress. Wait for it to finish before asking again.`),
+      );
+    }
+    aliasInFlight.add(aliasKey);
+    aliasInFlight.add(contractKey);
+    try {
+      /* 3. Availability. A real read of the deployed registry, never a cache
+            and never an optimistic assumption: a registry we cannot read is
+            reported as unreachable, not as free. */
+      try {
+        if (!(await midnames.isAvailable(label))) {
+          return fail(
+            refusal(409, 'name-taken', `${aliasDomain(label)} is already registered on ${config.networkId}.`),
+          );
+        }
+      } catch (cause) {
+        return fail(
+          refusal(503, 'registry-unreachable', cause instanceof Error ? cause.message : String(cause)),
+        );
+      }
+
+      /* 4. The target must exist. This is both a correctness gate — a name
+            bound to nothing is worse than no name — and the anti-spam gate:
+            deploying an account-custody contract costs a real transaction, so
+            an abuser cannot mint free targets faster than the chain allows. */
+      let targetExists: boolean;
+      try {
+        targetExists = await midnames.contractExists(contractAddress);
+      } catch (cause) {
+        return fail(
+          refusal(503, 'registry-unreachable', `The contract at ${contractAddress} could not be checked: ${cause instanceof Error ? cause.message : String(cause)}`),
+        );
+      }
+      if (!targetExists) {
+        return fail(
+          refusal(400, 'target-missing', `No contract state is served at ${contractAddress}, so there is nothing for ${aliasDomain(label)} to resolve to. Deploy the account-custody contract first.`),
+        );
+      }
+
+      /* 5. Once per Passport, ever. Keyed on the contract address because that
+            is what a Passport has exactly one of. */
+      const previous = aliasLedger.get(contractAddress);
+      if (previous) {
+        return fail(
+          refusal(409, 'already-sponsored', `This Passport already had ${aliasDomain(previous.alias)} sponsored on ${previous.at} (tx ${previous.registerTx}). One sponsored name per Passport.`, {
+            alias: previous.alias,
+            registerTx: previous.registerTx,
+          }),
+        );
+      }
+
+      /* 6. The hourly ceiling, looked at without consuming a slot. */
+      if (aliasLimiter.atCeiling()) {
+        return fail(
+          refusal(429, 'rate-limited', `The funder has reached its ceiling of ${config.aliasMaxPerHour} sponsored registrations per hour. Try again later.`),
+        );
+      }
+
+      /* 7. Can the funder actually pay? The registry price plus a fee, waiting
+            out any change still in flight rather than turning the user away
+            during a settle window. */
+      const cost = aliasCostAtomicNight(label);
+      const ready = await readiness({ settle: true, requireNight: cost });
+      if (ready.refuse) return fail(ready.refuse);
+
+      /* The slot is consumed here and nowhere earlier: every refusal above
+         spent nothing, and an hourly ceiling exists to cap what the funder
+         SPENDS. */
+      if (!aliasLimiter.take()) {
+        return fail(
+          refusal(429, 'rate-limited', `The funder has reached its ceiling of ${config.aliasMaxPerHour} sponsored registrations per hour. Try again later.`),
+        );
+      }
+
+      try {
+        /* Both transactions run under the wallet's spend lock, so a drip cannot
+           reserve the coins this registration is balancing against. */
+        const result = await wallet.exclusive(() =>
+          midnames.register({ label, ownerKey, contractAddress, ownerAddressBytes }),
+        );
+        aliasesSponsored += 1;
+        lastSpendAt = Date.now();
+        await aliasLedger.record(contractAddress, {
+          alias: result.alias,
+          resolverAddress: result.resolverAddress,
+          resolverDeployTx: result.resolverDeployTx,
+          registerTx: result.registerTx,
+          costAtomic: result.costAtomic.toString(),
+          at: result.registeredAt,
+        });
+        console.log(
+          `[alias] ${result.domain} → ${contractAddress} (resolver ${result.resolverAddress}, deploy ${result.resolverDeployTx}, register ${result.registerTx})`,
+        );
+        return {
+          status: 200,
+          body: {
+            alias: result.alias,
+            domain: result.domain,
+            network: result.network,
+            tldAddress: result.tldAddress,
+            resolverAddress: result.resolverAddress,
+            resolverDeployTx: result.resolverDeployTx,
+            registerTx: result.registerTx,
+            target: result.target,
+            ownerKey: result.ownerKey,
+            costAtomic: result.costAtomic.toString(),
+            registeredAt: result.registeredAt,
+          },
+        };
+      } catch (cause) {
+        if (cause instanceof AliasSponsorError) {
+          console.error(`[alias] FAILED for ${aliasDomain(label)}: ${cause.code} — ${cause.message}${cause.detail ? ` (${cause.detail})` : ''}`);
+          /* `name-taken` can still surface here: the availability read above is
+             a snapshot, and someone else's registration can land in between. */
+          const status = cause.code === 'name-taken' ? 409 : cause.code === 'registry-unreachable' ? 503 : 502;
+          return fail(refusal(status, cause.code, cause.message, cause.detail ? { detail: cause.detail } : undefined));
+        }
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error(`[alias] FAILED for ${aliasDomain(label)}: ${message}`);
+        return fail(refusal(500, 'registration-failed', `The sponsored registration could not be completed: ${message}`));
+      }
+    } finally {
+      /* Released on every path, so a failure can never leave a name or a
+         Passport permanently unregisterable. */
+      aliasInFlight.delete(aliasKey);
+      aliasInFlight.delete(contractKey);
     }
   };
 
@@ -336,8 +666,14 @@ async function main(): Promise<void> {
           address: wallet.address,
           balanceAtomic: night.toString(),
           dripsServed,
+          /* Since this process started, matching `dripsServed`; the total is
+             the persisted once-only ledger, which survives restarts. Neither
+             is key material and neither names a user. */
+          aliasesSponsored,
+          aliasesSponsoredTotal: aliasLedger.count,
+          aliasSponsorship: sponsor ? 'available' : 'unavailable',
           ready,
-          settling: !ready && Date.now() - lastDripAt < CHANGE_SETTLE_MS,
+          settling: !ready && Date.now() - lastSpendAt < CHANGE_SETTLE_MS,
         });
         return;
       }
@@ -358,7 +694,24 @@ async function main(): Promise<void> {
         return;
       }
 
-      respond(request, response, 404, { error: 'not-found', message: 'Routes: GET /status, POST /activate.' });
+      if (request.method === 'POST' && path === '/register-alias') {
+        let body: AliasRequestBody;
+        try {
+          body = JSON.parse((await readBody(request)) || '{}') as AliasRequestBody;
+        } catch {
+          respond(request, response, 400, {
+            error: 'invalid-request',
+            message:
+              'The request body must be JSON of the form {"alias": "…", "ownerKey": "64 hex", "contractAddress": "64 hex"}.',
+          });
+          return;
+        }
+        const outcome = await registerAlias(body);
+        respond(request, response, outcome.status, outcome.body);
+        return;
+      }
+
+      respond(request, response, 404, { error: 'not-found', message: 'Routes: GET /status, POST /activate, POST /register-alias.' });
     })().catch((cause) => {
       console.error('[http] handler failed', cause);
       try {
@@ -370,7 +723,9 @@ async function main(): Promise<void> {
   });
 
   server.listen(config.port, config.host, () => {
-    console.log(`listening on http://${config.host}:${config.port} — GET /status, POST /activate\n`);
+    console.log(
+      `listening on http://${config.host}:${config.port} — GET /status, POST /activate, POST /register-alias\n`,
+    );
   });
 
   const shutdown = (signal: string) => {

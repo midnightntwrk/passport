@@ -4,3 +4,6 @@ node_modules/
 # directory, whatever it is named, stays out of the repository.
 state/
 state-*/
+
+# Live verification harness. Disposable, never committed.
+.live-drill/

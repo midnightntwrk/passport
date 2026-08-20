@@ -31,7 +31,10 @@ import {
   UnshieldedWallet,
   type UnshieldedKeystore,
 } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
-import type { UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
+import {
+  MidnightBech32m,
+  UnshieldedAddress,
+} from '@midnight-ntwrk/wallet-sdk-address-format';
 
 import type { FunderConfig } from './config.js';
 
@@ -127,6 +130,41 @@ export interface DripResult {
   amountAtomic: bigint;
 }
 
+/**
+ * The subset of midnight-js's `WalletProvider & MidnightProvider` that contract
+ * deployments and circuit calls actually use.
+ *
+ * Structural, not imported: `@midnight-ntwrk/midnight-js-types` describes these
+ * in terms of ledger generics this module has no reason to name, and the demo's
+ * own providers (`examples/passport-demo/src/identity/midnames.ts`) are built
+ * the same structural way.
+ */
+export interface ContractWalletProvider {
+  getCoinPublicKey(): string;
+  getEncryptionPublicKey(): string;
+  balanceTx(tx: unknown, ttl?: Date): Promise<unknown>;
+  submitTx(tx: unknown): Promise<unknown>;
+}
+
+/**
+ * The facade methods a contract transaction needs, named structurally for the
+ * same reason as {@link ContractWalletProvider}: midnight-js hands us an
+ * unproven transaction whose type does not line up with the facade's own
+ * `UnboundTransaction`, and casting one narrow boundary is more honest than
+ * threading a generic through code that never inspects it.
+ */
+interface ContractCapableFacade {
+  balanceUnboundTransaction(
+    tx: unknown,
+    secretKeys: unknown,
+    options: { ttl: Date },
+  ): Promise<unknown>;
+  signRecipe(recipe: unknown, sign: (data: Uint8Array) => unknown): Promise<unknown>;
+  finalizeRecipe(recipe: unknown): Promise<unknown>;
+  submitTransaction(tx: unknown): Promise<unknown>;
+  revert(recipe: unknown): Promise<unknown>;
+}
+
 export interface FunderWallet {
   readonly address: string;
   currentState(): Promise<FacadeState>;
@@ -146,6 +184,33 @@ export interface FunderWallet {
    * serialized internally so two drips can never reserve the same coins.
    */
   drip(recipient: UnshieldedAddress, amountAtomic: bigint): Promise<DripResult>;
+  /**
+   * Runs `task` with exclusive use of this wallet's coins — the same queue
+   * `drip` uses, exposed so a multi-transaction job (an alias registration is
+   * two) cannot interleave with a drip and reserve the same UTxO.
+   *
+   * The lock is held for the whole task, proofs included, so a registration
+   * really does hold up a drip for its duration. That is the correct trade:
+   * two transactions contending for one UTxO produce a rejected transaction,
+   * and a queued drip produces a slightly later one.
+   */
+  exclusive<T>(task: () => Promise<T>): Promise<T>;
+  /**
+   * A midnight-js wallet provider bound to this wallet: it balances every token
+   * kind from the funder's OWN NIGHT, signs with the funder's keystore, pays
+   * the fee from the funder's OWN DUST, and submits. There is deliberately no
+   * sponsor path here — the funder already registers its NIGHT for DUST
+   * generation, so it can pay its own way, and a service that pays for other
+   * people has no business asking a third party to pay for it.
+   *
+   * Calls made through this provider MUST be wrapped in {@link exclusive}.
+   */
+  contractWalletProvider(): Promise<ContractWalletProvider>;
+  /**
+   * The funder's own 32 unshielded address bytes, as a Compact `UserAddress`
+   * argument expects them.
+   */
+  unshieldedAddressBytes(): Uint8Array;
   saveSnapshot(): Promise<void>;
   close(): Promise<void>;
 }
@@ -276,14 +341,28 @@ export async function openFunderWallet(config: FunderConfig): Promise<FunderWall
     error: () => undefined,
   });
 
-  // One drip at a time: the SDK reserves coins while balancing, and two
-  // concurrent transfers could otherwise contend for the same UTxO.
-  let dripQueue: Promise<unknown> = Promise.resolve();
+  // One spend at a time: the SDK reserves coins while balancing, and two
+  // concurrent transactions could otherwise contend for the same UTxO. Drips
+  // and alias registrations share this queue because they share the coins.
+  let spendQueue: Promise<unknown> = Promise.resolve();
   const serialize = <T>(task: () => Promise<T>): Promise<T> => {
-    const next = dripQueue.then(task, task);
-    dripQueue = next.catch(() => undefined);
+    const next = spendQueue.then(task, task);
+    spendQueue = next.catch(() => undefined);
     return next;
   };
+
+  /** The bech32m address decoded back to the 32 bytes Compact circuits take. */
+  const addressBytes = (): Uint8Array => {
+    const parsed = MidnightBech32m.parse(address);
+    const decoded = parsed.decode(UnshieldedAddress, parsed.network);
+    const bytes = new Uint8Array(decoded.data);
+    if (bytes.length !== 32) {
+      throw new Error(`Expected a 32-byte unshielded address, got ${bytes.length}.`);
+    }
+    return bytes;
+  };
+
+  const contractFacade = facade as unknown as ContractCapableFacade;
 
   return {
     address,
@@ -369,6 +448,45 @@ export async function openFunderWallet(config: FunderConfig): Promise<FunderWall
         return { txHash: String(finalized.transactionHash()), amountAtomic };
       });
     },
+
+    exclusive<T>(task: () => Promise<T>): Promise<T> {
+      return serialize(async () => {
+        if (closed) throw new Error('The funder wallet has been closed.');
+        return task();
+      });
+    },
+
+    async contractWalletProvider(): Promise<ContractWalletProvider> {
+      const state = await currentState();
+      return {
+        getCoinPublicKey: () => state.shielded.coinPublicKey.toHexString(),
+        getEncryptionPublicKey: () => state.shielded.encryptionPublicKey.toHexString(),
+        async balanceTx(tx: unknown, ttl?: Date): Promise<unknown> {
+          const deadline = ttl ?? new Date(Date.now() + 30 * 60 * 1_000);
+          const recipe = await contractFacade.balanceUnboundTransaction(
+            tx,
+            { shieldedSecretKeys, dustSecretKey },
+            { ttl: deadline },
+          );
+          try {
+            const signed = await contractFacade.signRecipe(recipe, (data: Uint8Array) =>
+              unshieldedKeystore.signData(data),
+            );
+            return await contractFacade.finalizeRecipe(signed);
+          } catch (cause) {
+            try {
+              await contractFacade.revert(recipe);
+            } catch {
+              // Best effort — the reserved coins are released on restart anyway.
+            }
+            throw cause;
+          }
+        },
+        submitTx: (tx: unknown) => contractFacade.submitTransaction(tx),
+      };
+    },
+
+    unshieldedAddressBytes: addressBytes,
 
     saveSnapshot,
 

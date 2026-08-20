@@ -1,47 +1,70 @@
 /**
- * The drip ledger and the rolling-hour rate limiter.
+ * The funder's once-only ledgers and the rolling-hour rate limiter.
  *
- * The ledger is the hard once-only gate: one activation per address, ever,
- * persisted as a small JSON file in the state directory so a restart cannot
- * forget who has already been activated. The rate limiter is in-memory —
- * a restart resets the window, which for a global back-stop is fine.
+ * A ledger is the hard once-only gate for whatever it keys on — one activation
+ * per address, one sponsored alias per account-custody contract — persisted as
+ * a small JSON file in the state directory so a restart cannot forget who has
+ * already been served. The rate limiter is in-memory: a restart resets the
+ * window, which for a global back-stop is fine.
  */
 
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+/** One activation drip, keyed by the recipient's unshielded address. */
 export interface DripEntry {
   txHash: string;
   amountAtomic: string;
   at: string;
 }
 
-export class DripLedger {
+/**
+ * One sponsored alias registration, keyed by the account-custody contract
+ * address the name was bound to. Keyed on the CONTRACT and not the alias
+ * because the limit being enforced is "one free name per Passport", and the
+ * contract address is the thing a Passport has exactly one of.
+ */
+export interface AliasEntry {
+  alias: string;
+  resolverAddress: string;
+  resolverDeployTx: string;
+  registerTx: string;
+  costAtomic: string;
+  at: string;
+}
+
+/**
+ * An append-mostly `Record<key, Entry>` on disk. Small enough to rewrite whole
+ * on every record: the funder serves tens of entries a day, not thousands, and
+ * a write-and-rename is atomic where a partial append would not be.
+ */
+export class JsonLedger<Entry> {
   private constructor(
     private readonly path: string,
-    private readonly entries: Record<string, DripEntry>,
+    private readonly entries: Record<string, Entry>,
   ) {}
 
-  static async open(stateDir: string, networkId: string): Promise<DripLedger> {
-    const path = join(stateDir, `drips-${networkId}.json`);
+  /** `<name>-<networkId>.json` in the state directory. */
+  static async open<E>(stateDir: string, networkId: string, name: string): Promise<JsonLedger<E>> {
+    const path = join(stateDir, `${name}-${networkId}.json`);
     try {
-      const parsed = JSON.parse(await readFile(path, 'utf8')) as Record<string, DripEntry>;
-      return new DripLedger(path, parsed && typeof parsed === 'object' ? parsed : {});
+      const parsed = JSON.parse(await readFile(path, 'utf8')) as Record<string, E>;
+      return new JsonLedger<E>(path, parsed && typeof parsed === 'object' ? parsed : {});
     } catch {
-      return new DripLedger(path, {});
+      return new JsonLedger<E>(path, {});
     }
   }
 
-  get(address: string): DripEntry | null {
-    return this.entries[address] ?? null;
+  get(key: string): Entry | null {
+    return this.entries[key] ?? null;
   }
 
   get count(): number {
     return Object.keys(this.entries).length;
   }
 
-  async record(address: string, entry: DripEntry): Promise<void> {
-    this.entries[address] = entry;
+  async record(key: string, entry: Entry): Promise<void> {
+    this.entries[key] = entry;
     const temp = `${this.path}.tmp`;
     await writeFile(temp, JSON.stringify(this.entries, null, 2), 'utf8');
     await rename(temp, this.path);
@@ -53,7 +76,7 @@ export class HourlyRateLimiter {
 
   constructor(private readonly maxPerHour: number) {}
 
-  /** True when another drip is allowed right now; records it when so. */
+  /** True when another spend is allowed right now; records it when so. */
   take(): boolean {
     const now = Date.now();
     this.stamps = this.stamps.filter((stamp) => now - stamp < 3_600_000);
@@ -65,11 +88,11 @@ export class HourlyRateLimiter {
   /**
    * Whether the ceiling is reached, WITHOUT consuming a slot.
    *
-   * The ceiling counts drips, not requests. A caller that refuses for some
-   * other reason — already activated, wrong network, funder empty — has not
+   * The ceiling counts spends, not requests. A caller that refuses for some
+   * other reason — already served, wrong network, funder empty — has not
    * used the funder's hourly budget, and burning a slot on it would let a
    * stream of bad requests shut the funder down without a single NIGHT
-   * leaving it. So `take()` is called only once a drip is actually about to
+   * leaving it. So `take()` is called only once a spend is actually about to
    * be attempted, and this exists for the cheap early refusal on the way in.
    */
   atCeiling(): boolean {

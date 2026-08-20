@@ -1,7 +1,7 @@
 {
   "name": "passport-funder",
   "version": "0.1.0",
-  "description": "Self-hosted activation funder for Midnight Passport: drips activation-sized NIGHT to brand-new wallets so their first .night claim executes immediately.",
+  "description": "Self-hosted onboarding funder for Midnight Passport: drips activation-sized NIGHT to brand-new wallets, and sponsors .night registrations outright so a Passport never has to hold NIGHT at all.",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,8 +11,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@midnight-ntwrk/compact-js": "2.5.0",
     "@midnight-ntwrk/ledger-v8": "8.0.3",
+    "@midnight-ntwrk/midnight-js-contracts": "4.0.4",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "4.0.4",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "4.0.4",
     "@midnight-ntwrk/midnight-js-network-id": "4.0.4",
+    "@midnight-ntwrk/midnight-js-types": "4.0.4",
     "@midnight-ntwrk/wallet-sdk-address-format": "3.1.1",
     "@midnight-ntwrk/wallet-sdk-dust-wallet": "4.0.0",
     "@midnight-ntwrk/wallet-sdk-facade": "4.0.0",

@@ -26,6 +26,19 @@ export interface FunderConfig extends FunderNetworkEndpoints {
   dripAtomic: bigint;
   /** Global ceiling on drips per rolling hour. */
   maxPerHour: number;
+  /**
+   * Global ceiling on SPONSORED ALIAS REGISTRATIONS per rolling hour, counted
+   * separately from drips: the two spend the same coins but answer different
+   * questions, and a burst of one must not silently close the other.
+   */
+  aliasMaxPerHour: number;
+  /**
+   * The `.night` TLD this funder registers against. Defaults to the deployed
+   * registry for {@link networkId}; override for a locally deployed one.
+   */
+  midnamesTldAddress: string;
+  /** Explicit path to the pinned Midnames build, when auto-discovery is wrong. */
+  midnamesAssetsPath?: string;
   /** Origins allowed to call this service from a browser. */
   allowedOrigins: string[];
   port: number;
@@ -56,6 +69,25 @@ const NETWORK_DEFAULTS: Record<string, { indexer: string; node: string; prover: 
   },
 };
 
+/**
+ * The deployed Midnames `.night` top-level domain on each network.
+ *
+ * Copied verbatim from `examples/passport-demo/src/identity/midnames.ts`, which
+ * in turn took them from the Midnames SDK's own `NETWORK_REGISTRY`. All three
+ * were probed live on 2026/08/05: each decodes with this repository's pinned
+ * contract build, each reports `BUY_ENABLED = true`, and each charges
+ * 600 / 140 / 10 atomic NIGHT for a name of <=3 / 4 / >=5 bytes.
+ *
+ * `undeployed` deliberately has no entry: a disposable localnet has no shared
+ * registry. Point `FUNDER_MIDNAMES_TLD_ADDRESS` at a locally deployed TLD to
+ * sponsor names there.
+ */
+export const MIDNAMES_TLD_ADDRESSES: Record<string, string> = {
+  preview: 'e2655a6d554d5d3ceb03dfbee517ad4186d6c287c5e638a29258320dde3e0ba7',
+  preprod: '43b500cadaa57d174d82cd6fd596002e33e3e680d7cf8bd7ba3383f62ceb0749',
+  mainnet: '0167c9ad2f166e717dd7b4a72606bf5cbba2fd462d5e1ca95e2d0452af288638',
+};
+
 /** The indexer's WebSocket endpoint is its HTTP endpoint with `/ws` appended. */
 function indexerWsFrom(indexerHttpUrl: string): string {
   return `${indexerHttpUrl.replace(/\/+$/, '').replace(/^http/, 'ws')}/ws`;
@@ -73,6 +105,13 @@ function trimmed(value: string | undefined): string | undefined {
 
 export const DEFAULT_DRIP_ATOMIC = 1_000n; // 0.001 NIGHT — ~100 long-name registrations
 export const DEFAULT_MAX_PER_HOUR = 60;
+/**
+ * Deliberately modest. A sponsored registration costs the funder two proofs and
+ * two transactions as well as the 10 atomic NIGHT price, so the ceiling that
+ * matters is throughput, not spend: at twenty an hour the funder is never
+ * queueing registrations behind each other for longer than a few minutes.
+ */
+export const DEFAULT_ALIAS_MAX_PER_HOUR = 20;
 export const DEFAULT_ALLOWED_ORIGINS = ['https://midnightpassport.com'];
 export const DEFAULT_PORT = 8799;
 
@@ -153,6 +192,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FunderConfig {
     throw new Error('FUNDER_MAX_PER_HOUR must be a positive integer.');
   }
 
+  const aliasMaxPerHour = Number(
+    trimmed(env.FUNDER_ALIAS_MAX_PER_HOUR) ?? DEFAULT_ALIAS_MAX_PER_HOUR,
+  );
+  if (!Number.isInteger(aliasMaxPerHour) || aliasMaxPerHour <= 0) {
+    throw new Error('FUNDER_ALIAS_MAX_PER_HOUR must be a positive integer.');
+  }
+
+  /* An empty string here is not a misconfiguration — it is a network with no
+     shared registry. `/register-alias` refuses on it with a named reason
+     instead of the service failing to start. */
+  const midnamesTldAddress =
+    trimmed(env.FUNDER_MIDNAMES_TLD_ADDRESS) ?? MIDNAMES_TLD_ADDRESSES[networkId] ?? '';
+
   const allowedOrigins = (trimmed(env.FUNDER_ALLOWED_ORIGINS) ?? '')
     .split(',')
     .map((origin) => origin.trim().replace(/\/+$/, ''))
@@ -165,6 +217,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FunderConfig {
     stateDir: trimmed(env.FUNDER_STATE_DIR) ?? './state',
     dripAtomic,
     maxPerHour,
+    aliasMaxPerHour,
+    midnamesTldAddress,
+    midnamesAssetsPath: trimmed(env.FUNDER_MIDNAMES_ASSETS),
     allowedOrigins: allowedOrigins.length > 0 ? allowedOrigins : [...DEFAULT_ALLOWED_ORIGINS],
     port: Number(trimmed(env.FUNDER_PORT) ?? DEFAULT_PORT),
     host: trimmed(env.FUNDER_HOST) ?? '0.0.0.0',
