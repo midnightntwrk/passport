@@ -969,6 +969,32 @@ a.mnhome-icon-button {
   .mnhome-send-spinner { animation: none; }
 }
 
+/* The QR scanner sheet. The viewport is square-ish and letterboxes the video
+   rather than stretching it — a distorted feed makes codes harder to hold in
+   frame. The reticle is decoration for aim, not a crop: detection reads the
+   whole frame. */
+.mnhome-qrscan { max-width: 420px; }
+.mnhome-qrscan-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--mn-radius-md);
+  overflow: hidden;
+  background: #000;
+}
+.mnhome-qrscan-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.mnhome-qrscan-reticle {
+  position: absolute;
+  inset: 18%;
+  border: 2px solid rgba(255, 255, 255, 0.75);
+  border-radius: var(--mn-radius-md);
+  pointer-events: none;
+}
+
 /* Every surface in the family carries the same beta mark: micro-caps on the
    accent wash, pill-shaped, sized to sit beside a wordmark without shouting. */
 .mn-beta-badge {

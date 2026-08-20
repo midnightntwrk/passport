@@ -1,12 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   ArrowRight,
   Loader2,
+  ScanLine,
   SendHorizontal,
   X,
 } from 'lucide-react'
+
+/* The camera scanner, loaded only when opened — the camera stack and the jsQR
+   fallback have no business in the Send chunk of a user who only pastes. */
+const QrScanSheet = lazy(() => import('./QrScanSheet.js'))
 import {
   mainnet,
   MidnightBech32m,
@@ -189,6 +194,7 @@ export default function SendSheet(props: SendSheetProps) {
 
   const [step, setStep] = useState<Step>('compose')
   const [recipient, setRecipient] = useState('')
+  const [scanning, setScanning] = useState(false)
   const [amountText, setAmountText] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<{ message: string; detail: string | null } | null>(null)
@@ -222,14 +228,15 @@ export default function SendSheet(props: SendSheetProps) {
   }, [readFeeReadiness])
 
   // Escape closes, unless a transaction is in flight — abandoning the sheet
-  // mid-submission would hide an outcome that is still coming.
+  // mid-submission would hide an outcome that is still coming. While the
+  // scanner is open, Escape belongs to it: one press closes one sheet.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onClose()
+      if (event.key === 'Escape' && !busy && !scanning) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [busy, onClose])
+  }, [busy, onClose, scanning])
 
   useEffect(() => {
     recipientRef.current?.focus()
@@ -352,6 +359,7 @@ export default function SendSheet(props: SendSheetProps) {
   }, [amount, busy, fee, onClose, onSend, readFeeReadiness, recipient, recipientReady])
 
   return createPortal(
+    <>
     <div
       className="mnhome-addr-scrim"
       onClick={() => {
@@ -384,7 +392,21 @@ export default function SendSheet(props: SendSheetProps) {
         {step === 'compose' ? (
           <div className="mnhome-send-form">
             <label className="mnhome-send-field">
-              <span className="mnhome-send-label">Recipient</span>
+              <span className="mnhome-send-label">
+                Recipient
+                {/* The camera fills this field; it never bypasses it. Whatever
+                    the scanner hands over meets the same validator a pasted
+                    address does, so a scanned wrong-network address gets the
+                    same honest sentence. */}
+                <button
+                  type="button"
+                  className="mnhome-send-max"
+                  onClick={() => setScanning(true)}
+                  disabled={busy}
+                >
+                  <ScanLine size={12} aria-hidden="true" /> Scan QR
+                </button>
+              </span>
               <textarea
                 ref={recipientRef}
                 className="mnhome-send-input mnhome-send-input-mono"
@@ -581,7 +603,23 @@ export default function SendSheet(props: SendSheetProps) {
           </div>
         )}
       </div>
-    </div>,
+    </div>
+
+    {/* A JSX sibling of the scrim, deliberately: the scanner portals its own
+        scrim, and mounting it inside this one would let its clicks bubble
+        through the React tree and close both sheets at once. */}
+    {scanning && (
+      <Suspense fallback={null}>
+        <QrScanSheet
+          onAddress={(address) => {
+            setRecipient(address)
+            setScanning(false)
+          }}
+          onClose={() => setScanning(false)}
+        />
+      </Suspense>
+    )}
+    </>,
     document.body,
   )
 }
