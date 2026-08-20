@@ -158,10 +158,11 @@ export class PassportAccount {
   /**
    * Publish a BUSS recovery backup: rotates the recovery commitment to a
    * FRESH secret and stores φ under a FRESH session nonce (both rules are
-   * load-bearing — see contracts/account.compact header). Device-authorised.
-   * `phi` holds 1..4 entries of 32 bytes each, straight from buildPhi();
-   * each is converted to the on-chain Field value here, so a non-canonical
-   * entry is rejected before it can land on-chain.
+   * load-bearing — see contracts/account.compact header; the circuit
+   * rejects reuse of the stored nonce or commitment as a backstop).
+   * Device-authorised. `phi` holds 1..4 entries of 32 bytes each, straight
+   * from buildPhi(); each is converted to the on-chain Field value here, so
+   * a non-canonical entry is rejected before it can land on-chain.
    */
   publishRecoveryBackup(
     newRecoverySecret: Uint8Array,
