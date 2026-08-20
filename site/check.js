@@ -6,6 +6,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 const SITE = 'site';
 const PAGES = ['index.html', 'demo.html', 'standards.html', 'architecture.html', 'plan.html'];
@@ -13,11 +14,12 @@ const STUBS = ['parallelisation.html', 'onboarding-mockup.html'];
 let failures = 0;
 function fail(msg) { failures++; console.log('FAIL  ' + msg); }
 
-// Load data.js
+// Load data.js — our own checked-in file, but a vm sandbox captures
+// window.PASSPORT_DATA without reaching for eval.
 const dataSrc = fs.readFileSync(path.join(SITE, 'data.js'), 'utf8');
-const window = {};
-eval(dataSrc);
-const data = window.PASSPORT_DATA;
+const sandbox = { window: {} };
+vm.runInNewContext(dataSrc, sandbox);
+const data = sandbox.window.PASSPORT_DATA;
 
 const componentIds = new Set(data.components.map(c => c.id));
 const promiseIds = new Set(data.promises.map(p => p.id));
