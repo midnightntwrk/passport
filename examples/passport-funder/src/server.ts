@@ -59,6 +59,22 @@ async function main(): Promise<void> {
 
   const ledgerFile = await DripLedger.open(config.stateDir, config.networkId);
   const limiter = new HourlyRateLimiter(config.maxPerHour);
+  /**
+   * Addresses with an activation in progress right now.
+   *
+   * The once-per-address rule lives in the ledger, but the ledger is only
+   * written AFTER the drip returns — and between the read and that write sit a
+   * balance probe, a settle loop, and a whole transaction. Two requests for the
+   * same address arriving in that window would both read "not activated" and
+   * both drip. This set closes the window: it is claimed before the ledger is
+   * read and released in a `finally`, so at most one activation for an address
+   * is ever in flight.
+   *
+   * A Set is sufficient because the funder is one single-threaded process with
+   * one wallet. It is deliberately NOT a substitute for the ledger, which is
+   * what survives a restart.
+   */
+  const inFlight = new Set<string>();
   const nightTokenType = String(nativeToken().raw);
 
   process.stdout.write('opening the funder wallet');
@@ -188,50 +204,80 @@ async function main(): Promise<void> {
       return fail(refusal(400, 'invalid-address', 'The funder does not drip to itself.'));
     }
 
-    const previous = ledgerFile.get(normalized);
-    if (previous) {
+    /* Claimed BEFORE the ledger is read, because the ledger cannot yet know
+       about an activation that is still in the air. A second request for the
+       same address is refused outright rather than queued: the honest answer
+       is "one is already running", not a second drip. */
+    if (inFlight.has(normalized)) {
       return fail(
-        refusal(409, 'already-activated', `This address was already activated on ${previous.at} (tx ${previous.txHash}). Activation is once per address.`, {
-          txHash: previous.txHash,
-        }),
+        refusal(409, 'activation-in-flight', 'An activation for this address is already in progress. Wait for it to finish before asking again.'),
       );
     }
-
-    if (!limiter.take()) {
-      return fail(
-        refusal(429, 'rate-limited', `The funder has reached its ceiling of ${config.maxPerHour} activations per hour. Try again later.`),
-      );
-    }
-
-    const ready = await readiness({ settle: true });
-    if (ready.refuse) return fail(ready.refuse);
-
-    // Best-effort, bounded read of the recipient's own balance. An address
-    // already holding a drip's worth is not a new wallet; an UNREADABLE
-    // balance is not proof of anything, so the drip proceeds — the once-only
-    // ledger above remains the hard gate.
-    const held = await recipientNightBalance(config.indexerWsUrl, normalized, nightTokenType);
-    if (held !== null && held >= config.dripAtomic) {
-      return fail(
-        refusal(409, 'already-funded', `That address already holds ${formatNight(held)} NIGHT — at least one activation grant's worth — so it does not need activating.`),
-      );
-    }
-
+    inFlight.add(normalized);
     try {
-      const result = await wallet.drip(recipient, config.dripAtomic);
-      dripsServed += 1;
-      lastDripAt = Date.now();
-      await ledgerFile.record(normalized, {
-        txHash: result.txHash,
-        amountAtomic: result.amountAtomic.toString(),
-        at: new Date().toISOString(),
-      });
-      console.log(`[drip] ${formatNight(result.amountAtomic)} NIGHT → ${normalized} (tx ${result.txHash})`);
-      return { status: 200, body: { txHash: result.txHash, amount: Number(result.amountAtomic) } };
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : String(cause);
-      console.error(`[drip] FAILED for ${normalized}: ${message}`);
-      return fail(refusal(500, 'drip-failed', `The activation transaction could not be sent: ${message}`));
+      const previous = ledgerFile.get(normalized);
+      if (previous) {
+        return fail(
+          refusal(409, 'already-activated', `This address was already activated on ${previous.at} (tx ${previous.txHash}). Activation is once per address.`, {
+            txHash: previous.txHash,
+          }),
+        );
+      }
+
+      /* A non-consuming look at the ceiling, so a request that arrives with the
+         budget already spent is turned away before the settle loop. The slot
+         itself is not claimed here — see the `take()` below. */
+      if (limiter.atCeiling()) {
+        return fail(
+          refusal(429, 'rate-limited', `The funder has reached its ceiling of ${config.maxPerHour} activations per hour. Try again later.`),
+        );
+      }
+
+      const ready = await readiness({ settle: true });
+      if (ready.refuse) return fail(ready.refuse);
+
+      // Best-effort, bounded read of the recipient's own balance. An address
+      // already holding a drip's worth is not a new wallet; an UNREADABLE
+      // balance is not proof of anything, so the drip proceeds — the once-only
+      // ledger above remains the hard gate.
+      const held = await recipientNightBalance(config.indexerWsUrl, normalized, nightTokenType);
+      if (held !== null && held >= config.dripAtomic) {
+        return fail(
+          refusal(409, 'already-funded', `That address already holds ${formatNight(held)} NIGHT — at least one activation grant's worth — so it does not need activating.`),
+        );
+      }
+
+      /* The slot is consumed here and nowhere earlier: every refusal above sent
+         no NIGHT, so none of them may count against an hourly ceiling that
+         exists to cap what the funder SPENDS. Claiming it before the drip, not
+         after, still keeps the cap honest — a drip that then fails has really
+         been attempted, and re-attempting it is what the ceiling limits. */
+      if (!limiter.take()) {
+        return fail(
+          refusal(429, 'rate-limited', `The funder has reached its ceiling of ${config.maxPerHour} activations per hour. Try again later.`),
+        );
+      }
+
+      try {
+        const result = await wallet.drip(recipient, config.dripAtomic);
+        dripsServed += 1;
+        lastDripAt = Date.now();
+        await ledgerFile.record(normalized, {
+          txHash: result.txHash,
+          amountAtomic: result.amountAtomic.toString(),
+          at: new Date().toISOString(),
+        });
+        console.log(`[drip] ${formatNight(result.amountAtomic)} NIGHT → ${normalized} (tx ${result.txHash})`);
+        return { status: 200, body: { txHash: result.txHash, amount: Number(result.amountAtomic) } };
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error(`[drip] FAILED for ${normalized}: ${message}`);
+        return fail(refusal(500, 'drip-failed', `The activation transaction could not be sent: ${message}`));
+      }
+    } finally {
+      /* Released on every path — recorded, refused, or thrown — so a failure
+         can never leave an address permanently unactivatable. */
+      inFlight.delete(normalized);
     }
   };
 

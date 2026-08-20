@@ -189,7 +189,43 @@ export interface PassportBackupStoreSummary {
    * drop.
    */
   skipped: { key: string; reason: string }[];
+  /**
+   * The store keys actually written, so a caller can go back and check what a
+   * restore put there. `restoredKeys.length === restored` always; the count is
+   * kept because the screen shows a count and the keys are the caller's
+   * business.
+   */
+  restoredKeys: string[];
 }
+
+/**
+ * What became of the promise that a restored contract is checked against the
+ * chain.
+ *
+ * A restored contract record is a claim made by a FILE. The address in it was
+ * true when the backup was taken; nothing in the file proves the contract is
+ * there now, and a browser that has just imported one has seen no chain at
+ * all. So the check is a real indexer read, and this is its result — including
+ * the case where it could not run, which is stated rather than glossed.
+ *
+ * Deliberately optional on {@link PassportBackupSummary}: this module has no
+ * wallet and no indexer, so it cannot fill it in. The caller that holds the
+ * open wallet does, and a summary that reaches a screen without one must be
+ * rendered as "not re-checked" — never as confirmation.
+ */
+export type PassportBackupLedgerCheck =
+  | { ran: false; reason: string }
+  | {
+      ran: true;
+      /** The network the open wallet reads, and the only one checkable here. */
+      network: string;
+      /** Records the indexer answered for. */
+      confirmed: number;
+      /** Records it did not — downgraded, not deleted. See the caller. */
+      unconfirmed: number;
+      /** Records belonging to some other network, left untouched. */
+      otherNetworks: number;
+    };
 
 export interface PassportBackupSummary {
   /** When the backup was taken, read from inside the ciphertext. */
@@ -197,6 +233,8 @@ export interface PassportBackupSummary {
   aliases: PassportBackupStoreSummary;
   passportContracts: PassportBackupStoreSummary;
   incentives: PassportBackupStoreSummary;
+  /** See {@link PassportBackupLedgerCheck}. Absent means "not re-checked". */
+  ledgerCheck?: PassportBackupLedgerCheck;
 }
 
 /* --- base64url ------------------------------------------------------------ */
@@ -508,7 +546,7 @@ export async function applyPassportBackup(
     import('./incentiveStore.js'),
   ]);
 
-  const aliases: PassportBackupStoreSummary = { found: 0, restored: 0, skipped: [] };
+  const aliases: PassportBackupStoreSummary = { found: 0, restored: 0, skipped: [], restoredKeys: [] };
   const localAliases = loadAliasRecords();
   for (const [network, record] of Object.entries(contents.aliases)) {
     aliases.found += 1;
@@ -520,6 +558,7 @@ export async function applyPassportBackup(
     try {
       saveAliasRecord({ ...record, network });
       aliases.restored += 1;
+      aliases.restoredKeys.push(network);
     } catch (cause) {
       aliases.skipped.push({
         key: network,
@@ -528,7 +567,12 @@ export async function applyPassportBackup(
     }
   }
 
-  const passportContracts: PassportBackupStoreSummary = { found: 0, restored: 0, skipped: [] };
+  const passportContracts: PassportBackupStoreSummary = {
+    found: 0,
+    restored: 0,
+    skipped: [],
+    restoredKeys: [],
+  };
   const localContracts = loadPassportContractRecords();
   for (const record of Object.values(contents.passportContracts)) {
     passportContracts.found += 1;
@@ -544,6 +588,7 @@ export async function applyPassportBackup(
     try {
       savePassportContractRecord(record);
       passportContracts.restored += 1;
+      passportContracts.restoredKeys.push(key);
     } catch (cause) {
       passportContracts.skipped.push({
         key,
@@ -552,7 +597,7 @@ export async function applyPassportBackup(
     }
   }
 
-  const incentives: PassportBackupStoreSummary = { found: 0, restored: 0, skipped: [] };
+  const incentives: PassportBackupStoreSummary = { found: 0, restored: 0, skipped: [], restoredKeys: [] };
   const localIncentiveIds = new Set(loadIncentives().map((record) => record.id));
   for (const record of contents.incentives) {
     incentives.found += 1;
@@ -563,6 +608,7 @@ export async function applyPassportBackup(
     try {
       saveIncentive(record);
       incentives.restored += 1;
+      incentives.restoredKeys.push(record.id);
     } catch (cause) {
       incentives.skipped.push({
         key: record.id,

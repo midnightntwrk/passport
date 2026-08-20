@@ -104,6 +104,10 @@ export interface FetchRecentTransactionsOptions {
  *
  * - `'address'` — the signed-in account's own history, from the per-address
  *   subscription. Authoritative; an empty list means the account has none.
+ *   Only a replay seen through to its end ever carries this scope: the
+ *   subscription streams OLDEST first, so a truncated one would be the wrong
+ *   end of the history, and it is rejected in favour of the chain walk rather
+ *   than presented as the newest rows.
  * - `'chain'` — a chain-wide sample of recent blocks, from the block-walk
  *   fallback. Rows may belong to anybody, and an empty list proves nothing
  *   about the account.
@@ -347,12 +351,20 @@ function fetchViaSubscription(
 
     const collected: RecentTransaction[] = []
     let highestTransactionId: number | null = null
+    /* The subscription replays history in ASCENDING id order, so an
+       interrupted replay is not a shorter answer — it is the wrong end of the
+       account's history. Resolving one would hand the caller the account's
+       oldest transactions and let it print them under "recent activity", with
+       `scope: 'address'` vouching for them. So the replay has to be seen
+       through to its end before anything it produced may be resolved; short of
+       that this path rejects, and `fetchRecentTransactions` degrades to the
+       chain walk, whose `scope: 'chain'` says plainly what it is. */
+    let historyComplete = false
     let settled = false
     let idleTimer: ReturnType<typeof setTimeout> | null = null
 
     const hardTimer = setTimeout(() => {
-      // Whatever arrived before the ceiling is still the newest slice we saw.
-      finish(collected.length > 0 ? null : new IndexerUnavailableError('The indexer did not answer in time.', { indexerUrl, stage: 'timeout' }))
+      abandon('The indexer did not answer in time.', 'timeout')
     }, Math.max(0, remaining(deadline)))
 
     function clearIdle(): void {
@@ -364,7 +376,16 @@ function fetchViaSubscription(
 
     function armIdle(): void {
       clearIdle()
-      idleTimer = setTimeout(() => finish(null), Math.min(IDLE_AFTER_FIRST_FRAME_MS, Math.max(0, remaining(deadline))))
+      idleTimer = setTimeout(() => {
+        /* The server sends no `complete` after the replay — it holds the socket
+           open for live traffic — so silence is how a finished replay announces
+           itself, and it is the only way an empty history ever ends. It counts
+           as an ending only once the Progress frame has arrived, though: before
+           that we have not been told what the end of history even is, and
+           silence is just an unanswered subscription. */
+        if (highestTransactionId !== null) historyComplete = true
+        abandon('The indexer went quiet before replaying this account.', 'timeout')
+      }, Math.min(IDLE_AFTER_FIRST_FRAME_MS, Math.max(0, remaining(deadline))))
     }
 
     function finish(error: IndexerUnavailableError | null): void {
@@ -381,30 +402,26 @@ function fetchViaSubscription(
       else resolve(collected.slice().reverse())
     }
 
+    /**
+     * Ends a call that stopped for a reason of its own — a ceiling, an error,
+     * a closed socket. Rows collected so far are only an answer if the replay
+     * had already run to completion; otherwise they are the oldest slice of
+     * history and this rejects rather than pass them off as the newest.
+     */
+    function abandon(message: string, stage: IndexerUnavailableError['stage']): void {
+      finish(historyComplete ? null : new IndexerUnavailableError(message, { indexerUrl, stage }))
+    }
+
     socket.onopen = () => {
       socket.send(JSON.stringify({ type: 'connection_init' }))
     }
 
     socket.onerror = () => {
-      finish(
-        collected.length > 0
-          ? null
-          : new IndexerUnavailableError('The indexer WebSocket reported an error.', {
-              indexerUrl,
-              stage: 'connect',
-            }),
-      )
+      abandon('The indexer WebSocket reported an error.', 'connect')
     }
 
     socket.onclose = () => {
-      finish(
-        collected.length > 0 || highestTransactionId !== null
-          ? null
-          : new IndexerUnavailableError('The indexer closed the connection before replying.', {
-              indexerUrl,
-              stage: 'connect',
-            }),
-      )
+      abandon('The indexer closed the connection before replaying this account.', 'connect')
     }
 
     socket.onmessage = (event: MessageEvent) => {
@@ -443,6 +460,8 @@ function fetchViaSubscription(
       }
 
       if (message.type === 'complete') {
+        // The server ended the subscription itself; there is no more history.
+        historyComplete = true
         finish(null)
         return
       }
@@ -496,6 +515,7 @@ function fetchViaSubscription(
 
       if (highestTransactionId !== null && typeof transaction.id === 'number' && transaction.id >= highestTransactionId) {
         // History replay is complete; everything after this is live traffic.
+        historyComplete = true
         finish(null)
         return
       }

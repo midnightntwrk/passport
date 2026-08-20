@@ -129,7 +129,11 @@ import {
   subscribePassportContractRecords,
   type PassportContractRecord,
 } from './identity/passportContractStore.js';
-import type { PassportContractProgress } from './identity/passportContract.js';
+import type {
+  PassportContractDeployment,
+  PassportContractProgress,
+} from './identity/passportContract.js';
+import type { PassportBackupLedgerCheck } from './identity/backup.js';
 import {
   NETWORK_LABELS,
   loadStoredNetwork,
@@ -1168,6 +1172,29 @@ export default function PassportDemo() {
   /** The live phase of a deployment in flight; null when none is running. */
   const [contractPhase, setContractPhase] = useState<PassportContractProgress['phase'] | null>(null);
   const [contractBusy, setContractBusy] = useState(false);
+  /**
+   * Contract deploys in flight, keyed by credential and network.
+   *
+   * TWO paths can deploy the account-custody contract: the Home card's "Try
+   * deploying again", and a name claim, which deploys one automatically before
+   * it can bind the name to it. Nothing stopped them from running at once —
+   * `contractBusy` is React state, so it is both too slow (a click landing in
+   * the same tick still reads `false`) and too narrow (the claim only raises it
+   * around its own deploy, leaving the retry live through every other phase of
+   * the claim). Two deploys for one credential and network would leave the user
+   * paying twice for two contracts, one of which the records would then forget.
+   *
+   * A ref is the guard because it is synchronous: the entry is claimed before
+   * the first `await` and released when the promise settles, whichever way. A
+   * caller that finds an entry already there does not start a second deploy and
+   * does not refuse either — it awaits the one that is running and uses its
+   * outcome, which is the answer it would have got anyway.
+   *
+   * Whichever caller STARTED a deploy owns the recording of it: see
+   * {@link deployPassportContractOnce}, which writes the deployed record itself
+   * so a joining caller cannot write a duplicate.
+   */
+  const contractDeploysInFlight = useRef(new Map<string, Promise<PassportContractDeployment>>());
   /**
    * How the deployment fee would be paid, in the send sheet's own words. Read
    * from the wallet's advisory `feeReadiness()` probe — never assumed, and
@@ -2375,6 +2402,48 @@ export default function PassportDemo() {
     })();
   }, [contractRecords, localWalletStatus, profile]);
 
+  /**
+   * The same read-back, at sign-in, for a record that has never had one.
+   *
+   * A contract record can reach this browser without any chain evidence behind
+   * it: a backup restored while no wallet was open writes the file's claim and
+   * says so. This is where that claim is settled — one indexer read per
+   * address per session, the moment a wallet is open on the record's network.
+   *
+   * Upgrades only. A read that does not answer leaves `ledgerConfirmed` where
+   * it is, because "the indexer did not answer" and "the contract is not
+   * there" are the same silence, and the unconfirmed state is already the
+   * honest one. A ref keeps it to one attempt: a re-render must not become a
+   * poll.
+   */
+  const attemptedContractConfirms = useRef(new Set<string>());
+  useEffect(() => {
+    const handle = localWalletRef.current;
+    if (localWalletStatus !== 'ready' || !handle || !profile) return;
+    const key = passportContractRecordKey(
+      profile.passkey.credentialId,
+      handle.network.networkId,
+    );
+    const record = contractRecords[key];
+    if (!record || record.status !== 'deployed' || !record.address) return;
+    if (record.ledgerConfirmed === true) return;
+    if (attemptedContractConfirms.current.has(key)) return;
+    attemptedContractConfirms.current.add(key);
+    void (async () => {
+      const { confirmPassportContractOnLedger } = await import('./identity/passportContract.js');
+      const live = await confirmPassportContractOnLedger(
+        handle.network.indexerHttpUrl,
+        record.address as string,
+      );
+      if (!live) return;
+      savePassportContractRecord({
+        ...record,
+        ledgerConfirmed: true,
+        updatedAt: new Date().toISOString(),
+      });
+    })();
+  }, [contractRecords, localWalletStatus, profile]);
+
   /** A live availability probe against one network's own registry. */
   const probeAlias = useCallback(
     async (network: PassportNetwork, alias: string): Promise<AliasAvailability> => {
@@ -2523,6 +2592,68 @@ export default function PassportDemo() {
   );
 
   /**
+   * The one gate every contract deploy passes through.
+   *
+   * Starts `run` only when no deploy for this credential and network is already
+   * running; when one is, the caller joins it and receives that deploy's
+   * outcome instead of issuing a second one. `joined` says which happened, so
+   * the caller can tell "I deployed this" from "somebody else did, and here it
+   * is" — the two want different activity entries and only the first wants a
+   * toast.
+   *
+   * The DEPLOYED record is written here rather than by the callers, because it
+   * must be written exactly once no matter how many callers were waiting on the
+   * deploy. Failure records stay with the callers: each has its own words for
+   * what the failure meant to the flow it interrupted, and each writes one only
+   * when it owned the run.
+   */
+  const deployPassportContractOnce = useCallback(
+    (
+      credentialId: string,
+      network: string,
+      run: () => Promise<PassportContractDeployment>,
+    ): { outcome: Promise<PassportContractDeployment>; joined: boolean } => {
+      const key = passportContractRecordKey(credentialId, network);
+      const existing = contractDeploysInFlight.current.get(key);
+      if (existing) return { outcome: existing, joined: true };
+
+      const started = (async () => {
+        const deployment = await run();
+        /* `deployTxId` is whatever the resolution loop ended with: the ledger
+           HASH where the indexer had caught up, and the raw 33-byte identifier
+           where it had not. Which of the two it is gets recorded, because an
+           identifier must never be dressed up as an explorer link. */
+        savePassportContractRecord({
+          credentialId,
+          network: deployment.network,
+          status: 'deployed',
+          address: deployment.address,
+          deployTxId: deployment.deployTxId,
+          txIdResolved: isLedgerTxHash(deployment.deployTxId),
+          deviceCommitment: deployment.deviceCommitment,
+          ledgerConfirmed: deployment.ledgerConfirmed,
+          feePaidBy: deployment.feePaidBy,
+          updatedAt: deployment.deployedAt,
+        });
+        return deployment;
+      })();
+
+      /* Claimed synchronously — before anything awaits — and released however
+         it settles, so a failed deploy never leaves the pair permanently
+         un-deployable. */
+      contractDeploysInFlight.current.set(key, started);
+      const release = () => {
+        if (contractDeploysInFlight.current.get(key) === started) {
+          contractDeploysInFlight.current.delete(key);
+        }
+      };
+      started.then(release, release);
+      return { outcome: started, joined: false };
+    },
+    [],
+  );
+
+  /**
    * ONE user action, from the passkey prompt to the registered name.
    *
    * Hector, 2026/08/19: "which account is basically being related? … this needs
@@ -2635,47 +2766,56 @@ export default function PassportDemo() {
         if (!contractAddress) {
           onPhase('attaching-account');
           setContractBusy(true);
+          /* Hoisted out of the try so the catch below knows whether this claim
+             merely waited on somebody else's deploy. A joined deploy is theirs
+             to record; this claim only reads its outcome. */
+          let joinedDeploy = false;
           try {
-            const deployment = await deployPassportContract(
-              handle,
-              contractRootSecret,
-              (progress) => setContractPhase(progress.phase),
-            );
-            savePassportContractRecord({
+            /* Through the shared gate, never straight to `deployPassportContract`:
+               the Home card's retry may already have one running for this
+               credential and network, and a second would be a second contract
+               the user paid for and the records would forget. */
+            const { outcome, joined } = deployPassportContractOnce(
               credentialId,
-              network: deployment.network,
-              status: 'deployed',
-              address: deployment.address,
-              deployTxId: deployment.deployTxId,
-              txIdResolved: isLedgerTxHash(deployment.deployTxId),
-              deviceCommitment: deployment.deviceCommitment,
-              ledgerConfirmed: deployment.ledgerConfirmed,
-              feePaidBy: deployment.feePaidBy,
-              updatedAt: deployment.deployedAt,
-            });
-            addActivity({
-              label: 'Passport contract deployed',
-              detail: `${compactAddress(deployment.address)} is ${
-                deployment.ledgerConfirmed ? 'live' : 'submitted'
-              } on ${deployment.network}, ready for ${alias}.night to point at it.`,
-              status: 'complete',
-              source: 'chain',
-              txHash: deployment.deployTxId,
-            });
+              network,
+              () =>
+                deployPassportContract(handle, contractRootSecret, (progress) =>
+                  setContractPhase(progress.phase),
+                ),
+            );
+            joinedDeploy = joined;
+            const deployment = await outcome;
+            if (!joinedDeploy) {
+              // The deployed record was written by the gate; this is the claim's
+              // own account of it, which a joining claim must not duplicate.
+              addActivity({
+                label: 'Passport contract deployed',
+                detail: `${compactAddress(deployment.address)} is ${
+                  deployment.ledgerConfirmed ? 'live' : 'submitted'
+                } on ${deployment.network}, ready for ${alias}.night to point at it.`,
+                status: 'complete',
+                source: 'chain',
+                txHash: deployment.deployTxId,
+              });
+            }
             contractAddress = deployment.address;
           } catch (cause) {
             /* The failure is recorded as a failure — that record is what puts
                the "Try deploying again" affordance on the Home card — and then
-               re-thrown, because the claim must not continue. */
+               re-thrown, because the claim must not continue. A deploy this
+               claim merely joined has already been recorded by whoever started
+               it, so only the owner writes. */
             const message = cause instanceof Error ? cause.message : String(cause);
             const detail = (cause as { detail?: string })?.detail;
-            savePassportContractRecord({
-              credentialId,
-              network,
-              status: 'failed',
-              failureReason: detail ? `${message} (${detail})` : message,
-              updatedAt: new Date().toISOString(),
-            });
+            if (!joinedDeploy) {
+              savePassportContractRecord({
+                credentialId,
+                network,
+                status: 'failed',
+                failureReason: detail ? `${message} (${detail})` : message,
+                updatedAt: new Date().toISOString(),
+              });
+            }
             throw new AliasClaimError(
               'account-contract-failed',
               `${alias}.night was not registered: your Passport's account contract could not be deployed, and the name would have had nothing to point at.`,
@@ -2715,7 +2855,7 @@ export default function PassportDemo() {
         contractRootSecret.fill(0);
       }
     },
-    [addActivity, rememberAccountOnPasskey],
+    [addActivity, deployPassportContractOnce, rememberAccountOnPasskey],
   );
 
   /**
@@ -3005,9 +3145,24 @@ export default function PassportDemo() {
     if (!handle || !activeProfile) return; // The card disables the action first.
     const credentialId = activeProfile.passkey.credentialId;
     const network = handle.network.networkId;
+    /* Synchronous, unlike the `contractBusy` state above: a claim raises that
+       flag only around its own deploy, and a click landing in the same tick
+       would read the stale value anyway. This is the guard that actually holds.
+       A retry that finds a deploy already running has nothing to add — the
+       running one is the outcome it wanted — so it simply stands down. */
+    if (contractDeploysInFlight.current.has(passportContractRecordKey(credentialId, network))) {
+      return;
+    }
     setContractBusy(true);
     setError(null);
     setContractPhase('deriving');
+    /* Set only when this call found a deploy already running and waited on it
+       instead of starting one. Declared out here because the catch needs it
+       too: the outcome of somebody else's deploy — good or bad — is theirs to
+       record, and this call must not write a second account of it. Every other
+       failure on this path, including one that never reached the deploy at
+       all, is genuinely this call's own and is recorded as usual. */
+    let joinedDeploy = false;
     try {
       const [{ deployPassportContract, checkPassportContractFunds }, { deriveWalletSeed }] =
         await Promise.all([
@@ -3033,32 +3188,31 @@ export default function PassportDemo() {
       );
       let deployment;
       try {
-        deployment = await deployPassportContract(handle, rootSecret, (progress) =>
-          setContractPhase(progress.phase),
+        /* Through the same shared gate the claim path uses. The synchronous
+           check at the top of this function cannot cover the awaits since —
+           the imports, the funds probe, the passkey derivation — so a claim may
+           have started a deploy in the meantime. If so this joins it rather
+           than issuing a second one for the same credential and network. */
+        const { outcome, joined } = deployPassportContractOnce(credentialId, network, () =>
+          deployPassportContract(handle, rootSecret, (progress) =>
+            setContractPhase(progress.phase),
+          ),
         );
+        joinedDeploy = joined;
+        deployment = await outcome;
       } finally {
         // The root secret's only job is done; nothing retains it.
         rootSecret.fill(0);
         passportKeyProviders.current.get(credentialId)?.lock(PASSPORT_CONTRACT_SCOPE);
       }
-      /* `deployTxId` is whatever the resolution loop ended with: the ledger
-         HASH when the indexer had caught up, and the raw 33-byte identifier
-         when it had not. Which of the two it is gets recorded, because an
-         identifier must never be dressed up as an explorer link — and because
-         a record that knows it is unresolved can be upgraded later. */
+      /* The deployed record is written by the gate, exactly once. What follows
+         is this path's own announcement of it, so a retry that merely joined a
+         claim's deploy stays quiet — the claim is already telling that story. */
+      if (joinedDeploy) {
+        void refreshLocalBalances();
+        return;
+      }
       const txIdResolved = isLedgerTxHash(deployment.deployTxId);
-      savePassportContractRecord({
-        credentialId,
-        network: deployment.network,
-        status: 'deployed',
-        address: deployment.address,
-        deployTxId: deployment.deployTxId,
-        txIdResolved,
-        deviceCommitment: deployment.deviceCommitment,
-        ledgerConfirmed: deployment.ledgerConfirmed,
-        feePaidBy: deployment.feePaidBy,
-        updatedAt: deployment.deployedAt,
-      });
       addActivity({
         label: 'Passport contract deployed',
         detail: `${compactAddress(deployment.address)} is ${
@@ -3089,6 +3243,10 @@ export default function PassportDemo() {
       const message = cause instanceof Error ? cause.message : String(cause);
       const detail = (cause as { detail?: string })?.detail;
       const reason = detail ? `${message} (${detail})` : message;
+      /* A deploy this call merely joined has already been recorded — and
+         narrated — by whoever started it. Writing again would put two failures
+         on the record for one attempt. */
+      if (joinedDeploy) return;
       savePassportContractRecord({
         credentialId,
         network,
@@ -3106,7 +3264,14 @@ export default function PassportDemo() {
       setContractPhase(null);
       setContractBusy(false);
     }
-  }, [addActivity, contractBusy, keyProviderFor, profile, refreshLocalBalances]);
+  }, [
+    addActivity,
+    contractBusy,
+    deployPassportContractOnce,
+    keyProviderFor,
+    profile,
+    refreshLocalBalances,
+  ]);
 
   /**
    * Network switch. The passkey and the wallet session are untouched — no
@@ -4955,19 +5120,102 @@ export default function PassportDemo() {
     return result;
   }, [addActivity]);
 
+  /**
+   * The chain re-check behind the Backup screen's promise.
+   *
+   * Every contract record a restore wrote is read back against the indexer the
+   * open wallet uses, and the record is annotated with what the indexer said:
+   * `ledgerConfirmed: true` where it answered, `false` where it did not. A
+   * record is never DELETED on a negative — one unanswered read is not proof
+   * that a contract is absent, only that this browser has not seen it — but it
+   * also never keeps a confirmation it did not earn.
+   *
+   * Records for another network are left alone and counted: this session holds
+   * exactly one indexer, the open wallet's, and asking it about a contract on
+   * a different chain would produce a confident wrong answer.
+   *
+   * With no wallet open there is no indexer to ask. That case is reported as
+   * such — never as a pass — and the effect further up (see
+   * `attemptedContractConfirms`) performs the same read at the next sign-in.
+   */
+  const confirmRestoredContracts = useCallback(
+    async (restoredKeys: string[]): Promise<PassportBackupLedgerCheck> => {
+      if (restoredKeys.length === 0) {
+        return {
+          ran: false,
+          reason: 'the backup wrote no contract records, so there was nothing to check.',
+        };
+      }
+      const handle = localWalletRef.current;
+      if (!handle) {
+        return {
+          ran: false,
+          reason:
+            'no wallet is open, so there was no indexer to ask. The check runs at your next sign-in.',
+        };
+      }
+      const network = handle.network.networkId;
+      const { confirmPassportContractOnLedger } = await import('./identity/passportContract.js');
+      const records = loadPassportContractRecords();
+      let confirmed = 0;
+      let unconfirmed = 0;
+      let otherNetworks = 0;
+      for (const key of restoredKeys) {
+        const record = records[key];
+        if (!record || record.status !== 'deployed' || !record.address) continue;
+        if (record.network !== network) {
+          otherNetworks += 1;
+          continue;
+        }
+        const live = await confirmPassportContractOnLedger(
+          handle.network.indexerHttpUrl,
+          record.address,
+        );
+        if (live) confirmed += 1;
+        else unconfirmed += 1;
+        if (record.ledgerConfirmed === live) continue;
+        try {
+          savePassportContractRecord({
+            ...record,
+            ledgerConfirmed: live,
+            updatedAt: new Date().toISOString(),
+          });
+        } catch {
+          /* A RECOVERED record may not be held unconfirmed at all — the store
+             refuses one whose read-back is not `true` — so it stays exactly as
+             the file wrote it and is reported in the count above rather than
+             quietly rewritten. */
+        }
+      }
+      return { ran: true, network, confirmed, unconfirmed, otherNetworks };
+    },
+    [],
+  );
+
   const restorePassportState = useCallback(
     async (file: File, password: string) => {
       const { importPassportBackup } = await import('./identity/backup.js');
       const summary = await importPassportBackup(file, password);
+      /* Done HERE, as part of the restore, rather than promised for later: a
+         restored contract record is a claim made by a file, and until the
+         indexer answers for its address this browser has no evidence the
+         contract is there. The result travels back with the summary so the
+         Backup screen reports what actually happened rather than what was
+         going to happen. */
+      const ledgerCheck = await confirmRestoredContracts(summary.passportContracts.restoredKeys);
       addActivity({
         label: 'Passport backup restored',
-        detail: `From a backup taken ${summary.createdAt}: ${summary.aliases.restored}/${summary.aliases.found} name claim(s), ${summary.passportContracts.restored}/${summary.passportContracts.found} contract record(s), ${summary.incentives.restored}/${summary.incentives.found} reward(s) written to this browser.`,
+        detail: `From a backup taken ${summary.createdAt}: ${summary.aliases.restored}/${summary.aliases.found} name claim(s), ${summary.passportContracts.restored}/${summary.passportContracts.found} contract record(s), ${summary.incentives.restored}/${summary.incentives.found} reward(s) written to this browser.${
+          ledgerCheck.ran
+            ? ` ${ledgerCheck.confirmed} contract(s) confirmed on ${ledgerCheck.network} by the indexer; ${ledgerCheck.unconfirmed} not yet.`
+            : ` Contracts were not re-checked against the chain: ${ledgerCheck.reason}`
+        }`,
         status: 'complete',
         source: 'local',
       });
-      return summary;
+      return { ...summary, ledgerCheck };
     },
-    [addActivity],
+    [addActivity, confirmRestoredContracts],
   );
 
   /**
@@ -5134,7 +5382,20 @@ export default function PassportDemo() {
             activeContractRecord?.status === 'failed'
               ? () => void deployPassportContractOnChain()
               : undefined,
-          busy: contractBusy,
+          /* Busy covers a claim as well as a deploy. A claim deploys this very
+             contract on its way to binding the name, but raises `contractBusy`
+             only around that one step — leaving the retry live through the
+             availability probe, the passkey ceremony, and the registration. The
+             shared in-flight gate makes a second deploy impossible either way;
+             this is so the card does not offer an action that would quietly do
+             nothing.
+
+             Narrowed to the case where the claim really will deploy: with a
+             contract already deployed a claim reuses it, and the pill would
+             otherwise read "Deploying…" over a contract that is simply there. */
+          busy:
+            contractBusy ||
+            (claimPhase !== null && activeContractRecord?.status !== 'deployed'),
           phase: contractPhase,
           disabledReason:
             activeContractRecord?.status === 'failed' ? contractDeployDisabledReason : null,

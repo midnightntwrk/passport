@@ -1090,7 +1090,21 @@ export async function claimAlias(
          at, so the leaf is read back too — the same decode any resolver would
          run. A mismatch is not "not yet": it leaves `registryConfirmed` false
          rather than asserting a binding we did not observe. */
-      const resolved = await resolveAliasTarget(network, label);
+      let resolved: Awaited<ReturnType<typeof resolveAliasTarget>> = null;
+      try {
+        resolved = await resolveAliasTarget(network, label);
+      } catch {
+        /* An indexer hiccup during the read-back is not a verdict on the
+           registration. The transaction has already landed — refusing the
+           claim here would report a failure for a name that is genuinely in
+           the registry, purely because one query out of thirty did not
+           answer. So a throw means only "not confirmed on THIS attempt": the
+           loop waits and asks again, exactly as it does for a leaf that has
+           not caught up yet, and if every attempt is spent the caller gets
+           `registryConfirmed: false` — the same honest "landed, not yet
+           verified" the lag path returns. */
+        resolved = null;
+      }
       const expectedKind = target.kind === 'contract' ? 'contract' : 'wallet';
       if (
         resolved &&

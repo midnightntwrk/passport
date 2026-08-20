@@ -23,6 +23,7 @@ import type { AliasRecord } from '../identity/aliasStore.js'
 import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
 /* The two names this screen shares with the wallet (Contract W). Type-only. */
 import type { FeeReadiness, SendNightResult } from '../lib/localWallet.js'
+import { faucetUrlFor, walletNetwork } from '../lib/networks.js'
 import { FeaturedApps, type AppsScreenProps, type FeaturedAppsProps } from './Apps.js'
 import { EcosystemIdentity } from './Ecosystem.js'
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
@@ -31,6 +32,16 @@ import SendSheet from './SendSheet.js'
 import SyncRing from './SyncRing.js'
 import ThemeToggle from './ThemeToggle.js'
 import './home.css'
+
+/* The wallet's own network and its faucet, both fixed for the life of a build
+   (`VITE_MIDNIGHT_NETWORK_ID`), so they are resolved once here rather than per
+   render. `receiveFaucetUrl` is null wherever no public faucet exists —
+   mainnet, and any devnet build — and the Receive sheet then shows no link at
+   all. Deliberately NOT the network chosen in the switcher: that selection
+   filters the app grid and never moves the wallet, so its faucet would drip to
+   a chain this address does not live on. */
+const receiveFaucetNetwork = walletNetwork()
+const receiveFaucetUrl = faucetUrlFor(receiveFaucetNetwork)
 
 export interface HomeScreenProps {
   displayName: string | null
@@ -721,16 +732,25 @@ export default function HomeScreen(props: HomeScreenProps) {
                     <p className="mnhome-addr-note">
                       A public receiving address — never the keys behind it.
                     </p>
-                    {network !== 'mainnet' ? (
-                      /* The faucet lives here, beside the address it funds.
-                         Mainnet has no faucet, so the button honestly
-                         disappears there. */
+                    {receiveFaucetUrl ? (
+                      /* The faucet lives here, beside the address it funds —
+                         and it is the faucet of the network THAT ADDRESS is on,
+                         which is the wallet's network, not the one selected in
+                         the switcher. The switcher only filters the app grid;
+                         a drip requested from the selected network's faucet
+                         would land nowhere this address can see it.
+
+                         The URL comes from `faucetUrlFor`, the one place that
+                         records which networks have a faucet at all. A network
+                         with none — mainnet, or a devnet build — yields null
+                         and the link simply is not rendered, rather than a
+                         hand-built host that would 404. */
                       <a
                         className="mnhome-addr-faucet"
-                        href={`https://faucet.${network}.midnight.network`}
+                        href={receiveFaucetUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        aria-label={`Open the ${network} faucet to get test NIGHT`}
+                        aria-label={`Open the ${receiveFaucetNetwork} faucet to get test NIGHT`}
                       >
                         <Droplets size={14} aria-hidden="true" />
                         <span>Get test NIGHT</span>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ExternalLink, ShieldCheck, X } from 'lucide-react';
 import {
   createPassportProfileReady,
@@ -71,6 +71,31 @@ export function PassportProfileConsent({
   const [pending, setPending] = useState<PendingRequest | null>(null);
   const [outcome, setOutcome] = useState<'approved' | 'denied' | 'unavailable' | null>(null);
 
+  /* Exactly one reply per window, whatever React does around it: the grace
+     timer below can be armed twice on mount under StrictMode, and posting a
+     second answer to a question already answered would let the opener see a
+     refusal after an approval — or two different profiles. Mirrors the same
+     guard in `txConsent.tsx`. */
+  const answered = useRef(false);
+
+  /**
+   * The single exit from this window. Every reply goes through here, so the
+   * first answer is the only one that ever reaches the opener — a later one
+   * would contradict it, and the opener has no way to tell which is real.
+   */
+  function replyOnce(
+    target: PendingRequest,
+    body: Omit<PassportProfileResponse, 'protocol' | 'type' | 'requestId' | 'nonce'>,
+  ): boolean {
+    if (answered.current) return false;
+    answered.current = true;
+    target.source.postMessage(
+      createPassportProfileResponse(target.request, body),
+      target.origin,
+    );
+    return true;
+  }
+
   useEffect(() => {
     if (!launch || !window.opener) return;
     const opener = window.opener;
@@ -86,7 +111,13 @@ export function PassportProfileConsent({
       ) {
         return;
       }
-      setPending({ request, origin: event.origin, source: opener });
+      /* One exchange per launch. The launch pair already fixes WHICH request
+         this window serves, but the opener can re-send it — and a later
+         message could arrive while the user is reading the sheet, swapping
+         the request out from under the consent they are about to give. A
+         re-send of the same pair is the same request, not a second sheet, so
+         the first one stands and the rest are ignored rather than refused. */
+      setPending((current) => current ?? { request, origin: event.origin, source: opener });
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -109,13 +140,7 @@ export function PassportProfileConsent({
   useEffect(() => {
     if (!pending || !sessionActive || profileReady || outcome) return;
     const timer = window.setTimeout(() => {
-      pending.source.postMessage(
-        createPassportProfileResponse(pending.request, {
-          approved: false,
-          error: 'profile_unavailable',
-        }),
-        pending.origin,
-      );
+      if (!replyOnce(pending, { approved: false, error: 'profile_unavailable' })) return;
       setOutcome('unavailable');
     }, PROFILE_WAIT_MS);
     return () => window.clearTimeout(timer);
@@ -130,12 +155,7 @@ export function PassportProfileConsent({
       PassportProfileResponse,
       'protocol' | 'type' | 'requestId' | 'nonce'
     >,
-  ) => {
-    pending.source.postMessage(
-      createPassportProfileResponse(pending.request, response),
-      pending.origin,
-    );
-  };
+  ) => replyOnce(pending, response);
 
   const approve = () => {
     const profile: NonNullable<PassportProfileResponse['profile']> = {};
@@ -148,13 +168,14 @@ export function PassportProfileConsent({
         profile.midnightAddresses = midnightAddresses;
       }
     }
-    send({ approved: true, profile });
-    setOutcome('approved');
+    /* The outcome only changes if this reply is the one that left: a window
+       that already answered says what it actually said, never what the last
+       button tapped would have said. */
+    if (send({ approved: true, profile })) setOutcome('approved');
   };
 
   const deny = () => {
-    send({ approved: false, error: 'denied' });
-    setOutcome('denied');
+    if (send({ approved: false, error: 'denied' })) setOutcome('denied');
   };
 
   return (

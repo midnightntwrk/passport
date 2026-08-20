@@ -242,8 +242,20 @@ export function parsePassportTxResponse(value: unknown): PassportTxResponse | nu
     nonce: value.nonce,
     status: value.status,
   };
-  if (typeof value.txId === 'string' && value.txId.length > 0) response.txId = value.txId;
-  if (isPassportTxErrorCode(value.error)) response.error = value.error;
+  /* The parsed reply must never be able to say two things at once. A sender
+     that attaches a `txId` to a refusal, or an `error` to a submission, is
+     making a claim the status contradicts; carrying either through would let a
+     caller read "declined" and still find a transaction id sitting next to it.
+     So each field is copied only onto the status that can honestly carry it —
+     `txId` on `submitted` (where the validation above already required one),
+     `error` on everything else (where it was likewise required). Extraneous
+     values are dropped rather than rejected: the reply is still a well-formed
+     answer, it just does not get to keep the contradiction. */
+  if (value.status === 'submitted') {
+    if (typeof value.txId === 'string' && value.txId.length > 0) response.txId = value.txId;
+  } else if (isPassportTxErrorCode(value.error)) {
+    response.error = value.error;
+  }
   if (typeof value.detail === 'string' && value.detail.length > 0) response.detail = value.detail;
   if (typeof value.sponsored === 'boolean') response.sponsored = value.sponsored;
   if (typeof value.feeNote === 'string' && value.feeNote.length > 0) {

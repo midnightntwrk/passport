@@ -229,6 +229,45 @@ describe('Passport transaction response', () => {
       }),
     ).toBeNull();
   });
+
+  it('does not carry a transaction id onto a refusal', () => {
+    /* The reply may not say two things at once: a refusal that also names a
+       transaction would let a caller read 'declined' and still find an id to
+       show, link, or treat as proof that something was submitted. */
+    for (const status of ['declined', 'failed'] as const) {
+      const parsed = parsePassportTxResponse({
+        protocol: PASSPORT_TX_PROTOCOL,
+        type: 'passport.tx.response',
+        requestId: 'request-1',
+        nonce: 'nonce-1',
+        status,
+        error: 'declined',
+        txId: '0f2c9ab1',
+      });
+      expect(parsed).not.toBeNull();
+      expect(parsed!.status).toBe(status);
+      expect(parsed!.error).toBe('declined');
+      expect(parsed).not.toHaveProperty('txId');
+    }
+  });
+
+  it('does not carry an error code onto a submitted reply', () => {
+    /* The mirror image: a submitted transaction exists, so nothing on the
+       reply may name the reason it did not happen. */
+    const parsed = parsePassportTxResponse({
+      protocol: PASSPORT_TX_PROTOCOL,
+      type: 'passport.tx.response',
+      requestId: 'request-1',
+      nonce: 'nonce-1',
+      status: 'submitted',
+      txId: '0f2c9ab1',
+      error: 'submit-failed',
+    });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.status).toBe('submitted');
+    expect(parsed!.txId).toBe('0f2c9ab1');
+    expect(parsed).not.toHaveProperty('error');
+  });
 });
 
 describe('Passport incentive report', () => {

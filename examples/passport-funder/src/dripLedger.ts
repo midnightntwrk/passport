@@ -61,4 +61,20 @@ export class HourlyRateLimiter {
     this.stamps.push(now);
     return true;
   }
+
+  /**
+   * Whether the ceiling is reached, WITHOUT consuming a slot.
+   *
+   * The ceiling counts drips, not requests. A caller that refuses for some
+   * other reason — already activated, wrong network, funder empty — has not
+   * used the funder's hourly budget, and burning a slot on it would let a
+   * stream of bad requests shut the funder down without a single NIGHT
+   * leaving it. So `take()` is called only once a drip is actually about to
+   * be attempted, and this exists for the cheap early refusal on the way in.
+   */
+  atCeiling(): boolean {
+    const now = Date.now();
+    this.stamps = this.stamps.filter((stamp) => now - stamp < 3_600_000);
+    return this.stamps.length >= this.maxPerHour;
+  }
 }

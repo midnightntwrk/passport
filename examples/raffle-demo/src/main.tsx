@@ -205,12 +205,20 @@ function App() {
   const txTimer = useRef<number | null>(null);
   /* Standalone only: the closed-popup poll for the payment exchange. */
   const txPoll = useRef<number | null>(null);
+  /* The same two watchers for the PROFILE exchange. A connect that is never
+     answered wedges the app just as a payment does — the popup is the only
+     thing that could reply, and a closed one never will — so it gets the same
+     treatment rather than a spinner with no end. */
+  const connectTimer = useRef<number | null>(null);
+  const connectPoll = useRef<number | null>(null);
   /* The message listeners are registered once, so anything they need about the
      connected Passport lives in a ref rather than in a render-scoped closure
      that would still be holding the first render's `null`. */
   const connectedAddress = useRef<string | null>(null);
 
   const settle = (profileResponse: PassportProfileResponse) => {
+    // Passport answered, so neither connect watcher has anything left to do.
+    clearConnectWatch();
     setResponse(profileResponse);
     connectedAddress.current =
       profileResponse.profile?.midnightAddresses?.unshielded ?? null;
@@ -246,7 +254,24 @@ function App() {
     }
   };
 
-  useEffect(() => clearTxTimer, []);
+  function clearConnectWatch(): void {
+    if (connectTimer.current !== null) {
+      window.clearTimeout(connectTimer.current);
+      connectTimer.current = null;
+    }
+    if (connectPoll.current !== null) {
+      window.clearInterval(connectPoll.current);
+      connectPoll.current = null;
+    }
+  }
+
+  useEffect(
+    () => () => {
+      clearTxTimer();
+      clearConnectWatch();
+    },
+    [],
+  );
 
   /**
    * Tells Passport what this entry earned the user. Passport records exactly
@@ -555,6 +580,7 @@ function App() {
 
     const requestId = crypto.randomUUID();
     const nonce = randomHex();
+    clearConnectWatch();
     request.current = { requestId, nonce };
     setResponse(null);
     setState('opening');
@@ -569,9 +595,15 @@ function App() {
       'popup,width=620,height=780',
     );
     if (!popup.current) {
+      /* No window, no handshake, nothing to wait for — so the exchange is
+         dropped here rather than left live for a reply that cannot come. */
+      request.current = null;
       setState('error');
       setDetail('The browser blocked the Passport window. Allow popups and try again.');
+      return;
     }
+    popup.current.focus();
+    armConnectWatch({ requestId, nonce });
   };
 
   const enterRaffle = () => {
@@ -667,6 +699,39 @@ function App() {
       abandon(
         'Passport did not answer the entry payment request. No ticket was issued; you can try again.',
       );
+    }, TX_TIMEOUT_MS);
+  };
+
+  /**
+   * The same two watchers for the standalone PROFILE exchange.
+   *
+   * The popup is the only thing that can answer a connect, so a user who
+   * closes it has answered — with a refusal — and no message will ever say so.
+   * Without this the app sits on "Opening Midnight Passport…" for as long as
+   * the tab is open, with a dead `request.current` swallowing the retry.
+   *
+   * Like the payment watchers, both settle only the exchange they were armed
+   * for, so a stale timer cannot kill a later attempt, and neither invents a
+   * connection: the app returns to the hero screen saying plainly that nothing
+   * was shared.
+   */
+  const armConnectWatch = (exchange: { requestId: string; nonce: string }) => {
+    clearConnectWatch();
+    const abandon = (reason: string) => {
+      clearConnectWatch();
+      if (!request.current || request.current.requestId !== exchange.requestId) return;
+      request.current = null;
+      setResponse(null);
+      setState('hero');
+      setDetail(reason);
+    };
+    connectPoll.current = window.setInterval(() => {
+      if (popup.current?.closed) {
+        abandon('The Passport window was closed before anything was shared. You can try again.');
+      }
+    }, POPUP_POLL_MS);
+    connectTimer.current = window.setTimeout(() => {
+      abandon('Passport did not answer the connection request. Nothing was shared; you can try again.');
     }, TX_TIMEOUT_MS);
   };
 

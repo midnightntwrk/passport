@@ -379,10 +379,35 @@ export default function BackupScreen(props: BackupProps) {
                   <code>{skipped.key}</code> was not written: {skipped.reason}.
                 </p>
               ))}
-              <p>
-                A restored contract is confirmed against the chain the next time this screen
-                is left — until the indexer answers for it, it is a record, not a proof.
-              </p>
+              {/* What the chain actually said about the contract records this
+                  restore wrote. A restored record is a claim made by a file;
+                  only an indexer read turns it into evidence, and where that
+                  read could not happen this says so rather than implying it
+                  did. See `confirmRestoredContracts` in App.tsx. */}
+              {restored.ledgerCheck === undefined ? (
+                <p>
+                  The restored contract records were not re-checked against the chain, so each
+                  is a record, not a proof.
+                </p>
+              ) : restored.ledgerCheck.ran ? (
+                <p>
+                  Checked against {restored.ledgerCheck.network}:{' '}
+                  {restored.ledgerCheck.confirmed} contract record(s) confirmed by the indexer
+                  {restored.ledgerCheck.unconfirmed > 0
+                    ? `, ${restored.ledgerCheck.unconfirmed} not answered for and now marked awaiting the indexer — a record, not a proof`
+                    : ''}
+                  {restored.ledgerCheck.otherNetworks > 0
+                    ? `, ${restored.ledgerCheck.otherNetworks} left unchecked because they belong to another network`
+                    : ''}
+                  .
+                </p>
+              ) : (
+                <p>
+                  The restored contract records were not re-checked against the chain:{' '}
+                  {restored.ledgerCheck.reason} Until the indexer answers for one, it is a
+                  record, not a proof.
+                </p>
+              )}
             </div>
           ) : null}
         </div>
