@@ -188,6 +188,20 @@ const FUNDER_UNAVAILABLE_SENTENCE =
   'Automatic activation was unavailable just now, so the wallet still needs funding.';
 
 /**
+ * Whether the funder is sponsoring `.night` registrations on `network` right
+ * now — its own `/status` answer, cached briefly, `false` on any doubt. When
+ * this is true the activation drip is NOT the path to a name: the funder
+ * registers the name itself (see `identity/sponsoredAlias.ts`) and the user's
+ * NIGHT balance is simply not part of the claim, so the callers below skip
+ * the shortfall-and-drip dance rather than sending a grant nobody will spend.
+ */
+async function aliasSponsorshipLikely(network: string | null | undefined): Promise<boolean> {
+  if (!FUNDER_URL || !aliasRegistrationSupported(network)) return false;
+  const { checkAliasSponsorship } = await import('./identity/sponsoredAlias.js');
+  return checkAliasSponsorship(FUNDER_URL, network as MidnamesNetwork);
+}
+
+/**
  * Parses a formatted (6-decimal) NIGHT figure back to atomic units, exactly.
  * Mirrors `atomicNightFrom` in `screens/AliasClaim.tsx`.
  */
@@ -2178,13 +2192,21 @@ export default function PassportDemo() {
       const credentialId = activeProfile.passkey.credentialId;
       const network = handle.network.networkId;
       const [
-        { AliasClaimError, checkAliasAvailability, checkAliasClaimFunds, claimAlias },
+        {
+          AliasClaimError,
+          checkAliasAvailability,
+          checkAliasClaimFunds,
+          claimAlias,
+          deriveMidnamesOwnerKey,
+        },
         { deployPassportContract },
         { deriveWalletSeed },
+        { AliasSponsorRefusal, checkAliasSponsorship, sponsorAliasRegistration },
       ] = await Promise.all([
         import('./identity/midnames.js'),
         import('./identity/passportContract.js'),
         import('./lib/localWallet.js'),
+        import('./identity/sponsoredAlias.js'),
       ]);
 
       /* The registry probes below need the network as a Midnames network, and
@@ -2217,8 +2239,18 @@ export default function PassportDemo() {
           availability.detail,
         );
       }
-      const funds = await checkAliasClaimFunds(handle, alias);
-      if (!funds.ok) throw new AliasClaimError('insufficient-night', funds.reason);
+      /* Sponsorship first, funds second. When the funder says it is sponsoring
+         registrations on this network, the user's own NIGHT is simply not part
+         of the claim — a wallet holding NOTHING gets its name — so gating on it
+         would refuse exactly the person this exists for. The funds gate still
+         runs, unchanged, whenever the sponsor cannot be confirmed. */
+      const sponsored = FUNDER_URL
+        ? await checkAliasSponsorship(FUNDER_URL, registryNetwork)
+        : false;
+      if (!sponsored) {
+        const funds = await checkAliasClaimFunds(handle, alias);
+        if (!funds.ok) throw new AliasClaimError('insufficient-night', funds.reason);
+      }
 
       /* (2) The one ceremony. Both secrets, one assertion, handle disposed. */
       const oneShot = await withPasskeyWatchdog(() =>
@@ -2305,14 +2337,52 @@ export default function PassportDemo() {
         }
 
         /* (4) The claim itself, bound to the contract address the chain gave
-           us — never to a value assembled from anything else. */
-        const claimed = await claimAlias(
-          handle,
-          ownerSecret,
-          alias,
-          { kind: 'contract', contractAddress },
-          (progress) => onPhase(progress.phase),
-        );
+           us — never to a value assembled from anything else.
+
+           Sponsored first: the funder registers the name FOR this Passport —
+           user's key as owner, this contract as target — paying the registry
+           price and the fees itself, so the user-side ceremony is already
+           over (the one passkey assertion above). The self-paid path is the
+           honest fallback, not a dead branch: it runs when no funder is
+           configured, when the funder refuses for a reason self-paying can
+           fix (out of NIGHT, rate ceiling, one-sponsored-name-per-Passport),
+           and it re-runs its own funds gates, so a broke wallet still gets
+           the truthful insufficient-night message rather than a retry loop. */
+        let claimed: AliasClaimResult | null = null;
+        if (sponsored && FUNDER_URL) {
+          onPhase('registering');
+          try {
+            claimed = await sponsorAliasRegistration(FUNDER_URL, {
+              alias,
+              ownerKey: await deriveMidnamesOwnerKey(ownerSecret),
+              contractAddress,
+              ownerAddress: handle.unshieldedAddress,
+              network: registryNetwork,
+            });
+          } catch (cause) {
+            if (!(cause instanceof AliasSponsorRefusal)) throw cause;
+            if (cause.code === 'name-taken') {
+              throw new AliasClaimError('taken', cause.message);
+            }
+            if (!cause.selfPayWorthTrying) {
+              /* `registration-in-flight` or `confirmation-failed`: something
+                 for this name or this Passport may already be on chain, and a
+                 self-paid attempt on top of it could register twice. Stop with
+                 the funder's own sentence. */
+              throw new AliasClaimError('register-rejected', cause.message);
+            }
+            claimed = null; // Fall through to the self-paid claim below.
+          }
+        }
+        if (!claimed) {
+          claimed = await claimAlias(
+            handle,
+            ownerSecret,
+            alias,
+            { kind: 'contract', contractAddress },
+            (progress) => onPhase(progress.phase),
+          );
+        }
 
         /* (5) Attach the account to the passkey, so a device that has never
            seen this Passport can find the contract again. Deliberately NOT
@@ -2424,8 +2494,14 @@ export default function PassportDemo() {
            is fetched and waited for HERE, before the claim — so the one button
            the user pressed does the whole thing. A funder that refuses or
            never lands is not fatal: the claim proceeds and fails with its own
-           honest insufficient-funds message. */
-        const shortfall = FUNDER_URL ? await claimNightShortfall(alias) : null;
+           honest insufficient-funds message.
+
+           A funder that SPONSORS registrations makes the grant itself
+           pointless: it will register the name with its own NIGHT, so the
+           user's balance is not consulted at all and no drip is requested. */
+        const sponsored = await aliasSponsorshipLikely(localWalletNetworkId);
+        const shortfall =
+          FUNDER_URL && !sponsored ? await claimNightShortfall(alias) : null;
         if (shortfall !== null) {
           setClaimPhase('activating');
           try {
@@ -2506,22 +2582,29 @@ export default function PassportDemo() {
         setReclaim({ target: selectedNetwork, alias: record.alias });
         return;
       }
-      // (2) Funds, before any passkey prompt. With a funder configured, a
-      // NIGHT shortfall earns one automatic activation attempt before the
-      // record goes honestly back in the queue — and the re-check afterwards
-      // is the same gate run again, never an assumption that the drip landed.
-      let funds = await checkAliasClaimFunds(handle, record.alias);
-      if (!funds.ok) {
-        const shortfall = FUNDER_URL ? await claimNightShortfall(record.alias) : null;
-        const activated = shortfall !== null && (await activateWalletViaFunder(shortfall));
-        if (activated) funds = await checkAliasClaimFunds(handle, record.alias);
+      // (2) Funds, before any passkey prompt — SKIPPED entirely while the
+      // funder is sponsoring registrations, because the sponsored claim never
+      // consults the user's balance (see `claimAliasBoundToAccount`, which
+      // re-probes and falls back to these same gates itself). Otherwise: with
+      // a funder configured, a NIGHT shortfall earns one automatic activation
+      // attempt before the record goes honestly back in the queue — and the
+      // re-check afterwards is the same gate run again, never an assumption
+      // that the drip landed.
+      const sponsored = await aliasSponsorshipLikely(selectedNetwork);
+      if (!sponsored) {
+        let funds = await checkAliasClaimFunds(handle, record.alias);
         if (!funds.ok) {
-          requeue(
-            shortfall !== null && !activated
-              ? `${funds.reason} ${FUNDER_UNAVAILABLE_SENTENCE}`
-              : funds.reason,
-          );
-          return;
+          const shortfall = FUNDER_URL ? await claimNightShortfall(record.alias) : null;
+          const activated = shortfall !== null && (await activateWalletViaFunder(shortfall));
+          if (activated) funds = await checkAliasClaimFunds(handle, record.alias);
+          if (!funds.ok) {
+            requeue(
+              shortfall !== null && !activated
+                ? `${funds.reason} ${FUNDER_UNAVAILABLE_SENTENCE}`
+                : funds.reason,
+            );
+            return;
+          }
         }
       }
       // (3) The onboarding claim's exact path, contract and all: one passkey
@@ -3563,7 +3646,15 @@ export default function PassportDemo() {
     // fees exactly as today). Every other queue reason — wrong network,
     // unreachable registry — passes through untouched, as does everything
     // when no funder is configured.
-    if (FUNDER_URL && selectedNetwork === localWalletNetworkId && aliasClaimSupported) {
+    if (
+      FUNDER_URL &&
+      selectedNetwork === localWalletNetworkId &&
+      aliasClaimSupported &&
+      // While the funder sponsors registrations, a claim never fails for lack
+      // of NIGHT in the first place — dripping a grant here would fund a
+      // wallet that is not going to spend it.
+      !(await aliasSponsorshipLikely(selectedNetwork))
+    ) {
       const shortfall = await claimNightShortfall(alias);
       // The probe keeps this branch honest: a name queued because the REGISTRY
       // was unreachable (or taken meanwhile) must queue exactly as before —
