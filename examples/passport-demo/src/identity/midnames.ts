@@ -866,7 +866,7 @@ export async function checkAliasClaimFunds(
     return {
       ok: false,
       reason:
-        'This wallet has no DUST, so it cannot pay the transaction fee yet. DUST accrues while NIGHT is held.',
+        'This wallet cannot pay the transaction fee yet: fees are normally covered by the fee sponsor, and this wallet holds no DUST of its own.',
     };
   }
   return { ok: true };
@@ -978,7 +978,7 @@ export async function claimAlias(
     if (dust <= 0n) {
       throw new AliasClaimError(
         'insufficient-dust',
-        'This wallet has no DUST, so it cannot pay the transaction fee yet. DUST accrues while NIGHT is held.',
+        'This wallet cannot pay the transaction fee yet: fees are normally covered by the fee sponsor, and this wallet holds no DUST of its own.',
       );
     }
   }

@@ -6,7 +6,6 @@ import {
   Loader2,
   SendHorizontal,
   X,
-  Zap,
 } from 'lucide-react'
 import {
   mainnet,
@@ -71,12 +70,6 @@ export interface SendSheetProps {
    * detail? }` — and are shown untouched.
    */
   onSend: (params: { recipientAddress: string; amount: bigint }) => Promise<SendNightResult>
-  /**
-   * Opens the same DUST registration the battery card offers. Provided only
-   * when that affordance genuinely applies to this wallet; the `no-dust`
-   * refusal stands alone without it.
-   */
-  onRegisterDust?: () => void
   onClose: () => void
 }
 
@@ -191,7 +184,6 @@ export default function SendSheet(props: SendSheetProps) {
     provingMode,
     readFeeReadiness,
     onSend,
-    onRegisterDust,
     onClose,
   } = props
 
@@ -465,21 +457,10 @@ export default function SendSheet(props: SendSheetProps) {
               {feeNote}
             </p>
 
-            {feeBlocksSend ? (
-              onRegisterDust ? (
-                <button
-                  type="button"
-                  className="mnhome-ghost"
-                  onClick={() => {
-                    onRegisterDust()
-                    onClose()
-                  }}
-                >
-                  <Zap size={13} aria-hidden="true" />
-                  <span>Generate DUST</span>
-                </button>
-              ) : null
-            ) : (
+            {/* Nothing stands in for the Send control when the fee cannot be
+                paid: the wallet's own refusal sentence above says why, and
+                there is no user-side registration left to point at. */}
+            {feeBlocksSend ? null : (
               <button
                 type="button"
                 className="mnhome-send-primary"

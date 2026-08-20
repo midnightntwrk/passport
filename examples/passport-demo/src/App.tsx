@@ -3616,82 +3616,14 @@ export default function PassportDemo() {
     }
   };
 
+  /**
+   * DUST registration for the CLASSIC Dynamic-hosted view only. The passkey
+   * wallet's own registration path was removed in the wallet-core review —
+   * fees on the demo networks are sponsored, so registering a user's NIGHT was
+   * a step that bought them nothing. This handler is reached only from the
+   * classic workspace, which is legacy and outside the demo flow.
+   */
   const registerDust = async () => {
-    if (walletMode === 'local') {
-      // The on-device wallet registers its own NIGHT for DUST generation, which
-      // is what makes a faucet-funded Passport able to pay its first fee.
-      const wallet = localWalletRef.current;
-      if (!wallet) return;
-      // A real chain transaction, so it takes the same approval ceremony as
-      // every other local submission. A refusal means nothing was signed.
-      try {
-        await confirmLocalApproval('Register NIGHT for DUST generation');
-      } catch (cause) {
-        pushToast({
-          tone: 'error',
-          title: 'DUST registration not submitted',
-          body: cause instanceof Error ? cause.message : String(cause),
-        });
-        return;
-      }
-      setBusyAction('dust');
-      setError(null);
-      // Proving and submitting can take tens of seconds; a silent spinner
-      // reads as "nothing happened" and invites a second press.
-      pushToast({
-        tone: 'info',
-        title: 'Registering NIGHT for DUST generation',
-        body: 'Proving and submitting — this can take a moment.',
-      });
-      try {
-        const result = await wallet.registerDust();
-        const detail =
-          result.status === 'already-generating'
-            ? 'Every NIGHT UTxO in this wallet is already generating DUST; nothing to submit.'
-            : `Registered ${result.utxoCount} NIGHT UTxO${result.utxoCount === 1 ? '' : 's'} for DUST generation.`;
-        addActivity({
-          label: 'DUST registration',
-          detail,
-          status: result.status === 'already-generating' ? 'blocked' : 'complete',
-          source: result.txId ? 'chain' : 'wallet',
-          ...(result.txId ? { txHash: result.txId } : {}),
-        });
-        if (result.status === 'registered') {
-          pushToast({
-            tone: 'success',
-            title: 'DUST registration submitted',
-            body:
-              result.note ??
-              'DUST accrues gradually from registered NIGHT — the battery starts filling within a minute.',
-            // The wallet's own network, not the UI-selected one — the two can
-            // differ, and the link must point where the transaction really is.
-            link: explorerTxLink(result.txId, localWalletNetworkId),
-          });
-        }
-        await refreshWallet();
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        // A RegisterDustError carries the node's own sentence in `detail` —
-        // dropping it leaves the user with an unverifiable accusation. Matched
-        // structurally: importing the class would pull the wallet SDK into the
-        // initial bundle, which the type-only import above exists to prevent.
-        const nodeDetail =
-          cause instanceof Error && cause.name === 'RegisterDustError'
-            ? (cause as { detail?: string }).detail
-            : undefined;
-        const detail = nodeDetail ? `${message} ${nodeDetail}` : message;
-        setError(detail);
-        addActivity({
-          label: 'DUST registration',
-          detail,
-          status: 'error',
-          source: 'wallet',
-        });
-      } finally {
-        setBusyAction(null);
-      }
-      return;
-    }
     if (!midnightWallet) return;
     setBusyAction('dust');
     setError(null);
@@ -5550,18 +5482,6 @@ export default function PassportDemo() {
     setExperience('classic');
   };
 
-  /**
-   * What the local wallet genuinely cannot do yet — nothing, as of 2026/08/06.
-   *
-   * It signs and submits unshielded NIGHT transfers (the path a framed app
-   * uses, and the path that pays for a `.night` name), and it now registers its
-   * own NIGHT for DUST generation through `LocalMidnightWallet.registerDust()`.
-   * The Dynamic route needs no note either: its embedded wallet registers DUST
-   * itself. Kept as a named constant so a future limitation has one place to
-   * go, rather than being scattered back through the Home props.
-   */
-  const localWalletWriteLimitation: string | null = null;
-
   const appsProfile = sessionActive
     ? {
         displayName: sessionDisplayName,
@@ -5736,10 +5656,6 @@ export default function PassportDemo() {
                 onDismissError={() => setError(null)}
                 onRefresh={refreshMobile}
                 onCopyAddress={copyAddressOfKind}
-                onRegisterDust={() => void registerDust()}
-                /* No limitation remains — see `localWalletWriteLimitation`,
-                   kept as the single place a future one would go. */
-                registerDustDisabledReason={localWalletWriteLimitation}
                 /* The Send seam. `null` when no local wallet session is open,
                    which is what makes Home render no Send control at all. */
                 send={homeSend}

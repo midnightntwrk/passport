@@ -44,7 +44,7 @@ node, indexer, proof server, and fixture fee wallet from
    after reload. Confirm that C1 metadata and permissions restore only after
    the passkey succeeds.
 6. Sign a Dynamic message. Record the user approval and result.
-7. With a funded test wallet, register DUST and send one unshielded and one
+7. With a funded test wallet, send one unshielded and one
    shielded transfer. For each, record the distinct build, Dynamic signing and
    proof, and submission entries, then open the transaction detail row and show
    the returned hash. Use the recovery icon only to release an abandoned pending

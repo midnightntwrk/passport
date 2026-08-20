@@ -149,7 +149,8 @@ State it exactly this way in any copy you write: the amount is paid **in
 NIGHT, by the user's own Passport wallet**, after the user approves on
 Passport's sheet. The network fee is **either covered by a sponsor**
 (`sponsored: true`, and only then) **or paid from the user's DUST**. A wallet
-with NIGHT but no registered DUST generation still gets `insufficient-funds`
+with NIGHT that reaches neither — no sponsor, and no DUST of its own — still
+gets `insufficient-funds`
 — that is designed behaviour (`docs/TROUBLESHOOTING.md`). `submitted` means
 *at the node*, not *final*. Nothing here is free, and no copy may say it is.
 

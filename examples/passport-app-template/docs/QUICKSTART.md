@@ -105,12 +105,12 @@ following must hold (`src/main.tsx`, `PAYMENT_ARMED`):
    first.
 
 And the half that is not on your side: the Passport you point at must have a
-wallet that can actually pay — NIGHT for the amount, **and DUST generation
-registered** (the wallet's *Register DUST* control), because DUST pays the
-network fee and NIGHT on its own does not generate it. Short of that, the
-reply is a `failed` carrying `insufficient-funds` or `wallet-unavailable`,
-which is the designed behaviour — see
-[TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
+wallet that can actually pay — NIGHT for the amount, **and something covering
+the network fee**, which is paid in DUST rather than NIGHT. On the public
+networks the fee sponsor covers it by default; a Passport with no sponsor
+reachable and no DUST of its own cannot pay. Short of either, the reply is a
+`failed` carrying `insufficient-funds` or `wallet-unavailable`, which is the
+designed behaviour — see [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
 
 **The payment flow truth, worth stating once:** the entry amount is paid in
 NIGHT by the user's own Passport wallet. The network fee is either covered by

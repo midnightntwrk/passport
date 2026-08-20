@@ -145,9 +145,11 @@ side, not yours:
 - **No NIGHT** — the wallet cannot cover the amount itself. Fund it from the
   public network's faucet, or with the Passport repository's
   `fund-localnet.mjs` against a localnet.
-- **No DUST** — NIGHT is present but nothing pays the network fee. DUST is
-  generated, and generation must be **registered** via the wallet's *Register
-  DUST* control. NIGHT on its own does not generate it.
+- **No DUST** — NIGHT is present but nothing pays the network fee. Fees are
+  paid in DUST, and on the public networks the fee sponsor covers them by
+  default; this shortfall means no sponsor was reachable or able to pay, and
+  the wallet holds no DUST of its own to fall back on. NIGHT alone does not
+  pay a fee.
 
 This is designed behaviour: Passport reports what its wallet actually said
 rather than simulating a success, and nothing on the app side can make an

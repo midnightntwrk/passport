@@ -7,14 +7,12 @@ import {
   ExternalLink,
   Layers,
   LogOut,
-  Plus,
   RefreshCw,
   Send,
   SendHorizontal,
   ShieldCheck,
   Wallet,
   X,
-  Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -104,18 +102,11 @@ export interface HomeScreenProps {
   unshieldedAddress: string | null
   shieldedAddress: string | null
   dustAddress: string | null
-  /** Failure from any control on this screen — copy, DUST registration, refresh. */
+  /** Failure from any control on this screen — copy, send, refresh. */
   error?: string | null
   onDismissError?: () => void
   onRefresh: () => void
   onCopyAddress: (kind: 'unshielded' | 'shielded' | 'dust') => void
-  onRegisterDust: () => void
-  /**
-   * Set when DUST registration genuinely cannot run for the active wallet.
-   * The control is disabled and this sentence is shown in its place — the
-   * button is never left live to fail silently.
-   */
-  registerDustDisabledReason?: string | null
   /**
    * @deprecated Ignored since 2026/08/06.
    *
@@ -225,8 +216,6 @@ export default function HomeScreen(props: HomeScreenProps) {
     onDismissError,
     onRefresh,
     onCopyAddress,
-    onRegisterDust,
-    registerDustDisabledReason,
     send,
     appsProfile,
     onProfileShared,
@@ -285,17 +274,6 @@ export default function HomeScreen(props: HomeScreenProps) {
 
   const balancesLoading = balanceStatus === 'loading'
   const fill = clampPercent(dustFillPercent)
-  /* Registration is a real on-chain action, so it is only offered once the
-     balance call has answered — 'ready', or 'syncing', where the figures are
-     real but DUST is still catching up. It is NOT additionally gated on the
-     syncing flag: a first sync can report "syncing" indefinitely, and hiding
-     the only actionable control behind that flag would strand the user. When
-     registration genuinely cannot run, the integrator disables the button
-     via `registerDustDisabledReason` instead. Note `dustBalance === '0'` is a
-     genuine zero, but does not by itself mean the wallet is registered — only
-     a reported cap or fill does. */
-  const dustAnswered = balanceStatus === 'ready' || balanceStatus === 'syncing'
-  const needsDustRegistration = dustAnswered && (fill === null || fill === 0)
 
   /* One legible story for the battery when the fill is unknown: say whether
      we are still waiting, whether the wallet is unreachable, or whether there
@@ -339,7 +317,10 @@ export default function HomeScreen(props: HomeScreenProps) {
             ? `Syncing the wallet — ${Math.round(syncPercent)}% of the chain walked`
             : 'No charge reported yet — the wallet is still syncing'
           : fill === null
-            ? 'Not registered yet — DUST pays transaction fees'
+            ? /* No DUST coins at all. Deliberately a state, not an
+                 instruction: registering NIGHT is not a user step here —
+                 fees on these networks are sponsored. */
+              'No DUST yet — DUST pays transaction fees'
             : 'Empty — DUST accrues while NIGHT is held'
 
   const ringDash = useMemo(() => {
@@ -509,21 +490,13 @@ export default function HomeScreen(props: HomeScreenProps) {
             loading={balancesLoading}
           />
 
-          {/* The DUST card earns its place only when it has something real:
-              a charge, a cap, or a registration the wallet can actually run.
-              The on-device wallet's dead state (no charge, registration not
-              wired) is hidden — sync progress lives in the strip up top. */}
-          {(import.meta.env as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1' ? (
-            /* Demo mode: the battery card stays hidden, but fee generation
-               still needs enabling once — a single quiet pill that vanishes
-               as soon as DUST exists. */
-            needsDustRegistration && !registerDustDisabledReason ? (
-              <button type="button" className="mnhome-ghost" onClick={onRegisterDust}>
-                <Zap size={13} aria-hidden="true" />
-                <span>Generate Dust</span>
-              </button>
-            ) : null
-          ) : fill === null && !dustCap && registerDustDisabledReason ? null : (
+          {/* The DUST card reports this wallet's charge, and asks nothing of
+              the user: fees are covered by the sponsor, so there is no
+              registration step to offer. Sync progress lives in the strip up
+              top. The localnet demo hides the card outright, as it always has
+              — the 'Generate Dust' pill that stood in its place there went
+              with the rest of user-side registration. */}
+          {(import.meta.env as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1' ? null : (
           <article className="mnhome-dust">
             <div className={`mnhome-battery${dustSyncing ? ' mnhome-battery-charging' : ''}`}>
               {fill !== null ? (
@@ -567,22 +540,6 @@ export default function HomeScreen(props: HomeScreenProps) {
                 )}
               </p>
               <p className="mnhome-dust-cap">{dustDetail}</p>
-              {needsDustRegistration ? (
-                <>
-                  <button
-                    type="button"
-                    className="mnhome-ghost"
-                    onClick={onRegisterDust}
-                    disabled={Boolean(registerDustDisabledReason)}
-                  >
-                    <Plus size={13} aria-hidden="true" />
-                    <span>Register DUST</span>
-                  </button>
-                  {registerDustDisabledReason ? (
-                    <p className="mnhome-dust-note">{registerDustDisabledReason}</p>
-                  ) : null}
-                </>
-              ) : null}
             </div>
           </article>
           )}
@@ -638,15 +595,6 @@ export default function HomeScreen(props: HomeScreenProps) {
             provingMode={send.provingMode}
             readFeeReadiness={send.readFeeReadiness}
             onSend={send.onSend}
-            /* Offered only when the battery card's own registration affordance
-               applies — a wallet that is already generating DUST, or one that
-               genuinely cannot register, gets the refusal without a pointer to
-               a button that would not help. */
-            onRegisterDust={
-              needsDustRegistration && !registerDustDisabledReason
-                ? () => onRegisterDust()
-                : undefined
-            }
             onClose={() => setSendOpen(false)}
           />
         ) : null}

@@ -128,7 +128,8 @@ grid filters it out.
 - **Payments are paid in NIGHT by the user's Passport wallet.** The network
   fee is sponsored only when the reply says `sponsored: true`; otherwise it
   comes from the user's DUST. Nothing here is free, and sponsorship is
-  best-effort. The wallet-side requirements (NIGHT, *and* registered DUST)
+  best-effort. The wallet-side requirements (NIGHT, *and* something covering
+  the DUST fee)
   are spelled out in [docs/QUICKSTART.md](./docs/QUICKSTART.md#e-arming-the-optional-payment-act-3)
   and [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md#insufficient-funds--night-versus-dust).
 

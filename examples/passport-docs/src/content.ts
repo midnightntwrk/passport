@@ -186,12 +186,12 @@ today, which is why Passport defaults to Preview — the measured detail is in
 /*                                                                            */
 /* Sources: examples/passport-demo/src/lib/networks.ts (faucet URLs, captcha  */
 /* rationale, mainnet absence); examples/passport-demo/src/screens/Home.tsx   */
-/* (Receive sheet, faucet link, battery states, Register DUST control);       */
-/* examples/passport-demo/src/lib/localWallet.ts (registerDust, DUST accrual, */
-/* subscribeBalances streaming, FeeReadiness); examples/passport-demo/src/    */
-/* lib/sponsor.ts (default gateways, on-by-default decision 2026/08/07,       */
-/* available > 0 gate); examples/passport-demo/src/screens/SendSheet.tsx      */
-/* (fee line copy).                                                           */
+/* (Receive sheet, faucet link, battery states); examples/passport-demo/src/  */
+/* lib/localWallet.ts (DUST accrual, subscribeBalances streaming,             */
+/* FeeReadiness, NO_DUST_SENTENCE); examples/passport-demo/src/lib/sponsor.ts */
+/* (default gateways, on-by-default decision 2026/08/07, available > 0 gate); */
+/* examples/passport-funder/src/wallet.ts (registerDustIfNeeded — the service */
+/* side); examples/passport-demo/src/screens/SendSheet.tsx (fee line copy).   */
 /* -------------------------------------------------------------------------- */
 
 const FUNDING: DocSection = {
@@ -206,9 +206,14 @@ into six decimal places (1 NIGHT = 1,000,000 atomic units).
 
 **DUST** is what pays network fees. It is not bought or transferred in the
 ordinary way: DUST **accrues gradually while registered NIGHT is held**. NIGHT
-on its own does not generate it — the wallet's NIGHT holdings must be
+on its own does not generate it — a wallet's NIGHT holdings must be
 *registered* for DUST generation first, which is itself one on-chain
 transaction.
+
+In Passport that registration is **not something you do**. Fees on the public
+networks are sponsored, so a Passport wallet never needs DUST of its own to
+transact. Registration is how the *services* pay their own way — see *Who
+registers NIGHT, and why* below.
 
 ## Getting test NIGHT from the faucet
 
@@ -229,27 +234,38 @@ requires a captcha token from a Cloudflare Turnstile challenge, so no in-app
 code can honestly obtain one. Mainnet has no faucet and never will — on
 mainnet the button simply is not there.
 
-## Registering NIGHT for DUST generation
+## The DUST battery
 
-The **DUST battery** card on Home tells this story:
+The **DUST battery** card on Home reports what this wallet holds. It is a
+readout, not a control — there is nothing on it to press:
 
 - The ring is a **battery gauge**: blue when it shows a real DUST charge, grey
   while it is still a sync gauge, with word states — *Syncing*, *Unknown*,
   *No charge* — when there is no figure to draw.
-- *"Not registered yet — DUST pays transaction fees"* means the wallet holds
-  NIGHT that is not yet generating DUST. The **Register DUST** button runs the
-  registration transaction. When registration genuinely cannot run, the button
-  is disabled with the reason shown in its place — never left live to fail
-  silently.
-- *"Empty — DUST accrues while NIGHT is held"* means registration is done and
-  the charge is building. The cap line ("Cap … · charging") shows the maximum
-  the battery can hold.
+- *"No DUST yet — DUST pays transaction fees"* means the wallet has no DUST
+  coins. On a sponsored network that is not a problem to solve: the sponsor
+  pays, and nothing about the wallet needs changing.
+- *"Empty — DUST accrues while NIGHT is held"* means DUST generation is under
+  way and the charge is building. The cap line ("Cap … · charging") shows the
+  maximum the battery can hold.
 
-Registration covers every unregistered NIGHT UTxO the wallet holds; if
-everything is already registered, nothing is submitted and no fee is paid.
-Measured end-to-end against a localnet on 2026/08/06: registering two NIGHT
-UTxOs yielded a spendable DUST balance about nine seconds later, and the
-transfer that followed paid its own fee.
+## Who registers NIGHT, and why
+
+DUST generation against registered NIGHT is real, and it is how the **services
+behind the demo pay their own way** — an operational concern, not a user step:
+
+- The **fee sponsor** holds DUST and attaches it to transactions users sign.
+- The **funder service** registers its own NIGHT for DUST generation on start
+  (\`examples/passport-funder/src/wallet.ts\`, \`registerDustIfNeeded\`) so its
+  service wallet can pay for the transfers it makes. That is the reference
+  implementation of the registration transaction, measured end-to-end against
+  a localnet on 2026/08/06: registering two NIGHT UTxOs yielded a spendable
+  DUST balance about nine seconds later, and the transfer that followed paid
+  its own fee.
+
+Passport's own passkey wallet had a *Register DUST* control until the
+wallet-core review removed it: with fees sponsored, it asked the user to spend
+a transaction on something that bought them nothing.
 
 ## Sponsored fees
 
@@ -506,10 +522,10 @@ and no transaction bridge.
 State it exactly this way: the amount is paid **in NIGHT, by the user's own
 Passport wallet**, after the user approves on Passport's sheet. The network
 fee is **either covered by a sponsor** (\`sponsored: true\` on the reply, and
-only then) **or paid from the user's DUST**. A wallet with NIGHT but no
-registered DUST generation still gets \`insufficient-funds\` — that is
-designed behaviour. \`submitted\` means *at the node*, not *final*. Nothing
-here is free, and no copy may say it is.
+only then) **or paid from the user's DUST**. A wallet with NIGHT that reaches
+neither — no sponsor, and no DUST of its own — still gets
+\`insufficient-funds\` — that is designed behaviour. \`submitted\` means *at
+the node*, not *final*. Nothing here is free, and no copy may say it is.
 
 ## Getting listed on the App Hub
 
@@ -545,8 +561,8 @@ property.
 /* explorer, CLAIMABLE_NETWORKS); examples/passport-demo/.env.example         */
 /* (endpoints, preprod first-sync measurements 2026/08/06, depth guard);      */
 /* examples/passport-demo/src/lib/sponsor.ts (gateways);                      */
-/* examples/passport-demo/src/lib/localWallet.ts (SendNightErrorCode,         */
-/* RegisterDustErrorCode); examples/passport-app-template/docs/PROTOCOL.md    */
+/* examples/passport-demo/src/lib/localWallet.ts (SendNightErrorCode);       */
+/* examples/passport-app-template/docs/PROTOCOL.md                            */
 /* (bridge error codes); examples/passport-demo/src/lib/passkeyPresence.ts    */
 /* (approval failure codes); examples/passport-app-template/docs/             */
 /* TROUBLESHOOTING.md (explorer hash note).                                   */
@@ -595,15 +611,6 @@ call answers with.
 | \`submit-rejected\` | The node rejected the transaction or was unreachable. |
 | \`wallet-closed\` | The wallet session closed before it could sign. |
 
-**Registering DUST** (\`RegisterDustError\`):
-
-| Code | Meaning |
-| --- | --- |
-| \`no-utxos\` | No NIGHT UTxOs to register. |
-| \`proving-failed\` | The proof could not be computed. |
-| \`submit-rejected\` | The node rejected the transaction or was unreachable. |
-| \`wallet-closed\` | The wallet session closed before it could sign. |
-
 **Bridge transactions** (\`passport.tx.response\`, what a connected app sees):
 
 | Code | Meaning |
@@ -648,9 +655,10 @@ configured for. A fresh browser wallet also cannot complete a first sync on
 preprod today — see [Networks](#reference) above for the measurements.
 
 **I have NIGHT but my transaction says it cannot pay the fee. Why?**
-Fees are paid in DUST, and DUST only accrues against **registered** NIGHT.
-Register DUST generation from the battery card, or let the fee sponsor cover
-the fee where one is available. NIGHT on its own does not generate DUST.
+Fees are paid in DUST, not NIGHT, and they are normally covered by the fee
+sponsor. That message means no sponsor is covering this one — it is off,
+unreachable, or out of DUST — and your wallet holds no DUST of its own to fall
+back on. The fee line names the sponsor's own reason where it gave one.
 
 **Is a sponsored transaction free?**
 The *network fee* is covered when — and only when — the sponsor genuinely
