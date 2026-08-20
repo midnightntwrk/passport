@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   MAX_ACCOUNT_BLOB_BYTES,
+  PassportEnrolmentConflictError,
   WebAuthnPrfKeyProvider,
   decodeAccountBlob,
   encodeAccountBlob,
@@ -106,6 +107,23 @@ describe('WebAuthnPrfKeyProvider', () => {
     // carries the scope, on both paths.
     const otherSeed = await discovered.deriveWalletSeed({ ...scope, accountId: 'other-account' });
     expect([...otherSeed]).not.toEqual([...discoveredSeed]);
+
+    // GOLDEN VECTOR — the seed a well-formed scope derived before the scope
+    // validation landed, byte for byte. Rejecting collision-capable scopes must
+    // never change the label of a scope that was always fine: if it did, every
+    // wallet already derived from this scope would be unreachable. Recorded
+    // from PRF output `Uint8Array(32).fill(5)` under the scope above.
+    expect([...discoveredSeed]).toEqual([
+      6, 132, 168, 189, 229, 137, 26, 171, 70, 112, 90, 79, 134, 30, 194, 233, 160, 99, 226, 250,
+      110, 89, 137, 91, 77, 5, 6, 126, 169, 183, 157, 182,
+    ]);
+    // A colon inside the accountId is well-formed and MUST keep deriving: every
+    // shipped multi-passkey Passport uses `passport-local:<credential>`.
+    const colonScoped = await discovered.deriveWalletSeed({
+      ...scope,
+      accountId: 'passport-local:AQIDBA',
+    });
+    expect(colonScoped).toHaveLength(32);
 
     const stateKey = await discovered.deriveStateKey(scope);
     expect(stateKey.extractable).toBe(false);
@@ -234,6 +252,9 @@ describe('WebAuthnPrfKeyProvider', () => {
         get: async () => {
           assertions += 1;
           return {
+            // base64 of [1,2,3] — the credential the provider below targets.
+            // A targeted assertion now refuses any other credential's answer.
+            rawId: new Uint8Array([1, 2, 3]).buffer,
             getClientExtensionResults: () => ({
               prf: { results: { first: new Uint8Array(32).fill(9).buffer } },
             }),
@@ -471,5 +492,300 @@ describe('WebAuthn largeBlob account metadata', () => {
 
     replaceNavigator({});
     await expect(WebAuthnPrfKeyProvider.readAccountBlob(reference)).resolves.toBeNull();
+  });
+});
+
+/**
+ * Scope→label injectivity.
+ *
+ * The two halves of a scope are glued into every HKDF info string with a bare
+ * separator and nothing is escaped, so an appId carrying that separator makes
+ * two different scopes derive the same secret. These pin the rule at the
+ * derivation sites; `private-state.test.ts` pins it at the storage site.
+ */
+describe('scope encoding is injective', () => {
+  const prfOutput = new Uint8Array(32).fill(5);
+
+  async function discoveredHandle() {
+    replaceNavigator({
+      credentials: {
+        get: async () => ({
+          rawId: new Uint8Array([9, 9, 9]).buffer,
+          getClientExtensionResults: () => ({
+            prf: { results: { first: prfOutput.slice().buffer } },
+          }),
+        }),
+      },
+    });
+    return WebAuthnPrfKeyProvider.discover({ rpId: 'localhost' });
+  }
+
+  it('refuses the appId half of a colliding pair on every derivation path', async () => {
+    const handle = await discoveredHandle();
+    // These two flattened to the SAME label before the rule existed:
+    // 'demo:eu' + 'alice' and 'demo' + 'eu:alice'.
+    const colliding = { appId: 'demo:eu', accountId: 'alice' };
+    const wellFormed = { appId: 'demo', accountId: 'eu:alice' };
+
+    await expect(handle.deriveWalletSeed(colliding)).rejects.toThrow(/may not contain/);
+    await expect(handle.deriveStateKey(colliding)).rejects.toThrow(/may not contain/);
+    // The other half of the pair is unambiguous and still derives.
+    expect(await handle.deriveWalletSeed(wellFormed)).toHaveLength(32);
+    handle.dispose();
+  });
+
+  it('refuses a pipe or a control character, and an empty half', async () => {
+    const handle = await discoveredHandle();
+    await expect(handle.deriveWalletSeed({ appId: 'demo|eu', accountId: 'alice' })).rejects.toThrow(
+      /may not contain/,
+    );
+    await expect(
+      handle.deriveWalletSeed({ appId: 'demo\u0000eu', accountId: 'alice' }),
+    ).rejects.toThrow(/control characters/);
+    await expect(
+      handle.deriveWalletSeed({ appId: 'demo', accountId: 'alice\u0000bob' }),
+    ).rejects.toThrow(/control characters/);
+    await expect(handle.deriveWalletSeed({ appId: '  ', accountId: 'alice' })).rejects.toThrow(
+      /requires an appId/,
+    );
+    handle.dispose();
+  });
+
+  it('runs the same rule on the cached targeted provider', async () => {
+    replaceNavigator({
+      credentials: {
+        get: async () => ({
+          rawId: new Uint8Array([1, 2, 3]).buffer,
+          getClientExtensionResults: () => ({
+            prf: { results: { first: prfOutput.slice().buffer } },
+          }),
+        }),
+      },
+    });
+    const provider = new WebAuthnPrfKeyProvider({
+      credentialId: 'AQID',
+      label: 'Midnight Passport',
+    });
+    await expect(provider.getKey({ appId: 'a:b', accountId: 'c' })).rejects.toThrow(
+      /may not contain/,
+    );
+    await expect(provider.deriveWalletSeed({ appId: 'a|b', accountId: 'c' })).rejects.toThrow(
+      /may not contain/,
+    );
+  });
+});
+
+/**
+ * Enrolment overwrite guard.
+ *
+ * The user handle is deterministic and resident keys are required, so a second
+ * `create` for the same (rpId, user.id) REPLACES the credential and takes its
+ * PRF secret — and every wallet seed derived from it — with it. Two mechanisms
+ * stand against that: exclusion of every id we know, and asking the
+ * authenticator itself before creating anything.
+ */
+describe('enrolment overwrite guard', () => {
+  it('excludes every known credential, not only the deprecated single id', async () => {
+    let capturedOptions: CredentialCreationOptions | undefined;
+    replaceNavigator({
+      credentials: {
+        create: async (options: CredentialCreationOptions) => {
+          capturedOptions = options;
+          return {
+            rawId: new Uint8Array([8, 8]).buffer,
+            getClientExtensionResults: () => ({ prf: { enabled: true } }),
+          };
+        },
+      },
+    });
+
+    await WebAuthnPrfKeyProvider.enrollWithPrf({
+      label: 'Midnight Passport',
+      userId: 'local-exclude',
+      knownCredentialIds: ['AQID', 'BAUG', 'AQID'],
+      // The deprecated alias still counts, and is folded in rather than ignored.
+      existingCredentialId: 'Bwc=',
+    });
+    const publicKey = capturedOptions?.publicKey as Record<string, unknown>;
+    const excluded = publicKey.excludeCredentials as { id: ArrayBuffer; type: string }[];
+    // Three: the duplicate collapses, the alias joins.
+    expect(excluded).toHaveLength(3);
+    expect(excluded.every((entry) => entry.type === 'public-key')).toBe(true);
+    expect(excluded.every((entry) => entry.id instanceof ArrayBuffer)).toBe(true);
+  });
+
+  it('sends no exclusion list at all when nothing is known', async () => {
+    let capturedOptions: CredentialCreationOptions | undefined;
+    replaceNavigator({
+      credentials: {
+        create: async (options: CredentialCreationOptions) => {
+          capturedOptions = options;
+          return {
+            rawId: new Uint8Array([8]).buffer,
+            getClientExtensionResults: () => ({ prf: { enabled: true } }),
+          };
+        },
+      },
+    });
+    await WebAuthnPrfKeyProvider.enrollWithPrf({ label: 'Midnight Passport', userId: 'local-none' });
+    const publicKey = capturedOptions?.publicKey as Record<string, unknown>;
+    expect('excludeCredentials' in publicKey).toBe(false);
+  });
+
+  it('raises a distinct conflict error when the authenticator reports InvalidStateError', async () => {
+    replaceNavigator({
+      credentials: {
+        create: async () => {
+          // Exactly what a browser throws when excludeCredentials matched.
+          const error = new Error('The authenticator recognised an excluded credential.');
+          error.name = 'InvalidStateError';
+          throw error;
+        },
+      },
+    });
+
+    const enrolment = WebAuthnPrfKeyProvider.enrollWithPrf({
+      label: 'Midnight Passport',
+      userId: 'local-conflict',
+      knownCredentialIds: ['AQID'],
+    });
+    // Catchable as its own type — not a message the caller has to match.
+    await expect(enrolment).rejects.toBeInstanceOf(PassportEnrolmentConflictError);
+    await expect(enrolment).rejects.toThrow(/already holds a Passport passkey/);
+  });
+
+  it('leaves every other enrolment failure as the ordinary flattened error', async () => {
+    replaceNavigator({
+      credentials: {
+        create: async () => {
+          const error = new Error('The user cancelled.');
+          error.name = 'NotAllowedError';
+          throw error;
+        },
+      },
+    });
+    const enrolment = WebAuthnPrfKeyProvider.enrollWithPrf({
+      label: 'Midnight Passport',
+      userId: 'local-cancel',
+    });
+    await expect(enrolment).rejects.not.toBeInstanceOf(PassportEnrolmentConflictError);
+    await expect(enrolment).rejects.toThrow('The user cancelled.');
+  });
+
+  it('signs in to a resident credential instead of creating one', async () => {
+    let creations = 0;
+    let assertions = 0;
+    replaceNavigator({
+      credentials: {
+        create: async () => {
+          creations += 1;
+          throw new Error('discoverOrEnroll must not create when a passkey already answers');
+        },
+        get: async () => {
+          assertions += 1;
+          return {
+            rawId: new Uint8Array([1, 2, 3, 4]).buffer,
+            getClientExtensionResults: () => ({
+              prf: { results: { first: new Uint8Array(32).fill(2).buffer } },
+            }),
+          };
+        },
+      },
+    });
+
+    const outcome = await WebAuthnPrfKeyProvider.discoverOrEnroll({
+      label: 'Midnight Passport',
+      userId: 'local-discoverable',
+      rpId: 'localhost',
+    });
+    expect(outcome.outcome).toBe('existing');
+    expect(outcome.enrolled).toBeNull();
+    expect(outcome.discovered?.credentialId).toBe('AQIDBA==');
+    // The whole point: the surviving passkey was never at risk of replacement,
+    // and the user saw ONE prompt rather than a create followed by a sign-in.
+    expect(creations).toBe(0);
+    expect(assertions).toBe(1);
+    outcome.discovered?.dispose();
+  });
+
+  it('enrols only when discovery finds nothing, cancellation included', async () => {
+    for (const failure of [
+      async () => null,
+      async () => {
+        const error = new Error('The user cancelled.');
+        error.name = 'NotAllowedError';
+        throw error;
+      },
+    ]) {
+      let creations = 0;
+      let capturedOptions: CredentialCreationOptions | undefined;
+      replaceNavigator({
+        credentials: {
+          get: failure,
+          create: async (options: CredentialCreationOptions) => {
+            creations += 1;
+            capturedOptions = options;
+            return {
+              rawId: new Uint8Array([3, 3]).buffer,
+              getClientExtensionResults: () => ({ prf: { enabled: true } }),
+            };
+          },
+        },
+      });
+
+      const outcome = await WebAuthnPrfKeyProvider.discoverOrEnroll({
+        label: 'Midnight Passport',
+        userId: 'local-empty',
+        rpId: 'localhost',
+        knownCredentialIds: ['AQID'],
+      });
+      expect(outcome.outcome).toBe('enrolled');
+      expect(outcome.discovered).toBeNull();
+      expect(creations).toBe(1);
+      // The second line of defence still rides along on the create.
+      const publicKey = capturedOptions?.publicKey as Record<string, unknown>;
+      expect(publicKey.excludeCredentials).toHaveLength(1);
+      outcome.enrolled?.prf?.dispose();
+    }
+  });
+});
+
+/**
+ * A targeted assertion names one credential. Nothing in the browser API
+ * obliges the caller to check that the credential which answered is that one,
+ * and a different credential's PRF output opens a different wallet.
+ */
+describe('targeted assertions verify the answering credential', () => {
+  const mismatched = {
+    credentials: {
+      get: async () => ({
+        // Asked for 'AQIDBA==' ([1,2,3,4]); a different credential answers.
+        rawId: new Uint8Array([9, 9, 9, 9]).buffer,
+        getClientExtensionResults: () => ({
+          prf: { results: { first: new Uint8Array(32).fill(6).buffer } },
+        }),
+      }),
+    },
+  };
+
+  it('refuses a mismatched rawId on assertOnce', async () => {
+    replaceNavigator(mismatched);
+    await expect(
+      WebAuthnPrfKeyProvider.assertOnce({
+        credentialId: 'AQIDBA==',
+        label: 'Midnight Passport',
+        rpId: 'localhost',
+      }),
+    ).rejects.toThrow('A different passkey answered');
+  });
+
+  it('refuses a mismatched rawId before the PRF output reaches a derivation', async () => {
+    replaceNavigator(mismatched);
+    const provider = new WebAuthnPrfKeyProvider({
+      credentialId: 'AQIDBA==',
+      label: 'Midnight Passport',
+    });
+    await expect(provider.getKey(scope)).rejects.toThrow('A different passkey answered');
+    await expect(provider.deriveWalletSeed(scope)).rejects.toThrow('A different passkey answered');
   });
 });

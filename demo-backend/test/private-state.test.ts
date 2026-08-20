@@ -107,6 +107,38 @@ describe('EncryptedPassportPrivateStateStore', () => {
     await expect(malformedStore.load(scope)).rejects.toThrow('Unsupported Passport private-state version');
   });
 
+  it('refuses a scope that could collide with another, and keeps the ones that cannot', async () => {
+    // Before the rule, these two flattened to the same AAD and the same
+    // storage key, so one scope's save() overwrote the other's envelope.
+    const colliding: PassportStateScope = { appId: 'demo:eu', accountId: 'alice' };
+    const wellFormed: PassportStateScope = { appId: 'demo', accountId: 'eu:alice' };
+    await expect(store.save(colliding, { secret: 'x' })).rejects.toThrow(/may not contain/);
+    await expect(store.load(colliding)).rejects.toThrow(/may not contain/);
+    await expect(store.save({ appId: 'demo|eu', accountId: 'alice' }, {})).rejects.toThrow(
+      /may not contain/,
+    );
+    await expect(store.save({ appId: 'demo\u0000', accountId: 'alice' }, {})).rejects.toThrow(
+      /control characters/,
+    );
+    await expect(store.save({ appId: '', accountId: 'alice' }, {})).rejects.toThrow(
+      'Passport state scope requires an appId.',
+    );
+    await expect(store.save({ appId: 'demo', accountId: '' }, {})).rejects.toThrow(
+      'Passport state scope requires an accountId.',
+    );
+
+    // The unambiguous half of the pair still round-trips — and so does the
+    // colon-bearing accountId every shipped multi-passkey Passport uses.
+    await store.save(wellFormed, { secret: 'alice' });
+    expect(await store.load(wellFormed)).toEqual({ secret: 'alice' });
+    const shipped: PassportStateScope = {
+      appId: 'org.midnight.passport.demo',
+      accountId: 'passport-local:AQIDBA',
+    };
+    await store.save(shipped, { secret: 'shipped' });
+    expect(await store.load(shipped)).toEqual({ secret: 'shipped' });
+  });
+
   it('loads stored state at the initialPrivateState join boundary', async () => {
     await store.save(scope, { deviceSecretHex: 'encrypted', recoverySecretHex: null });
     const injection = await PassportStateInjection({

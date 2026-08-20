@@ -1,3 +1,5 @@
+import { MAX_PROFILE_ADDRESS_LENGTH } from './limits.js';
+
 export const PASSPORT_PROFILE_PROTOCOL = 'org.midnight.passport.profile/v1' as const;
 
 export const PASSPORT_PROFILE_FIELDS = [
@@ -51,8 +53,12 @@ export type PassportProfileMessage =
 
 /** Shared with the tx protocol: ids, names, and other short strings. */
 const MAX_STRING_LENGTH = 256;
-/** Bech32m shielded addresses run long, so addresses get their own cap. */
-const MAX_ADDRESS_LENGTH = 512;
+/**
+ * Bech32m shielded addresses run long, so addresses get their own cap. It is
+ * deliberately LOOSER than the tx protocol's recipient cap — both live in
+ * `limits.ts`, which explains why.
+ */
+const MAX_ADDRESS_LENGTH = MAX_PROFILE_ADDRESS_LENGTH;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

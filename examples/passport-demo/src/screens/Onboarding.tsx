@@ -7,9 +7,14 @@ import './onboarding.css'
  *
  * "Sign in" and "Create passkey" are consolidated into a single button whose
  * behaviour the integrator resolves: if a local Passport profile exists in
- * this browser the existing sign-in/unlock flow runs, otherwise the existing
- * create/enrol flow runs. WebAuthn discoverable credentials mean the
- * assertion path also covers a passkey synced from another device.
+ * this browser the existing sign-in/unlock flow runs, otherwise the
+ * create flow runs — and that flow ASKS THE AUTHENTICATOR before it enrols
+ * anything. "No local profile" is not "no passkey": site data cleared with the
+ * passkey still in the keychain looks exactly like a first visit, and creating
+ * there would replace the surviving credential and make its wallet seed
+ * underivable. So a resident credential that answers is signed in to instead.
+ * WebAuthn discoverable credentials mean the assertion path also covers a
+ * passkey synced from another device.
  *
  * The mobile onboarding offers no route to Dynamic at all. The "Full dashboard"
  * footer link was cut on 2026/08/19: the demo runs "only with the local,
@@ -26,11 +31,17 @@ export interface OnboardingProps {
    * Whether a Passport passkey is already enrolled in this browser. `null`
    * while the lookup is still running; the button works in every case — this
    * only tunes the sentence beneath it.
+   *
+   * `false` means only that this BROWSER holds no record. The device may still
+   * hold the passkey, which is why the copy below promises a sign-in rather
+   * than a creation, and why the flow behind the button discovers first.
    */
   hasExistingPassport: boolean | null
   /**
-   * The one action. Signs in when a local Passport exists here, enrols a new
-   * passkey otherwise. No Dynamic involvement on this route.
+   * The one action. Signs in when a local Passport exists here; otherwise
+   * discovers first and enrols only when no passkey answers. A refused
+   * enrolment (the authenticator already holds the credential) must route
+   * into sign-in, never into an error. No Dynamic involvement on this route.
    */
   onContinue: () => void
   /**
@@ -66,7 +77,7 @@ export default function OnboardingScreen(props: OnboardingProps) {
     hasExistingPassport === true
       ? 'Unlocks the Passport on this device with its passkey.'
       : hasExistingPassport === false
-        ? 'Creates a passkey on this device the first time, then signs you straight in.'
+        ? 'Signs you in if this device already has a Passport, and creates one if it does not.'
         : 'Uses a passkey on this device — sign in, or create your Passport the first time.'
 
   return (

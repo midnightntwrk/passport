@@ -1,4 +1,35 @@
-import { asArrayBuffer, decodeState, encodeState, fromBase64, toBase64, utf8 } from './encoding.js';
+/**
+ * Encrypted Passport private state.
+ *
+ * Every record is an AES-GCM envelope whose additional authenticated data
+ * binds it to one `(domain, appId, accountId)` scope, and whose storage key is
+ * a digest of that same string. State therefore cannot be moved between
+ * scopes: an envelope written for one app and account will not decrypt under
+ * another, it will fail the tag check.
+ *
+ * KNOWN LIMITATION — ROLLBACK IS NOT DETECTED. An envelope's `updatedAt` sits
+ * BESIDE the ciphertext, not inside the AAD, so it is not authenticated.
+ * Anyone able to write to the record store can put back an earlier envelope
+ * they captured for the same scope and the decrypt will succeed, silently
+ * returning stale state. The scope binding still holds — this is a rewind
+ * within one scope, never a swap between scopes.
+ *
+ * That is accepted on testnet, where the state carries device and recovery
+ * secrets rather than spendable value, and where the record store is the
+ * user's own browser. Revisit it before wallet-core tracks spent coins here:
+ * a state rolled back to before a spend is a double-spend attempt, and the
+ * answer (a monotonic counter inside the AAD, or a signed envelope head)
+ * belongs in the envelope format rather than in any one caller.
+ */
+import {
+  asArrayBuffer,
+  decodeState,
+  encodeState,
+  fromBase64,
+  toBase64,
+  utf8,
+  validatePassportStateScope,
+} from './encoding.js';
 import type {
   PassportEncryptedEnvelope,
   PassportEncryptedRecordStore,
@@ -17,13 +48,11 @@ function webCrypto(): Crypto {
   return globalThis.crypto;
 }
 
-function validateScope(scope: PassportStateScope): void {
-  if (!scope.appId.trim()) throw new Error('Passport state scope requires an appId.');
-  if (!scope.accountId.trim()) throw new Error('Passport state scope requires an accountId.');
-}
-
 function additionalData(scope: PassportStateScope): Uint8Array {
-  validateScope(scope);
+  // The shared injectivity rule — see `validatePassportStateScope`. This site
+  // glues with '|', the passkey derivation sites with ':'; one convention
+  // covers all three so no pair of scopes can flatten to the same label.
+  validatePassportStateScope(scope);
   return utf8(`${DOMAIN}|${scope.appId}|${scope.accountId}`);
 }
 

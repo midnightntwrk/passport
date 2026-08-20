@@ -24,12 +24,18 @@
  * there is no covered fee on a transaction that does not exist.
  */
 
+import { MAX_TX_RECIPIENT_ADDRESS_LENGTH } from './limits.js';
+
 export const PASSPORT_TX_PROTOCOL = 'org.midnight.passport.tx/v1' as const;
 
 /** Shared with the profile protocol: ids and nonces are capped at 256 chars. */
 const MAX_ID_LENGTH = 256;
 const MAX_PURPOSE_LENGTH = 140;
-const MAX_ADDRESS_LENGTH = 200;
+/**
+ * Recipients are unshielded-only here, so this is deliberately TIGHTER than
+ * the profile protocol's address cap — both live in `limits.ts`, with why.
+ */
+const MAX_ADDRESS_LENGTH = MAX_TX_RECIPIENT_ADDRESS_LENGTH;
 const MAX_DETAIL_LENGTH = 400;
 const MAX_LABEL_LENGTH = 80;
 const MAX_FEE_NOTE_LENGTH = 140;

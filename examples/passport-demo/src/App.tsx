@@ -30,6 +30,7 @@ import { mainnet, MidnightBech32m, ShieldedAddress, UnshieldedAddress } from '@m
 import {
   EncryptedPassportPrivateStateStore,
   IndexedDbPassportEncryptedRecordStore,
+  PassportEnrolmentConflictError,
   PassportStateInjection,
   WebAuthnPrfKeyProvider,
 } from './backend.js';
@@ -440,11 +441,22 @@ async function withPasskeyWatchdog<T>(ceremony: () => Promise<T>): Promise<T> {
   } catch (cause) {
     void pending
       .then((late) => {
+        /* Every shape a passkey ceremony resolves to, so a late answer never
+           leaves PRF bytes alive after the flow that wanted them gave up: a
+           one-shot handle, an enrolment, and the discover-or-enrol result
+           which nests one of each. */
         const value = late as
-          | { dispose?: () => void; prf?: { dispose?: () => void } | null }
+          | {
+              dispose?: () => void;
+              prf?: { dispose?: () => void } | null;
+              discovered?: { dispose?: () => void } | null;
+              enrolled?: { prf?: { dispose?: () => void } | null } | null;
+            }
           | null;
         value?.dispose?.();
         value?.prf?.dispose?.();
+        value?.discovered?.dispose?.();
+        value?.enrolled?.prf?.dispose?.();
       })
       .catch(() => undefined);
     throw cause;
@@ -1889,6 +1901,93 @@ export default function PassportDemo() {
   );
 
   /**
+   * Takes whichever resident credential answered a discoverable assertion and
+   * makes it this session's Passport: signs in to the profile bound to it, or
+   * binds a fresh profile to it when this browser has no record of it.
+   *
+   * Shared by "Use a different passkey" and by the create path's
+   * discover-before-create guard, so both land in exactly the same place. The
+   * caller owns `discovered` and disposes it.
+   */
+  const adoptDiscoveredPasskey = async (
+    discovered: DiscoveredPassportPasskey,
+  ): Promise<DemoPassportProfile> => {
+    const known = await loadLocalProfileByCredential(discovered.credentialId).catch(() => null);
+    if (known) {
+      setOnboardingBusyLabel('Unlocking your Passport');
+      const scope = localScopeFor(known);
+      // Same PRF output, same HKDF constants as the targeted path — the
+      // one assertion already made is enough to derive this profile's seed.
+      const seed = await discovered.deriveWalletSeed(scope);
+      setProfile(known);
+      setProfileStatus('ready');
+      setLocalPassportKnown(true);
+      await openLocalWalletWithSeed(seed, scope, known.passkey.credentialId);
+      await recoverAccountFromPasskey(known.passkey.credentialId, discovered.accountBlob);
+      addActivity({
+        label: 'Passport passkey unlocked',
+        detail: 'Signed in with a passkey chosen from the device picker.',
+        status: 'complete',
+        source: 'local',
+      });
+      storeLastPasskey(discovered.credentialId);
+      return known;
+    }
+    setOnboardingBusyLabel('Creating a Passport for this passkey');
+    const accountId = localCredentialAccountId(discovered.credentialId);
+    const scope = { appId: APP_ID, accountId };
+    const hostname = window.location?.hostname;
+    const nextProfile: DemoPassportProfile = {
+      subjectId: localProfileId(discovered.credentialId),
+      passkey: {
+        credentialId: discovered.credentialId,
+        label: 'Midnight Passport',
+        ...(hostname ? { rpId: hostname } : {}),
+      },
+      accountId,
+      createdAt: new Date().toISOString(),
+    };
+    const state: PassportDemoState = {
+      deviceSecret: newDeviceSecret(),
+      recoverySecret: newDeviceSecret(),
+      createdAt: new Date().toISOString(),
+      schema: 4,
+    };
+    // Encrypt the initial private state with a key derived from the SAME
+    // assertion — no second passkey prompt, and byte-identical to what
+    // the targeted provider would derive for this scope.
+    await oneShotVaultFor(discovered).save<PassportDemoState>(scope, state);
+    await saveDemoProfile(nextProfile);
+    await requestPassportStoragePersistence();
+    setProfile(nextProfile);
+    setProfileStatus('ready');
+    setLocalPassportKnown(true);
+    // A Passport that did not exist here a moment ago: the name step is
+    // part of ITS setup. A sign-in to a known profile never arms it.
+    identityStepArmed.current = true;
+    const seed = await discovered.deriveWalletSeed(scope);
+    await openLocalWalletWithSeed(seed, scope, discovered.credentialId);
+    /* The fresh-device case this whole mechanism exists for: a passkey
+       synced here from another device, no local records at all, and its
+       blob naming the contract to look for. */
+    await recoverAccountFromPasskey(discovered.credentialId, discovered.accountBlob);
+    addActivity({
+      label: 'Passport bound to passkey',
+      detail:
+        'A chosen passkey with no Passport here now holds its own profile and on-device wallet.',
+      status: 'complete',
+      source: 'local',
+    });
+    pushToast({
+      tone: 'success',
+      title: 'Passport created',
+      body: 'This passkey now holds its own Midnight wallet.',
+    });
+    storeLastPasskey(discovered.credentialId);
+    return nextProfile;
+  };
+
+  /**
    * First-time create — ONE enrolment, and at most ONE assertion.
    *
    * The enrolment asks the platform to evaluate the PRF there and then. Where
@@ -1896,8 +1995,20 @@ export default function PassportDemo() {
    * wallet seed and the user is prompted exactly once. Where it does not — the
    * common case, and never surfaced as an error — one targeted assertion
    * covers both. The old path cost three prompts: enrol, encrypt, derive.
+   *
+   * ASK THE AUTHENTICATOR BEFORE CREATING ANYTHING. "No local profile" is not
+   * the same fact as "no passkey". Site data cleared with the passkey still in
+   * the keychain looks identical to a first visit, and a `create` there would
+   * REPLACE the surviving credential — the user handle is deterministic — and
+   * take its PRF secret, and so every coin its wallet seed derives, with it.
+   * So this discovers first and only enrols when nothing answers. `created`
+   * says which of the two actually happened, so nothing downstream claims a
+   * Passport was made when one was merely reopened.
    */
-  const createLocalPassportProfile = async (): Promise<DemoPassportProfile> => {
+  const createLocalPassportProfile = async (): Promise<{
+    profile: DemoPassportProfile;
+    created: boolean;
+  }> => {
     const existing = await resolveDefaultLocalProfile();
     if (existing) {
       setLocalPassportKnown(true);
@@ -1905,13 +2016,57 @@ export default function PassportDemo() {
         'This browser already holds a Passport passkey. Choose Sign in to reopen its wallet.',
       );
     }
+    setOnboardingBusyLabel('Checking this device for a Passport passkey');
+    /* Every credential this browser still knows about goes into the exclusion
+       list. It is empty on a genuinely first visit, and that is precisely the
+       case discovery above covers instead. */
+    const knownCredentialIds = (await listLocalProfiles().catch(() => []))
+      .map((candidate) => candidate.passkey.credentialId)
+      .filter((credentialId): credentialId is string => Boolean(credentialId));
+    let onboarding: import('./backend.js').PassportPasskeyOnboarding;
+    try {
+      onboarding = await withPasskeyWatchdog(() =>
+        WebAuthnPrfKeyProvider.discoverOrEnroll({
+          label: 'Midnight Passport',
+          userId: LOCAL_ACCOUNT_ID,
+          knownCredentialIds,
+        }),
+      );
+    } catch (cause) {
+      if (!(cause instanceof PassportEnrolmentConflictError)) throw cause;
+      /* The authenticator refused to overwrite a passkey it still holds. That
+         is the guard working, not a failure: the Passport is intact and the
+         only honest move is to sign the user into it. */
+      setOnboardingIntent('local-signin');
+      setOnboardingBusyLabel('You already have a Passport on this device — signing you into it');
+      let recovered: DiscoveredPassportPasskey;
+      try {
+        recovered = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.discover());
+      } catch {
+        throw new Error(
+          'You already have a Passport on this device. Choose "Use a different passkey" to sign in to it.',
+        );
+      }
+      try {
+        return { profile: await adoptDiscoveredPasskey(recovered), created: false };
+      } finally {
+        recovered.dispose();
+      }
+    }
+    if (onboarding.outcome === 'existing') {
+      /* A passkey answered, so this device already has a Passport whatever
+         local storage says. Sign in to it — one prompt, no enrolment, and the
+         wallet seed comes from the assertion just made. */
+      const recovered = onboarding.discovered;
+      setOnboardingIntent('local-signin');
+      try {
+        return { profile: await adoptDiscoveredPasskey(recovered), created: false };
+      } finally {
+        recovered.dispose();
+      }
+    }
     setOnboardingBusyLabel('Creating your Passport passkey');
-    const enrolled = await withPasskeyWatchdog(() =>
-      WebAuthnPrfKeyProvider.enrollWithPrf({
-        label: 'Midnight Passport',
-        userId: LOCAL_ACCOUNT_ID,
-      }),
-    );
+    const enrolled = onboarding.enrolled;
     const passkey = enrolled.reference;
     // New profiles bind to their credential: per-credential storage key and
     // per-credential scope, so a second passkey can never collide with this
@@ -1954,7 +2109,7 @@ export default function PassportDemo() {
       // Same handle, same ceremony: the wallet seed costs no further prompt.
       const seed = await handle.deriveWalletSeed(scope);
       await openLocalWalletWithSeed(seed, scope, passkey.credentialId);
-      return nextProfile;
+      return { profile: nextProfile, created: true };
     } finally {
       handle?.dispose();
     }
@@ -2016,6 +2171,10 @@ export default function PassportDemo() {
     // passkey synced from another device once a profile exists here.
     let intent: 'create' | 'signin' = requested === 'signin' ? 'signin' : 'create';
     let activeProfile: DemoPassportProfile | null = null;
+    /* What the create journey DID, not what it set out to do: the
+       discover-before-create guard may sign the user in instead of enrolling,
+       and the copy below must not claim a Passport was created then. */
+    let created = false;
     try {
       if (requested === 'auto') {
         const existing = await resolveDefaultLocalProfile().catch(() => null);
@@ -2027,17 +2186,22 @@ export default function PassportDemo() {
       );
       // Both journeys now open the wallet from the SAME ceremony that unlocked
       // the profile — no second passkey prompt to derive the seed.
-      activeProfile =
-        intent === 'create' ? await createLocalPassportProfile() : await unlockLocalPassportProfile();
+      if (intent === 'create') {
+        const outcome = await createLocalPassportProfile();
+        activeProfile = outcome.profile;
+        created = outcome.created;
+      } else {
+        activeProfile = await unlockLocalPassportProfile();
+      }
       storeLastPasskey(activeProfile.passkey.credentialId);
       setOnboardingError(null);
       addActivity({
-        label: intent === 'create' ? 'Passport passkey enrolled' : 'Passport passkey unlocked',
+        label: created ? 'Passport passkey enrolled' : 'Passport passkey unlocked',
         detail: 'On-device Midnight wallet derived from this passkey. Dynamic was not involved.',
         status: 'complete',
         source: 'local',
       });
-      if (intent === 'create') {
+      if (created) {
         pushToast({
           tone: 'success',
           title: 'Passport created',
@@ -2049,7 +2213,7 @@ export default function PassportDemo() {
       setLocalWalletStatus('error');
       setOnboardingError(message);
       addActivity({
-        label: intent === 'create' ? 'Passport passkey' : 'Passport unlock',
+        label: intent === 'create' && !created ? 'Passport passkey' : 'Passport unlock',
         detail: message,
         status: 'error',
         source: 'local',
@@ -2092,79 +2256,7 @@ export default function PassportDemo() {
       // browser matches its own passkey below.
       await migrateLegacyLocalProfile().catch(() => null);
       discovered = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.discover());
-      const known = await loadLocalProfileByCredential(discovered.credentialId).catch(() => null);
-      if (known) {
-        activeProfile = known;
-        setOnboardingBusyLabel('Unlocking your Passport');
-        const scope = localScopeFor(known);
-        // Same PRF output, same HKDF constants as the targeted path — the
-        // one assertion already made is enough to derive this profile's seed.
-        const seed = await discovered.deriveWalletSeed(scope);
-        setProfile(known);
-        setProfileStatus('ready');
-        setLocalPassportKnown(true);
-        await openLocalWalletWithSeed(seed, scope, known.passkey.credentialId);
-        await recoverAccountFromPasskey(known.passkey.credentialId, discovered.accountBlob);
-        addActivity({
-          label: 'Passport passkey unlocked',
-          detail: 'Signed in with a passkey chosen from the device picker.',
-          status: 'complete',
-          source: 'local',
-        });
-      } else {
-        setOnboardingBusyLabel('Creating a Passport for this passkey');
-        const accountId = localCredentialAccountId(discovered.credentialId);
-        const scope = { appId: APP_ID, accountId };
-        const hostname = window.location?.hostname;
-        const nextProfile: DemoPassportProfile = {
-          subjectId: localProfileId(discovered.credentialId),
-          passkey: {
-            credentialId: discovered.credentialId,
-            label: 'Midnight Passport',
-            ...(hostname ? { rpId: hostname } : {}),
-          },
-          accountId,
-          createdAt: new Date().toISOString(),
-        };
-        const state: PassportDemoState = {
-          deviceSecret: newDeviceSecret(),
-          recoverySecret: newDeviceSecret(),
-          createdAt: new Date().toISOString(),
-          schema: 4,
-        };
-        // Encrypt the initial private state with a key derived from the SAME
-        // assertion — no second passkey prompt, and byte-identical to what
-        // the targeted provider would derive for this scope.
-        await oneShotVaultFor(discovered).save<PassportDemoState>(scope, state);
-        await saveDemoProfile(nextProfile);
-        await requestPassportStoragePersistence();
-        activeProfile = nextProfile;
-        setProfile(nextProfile);
-        setProfileStatus('ready');
-        setLocalPassportKnown(true);
-        // A Passport that did not exist here a moment ago: the name step is
-        // part of ITS setup. A sign-in to a known profile never arms it.
-        identityStepArmed.current = true;
-        const seed = await discovered.deriveWalletSeed(scope);
-        await openLocalWalletWithSeed(seed, scope, discovered.credentialId);
-        /* The fresh-device case this whole mechanism exists for: a passkey
-           synced here from another device, no local records at all, and its
-           blob naming the contract to look for. */
-        await recoverAccountFromPasskey(discovered.credentialId, discovered.accountBlob);
-        addActivity({
-          label: 'Passport bound to passkey',
-          detail:
-            'A chosen passkey with no Passport here now holds its own profile and on-device wallet.',
-          status: 'complete',
-          source: 'local',
-        });
-        pushToast({
-          tone: 'success',
-          title: 'Passport created',
-          body: 'This passkey now holds its own Midnight wallet.',
-        });
-      }
-      storeLastPasskey(discovered.credentialId);
+      activeProfile = await adoptDiscoveredPasskey(discovered);
       setOnboardingError(null);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);

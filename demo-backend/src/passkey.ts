@@ -1,4 +1,10 @@
-import { asArrayBuffer, fromBase64, toBase64, utf8 } from './encoding.js';
+import {
+  asArrayBuffer,
+  fromBase64,
+  toBase64,
+  utf8,
+  validatePassportStateScope,
+} from './encoding.js';
 import type {
   PassportStateKeyProvider,
   PassportStateScope,
@@ -27,8 +33,58 @@ export interface EnrollPassportPasskeyOptions {
   userId: string;
   rpName?: string;
   rpId?: string;
+  /**
+   * Every credential id this relying party already knows for this user —
+   * enrolled here, or synced to this device from another. All of them go into
+   * `excludeCredentials`.
+   *
+   * WHY THIS MATTERS. {@link userHandle} is deterministic and enrolment asks
+   * for `residentKey: 'required'`, so a second `create` for the same
+   * `(rpId, user.id)` does not fail: it REPLACES the credential. The
+   * replacement has a new PRF secret, and the old wallet seed — every coin it
+   * holds — becomes underivable, permanently. Excluding the ids we know makes
+   * the authenticator refuse instead, which surfaces as
+   * {@link PassportEnrolmentConflictError}.
+   *
+   * Exclusion cannot cover the dangerous case on its own: site data cleared
+   * while the passkey survives in the keychain leaves no ids to exclude. For
+   * that, call {@link WebAuthnPrfKeyProvider.discoverOrEnroll}, which asks
+   * the authenticator itself before it creates anything.
+   */
+  knownCredentialIds?: readonly string[];
+  /**
+   * @deprecated Use {@link knownCredentialIds}; this is merged into it.
+   * A single id was never enough — a Passport may hold several passkeys.
+   */
   existingCredentialId?: string;
 }
+
+/**
+ * The authenticator refused to create a credential because it already holds
+ * one this enrolment excluded. WebAuthn reports that as `InvalidStateError`.
+ *
+ * This is the overwrite guard WORKING, not a fault: the passkey that already
+ * exists is the one whose PRF output every wallet seed and private-state key
+ * derives from, and it is still intact. Callers must catch this and route the
+ * user into sign-in or recovery — never show it as a failure.
+ */
+export class PassportEnrolmentConflictError extends Error {
+  constructor(
+    message = 'This device already holds a Passport passkey for this account, so a new one was not created. Sign in to the existing Passport instead.',
+  ) {
+    super(message);
+    this.name = 'PassportEnrolmentConflictError';
+  }
+}
+
+/**
+ * What {@link WebAuthnPrfKeyProvider.discoverOrEnroll} did: signed in to a
+ * resident credential that already existed, or enrolled a new one. Exactly
+ * one of the two handles is non-null, and the caller owns disposing it.
+ */
+export type PassportPasskeyOnboarding =
+  | { outcome: 'existing'; discovered: DiscoveredPassportPasskey; enrolled: null }
+  | { outcome: 'enrolled'; discovered: null; enrolled: EnrolledPassportPasskey };
 
 export interface DiscoverPassportPasskeyOptions {
   /** Relying-party id. Defaults to the current hostname, matching enrolment. */
@@ -217,6 +273,52 @@ async function userHandle(userId: string): Promise<ArrayBuffer> {
   );
 }
 
+/**
+ * Every credential id the caller knows, de-duplicated, with the deprecated
+ * single-id alias folded in. Blank entries are dropped: an empty string in an
+ * exclusion list is a credential that does not exist, and some clients reject
+ * the whole request over it.
+ */
+function excludedCredentialIds(options: EnrollPassportPasskeyOptions): string[] {
+  const ids = [...(options.knownCredentialIds ?? [])];
+  if (options.existingCredentialId) ids.push(options.existingCredentialId);
+  return [...new Set(ids.filter((id) => typeof id === 'string' && id.length > 0))];
+}
+
+/**
+ * True when the authenticator refused the create because `excludeCredentials`
+ * matched something it already holds. The name is the only signal WebAuthn
+ * gives, and it is on the DOMException the client throws.
+ */
+function isExclusionConflict(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { name?: unknown }).name === 'InvalidStateError'
+  );
+}
+
+/**
+ * Confirms that the credential which answered is the credential that was
+ * asked for, and returns its id.
+ *
+ * A targeted assertion names one credential in `allowCredentials`, but the
+ * answer arrives as data and nothing in the browser API obliges the caller to
+ * check it. A different credential's PRF output derives a different wallet
+ * seed and a different private-state key, so trusting the answer blind would
+ * quietly open the wrong Passport. Discoverable assertions are exempt by
+ * design: they ask for no particular credential.
+ */
+function assertAnsweredAsRequested(expectedCredentialId: string, rawId: ArrayBuffer): string {
+  const answered = toBase64(new Uint8Array(rawId));
+  if (answered !== expectedCredentialId) {
+    throw new Error(
+      'A different passkey answered this Passport assertion than the one it targeted. Its PRF output derives a different wallet, so the answer was refused.',
+    );
+  }
+  return answered;
+}
+
 function errorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (/invalid domain|relying party|rp id|security/i.test(message)) {
@@ -226,6 +328,10 @@ function errorMessage(error: unknown): string {
 }
 
 async function deriveKey(prfOutput: Uint8Array, scope: PassportStateScope): Promise<CryptoKey> {
+  // Same rule as the private-state AAD: the info string below glues appId and
+  // accountId with ':' and escapes nothing, so a separator in appId would let
+  // two different scopes derive the same key. See `validatePassportStateScope`.
+  validatePassportStateScope(scope);
   const material = await globalThis.crypto.subtle.importKey(
     'raw',
     asArrayBuffer(prfOutput),
@@ -257,6 +363,9 @@ async function deriveWalletSeedBytes(
   prfOutput: Uint8Array,
   scope: PassportStateScope,
 ): Promise<Uint8Array> {
+  // The wallet seed is the one output nothing can re-derive if it is wrong, so
+  // the scope check happens here too, on the same shared rule.
+  validatePassportStateScope(scope);
   const material = await globalThis.crypto.subtle.importKey(
     'raw',
     asArrayBuffer(prfOutput),
@@ -374,6 +483,7 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
     const navigator = getNavigator();
     const hostname = globalThis.location?.hostname;
     const rpId = options.rpId ?? hostname;
+    const excluded = excludedCredentialIds(options);
     const rp: PublicKeyCredentialRpEntity = {
       name: options.rpName ?? 'Midnight Passport',
       ...(rpId ? { id: rpId } : {}),
@@ -393,11 +503,15 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
             { type: 'public-key', alg: -257 },
           ],
           authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
-          ...(options.existingCredentialId
+          // EVERY known credential, not just one. A create that omits an id
+          // the authenticator holds will replace that credential rather than
+          // refuse, and the replaced PRF secret is not recoverable.
+          ...(excluded.length > 0
             ? {
-                excludeCredentials: [
-                  { type: 'public-key', id: asArrayBuffer(fromBase64(options.existingCredentialId)) },
-                ],
+                excludeCredentials: excluded.map((credentialId) => ({
+                  type: 'public-key' as const,
+                  id: asArrayBuffer(fromBase64(credentialId)),
+                })),
               }
             : {}),
           // Enable the extension AND ask for the salt to be evaluated now.
@@ -436,8 +550,55 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
             : null,
       };
     } catch (error) {
+      // The exclusion list doing its job is a distinct, catchable outcome —
+      // never a generic message the caller has to pattern-match, and never a
+      // failure toast. It means the user's Passport is still there.
+      if (isExclusionConflict(error)) throw new PassportEnrolmentConflictError();
       throw new Error(errorMessage(error));
     }
+  }
+
+  /**
+   * DISCOVER BEFORE CREATE — the affordance `excludeCredentials` cannot give.
+   *
+   * Exclusion only protects against overwriting credentials whose ids this
+   * device still remembers. The dangerous case is exactly the one where it
+   * remembers none: site data cleared, passkey still in the keychain. An app
+   * that keys "create or sign in" off local storage then calls `create`, the
+   * deterministic user handle matches, and the surviving credential is
+   * REPLACED — the wallet seed gone for good.
+   *
+   * So ask the authenticator first. One discoverable assertion: if a resident
+   * credential answers, that is the Passport, and this returns its one-shot
+   * handle without creating anything. Only an empty discovery proceeds to
+   * enrolment — which still carries `knownCredentialIds` as a second line.
+   *
+   * A discovery that FAILS counts as "nothing there". The user cancelling
+   * (`NotAllowedError`) is the case the reviewer named, but {@link discover}
+   * flattens the DOMException into a plain `Error` before this sees it, so the
+   * name is not recoverable here and every failure is treated alike. That is
+   * the safe reading in both directions: no credential was obtained, so there
+   * is nothing to sign in to, and the create that follows is still guarded by
+   * exclusion and reports {@link PassportEnrolmentConflictError} if it was
+   * wrong. Callers MUST dispose whichever handle comes back.
+   */
+  static async discoverOrEnroll(
+    options: EnrollPassportPasskeyOptions,
+  ): Promise<PassportPasskeyOnboarding> {
+    let discovered: DiscoveredPassportPasskey | null = null;
+    try {
+      discovered = await WebAuthnPrfKeyProvider.discover(
+        options.rpId ? { rpId: options.rpId } : {},
+      );
+    } catch {
+      discovered = null;
+    }
+    if (discovered) return { outcome: 'existing', discovered, enrolled: null };
+    return {
+      outcome: 'enrolled',
+      discovered: null,
+      enrolled: await WebAuthnPrfKeyProvider.enrollWithPrf(options),
+    };
   }
 
   /**
@@ -488,7 +649,8 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
       const result = extension.prf?.results?.first;
       if (!result) throw new Error('The authenticator did not return a PRF result.');
       return oneShotFromPrf(
-        toBase64(new Uint8Array(assertion.rawId)),
+        // Targeted: the answer must come from the credential that was named.
+        assertAnsweredAsRequested(reference.credentialId, assertion.rawId),
         result,
         decodeAccountBlob(extension.largeBlob?.blob),
       );
@@ -662,6 +824,9 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
       },
     })) as PublicKeyCredential | null;
     if (!assertion) throw new Error('Passport passkey unlock was cancelled.');
+    // Targeted, like `assertOnce`: refuse an answer from any other credential
+    // before its PRF output reaches a derivation.
+    assertAnsweredAsRequested(this.reference.credentialId, assertion.rawId);
     const extension = assertion.getClientExtensionResults() as PrfExtensionResults;
     const result = extension.prf?.results?.first;
     if (!result) throw new Error('The authenticator did not return a PRF result.');

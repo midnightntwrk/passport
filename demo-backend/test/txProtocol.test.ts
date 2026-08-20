@@ -8,6 +8,11 @@ import {
   parsePassportTxResponse,
   type PassportTxRequest,
 } from '../src/txProtocol.js';
+import {
+  MAX_PROFILE_ADDRESS_LENGTH,
+  MAX_TX_RECIPIENT_ADDRESS_LENGTH,
+  randomRequestId,
+} from '../src/index.js';
 
 const VALID_REQUEST = {
   protocol: PASSPORT_TX_PROTOCOL,
@@ -314,5 +319,34 @@ describe('Passport incentive report', () => {
   it('does not mistake a transaction request or response for a report', () => {
     expect(parsePassportIncentiveReport(VALID_REQUEST)).toBeNull();
     expect(parsePassportTxRequest({ ...base, incentive: { id: 'x', label: 'y' } })).toBeNull();
+  });
+});
+
+describe('randomRequestId', () => {
+  it('mints unguessable hex ids of the requested length', () => {
+    // 24 bytes by default — the width every connector should mint at.
+    expect(randomRequestId()).toMatch(/^[0-9a-f]{48}$/);
+    expect(randomRequestId(8)).toMatch(/^[0-9a-f]{16}$/);
+    expect(randomRequestId()).not.toBe(randomRequestId());
+    expect(() => randomRequestId(0)).toThrow(/at least one random byte/);
+    expect(() => randomRequestId(1.5)).toThrow(/at least one random byte/);
+  });
+});
+
+describe('shared address caps', () => {
+  it('keeps the recipient cap deliberately tighter than the profile cap', () => {
+    // Both live in one module so the divergence is visible and explained: a
+    // profile address may be shielded and long, a tx recipient is
+    // unshielded-only. Values unchanged — this pins them against silent drift.
+    expect(MAX_TX_RECIPIENT_ADDRESS_LENGTH).toBe(200);
+    expect(MAX_PROFILE_ADDRESS_LENGTH).toBe(512);
+    expect(MAX_TX_RECIPIENT_ADDRESS_LENGTH).toBeLessThan(MAX_PROFILE_ADDRESS_LENGTH);
+    // And the tx parser really enforces the tighter one.
+    expect(
+      parsePassportTxRequest({
+        ...VALID_REQUEST,
+        intent: { ...VALID_REQUEST.intent, recipientAddress: 'a'.repeat(201) },
+      }),
+    ).toBeNull();
   });
 });
