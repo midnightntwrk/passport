@@ -103,24 +103,72 @@ function encode(kind: string, payload: unknown): string {
   return `${kind}.v0.${bytesToB64url(json)}`;
 }
 
-function decode<T>(kind: string, s: string): T {
+// A hand-edited or corrupted paste must fail here, legibly, not deep inside
+// a wasm call: `JSON.parse(...) as T` is a compile-time-only assertion, so
+// each wire format validates its decoded shape. Unknown extra fields are
+// tolerated (forward compatibility); known fields must have the right type.
+
+const isHexString = (v: unknown, bytes: number): boolean =>
+  typeof v === 'string' && v.length === bytes * 2 && /^[0-9a-fA-F]*$/.test(v);
+
+const isIndex = (v: unknown): boolean =>
+  typeof v === 'number' && Number.isInteger(v) && v >= 1;
+
+type ShapeCheck = (v: unknown) => string | null;
+
+const checkGuardianRequest: ShapeCheck = (v) => {
+  const r = v as Partial<GuardianRequest> | null;
+  if (typeof r !== 'object' || r === null) return 'payload is not an object';
+  if (typeof r.address !== 'string' || r.address.length === 0)
+    return 'address must be a non-empty string';
+  if (!isHexString(r.sessionNonce, 32)) return 'sessionNonce must be 32 bytes of hex';
+  if (!isIndex(r.index)) return 'index must be a positive integer';
+  return null;
+};
+
+const checkGuardianReply: ShapeCheck = (v) => {
+  const r = v as Partial<GuardianReply> | null;
+  if (typeof r !== 'object' || r === null) return 'payload is not an object';
+  if (!isIndex(r.index)) return 'index must be a positive integer';
+  if (!isHexString(r.sigma, 32)) return 'sigma must be 32 bytes of hex';
+  return null;
+};
+
+const checkPaperKey: ShapeCheck = (v) => {
+  const p = v as Partial<PaperKey> | null;
+  if (typeof p !== 'object' || p === null) return 'payload is not an object';
+  if (!isIndex(p.index)) return 'index must be a positive integer';
+  if (!isHexString(p.sk, 32)) return 'sk must be 32 bytes of hex';
+  return null;
+};
+
+function decode<T>(kind: string, s: string, check: ShapeCheck): T {
   const parts = s.trim().split('.');
   if (parts.length !== 3 || parts[0] !== kind || parts[1] !== 'v0') {
     throw new Error(`expected a ${kind}.v0.… string`);
   }
-  return JSON.parse(new TextDecoder().decode(b64urlToBytes(parts[2]))) as T;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(b64urlToBytes(parts[2])));
+  } catch {
+    throw new Error(`${kind}.v0 payload is not valid base64url JSON`);
+  }
+  const problem = check(parsed);
+  if (problem !== null) throw new Error(`${kind}.v0 payload: ${problem}`);
+  return parsed as T;
 }
 
 export const encodeGuardianRequest = (r: GuardianRequest): string => encode('buss-req', r);
 export const decodeGuardianRequest = (s: string): GuardianRequest =>
-  decode<GuardianRequest>('buss-req', s);
+  decode<GuardianRequest>('buss-req', s, checkGuardianRequest);
 
 export const encodeGuardianReply = (r: GuardianReply): string => encode('buss-sig', r);
 export const decodeGuardianReply = (s: string): GuardianReply =>
-  decode<GuardianReply>('buss-sig', s);
+  decode<GuardianReply>('buss-sig', s, checkGuardianReply);
 
 export const encodePaperKey = (p: PaperKey): string => encode('buss-paper', p);
-export const decodePaperKey = (s: string): PaperKey => decode<PaperKey>('buss-paper', s);
+export const decodePaperKey = (s: string): PaperKey =>
+  decode<PaperKey>('buss-paper', s, checkPaperKey);
 
 /** Which wire format a pasted string is, if any. */
 export function classifyPaste(s: string): 'request' | 'reply' | 'paper' | null {
