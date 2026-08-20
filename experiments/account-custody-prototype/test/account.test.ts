@@ -16,6 +16,8 @@ import {
   buildPhi,
   reconstructRecoverySecret,
   paramsFromPhi,
+  phiFieldFromBytes,
+  phiBytesFromField,
   type GuardianReply,
 } from '../src/wallet/buss.js';
 import { randomBytes32, hexToBytes32, bytesToHex } from '../src/wallet/hex.js';
@@ -177,8 +179,6 @@ describe('scoped grants', () => {
 });
 
 describe('recovery backup publication (BUSS)', () => {
-  const ZERO = new Uint8Array(32);
-
   it('publishes φ, session nonce, and rotated commitment', () => {
     const rotated = newRecoverySecret();
     const nonce = newSessionNonce();
@@ -186,10 +186,10 @@ describe('recovery backup publication (BUSS)', () => {
       'publish_recovery_backup',
       recoveryCommitment(rotated),
       nonce,
-      randomBytes32(),
-      randomBytes32(),
-      ZERO,
-      ZERO,
+      phiFieldFromBytes(newRecoverySecret()),
+      phiFieldFromBytes(newRecoverySecret()),
+      0n,
+      0n,
       2n,
     );
     const l = sim.ledger();
@@ -206,10 +206,10 @@ describe('recovery backup publication (BUSS)', () => {
         'publish_recovery_backup',
         recoveryCommitment(newRecoverySecret()),
         newSessionNonce(),
-        ZERO,
-        ZERO,
-        ZERO,
-        ZERO,
+        0n,
+        0n,
+        0n,
+        0n,
         0n,
       ),
     ).toThrow(/phi must not be empty/);
@@ -222,10 +222,10 @@ describe('recovery backup publication (BUSS)', () => {
         'publish_recovery_backup',
         recoveryCommitment(newRecoverySecret()),
         newSessionNonce(),
-        randomBytes32(),
-        ZERO,
-        ZERO,
-        ZERO,
+        phiFieldFromBytes(newRecoverySecret()),
+        0n,
+        0n,
+        0n,
         1n,
       ),
     ).toThrow(/device_secret requested/);
@@ -270,21 +270,23 @@ describe('total-loss recovery (BUSS)', () => {
     const phi = buildPhi(rotated, replies, params);
     expect(phi.length).toBe(2);
 
-    const ZERO = new Uint8Array(32);
     sim.call(
       'publish_recovery_backup',
       recoveryCommitment(rotated),
       nonce,
-      phi[0],
-      phi[1],
-      ZERO,
-      ZERO,
+      phiFieldFromBytes(phi[0]),
+      phiFieldFromBytes(phi[1]),
+      0n,
+      0n,
       2n,
     );
 
     // ── Total loss: reconstruct from guardian σ + ONE paper key + chain ──
     const l = sim.ledger();
-    const phiFromChain = [l.recovery_phi.lookup(1n), l.recovery_phi.lookup(2n)];
+    const phiFromChain = [
+      phiBytesFromField(l.recovery_phi.lookup(1n)),
+      phiBytesFromField(l.recovery_phi.lookup(2n)),
+    ];
     const sessionFromChain = bytesToHex(l.recovery_session);
     const quorum: GuardianReply[] = [
       computeSigma({ address: sim.address, sessionNonce: sessionFromChain, index: 1 }, guardianSk),
@@ -334,15 +336,14 @@ describe('total-loss recovery (BUSS)', () => {
     const papers = [1, 2, 3].map(newPaperKey);
     const replies = papers.map((p) => paperSigma(p, sim.address, nonceHex));
     const phi = buildPhi(rotated, replies, { t: 1, n: 4 });
-    const ZERO = new Uint8Array(32);
     sim.call(
       'publish_recovery_backup',
       recoveryCommitment(rotated),
       nonce,
-      phi[0],
-      phi[1],
-      ZERO,
-      ZERO,
+      phiFieldFromBytes(phi[0]),
+      phiFieldFromBytes(phi[1]),
+      0n,
+      0n,
       2n,
     );
 

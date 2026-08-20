@@ -12,6 +12,8 @@ export const buss = makeBussApi(wasm);
 export {
   sessionIdBytes,
   paramsFromPhi,
+  phiFieldFromBytes,
+  phiBytesFromField,
   newSessionNonce,
   encodeGuardianRequest,
   decodeGuardianRequest,

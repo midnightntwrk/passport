@@ -25,6 +25,8 @@ export const {
 export {
   sessionIdBytes,
   paramsFromPhi,
+  phiFieldFromBytes,
+  phiBytesFromField,
   newSessionNonce,
   encodeGuardianRequest,
   decodeGuardianRequest,

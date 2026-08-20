@@ -74,6 +74,34 @@ export function paramsFromPhi(phiLen: number, guardianCount: number): BussParams
   return { t: n - phiLen - 1, n };
 }
 
+// φ entries cross the BussApi boundary as the canonical little-endian
+// 32-byte repr of a BLS12-381 scalar; on-chain they are Field values
+// (bigint on the TS side), which makes a non-canonical encoding
+// unrepresentable. These two convert between the encodings.
+
+/** Canonical little-endian 32-byte repr → on-chain Field value. */
+export function phiFieldFromBytes(bytes: Uint8Array): bigint {
+  if (bytes.length !== 32) {
+    throw new Error(`phi entry must be 32 bytes, got ${bytes.length}`);
+  }
+  let f = 0n;
+  for (let i = 31; i >= 0; i--) f = (f << 8n) | BigInt(bytes[i]);
+  return f;
+}
+
+/** On-chain Field value → canonical little-endian 32-byte repr. */
+export function phiBytesFromField(field: bigint): Uint8Array {
+  if (field < 0n) throw new Error('phi entry must be non-negative');
+  const out = new Uint8Array(32);
+  let v = field;
+  for (let i = 0; i < 32; i++) {
+    out[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  if (v !== 0n) throw new Error('phi entry does not fit in 32 bytes');
+  return out;
+}
+
 /** Fresh 32-byte session nonce for a backup publication. */
 export function newSessionNonce(): Uint8Array {
   const nonce = new Uint8Array(32);

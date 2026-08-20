@@ -21,6 +21,7 @@ import {
   paperSigma,
   reconstructRecoverySecret,
   paramsFromPhi,
+  phiBytesFromField,
   encodeGuardianRequest,
   decodeGuardianReply,
   decodePaperKey,
@@ -55,7 +56,9 @@ const reader = await connectAccount(ctx, address, {});
 const l = await reader.ledgerState();
 const phiLen = Number(l.recovery_phi_len);
 if (phiLen === 0) throw new Error('no recovery backup published on this account');
-const phi = Array.from({ length: phiLen }, (_, i) => l.recovery_phi.lookup(BigInt(i + 1)));
+const phi = Array.from({ length: phiLen }, (_, i) =>
+  phiBytesFromField(l.recovery_phi.lookup(BigInt(i + 1))),
+);
 const sessionHex = bytesToHex(l.recovery_session);
 const params = paramsFromPhi(phiLen, guardians);
 const threshold = params.t + 1;
