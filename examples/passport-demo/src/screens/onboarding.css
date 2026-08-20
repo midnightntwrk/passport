@@ -219,8 +219,8 @@
   letter-spacing: .04em;
 }
 /* `.mnob-foot-link` was removed on 2026/08/19 with the "Full dashboard"
-   escape hatch it styled — the demo flow offers no route to the
-   Dynamic-hosted classic view, so the footer carries only its honesty note. */
+   escape hatch it styled — there is no second route to link to, so the footer
+   carries only its honesty note. */
 
 @keyframes mnob-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes mnob-stage-in {

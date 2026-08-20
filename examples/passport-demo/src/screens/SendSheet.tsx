@@ -33,8 +33,8 @@ import './home.css'
  * once the node has returned a transaction id.
  *
  * The host mounts this ONLY while a local wallet session is genuinely open. A
- * closed or Dynamic-hosted wallet has no Send button at all — a control that
- * cannot work is absent, not disabled and lying about why.
+ * closed wallet has no Send button at all — a control that cannot work is
+ * absent, not disabled and lying about why.
  */
 
 const NIGHT_DECIMALS = 6

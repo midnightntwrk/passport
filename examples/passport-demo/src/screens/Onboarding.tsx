@@ -16,12 +16,8 @@ import './onboarding.css'
  * WebAuthn discoverable credentials mean the assertion path also covers a
  * passkey synced from another device.
  *
- * The mobile onboarding offers no route to Dynamic at all. The "Full dashboard"
- * footer link was cut on 2026/08/19: the demo runs "only with the local,
- * without Dynamics", so the Dynamic-hosted classic view must have no
- * user-visible entry point from this screen. The classic experience itself
- * stays in the tree and stays reachable through its internal routes; only the
- * door from onboarding is closed.
+ * This is the only way in. There is no second, hosted route to offer, and no
+ * vendor sign-in to wait on.
  */
 export interface OnboardingProps {
   stage: 'welcome' | 'working'
@@ -41,7 +37,7 @@ export interface OnboardingProps {
    * The one action. Signs in when a local Passport exists here; otherwise
    * discovers first and enrols only when no passkey answers. A refused
    * enrolment (the authenticator already holds the credential) must route
-   * into sign-in, never into an error. No Dynamic involvement on this route.
+   * into sign-in, never into an error.
    */
   onContinue: () => void
   /**
@@ -52,14 +48,6 @@ export interface OnboardingProps {
    */
   onUseDifferentPasskey?: () => void
   onDismissError?: () => void
-  /**
-   * @deprecated Ignored since 2026/08/19.
-   *
-   * This drove the footer's "Full dashboard" escape hatch into the classic
-   * Dynamic-hosted view. The demo flow must not offer it, so nothing renders
-   * it. The prop stays on the interface so the integrator needs no change.
-   */
-  onOpenClassic?: () => void
 }
 
 export default function OnboardingScreen(props: OnboardingProps) {
@@ -165,8 +153,8 @@ export default function OnboardingScreen(props: OnboardingProps) {
         ) : null}
       </div>
 
-      {/* No "Full dashboard" link: the classic view is Dynamic-hosted, and the
-          demo runs local-only. The footer carries the honesty note alone. */}
+      {/* The footer carries the honesty note alone — there is no second route
+          to link to. */}
       <footer className="mnob-foot">
         <span>Preview network demo — not production</span>
       </footer>

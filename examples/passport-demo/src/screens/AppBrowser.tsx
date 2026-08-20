@@ -96,13 +96,6 @@ export interface AppBrowserProps {
    */
   executeTransfer?: (intent: PassportTransferIntent) => Promise<{ txId: string }>
   /**
-   * True when the open session is Dynamic-hosted with no local passkey wallet —
-   * the one case where a profile connect succeeds but nothing can sign, so the
-   * `wallet-unavailable` refusal names the real reason instead of claiming no
-   * session is open at all.
-   */
-  dynamicOnlySession?: boolean
-  /**
    * The wallet the approval sheet is describing. `networkId` is the network a
    * recipient address must belong to; `formattedBalance` is NIGHT in display
    * units, or null while it is still unknown (the sheet then says so).
@@ -197,7 +190,7 @@ export function AppIcon({
   )
 }
 
-/** Registry names may carry a parenthetical qualifier — "Atlas (Passport demo
+/** Registry names may carry a parenthetical qualifier — "ClubCoin (demo
     dApp)". The chrome and consent sheet sit directly above the app's own
     header, so they show the bare name; the full registry name still goes to
     the activity feed untouched. */
@@ -212,7 +205,6 @@ export default function AppBrowser(props: AppBrowserProps) {
     onClose,
     onProfileShared,
     executeTransfer,
-    dynamicOnlySession,
     transferContext,
     onIncentiveRedeemed,
   } = props
@@ -403,7 +395,6 @@ export default function AppBrowser(props: AppBrowserProps) {
         sheetOpen: Boolean(pending || pendingTx),
         walletReady: Boolean(executeTransferRef.current),
         transferContext: transferContext ?? null,
-        dynamicOnlySession: Boolean(dynamicOnlySession),
       })
       if (verdict.kind === 'refuse') {
         postTx(txRequest, verdict.body)
@@ -420,7 +411,6 @@ export default function AppBrowser(props: AppBrowserProps) {
     return () => window.removeEventListener('message', onMessage)
   }, [
     app.name,
-    dynamicOnlySession,
     onIncentiveRedeemed,
     origin,
     pending,

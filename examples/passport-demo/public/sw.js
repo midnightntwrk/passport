@@ -10,9 +10,10 @@ const SHELL_ASSETS = [
   '/offline.html',
   '/manifest.webmanifest',
   '/midnight-symbol.svg',
+  // The wordmark IS the onboarding screen's only art, and onboarding is the
+  // default first view — so it belongs in the shell rather than in the
+  // runtime cache.
   '/midnight-wordmark.svg',
-  // Hero art for the onboarding screen, which is now the default first view.
-  '/passport-portal-monochrome.png',
   '/icons/passport-192.png',
   '/icons/passport-512.png',
   '/icons/passport-maskable-512.png',

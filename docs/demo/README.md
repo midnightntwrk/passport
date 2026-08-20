@@ -32,7 +32,4 @@ mocked.
 |---|---|
 | [`pwa-feasibility-report.md`](pwa-feasibility-report.md) | The #102 feasibility deliverable for the installable PWA. |
 | [`runbook.md`](runbook.md) | How to run the demo end to end, and the result language. |
-| [`dynamic-capability-matrix.md`](dynamic-capability-matrix.md) | What Dynamic 4.93.1 can and cannot do today. |
-| [`blockers.md`](blockers.md) | Current integration boundaries and who owns them. |
 | [`validation-log.md`](validation-log.md) | Observed results only — no claimed ones. |
-| [`why-passport-needs-a-passkey-with-dynamic.md`](why-passport-needs-a-passkey-with-dynamic.md) | Why the demo derives its private-state key from a passkey. |

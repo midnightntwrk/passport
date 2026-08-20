@@ -336,11 +336,10 @@ body:has(.mnob-screen) {
   background: var(--mn-surface-page);
 }
 
-/* The mobile screens mount inside `.passport-experience.is-mobile`, whose
-   legacy background is a fixed near-black. Hand that wrapper to the token
-   system as well, or a dark band shows through in light mode wherever a
-   screen is shorter than the wrapper. The classic wrapper is
-   `.passport-experience` WITHOUT `.is-mobile`, and is not matched here. */
+/* The screens mount inside `.passport-experience.is-mobile`, whose legacy
+   background in styles.css is a fixed near-black. Hand that wrapper to the
+   token system as well, or a dark band shows through in light mode wherever a
+   screen is shorter than the wrapper. */
 .passport-experience.is-mobile {
   background: var(--mn-surface-page);
 }

@@ -57,7 +57,7 @@ interface CallbackConsentProps {
   /** The launch captured at import time. Absent on an ordinary Passport visit. */
   launch: PassportCallbackLaunchRecord;
   /**
-   * Whether a Passport session (local passkey or Dynamic) is open. False while
+   * Whether a Passport session is open. False while
    * the user is still onboarding, so the hydration grace timer below must not
    * run: a passkey ceremony takes as long as it takes, and answering
    * "unavailable" during one would refuse every first-time user.
@@ -73,9 +73,9 @@ interface CallbackConsentProps {
    * exactly when it matters.
    *
    * Structurally identical to `wallet.keys.unshieldedKeystore`, so the host
-   * wires it with no adapter. Return null when nothing in this tab can sign —
-   * a Dynamic-only session, for instance — and the reply goes out honestly
-   * unsigned rather than with a fabricated signature.
+   * wires it with no adapter. Return null when nothing in this tab can sign,
+   * and the reply goes out honestly unsigned rather than with a fabricated
+   * signature.
    */
   getSigningKeystore?: () => {
     getPublicKey(): string;

@@ -35,15 +35,6 @@ function serveLocalCustodyAssets(): Plugin {
   };
 }
 
-function deploymentAddress(fileName: string, field: string): string {
-  try {
-    const value = JSON.parse(fs.readFileSync(path.resolve(custodyRoot, fileName), 'utf8'));
-    return typeof value[field] === 'string' ? value[field] : '';
-  } catch {
-    return '';
-  }
-}
-
 export default defineConfig({
   // `topLevelAwait()` is deliberately absent from the MAIN graph — see
   // 2026/08/05, found while deploying to Vercel. Its build transform hoists
@@ -73,12 +64,6 @@ export default defineConfig({
   // kept for `worker.plugins`, a separate and much smaller module graph that
   // does not contain the affected package.
   plugins: [react(), wasm(), serveLocalCustodyAssets()],
-  define: {
-    __FAUCET_ADDRESS__: JSON.stringify(deploymentAddress('faucet-deployment.json', 'faucetAddress')),
-    __IDENTITY_REGISTRY_ADDRESS__: JSON.stringify(
-      deploymentAddress('identity-registry-deployment.json', 'identityRegistryAddress'),
-    ),
-  },
   resolve: {
     alias: [
       { find: /^node:buffer$/, replacement: workspaceBuffer },

@@ -5,13 +5,10 @@
  * WHY THIS EXISTS — the demos cannot be built on a Vercel builder
  * ---------------------------------------------------------------
  * Verified on 2026/08/05 in a clean `git worktree` + `npm ci` of this branch:
- * `tsc --noEmit` and `vite build` both fail outright, because five generated
+ * `tsc --noEmit` and `vite build` both fail outright, because two generated
  * Compact contract modules are gitignored and absent from a fresh checkout —
  *
- *   examples/passport-demo/.generated/passport-c1/contract/index.js
  *   experiments/account-custody-prototype/contracts/managed/account/…
- *   experiments/account-custody-prototype/contracts/managed/faucet/…
- *   experiments/account-custody-prototype/contracts/managed/identity_registry/…
  *   experiments/account-custody-prototype/contracts/managed/midnames/…
  *
  * Producing them needs the `compact` compiler, which does not exist on a

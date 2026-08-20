@@ -29,30 +29,6 @@ export interface DemoPassportProfile {
    * rides on the sign-in assertion either way.
    */
   largeBlobSupported?: boolean;
-  /** Public retry metadata. The transaction itself remains encrypted. */
-  passportPreparation?: {
-    address: string;
-    preparedAt: string;
-    network: 'preview';
-    artifact: 'passport-c1-pilot-v1';
-  };
-  /** Set once a C1 deployment has genuinely been broadcast. */
-  passportContract?: {
-    address: string;
-    deployedAt: string;
-    /**
-     * While `status` is 'submitted' on the Dynamic settlement path this holds
-     * the SUBMISSION IDENTIFIER from `submitTx` (not explorer-resolvable);
-     * once confirmed via the indexer it is replaced with the canonical hash.
-     */
-    txHash: string;
-    network: 'preview' | 'undeployed';
-    status: 'submitted' | 'confirmed';
-    artifact: 'passport-c1-pilot-v1' | 'account-custody-prototype-v1';
-    identityRegistryAddress?: string;
-    identityTxHash?: string;
-    alias?: string;
-  };
 }
 
 async function database(): Promise<IDBDatabase> {
@@ -135,7 +111,7 @@ export async function loadLocalProfileByCredential(
   return loadDemoProfile(localProfileId(credentialId));
 }
 
-/** Every local (passkey-route) profile in this browser. Dynamic profiles are excluded. */
+/** Every passkey-route profile in this browser. */
 export async function listLocalProfiles(): Promise<DemoPassportProfile[]> {
   const all = (await request('readonly', (store) => store.getAll())) as DemoPassportProfile[];
   return all.filter(

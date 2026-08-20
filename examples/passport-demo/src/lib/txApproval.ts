@@ -59,8 +59,6 @@ export interface TxApprovalConditions {
   walletReady: boolean
   /** Null whenever no local wallet session is open. */
   transferContext: PassportTransferContext | null
-  /** Dynamic-hosted session with no local passkey wallet. */
-  dynamicOnlySession: boolean
 }
 
 export type TxApprovalVerdict =
@@ -185,12 +183,7 @@ export function evaluateTxRequest(
       body: {
         status: 'failed',
         error: 'wallet-unavailable',
-        /* Same error code either way — apps already handle it — but a
-           Dynamic-only session deserves the honest detail: the connect
-           worked, and it is specifically signing that needs the passkey. */
-        detail: conditions.dynamicOnlySession
-          ? 'This session is signed in with Dynamic; paying from Passport requires the local passkey wallet. Sign in with a passkey to pay.'
-          : 'No Passport wallet session is open in this browser, so nothing can be signed or sent.',
+        detail: 'No Passport wallet session is open in this browser, so nothing can be signed or sent.',
       },
     }
   }

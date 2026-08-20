@@ -57,7 +57,7 @@ import {
 
 interface TxConsentProps {
   /**
-   * Whether a Passport session (local passkey or Dynamic) is open. While it is
+   * Whether a Passport session is open. While it is
    * false the popup is still mid-sign-in — a session restored after the
    * navigation takes as long as it takes — so the unavailability grace timer
    * must not run: answering "wallet-unavailable" then would refuse every
@@ -77,13 +77,6 @@ interface TxConsentProps {
     purpose: string;
     origin: string;
   }) => Promise<{ txId: string }>;
-  /**
-   * True when the open session is Dynamic-hosted with no local passkey wallet —
-   * the one case where a profile connect succeeds but nothing can sign, so the
-   * `wallet-unavailable` refusal names the real reason instead of claiming no
-   * session is open at all.
-   */
-  dynamicOnlySession?: boolean;
   /** The wallet the approval sheet is describing. Null with no local session. */
   transferContext?: PassportTransferContext | null;
 }
@@ -129,7 +122,6 @@ function launchParameters(): { requestId: string; nonce: string } | null {
 export function PassportTxConsent({
   sessionActive,
   executeTransfer,
-  dynamicOnlySession,
   transferContext,
 }: TxConsentProps) {
   const launch = useMemo(launchParameters, []);
@@ -232,7 +224,6 @@ export function PassportTxConsent({
       sheetOpen: false,
       walletReady: Boolean(executeTransferRef.current),
       transferContext: transferContext ?? null,
-      dynamicOnlySession: Boolean(dynamicOnlySession),
     });
     if (verdict.kind === 'refuse') {
       reply(pending, verdict.body);
@@ -245,7 +236,6 @@ export function PassportTxConsent({
     setAmount(verdict.amount);
   }, [
     amount,
-    dynamicOnlySession,
     graceElapsed,
     outcome,
     pending,

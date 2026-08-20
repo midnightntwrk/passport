@@ -16,7 +16,6 @@
     "build": "npm run build --workspace passport-demo-backend && npm run build --workspace passport-demo && npm run build --workspace passport-profile-client",
     "test": "npm run test --workspace passport-demo-backend",
     "test:demo-backend": "npm run test --workspace passport-demo-backend",
-    "test:c1": "npm run test:c1 --workspace passport-demo",
     "test:pwa": "npm run test:pwa --workspace passport-demo",
     "demo": "npm run dev --workspace passport-demo",
     "demo:profile-client": "npm run dev --workspace passport-profile-client",

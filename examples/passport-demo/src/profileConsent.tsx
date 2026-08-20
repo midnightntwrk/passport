@@ -11,7 +11,7 @@ import {
 
 interface ProfileConsentProps {
   /**
-   * Whether a Passport session (local passkey or Dynamic) is open. While it is
+   * Whether a Passport session is open. While it is
    * false the popup is still mid-sign-in — the passkey ceremony takes as long
    * as it takes — so the unavailability grace timer must not run: answering
    * "unavailable" then would refuse every standalone popup connect.

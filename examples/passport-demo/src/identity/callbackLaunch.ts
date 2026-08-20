@@ -10,7 +10,6 @@
  *   - `pwa.tsx` calls `location.reload()` when a new service worker takes
  *     control, which is most likely on a first visit — exactly when a new user
  *     arrives from an app.
- *   - `App.tsx` reloads when Dynamic's initialisation is blocked.
  *   - In development `main.tsx` does `location.replace` to pin the origin to
  *     `http://localhost:5175`.
  *   - iOS discards and restores tabs whenever it feels like it.

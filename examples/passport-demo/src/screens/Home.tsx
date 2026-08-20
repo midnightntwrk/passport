@@ -91,8 +91,8 @@ export interface HomeScreenProps {
   dustFillPercent: number | null
   dustSyncing: boolean
   /**
-   * Live wallet sync progress, 0–100, when the wallet source reports one
-   * (the on-device wallet does; Dynamic does not). null = no figure known.
+   * Live wallet sync progress, 0–100, as the on-device wallet reports it.
+   * null = no figure known.
    */
   syncPercent?: number | null
   /** Selected network context; filters the app grid, does not move the wallet. */
@@ -108,20 +108,11 @@ export interface HomeScreenProps {
   onRefresh: () => void
   onCopyAddress: (kind: 'unshielded' | 'shielded' | 'dust') => void
   /**
-   * @deprecated Ignored since 2026/08/06.
-   *
-   * This fed the Home footer line — "On-device wallet · preview · derived from
-   * your passkey…" — which the 2026/08/06 review cut: the dashboard should not
-   * be telling the user where their wallet physically lives. The prop stays on
-   * the interface so the integrator needs no change, and nothing renders it.
-   */
-  walletSourceNote?: string | null
-  /**
    * The Send seam — the open on-device wallet's own `sendUnshieldedNight`, plus
    * the fee-readiness probe whose answer the sheet quotes.
    *
-   * Omitted or `null` whenever no local wallet session is genuinely open, or
-   * the wallet is Dynamic-hosted. The Send control is then ABSENT rather than
+   * Omitted or `null` whenever no local wallet session is genuinely open.
+   * The Send control is then ABSENT rather than
    * disabled: a button that cannot work should not be on screen claiming it
    * nearly could. Receive needs no seam — it is the address sheet, which is
    * driven by the addresses this screen already has.
@@ -143,7 +134,6 @@ export interface HomeScreenProps {
   onProfileShared?: (appName: string, fields: string[]) => void
   /** The wallet seam the embedded apps grid hands to its in-Passport browser. */
   executeTransfer?: FeaturedAppsProps['executeTransfer']
-  dynamicOnlySession?: FeaturedAppsProps['dynamicOnlySession']
   transferContext?: FeaturedAppsProps['transferContext']
   onIncentiveRedeemed?: FeaturedAppsProps['onIncentiveRedeemed']
   /**
@@ -159,14 +149,6 @@ export interface HomeScreenProps {
    * appears.
    */
   onOpenBackup?: () => void
-  /**
-   * @deprecated Ignored since 2026/08/19.
-   *
-   * The classic dashboard is the Dynamic-hosted view, and the demo flow runs
-   * local-only, so no control on this screen opens it. The prop stays on the
-   * interface so the integrator needs no change, and nothing renders it.
-   */
-  onOpenClassic: () => void
   onSignOut: () => void
 }
 
@@ -220,7 +202,6 @@ export default function HomeScreen(props: HomeScreenProps) {
     appsProfile,
     onProfileShared,
     executeTransfer,
-    dynamicOnlySession,
     transferContext,
     onIncentiveRedeemed,
     supportUrl,
@@ -582,7 +563,6 @@ export default function HomeScreen(props: HomeScreenProps) {
           onProfileShared={onProfileShared}
           network={network}
           executeTransfer={executeTransfer}
-          dynamicOnlySession={dynamicOnlySession}
           transferContext={transferContext}
           onIncentiveRedeemed={onIncentiveRedeemed}
         />
@@ -743,12 +723,6 @@ export default function HomeScreen(props: HomeScreenProps) {
               document.body,
             )
           : null}
-
-        {/* The "Open full dashboard" button was cut 2026/08/06, and the
-            onboarding footer link that replaced it went on 2026/08/19: the
-            demo runs local-only, so the mobile experience offers no route to
-            the Dynamic-hosted classic view at all. `onOpenClassic` stays on
-            the props so the integrator needs no change; nothing renders it. */}
 
         {onOpenBackup ? (
           <button type="button" className="mnhome-support" onClick={onOpenBackup}>

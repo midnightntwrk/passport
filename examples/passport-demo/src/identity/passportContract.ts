@@ -10,20 +10,12 @@
  * grant table. Deploying it is a REAL transaction on whichever network the open
  * wallet signs on — nothing here simulates a deployment.
  *
- * WHY THIS MODULE EXISTS ALONGSIDE `../localC1.ts`
- * -----------------------------------------------
- * `src/localC1.ts` reaches the same contract, but only through the classic
- * Dynamic-hosted desktop experience: every entry point there takes a
- * `MidnightWallet` from `@dynamic-labs/midnight`, calls `getMidnight(wallet)`,
- * and throws unless `midnight.mode === 'local'` AND the launch carries
- * `?demoMode=local`. The passkey wallet has none of those things, so the mobile
- * PWA could never deploy the contract at all.
- *
- * This module is the network-general path: it takes the open
- * {@link LocalMidnightWallet} — the passkey-derived wallet — and deploys on
- * `wallet.network.networkId`, whatever that is. `?demoMode=local` stops being a
- * gate and becomes nothing more than the localnet flavour of the same flow: the
- * wallet is pointed at the localnet, so the deployment lands there.
+ * THE NETWORK-GENERAL PATH
+ * ------------------------
+ * This module takes the open {@link LocalMidnightWallet} — the passkey-derived
+ * wallet — and deploys on `wallet.network.networkId`, whatever that is. A
+ * localnet is not a mode: the wallet is pointed at it, so the deployment lands
+ * there, by exactly the same code that reaches Preview.
  *
  * IT IS A LINE-FOR-LINE SIBLING OF `./midnames.ts`
  * -----------------------------------------------

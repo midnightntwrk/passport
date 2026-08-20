@@ -11,7 +11,7 @@ Before reading anything about the demo, read [`WHAT-THIS-IS.md`](WHAT-THIS-IS.md
 
 The first implementation surface now lives alongside the architecture:
 
-- [`examples/passport-demo/`](examples/passport-demo/) is the client-facing Dynamic + Passport capability demo.
+- [`examples/passport-demo/`](examples/passport-demo/) is the client-facing Passport capability demo — passkey onboarding, no third-party wallet vendor.
 - [`demo-backend/`](demo-backend/) is the demo backend with connectors — the private, file-linked engine behind the demo, a prototype for testing integrations.
 - [`experiments/account-custody-prototype/`](experiments/account-custody-prototype/) remains a localnet prototype and is not a production dependency.
 
@@ -33,7 +33,7 @@ validation status.
 ```
 passport/
 ├── demo-backend/                Demo backend with connectors
-├── examples/passport-demo/       Dynamic wallet and Passport client demo
+├── examples/passport-demo/       Passport client demo (passkey onboarding)
 ├── site/                        Static web artefacts deployed to GitHub Pages
 │   ├── index.html               Landing page and unified entry point
 │   ├── demo.html                The October MVP — what the team builds toward October 2026

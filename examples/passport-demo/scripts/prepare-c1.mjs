@@ -19,20 +19,15 @@ const custodyRoot = resolve(
   'account-custody-prototype',
 );
 
-const targets = [
-  {
-    label: 'Passport C1',
-    source: resolve(appDir, 'contracts', 'passport_c1.compact'),
-    generated: resolve(appDir, '.generated', 'passport-c1'),
-    publicAssets: resolve(appDir, 'public', 'zk', 'passport-c1'),
-  },
-  ...['account', 'faucet', 'identity_registry'].map((name) => ({
-    label: `Local ${name}`,
-    source: resolve(custodyRoot, 'contracts', `${name}.compact`),
-    generated: resolve(custodyRoot, 'contracts', 'managed', name),
-    publicAssets: resolve(appDir, 'public', 'zk', name),
-  })),
-];
+// The account-custody contract only. The Passport C1 pilot, the faucet, and
+// the identity registry were compiled for the retired Dynamic-hosted flow and
+// no longer have a caller in this app.
+const targets = ['account'].map((name) => ({
+  label: `Local ${name}`,
+  source: resolve(custodyRoot, 'contracts', `${name}.compact`),
+  generated: resolve(custodyRoot, 'contracts', 'managed', name),
+  publicAssets: resolve(appDir, 'public', 'zk', name),
+}));
 
 function outputIsCurrent({ source, generated, publicAssets }) {
   const generatedContract = resolve(generated, 'contract', 'index.js');

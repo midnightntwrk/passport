@@ -6,7 +6,6 @@
   "scripts": {
     "prepare:c1": "node scripts/prepare-c1.mjs",
     "prepare:midnames": "node scripts/prepare-midnames-assets.mjs",
-    "test:c1": "npm run prepare:c1 && node scripts/check-c1-draft.mjs",
     "check:pwa": "node scripts/check-pwa.mjs",
     "test:pwa": "npm run build && npm run check:pwa",
     "dev": "npm run prepare:c1 && npm run prepare:midnames && vite",
@@ -14,8 +13,6 @@
     "build": "npm run prepare:c1 && npm run prepare:midnames && tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@dynamic-labs/midnight": "4.96.0",
-    "@dynamic-labs/sdk-react-core": "4.96.0",
     "@fontsource/space-grotesk": "^5.2.10",
     "@midnight-ntwrk/compact-js": "2.5.0",
     "@midnight-ntwrk/compact-runtime": "0.16.0",

@@ -145,10 +145,9 @@
  * `verify` function, so the contract can be unit-drilled and copied into a
  * receiver without dragging a curve implementation along.
  *
- * The honest fallback: a Dynamic-hosted session with no local passkey wallet
- * has no unshielded keystore in the tab, so nothing can sign. That case emits
- * `scheme: 'none'` and omits the key and signature. It is NOT dressed up as
- * signed. Integrity then rests on TLS to the callback origin plus the audience
+ * The honest fallback: when no unshielded keystore is available in the tab, or
+ * the signer throws, nothing can sign. That case emits `scheme: 'none'` and
+ * omits the key and signature. It is NOT dressed up as signed. Integrity then rests on TLS to the callback origin plus the audience
  * and state bindings inside the payload, and the receiver decides whether that
  * is enough — {@link verifyPassportCallbackResponse} refuses an unsigned reply
  * unless the caller passes `requireSignature: false`.

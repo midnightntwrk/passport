@@ -11,9 +11,8 @@
  *      never should be — this module must be safe to point at Preview.
  *   2. Every network endpoint is configurable through `import.meta.env`, with
  *      Preview as the default rather than a localnet.
- *   3. The returned handle reports the same surfaces the Dynamic path reports
- *      (see `LocalWalletSurfaces` versus `DynamicSurfaceState` in
- *      `src/dynamic.ts`), so the Home screen can be fed from either source.
+ *   3. The returned handle reports the surfaces the Home screen reads
+ *      (see `LocalWalletSurfaces` below).
  *
  * Proving defaults to an HTTP proof server. The prototype's `?prover=browser`
  * in-tab zkir-v2 path is now ported as well (see `./wasmProver.ts`): it needs a
@@ -218,16 +217,14 @@ export function localWalletNetworkConfig(
 }
 
 // ---------------------------------------------------------------------------
-// Surfaces — structurally identical to DynamicSurfaceState in src/dynamic.ts
+// Surfaces — what every shared consumer reads off the open wallet
 // ---------------------------------------------------------------------------
 
 export type LocalWalletAddressStatus = 'loading' | 'ready' | 'partial';
 export type LocalWalletBalanceStatus = 'loading' | 'ready' | 'syncing' | 'unavailable';
 
-/**
- * Mirrors `DynamicSurfaceState` field for field so the Home screen can be fed
- * from either the Dynamic wallet or this local one. Keep the two in step.
- */
+/** Everything the Home screen, the address sheet, and the consent bridges
+    read off an open wallet. */
 export interface LocalWalletSurfaces {
   unshieldedAddress: string;
   shieldedAddress: string | null;
@@ -247,7 +244,7 @@ export interface LocalWalletSurfaces {
   balanceError: string | null;
 }
 
-/** The subset `getBalances()` refreshes — mirrors `refreshDynamicBalances`. */
+/** The subset `getBalances()` refreshes. */
 export type LocalWalletBalances = Pick<
   LocalWalletSurfaces,
   | 'unshieldedBalance'
@@ -259,8 +256,7 @@ export type LocalWalletBalances = Pick<
   | 'balanceError'
 >;
 
-// NIGHT is quoted with 6 decimals and DUST in Specks with 15, matching the
-// scales Dynamic's `getFormattedBalances()` reports.
+// NIGHT is quoted with 6 decimals and DUST in Specks with 15.
 const NIGHT_DECIMALS = 6;
 const DUST_DECIMALS = 15;
 const STATE_TIMEOUT_MS = 15_000;
