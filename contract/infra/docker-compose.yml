@@ -2,17 +2,19 @@
 # Run: docker compose up -d
 # macOS: docker compose -f docker-compose.yml -f docker-compose.macos.yml up -d
 #
-# Image versions are pinned to those used by experiments/redjubjub-wallet/.
+# Image versions are the ledger-9 wave the devnet runs (node 2.1.0 line,
+# ZKIR v3 capable proof server). Fresh volumes are mandatory: ledger 9 has
+# no 8-to-9 state migration on this line.
 #
 # The explicit project name keeps this stack's containers and volumes
 # separate from other experiments whose compose dir is also named `infra`
 # (a shared default project name means a shared — and stale — chain volume).
 
-name: account-custody-reference
+name: account-custody-k1-arm
 
 services:
   node:
-    image: 'midnightntwrk/midnight-node:1.0.0'
+    image: 'midnightntwrk/midnight-node:2.1.0-2e92c4ae642c'
     network_mode: host
     cap_drop:
       - ALL
@@ -33,7 +35,7 @@ services:
       SIDECHAIN_BLOCK_BENEFICIARY: '04bcf7ad3be7a5c790460be82a713af570f22e0f801f6659ab8e84a52be6969e'
 
   indexer:
-    image: 'midnightntwrk/indexer-standalone:4.3.3'
+    image: 'midnightntwrk/indexer-standalone:4.4.0-rc.2'
     network_mode: host
     cap_drop:
       - ALL
@@ -61,7 +63,7 @@ services:
         condition: service_healthy
 
   proof-server:
-    image: 'midnightntwrk/proof-server:8.1.0'
+    image: 'midnightntwrk/proof-server:9.0.0-rc.6'
     network_mode: host
     cap_drop:
       - ALL

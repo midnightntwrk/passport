@@ -1,64 +1,81 @@
-pragma language_version 0.23;
+pragma language_version >= 0.17.0;
 
 import CompactStandardLibrary;
 
 // ---------------------------------------------------------------------------
-// Midnight account custody contract — reference implementation.
+// Midnight account custody contract — ECDSA-secp256k1 arm.
 //
-// Implements, together, the two building blocks of the MPS-0018 keystone:
+// This branch variant instantiates the MIP-0012 §4 authorisation seam with
+// ECDSA over secp256k1 (the standard library's secp256k1EcdsaVerify circuit,
+// ZKIR v3) in place of the JubJub Schnorr scheme of MIP-0013 that the main
+// branch carries. It is an engineering stand-in for the planned secp256r1
+// (P-256) passkey arm: secp256r1 verification has ZKIR v3 operations
+// upstream (ledger 9.1.0.0-rc.4) but no Compact language surface yet, while
+// secp256k1 verification shipped in Compact toolchain 0.33/0.34-rc and runs
+// on the ledger the ledger-9 networks deploy today. The two curves share the
+// short-Weierstrass ECDSA shape, so the later k1 → r1 swap is a
+// type-and-constants substitution behind the same seam.
 //
-//   MIP-0012 (Contract Custody of Midnight-Native Assets)
-//     - unshielded custody with an explicit per-color balance mirror (§5);
-//     - stateless shielded custody: no held coin's description (nonce,
-//       color, value) ever enters public ledger state (§6.1); deposits pair
-//       the protocol coin claim with an encrypted inbox entry (§6.2); spends
-//       take the coin from the `held_coin` witness (§6.3); change follows
-//       the surviving-coin rule (§6.3, R4);
-//     - the InboxEntry v1 container is 192 opaque bytes (§6.4) — all entry
-//       cryptography is client-side, the contract never inspects entries;
-//     - the direct-transfer mode (§6.6): an optional contract-recipient
-//       spend circuit, claimed by the receiving contract's deposit path in
-//       the same client-composed transaction;
-//     - encryption-key lifecycle: exactly one authorised rotation path
-//       (§6.7).
+// This arm is NOT a MIP-0013 conforming scheme: MIP-0013 R2 selects JubJub
+// and rejects secp256k1 ECDSA for account authorisation. MIP-0012 §4 keeps
+// the seam credential-scheme-agnostic and requires conforming contracts to
+// document which instantiating standard their seam implements: this
+// contract implements the seam with an ECDSA arm pending the secp256r1
+// standard (the unclaimed secp256r1 slot of docs/plans/MIPS.md). Everything
+// below the seam — custody, inbox, mirror bookkeeping — is byte-identical
+// to the main branch and remains MIP-0012 conforming.
 //
-//   MIP-0013 (Multi-key Account Authorisation for Custody Contracts)
-//     - every asset-releasing circuit is gated by an in-circuit JubJub
-//       Schnorr verification (§4): s·G == R + c·pk, against a rolling
-//       single-use device entry (AUTH-9): each gated call consumes
-//       persistentHash([DST_DEVICE, self, pk, device_epoch, use_counter])
-//       and inserts the successor at use_counter + 1, so the ledger never
-//       holds a device identifier stable across two calls;
-//     - the challenge c binds the per-circuit domain-separation tag, the
-//       account address, R, pk, the full argument list, the ORDERED VALUES
-//       RETURNED BY EVERY WITNESS INVOCATION (AUTH-10: the private state
-//       is pinned, so approval covers the execution, not just the call
-//       shape), the authorisation counter, and the grinding nonce (§5.1);
-//       signers grind until the hash's little-endian value falls below the
-//       JubJub subgroup order (§5.2) so the in-circuit `as Field` cast
-//       always succeeds;
-//     - a dedicated `auth_nonce` advanced only by gated calls (R4), so
-//       permissionless deposits cannot invalidate a pending authorisation
-//       (AUTH-8);
-//     - device lifecycle: add_device inserts the new key's entry at use
-//       counter 0; remove_device consumes a literal set element, with the
-//       last-device rule (AUTH-5); the epoch mechanism (AUTH-6) is present
-//       in state, and its only bump site is the recovery seam of MIP-0013
-//       §8, which awaits the recovery-paths MIP — no recovery circuit is
-//       exposed here yet.
+// Scheme differences from the JubJub Schnorr trunk:
 //
-// DST construction (§5.1 as amended by midnight-improvement-proposals#249):
-//   every per-circuit DST is derived unconditionally as
-//   persistentHash<[Bytes<64>]> of the ASCII tag zero-padded to 64 bytes,
-//   regardless of the tag's length. The original "zero-padded or hashed to
-//   32 bytes" wording specified neither the arm selection nor the hash
-//   construction; #249 codifies the derivation used here.
+//   - pk is a Secp256k1Point; the signature is the standard library's
+//     Secp256k1EcdsaSignature struct {r, s}; verification is
+//     secp256k1EcdsaVerify(challenge, sig, pk), which interprets the
+//     32-byte challenge as a big-endian integer and reduces it mod the
+//     curve order internally.
 //
-// Exported pure circuits mirror every challenge construction so that
-// signers (TypeScript, Rust, HSM profiles) can reproduce the exact
-// field-aligned encoding through the contract's own toolchain; independent
-// implementations reproduce persistentHash bit-exactly instead (MIP-0013
-// §2).
+//   - No grinding nonce. The JubJub arm ground each challenge below the
+//     JubJub subgroup order so the in-circuit `as Field` cast succeeded
+//     (MIP-0013 §5.2); ECDSA consumes the digest natively, so grind_nonce
+//     disappears from every gated circuit's argument list and every
+//     challenge preimage.
+//
+//   - The challenge no longer binds a signature commitment. Schnorr's
+//     challenge binds R by construction; an ECDSA message must not depend
+//     on its own signature, so the sig_r term leaves the preimage. The
+//     preimage is [DST_CIRCUIT, self, pk, ...args, ...witness_values,
+//     auth_nonce], with pk encoded as coordinate bytes (below).
+//
+//   - Domain separation: every tag carries the arm marker
+//     ("midnight:account:device:k1:v1", "midnight:account:auth:k1:v1:…"),
+//     so no entry or challenge of this arm can collide with the JubJub
+//     arm's, and a future r1 arm takes fresh ":r1:" tags.
+//
+//   - Key encoding: device entries, the boot commitment, and challenges
+//     bind the key as the two little-endian 32-byte encodings of the
+//     affine coordinates (secp256k1PointX/Y cast to Bytes<32>) — an
+//     explicit byte encoding independent signers reproduce without the
+//     compiler's field-aligned point layout.
+//
+//   - Malleability: secp256k1EcdsaVerify accepts both low-S and high-S
+//     forms, and (r, s) and (r, n − s) verify identically. Both forms
+//     authorise the same challenge, whose device entry is consumed on
+//     execution (AUTH-9) and whose auth_nonce advances, so a malleated
+//     twin cannot replay, and signatures are never used as identifiers.
+//     No low-S constraint is imposed — deliberately, because real P-256
+//     authenticators emit high-S signatures and the r1 passkey arm must
+//     accept them.
+//
+// Everything else — DST derivation via persistentHash of the zero-padded
+// ASCII tag (midnight-improvement-proposals#249), the rolling single-use
+// device entry (AUTH-9), witness-value binding (AUTH-10), the dedicated
+// auth_nonce (AUTH-8), the boot-commitment bootstrap
+// (midnight-improvement-proposals#250), and the custody semantics of
+// MIP-0012 — is carried over from the main branch unchanged.
+//
+// Toolchain: requires the ZKIR v3 backend (compile with --feature-zkir-v3,
+// Compact toolchain 0.33.0-rc or later; the secp256k1 surface lives in the
+// compiler's zkir-v3-library.compact and is loaded only when the v3 IR is
+// enabled) and a ledger-9 network with a ZKIR-3.0-capable proof server.
 // ---------------------------------------------------------------------------
 
 // ── Witness (MIP-0012 §6.3): the wallet-local coin store ────────────────────
@@ -92,7 +109,7 @@ export ledger unshielded_balances: Map<Bytes<32>, Uint<128>>;
 export ledger spec_version: Uint<32>;
 // MIP-0012 §8: feature gate for clients.
 
-// MIP-0013 §3.
+// MIP-0013 §3 state shape, instantiated by this arm's scheme.
 
 export ledger devices: Set<Bytes<32>>;
 // Single-use device entries (MIP-0013 §3). Every gated call consumes the
@@ -148,7 +165,7 @@ constructor(initial_device_boot: Bytes<32>, encryption_key: Bytes<32>) {
 // the permissionless circuit cannot be front-run to register a foreign
 // key. Increments round like the other permissionless circuits; does not
 // touch auth_nonce (AUTH-8).
-export circuit activate_initial_device(pk: JubjubPoint, salt: Bytes<32>): [] {
+export circuit activate_initial_device(pk: Secp256k1Point, salt: Bytes<32>): [] {
   assert(!booted, "already activated");
   assert(derive_boot_commitment(salt, pk) == boot, "boot commitment mismatch");
   devices.insert(disclose(derive_device_entry(
@@ -160,68 +177,73 @@ export circuit activate_initial_device(pk: JubjubPoint, salt: Bytes<32>): [] {
   bump_round();
 }
 
-// Boot commitment: DST_BOOT = "midnight:account:boot:v1" zero-padded to
-// 32 bytes (to be registered under the MPS-0027 registry).
-export pure circuit derive_boot_commitment(salt: Bytes<32>, pk: JubjubPoint): Bytes<32> {
-  return persistentHash<[Bytes<32>, Bytes<32>, JubjubPoint]>(
-    [pad(32, "midnight:account:boot:v1"), salt, pk]
+// Boot commitment: DST_BOOT = "midnight:account:boot:k1:v1" zero-padded to
+// 32 bytes (arm-marked; to be registered under the MPS-0027 registry). The
+// key is bound as its little-endian affine coordinate bytes, the same
+// encoding the device entries use.
+export pure circuit derive_boot_commitment(salt: Bytes<32>, pk: Secp256k1Point): Bytes<32> {
+  return persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>(
+    [pad(32, "midnight:account:boot:k1:v1"), salt,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>]
   );
 }
 
-// ── Entries and challenge constructions (MIP-0013 §3, §5) ───────────────────
+// ── Entries and challenge constructions ─────────────────────────────────────
 //
-// All domain-separation tags below are to be registered under the MPS-0027
-// registry once it ratifies (MIP-0012 S6, MIP-0013 Path to Active).
+// All domain-separation tags below are arm-marked (":k1:") and are to be
+// registered under the MPS-0027 registry once it ratifies.
 
 // Rolling device entry (MIP-0013 §3): the account address makes entries
 // for one key unequal across accounts; the epoch makes revocation total
 // without enumerating the set; the use counter makes every entry
-// single-use (AUTH-9). DST_DEVICE = "midnight:account:device:v1"
-// zero-padded to 32 bytes.
+// single-use (AUTH-9). DST_DEVICE = "midnight:account:device:k1:v1"
+// zero-padded to 32 bytes. The key is bound as the little-endian 32-byte
+// encodings of its affine coordinates.
 export pure circuit derive_device_entry(
   self_addr: ContractAddress,
-  pk:        JubjubPoint,
+  pk:        Secp256k1Point,
   epoch:     Uint<32>,
   counter:   Uint<64>,
 ): Bytes<32> {
-  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, Uint<32>, Uint<64>]>(
-    [pad(32, "midnight:account:device:v1"), self_addr, pk, epoch, counter]
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<32>, Uint<64>]>(
+    [pad(32, "midnight:account:device:k1:v1"), self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     epoch, counter]
   );
 }
 
-// Scalar-to-point helper: R = r·G, pk = sk·G. Exposed so signers use the
+// Scalar-to-point helper: pk = sk·G. Exposed so signers can use the
 // contract's own curve arithmetic (generator included) instead of a
-// foreign JubJub library.
-export pure circuit compute_public_point(scalar: Field): JubjubPoint {
+// foreign secp256k1 library.
+export pure circuit compute_public_point(scalar: Secp256k1Scalar): Secp256k1Point {
   return ecMulGenerator(scalar);
 }
 
-// Per-circuit challenges (MIP-0013 §5.1). Preimage:
-//   [DST_CIRCUIT, self, sig_r, pk, ...args, ...witness_values,
-//    auth_nonce, grind_nonce]
+// Per-circuit challenges. Preimage:
+//   [DST_CIRCUIT, self, pk_x, pk_y, ...args, ...witness_values, auth_nonce]
 // The gated circuit passes kernel.self(), the values its witness
 // invocations actually returned (AUTH-10), and its live auth_nonce; the
 // signer passes the deployed address, the witness values the call will
-// execute against (which the client pipeline MUST hand to the approver,
-// §5.3), and the observed auth_nonce. The signer grinds grind_nonce until
-// the hash, read little-endian, is strictly below the JubJub subgroup
-// order r_J (§5.2).
+// execute against (which the client pipeline MUST hand to the approver),
+// and the observed auth_nonce. There is no signature term (an ECDSA
+// message must not depend on its own signature) and no grinding nonce
+// (secp256k1EcdsaVerify reduces the 32-byte challenge mod n natively).
 
 export pure circuit challenge_withdraw_unshielded(
   self_addr:   ContractAddress,
-  sig_r:       JubjubPoint,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   color:       Bytes<32>,
   amount:      Uint<128>,
   recipient:   UserAddress,
   nonce_value: Uint<64>,
-  grind_nonce: Uint<64>,
 ): Bytes<32> {
   const dst = persistentHash<[Bytes<64>]>(
-    [pad(64, "midnight:account:auth:v1:withdraw_unshielded")]
+    [pad(64, "midnight:account:auth:k1:v1:withdraw_unshielded")]
   );
-  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<128>, UserAddress, Uint<64>, Uint<64>]>(
-    [dst, self_addr, sig_r, pk, color, amount, recipient, nonce_value, grind_nonce]
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<128>, UserAddress, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     color, amount, recipient, nonce_value]
   );
 }
 
@@ -231,126 +253,125 @@ export pure circuit challenge_withdraw_unshielded(
 // a different coin under a valid signature.
 export pure circuit challenge_withdraw_shielded(
   self_addr:   ContractAddress,
-  sig_r:       JubjubPoint,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   recipient:   ZswapCoinPublicKey,
   color:       Bytes<32>,
   amount:      Uint<128>,
   coin:        QualifiedShieldedCoinInfo,
   nonce_value: Uint<64>,
-  grind_nonce: Uint<64>,
 ): Bytes<32> {
   const dst = persistentHash<[Bytes<64>]>(
-    [pad(64, "midnight:account:auth:v1:withdraw_shielded")]
+    [pad(64, "midnight:account:auth:k1:v1:withdraw_shielded")]
   );
-  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, ZswapCoinPublicKey, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo, Uint<64>, Uint<64>]>(
-    [dst, self_addr, sig_r, pk, recipient, color, amount, coin, nonce_value, grind_nonce]
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, ZswapCoinPublicKey, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     recipient, color, amount, coin, nonce_value]
   );
 }
 
 export pure circuit challenge_withdraw_shielded_to_contract(
   self_addr:   ContractAddress,
-  sig_r:       JubjubPoint,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   recipient:   ContractAddress,
   color:       Bytes<32>,
   amount:      Uint<128>,
   coin:        QualifiedShieldedCoinInfo,
   nonce_value: Uint<64>,
-  grind_nonce: Uint<64>,
 ): Bytes<32> {
   const dst = persistentHash<[Bytes<64>]>(
-    [pad(64, "midnight:account:auth:v1:withdraw_shielded_to_contract")]
+    [pad(64, "midnight:account:auth:k1:v1:withdraw_shielded_to_contract")]
   );
-  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, ContractAddress, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo, Uint<64>, Uint<64>]>(
-    [dst, self_addr, sig_r, pk, recipient, color, amount, coin, nonce_value, grind_nonce]
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, ContractAddress, Bytes<32>, Uint<128>, QualifiedShieldedCoinInfo, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     recipient, color, amount, coin, nonce_value]
   );
 }
 
 export pure circuit challenge_append_inbox(
   self_addr:   ContractAddress,
-  sig_r:       JubjubPoint,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   entry:       Bytes<192>,
   nonce_value: Uint<64>,
-  grind_nonce: Uint<64>,
 ): Bytes<32> {
   const dst = persistentHash<[Bytes<64>]>(
-    [pad(64, "midnight:account:auth:v1:append_inbox")]
+    [pad(64, "midnight:account:auth:k1:v1:append_inbox")]
   );
-  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<192>, Uint<64>, Uint<64>]>(
-    [dst, self_addr, sig_r, pk, entry, nonce_value, grind_nonce]
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<192>, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     entry, nonce_value]
   );
 }
 
 export pure circuit challenge_rotate_enc_key(
   self_addr:   ContractAddress,
-  sig_r:       JubjubPoint,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   new_key:     Bytes<32>,
   nonce_value: Uint<64>,
-  grind_nonce: Uint<64>,
 ): Bytes<32> {
   const dst = persistentHash<[Bytes<64>]>(
-    [pad(64, "midnight:account:auth:v1:rotate_enc_key")]
+    [pad(64, "midnight:account:auth:k1:v1:rotate_enc_key")]
   );
-  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>(
-    [dst, self_addr, sig_r, pk, new_key, nonce_value, grind_nonce]
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     new_key, nonce_value]
   );
 }
 
 export pure circuit challenge_add_device(
   self_addr:   ContractAddress,
-  sig_r:       JubjubPoint,
-  pk:          JubjubPoint,
-  new_pk:      JubjubPoint,
+  pk:          Secp256k1Point,
+  new_pk:      Secp256k1Point,
   nonce_value: Uint<64>,
-  grind_nonce: Uint<64>,
 ): Bytes<32> {
   const dst = persistentHash<[Bytes<64>]>(
-    [pad(64, "midnight:account:auth:v1:add_device")]
+    [pad(64, "midnight:account:auth:k1:v1:add_device")]
   );
-  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, JubjubPoint, Uint<64>, Uint<64>]>(
-    [dst, self_addr, sig_r, pk, new_pk, nonce_value, grind_nonce]
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     secp256k1PointX(new_pk) as Bytes<32>, secp256k1PointY(new_pk) as Bytes<32>,
+     nonce_value]
   );
 }
 
 export pure circuit challenge_remove_device(
   self_addr:   ContractAddress,
-  sig_r:       JubjubPoint,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   entry:       Bytes<32>,
   nonce_value: Uint<64>,
-  grind_nonce: Uint<64>,
 ): Bytes<32> {
   const dst = persistentHash<[Bytes<64>]>(
-    [pad(64, "midnight:account:auth:v1:remove_device")]
+    [pad(64, "midnight:account:auth:k1:v1:remove_device")]
   );
-  return persistentHash<[Bytes<32>, ContractAddress, JubjubPoint, JubjubPoint, Bytes<32>, Uint<64>, Uint<64>]>(
-    [dst, self_addr, sig_r, pk, entry, nonce_value, grind_nonce]
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<64>]>(
+    [dst, self_addr,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     entry, nonce_value]
   );
 }
 
-// ── The authorisation seam (MIP-0012 §4 as instantiated by MIP-0013 §4) ─────
+// ── The authorisation seam (MIP-0012 §4, ECDSA-secp256k1 instantiation) ─────
 //
 // One internal seam gates every asset-releasing and state-changing circuit
 // other than deposits (INV-1). Replacing the credential scheme touches this
-// circuit and the challenge constructions only. Order per MIP-0013 §4:
-// consume the device entry (and insert its successor), challenge (computed
-// by the caller), verification, freshness.
+// circuit and the challenge constructions only. Order: consume the device
+// entry (and insert its successor), challenge (computed by the caller),
+// verification, freshness.
 //
 // The entry consumed and the successor inserted are disclosed by the ledger
-// operations themselves; both are single-use values (AUTH-9; MIP-0013 S4
-// bounds the residual transcript chaining). The signature material
-// (pk, sig_r, sig_s) is witness data of the proof and appears in no public
+// operations themselves; both are single-use values (AUTH-9). The signature
+// material (pk, sig) is witness data of the proof and appears in no public
 // output. An unregistered key, a stale epoch, and a wrong use counter all
 // fail the membership assert identically.
 
 circuit require_authorised(
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   use_counter: Uint<64>,
-  sig_r:       JubjubPoint,
-  sig_s:       Field,
+  sig:         Secp256k1EcdsaSignature,
   challenge:   Bytes<32>,
 ): [] {
   const entry = disclose(derive_device_entry(kernel.self(), pk, device_epoch, use_counter));
@@ -359,11 +380,11 @@ circuit require_authorised(
   devices.insert(disclose(derive_device_entry(
     kernel.self(), pk, device_epoch, ((use_counter + (1 as Uint<64>)) as Uint<64>)
   )));
-  // The signer ground the challenge below the JubJub subgroup order, so the
-  // range-checked cast always succeeds for an honestly produced signature.
-  const c = challenge as Field;
+  // The verify interprets the challenge as a big-endian integer and reduces
+  // it mod the curve order internally; both low-S and high-S signature
+  // forms are accepted (see the malleability note in the header).
   assert(
-    ecMulGenerator(sig_s) == ecAdd(sig_r, ecMul(pk, c)),
+    secp256k1EcdsaVerify(challenge, sig, pk),
     "invalid signature"
   );
   auth_nonce = ((auth_nonce + (1 as Uint<64>)) as Uint<64>);
@@ -410,16 +431,14 @@ export circuit withdraw_unshielded(
   color:       Bytes<32>,
   amount:      Uint<128>,
   recipient:   UserAddress,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   use_counter: Uint<64>,
-  sig_r:       JubjubPoint,
-  sig_s:       Field,
-  grind_nonce: Uint<64>,
+  sig:         Secp256k1EcdsaSignature,
 ): [] {
   const challenge = challenge_withdraw_unshielded(
-    kernel.self(), sig_r, pk, color, amount, recipient, auth_nonce, grind_nonce
+    kernel.self(), pk, color, amount, recipient, auth_nonce
   );
-  require_authorised(pk, use_counter, sig_r, sig_s, challenge);
+  require_authorised(pk, use_counter, sig, challenge);
   const c = disclose(color);
   const a = disclose(amount);
   debit_unshielded(c, a);
@@ -444,16 +463,14 @@ export circuit deposit_shielded(coin: ShieldedCoinInfo, entry: Bytes<192>): [] {
 // always performed by the owner's own client, so gating loses nothing.
 export circuit append_inbox(
   entry:       Bytes<192>,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   use_counter: Uint<64>,
-  sig_r:       JubjubPoint,
-  sig_s:       Field,
-  grind_nonce: Uint<64>,
+  sig:         Secp256k1EcdsaSignature,
 ): [] {
   const challenge = challenge_append_inbox(
-    kernel.self(), sig_r, pk, entry, auth_nonce, grind_nonce
+    kernel.self(), pk, entry, auth_nonce
   );
-  require_authorised(pk, use_counter, sig_r, sig_s, challenge);
+  require_authorised(pk, use_counter, sig, challenge);
   inbox.insert(inbox_count, disclose(entry));
   inbox_count = ((inbox_count + (1 as Uint<64>)) as Uint<64>);
 }
@@ -471,20 +488,18 @@ export circuit withdraw_shielded(
   recipient:   ZswapCoinPublicKey,
   color:       Bytes<32>,
   amount:      Uint<128>,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   use_counter: Uint<64>,
-  sig_r:       JubjubPoint,
-  sig_s:       Field,
-  grind_nonce: Uint<64>,
+  sig:         Secp256k1EcdsaSignature,
 ): Maybe<ShieldedCoinInfo> {
   // The witness is invoked first so its returned value enters the
   // challenge (AUTH-10): the signature authorises spending exactly this
   // qualified coin, not any coin of this color.
   const coin = held_coin(color);
   const challenge = challenge_withdraw_shielded(
-    kernel.self(), sig_r, pk, recipient, color, amount, coin, auth_nonce, grind_nonce
+    kernel.self(), pk, recipient, color, amount, coin, auth_nonce
   );
-  require_authorised(pk, use_counter, sig_r, sig_s, challenge);
+  require_authorised(pk, use_counter, sig, challenge);
   const result = sendShielded(
     disclose(coin),
     left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
@@ -513,17 +528,15 @@ export circuit withdraw_shielded_to_contract(
   recipient:   ContractAddress,
   color:       Bytes<32>,
   amount:      Uint<128>,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   use_counter: Uint<64>,
-  sig_r:       JubjubPoint,
-  sig_s:       Field,
-  grind_nonce: Uint<64>,
+  sig:         Secp256k1EcdsaSignature,
 ): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
   const coin = held_coin(color);
   const challenge = challenge_withdraw_shielded_to_contract(
-    kernel.self(), sig_r, pk, recipient, color, amount, coin, auth_nonce, grind_nonce
+    kernel.self(), pk, recipient, color, amount, coin, auth_nonce
   );
-  require_authorised(pk, use_counter, sig_r, sig_s, challenge);
+  require_authorised(pk, use_counter, sig, challenge);
   const result = sendShielded(
     disclose(coin),
     right<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
@@ -543,42 +556,40 @@ export circuit withdraw_shielded_to_contract(
 
 export circuit rotate_enc_key(
   new_key:     Bytes<32>,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   use_counter: Uint<64>,
-  sig_r:       JubjubPoint,
-  sig_s:       Field,
-  grind_nonce: Uint<64>,
+  sig:         Secp256k1EcdsaSignature,
 ): [] {
   const challenge = challenge_rotate_enc_key(
-    kernel.self(), sig_r, pk, new_key, auth_nonce, grind_nonce
+    kernel.self(), pk, new_key, auth_nonce
   );
-  require_authorised(pk, use_counter, sig_r, sig_s, challenge);
+  require_authorised(pk, use_counter, sig, challenge);
   enc_key = disclose(new_key);
 }
 
-// ── Device lifecycle (MIP-0013 §6) ──────────────────────────────────────────
+// ── Device lifecycle ────────────────────────────────────────────────────────
 //
 // Any active device is sufficient to authorise (1-of-n at the contract
-// surface); threshold policies live behind a single device entry whose key
-// is a FROST committee's joint key (MIP-0013 §7) — this contract neither
-// knows nor cares.
+// surface). The JubJub trunk points threshold policies at a FROST
+// committee's joint key behind a single entry; ECDSA thresholdisation is
+// deliberately out of scope for this arm (it is one of MIP-0013 R2's
+// grounds for rejecting ECDSA as the standard scheme) — the arm exists to
+// validate the seam and the verifier shape, not a threshold story.
 
-// Inserts the new key's entry at the current epoch and use counter 0
-// (MIP-0013 §6). The contract cannot detect re-registration of an active
-// key whose chain has advanced past counter 0; clients MUST track the
-// device roster and MUST NOT re-add an active key (S11).
+// Inserts the new key's entry at the current epoch and use counter 0.
+// The contract cannot detect re-registration of an active key whose chain
+// has advanced past counter 0; clients MUST track the device roster and
+// MUST NOT re-add an active key (S11).
 export circuit add_device(
-  new_pk:      JubjubPoint,
-  pk:          JubjubPoint,
+  new_pk:      Secp256k1Point,
+  pk:          Secp256k1Point,
   use_counter: Uint<64>,
-  sig_r:       JubjubPoint,
-  sig_s:       Field,
-  grind_nonce: Uint<64>,
+  sig:         Secp256k1EcdsaSignature,
 ): [] {
   const challenge = challenge_add_device(
-    kernel.self(), sig_r, pk, new_pk, auth_nonce, grind_nonce
+    kernel.self(), pk, new_pk, auth_nonce
   );
-  require_authorised(pk, use_counter, sig_r, sig_s, challenge);
+  require_authorised(pk, use_counter, sig, challenge);
   const new_entry = disclose(derive_device_entry(
     kernel.self(), new_pk, device_epoch, 0 as Uint<64>
   ));
@@ -587,22 +598,19 @@ export circuit add_device(
   device_count = ((device_count + (1 as Uint<8>)) as Uint<8>);
 }
 
-// Removes a device's CURRENT entry, supplied as the literal set element
-// (MIP-0013 §6): removing a lost device requires its public key and
-// current use counter, recovered from the client roster or the S11
-// rescan.
+// Removes a device's CURRENT entry, supplied as the literal set element:
+// removing a lost device requires its public key and current use counter,
+// recovered from the client roster or the S11 rescan.
 export circuit remove_device(
   entry:       Bytes<32>,
-  pk:          JubjubPoint,
+  pk:          Secp256k1Point,
   use_counter: Uint<64>,
-  sig_r:       JubjubPoint,
-  sig_s:       Field,
-  grind_nonce: Uint<64>,
+  sig:         Secp256k1EcdsaSignature,
 ): [] {
   const challenge = challenge_remove_device(
-    kernel.self(), sig_r, pk, entry, auth_nonce, grind_nonce
+    kernel.self(), pk, entry, auth_nonce
   );
-  require_authorised(pk, use_counter, sig_r, sig_s, challenge);
+  require_authorised(pk, use_counter, sig, challenge);
   const e = disclose(entry);
   assert(device_count > (1 as Uint<8>), "cannot remove last device");
   assert(devices.member(e), "unknown device entry");
