@@ -1,0 +1,19 @@
+{
+  "testId": "AUTH-COINLESS-K1",
+  "name": "auth-coinless",
+  "description": "ECDSA-secp256k1 seam: bootstrap, gated call, tampered-signature abort, second-device call",
+  "verdict": "PASS",
+  "note": "In-circuit secp256k1EcdsaVerify gates state changes on-node: a valid device signature executes and advances auth_nonce; a tampered signature fails the in-circuit assert with no state change; a newly added device authorises its own gated call through its rolling entry.",
+  "details": {
+    "account": "ea9462e5b63f516d1cbf8d81493a8a97f8cd450d5307f86213eb6f7d77629547",
+    "addDeviceTx": "00a9a3480bbeaa1337578e3d7b7ecc3f0e678d5b6a38504cc341f2b5f7efd6523b",
+    "tamperedSigAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
+    "secondDeviceTx": "00f090e5dad1d58887f6ae3d4b9134b1a514308dbb52a6280968117e7166df27d6"
+  },
+  "ranAt": "2026-08-21T12:39:02.115Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

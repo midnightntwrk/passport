@@ -5,10 +5,10 @@
   "verdict": "PASS",
   "note": "One-hop: no transaction in the flow names both accounts. Direct: one composed transaction pairs the contract-recipient spend with the payee claim; both addresses visible by design, no coin material; the received coin is discoverable and spendable.",
   "details": {
-    "accountA": "275bdd749ad04c234b5b2f0d60bd1c9d79b33a1dbcdd2a814fbb03fd38cf20bc",
-    "accountB": "86bbf19f47aa3c18995e6b7cec7ddfc54dd6788ba5e291633301654e7acd1871",
-    "hop1Tx": "00c1d0f9e12c63ca76e7b921fed34ea1955083c24c0feac4cc43e84a2c3100a413",
-    "hop2Tx": "00800d7d79b0a27cec585dd52bfbdeed90e18eedc190b00c3de49910a7d00ae4d9",
+    "accountA": "8a7a43ecf37158d2cdca45033fd9f70e65e8ce9ada94132dbb5e47e16c369901",
+    "accountB": "1ae1991e65b435b192d8aa8486c4e87467825788b167343a6c57dc09e4c16522",
+    "hop1Tx": "007b0c51718ea3e6cc24a27126fdc64b84238e30445336c7427d675b0a9b914014",
+    "hop2Tx": "001c4e061af3ac920da3894c16324e4e74eefb36a704a0ec7ae96a0f5eae5142d6",
     "oneHopAudit": {
       "hop1": {
         "a": true,
@@ -21,14 +21,14 @@
     },
     "composeAttempts": [
       {
-        "mtIndex": "40",
-        "outcome": "accepted: 00422ea2d646f63905c7c10d90dfafa7726dfd9cae3e43fcb7d2ff5e324278a49e"
+        "mtIndex": "51",
+        "outcome": "accepted: 0060ca4fc338070facc2cd7ebf1baf1302b406f86130eebd66d59c41a7e455cba9"
       }
     ],
-    "composedTxId": "00422ea2d646f63905c7c10d90dfafa7726dfd9cae3e43fcb7d2ff5e324278a49e",
+    "composedTxId": "0060ca4fc338070facc2cd7ebf1baf1302b406f86130eebd66d59c41a7e455cba9",
     "sent": {
       "value": "150",
-      "nonce": "d5e91d9fe48b1652…"
+      "nonce": "cb9375f764109bbd…"
     },
     "directAudit": {
       "link": {
@@ -52,51 +52,55 @@
     },
     "onwardWindow": {
       "reported": [
-        "43",
-        "44"
+        "54",
+        "55"
       ],
       "swept": [
-        "39",
-        "40",
-        "41",
-        "42",
-        "43",
-        "44",
-        "45",
-        "46",
-        "47",
-        "48"
+        "50",
+        "51",
+        "52",
+        "53",
+        "54",
+        "55",
+        "56",
+        "57",
+        "58",
+        "59"
       ],
       "position": {
-        "startIndex": 43,
-        "endIndex": 45
+        "startIndex": 54,
+        "endIndex": 56
       }
     },
     "onwardAttempts": [
       {
-        "mtIndex": "39",
+        "mtIndex": "50",
         "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing cir"
       },
       {
-        "mtIndex": "40",
-        "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': RuntimeError: unreachable"
+        "mtIndex": "51",
+        "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': Error: invalid index into sparse merkle t"
       },
       {
-        "mtIndex": "41",
-        "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': RuntimeError: unreachable"
-      },
-      {
-        "mtIndex": "42",
+        "mtIndex": "52",
         "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error:"
       },
       {
-        "mtIndex": "43",
-        "outcome": "accepted: 003c6bacf92a45d501d8009508b2bd7e21218683264249b237c2991982b16e7921"
+        "mtIndex": "53",
+        "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error:"
+      },
+      {
+        "mtIndex": "54",
+        "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error:"
+      },
+      {
+        "mtIndex": "55",
+        "outcome": "accepted: 002e23deafedfa78d64de1dc4cb66a0bd4e8f751e7fe461cd1d524442d1803095d"
       }
     ],
-    "onwardSpendTx": "003c6bacf92a45d501d8009508b2bd7e21218683264249b237c2991982b16e7921"
+    "onwardSpendTx": "002e23deafedfa78d64de1dc4cb66a0bd4e8f751e7fe461cd1d524442d1803095d"
   },
-  "ranAt": "2026-07-17T16:16:50.119Z",
+  "ranAt": "2026-08-21T13:06:56.816Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

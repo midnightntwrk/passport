@@ -4,9 +4,9 @@
 //   1. A gated call with a valid signature from an active device executes;
 //      auth_nonce and round advance (AUTH-1, AUTH-2).
 //   2. The same call aborts, with no state change, under each single
-//      fault: wrong sig_s; sig_r for a different challenge; unregistered
-//      pk; wrong use counter; tampered argument; stale auth_nonce; reused
-//      signature. The
+//      fault: wrong sig.s; a signature for a different challenge;
+//      unregistered pk; wrong use counter; tampered argument; stale
+//      auth_nonce; reused signature. The
 //      stale-epoch fault is N/A until the recovery seam lands (no circuit
 //      bumps device_epoch yet).
 //   3. A permissionless deposit lands between signing and submission; the
@@ -81,16 +81,16 @@ await runScenario('auth-conformance', async () => {
   const ctxNow = async () => s.account.callContext();
   const counterNow = async () => s.account.resolveUseCounter(s.device);
 
-  // (a) wrong sig_s
+  // (a) wrong sig.s
   {
     const ctx = await ctxNow();
     const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
-    const bad: Authorisation = { ...auth, sig_s: (auth.sig_s + 1n) };
-    matrix.wrongSigS = await expectAbort('wrong sig_s', () =>
+    const bad: Authorisation = { ...auth, sig: { r: auth.sig.r, s: (auth.sig.s + 1n) } };
+    matrix.wrongSigS = await expectAbort('wrong sig.s', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, bad));
   }
 
-  // (b) sig_r from a different challenge (signed for a different amount)
+  // (b) signature from a different challenge (signed for a different amount)
   {
     const ctx = await ctxNow();
     const other = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND + 1n, recipient), await counterNow());

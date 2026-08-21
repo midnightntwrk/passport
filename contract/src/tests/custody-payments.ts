@@ -138,9 +138,7 @@ await runScenario('custody-payments', async () => {
         DIRECT,
         authA.pk,
         authA.use_counter,
-        authA.sig_r,
-        authA.sig_s,
-        authA.grind_nonce,
+        authA.sig,
       ],
       privateStateId: s.account.privateStateId,
     });

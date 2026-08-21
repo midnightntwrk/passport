@@ -4,7 +4,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { firstValueFrom } from 'rxjs';
-import { rawTokenType, encodeRawTokenType } from '@midnight-ntwrk/ledger-v8';
+import { rawTokenType, encodeRawTokenType } from '@midnightntwrk/ledger-v9';
 
 import { sleep, step } from './runner.js';
 import {

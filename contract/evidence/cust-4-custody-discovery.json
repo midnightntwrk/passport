@@ -3,15 +3,15 @@
   "name": "custody-discovery",
   "description": "MIP-0012 third-party deposit and discovery (inbox walk + chain data)",
   "verdict": "PASS",
-  "txHash": "00b53737afeea7f7dfa7b622eb2db5c1d88e3b70ec9c3d672b4388c004e99d5797",
+  "txHash": "00f4175be9b83c0c1cc2ff67b9ac3a0ba45777ef8698169402085bb171edc87882",
   "note": "Full loop with no off-band channel: B deposited against the advertised key; A replayed the contract history from its address alone (contractActions subscription), recovered the coin via the inbox walk, and spent with a device signature.",
   "details": {
-    "account": "e556df897e6532d5c0f51cfa47044ffb130ac6fe328fcea56717348b46cdef2b",
-    "mintTx": "006c40136c2a9392acf5836cf1ea480311d5ef72be3dc3c6e722d6a9878045f28a",
-    "advertisedKeyHex": "6c66b5d197619d02b03a46eac3061395815d481561d5f7263b24a4b10d54550f",
-    "depositTx": "00752c2c9aafada4e75980a3239ce89dcc0100b11b1995021b963b17964fb95238",
+    "account": "f2ae257d2ca39749f06219caa20cdbba7582e73c2688a74eec57e1b90987baff",
+    "mintTx": "00876b7acb767cd9d4589e4aff057a486e5546d02d95289a1399c0939d1bb9c7bc",
+    "advertisedKeyHex": "0a00b64d22e6c234ac561678061e4e2f90229a48d27a3aad3413d822b8e94565",
+    "depositTx": "00351686f88cfe51fb116cfa9968a1339d08ce7b63cc3042a49d4f413d79fc71db",
     "discoveredCoin": {
-      "colorHex": "38b285d2f817c087ab2b9503259e3a234b685951ae2668209e6871aa2fe9f684",
+      "colorHex": "3a440dfb7089aaa9b2bbabf29609ed9539a599a32fd76b0a82ea78401a4e39d5",
       "value": "350",
       "matches": true
     },
@@ -19,60 +19,60 @@
       {
         "kind": "ContractDeploy",
         "entryPoint": null,
-        "txHash": "5478d15fb74975e30afa37bb01076a680d3275d31b4e3d025418a6bc9e160bbf",
+        "txHash": "477a8ac16da4bfb0d80385082de97f13bfc3cad967d09be4ad0e0f3fef53a78a",
         "identifiers": [
-          "00a32bf7a2dec699fce480713b74ffcca644a2b14c97ad2263b327b9d20645244a",
-          "00b9b347608ef4914673f57fe07a03a5d895196f5a0fd1ce90896bbc42b4dca75e"
+          "000fd6a9369061b77a034f4fa578896dcc5dbe24880feb883509e7a13878c56b5a",
+          "00b85ca7a4d9f1bcec18195107ddbc6cf26ea34d5d1455252669c3c90190eedb35"
         ],
-        "blockHeight": 182,
-        "window": "[35, 35)"
+        "blockHeight": 83,
+        "window": "[33, 33)"
       },
       {
         "kind": "ContractCall",
         "entryPoint": "activate_initial_device",
-        "txHash": "c0e3eece8d42392619522ca90e34b6723c3fb2aa61097323fb9ebee32ee94f1e",
+        "txHash": "286765139907ed70aa76b201f7de730e831ea9aac64da0db6a54994dd4f6329d",
         "identifiers": [
-          "003ee751463247bb2013d4a01d5948f05559248fc3befee38f76923aa97a2103c9",
-          "004f7174313648efcdf01e703d8da9e8bae5904dc4a0ecddf6ed5554f164aaa945"
+          "00ae6be386330d5f5000bcbb426178311ffbf764b6f134b057078ecd356516f06b",
+          "0084e3f12502bf883e085a1596da7447ae3afc827df574dcb919346b8154ff8440"
         ],
-        "blockHeight": 185,
-        "window": "[35, 35)"
+        "blockHeight": 86,
+        "window": "[33, 33)"
       },
       {
         "kind": "ContractCall",
         "entryPoint": "deposit_shielded",
-        "txHash": "bd6d963c35f9e55efd8e83769d89986c4a9d68aa57ac4fb1330b46be1dc33f68",
+        "txHash": "d4470634143ad03c53cc47c36b1ed63336c0616e18918e59ef3469fb393482e1",
         "identifiers": [
-          "007303493eef3ef3c0f57a7fdcd7ea0258237faaba55d65578b924226ac11086bc",
-          "004f5993404d8b1e92d8e846d8359753812ecfe977e20df0be7fe5d4b1a3b9215e",
-          "00c78b0cd3a84ad29e47e586c34afca55fbb08abf31b93cf99f885953ba407ea6c",
-          "00752c2c9aafada4e75980a3239ce89dcc0100b11b1995021b963b17964fb95238"
+          "005f85ea39e616b37eaca487a561194a6f341e296ad29a54dd0d0f5d65f2617852",
+          "00794fa36624c2b0f85532f63a3a69312dc36520c816b10663ebd73e3ca0632f5d",
+          "00eeaefa03bdd6ff16478896740ad3d7d32c9f63c4f39e653537cebbacae1d2287",
+          "00351686f88cfe51fb116cfa9968a1339d08ce7b63cc3042a49d4f413d79fc71db"
         ],
-        "blockHeight": 202,
-        "window": "[36, 37)"
+        "blockHeight": 102,
+        "window": "[34, 35)"
       }
     ],
     "depositTxEnumerated": true,
     "candidateSets": [
       {
-        "source": "enumerated ContractCall deposit_shielded @ block 202",
+        "source": "enumerated ContractCall deposit_shielded @ block 102",
         "candidates": [
-          "36"
+          "34"
         ]
       }
     ],
     "spendAttempts": [
       {
-        "source": "enumerated ContractCall deposit_shielded @ block 202",
-        "mtIndex": "36",
+        "source": "enumerated ContractCall deposit_shielded @ block 102",
+        "mtIndex": "34",
         "outcome": "accepted",
-        "txId": "00b53737afeea7f7dfa7b622eb2db5c1d88e3b70ec9c3d672b4388c004e99d5797"
+        "txId": "00f4175be9b83c0c1cc2ff67b9ac3a0ba45777ef8698169402085bb171edc87882"
       }
     ],
-    "mtIndexSource": "enumerated ContractCall deposit_shielded @ block 202 @ index 36",
-    "spendTx": "00b53737afeea7f7dfa7b622eb2db5c1d88e3b70ec9c3d672b4388c004e99d5797"
+    "mtIndexSource": "enumerated ContractCall deposit_shielded @ block 102 @ index 34",
+    "spendTx": "00f4175be9b83c0c1cc2ff67b9ac3a0ba45777ef8698169402085bb171edc87882"
   },
-  "ranAt": "2026-07-17T16:07:20.245Z",
+  "ranAt": "2026-08-21T12:47:14.499Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

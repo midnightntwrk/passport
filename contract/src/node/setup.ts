@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
-import { rawTokenType, encodeRawTokenType } from '@midnight-ntwrk/ledger-v8';
+import { rawTokenType, encodeRawTokenType } from '@midnightntwrk/ledger-v9';
 
 import * as FaucetModule from '../../contracts/managed/faucet/contract/index.js';
 import * as ControlModule from '../../contracts/managed/control/contract/index.js';

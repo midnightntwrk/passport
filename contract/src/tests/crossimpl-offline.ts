@@ -1,19 +1,19 @@
-// Offline half of MIP-0013 conformance test 7 — cross-implementation
-// signing. The Rust signer (signer-rs) computes the withdraw_unshielded
-// challenge with its own hash and curve stack; this check asserts the
-// challenge is bit-identical to the compiled contract's pure circuit, and
-// that the signature verifies against the §4 equation off-circuit. The
+// Offline half of conformance test 7 — cross-implementation signing. The
+// Rust signer (signer-rs) computes the withdraw_unshielded challenge with
+// its own hash and curve stack; this check asserts the challenge is
+// bit-identical to the compiled contract's pure circuit, and that the
+// ECDSA signature verifies over that digest on an independent stack. The
 // on-node half (auth-crossimpl.ts) then submits a Rust-signed withdrawal.
 
 import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
-import { ecAdd, ecMul, ecMulGenerator } from '@midnight-ntwrk/compact-runtime';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 
 import { runScenario, step } from './runner.js';
-import { pureCircuits } from '../wallet/contract.js';
-import { JUBJUB_R, bytesToBigIntLE } from '../wallet/signer.js';
+import { pureCircuits, type Secp256k1Point } from '../wallet/contract.js';
+import { SECP256K1_N, type EcdsaSignature } from '../wallet/signer.js';
 import { bytesToHex } from '../wallet/hex.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,17 +22,14 @@ export const SIGNER_BIN = path.resolve(
 );
 
 export interface RustSignature {
-  pk: { x: bigint; y: bigint };
-  sig_r: { x: bigint; y: bigint };
-  sig_s: bigint;
-  grind_nonce: bigint;
+  pk: Secp256k1Point;
+  sig: EcdsaSignature;
   challenge: string;
-  attempts: number;
 }
 
-export function rustKeygen(): { sk: string; pk: { x: bigint; y: bigint } } {
+export function rustKeygen(): { sk: string; pk: Secp256k1Point } {
   const out = JSON.parse(execFileSync(SIGNER_BIN, [], { input: '{"cmd":"keygen"}', encoding: 'utf-8' }));
-  return { sk: out.sk, pk: { x: BigInt(out.pk.x), y: BigInt(out.pk.y) } };
+  return { sk: out.sk, pk: { x: BigInt(out.pk.x), y: BigInt(out.pk.y), identity: false } };
 }
 
 export function rustSignWithdrawUnshielded(req: {
@@ -59,12 +56,9 @@ export function rustSignWithdrawUnshielded(req: {
     }),
   );
   return {
-    pk: { x: BigInt(out.pk.x), y: BigInt(out.pk.y) },
-    sig_r: { x: BigInt(out.sig_r.x), y: BigInt(out.sig_r.y) },
-    sig_s: BigInt(out.sig_s),
-    grind_nonce: BigInt(out.grind_nonce),
+    pk: { x: BigInt(out.pk.x), y: BigInt(out.pk.y), identity: false },
+    sig: { r: BigInt(out.sig.r), s: BigInt(out.sig.s) },
     challenge: out.challenge,
-    attempts: out.attempts,
   };
 }
 
@@ -79,12 +73,10 @@ if (isMain) {
     const amount = 500n;
     const authNonce = 3n;
     const sig = rustSignWithdrawUnshielded({ sk, contractAddress, color, amount, recipient, authNonce });
-    console.log(`  grinding attempts: ${sig.attempts}`);
 
     step('challenge bit-exactness: Rust stack vs the contract’s pure circuit');
     const expected = pureCircuits.challenge_withdraw_unshielded(
-      { bytes: contractAddress }, sig.sig_r, sig.pk, color, amount, { bytes: recipient },
-      authNonce, sig.grind_nonce,
+      { bytes: contractAddress }, sig.pk, color, amount, { bytes: recipient }, authNonce,
     );
     const expectedHex = bytesToHex(expected);
     if (expectedHex !== sig.challenge) {
@@ -92,12 +84,16 @@ if (isMain) {
     }
     console.log(`  ✓ identical: ${sig.challenge.slice(0, 32)}…`);
 
-    step('the §4 equation holds for the Rust signature');
-    const c = bytesToBigIntLE(expected);
-    if (!(c < JUBJUB_R)) throw new Error('ground challenge not below r_J');
-    const lhs = ecMulGenerator(sig.sig_s);
-    const rhs = ecAdd(sig.sig_r, ecMul(sig.pk, c));
-    if (!(lhs.x === rhs.x && lhs.y === rhs.y)) throw new Error('s·G != R + c·pk');
-    console.log('  ✓ s·G == R + c·pk with the Rust-produced (R, s, grind_nonce)');
+    step('the ECDSA signature verifies over the digest');
+    if (!(sig.sig.r > 0n && sig.sig.r < SECP256K1_N)) throw new Error('r outside [1, n)');
+    if (!(sig.sig.s > 0n && sig.sig.s < SECP256K1_N)) throw new Error('s outside [1, n)');
+    const ok = secp256k1.verify(
+      new secp256k1.Signature(sig.sig.r, sig.sig.s).toBytes('compact'),
+      expected,
+      secp256k1.Point.fromAffine({ x: sig.pk.x, y: sig.pk.y }).toBytes(false),
+      { prehash: false, lowS: false }, // the circuit accepts both S forms
+    );
+    if (!ok) throw new Error('Rust signature does not verify over the challenge digest');
+    console.log('  ✓ verify(challenge, (r, s), pk) with the Rust-produced signature');
   });
 }
