@@ -1,16 +1,16 @@
 // Public surface of the account-custody reference implementation.
 
 export { Contract, ledger, pureCircuits } from './wallet/contract.js';
-export type { Ledger, JubjubPoint, ShieldedCoin, QualifiedCoin } from './wallet/contract.js';
+export type { Ledger, Secp256k1Point, ShieldedCoin, QualifiedCoin } from './wallet/contract.js';
 
 export {
   Device,
   challenges,
-  JUBJUB_R,
-  randomJubjubScalar,
-  bytesToBigIntLE,
+  SECP256K1_N,
+  randomSecp256k1Scalar,
+  scalarToBytesBE,
 } from './wallet/signer.js';
-export type { Authorisation, CallContext, ChallengeBuilder } from './wallet/signer.js';
+export type { Authorisation, EcdsaSignature, CallContext } from './wallet/signer.js';
 
 export {
   sealInboxEntry,

@@ -4,11 +4,11 @@
 // Every authorised call follows the same shape: read the live auth_nonce,
 // resolve the device's current use counter (the rolling-entry position,
 // AUTH-9), collect the witness values the call will consume (AUTH-10),
-// build the per-circuit challenge (MIP-0013 §5.1), have the device sign it
-// (§5.3), and pass (pk, use_counter, R, s, grind_nonce) as the circuit's
-// authorising material. Low-level `*WithAuth` variants accept a pre-built
-// Authorisation so conformance tests can inject faults (wrong s, stale
-// nonce, wrong counter, replays).
+// build the per-circuit challenge digest, have the device ECDSA-sign it,
+// and pass (pk, use_counter, sig) as the circuit's authorising material.
+// Low-level `*WithAuth` variants accept a pre-built Authorisation so
+// conformance tests can inject faults (wrong s, stale nonce, wrong
+// counter, replays).
 //
 // The client tracks a device roster (pk → use counter) per MIP-0013 S11:
 // counters advance on every successful gated call, and an unknown counter
@@ -16,7 +16,7 @@
 
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 
-import { ledger, pureCircuits, type Ledger, type ShieldedCoin, type QualifiedCoin, type JubjubPoint } from './contract.js';
+import { ledger, pureCircuits, type Ledger, type ShieldedCoin, type QualifiedCoin, type Secp256k1Point } from './contract.js';
 import {
   emptyCoinStore,
   withCoin,
@@ -163,7 +163,7 @@ export class CustodyAccount {
   }
 
   /** Low-level activation call against a live account (bootstrap probes). */
-  activateInitialDevice(pk: JubjubPoint, salt: Uint8Array): Promise<unknown> {
+  activateInitialDevice(pk: Secp256k1Point, salt: Uint8Array): Promise<unknown> {
     return submitWithDustRetry('activate_initial_device', () => this.handle.callTx.activate_initial_device(pk, salt));
   }
 
@@ -223,12 +223,12 @@ export class CustodyAccount {
     throw new Error('device entry not found on-ledger (rescan limit reached) — not a registered device?');
   }
 
-  private advanceCounter(pk: { x: bigint; y: bigint }, used: bigint): void {
+  private advanceCounter(pk: Secp256k1Point, used: bigint): void {
     this.counters.set(pkKey(pk), used + 1n);
   }
 
   /** Record a freshly registered device (entry at use counter 0). */
-  registerDevice(pk: { x: bigint; y: bigint }): void {
+  registerDevice(pk: Secp256k1Point): void {
     this.counters.set(pkKey(pk), 0n);
   }
 
@@ -350,7 +350,7 @@ export class CustodyAccount {
     return r;
   }
 
-  async addDevice(device: Device, newPk: { x: bigint; y: bigint }): Promise<TxResult> {
+  async addDevice(device: Device, newPk: Secp256k1Point): Promise<TxResult> {
     const ctx = await this.callContext();
     const counter = await this.resolveUseCounter(device);
     const auth = device.sign(challenges.addDevice(ctx, device.pk, newPk), counter);
@@ -388,7 +388,7 @@ export class CustodyAccount {
     a: Authorisation,
   ): Promise<TxResult> {
     const r = await submitWithDustRetry('withdraw_unshielded', () => this.handle.callTx.withdraw_unshielded(
-      color, amount, { bytes: recipient }, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce,
+      color, amount, { bytes: recipient }, a.pk, a.use_counter, a.sig,
     ));
     return { txId: txId(r) };
   }
@@ -400,7 +400,7 @@ export class CustodyAccount {
     a: Authorisation,
   ): Promise<SpendOutcome> {
     const r = await submitWithDustRetry('withdraw_shielded', () => this.handle.callTx.withdraw_shielded(
-      { bytes: recipient }, color, amount, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce,
+      { bytes: recipient }, color, amount, a.pk, a.use_counter, a.sig,
     ));
     return { txId: txId(r), change: changeOf(r) };
   }
@@ -412,7 +412,7 @@ export class CustodyAccount {
     a: Authorisation,
   ): Promise<DirectSpendOutcome> {
     const r = await submitWithDustRetry('withdraw_shielded_to_contract', () => this.handle.callTx.withdraw_shielded_to_contract(
-      { bytes: recipient }, color, amount, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce,
+      { bytes: recipient }, color, amount, a.pk, a.use_counter, a.sig,
     ));
     const result = circuitResult(r);
     if (!Array.isArray(result) || !result[0]?.nonce) {
@@ -427,22 +427,22 @@ export class CustodyAccount {
   }
 
   async appendInboxWithAuth(entry: Uint8Array, a: Authorisation): Promise<TxResult> {
-    const r = await submitWithDustRetry('append_inbox', () => this.handle.callTx.append_inbox(entry, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
+    const r = await submitWithDustRetry('append_inbox', () => this.handle.callTx.append_inbox(entry, a.pk, a.use_counter, a.sig));
     return { txId: txId(r) };
   }
 
   async rotateEncKeyWithAuth(newKey: Uint8Array, a: Authorisation): Promise<TxResult> {
-    const r = await submitWithDustRetry('rotate_enc_key', () => this.handle.callTx.rotate_enc_key(newKey, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
+    const r = await submitWithDustRetry('rotate_enc_key', () => this.handle.callTx.rotate_enc_key(newKey, a.pk, a.use_counter, a.sig));
     return { txId: txId(r) };
   }
 
-  async addDeviceWithAuth(newPk: { x: bigint; y: bigint }, a: Authorisation): Promise<TxResult> {
-    const r = await submitWithDustRetry('add_device', () => this.handle.callTx.add_device(newPk, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
+  async addDeviceWithAuth(newPk: Secp256k1Point, a: Authorisation): Promise<TxResult> {
+    const r = await submitWithDustRetry('add_device', () => this.handle.callTx.add_device(newPk, a.pk, a.use_counter, a.sig));
     return { txId: txId(r) };
   }
 
   async removeDeviceEntryWithAuth(entry: Uint8Array, a: Authorisation): Promise<TxResult> {
-    const r = await submitWithDustRetry('remove_device', () => this.handle.callTx.remove_device(entry, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
+    const r = await submitWithDustRetry('remove_device', () => this.handle.callTx.remove_device(entry, a.pk, a.use_counter, a.sig));
     return { txId: txId(r) };
   }
 

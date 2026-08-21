@@ -1,112 +1,102 @@
-// Device signer — MIP-0013 §5.
+// Device signer — ECDSA-secp256k1 arm (see the contract header; this is
+// not the MIP-0013 scheme).
 //
-// A device holds an independent Schnorr keypair (sk, pk = sk·G) on JubJub
-// (§1); keys are never derived from one another or from a seed (AUTH-7).
-// To authorise a call the device:
-//   1. samples a nonce scalar r uniformly from [1, r_J)   (§5.3, S1)
-//   2. computes R = r·G
-//   3. grinds the challenge: h = persistentHash(preimage(grind_nonce)) for
-//      grind_nonce = 0, 1, 2, … until the little-endian integer value of h
-//      is strictly below r_J (§5.2; ~17.5 expected attempts)
-//   4. computes s = r + c·sk mod r_J
-//   5. outputs (R, s, grind_nonce)
+// A device holds an independent ECDSA keypair (sk, pk = sk·G) on secp256k1;
+// keys are never derived from one another or from a seed (AUTH-7). To
+// authorise a call the device ECDSA-signs the 32-byte per-circuit challenge
+// digest directly: the contract's secp256k1EcdsaVerify interprets the
+// challenge as a big-endian integer and reduces it mod the curve order n
+// internally, so there is no grinding step, and an ECDSA message must not
+// depend on its own signature, so there is no signature commitment in the
+// preimage either. The signer emits low-S signatures (the @noble/curves
+// default); the circuit deliberately accepts both S forms (see the
+// malleability note in the contract header).
 //
 // The challenge preimages are reproduced through the contract's own
 // exported pure circuits, so the signer inherits the compiler's
-// field-aligned encoding bit-exactly (§2). The signing side needs no node,
+// field-aligned encoding bit-exactly. The signing side needs no node,
 // indexer, prover, or contract runtime beyond those pure functions — the
 // approval/proving separation of R5. Proof generation consumes the
 // signature and never sk (AUTH-4).
 
 import { randomBytes } from 'node:crypto';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 
-import { pureCircuits, type JubjubPoint, type QualifiedCoin } from './contract.js';
+import { pureCircuits, type Secp256k1Point, type QualifiedCoin } from './contract.js';
 
-// JubJub prime-order subgroup order r_J (MIP-0013 §2).
-export const JUBJUB_R = BigInt(
-  '0x0e7db4ea6533afa906673b0101343b00a6682093ccc81082d0970e5ed6f72cb7',
+// secp256k1 group order n.
+export const SECP256K1_N = BigInt(
+  '0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141',
 );
 
-/** Uniform scalar in [1, r_J), by rejection sampling. */
-export function randomJubjubScalar(): bigint {
+/** Uniform scalar in [1, n), by rejection sampling. */
+export function randomSecp256k1Scalar(): bigint {
   for (;;) {
     const candidate = BigInt('0x' + randomBytes(32).toString('hex'));
-    if (candidate > 0n && candidate < JUBJUB_R) return candidate;
+    if (candidate > 0n && candidate < SECP256K1_N) return candidate;
   }
 }
 
-/** Little-endian integer interpretation of a 32-byte hash (§5.2). */
-export function bytesToBigIntLE(bytes: Uint8Array): bigint {
-  let r = 0n;
-  for (let i = bytes.length - 1; i >= 0; i--) r = (r << 8n) | BigInt(bytes[i]);
-  return r;
+/** Big-endian 32-byte encoding of a scalar (the noble key/digest format). */
+export function scalarToBytesBE(value: bigint): Uint8Array {
+  const out = new Uint8Array(32);
+  let v = value;
+  for (let i = 31; i >= 0; i--) {
+    out[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  return out;
 }
 
-/** The authorising material a gated circuit consumes (MIP-0013 §4). */
+/** An ECDSA signature as the generated circuit ABI carries it. */
+export interface EcdsaSignature {
+  r: bigint;
+  s: bigint;
+}
+
+/** The authorising material a gated circuit consumes (MIP-0012 §4). */
 export interface Authorisation {
-  pk: JubjubPoint;
+  pk: Secp256k1Point;
   /** The device's current use counter — the rolling-entry position
    *  (AUTH-9). Not part of the challenge; bound by entry consumption. */
   use_counter: bigint;
-  sig_r: JubjubPoint;
-  sig_s: bigint;
-  grind_nonce: bigint;
+  sig: EcdsaSignature;
 }
 
-/**
- * A challenge builder: the per-circuit §5.1 preimage hash, closed over the
- * account address, the circuit's arguments, and the observed auth_nonce.
- * The signer varies only grind_nonce.
- */
-export type ChallengeBuilder = (sigR: JubjubPoint, grindNonce: bigint) => Uint8Array;
-
 export class Device {
-  readonly pk: JubjubPoint;
+  readonly pk: Secp256k1Point;
 
   constructor(readonly sk: bigint) {
     this.pk = pureCircuits.compute_public_point(sk);
   }
 
   static generate(): Device {
-    return new Device(randomJubjubScalar());
+    return new Device(randomSecp256k1Scalar());
   }
 
-  /** The device's rolling entry at a given account/epoch/counter (§3). */
+  /** The device's rolling entry at a given account/epoch/counter. */
   entryAt(contractAddress: Uint8Array, epoch: bigint, counter: bigint): Uint8Array {
     return pureCircuits.derive_device_entry({ bytes: contractAddress }, this.pk, epoch, counter);
   }
 
-  /** Produce (R, s, grind_nonce) for the call the builder describes.
-   *  `useCounter` is carried alongside for the seam's entry consumption. */
-  sign(challenge: ChallengeBuilder, useCounter: bigint): Authorisation {
-    const r = randomJubjubScalar();
-    const sigR = pureCircuits.compute_public_point(r);
-
-    let grindNonce = 0n;
-    let c: bigint;
-    for (;;) {
-      const h = challenge(sigR, grindNonce);
-      const hInt = bytesToBigIntLE(h);
-      if (hInt < JUBJUB_R) {
-        c = hInt;
-        break;
-      }
-      grindNonce++;
-    }
-
-    const s = (r + ((c % JUBJUB_R) * (this.sk % JUBJUB_R)) % JUBJUB_R) % JUBJUB_R;
-    return { pk: this.pk, use_counter: useCounter, sig_r: sigR, sig_s: s, grind_nonce: grindNonce };
+  /** ECDSA-sign the 32-byte challenge digest (prehashed — the digest IS
+   *  the message). `useCounter` is carried alongside for the seam's entry
+   *  consumption. */
+  sign(challenge: Uint8Array, useCounter: bigint): Authorisation {
+    const sigBytes = secp256k1.sign(challenge, scalarToBytesBE(this.sk), { prehash: false });
+    const { r, s } = secp256k1.Signature.fromBytes(sigBytes);
+    return { pk: this.pk, use_counter: useCounter, sig: { r, s } };
   }
 }
 
-// ── Per-circuit challenge builders (MIP-0013 §5.1) ──────────────────────────
+// ── Per-circuit challenge digests ───────────────────────────────────────────
 //
-// Preimage: [DST_CIRCUIT, self, sig_r, pk, ...args, ...witness_values,
-// auth_nonce, grind_nonce] with args in declaration order and the values
-// returned by the circuit's witness invocations pinned after them
-// (AUTH-10) — for the two shielded spends that is the held_coin result,
-// which is why their builders take the qualified coin. Each builder
-// mirrors one gated circuit.
+// Preimage: [DST_CIRCUIT, self, pk_x, pk_y, ...args, ...witness_values,
+// auth_nonce] with args in declaration order and the values returned by the
+// circuit's witness invocations pinned after them (AUTH-10) — for the two
+// shielded spends that is the held_coin result, which is why their builders
+// take the qualified coin. Each builder mirrors one gated circuit and
+// returns the digest the device signs.
 
 export interface CallContext {
   /** The account's contract address, raw bytes (binds the account, AUTH-3). */
@@ -118,47 +108,33 @@ export interface CallContext {
 const addr = (ctx: CallContext) => ({ bytes: ctx.contractAddress });
 
 export const challenges = {
-  withdrawUnshielded:
-    (ctx: CallContext, pk: JubjubPoint, color: Uint8Array, amount: bigint, recipient: Uint8Array): ChallengeBuilder =>
-    (sigR, grind) =>
-      pureCircuits.challenge_withdraw_unshielded(
-        addr(ctx), sigR, pk, color, amount, { bytes: recipient }, ctx.authNonce, grind,
-      ),
+  withdrawUnshielded: (ctx: CallContext, pk: Secp256k1Point, color: Uint8Array, amount: bigint, recipient: Uint8Array): Uint8Array =>
+    pureCircuits.challenge_withdraw_unshielded(
+      addr(ctx), pk, color, amount, { bytes: recipient }, ctx.authNonce,
+    ),
 
   // The witness-consuming circuits bind the held_coin return value into
   // the challenge (AUTH-10): the approver receives — and signs over — the
-  // exact qualified coin the spend will consume (MIP-0013 §5.3).
-  withdrawShielded:
-    (ctx: CallContext, pk: JubjubPoint, recipient: Uint8Array, color: Uint8Array, amount: bigint, coin: QualifiedCoin): ChallengeBuilder =>
-    (sigR, grind) =>
-      pureCircuits.challenge_withdraw_shielded(
-        addr(ctx), sigR, pk, { bytes: recipient }, color, amount, coin, ctx.authNonce, grind,
-      ),
+  // exact qualified coin the spend will consume.
+  withdrawShielded: (ctx: CallContext, pk: Secp256k1Point, recipient: Uint8Array, color: Uint8Array, amount: bigint, coin: QualifiedCoin): Uint8Array =>
+    pureCircuits.challenge_withdraw_shielded(
+      addr(ctx), pk, { bytes: recipient }, color, amount, coin, ctx.authNonce,
+    ),
 
-  withdrawShieldedToContract:
-    (ctx: CallContext, pk: JubjubPoint, recipient: Uint8Array, color: Uint8Array, amount: bigint, coin: QualifiedCoin): ChallengeBuilder =>
-    (sigR, grind) =>
-      pureCircuits.challenge_withdraw_shielded_to_contract(
-        addr(ctx), sigR, pk, { bytes: recipient }, color, amount, coin, ctx.authNonce, grind,
-      ),
+  withdrawShieldedToContract: (ctx: CallContext, pk: Secp256k1Point, recipient: Uint8Array, color: Uint8Array, amount: bigint, coin: QualifiedCoin): Uint8Array =>
+    pureCircuits.challenge_withdraw_shielded_to_contract(
+      addr(ctx), pk, { bytes: recipient }, color, amount, coin, ctx.authNonce,
+    ),
 
-  appendInbox:
-    (ctx: CallContext, pk: JubjubPoint, entry: Uint8Array): ChallengeBuilder =>
-    (sigR, grind) =>
-      pureCircuits.challenge_append_inbox(addr(ctx), sigR, pk, entry, ctx.authNonce, grind),
+  appendInbox: (ctx: CallContext, pk: Secp256k1Point, entry: Uint8Array): Uint8Array =>
+    pureCircuits.challenge_append_inbox(addr(ctx), pk, entry, ctx.authNonce),
 
-  rotateEncKey:
-    (ctx: CallContext, pk: JubjubPoint, newKey: Uint8Array): ChallengeBuilder =>
-    (sigR, grind) =>
-      pureCircuits.challenge_rotate_enc_key(addr(ctx), sigR, pk, newKey, ctx.authNonce, grind),
+  rotateEncKey: (ctx: CallContext, pk: Secp256k1Point, newKey: Uint8Array): Uint8Array =>
+    pureCircuits.challenge_rotate_enc_key(addr(ctx), pk, newKey, ctx.authNonce),
 
-  addDevice:
-    (ctx: CallContext, pk: JubjubPoint, newPk: JubjubPoint): ChallengeBuilder =>
-    (sigR, grind) =>
-      pureCircuits.challenge_add_device(addr(ctx), sigR, pk, newPk, ctx.authNonce, grind),
+  addDevice: (ctx: CallContext, pk: Secp256k1Point, newPk: Secp256k1Point): Uint8Array =>
+    pureCircuits.challenge_add_device(addr(ctx), pk, newPk, ctx.authNonce),
 
-  removeDevice:
-    (ctx: CallContext, pk: JubjubPoint, commitment: Uint8Array): ChallengeBuilder =>
-    (sigR, grind) =>
-      pureCircuits.challenge_remove_device(addr(ctx), sigR, pk, commitment, ctx.authNonce, grind),
+  removeDevice: (ctx: CallContext, pk: Secp256k1Point, commitment: Uint8Array): Uint8Array =>
+    pureCircuits.challenge_remove_device(addr(ctx), pk, commitment, ctx.authNonce),
 };

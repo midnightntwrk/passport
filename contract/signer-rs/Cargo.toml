@@ -3,7 +3,7 @@ name = "account-custody-signer"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "Independent Rust signer for the MIP-0013 account authorisation scheme (conformance test 7). No Midnight TypeScript, WASM, or npm dependency."
+description = "Independent Rust signer for the account authorisation seam, ECDSA-secp256k1 arm (conformance test 7). No Midnight TypeScript, WASM, or npm dependency."
 
 [dependencies]
 # Midnight ledger crates — used ONLY for the field-aligned binary encoding
@@ -12,13 +12,16 @@ description = "Independent Rust signer for the MIP-0013 account authorisation sc
 midnight-base-crypto = "1.0.0"
 midnight-transient-crypto = "2.1.0"
 
-# Curve arithmetic (JubJub over BLS12-381, the ledger's own curve crate).
-midnight-curves = "0.2.0"
-ff = "0.13"
-group = "0.13"
+# Curve arithmetic and ECDSA (secp256k1, RustCrypto).
+k256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
 
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 hex = "0.4"
 anyhow = "1"
+
+[dev-dependencies]
+# The by-hand oracle tests recompute the persistent hashes as plain
+# SHA-256 over the padded-and-concatenated elements, bypassing fab.
+sha2 = "0.10"
