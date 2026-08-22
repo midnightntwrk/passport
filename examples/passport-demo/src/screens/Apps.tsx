@@ -48,6 +48,10 @@ export interface AppsScreenProps {
 
 type LoadState = 'loading' | 'ready'
 
+/** The order the non-featured apps are listed in. The categories no longer
+    title their own sections — "All apps" is one flat list — but they still
+    decide what comes before what, so an entry does not move around the grid
+    between registry fetches. */
 const CATEGORY_ORDER: readonly RegistryCategory[] = [
   'defi',
   'gaming',
@@ -55,15 +59,6 @@ const CATEGORY_ORDER: readonly RegistryCategory[] = [
   'tools',
   'other',
 ]
-
-/** Folder titles — title-cased, one word each so the folder label stays tidy. */
-const CATEGORY_LABELS: Record<RegistryCategory, string> = {
-  defi: 'DeFi',
-  gaming: 'Gaming',
-  identity: 'Identity',
-  tools: 'Tools',
-  other: 'Other',
-}
 
 function matches(app: RegistryApp, query: string): boolean {
   if (!query) return true

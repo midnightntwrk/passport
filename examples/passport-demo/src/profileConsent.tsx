@@ -35,10 +35,15 @@ interface PendingRequest {
   source: Window;
 }
 
+/* The `midnightAddresses` field still carries the unshielded, shielded, and
+   DUST addresses on the wire — the label simply does not name them. Passport
+   surfaces the .night name as the identity and keeps the three addresses out
+   of the primary UI, so a consent sheet must not be the one place a user meets
+   the word DUST. */
 const FIELD_LABELS: Record<PassportProfileField, string> = {
   displayName: 'Passport display name',
   passportContract: 'Passport contract address and network',
-  midnightAddresses: 'Midnight unshielded, shielded, and DUST addresses',
+  midnightAddresses: 'Midnight technical addresses',
 };
 
 /**
@@ -168,6 +173,16 @@ export function PassportProfileConsent({
         profile.midnightAddresses = midnightAddresses;
       }
     }
+    /* An approval that carries nothing is not an approval. The grace timer
+       above only guards `displayName` and `midnightAddresses`, so a request
+       for `passportContract` alone reaches this button on a Passport that has
+       not deployed one — and `{ approved: true, profile: {} }` parses, leaving
+       the app to read a yes and find no fields behind it. Answer with what is
+       true instead, exactly as the in-app browser's sheet does. */
+    if (Object.keys(profile).length === 0) {
+      if (send({ approved: false, error: 'profile_unavailable' })) setOutcome('unavailable');
+      return;
+    }
     /* The outcome only changes if this reply is the one that left: a window
        that already answered says what it actually said, never what the last
        button tapped would have said. */
@@ -248,7 +263,11 @@ export function PassportProfileConsent({
               </button>
               <button type="button" className="approve" onClick={approve} disabled={!profileReady}>
                 <ShieldCheck size={16} />
-                Share selected fields
+                {/* "Selected" would be a lie on this surface: unlike the in-app
+                    browser's sheet there is nothing to tick here, and the
+                    button shares every field listed above that this Passport
+                    can serve. */}
+                Share these fields
               </button>
             </div>
           </>

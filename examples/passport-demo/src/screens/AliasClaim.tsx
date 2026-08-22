@@ -80,7 +80,7 @@ export interface AliasClaimProps {
   error: string | null
   /**
    * Whether the DUST fee for this registration is genuinely covered by the
-   * demo sponsor — reported by the claim path, never assumed here.
+   * fee sponsor — reported by the claim path, never assumed here.
    *
    * `undefined` (the default) keeps the honest baseline copy: the fee comes
    * out of this wallet. Only a `true` that the sponsor path actually produced
@@ -88,6 +88,12 @@ export interface AliasClaimProps {
    * NIGHT paid to the registry owner still leaves the user's wallet. If the
    * sponsor is unreachable or unauthorised, this must stay false and the
    * screen goes back to naming the real cost.
+   *
+   * Even a `true` is a prediction: it comes from the same advisory probe the
+   * send sheet and the contract card quote, and a sponsor can drain between
+   * that probe and the submit. So the copy below carries the send sheet's
+   * hedging and the send sheet's noun — "expected to be covered by the fee
+   * sponsor" — rather than asserting a cover this screen cannot guarantee.
    */
   feesSponsored?: boolean
   /**
@@ -428,7 +434,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
             Names are 1–32 characters: lowercase letters, numbers, and hyphens inside. A real
             registration pays the registry owner in unshielded NIGHT from this wallet
             {feesSponsored
-              ? ', and its network fee in DUST is covered by the demo sponsor'
+              ? ', and its network fee in DUST is expected to be covered by the fee sponsor'
               : ', and its fee in DUST from this wallet too'}{' '}
             — which is why Passport only performs one where it can.
           </span>

@@ -83,10 +83,15 @@ interface CallbackConsentProps {
   } | null;
 }
 
+/* Word for word `../profileConsent.tsx`, and for the reason given there: the
+   wire field still carries all three addresses, but the three addresses are
+   kept out of Passport's primary UI and a consent sheet must not be where the
+   word DUST first reaches a user. The two sheets are one object in the user's
+   mind, so the labels cannot drift apart. */
 const FIELD_LABELS = {
   displayName: 'Passport display name',
   passportContract: 'Passport contract address and network',
-  midnightAddresses: 'Midnight unshielded, shielded, and DUST addresses',
+  midnightAddresses: 'Midnight technical addresses',
 } as const;
 
 /**

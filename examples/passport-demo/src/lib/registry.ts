@@ -56,17 +56,29 @@ export const FALLBACK_APPS: readonly RegistryApp[] = [
   { id: 'zkmint', name: 'ZKMint', url: 'https://zkmint.1am.xyz', stale: true },
 ]
 
+/** The port `examples/raffle-demo` pins in its own `vite.config.ts`. */
+const RAFFLE_FALLBACK_URL = 'http://localhost:5177'
+
 /**
  * Local demo entry for the separate-origin Midnight Raffle example dApp —
  * decided 2026/08/05, replacing the earlier Atlas entry. This is the entry
  * that demonstrably completes the Passport profile handshake end-to-end.
+ *
+ * Unlike {@link LOCAL_DEV_APP} this entry always exists: with `VITE_RAFFLE_URL`
+ * unset it falls back to the pinned local port, so a plain `npm run demo` still
+ * shows the handshake. Both halves of the entry read from the environment on
+ * the same terms the local-app slot uses — `VITE_RAFFLE_URL`/`VITE_RAFFLE_NAME`
+ * against `VITE_LOCAL_APP_URL`/`VITE_LOCAL_APP_NAME` — because a build that
+ * moves the raffle to a deployed origin (`npm run deploy:passport`) must be
+ * able to rename it there too, rather than shipping a label naming a demo the
+ * configured origin may no longer serve.
  */
 export const RAFFLE_DEMO_APP: RegistryApp = {
   id: 'raffle-demo',
-  name: 'Midnight Raffle',
+  name: optionalString(import.meta.env.VITE_RAFFLE_NAME) ?? 'Midnight Raffle',
   description:
     'Connect your Passport to claim a race-weekend perk and a demo raffle ticket',
-  url: webUrl(import.meta.env.VITE_RAFFLE_URL, true) ?? 'http://localhost:5177',
+  url: webUrl(import.meta.env.VITE_RAFFLE_URL, true) ?? RAFFLE_FALLBACK_URL,
   category: 'other',
   // The raffle runs against whichever network Passport's wallet is on, because
   // the only thing it asks Passport for is a profile and (when an operator

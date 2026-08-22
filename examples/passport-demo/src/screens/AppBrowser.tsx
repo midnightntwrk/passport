@@ -39,7 +39,6 @@ import {
   type PassportTxResponseBody,
 } from '../lib/txApproval.js'
 import type { RegistryApp } from '../lib/registry.js'
-import { pushToast } from './ToastStack.js'
 import './apps.css'
 
 /**
@@ -129,10 +128,14 @@ type TransferOutcome =
   | { kind: 'declined' }
   | { kind: 'failed'; message: string }
 
+/* Word for word `../profileConsent.tsx`, and for the reason given there: the
+   wire field still carries all three addresses, but the three addresses are
+   kept out of Passport's primary UI and a consent sheet must not be where the
+   word DUST first reaches a user. */
 const FIELD_LABELS: Record<PassportProfileField, string> = {
   displayName: 'Passport display name',
   passportContract: 'Passport contract address and network',
-  midnightAddresses: 'Midnight unshielded, shielded, and DUST addresses',
+  midnightAddresses: 'Midnight technical addresses',
 }
 
 const FIELD_DETAILS: Record<PassportProfileField, string> = {
@@ -190,8 +193,8 @@ export function AppIcon({
   )
 }
 
-/** Registry names may carry a parenthetical qualifier — "ClubCoin (demo
-    dApp)". The chrome and consent sheet sit directly above the app's own
+/** Registry names may carry a parenthetical qualifier — "Midnight Raffle
+    (demo dApp)". The chrome and consent sheet sit directly above the app's own
     header, so they show the bare name; the full registry name still goes to
     the activity feed untouched. */
 function displayName(name: string): string {
@@ -214,8 +217,15 @@ export default function AppBrowser(props: AppBrowserProps) {
   const handshake = useRef<{ requestId: string; nonce: string } | null>(null)
 
   const [loaded, setLoaded] = useState(false)
-  /** Any message from the framed window is genuine evidence it is running. */
+  /** Any message from the framed window is genuine evidence it is running.
+      Per DOCUMENT, not per app: a navigation inside the frame replaces the
+      document, and the new one has not spoken yet. */
   const [frameSpoke, setFrameSpoke] = useState(false)
+  /** Whether any document in this frame has ever spoken. The slow-frame hint
+      keys off this rather than off `frameSpoke`, so navigating between an
+      app's own pages does not make the hint flash back on for an app that has
+      already proved it frames and speaks the protocol. */
+  const everSpoke = useRef(false)
   const [hintDue, setHintDue] = useState(false)
   const [hintDismissed, setHintDismissed] = useState(false)
   const [pending, setPending] = useState<PendingRequest | null>(null)
@@ -337,6 +347,7 @@ export default function AppBrowser(props: AppBrowserProps) {
       const frame = frameRef.current
       if (!frame || event.source !== frame.contentWindow) return
       if (event.origin !== origin) return
+      everSpoke.current = true
       setFrameSpoke(true)
 
       const request = parsePassportProfileRequest(event.data)
@@ -420,8 +431,36 @@ export default function AppBrowser(props: AppBrowserProps) {
     transferContext,
   ])
 
+  /* `signing` as the load handler can see it: `handleLoad` is built once and
+     the DOM calls it whenever the frame commits a document. */
+  const signingRef = useRef(false)
+  signingRef.current = signing
+  /** How many documents this frame has committed. >1 means the app navigated. */
+  const documents = useRef(0)
+
   const handleLoad = useCallback(() => {
     setLoaded(true)
+    documents.current += 1
+    /* An app that navigates — its own next page, a reload, a link out — takes
+       the document that asked with it. A sheet raised by the previous document
+       cannot be answered: `postMessage` would reach a window that never sent
+       the request and drops the reply, while Passport's sheet went on telling
+       the user their answer had been delivered. So the sheet goes with the
+       document that raised it, and the exchange is simply abandoned.
+
+       A signature already in flight is the exception, and the same one Escape
+       makes: the transaction may already be at the node, so it is allowed to
+       finish and report what really happened. */
+    if (documents.current > 1) {
+      setFrameSpoke(false)
+      if (!signingRef.current) {
+        setPending(null)
+        setApproved([])
+        setOutcome(null)
+        setPendingTx(null)
+        setTxOutcome(null)
+      }
+    }
     const target = frameRef.current?.contentWindow
     if (!target || !origin) return
     const requestId = crypto.randomUUID()
@@ -553,16 +592,12 @@ export default function AppBrowser(props: AppBrowserProps) {
       if (!txId) throw new Error('The wallet returned no transaction id.')
       postTx(pendingTx.request, { status: 'submitted', txId })
       setTxOutcome({ kind: 'submitted', txId })
-      /* The toast is the primary success surface since 2026/08/06 — it
-         outlives the sheet the user is about to dismiss, and carries the
-         explorer link where the network has one. */
-      const submittedHref = explorerTxHref(transferContext?.networkId, txId)
-      pushToast({
-        tone: 'success',
-        title: 'Transaction submitted',
-        body: `${pendingTx.origin} was told the same transaction id.`,
-        ...(submittedHref ? { link: { label: 'View on explorer', href: submittedHref } } : {}),
-      })
+      /* No toast is raised here. The send seam this component is handed
+         (`App.tsx`'s `executeAppTransfer`) already raises the submitted toast,
+         with the same explorer link, for BOTH approval surfaces — one raised
+         here as well stacked two success toasts on one transaction. The seam
+         is the honest place for it: it is the code that knows the transaction
+         reached the node. */
     } catch (cause) {
       /* Cancelling the passkey verification sheet is the user declining, not a
          submission that failed — the app is told exactly that. */
@@ -580,7 +615,7 @@ export default function AppBrowser(props: AppBrowserProps) {
     } finally {
       setSigning(false)
     }
-  }, [pendingTx, postTx, signing, transferContext?.networkId])
+  }, [pendingTx, postTx, signing])
 
   /* Escape closes a sheet first, then the browser. It never cancels a signature
      already in flight: the transaction may already be at the node. */
@@ -607,7 +642,7 @@ export default function AppBrowser(props: AppBrowserProps) {
   const anythingToShare = pending
     ? pending.request.fields.some((field) => hasField(profile, field))
     : false
-  const showHint = hintDue && !hintDismissed && !frameSpoke
+  const showHint = hintDue && !hintDismissed && !frameSpoke && !everSpoke.current
   /* Networks with no public explorer show the id as text rather than
      pretending it resolves somewhere. */
   const explorerHref =

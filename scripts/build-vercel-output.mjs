@@ -27,8 +27,20 @@
  *   node scripts/build-vercel-output.mjs <app-directory>
  *
  * Use `npm run deploy:passport` / `npm run deploy:raffle` from the repository
- * root, which build with the right VITE_* values, call this, and upload. Each
- * app directory must be linked to its Vercel project once, first:
+ * root, which build with the right VITE_* values, call this, and upload.
+ *
+ * One of those values reads like a special case and is not. `deploy:passport`
+ * sets `VITE_RAFFLE_URL` — not `VITE_LOCAL_APP_URL`, the variable third-party
+ * developers are handed for the same grid slot. The two are deliberately
+ * separate entries in `examples/passport-demo/src/lib/registry.ts`: the raffle
+ * one carries the id `raffle-demo`, its own description, and the illustrated
+ * card the Apps grid keys off that id, none of which the generic local slot
+ * has. Moving the deployed raffle onto `VITE_LOCAL_APP_URL` would therefore
+ * change what ships, so the two variables stay distinct and this script's
+ * callers keep naming the raffle one. Nothing here reads either variable —
+ * both are consumed by `vite build` before this script runs.
+ *
+ * Each app directory must be linked to its Vercel project once, first:
  *
  *   cd examples/passport-demo && vercel link --scope utkarsh232s-projects \
  *     --project midnight-passport-app --yes
