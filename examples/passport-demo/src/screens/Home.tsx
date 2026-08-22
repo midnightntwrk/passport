@@ -20,11 +20,17 @@ import { createPortal } from 'react-dom'
 import type { AliasRecord } from '../identity/aliasStore.js'
 import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
 /* The two names this screen shares with the wallet (Contract W). Type-only. */
-import type { FeeReadiness, SendNightResult } from '../lib/localWallet.js'
+import type {
+  FeeReadiness,
+  SendNightResult,
+  SendShieldedResult,
+  ShieldedHolding,
+} from '../lib/localWallet.js'
 import { faucetUrlFor, walletNetwork } from '../lib/networks.js'
 import { FeaturedApps, type AppsScreenProps, type FeaturedAppsProps } from './Apps.js'
 import { EcosystemIdentity } from './Ecosystem.js'
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
+import NotificationToggle from './NotificationToggle.js'
 import PassportContractCard, { type PassportContractCardProps } from './PassportContract.js'
 import SendSheet from './SendSheet.js'
 import SyncRing from './SyncRing.js'
@@ -127,6 +133,18 @@ export interface HomeScreenProps {
       recipientAddress: string
       amount: bigint
     }) => Promise<SendNightResult>
+    /**
+     * The shielded half of the send seam — see the Send sheet's own header
+     * comment. Supplied together or not at all: a host that offers neither
+     * leaves a shielded recipient refused, which is honest, because nothing
+     * behind the sheet could pay one.
+     */
+    readShieldedHoldings?: () => Promise<ShieldedHolding[]>
+    onSendShielded?: (params: {
+      recipientAddress: string
+      tokenType: string
+      amount: bigint
+    }) => Promise<SendShieldedResult>
   } | null
   /** Fed to the embedded apps grid and its in-Passport browser. */
   appsProfile: AppsScreenProps['profile']
@@ -575,6 +593,10 @@ export default function HomeScreen(props: HomeScreenProps) {
             provingMode={send.provingMode}
             readFeeReadiness={send.readFeeReadiness}
             onSend={send.onSend}
+            {...(send.readShieldedHoldings
+              ? { readShieldedHoldings: send.readShieldedHoldings }
+              : {})}
+            {...(send.onSendShielded ? { onSendShielded: send.onSendShielded } : {})}
             onClose={() => setSendOpen(false)}
           />
         ) : null}
@@ -737,6 +759,10 @@ export default function HomeScreen(props: HomeScreenProps) {
             <span>Support on Telegram</span>
           </a>
         ) : null}
+
+        {/* Renders nothing where the browser has no Notification API, which is
+            why it needs no condition here. */}
+        <NotificationToggle />
 
       </div>
     </section>

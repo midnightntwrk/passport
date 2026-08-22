@@ -52,6 +52,7 @@ import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import {
   mainnet,
   MidnightBech32m,
+  ShieldedAddress,
   UnshieldedAddress,
 } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { DustWallet } from '@midnight-ntwrk/wallet-sdk-dust-wallet';
@@ -641,6 +642,80 @@ export interface SendNightResult {
   sponsorTxHash?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Sending shielded tokens
+// ---------------------------------------------------------------------------
+
+/**
+ * One shielded colour this wallet holds, exactly as its own state reports it.
+ *
+ * `tokenType` is the raw ledger colour — the key `state.shielded.balances` is
+ * indexed by — not a name, a symbol, or a contract. A shielded colour is minted
+ * by a contract (`mintShieldedToken`) and carries no on-chain ticker and no
+ * on-chain decimal scale, so `amount` is in that colour's own atomic units and
+ * nothing here invents a way to make it prettier.
+ *
+ * NIGHT never appears in this list. `nativeToken()` is tagged `unshielded`, the
+ * ledger keys its balance check by the tag as well as the raw colour, and the
+ * wallet SDK offers no primitive that moves value across that boundary — so a
+ * shielded balance of NIGHT is not a thing that can exist. Measured against
+ * Preview on 2026/08/22; see `docs/demo/shielded-send-drill.md`.
+ */
+export interface ShieldedHolding {
+  tokenType: string;
+  amount: bigint;
+}
+
+export type SendShieldedErrorCode =
+  | 'invalid-recipient'
+  | 'wrong-network'
+  | 'unknown-token'
+  | 'insufficient-shielded'
+  | 'insufficient-dust'
+  | 'proving-failed'
+  | 'submit-rejected'
+  | 'wallet-closed';
+
+/**
+ * A refused or failed shielded transfer. Held to the same standard as
+ * {@link SendNightError}: every instance describes something that really
+ * happened, and a submitted transaction never throws.
+ */
+export class SendShieldedError extends Error {
+  readonly code: SendShieldedErrorCode;
+  /** The underlying SDK or node message, when there is one. */
+  readonly detail?: string;
+
+  constructor(code: SendShieldedErrorCode, message: string, detail?: string) {
+    super(message);
+    this.name = 'SendShieldedError';
+    this.code = code;
+    if (detail !== undefined) this.detail = detail;
+  }
+}
+
+export interface SendShieldedParams {
+  /** Bech32m `mn_shield-addr…` recipient. */
+  recipientAddress: string;
+  /** The raw shielded colour to send, from {@link ShieldedHolding.tokenType}. */
+  tokenType: string;
+  /** atomic units of that colour, > 0 */
+  amount: bigint;
+  ttlMinutes?: number;
+}
+
+export interface SendShieldedResult {
+  txId: string;
+  recipientAddress: string;
+  tokenType: string;
+  amount: bigint;
+  submittedAt: string;
+  /** Held to exactly the standard {@link SendNightResult.sponsored} is held to. */
+  sponsored: boolean;
+  /** The sponsor's own hash for the balanced transaction, when sponsored. */
+  sponsorTxHash?: string;
+}
+
 /**
  * How the next transfer's fee would be paid, as far as can be told *before* one
  * is built.
@@ -704,6 +779,21 @@ export interface LocalMidnightWallet {
    * failures surface the SDK's own error unchanged.
    */
   sendUnshieldedNight(params: SendNightParams): Promise<SendNightResult>;
+  /**
+   * The shielded colours this wallet holds a positive balance of, newest state
+   * first read from the same stream every other surface reads. An empty array
+   * is a real answer — this wallet holds no shielded tokens — and is never a
+   * stand-in for a read that failed, which throws instead.
+   */
+  shieldedHoldings(): Promise<ShieldedHolding[]>;
+  /**
+   * Submits a real shielded transfer of one colour from this wallet's shielded
+   * account to a `mn_shield-addr…` recipient, and resolves with the node's
+   * transaction identifier. Throws {@link SendShieldedError} for every refusal
+   * it can name; balancing and signing failures surface the SDK's own error
+   * unchanged.
+   */
+  sendShieldedToken(params: SendShieldedParams): Promise<SendShieldedResult>;
   /** Refreshes the balance surfaces. Never throws — failures land in `balanceError`. */
   getBalances(): Promise<LocalWalletBalances>;
   /**
@@ -849,20 +939,31 @@ function defaultProvingMode(): LocalWalletProvingMode {
  * `{ _tag: 'Wallet.InsufficientFunds', tokenType }` (see
  * `wallet-sdk-unshielded-wallet/dist/v1/Transacting.js` and its DUST twin).
  * `Effect.runPromise` may wrap it, so up to three `cause` links are walked.
- * Anything that is not recognisably a shortfall returns `null` and the original
- * error is rethrown untouched — no invented codes.
+ * Returns the raw token type the shortfall names, or `null` when the error is
+ * not recognisably a shortfall — the caller then rethrows the original error
+ * untouched rather than inventing a code for it.
+ *
+ * The raw type alone does not say which side ran out: the ledger distinguishes
+ * shielded from unshielded by a tag the SDK drops here, so only a caller that
+ * knows which colours it asked for can classify the answer. Both do, below.
  */
-function balancingShortfall(cause: unknown): 'insufficient-night' | 'insufficient-dust' | null {
-  const nightRaw = ledger.nativeToken().raw;
+function balancingShortfallToken(cause: unknown): string | null {
   let current: unknown = cause;
   for (let depth = 0; depth < 4 && current !== null && typeof current === 'object'; depth += 1) {
     const record = current as { _tag?: unknown; tokenType?: unknown; cause?: unknown };
     if (record._tag === 'Wallet.InsufficientFunds') {
-      return record.tokenType === nightRaw ? 'insufficient-night' : 'insufficient-dust';
+      return typeof record.tokenType === 'string' ? record.tokenType : '';
     }
     current = record.cause;
   }
   return null;
+}
+
+/** {@link balancingShortfallToken}, classified for an unshielded NIGHT transfer. */
+function balancingShortfall(cause: unknown): 'insufficient-night' | 'insufficient-dust' | null {
+  const shortfall = balancingShortfallToken(cause);
+  if (shortfall === null) return null;
+  return shortfall === ledger.nativeToken().raw ? 'insufficient-night' : 'insufficient-dust';
 }
 
 function messageOf(cause: unknown): string {
@@ -1218,7 +1319,7 @@ export async function createLocalMidnightWallet(
   };
 
   // -------------------------------------------------------------------------
-  // Sending unshielded NIGHT
+  // Sending — unshielded NIGHT and shielded colours share this machinery
   // -------------------------------------------------------------------------
 
   const revertQuietly = async (recipe: BalancingRecipe): Promise<void> => {
@@ -1246,13 +1347,21 @@ export async function createLocalMidnightWallet(
    * from a clean slate. Once `submitTransaction` has been called the
    * transaction may have reached the chain even when the call throws (a
    * timeout, a transient error after acceptance), so from that point every
-   * failure propagates as a `submit-rejected` {@link SendNightError} and
-   * nothing falls back — a second, unsponsored send against an uncertain first
-   * one is how a user pays twice.
+   * failure propagates as a `submit-rejected` refusal and nothing falls back —
+   * a second, unsponsored send against an uncertain first one is how a user
+   * pays twice.
+   *
+   * The output groups are the facade's own `CombinedTokenTransfer[]`, so this
+   * builds a shielded transfer exactly as readily as an unshielded one; only
+   * the vocabulary of the submit refusal differs, which is what `submitRejected`
+   * supplies. Nothing about the sponsorship contract changes with the token
+   * kind: the wallet balances everything but DUST, and the service adds the fee.
    */
   const trySponsoredTransfer = async (
     outputs: Parameters<typeof facade.transferTransaction>[0],
     ttl: Date,
+    submitRejected: (detail: string) => Error = (detail) =>
+      new SendNightError('submit-rejected', 'The node rejected this sponsored transaction.', detail),
   ): Promise<{ txId: string; sponsorTxHash: string } | null> => {
     const reserved: BalancingRecipe[] = [];
     let balancedTransaction: ledger.Transaction<
@@ -1327,11 +1436,7 @@ export async function createLocalMidnightWallet(
       return { txId: String(balancedTransaction.transactionHash()), sponsorTxHash };
     } catch (cause) {
       for (const recipe of [...reserved].reverse()) await revertQuietly(recipe);
-      throw new SendNightError(
-        'submit-rejected',
-        'The node rejected this sponsored transaction.',
-        messageOf(cause),
-      );
+      throw submitRejected(messageOf(cause));
     }
   };
 
@@ -1520,6 +1625,211 @@ export async function createLocalMidnightWallet(
     };
   };
 
+  // -------------------------------------------------------------------------
+  // Sending a shielded colour
+  // -------------------------------------------------------------------------
+
+  const shieldedHoldings = async (): Promise<ShieldedHolding[]> => {
+    if (closed) throw new Error('This Passport wallet has been closed.');
+    const state = await currentState();
+    return Object.entries(state.shielded.balances)
+      .filter(([, amount]) => amount > 0n)
+      .map(([tokenType, amount]) => ({ tokenType, amount }))
+      // Stable order, so a picker does not reshuffle itself between emissions.
+      .sort((left, right) => (left.tokenType < right.tokenType ? -1 : 1));
+  };
+
+  /**
+   * The shielded twin of {@link sendUnshieldedNight}, and deliberately its
+   * mirror image: same order of checks, same sponsorship contract, same rule
+   * that a submitted transaction never throws.
+   *
+   * One difference is real rather than stylistic. A shielded colour has no
+   * ticker and no decimal scale on the ledger, so every figure here — the
+   * refusals included — is in that colour's own atomic units. Formatting one
+   * as though it were NIGHT would be a decimal point this code cannot justify.
+   */
+  const sendShieldedToken = async (params: SendShieldedParams): Promise<SendShieldedResult> => {
+    if (closed) {
+      throw new SendShieldedError('wallet-closed', 'This Passport wallet has been closed.');
+    }
+    if (params.amount <= 0n) {
+      // A programming error rather than a send outcome, so it gets no code.
+      throw new RangeError('A shielded transfer amount must be greater than zero.');
+    }
+
+    // (1) Recipient. Parse, then require this wallet's own network, then
+    // require that the payload really is a shielded address.
+    const candidate = params.recipientAddress.trim();
+    let parsed: MidnightBech32m;
+    try {
+      parsed = MidnightBech32m.parse(candidate);
+    } catch (cause) {
+      throw new SendShieldedError(
+        'invalid-recipient',
+        'That is not a Midnight address.',
+        messageOf(cause),
+      );
+    }
+    const recipientNetwork = parsedNetworkName(parsed.network);
+    if (recipientNetwork !== network.networkId) {
+      throw new SendShieldedError(
+        'wrong-network',
+        `That address belongs to the ${recipientNetwork} network; this wallet is on ${network.networkId}.`,
+      );
+    }
+    let recipient: ShieldedAddress;
+    try {
+      recipient = parsed.decode(ShieldedAddress, network.networkId);
+    } catch (cause) {
+      throw new SendShieldedError(
+        'invalid-recipient',
+        'That is a Midnight address, but not a shielded (mn_shield-addr…) one.',
+        messageOf(cause),
+      );
+    }
+
+    // (2) Pre-checks against real synced state, BEFORE anything is built.
+    const state = await currentState();
+    const held = state.shielded.balances[params.tokenType] ?? 0n;
+    if (held === 0n) {
+      throw new SendShieldedError(
+        'unknown-token',
+        `This wallet holds none of the shielded token ${params.tokenType}.`,
+      );
+    }
+    if (held < params.amount) {
+      throw new SendShieldedError(
+        'insufficient-shielded',
+        `This wallet holds ${held.toString()} of that shielded token; ${params.amount.toString()} is required.`,
+      );
+    }
+    const sponsorship = await sponsorReadiness();
+    if (sponsorship.state !== 'ready') {
+      if (devMode() && sponsorship.state === 'unavailable') {
+        console.debug('[localWallet] fees are not sponsored:', sponsorship.reason);
+      }
+      if (state.dust.balance(new Date()) === 0n) {
+        throw new SendShieldedError('insufficient-dust', NO_DUST_SENTENCE);
+      }
+    }
+
+    // (3) Build. The only structural difference from the NIGHT path is the
+    // `shielded` output group; the facade merges it into the same transaction
+    // shape and the same DUST leg pays for it.
+    const ttl = new Date(Date.now() + (params.ttlMinutes ?? 30) * 60_000);
+    const transferOutputs = [
+      {
+        type: 'shielded' as const,
+        outputs: [
+          { type: params.tokenType, receiverAddress: recipient, amount: params.amount },
+        ],
+      },
+    ];
+
+    if (sponsorship.state === 'ready') {
+      const sponsoredOutcome = await trySponsoredTransfer(
+        transferOutputs,
+        ttl,
+        (detail) =>
+          new SendShieldedError(
+            'submit-rejected',
+            'The node rejected this sponsored transaction.',
+            detail,
+          ),
+      );
+      if (sponsoredOutcome) {
+        return {
+          txId: sponsoredOutcome.txId,
+          recipientAddress: parsed.asString(),
+          tokenType: params.tokenType,
+          amount: params.amount,
+          submittedAt: new Date().toISOString(),
+          sponsored: true,
+          sponsorTxHash: sponsoredOutcome.sponsorTxHash,
+        };
+      }
+      if (state.dust.balance(new Date()) === 0n) {
+        throw new SendShieldedError(
+          'insufficient-dust',
+          'The fee sponsor could not cover this transaction, and this wallet has no DUST of its own to pay the fee with.',
+        );
+      }
+    }
+
+    let recipe: BalancingRecipe;
+    try {
+      recipe = await facade.transferTransaction(
+        transferOutputs,
+        { shieldedSecretKeys, dustSecretKey },
+        { ttl },
+      );
+    } catch (cause) {
+      // The SDK names the colour it ran out of but not which side of the
+      // ledger it sits on, so the classification is made here, where the
+      // colour that was asked for is known.
+      const shortfall = balancingShortfallToken(cause);
+      if (shortfall === params.tokenType) {
+        throw new SendShieldedError(
+          'insufficient-shielded',
+          'There is not enough of that shielded token to cover this transfer.',
+          messageOf(cause),
+        );
+      }
+      if (shortfall !== null) {
+        throw new SendShieldedError(
+          'insufficient-dust',
+          'There is not enough DUST to pay this transaction’s fee.',
+          messageOf(cause),
+        );
+      }
+      throw cause;
+    }
+
+    let signed: BalancingRecipe;
+    try {
+      signed = await facade.signRecipe(recipe, (data) => keys.unshieldedKeystore.signData(data));
+    } catch (cause) {
+      await revertQuietly(recipe);
+      throw cause;
+    }
+
+    let finalized: Awaited<ReturnType<typeof facade.finalizeRecipe>>;
+    try {
+      finalized = await facade.finalizeRecipe(signed);
+    } catch (cause) {
+      await revertQuietly(signed);
+      throw new SendShieldedError(
+        'proving-failed',
+        provingMode === 'browser'
+          ? 'The in-browser prover could not prove this transaction.'
+          : `The proof server at ${network.provingServerUrl} (network ${network.networkId}) could not prove this transaction.`,
+        messageOf(cause),
+      );
+    }
+
+    try {
+      await facade.submitTransaction(finalized);
+    } catch (cause) {
+      await revertQuietly(signed);
+      throw new SendShieldedError(
+        'submit-rejected',
+        'The node rejected this transaction.',
+        messageOf(cause),
+      );
+    }
+
+    return {
+      txId: String(finalized.transactionHash()),
+      recipientAddress: parsed.asString(),
+      tokenType: params.tokenType,
+      amount: params.amount,
+      submittedAt: new Date().toISOString(),
+      // This wallet paid its own fee. Saying otherwise would be a lie.
+      sponsored: false,
+    };
+  };
+
   return {
     network,
     unshieldedAddress,
@@ -1531,6 +1841,8 @@ export async function createLocalMidnightWallet(
     resumedFromSnapshot,
     saveSnapshot,
     sendUnshieldedNight,
+    shieldedHoldings,
+    sendShieldedToken,
     getBalances,
     subscribeBalances,
     feeReadiness,

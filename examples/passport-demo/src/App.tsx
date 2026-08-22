@@ -79,6 +79,9 @@ import AppsScreen from './screens/Apps.js';
 import PassportNav, { type MobileTab } from './screens/Nav.js';
 import PassportToasts, { pushToast } from './screens/ToastStack.js';
 import { fetchRecentTransactions, type RecentTransaction } from './lib/indexerTx.js';
+// In-app notifications only — a closed Passport notifies nobody. The module's
+// header says exactly what background Web Push would additionally need.
+import { notify } from './lib/notifications.js';
 import { PasskeyPresenceError, confirmPresence } from './lib/passkeyPresence.js';
 import {
   CLAIMABLE_NETWORKS,
@@ -98,6 +101,8 @@ import type {
   LocalWalletBalances,
   LocalWalletSurfaces,
   SendNightResult,
+  SendShieldedResult,
+  ShieldedHolding,
 } from './lib/localWallet.js';
 
 type ActivityStatus = 'pending' | 'complete' | 'blocked' | 'error';
@@ -600,6 +605,34 @@ function parseFormattedAmount(value: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/**
+ * NIGHT is quoted to six decimals — Contract W's `formatUnits(night, 6)`, with
+ * trailing zeroes already stripped. These two undo and redo exactly that, in
+ * whole micro-NIGHT, so an arriving transfer is compared and named without a
+ * float ever touching a balance. `parseFormattedAmount` above is deliberately
+ * not reused: it is a lossy read for a percentage gauge, and money is not that.
+ */
+const NIGHT_DECIMALS = 6n;
+const NIGHT_UNITS = 1_000_000n;
+
+/** `null` for anything that is not a plain formatted amount, unknown included. */
+function parseNightUnits(value: string | null): bigint | null {
+  if (value === null) return null;
+  const match = /^(-?)(\d+)(?:\.(\d{1,6}))?$/.exec(value.trim());
+  if (!match) return null;
+  const [, sign, whole, fraction = ''] = match;
+  const units = BigInt(whole) * NIGHT_UNITS + BigInt(fraction.padEnd(Number(NIGHT_DECIMALS), '0'));
+  return sign === '-' ? -units : units;
+}
+
+function formatNightUnits(units: bigint): string {
+  const negative = units < 0n;
+  const digits = (negative ? -units : units).toString().padStart(Number(NIGHT_DECIMALS) + 1, '0');
+  const whole = digits.slice(0, digits.length - Number(NIGHT_DECIMALS));
+  const fraction = digits.slice(digits.length - Number(NIGHT_DECIMALS)).replace(/0+$/, '');
+  return `${negative ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`;
+}
+
 /** DUST charge as a 0-100 percentage, or null when either side is unknown. */
 function dustFillPercentFrom(balance: string | null, cap: string | null): number | null {
   const heldValue = parseFormattedAmount(balance);
@@ -753,7 +786,7 @@ export default function PassportDemo() {
   const [claimPhase, setClaimPhase] = useState<AliasClaimProgress['phase'] | null>(null);
   const [aliasError, setAliasError] = useState<string | null>(null);
   /**
-   * Whether the demo sponsor has really told us it can pay this registration's
+   * Whether the fee sponsor has really told us it can pay this registration's
    * DUST fee — `available > 0` on its own `/wallet-status`, never an
    * assumption. It starts false and only a live probe may raise it, so the
    * claim screen's baseline copy ("its fee in DUST from this wallet too")
@@ -838,6 +871,15 @@ export default function PassportDemo() {
   // socket behind it, and every consumer wants the current one rather than a
   // render-scoped snapshot.
   const localWalletRef = useRef<LocalMidnightWallet | null>(null);
+  /**
+   * Has the open wallet finished walking the chain at least once?
+   *
+   * Only the incoming-transfer watch reads it, and it has to: while the walk is
+   * in progress the unshielded balance climbs as historical blocks are applied,
+   * and every one of those steps looks exactly like an arriving transfer. Set
+   * by the sync-progress effect, which owns the same handle's stream.
+   */
+  const localWalletSynced = useRef(false);
 
   const addActivity = useCallback((entry: Omit<ActivityEntry, 'id' | 'createdAt'>) => {
     const value = { ...entry, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
@@ -1681,6 +1723,7 @@ export default function PassportDemo() {
   useEffect(() => {
     if (localWalletStatus !== 'ready') {
       setLocalSyncPercent(null);
+      localWalletSynced.current = false;
       return;
     }
     const handle = localWalletRef.current;
@@ -1690,6 +1733,9 @@ export default function PassportDemo() {
       setLocalSyncPercent(progress.percent);
       if (progress.synced && !wasSynced) {
         wasSynced = true;
+        // Read by the incoming-transfer watch below, which must not mistake the
+        // chain walk's own climbing balance for money arriving.
+        localWalletSynced.current = true;
         pushToast({ tone: 'success', title: 'Wallet synced' });
         void refreshLocalBalances();
       }
@@ -1697,6 +1743,7 @@ export default function PassportDemo() {
     return () => {
       unsubscribe();
       setLocalSyncPercent(null);
+      localWalletSynced.current = false;
     };
   }, [localWalletStatus, refreshLocalBalances]);
 
@@ -1725,6 +1772,8 @@ export default function PassportDemo() {
     if (!handle) return;
 
     let pending: LocalWalletBalances | null = null;
+    /** Last unshielded NIGHT this watch has seen, in whole micro-NIGHT. */
+    let knownNight: bigint | null = null;
 
     const apply = (balances: LocalWalletBalances) => {
       // A stale handle's stream must never write over a newer wallet's numbers.
@@ -1734,7 +1783,51 @@ export default function PassportDemo() {
       );
     };
 
+    /**
+     * Money arriving, announced from the only place that can see it.
+     *
+     * This runs on the RAW emission, ahead of the visibility deferral below,
+     * and that ordering is the point: a backgrounded Passport is exactly the
+     * Passport whose owner needs telling. Rendering still waits for the tab to
+     * come back; the announcement does not.
+     *
+     * Three things it deliberately will not claim:
+     *
+     * - Nothing before the wallet reports fully synced. The chain walk credits
+     *   historical blocks one at a time, and each step is a rise.
+     * - Nothing off an unknown or unreadable balance. `null` is "the wallet
+     *   could not say", never a zero to subtract from.
+     * - Nothing on a fall or a flat reading, which is what an outgoing send
+     *   and a DUST-only change respectively look like.
+     *
+     * A shielded receive is invisible here by construction — that is what
+     * shielded means — and DUST accrual is not a transfer. Both are out of
+     * scope for the same honest reason.
+     */
+    const watchForIncomingNight = (balances: LocalWalletBalances) => {
+      if (localWalletRef.current !== handle) return;
+      const next = parseNightUnits(balances.unshieldedBalance);
+      if (next === null) return;
+      const previous = knownNight;
+      knownNight = next;
+      if (previous === null || next <= previous) return;
+      if (!localWalletSynced.current) return;
+      const amount = formatNightUnits(next - previous);
+      addActivity({
+        label: 'NIGHT received',
+        detail: `${amount} NIGHT arrived at this Passport's unshielded address.`,
+        status: 'complete',
+        source: 'chain',
+      });
+      pushToast({ tone: 'success', title: `${amount} NIGHT received` });
+      /* Silent unless the user has turned notifications on for this device. */
+      void notify('NIGHT received', `${amount} NIGHT arrived in your Passport.`, {
+        tag: 'passport-night-received',
+      });
+    };
+
     const unsubscribe = handle.subscribeBalances((balances) => {
+      watchForIncomingNight(balances);
       if (document.visibilityState === 'hidden') {
         pending = balances;
         return;
@@ -1755,7 +1848,7 @@ export default function PassportDemo() {
       unsubscribe();
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [localWalletStatus]);
+  }, [addActivity, localWalletStatus]);
 
   /* ---------------------------------------------------------------------- */
   /* Identity — claiming, queueing, and reclaiming a .night name             */
@@ -2306,6 +2399,17 @@ export default function PassportDemo() {
                 source: 'chain',
                 txHash: deployment.deployTxId,
               });
+              /* The deploy is the long half of onboarding and has no toast of
+                 its own — the claim's own toast comes later, once the name has
+                 landed. This is the only thing that says the first step is
+                 done while the second is still running. */
+              void notify(
+                'Your Passport contract is deployed',
+                `${deployment.ledgerConfirmed ? 'It is live' : 'It is submitted'} on ${
+                  deployment.network
+                }. Registering ${alias}.night against it now.`,
+                { tag: 'passport-contract-deployed' },
+              );
             }
             contractAddress = deployment.address;
           } catch (cause) {
@@ -2458,6 +2562,16 @@ export default function PassportDemo() {
           // reachable from it. No link on a network with no public explorer.
           link: explorerTxLink(result.registerTxId, result.network),
         });
+        /* A claim can outlast the user's attention — the two Midnames
+           transactions and a contract deploy take minutes on preview. Silent
+           unless notifications were turned on. */
+        void notify(
+          `${result.domain} is yours`,
+          result.registryConfirmed
+            ? 'The registry confirmed the registration.'
+            : 'Submitted — the registry has not reported it yet.',
+          { tag: 'passport-name-registered' },
+        );
         void refreshLocalBalances();
         // Only record the step as settled when the claim genuinely landed.
         storeNameStep(activeProfile.passkey.credentialId, 'done');
@@ -2648,6 +2762,15 @@ export default function PassportDemo() {
           : `${result.domain} was submitted — the registry has not reported it yet.`,
         link: explorerTxLink(result.registerTxId, result.network),
       });
+      /* Same event as the onboarding claim, reached from the queued-name card.
+         One tag, so a retry replaces rather than stacks. */
+      void notify(
+        'Name registered on-chain',
+        result.registryConfirmed
+          ? `${result.domain} is confirmed by the registry.`
+          : `${result.domain} was submitted — the registry has not reported it yet.`,
+        { tag: 'passport-name-registered' },
+      );
       void refreshLocalBalances();
     } catch (cause) {
       // A real failure from the claim itself: keep the record queued with the
@@ -2794,6 +2917,15 @@ export default function PassportDemo() {
         }`,
         link: explorerTxLink(deployment.deployTxId, deployment.network),
       });
+      /* The retry path. Same tag as the claim's deploy: one contract, one
+         story, whichever route reached it. */
+      void notify(
+        'Your Passport contract is deployed',
+        `${compactAddress(deployment.address)} is ${
+          deployment.ledgerConfirmed ? 'live' : 'submitted'
+        } on ${deployment.network}.`,
+        { tag: 'passport-contract-deployed' },
+      );
       void refreshLocalBalances();
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
@@ -3291,6 +3423,89 @@ export default function PassportDemo() {
   );
 
   /**
+   * The shielded colours this Passport holds, straight from the wallet.
+   *
+   * Thrown, not smoothed, when the wallet cannot be asked: "we could not read
+   * your shielded balances" and "you hold none" are different sentences, and
+   * the Send sheet shows whichever is true.
+   */
+  const readLocalShieldedHoldings = useCallback(async (): Promise<ShieldedHolding[]> => {
+    const handle = localWalletRef.current;
+    if (!handle) throw new Error('The Passport wallet session is not open.');
+    return handle.shieldedHoldings();
+  }, []);
+
+  /**
+   * Signs and submits the user's own shielded transfer — the Otrix totem case:
+   * a QR carrying a `mn_shield-addr…` deposit address, paid from this
+   * Passport's shielded account.
+   *
+   * Deliberately the same shape as {@link executeOwnSend}: one approval
+   * ceremony, one activity row, the wallet's refusals rethrown untouched, and
+   * a covered fee claimed only on the strength of the result's own flag.
+   */
+  const executeOwnShieldedSend = useCallback(
+    async (params: {
+      recipientAddress: string;
+      tokenType: string;
+      amount: bigint;
+    }): Promise<SendShieldedResult> => {
+      const handle = localWalletRef.current;
+      if (!handle) {
+        throw Object.assign(
+          new Error('The Passport wallet session closed before this could be signed.'),
+          { code: 'wallet-closed' as const },
+        );
+      }
+      await confirmLocalApproval('Send a shielded token');
+      const entry = addActivity({
+        label: 'Sent a shielded token',
+        detail: `To ${params.recipientAddress}.`,
+        status: 'pending',
+        source: 'wallet',
+      });
+      try {
+        const result = await handle.sendShieldedToken(params);
+        updateActivity(entry.id, {
+          status: 'complete',
+          detail: `Submitted from this device to ${params.recipientAddress}.`,
+          source: 'chain',
+          txHash: result.txId,
+        });
+        pushToast({
+          tone: 'success',
+          /* Accepted, not yet included — the same claim the NIGHT path makes. */
+          title: 'Shielded transfer accepted by the network — confirming',
+          body: result.sponsored
+            ? 'The fee sponsor covered the network fee.'
+            : 'The network fee was paid from your DUST.',
+          link: explorerTxLink(result.txId, localWalletNetworkId),
+        });
+        void refreshLocalBalances();
+        window.setTimeout(() => void refreshTransactions(), 5_000);
+        return result;
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        updateActivity(entry.id, {
+          status: 'error',
+          detail: message,
+          source: 'local',
+        });
+        const code =
+          typeof cause === 'object' && cause !== null &&
+          typeof (cause as { code?: unknown }).code === 'string'
+            ? (cause as { code: string }).code
+            : null;
+        if (code === 'wallet-closed') {
+          pushToast({ tone: 'error', title: 'Nothing was sent', body: message });
+        }
+        throw cause;
+      }
+    },
+    [addActivity, confirmLocalApproval, localWalletNetworkId, refreshLocalBalances, refreshTransactions, updateActivity],
+  );
+
+  /**
    * The Send seam handed to Home — `null` unless a local wallet session is
    * genuinely open AND has an unshielded address to send from. Home renders no
    * Send control at all in that case, rather than a disabled one implying the
@@ -3306,6 +3521,8 @@ export default function PassportDemo() {
           provingMode: localWalletProvingMode,
           readFeeReadiness: readLocalFeeReadiness,
           onSend: executeOwnSend,
+          readShieldedHoldings: readLocalShieldedHoldings,
+          onSendShielded: executeOwnShieldedSend,
         }
       : null;
 

@@ -15,18 +15,24 @@ const QrScanSheet = lazy(() => import('./QrScanSheet.js'))
 import {
   mainnet,
   MidnightBech32m,
+  ShieldedAddress,
   UnshieldedAddress,
 } from '@midnight-ntwrk/wallet-sdk-address-format'
 
-/* The two names this screen shares with the wallet (Contract W). Type-only, so
+/* The names this screen shares with the wallet (Contract W). Type-only, so
    nothing of `lib/localWallet.ts` — and none of the wallet SDK it statically
    imports — is pulled into this chunk. */
-import type { FeeReadiness, SendNightResult } from '../lib/localWallet.js'
+import type {
+  FeeReadiness,
+  SendNightResult,
+  SendShieldedResult,
+  ShieldedHolding,
+} from '../lib/localWallet.js'
 
 import './home.css'
 
 /**
- * The Send sheet — a real unshielded NIGHT transfer from the on-device wallet.
+ * The Send sheet — a real transfer from the on-device wallet.
  *
  * Everything on this surface describes something that will actually happen. The
  * recipient is validated with the wallet SDK's own codec, so its refusals are
@@ -36,6 +42,28 @@ import './home.css'
  * quoted as the prediction it is, and re-read immediately before submitting so
  * a stale quote is never silently acted on; and the sheet only reports success
  * once the node has returned a transaction id.
+ *
+ * TWO KINDS OF RECIPIENT, DECIDED BY THE ADDRESS
+ * ----------------------------------------------
+ * The address the user pastes or scans decides what is being sent, because on
+ * Midnight the two are not interchangeable:
+ *
+ *   `mn_addr…`         unshielded — NIGHT, quoted with six decimals.
+ *   `mn_shield-addr…`  shielded — one of the shielded colours this wallet
+ *                      holds, quoted in whole units.
+ *
+ * NIGHT cannot be sent to a shielded address. `nativeToken()` is tagged
+ * `unshielded`, the ledger keys its balance check by that tag, and no wallet
+ * SDK primitive crosses the boundary — so the shielded mode offers the wallet's
+ * own shielded colours and says plainly when there are none. The two modes
+ * therefore quote different balances, different units, and different refusals;
+ * what they share is the fee sentence, because the fee is DUST either way.
+ *
+ * The shielded mode exists only when the host supplies both
+ * {@link SendSheetProps.readShieldedHoldings} and
+ * {@link SendSheetProps.onSendShielded}. Without them a shielded address is
+ * refused, which is the honest answer when nothing behind the sheet could act
+ * on one.
  *
  * The host mounts this ONLY while a local wallet session is genuinely open. A
  * closed wallet has no Send button at all — a control that cannot work is
@@ -75,10 +103,32 @@ export interface SendSheetProps {
    * detail? }` — and are shown untouched.
    */
   onSend: (params: { recipientAddress: string; amount: bigint }) => Promise<SendNightResult>
+  /**
+   * Reads the shielded colours this wallet holds, in the wallet's own atomic
+   * units. Called once, when a shielded recipient first turns up. An empty
+   * array is a real answer — this Passport holds nothing shielded — and the
+   * sheet says so rather than offering a control that cannot work.
+   *
+   * Optional together with {@link SendSheetProps.onSendShielded}: a host that
+   * supplies neither leaves shielded addresses refused.
+   */
+  readShieldedHoldings?: () => Promise<ShieldedHolding[]>
+  /**
+   * Signs and submits the shielded transfer, resolving with the node's
+   * transaction id. Refusals arrive as Contract W's `SendShieldedError` —
+   * `{ code, message, detail? }` — and are shown untouched.
+   */
+  onSendShielded?: (params: {
+    recipientAddress: string
+    tokenType: string
+    amount: bigint
+  }) => Promise<SendShieldedResult>
   onClose: () => void
 }
 
 type Step = 'compose' | 'review'
+/** Which ledger the pasted recipient belongs to — see the header comment. */
+type Mode = 'unshielded' | 'shielded'
 
 /** Atomic NIGHT → display NIGHT. Exact: string arithmetic, never a float. */
 function formatNight(atomic: bigint): string {
@@ -111,6 +161,33 @@ function parseNight(input: string): { amount: bigint } | { error: string } {
   const amount = BigInt(`${whole || '0'}${fraction.padEnd(NIGHT_DECIMALS, '0')}`)
   if (amount <= 0n) return { error: 'Send an amount greater than zero.' }
   return { amount }
+}
+
+/**
+ * Whole shielded units → a `bigint`, or a refusal.
+ *
+ * Deliberately not {@link parseNight}. A shielded colour is minted by a
+ * contract and carries no decimal scale anywhere on the ledger, so there is no
+ * honest place to put a decimal point: an amount is a whole count of that
+ * colour's atomic units, and a typed `1.5` is refused rather than silently
+ * rounded into something the user did not mean.
+ */
+function parseShieldedUnits(input: string): { amount: bigint } | { error: string } {
+  const text = input.trim()
+  if (!text) return { error: 'Enter an amount to send.' }
+  if (!/^\d+$/.test(text)) {
+    return {
+      error: 'Shielded tokens carry no decimal scale on the ledger, so amounts are whole units.',
+    }
+  }
+  const amount = BigInt(text)
+  if (amount <= 0n) return { error: 'Send an amount greater than zero.' }
+  return { amount }
+}
+
+/** A shielded colour is 64 hex characters and identifies nothing to a reader. */
+function shortToken(tokenType: string): string {
+  return tokenType.length <= 18 ? tokenType : `${tokenType.slice(0, 10)}…${tokenType.slice(-6)}`
 }
 
 /**
@@ -151,34 +228,63 @@ function shortAddress(value: string): string {
   return value.length <= 24 ? value : `${value.slice(0, 12)}…${value.slice(-8)}`
 }
 
+/** What {@link classifyRecipient} concluded. `null` means "nothing typed yet". */
+type Verdict = { mode: Mode } | { error: string }
+
 /**
- * The wallet's own recipient taxonomy, in the same three steps and the same
- * order Contract W and the in-Passport browser use: is it a Midnight address at
- * all, is it on this wallet's network, and is it an unshielded one.
+ * The wallet's own recipient taxonomy, in the same order Contract W and the
+ * in-Passport browser use: is it a Midnight address at all, is it on this
+ * wallet's network, and which of the two ledgers does it name.
+ *
+ * `shieldedSupported` is not a preference — it is whether the host gave this
+ * sheet a shielded send to perform. Without one, a perfectly valid shielded
+ * address still earns a refusal, because accepting it would promise a transfer
+ * nothing here could make.
  *
  * Sending to one's own address is deliberately allowed. It is harmless, it is a
  * real transaction, and refusing it would be the UI inventing a rule the chain
  * does not have.
  */
-function validateRecipient(raw: string, networkId: string): string | null {
+function classifyRecipient(
+  raw: string,
+  networkId: string,
+  shieldedSupported: boolean,
+): Verdict | null {
   const value = raw.trim()
   if (!value) return null
   let parsed: MidnightBech32m
   try {
     parsed = MidnightBech32m.parse(value)
   } catch {
-    return 'That is not a Midnight address.'
+    return { error: 'That is not a Midnight address.' }
   }
   const recipientNetwork = networkNameOf(parsed.network)
   if (recipientNetwork !== networkId) {
-    return `That address belongs to the ${recipientNetwork} network; this wallet is on ${networkId}.`
+    return {
+      error: `That address belongs to the ${recipientNetwork} network; this wallet is on ${networkId}.`,
+    }
   }
   try {
     parsed.decode(UnshieldedAddress, networkId)
+    return { mode: 'unshielded' }
   } catch {
-    return 'That is a Midnight address, but not an unshielded (mn_addr…) one.'
+    // Not unshielded. The shielded codec gets the next word.
   }
-  return null
+  try {
+    parsed.decode(ShieldedAddress, networkId)
+  } catch {
+    return {
+      error: shieldedSupported
+        ? 'That is a Midnight address, but neither an unshielded (mn_addr…) nor a shielded (mn_shield-addr…) one.'
+        : 'That is a Midnight address, but not an unshielded (mn_addr…) one.',
+    }
+  }
+  if (!shieldedSupported) {
+    return {
+      error: 'That is a shielded (mn_shield-addr…) address, and this Passport cannot pay one.',
+    }
+  }
+  return { mode: 'shielded' }
 }
 
 export default function SendSheet(props: SendSheetProps) {
@@ -189,6 +295,8 @@ export default function SendSheet(props: SendSheetProps) {
     provingMode,
     readFeeReadiness,
     onSend,
+    readShieldedHoldings,
+    onSendShielded,
     onClose,
   } = props
 
@@ -202,8 +310,15 @@ export default function SendSheet(props: SendSheetProps) {
   const [fee, setFee] = useState<FeeReadiness | null>(null)
   const [feeUnknown, setFeeUnknown] = useState<string | null>(null)
   const [feeChanged, setFeeChanged] = useState(false)
+  /* `null` while nothing has been read yet — never a stand-in for an empty
+     wallet, which is `[]` and gets its own sentence. */
+  const [holdings, setHoldings] = useState<ShieldedHolding[] | null>(null)
+  const [holdingsError, setHoldingsError] = useState<string | null>(null)
+  const [tokenType, setTokenType] = useState<string | null>(null)
 
   const recipientRef = useRef<HTMLTextAreaElement | null>(null)
+
+  const shieldedSupported = Boolean(readShieldedHoldings && onSendShielded)
 
   /* The fee sentence describes what will really happen, so it is read from the
      wallet when the sheet opens rather than assumed. Until it answers, nothing
@@ -242,32 +357,92 @@ export default function SendSheet(props: SendSheetProps) {
     recipientRef.current?.focus()
   }, [])
 
-  const availableAtomic = useMemo(() => atomicFromFormatted(availableBalance), [availableBalance])
-  const recipientError = useMemo(
-    () => validateRecipient(recipient, networkId),
-    [networkId, recipient],
+  const verdict = useMemo(
+    () => classifyRecipient(recipient, networkId, shieldedSupported),
+    [networkId, recipient, shieldedSupported],
   )
-  const parsedAmount = useMemo(
-    () => (amountText.trim() ? parseNight(amountText) : null),
-    [amountText],
+  const recipientError = verdict && 'error' in verdict ? verdict.error : null
+  const mode: Mode = verdict && 'mode' in verdict ? verdict.mode : 'unshielded'
+
+  /* The shielded colours are read once, and only once a shielded recipient has
+     actually turned up: a user sending NIGHT should not pay for a balance
+     query they will never look at. */
+  useEffect(() => {
+    if (mode !== 'shielded' || !readShieldedHoldings) return
+    if (holdings !== null || holdingsError !== null) return
+    let live = true
+    void (async () => {
+      try {
+        const read = await readShieldedHoldings()
+        if (!live) return
+        setHoldings(read)
+        setHoldingsError(null)
+      } catch (cause) {
+        if (!live) return
+        setHoldings(null)
+        setHoldingsError(messageOf(cause))
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [holdings, holdingsError, mode, readShieldedHoldings])
+
+  /* One colour is chosen for the user; several are offered. Re-chosen whenever
+     the current selection is no longer one of the colours actually held. */
+  useEffect(() => {
+    if (holdings === null || holdings.length === 0) return
+    if (tokenType !== null && holdings.some((held) => held.tokenType === tokenType)) return
+    setTokenType(holdings[0].tokenType)
+  }, [holdings, tokenType])
+
+  const selectedHolding = useMemo(
+    () => holdings?.find((held) => held.tokenType === tokenType) ?? null,
+    [holdings, tokenType],
   )
+
+  const availableAtomic = useMemo(
+    () =>
+      mode === 'shielded'
+        ? (selectedHolding?.amount ?? null)
+        : atomicFromFormatted(availableBalance),
+    [availableBalance, mode, selectedHolding],
+  )
+  const parsedAmount = useMemo(() => {
+    if (!amountText.trim()) return null
+    return mode === 'shielded' ? parseShieldedUnits(amountText) : parseNight(amountText)
+  }, [amountText, mode])
   const amountError = useMemo(() => {
     if (!parsedAmount) return null
     if ('error' in parsedAmount) return parsedAmount.error
     if (availableAtomic !== null && parsedAmount.amount > availableAtomic) {
-      return `That is more than this wallet holds — ${availableBalance} NIGHT is available.`
+      return mode === 'shielded'
+        ? `That is more than this wallet holds — ${availableAtomic.toString()} units of this token are available.`
+        : `That is more than this wallet holds — ${availableBalance} NIGHT is available.`
     }
     return null
-  }, [availableAtomic, availableBalance, parsedAmount])
+  }, [availableAtomic, availableBalance, mode, parsedAmount])
 
   const amount = parsedAmount && !('error' in parsedAmount) ? parsedAmount.amount : null
   const recipientReady = recipient.trim().length > 0 && recipientError === null
   /* A balance the wallet tried and failed to read. Distinct from one still in
      flight: with no ceiling to compare against, sending stays disabled rather
-     than proceeding uncapped. */
-  const balanceUnreadable = availableBalance === null && balanceStatus === 'unavailable'
+     than proceeding uncapped. The shielded read has the same two states, and
+     an empty holdings list is neither — it is a known, empty wallet. */
+  const balanceUnreadable =
+    mode === 'shielded'
+      ? holdingsError !== null || holdings === null
+      : availableBalance === null && balanceStatus === 'unavailable'
+  /* Nothing shielded to send is not an error and not a loading state: it is a
+     fact about this Passport, and it removes the Send control rather than
+     disabling it. */
+  const noShieldedTokens = mode === 'shielded' && holdings !== null && holdings.length === 0
   const canReview =
-    recipientReady && amount !== null && amountError === null && !balanceUnreadable
+    recipientReady &&
+    amount !== null &&
+    amountError === null &&
+    !balanceUnreadable &&
+    (mode === 'unshielded' || tokenType !== null)
 
   /* Why no sponsor is covering the fee, when the wallet says. The field is
      being added to `feeReadiness()`'s answer and may not exist yet, so it is
@@ -300,9 +475,14 @@ export default function SendSheet(props: SendSheetProps) {
   const feeBlocksSend = fee?.mode === 'no-dust'
 
   const handleMax = useCallback(() => {
+    if (mode === 'shielded') {
+      if (selectedHolding === null) return
+      setAmountText(selectedHolding.amount.toString())
+      return
+    }
     if (availableBalance === null) return
     setAmountText(availableBalance)
-  }, [availableBalance])
+  }, [availableBalance, mode, selectedHolding])
 
   const handleSend = useCallback(async () => {
     if (amount === null || !recipientReady || busy) return
@@ -336,7 +516,16 @@ export default function SendSheet(props: SendSheetProps) {
       return
     }
     try {
-      await onSend({ recipientAddress: recipient.trim(), amount })
+      if (mode === 'shielded') {
+        // `canReview` already required a chosen colour and a shielded seam;
+        // both are re-read here so this branch cannot be entered on a `null`.
+        if (!onSendShielded || tokenType === null) {
+          throw new Error('This Passport cannot send a shielded token right now.')
+        }
+        await onSendShielded({ recipientAddress: recipient.trim(), tokenType, amount })
+      } else {
+        await onSend({ recipientAddress: recipient.trim(), amount })
+      }
       // A real txId came back from the node. The host owns the toast, the
       // activity row, and the refreshes; the sheet's job here is to get out
       // of the way.
@@ -356,7 +545,19 @@ export default function SendSheet(props: SendSheetProps) {
       setBusy(false)
       setFailure({ message: messageOf(cause), detail: detailOf(cause) })
     }
-  }, [amount, busy, fee, onClose, onSend, readFeeReadiness, recipient, recipientReady])
+  }, [
+    amount,
+    busy,
+    fee,
+    mode,
+    onClose,
+    onSend,
+    onSendShielded,
+    readFeeReadiness,
+    recipient,
+    recipientReady,
+    tokenType,
+  ])
 
   return createPortal(
     <>
@@ -376,7 +577,11 @@ export default function SendSheet(props: SendSheetProps) {
       >
         <div className="mnhome-addr-head">
           <p className="mnhome-micro" id="mnhome-send-title">
-            {step === 'compose' ? 'Send NIGHT' : 'Review this transfer'}
+            {step === 'review'
+              ? 'Review this transfer'
+              : mode === 'shielded'
+                ? 'Send a shielded token'
+                : 'Send NIGHT'}
           </p>
           <button
             type="button"
@@ -424,13 +629,51 @@ export default function SendSheet(props: SendSheetProps) {
                 <span className="mnhome-send-error" id="mnhome-send-recipient-error" role="alert">
                   {recipientError}
                 </span>
+              ) : mode === 'shielded' ? (
+                <span className="mnhome-send-hint">
+                  A shielded {networkId} address. This pays one of the shielded tokens this
+                  Passport holds — not NIGHT, which is unshielded and cannot reach a shielded
+                  account.
+                </span>
               ) : (
                 <span className="mnhome-send-hint">
-                  An unshielded {networkId} address. Paste it — nothing is guessed from a
-                  partial one.
+                  {shieldedSupported
+                    ? `An unshielded (mn_addr…) or shielded (mn_shield-addr…) ${networkId} address. Paste it — nothing is guessed from a partial one.`
+                    : `An unshielded ${networkId} address. Paste it — nothing is guessed from a partial one.`}
                 </span>
               )}
             </label>
+
+            {/* The colour picker. One held colour is simply named; several are
+                offered; none at all is said plainly by the amount hint below,
+                and the Send control goes with it. */}
+            {mode === 'shielded' && holdings !== null && holdings.length === 1 ? (
+              /* A `div`, not a `label`: there is no control here to label — one
+                 held colour is stated, not chosen. */
+              <div className="mnhome-send-field">
+                <span className="mnhome-send-label">Token</span>
+                <span className="mnhome-send-hint">
+                  <code>{shortToken(holdings[0].tokenType)}</code> — the only shielded token this
+                  Passport holds.
+                </span>
+              </div>
+            ) : null}
+            {mode === 'shielded' && holdings !== null && holdings.length > 1 ? (
+              <label className="mnhome-send-field">
+                <span className="mnhome-send-label">Token</span>
+                <select
+                  className="mnhome-send-input mnhome-send-input-mono"
+                  value={tokenType ?? ''}
+                  onChange={(event) => setTokenType(event.target.value)}
+                >
+                  {holdings.map((held) => (
+                    <option key={held.tokenType} value={held.tokenType}>
+                      {shortToken(held.tokenType)} — {held.amount.toString()} units
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
             <label className="mnhome-send-field">
               <span className="mnhome-send-label">
@@ -452,17 +695,27 @@ export default function SendSheet(props: SendSheetProps) {
                   className="mnhome-send-input"
                   value={amountText}
                   onChange={(event) => setAmountText(event.target.value)}
-                  placeholder="0.0"
-                  inputMode="decimal"
+                  placeholder={mode === 'shielded' ? '0' : '0.0'}
+                  inputMode={mode === 'shielded' ? 'numeric' : 'decimal'}
                   spellCheck={false}
                   aria-invalid={amountError !== null}
                   aria-describedby={amountError ? 'mnhome-send-amount-error' : undefined}
                 />
-                <span className="mnhome-send-unit">NIGHT</span>
+                <span className="mnhome-send-unit">{mode === 'shielded' ? 'units' : 'NIGHT'}</span>
               </span>
               {amountError ? (
                 <span className="mnhome-send-error" id="mnhome-send-amount-error" role="alert">
                   {amountError}
+                </span>
+              ) : mode === 'shielded' ? (
+                <span className="mnhome-send-hint">
+                  {holdingsError !== null
+                    ? `The shielded balances could not be read, so sending is disabled until they can be: ${holdingsError}`
+                    : holdings === null
+                      ? 'Reading which shielded tokens this Passport holds…'
+                      : holdings.length === 0
+                        ? 'This Passport holds no shielded tokens, so there is nothing to pay a shielded address with. Shielded tokens are minted by contracts; NIGHT is unshielded and never appears here.'
+                        : `${(selectedHolding?.amount ?? 0n).toString()} units of this token available. A shielded token has no decimal scale on the ledger, so this is a whole-unit count. Fees are paid in DUST, so the whole balance can go.`}
                 </span>
               ) : (
                 <span className="mnhome-send-hint">
@@ -480,9 +733,10 @@ export default function SendSheet(props: SendSheetProps) {
             </p>
 
             {/* Nothing stands in for the Send control when the fee cannot be
-                paid: the wallet's own refusal sentence above says why, and
-                there is no user-side registration left to point at. */}
-            {feeBlocksSend ? null : (
+                paid, or when there is nothing shielded to pay with: the
+                sentences above already say why, and there is no user-side
+                registration left to point at. */}
+            {feeBlocksSend || noShieldedTokens ? null : (
               <button
                 type="button"
                 className="mnhome-send-primary"
@@ -505,10 +759,33 @@ export default function SendSheet(props: SendSheetProps) {
               <div className="mnhome-send-row">
                 <dt>Amount</dt>
                 <dd>
-                  <strong>{amount === null ? '—' : `${formatNight(amount)} NIGHT`}</strong>
-                  <small>{amount === null ? '' : `${amount.toString()} atomic units`}</small>
+                  <strong>
+                    {amount === null
+                      ? '—'
+                      : mode === 'shielded'
+                        ? `${amount.toString()} units`
+                        : `${formatNight(amount)} NIGHT`}
+                  </strong>
+                  <small>
+                    {amount === null
+                      ? ''
+                      : mode === 'shielded'
+                        ? /* There is no second scale to convert to: the figure
+                             above already IS the ledger's own count. */
+                          'A shielded token has no decimal scale on the ledger.'
+                        : `${amount.toString()} atomic units`}
+                  </small>
                 </dd>
               </div>
+              {mode === 'shielded' ? (
+                <div className="mnhome-send-row">
+                  <dt>Token</dt>
+                  <dd>
+                    <strong>{tokenType === null ? '—' : shortToken(tokenType)}</strong>
+                    <small>{tokenType ?? ''}</small>
+                  </dd>
+                </div>
+              ) : null}
               <div className="mnhome-send-row">
                 <dt>Recipient</dt>
                 <dd>
@@ -552,7 +829,8 @@ export default function SendSheet(props: SendSheetProps) {
               <p className="mnhome-notice" role="alert">
                 <AlertTriangle size={14} aria-hidden="true" />
                 <span>
-                  Nothing was sent — no NIGHT moved from this wallet. {failure.message}
+                  Nothing was sent — {mode === 'shielded' ? 'no shielded token' : 'no NIGHT'}{' '}
+                  moved from this wallet. {failure.message}
                   {failure.detail ? ` ${failure.detail}` : ''}
                 </span>
               </p>
