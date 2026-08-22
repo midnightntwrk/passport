@@ -46,6 +46,28 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// The click side of the notifications `src/lib/notifications.ts` shows through
+// this worker. Android Chrome forbids the page-side Notification constructor
+// wherever a service worker is registered, so on the one platform this demo
+// notifies from, every notification is shown here and every tap arrives here
+// too — without this handler they would be inert.
+//
+// This is NOT push. There is no `push` handler, deliberately: a notification
+// only ever exists because a running Passport tab observed something on its
+// own wallet stream. See the scope note in `src/lib/notifications.ts`.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (new URL(client.url).origin !== self.location.origin) continue;
+        return 'focus' in client ? client.focus() : undefined;
+      }
+      return self.clients.openWindow('/');
+    }),
+  );
+});
+
 async function networkNavigation(request) {
   try {
     const response = await fetch(request);
