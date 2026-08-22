@@ -120,19 +120,19 @@ The other possibilities, in order of likelihood:
 
 ## `wallet-unavailable` — "No Passport wallet session is open, so nothing could be signed."
 
-**Causes:** the Passport you are talking to has no wallet that can sign —
-no passkey has been created in that browser profile, the session has not
-been established, or the user signed in with Dynamic only (the profile
-handshake works, but paying requires the local passkey wallet; Passport's
-`detail` sentence says so — show it verbatim). Sign in to Passport with a
-passkey, created in the same browser profile you are testing in, and retry.
+**Causes:** the Passport you are talking to has no wallet that can sign — no
+passkey has been created in that browser profile, the session has not been
+established, or the wallet has not finished opening. The profile handshake can
+answer without a signing wallet; paying cannot. Passport's `detail` sentence
+says which it is — show it verbatim. Sign in to Passport with a passkey,
+created in the same browser profile you are testing in, and retry.
 
 **Timing, in the standalone popup:** Passport does not answer this the instant
 it cannot sign. It waits indefinitely while no session is open at all — the
 user may be mid-passkey-ceremony — and once a session *is* open it allows a
 further five seconds for the wallet surfaces to arrive before refusing. So a
 `wallet-unavailable` from a popup means a session exists and still nothing can
-sign it, which in practice means Dynamic-only. Read the `detail`.
+sign it. Read the `detail`.
 
 ## `insufficient-funds` — NIGHT versus DUST
 

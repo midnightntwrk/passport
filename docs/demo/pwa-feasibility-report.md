@@ -1,8 +1,34 @@
 # Midnight Passport PWA Feasibility
 
-Date: 2026-07-23
+Date: 2026/07/23
 Scope: issue [#102](https://github.com/midnightntwrk/passport/issues/102), using
 `examples/passport-demo`
+
+## Status — partly superseded, updated 2026/08/22
+
+The Dynamic SDK was removed from the demo on 2026/08/20. Passages here that
+described the wallet vendor have been rewritten to match the architecture that
+ships; the vendor-specific findings are recorded below rather than deleted,
+because they are why the architecture changed.
+
+What this report found on 2026/07/23, and what became of it:
+
+- **Dynamic could not deploy the Passport C1 contract.** Its public Midnight
+  API supported wallet transfers but exposed no arbitrary Compact
+  `UnboundTransaction` proof/finalization boundary (issue
+  [#101](https://github.com/midnightntwrk/passport/issues/101)). This is now
+  moot: the wallet is derived from the passkey in the browser and deploys the
+  contract itself.
+- **Dynamic's production dependency audit was not clean** — 20 transitive
+  advisories on 4.93.1, with no non-destructive remedy. Moot with the
+  dependency gone.
+- **Installed-mode OAuth was an open validation item.** There is no OAuth in
+  the flow any more, so the item is closed rather than passed.
+
+Everything else in this report — storage durability, PRF and authenticator
+coverage, payload size, backgrounding, the service-worker boundary, and the
+recovery gate — still stands and is still the reason the recommendation below
+is conditional.
 
 ## Recommendation
 
@@ -10,10 +36,10 @@ Scope: issue [#102](https://github.com/midnightntwrk/passport/issues/102), using
 using the PWA as the only production Passport client today.**
 
 The web platform can install and run the Passport UI, protect a small encrypted
-private-state envelope in IndexedDB, and invoke foreground WebAuthn and Dynamic
-wallet operations. The production blockers are recovery from browser storage
-loss, real-device PRF/authenticator coverage, installed-mode Dynamic OAuth
-validation, and reliable foreground-only handling of long proof operations.
+private-state envelope in IndexedDB, and invoke foreground WebAuthn and wallet
+operations. The production blockers are recovery from browser storage loss,
+real-device PRF/authenticator coverage, and reliable foreground-only handling
+of long proof operations.
 
 ## Prototype Evidence
 
@@ -27,8 +53,8 @@ validation, and reliable foreground-only handling of long proof operations.
 | Private state | Existing and tested | AES-GCM envelope in IndexedDB; PRF-derived non-exportable key and plaintext exist in memory only. |
 | Separate-app profile request | Implemented | A second origin opens Passport, requests an allowlisted field set with a nonce, receives explicit user consent, and gets only the approved public DTO through an exact-origin `postMessage` response. |
 | Storage durability | Partially implemented | Passport key setup requests `navigator.storage.persist()`. Browser approval is not guaranteed and explicit site-data deletion still wins. |
-| Dynamic C1 deployment | Externally blocked | Dynamic's public Midnight API supports wallet transfers, but does not currently expose the arbitrary Compact `UnboundTransaction` proof/finalization boundary required by Passport C1. See issue #101. |
-| Dependency audit | Externally blocked | `npm audit --omit=dev` on Dynamic 4.93.1 reports 20 transitive production-tree advisories (14 moderate, 6 high). npm only offers forced Dynamic downgrades that predate the required WaaS integration. |
+| Account-custody contract deployment | Resolved after this report | Blocked on 2026/07/23 because the wallet vendor exposed no arbitrary Compact proof/finalization boundary (issue #101). The passkey-derived in-browser wallet that replaced it deploys the contract itself, as part of the single name-claim action. |
+| Dependency audit | Resolved after this report | The 20 transitive production advisories counted here all came in through the removed vendor SDK. Re-run `npm audit --omit=dev` before quoting a current number. |
 | Automated checks | Passed locally | Demo-backend unit tests, C1 draft test, production build, and `check:pwa` manifest/service-worker boundary checks. |
 | Mobile payload | Needs optimization | Current build emits a 5.86 MB JavaScript chunk (954 KB gzip), 10.42 MB ledger WASM (4.68 MB gzip), and 1.40 MB runtime WASM (411 KB gzip). |
 | Physical devices | Not yet executed | iPhone/iPad, Android, and desktop Safari/Firefox matrices remain release-gate tests. |
@@ -42,10 +68,10 @@ HTTPS or localhost.
 
 | Platform | Assessment | Required validation |
 | --- | --- | --- |
-| Android Chrome/Edge/Samsung Internet | Best initial PWA target. Manifest installation and `beforeinstallprompt` are supported. | Install, Dynamic Discord/email login, embedded wallet return, platform passkey PRF, app restart, storage pressure, and interrupted proof. |
-| iOS/iPadOS | Viable pilot with higher risk. Installation is through the Share menu; `beforeinstallprompt` is not available. Home Screen apps run standalone. Safari 18 added WebAuthn PRF support. | Safari and installed-mode OAuth return, Face ID passkey PRF, hardware-key behavior, process termination, device reboot, eviction, and app removal/reinstall. |
+| Android Chrome/Edge/Samsung Internet | Best initial PWA target. Manifest installation and `beforeinstallprompt` are supported. | Install, platform passkey PRF enrolment and unlock, wallet open and first sync, app restart, storage pressure, and interrupted proof. |
+| iOS/iPadOS | Viable pilot with higher risk. Installation is through the Share menu; `beforeinstallprompt` is not available. Home Screen apps run standalone. Safari 18 added WebAuthn PRF support. | Face ID passkey PRF in Safari and in installed mode, hardware-key behavior, process termination, device reboot, eviction, and app removal/reinstall. |
 | Desktop Chromium | Suitable for development and fallback access. Manifest install and service workers are supported. | Install/update lifecycle, platform passkey, external security key, multi-tab update, and offline fallback. |
-| macOS Safari | Add to Dock is available on Safari 17+; Safari 18 added PRF. | Touch ID PRF, Dynamic popup/redirect, update lifecycle, and cross-browser credential use. |
+| macOS Safari | Add to Dock is available on Safari 17+; Safari 18 added PRF. | Touch ID PRF, the popup and URL-callback connector round trips, update lifecycle, and cross-browser credential use. |
 | Desktop Firefox | The web client remains usable, but Firefox does not provide manifest-based desktop PWA installation. | WebAuthn PRF and normal browser-mode operation; do not promise installability. |
 
 Sources:
@@ -84,10 +110,14 @@ The prototype therefore uses a user-mediated opener protocol:
    and shows field-level consent;
 4. Passport returns only the approved public DTO to that exact origin.
 
-The protocol never shares the Dynamic subject ID, passkey credential reference,
-PRF material, encrypted envelope, decrypted witness, or grant secret. The
-reference consumer is `examples/passport-profile-client`; the protocol schemas
-and parsers live in `demo-backend/src/profileProtocol.ts`.
+The protocol never shares the passkey credential reference, PRF material, the
+encrypted envelope, a decrypted witness, or a grant secret. The reference
+consumers are `examples/passport-profile-client` and, since 2026/08/05,
+`examples/raffle-demo`; the protocol schemas and parsers live in
+`demo-backend/src/profileProtocol.ts`. The redirect-based variant for phones,
+where the opening tab is frequently discarded, is specified in
+`examples/passport-demo/src/identity/callbackProtocol.ts` and exercised by
+`examples/clubcoin-mock`.
 
 This works while both applications are open, including from cached shells. It
 does not bypass browser origin isolation and it is not the private-storage
@@ -111,30 +141,33 @@ Changing the production RP domain can make existing credentials unusable.
 **Production gate:** publish a supported browser/authenticator matrix and a
 recovery path for a missing, deleted, or unsupported credential.
 
-### Dynamic OAuth and social login
+### Sign-in — no OAuth, no hosted round trip
 
-Dynamic supports social login and both `popup` and `redirect` strategies through
-`DynamicContextProvider`. The prototype currently uses `popup`. See
-[Dynamic social providers](https://www.dynamic.xyz/docs/overview/social-providers/overview)
-and [`DynamicContextProvider` settings](https://www.dynamic.xyz/docs/react/reference/providers/dynamiccontextprovider).
+**Updated 2026/08/22.** This section originally assessed the wallet vendor's
+social login and its `popup` versus `redirect` strategies. That entire surface
+is gone. Sign-in is one WebAuthn ceremony in the tab: no third-party window, no
+cookies to survive a return to standalone mode, and no in-progress state to
+restore across an origin hop. The class of installed-PWA OAuth risk this
+section was written about does not apply to the flow that ships.
 
-Installed mobile PWAs can move OAuth into a browser-controlled window. Popup
-closing, return-to-standalone behavior, cookies, and preserved in-progress state
-must be validated with the actual Dynamic environment. If popup proves
-unreliable, use Dynamic's documented redirect strategy with an allowlisted
-production return URL and restore the pending foreground intent after return.
+What replaces it as the risk to validate is the passkey itself, covered in the
+section above: enrolment and unlock on each platform, discoverable-credential
+sign-in when the browser holds no local profile, and the consequence of a
+changed relying-party domain.
 
-Dynamic's supported transfer builder does not establish compatibility with an
-arbitrary Passport Compact contract call. The PWA cannot call C1 deployment
-complete until Dynamic publishes and validates the proof/finalization
-capability tracked by issue #101.
+One redirect round trip does remain, but it is between Passport and a
+third-party app rather than between Passport and an identity provider: the
+URL-callback connector, for phones where the opening tab does not survive. It
+carries its reply in the URL fragment, signed with the wallet's unshielded key,
+and the receiving app verifies it before believing it.
 
-**Production gate:** pass Discord and email authentication in browser and
-installed mode on iOS and Android without losing the selected Passport account.
+**Production gate:** passkey sign-in in browser and installed mode on iOS and
+Android, including the case where site data was cleared but the credential
+survives in the keychain, without enrolling a second credential over the first.
 
 ### Proof generation and backgrounding
 
-Compact proving, Dynamic approval, and transaction submission are foreground,
+Compact proving, user approval, and transaction submission are foreground,
 network-dependent operations. The service worker does not generate proofs,
 store signatures, submit transactions, or register Background Sync.
 Background Sync itself is not uniformly available across major browsers, and
@@ -185,7 +218,8 @@ The worker may:
 
 The worker may not:
 
-- cache or synthesize Dynamic/Midnight API responses;
+- cache or synthesize Midnight node, indexer, proof-server, sponsor, or funder
+  responses;
 - read Passport IndexedDB private-state records;
 - handle passkey prompts or PRF outputs;
 - queue proofs, signatures, contract deployments, or transfers;
@@ -197,9 +231,9 @@ The worker may not:
    decrypted in the page for authorized operations. Production needs a strict
    CSP, dependency review, no inline third-party scripts, and sensitive-log
    inspection.
-2. **Origin stability is security-critical.** HTTPS origin, Dynamic allowlist,
-   WebAuthn RP ID, service-worker scope, and IndexedDB storage must use the final
-   production domain.
+2. **Origin stability is security-critical.** HTTPS origin, WebAuthn RP ID,
+   service-worker scope, IndexedDB storage, the funder's CORS allowlist, and
+   every connector's audience binding must use the final production domain.
 3. **Storage persistence is not backup.** Explicit clear/uninstall can destroy
    the envelope. The UI must communicate recovery status before value is placed
    under Passport control.
@@ -209,25 +243,26 @@ The worker may not:
 5. **No offline transaction queue.** Replaying a stale proof or finalized
    transaction after reconnect requires protocol-level expiry/idempotency, not a
    generic service-worker retry.
-6. **Dynamic's transitive dependency audit is not clean.** The current stable
-   Midnight integration pulls vulnerable Axios, UUID, and Solana dependency
-   ranges. Do not use `npm audit fix --force`: its proposed downgrade removes
-   the current embedded-wallet surface. Dynamic must publish a compatible
-   patched dependency graph, followed by a new integration and bundle audit.
+6. **The dependency graph still needs auditing on its own terms.** The 20
+   advisories counted on 2026/07/23 arrived through the removed vendor SDK, so
+   that specific finding is closed — but the Midnight and proving dependencies
+   that remain have not been re-audited since. Re-run `npm audit --omit=dev`
+   and record the result before any production claim; do not quote the old
+   number in either direction.
 
 ## Release Gates
 
 - [ ] Real-device install and relaunch on current iOS/iPadOS and Android.
-- [ ] Dynamic Discord and email OAuth in browser and standalone modes.
+- [ ] Passkey sign-in in browser and standalone modes, including the cleared-site-data case.
 - [ ] PRF enrollment/unlock with platform passkeys and supported security keys.
 - [ ] IndexedDB persistence granted, denied, cleared, and storage-pressure cases.
 - [ ] Documented encrypted backup/recovery and account-rebinding flow.
-- [ ] C1 proof/deploy interruption and explicit resume across backgrounding.
-- [ ] Dynamic arbitrary Compact proof/finalization capability required by issue #101.
-- [ ] Dynamic release with a clean or formally accepted production dependency audit.
+- [ ] Contract deploy and name registration interrupted mid-flight, and resumed or honestly refused, across backgrounding.
+- [ ] Behaviour when the fee sponsor is unavailable and when the funder refuses, on a wallet holding nothing.
+- [ ] A re-run dependency audit on the post-Dynamic graph.
 - [ ] Route-level code splitting and mobile cold-start/memory budgets.
-- [ ] Wallet sync, DUST, shielded/unshielded transfer, and chain confirmation.
-- [ ] Production HTTPS origin, CSP, Dynamic allowlist, and WebAuthn RP review.
+- [ ] Wallet sync, shielded/unshielded transfer, and chain confirmation.
+- [ ] Production HTTPS origin, CSP, connector origin allowlists, and WebAuthn RP review.
 - [ ] Mobile accessibility, safe-area, keyboard, and responsive visual pass.
 
 Until these gates pass, the PWA should be labelled a **testnet prototype**, not

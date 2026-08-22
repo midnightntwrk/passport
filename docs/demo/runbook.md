@@ -1,83 +1,165 @@
-# Client Demo Runbook
+# Demo runbook
 
-## Start
+How to run the Passport demo, what to walk through, and how to write down what
+you saw.
+
+Read [`WHAT-THIS-IS.md`](../../WHAT-THIS-IS.md) first. Then note what this
+runbook no longer contains, because earlier versions of it did:
+
+- **No wallet vendor.** The Dynamic SDK was removed on 2026/08/20. There is no
+  environment id to configure, no Discord or email sign-in, and no hosted
+  wallet to wait on. The only way in is a passkey.
+- **No user-paid DUST registration.** Network fees are sponsored. Nothing asks
+  the user to register NIGHT for DUST before they can transact.
+- **No user-paid name claim.** When a funder is configured and sponsoring, the
+  `.night` name is registered *for* the user and their wallet spends nothing.
+- **No `?demoMode=local`.** The query parameter is gone from the client. The
+  demo runs against a public network — Preview by default.
+
+## Start Passport
 
 ```sh
-cp examples/passport-demo/.env.example examples/passport-demo/.env.local
-# Add VITE_DYNAMIC_ENVIRONMENT_ID
 npm install
 npm run demo
 ```
 
-For the complete isolated localnet contract flow:
+Open `http://localhost:5175`. The port is pinned in the source with
+`strictPort`, and the dev build redirects any other origin to it: Passport
+frames apps by URL, and a handshake against a moving origin fails silently. Do
+not substitute `127.0.0.1`.
+
+Every setting is optional — the defaults run against Preview, with fees
+sponsored through the preview gateway. Copy
+`examples/passport-demo/.env.example` to `.env.local` to change any of them;
+that file documents each variable and why it exists.
+
+## The companion services, and which of them you actually need
+
+| What | Port | Needed for |
+|---|---|---|
+| `examples/passport-funder` | 8799 | Sponsored `.night` registration. Needed for a clean onboarding walk-through — see below. |
+| `examples/raffle-demo` (`npm run demo:raffle`) | 5177 | The example dApp in the Apps grid: profile handshake and a Passport-signed payment. |
+| `examples/passport-profile-client` (`npm run demo:profile-client`) | 5176 | The separate-origin profile consent client ("Atlas"). Superseded in the Apps grid by the raffle since 2026/08/05; still runnable. |
+| `examples/passport-app-template` | 5178 | The starter a third-party developer copies. Point Passport at it with `VITE_LOCAL_APP_URL`. |
+| `examples/clubcoin-mock` | 5181 | The URL-callback (redirect) connector example — the phone-shaped alternative to the popup handshake. |
+| `examples/passport-app-hub` (`npm run demo:hub`) | 5179 | The public app-listing site. Not part of the wallet flow. |
+| `examples/passport-docs` (`npm run demo:docs`) | 5180 | The documentation site. Not part of the wallet flow. |
+
+Passport alone is enough to demonstrate onboarding, the wallet, and sending.
+Everything else is a counterparty for one specific handshake.
+
+## Bring the funder up before you demonstrate onboarding
+
+A fresh passkey wallet holds zero NIGHT, and the public faucets are
+captcha-gated. Without a funder the name claim falls back to the self-paid
+path, finds no NIGHT, and honestly queues the name instead of registering it —
+correct behaviour, but not the flow you want to show.
 
 ```sh
-cd experiments/account-custody-prototype
-./run-all.sh
-cd ../..
-npm run demo
-npm run demo:profile-client
+cd examples/passport-funder
+npm run generate-seed              # prints a seed and its address
+# fund that address ONCE from https://faucet.preview.midnight.network
+FUNDER_SEED=<the seed> npm start   # port 8799
 ```
 
-Open `http://localhost:5175/?demoMode=local` for Passport and
-`http://localhost:5176` for the separate Atlas application. Configure
-`http://localhost:5175` in Dynamic before testing Discord or email
-authentication. The local contract flow also requires the disposable Midnight
-node, indexer, proof server, and fixture fee wallet from
-`experiments/account-custody-prototype`.
+Then set `VITE_FUNDER_URL=http://localhost:8799` in
+`examples/passport-demo/.env.local` and restart the dev server.
 
-## Recording checklist
+Before recording anything, check `curl http://localhost:8799/status` and
+confirm `"aliasSponsorship": "available"` and `"ready": true`. On first run the
+funder registers its own NIGHT for DUST generation and `ready` flips to `true`
+within about a minute. The full API, refusal codes, and cost maths are in
+[`examples/passport-funder/README.md`](../../examples/passport-funder/README.md).
 
-1. Sign in with Discord. Record the Dynamic environment and account used.
-2. Confirm the preflight row reaches authenticated, wallet provisioned, and
-   DUST-sync-ready states.
-3. Use **Deploy Passport** as the primary action. Its first user gesture creates
-   or unlocks the Passport PRF passkey because the C1 contract requires a
-   private witness authority. In `demoMode=local`, it then deploys the real C1
-   custody contract with the isolated fixture fee wallet and registers the
-   Night ID. Record both contract addresses and transaction hashes. On Dynamic
-   preview, stop at the explicit capability error unless Dynamic has shipped
-   and validated arbitrary Compact proof finalization.
-4. Show all three address surfaces and copy each without exposing private key
-   material.
-5. Use the separate Passport-key action to unlock the existing encrypted state
-   after reload. Confirm that C1 metadata and permissions restore only after
-   the passkey succeeds.
-6. Sign a Dynamic message. Record the user approval and result.
-7. With a funded test wallet, send one unshielded and one
-   shielded transfer. For each, record the distinct build, Dynamic signing and
-   proof, and submission entries, then open the transaction detail row and show
-   the returned hash. Use the recovery icon only to release an abandoned pending
-   transaction.
-8. In local mode, read C1 custody, deposit and withdraw unshielded NIGHT, then
-   mint a disposable shielded test note, deposit it into C1, and withdraw part
-   of it. Open each returned chain hash from Activity.
-9. Open Permissions, read the local C1 ledger, issue a scoped NIGHT grant,
-   then revoke it. Each write must ask for the Passport passkey and return a
-   real localnet transaction hash.
-10. Open Connections, launch Atlas on port `5176`, request selected public
-   profile fields, approve them in Passport, and verify that no passkey
-   reference or private state crosses the origin boundary.
+## The walk-through
+
+1. **One button.** The welcome screen offers a single action. If this browser
+   holds a Passport profile it signs in; otherwise it asks the authenticator
+   before enrolling anything, so a passkey that survived a site-data clear is
+   signed in to rather than replaced. Record the platform and authenticator.
+2. **The wallet opens in this tab.** The WebAuthn PRF output becomes a 32-byte
+   Midnight seed and the wallet is built in the browser. The first sync walks
+   the chain: measured on Preview (~296k blocks), about 75 seconds. Record how
+   long it took and on what hardware.
+3. **The name screen.** Availability is a live `domains.member()` read against
+   the deployed `.night` TLD as you type, and the price shown is the deployed
+   contract's own constant for that label length. A registry that cannot be
+   reached says so.
+4. **Claim — one user action, two things on chain, in order.** A single
+   user-verified assertion derives both the Midnames owner secret and the
+   contract root secret, and then:
+   - the **account-custody contract deploys first**, because the name has to
+     resolve to something. A Passport has one contract per network, so an
+     existing deployed record is reused rather than deployed again;
+   - the **name is registered pointing at that contract**. With the funder
+     sponsoring, the funder deploys the resolver leaf and calls
+     `register_domain_for` with the user's own owner key: the user's wallet
+     signs nothing and spends nothing, and the client confirms the result with
+     its own registry read before reporting it registered.
+
+   Record every transaction hash that comes back, and note whether the
+   registration was sponsored or self-paid. A funder refusal that self-paying
+   could fix falls back to the self-paid claim; some refusals deliberately do
+   not fall back, because the sponsored name may already have landed.
+5. **The contract card is status, not a choice.** There is no "deploy contract"
+   button. The card on Home reports what the claim produced, and offers a retry
+   only on a record that says a previous automatic deploy failed.
+6. **One identity on the primary surface.** The `.night` name is the identity.
+   The three wallet addresses are deliberately not on the everyday screens;
+   reach them where the flow needs them.
+7. **Send.** Send unshielded NIGHT to an address pasted in, or scanned with the
+   QR scanner — the camera fills the field and never bypasses it. Fees are
+   sponsored; record the returned transaction hash and open it in the explorer.
+8. **Apps.** Open the raffle from the Apps grid. It asks for a profile,
+   Passport shows its own consent sheet, and only approved fields cross the
+   origin boundary. Then let it request a payment: the app posts an intent,
+   Passport approves and signs, and the node's transaction id comes back.
+9. **The URL-callback round trip.** On a phone, run the redirect connector
+   example on 5181 instead — the tab that opens Passport is frequently
+   discarded on mobile, so the reply comes back in the URL fragment, signed.
+   See [`examples/clubcoin-mock/README.md`](../../examples/clubcoin-mock/README.md).
+10. **Backup.** Back the private state up behind a password and restore it.
+
+### Not yet built: the Otrix totem
+
+The next partner flow is **Otrix**: a totem displays a QR code carrying a
+shielded deposit address, and the user pays it from Passport. It does not
+exist yet — no code, no route, no fixture. Do not demonstrate it, and do not
+describe it as available. ClubCoin, which used to be named here as the partner
+dApp, is out of the demo entirely; the `clubcoin-mock` directory survives only
+as the generic URL-callback example.
 
 ## Result language
 
-- **Passed:** an actual API call completed and a wallet result/transaction hash
-  was observed.
-- **Blocked:** the dependency is absent (for example, Dynamic private-key
-  exports, a funded wallet, or a custom-circuit bridge).
-- **Failed:** the API call ran and returned an error. Preserve the error text
-  and environment; do not replace it with a generic success screen.
+- **Passed:** an actual API call completed and a wallet result or transaction
+  hash was observed.
+- **Blocked:** the dependency is absent — no funded funder, no camera
+  permission, no registry on this network.
+- **Failed:** the call ran and returned an error. Preserve the error text and
+  the environment; do not replace it with a generic success screen.
+- **Untested:** nobody has run it. This is not a synonym for "works".
 
-## C1 guardrails
+Append observed runs to [`validation-log.md`](validation-log.md), with the
+transaction hash where one exists and the error text where it fails.
 
-- The testnet C1 draft builder is deterministic and covered by
-  `npm run test:c1 --workspace passport-demo`.
-- The browser only stores public deployment metadata after Dynamic returns a
-  transaction hash. Device and maintenance state remain inside the encrypted
-  Passport private-state envelope.
-- Mainnet is rejected before a C1 transaction is created. Do not remove that
-  check as part of a demo recording.
-- The local adapter is enabled only by `?demoMode=local` and uses a known
-  fixture fee wallet only against the disposable local network.
-- Dynamic message signatures are wallet verification only. They are never
-  used as or described as C1 witness proofs.
+## Guardrails that must survive a demo recording
+
+- **Mainnet is hard-blocked in code.** Do not remove that check to record
+  something.
+- **Preview only.** Every preprod endpoint is healthy and the sponsor is funded
+  there, but a cold wallet cannot walk ~1.98M blocks in a browser tab — it
+  crashes at around 4.2 GB of heap. A depth guard in `src/lib/localWallet.ts`
+  refuses a from-genesis walk above 500k blocks with an honest error rather
+  than starting one. The measurements and the ruled-out tip-start experiment
+  are written up in `examples/passport-demo/.env.example` and in
+  `src/lib/walletSnapshot.ts`.
+- **Sponsored fees are gated on the sponsor's own answer.** The client checks
+  `available > 0` from the gateway's `/wallet-status`, never on a hopeful
+  assumption. `VITE_SPONSOR_URL=off` disables sponsorship, at which point a
+  fresh wallet cannot pay its first fee — which is the point of the default.
+- **Nothing on screen is simulated.** A balance, a transaction hash, or a
+  resolved name is either read from the chain or absent. A queued name is never
+  shown as registered.
+- **Private state stays encrypted.** Only public deployment metadata is stored
+  unencrypted; device and maintenance state stay inside the AES-GCM envelope in
+  IndexedDB, decrypted only for the duration of an explicit unlock.
