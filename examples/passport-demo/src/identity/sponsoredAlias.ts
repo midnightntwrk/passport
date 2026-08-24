@@ -47,11 +47,15 @@ const PROBE_TTL_MS = 30_000;
 /** Ceiling on the probe round-trip — a slow funder must not stall a claim. */
 const PROBE_TIMEOUT_MS = 4_000;
 /**
- * Ceiling on the registration round-trip. The funder submits two transactions
- * and waits for the registry to confirm before answering — 63 s measured on
- * preview 2026/08/20 — so this is generous but not unbounded.
+ * Ceiling on the registration round-trip. The service submits two
+ * transactions and waits for the registry to confirm before answering: 63 s
+ * measured on preview with a remote proof server (2026/08/20), 113 s on
+ * stagenet proving in-process on a laptop (2026/08/24), and slower again on a
+ * small server. Matches the fee sponsor's own patience — abandoning a
+ * registration the service is still proving costs more than waiting, because
+ * the name then lands with nobody listening.
  */
-const REGISTER_TIMEOUT_MS = 180_000;
+const REGISTER_TIMEOUT_MS = 600_000;
 
 /** The funder's refusal, verbatim: its `error` code and its human sentence. */
 export class AliasSponsorRefusal extends Error {
