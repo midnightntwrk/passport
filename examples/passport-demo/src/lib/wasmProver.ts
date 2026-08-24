@@ -42,7 +42,7 @@
 // same code path works and no staging is needed.
 
 import { CostModel } from '@midnightntwrk/ledger-v9';
-import { zkConfigToProvingKeyMaterial } from '@midnight-ntwrk/midnight-js-types';
+import { ZKConfigRegistry, zkConfigToProvingKeyMaterial } from '@midnight-ntwrk/midnight-js-types';
 
 interface ZkConfigProviderLike {
   get(keyLocation: string): Promise<unknown>;
@@ -239,11 +239,23 @@ function workerProvingProvider(km: KmProvider): any {
  * `../identity/contractRuntime.ts`.
  */
 export function wasmProvingProvider(zkConfigProvider: ZkConfigProviderLike): any {
+  /* The registry joins a CANONICAL key location — contract address, circuit,
+     and the verifier-key hash the deployed contract carries — against our
+     staged artefacts, refusing a build whose verifier key differs from what is
+     on chain. A bare circuit name (what a DEPLOY preimage carries, there being
+     no address yet) resolves straight from the provider; anything else is a
+     protocol builtin served from the system bucket. Same order the balancer
+     proves with in-process. */
+  const registry = new ZKConfigRegistry([zkConfigProvider as never]);
   const km: KmProvider = {
     lookupKey: async (keyLocation: string) => {
       console.debug(`[wasm-prover] lookupKey: ${keyLocation}`);
       const system = await lookupSystemKey(keyLocation);
       if (system) return system;
+      const resolved = await registry.resolveKeyLocation(keyLocation);
+      if (resolved !== undefined) {
+        return zkConfigToProvingKeyMaterial(resolved as any) as KeyMaterial;
+      }
       const zkConfig = await zkConfigProvider.get(keyLocation);
       return zkConfigToProvingKeyMaterial(zkConfig as any) as KeyMaterial;
     },
@@ -252,7 +264,13 @@ export function wasmProvingProvider(zkConfigProvider: ZkConfigProviderLike): any
   const inner = workerProvingProvider(km);
   /* The busy signal belongs here rather than in the worker plumbing: a contract
      proof is the slow thing a user waits through, and `onProving` is what the
-     UI listens to. */
+     UI listens to.
+
+     `lookupKey` is part of the ledger's `ProvingProvider` contract, not an
+     internal of the worker protocol: midnight-js 5 calls it on the provider it
+     is handed before proving a contract call ("expected proving provider
+     property 'lookupKey' to be a function" — seen live on the first stagenet
+     claim, 2026/08/24). It is the same resolver the worker proxies to. */
   return {
     check: (preimage: Uint8Array, keyLocation: string) => inner.check(preimage, keyLocation),
     prove: async (preimage: Uint8Array, keyLocation: string, obi?: bigint) => {
@@ -263,6 +281,7 @@ export function wasmProvingProvider(zkConfigProvider: ZkConfigProviderLike): any
         proveEnded();
       }
     },
+    lookupKey: (keyLocation: string) => km.lookupKey(keyLocation),
   };
 }
 
