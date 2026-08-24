@@ -51,3 +51,11 @@ ecosystem).
 
 **C — Both — Compact circuits for Midnight-native, BBS+ for VC
 interop.**
+
+## Readings
+
+- **External prior art.** Commitment-based holder-side selective
+  disclosure in Compact is exercised end-to-end by the agent-DID registry
+  ([midnight-agent-did-manager](https://github.com/mzf11125/midnight-agent-did-manager),
+  `contracts/did_registry.compact`); see
+  [research/agent-did-registry.md](../../../research/agent-did-registry.md).

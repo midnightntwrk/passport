@@ -50,3 +50,12 @@ intended for issuer A's schema is accepted under issuer B's.
 **B — Multi-issuer from day one** (per design doc principle 5).
 
 **C — Hybrid (one default issuer + extension points for others).**
+
+## Readings
+
+- **External prior art.** A permissioned, commitment-holding issuer flow
+  is realised by the agent-DID registry
+  ([midnight-agent-did-manager](https://github.com/mzf11125/midnight-agent-did-manager),
+  `contracts/did_registry.compact`): `issue_did` is gated on an on-chain
+  issuer key, and request/issue state is stored as commitments; see
+  [research/agent-did-registry.md](../../../research/agent-did-registry.md).

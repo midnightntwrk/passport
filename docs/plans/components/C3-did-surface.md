@@ -205,3 +205,8 @@ name directly, which they may not support.
 - **v1.0 deliverable:** B or C — companion public `did:midnight`
   separate from the name, with the delivery model made explicit. D or E
   become additive if profile-specific multiple DIDs are needed.
+- **External prior art.** A working Midnight-native DID registry with
+  commitment-based selective disclosure
+  ([midnight-agent-did-manager](https://github.com/mzf11125/midnight-agent-did-manager))
+  exercises the delivery-model and DID-Document privacy questions above;
+  see [research/agent-did-registry.md](../../../research/agent-did-registry.md).
