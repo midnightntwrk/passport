@@ -7,6 +7,13 @@
  * Endpoint introspected on 2026/08/04:
  *   https://indexer.preview.midnight.network/api/v4/graphql
  *
+ * The build moved to stagenet on 2026/08/24 and this module did not have to:
+ * https://indexer.stagenet.shielded.tools/api/v4/graphql serves the same v4
+ * schema, and both fields relied on below — `block(offset:)` and the
+ * `transactions(offset: { identifier })` point lookup — were exercised against
+ * it live. What could NOT sync stagenet was the ledger-8 wallet SDK's own
+ * indexer client, not this one; see `./networks.ts`.
+ *
  * 1. There is NO per-address transaction QUERY over HTTP. The full `Query`
  *    field list is: block, zswapMerkleTreeCollapsedUpdate, transactions,
  *    contractAction, contract, dustGenerationStatus, dustGenerations,

@@ -57,6 +57,36 @@
 export const SPONSOR_READINESS_TTL_MS = 30_000;
 /** Upper bound on the whole 429 `PENDING_TRANSACTION` retry window. */
 export const SPONSOR_PENDING_RETRY_WINDOW_MS = 20_000;
+/**
+ * The same window for a CONTRACT transaction, which is a different bet.
+ *
+ * 20 seconds is right for a transfer: the wallet can pay its own fee, so giving
+ * up early costs a slower path, not a failed one. A contract deploy from a
+ * fresh passkey wallet has NO fall-back — it holds no DUST — so giving up early
+ * costs the whole operation, and the operation already takes tens of seconds.
+ *
+ * Ten minutes, and every shorter value here was measured and found wanting
+ * against the stagenet balancer on 2026/08/24. It proves the DUST leg
+ * in-process with the WASM prover, having first fetched and warmed ~32 MB of
+ * circuit keys, and it serialises balancing so a caller who arrives mid-proof
+ * is told `429 PENDING_TRANSACTION` and has to wait the whole thing out. Three
+ * observed service times: ~100 s, ~180 s, and one over 180 s. At 20 s and again
+ * at 180 s the client gave up while the sponsor was working correctly and went
+ * on to finish.
+ *
+ * Giving up early is worse than waiting in a second way, too, and this is the
+ * part that decided the number. The service reserves its DUST for a balanced
+ * transaction the moment it finalizes one, and an abandoned request leaves that
+ * reservation standing until it expires — so an impatient client does not just
+ * fail itself, it takes the sponsor's DUST out of circulation for everyone,
+ * for far longer than it would have waited. Measured: two abandoned requests
+ * put the sponsor at `available: 0` for roughly twenty minutes each.
+ *
+ * Ten minutes still sits inside the balanced transaction's own TTL (thirty
+ * minutes, see DEFAULT_TTL_MS in `../identity/contractRuntime.ts`), so a client
+ * that waits the full window never submits something already expired.
+ */
+export const SPONSOR_CONTRACT_RETRY_WINDOW_MS = 600_000;
 /** Floor on a retry delay, so a zero `retryAfterMs` cannot spin. */
 const SPONSOR_PENDING_RETRY_MIN_DELAY_MS = 250;
 /** Fallback delay when the service names no `retryAfterMs`. */
@@ -76,8 +106,19 @@ const SPONSOR_STATUS_RETRY_TIMEOUT_MS = 2_000;
  * both retrying paths — the readiness probe and the `/balance-only` POST.
  */
 export const SPONSOR_PROBE_RETRY_DELAY_MS = 500;
-/** Balancing proves a dust segment server-side, so it gets real room. */
-const SPONSOR_BALANCE_TIMEOUT_MS = 90_000;
+/**
+ * Balancing proves a dust segment server-side, so it gets real room.
+ *
+ * 600 s rather than the 90 s it was until 2026/08/24, measured rather than
+ * guessed: the stagenet balancer proves in-process with the WASM prover and
+ * warms ~32 MB of circuit keys first, and its observed service times were
+ * ~100 s, ~180 s, and one longer still. At 90 s — and again at 180 s — the
+ * client aborted a request the sponsor then completed, which fails the caller
+ * AND leaves the sponsor's DUST reserved against a balanced transaction nobody
+ * will submit. Kept equal to {@link SPONSOR_CONTRACT_RETRY_WINDOW_MS} so that
+ * neither bound can silently undercut the other.
+ */
+const SPONSOR_BALANCE_TIMEOUT_MS = 600_000;
 
 export interface SponsorConfig {
   /** Base URL, no trailing slash. */
@@ -125,6 +166,14 @@ function trimmed(value: string | undefined): string | undefined {
  * and stays unsponsored unless a URL is set explicitly.
  */
 const DEFAULT_SPONSOR_URLS: Record<string, string> = {
+  /* Stagenet is sponsored by our OWN balancer rather than a 1AM gateway,
+     because there is no 1AM gateway on stagenet. It speaks the identical wire
+     contract — `GET /wallet-status` and `POST /balance-only`, same bodies,
+     same error codes — so nothing else in this module changes. Probed live
+     2026/08/24: `{"total":1,"available":1,…,"dust":{"balance":
+     "288384879317778538","utxoCount":3,"isSynced":true}}`, i.e. genuinely
+     able to pay, which is the only thing rule 2 below accepts. */
+  stagenet: 'https://funder.midnightpassport.com/balancer',
   preview: 'https://api-preview.1am.xyz',
   preprod: 'https://api-preprod.1am.xyz',
 };
@@ -148,7 +197,7 @@ export function sponsorConfig(
   if (explicit === 'off') return null;
   const raw =
     explicit ??
-    DEFAULT_SPONSOR_URLS[trimmed(env.VITE_MIDNIGHT_NETWORK_ID) ?? 'preview'];
+    DEFAULT_SPONSOR_URLS[trimmed(env.VITE_MIDNIGHT_NETWORK_ID) ?? 'stagenet'];
   if (!raw) return null;
   const url = raw.replace(/\/+$/, '');
   assertSecureSponsorUrl(url);

@@ -26,7 +26,9 @@
   border-radius: var(--mn-radius-pill);
   flex-shrink: 0;
 }
-.mnnet-dot-preview { background: var(--mn-accent); }
+/* Stagenet is where this build's wallet lives, so it carries the accent. */
+.mnnet-dot-stagenet { background: var(--mn-accent); }
+.mnnet-dot-preview { background: #6b7280; }
 .mnnet-dot-preprod { background: #b58a00; }
 .mnnet-dot-mainnet { background: #0a8a4a; }
 
@@ -78,4 +80,14 @@
   color: var(--mn-text-muted);
   font-size: 11px;
   line-height: 1.45;
+}
+
+/* The read-only explanation for a network this build cannot transact on. It
+   wraps, unlike the note above it, because it is a sentence rather than a
+   label — and it carries no border, so the two read as one block. */
+.mnnet-note-warning {
+  display: block;
+  border-top: none;
+  padding-top: 0;
+  margin-top: 2px;
 }

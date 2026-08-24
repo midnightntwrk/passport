@@ -16,7 +16,7 @@ const CACHE_TTL_MS = 10 * 60 * 1000
 const FETCH_TIMEOUT_MS = 8_000
 
 export type RegistryCategory = 'defi' | 'gaming' | 'tools' | 'identity' | 'other'
-export type RegistryNetwork = 'preview' | 'preprod' | 'mainnet'
+export type RegistryNetwork = 'stagenet' | 'preview' | 'preprod' | 'mainnet'
 export type RegistrySection = 'standard' | 'hackathon'
 
 export interface RegistryApp {
@@ -43,7 +43,7 @@ export interface RegistryApp {
 }
 
 const CATEGORIES: readonly RegistryCategory[] = ['defi', 'gaming', 'tools', 'identity', 'other']
-const NETWORKS: readonly RegistryNetwork[] = ['preview', 'preprod', 'mainnet']
+const NETWORKS: readonly RegistryNetwork[] = ['stagenet', 'preview', 'preprod', 'mainnet']
 
 /**
  * Minimal offline list — ids, names, and urls only. Returned when the live
@@ -86,7 +86,7 @@ export const RAFFLE_DEMO_APP: RegistryApp = {
   // on one fixed network hid it from the grid the moment the build moved —
   // found on 2026/08/06 while trialling a pre-production build, where the grid
   // filters to preprod and a preview-only entry simply vanishes.
-  networks: walletNetwork() ? [walletNetwork() as RegistryNetwork] : ['preview'],
+  networks: walletNetwork() ? [walletNetwork() as RegistryNetwork] : ['stagenet'],
   featured: true,
 }
 
@@ -119,7 +119,7 @@ function buildLocalDevApp(): RegistryApp | null {
     // Same reasoning as the raffle entry: follow the wallet's network rather
     // than declaring one, or the entry vanishes from a grid filtered to a
     // network the developer happens to be on.
-    networks: walletNetwork() ? [walletNetwork() as RegistryNetwork] : ['preview'],
+    networks: walletNetwork() ? [walletNetwork() as RegistryNetwork] : ['stagenet'],
     // Featured so a developer who has just pointed the build at their own dev
     // server finds it at the top of the grid rather than hunting for it.
     featured: true,

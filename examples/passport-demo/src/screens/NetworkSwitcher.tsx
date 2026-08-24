@@ -1,7 +1,12 @@
 import { Check, ChevronDown, Globe } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import { defaultSelectedNetwork, walletNetwork } from '../lib/networks.js'
+import {
+  defaultSelectedNetwork,
+  networkIsTransactable,
+  networkUnavailableReason,
+  walletNetwork,
+} from '../lib/networks.js'
 import './network-switcher.css'
 
 /**
@@ -18,7 +23,7 @@ import './network-switcher.css'
  * own apps (the raffle, local dev entries) out of the grid.
  */
 
-export type PassportNetwork = 'preview' | 'preprod' | 'mainnet'
+export type PassportNetwork = 'stagenet' | 'preview' | 'preprod' | 'mainnet'
 
 export const DEFAULT_NETWORK: PassportNetwork = defaultSelectedNetwork()
 /** The network the wallet in this build signs on, or null on a devnet build. */
@@ -31,17 +36,23 @@ const LOCALNET_DEMO =
   ((import.meta.env ?? {}) as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1'
 
 export const NETWORK_LABELS: Record<PassportNetwork, string> = {
-  preview: LOCALNET_DEMO ? 'Localnet' : 'Preview',
+  stagenet: LOCALNET_DEMO ? 'Localnet' : 'Stagenet',
+  preview: 'Preview',
   preprod: 'Pre-production',
   mainnet: 'Mainnet',
 }
 
-const NETWORK_ORDER: PassportNetwork[] = ['preview', 'preprod', 'mainnet']
+const NETWORK_ORDER: PassportNetwork[] = ['stagenet', 'preview', 'preprod', 'mainnet']
 
 export function loadStoredNetwork(): PassportNetwork {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'preview' || stored === 'preprod' || stored === 'mainnet') {
+    if (
+      stored === 'stagenet' ||
+      stored === 'preview' ||
+      stored === 'preprod' ||
+      stored === 'mainnet'
+    ) {
       /* A selection persisted by an earlier visit can disagree with the
          network THIS build's wallet signs on — after a redeploy, or across
          builds sharing an origin. Keeping it would filter the build's own
@@ -131,7 +142,16 @@ export default function NetworkSwitcher({ network, onSelect }: NetworkSwitcherPr
               <span className={`mnnet-dot mnnet-dot-${candidate}`} aria-hidden="true" />
               <span className="mnnet-option-copy">
                 <strong>{NETWORK_LABELS[candidate]}</strong>
-                {candidate === WALLET_NETWORK ? <small>Demo wallet lives here</small> : null}
+                {candidate === WALLET_NETWORK ? (
+                  <small>Demo wallet lives here</small>
+                ) : networkIsTransactable(candidate) ? null : (
+                  /* Selecting a network only filters the app list — it never
+                     moves the wallet, which is what the note below says. But
+                     this build's ledger cannot transact on the ledger-8
+                     networks at all, so saying "read-only" here is the
+                     difference between a filter and a promise. */
+                  <small>Read-only from this build</small>
+                )}
               </span>
               {candidate === network ? <Check size={14} aria-hidden="true" /> : null}
             </button>
@@ -141,6 +161,13 @@ export default function NetworkSwitcher({ network, onSelect }: NetworkSwitcherPr
             Switching filters the app list. The demo wallet stays on{' '}
             {WALLET_NETWORK ? NETWORK_LABELS[WALLET_NETWORK] : 'its configured network'}.
           </p>
+          {/* Why the selected network is read-only, in the words networks.ts
+              uses — shown only when it IS read-only, so the common case is
+              unchanged. Without it, "switching filters the app list" reads as
+              though a name could still be claimed over there. */}
+          {networkUnavailableReason(network) ? (
+            <p className="mnnet-note mnnet-note-warning">{networkUnavailableReason(network)}</p>
+          ) : null}
         </div>
       ) : null}
     </div>

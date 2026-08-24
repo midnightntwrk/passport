@@ -99,6 +99,7 @@ import type {
   FeeReadiness,
   LocalMidnightWallet,
   LocalWalletBalances,
+  LocalWalletProvingMode,
   LocalWalletSurfaces,
   SendNightResult,
   SendShieldedResult,
@@ -174,7 +175,7 @@ const signingNetworkLabel = configuredWalletNetwork
  * configured for — see `lib/networks.ts`.
  */
 const MIDNIGHT_INDEXER_URL =
-  import.meta.env.VITE_INDEXER_URL ?? 'https://indexer.preview.midnight.network/api/v4/graphql';
+  import.meta.env.VITE_INDEXER_URL ?? 'https://indexer.stagenet.shielded.tools/api/v4/graphql';
 /**
  * Optional activation funder (`VITE_FUNDER_URL`, see
  * `examples/passport-funder`). When set, Passport asks this self-hosted
@@ -761,7 +762,7 @@ export default function PassportDemo() {
    * right machine without a render-time ref read.
    */
   const [localWalletProvingMode, setLocalWalletProvingMode] = useState<
-    'browser' | 'http' | null
+    LocalWalletProvingMode | null
   >(null);
   /**
    * Whether the OPEN wallet's network is one Passport genuinely registers

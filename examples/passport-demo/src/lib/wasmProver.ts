@@ -14,14 +14,34 @@
 // SRS slices are served from `/zk-params`, byte-identical to the files the
 // proof server downloads and verifies from the public bucket.
 //
-// Selected with `?prover=browser` or `VITE_BROWSER_PROVER=1` (see
-// `./localWallet.ts`). With that flag set, no proof server is contacted
-// anywhere in the stack. If the `/zk-params` tree has not been staged, the
-// fetch below fails with an explicit instruction and that failure reaches the
-// caller unmasked — there is no silent fallback to a remote proof server,
-// because "the proof was computed locally" must never be claimed falsely.
+// Selected with `?prover=browser` or `VITE_BROWSER_PROVER=1`, and now also
+// whenever no proof server is configured — which is the stagenet default,
+// because stagenet publishes none (see `./localWallet.ts`). With this prover in
+// play, no proof server is contacted anywhere in the stack. If the `/zk-params`
+// tree has not been staged, the fetch below fails with an explicit instruction
+// and that failure reaches the caller unmasked — there is no silent fallback to
+// a remote proof server, because "the proof was computed locally" must never be
+// claimed falsely.
+//
+// LEDGER-9: only the `CostModel` import moved (to `@midnightntwrk/ledger-v9`,
+// the hyphenless scope). The key layout below did not, and that is not luck:
+// `SYSTEM_KEYS` already names the version-9 circuits (`zswap/9/spend`,
+// `dust/9/spend`, …) from the same bucket the beta SDK's own
+// `makeDefaultKeyMaterialProvider` reads, so the tree
+// `scripts/fetch-zk-params.mjs` stages is byte-for-byte the one ledger-9 wants.
+//
+// This module — rather than the SDK's `makeWasmProvingService` — is what proves
+// in the browser, and that is a build constraint rather than a preference. The
+// SDK's prover starts its worker with
+// `new Worker(new URL(`../../dist/proof-worker.js`, currentFile))` from inside
+// `node_modules`: a template literal against a variable, which Vite's worker
+// analysis does not rewrite, so the worker's own bare imports (`effect`,
+// `@midnight-ntwrk/zkir-v2`) reach the browser unresolved. The `new
+// Worker(new URL('./proofWorker.ts', import.meta.url), …)` below is the form
+// Vite does rewrite. The SDK's service is used under Node instead, where the
+// same code path works and no staging is needed.
 
-import { CostModel } from '@midnight-ntwrk/ledger-v8';
+import { CostModel } from '@midnightntwrk/ledger-v9';
 import { zkConfigToProvingKeyMaterial } from '@midnight-ntwrk/midnight-js-types';
 
 interface ZkConfigProviderLike {
@@ -207,7 +227,18 @@ function workerProvingProvider(km: KmProvider): any {
 
 // ——— public surface ———
 
-export function wasmProofProvider(zkConfigProvider: ZkConfigProviderLike): any {
+/**
+ * The ledger's circuit-level `{ check, prove }` provider for CONTRACT circuits,
+ * resolving contract keys through the given ZK config provider and the four
+ * system (balancing) circuits from `/zk-params`.
+ *
+ * Returned at this level rather than as a finished `ProofProvider` because
+ * midnight-js 5 ships its own transaction-level adapter, `createProofProvider`,
+ * and going through it means the cost model and the prove/check sequencing are
+ * the library's rather than a second implementation of them here. See
+ * `../identity/contractRuntime.ts`.
+ */
+export function wasmProvingProvider(zkConfigProvider: ZkConfigProviderLike): any {
   const km: KmProvider = {
     lookupKey: async (keyLocation: string) => {
       console.debug(`[wasm-prover] lookupKey: ${keyLocation}`);
@@ -218,15 +249,33 @@ export function wasmProofProvider(zkConfigProvider: ZkConfigProviderLike): any {
     },
     getParams,
   };
-  const provingProvider = workerProvingProvider(km);
+  const inner = workerProvingProvider(km);
+  /* The busy signal belongs here rather than in the worker plumbing: a contract
+     proof is the slow thing a user waits through, and `onProving` is what the
+     UI listens to. */
   return {
-    async proveTx(unprovenTx: any) {
+    check: (preimage: Uint8Array, keyLocation: string) => inner.check(preimage, keyLocation),
+    prove: async (preimage: Uint8Array, keyLocation: string, obi?: bigint) => {
       proveStarted();
       try {
-        return await unprovenTx.prove(provingProvider, CostModel.initialCostModel());
+        return await inner.prove(preimage, keyLocation, obi);
       } finally {
         proveEnded();
       }
+    },
+  };
+}
+
+/**
+ * Transaction-level proving for contract circuits, kept for callers that want
+ * to drive `unprovenTx.prove` themselves. {@link wasmProvingProvider} through
+ * midnight-js's `createProofProvider` is the path the app takes.
+ */
+export function wasmProofProvider(zkConfigProvider: ZkConfigProviderLike): any {
+  const provingProvider = wasmProvingProvider(zkConfigProvider);
+  return {
+    async proveTx(unprovenTx: any) {
+      return unprovenTx.prove(provingProvider, CostModel.initialCostModel());
     },
   };
 }

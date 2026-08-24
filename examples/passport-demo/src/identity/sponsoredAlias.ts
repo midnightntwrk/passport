@@ -22,6 +22,22 @@
  *
  * The service stands in for Midnames-side sponsorship until the Midnames team
  * runs their own; nothing in the protocol is Passport-specific.
+ * WHERE THIS STANDS ON STAGENET (2026/08/24)
+ * ------------------------------------------
+ * Nowhere, and by design rather than by omission. This module is pure
+ * transport — it holds no ledger, no SDK, and no contract — so the move to
+ * ledger-9 changed nothing in it. What changed is the answer it gets:
+ * {@link checkAliasSponsorship} requires the funder's own `/status` to report
+ * the network being claimed on, and the deployed funder reports
+ * `network: "preview"`. On stagenet it therefore returns `false`, every time,
+ * and the caller takes the self-paid path.
+ *
+ * That is the correct behaviour and it needs no gate of its own: the funder
+ * genuinely cannot register a stagenet name — it holds preview NIGHT, on a
+ * preview wallet, against the preview registry. The stagenet balancer at
+ * `/balancer` sponsors FEES and nothing else; it has no `/register-alias` and
+ * does not send NIGHT. So on stagenet a registration's COST is the user's, and
+ * the code already says so rather than hoping.
  */
 
 import type { AliasClaimResult, MidnamesNetwork } from './midnames.js';

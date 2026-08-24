@@ -4,12 +4,24 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import wasm from 'vite-plugin-wasm';
-import topLevelAwait from 'vite-plugin-top-level-await';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceBuffer = path.resolve(__dirname, '..', '..', 'node_modules', 'buffer', 'index.js');
 const custodyRoot = path.resolve(__dirname, '..', '..', 'experiments', 'account-custody-prototype');
-const custodyManagedDir = path.resolve(custodyRoot, 'contracts', 'managed');
+/**
+ * Where `/zk/**` is served from in DEV.
+ *
+ * `public/zk` is already staged by `scripts/prepare-zk-assets.mjs` and Vite
+ * serves it for free, so this middleware exists only to let a developer point
+ * the dev server straight at a freshly built contract tree without re-staging:
+ * set PASSPORT_STAGENET_CONTRACTS and every `/zk/<contract>/…` request is read
+ * from there instead. Unset, it resolves to the same stagenet build the
+ * staging script copies from, so dev and a production build serve identical
+ * bytes.
+ */
+const stagenetManagedDir =
+  process.env.PASSPORT_STAGENET_CONTRACTS?.trim() ||
+  path.resolve(__dirname, '..', 'passport-balancer', 'contracts-stagenet', 'managed');
 
 function serveLocalCustodyAssets(): Plugin {
   return {
@@ -18,10 +30,10 @@ function serveLocalCustodyAssets(): Plugin {
       server.middlewares.use('/zk', (request, response, next) => {
         const relativePath = decodeURIComponent((request.url ?? '').split('?')[0])
           .replace(/^\/+/, '');
-        const filePath = path.resolve(custodyManagedDir, relativePath);
+        const filePath = path.resolve(stagenetManagedDir, relativePath);
         if (
-          filePath !== custodyManagedDir &&
-          !filePath.startsWith(`${custodyManagedDir}${path.sep}`)
+          filePath !== stagenetManagedDir &&
+          !filePath.startsWith(`${stagenetManagedDir}${path.sep}`)
         ) {
           return next();
         }
@@ -79,13 +91,23 @@ export default defineConfig({
         replacement: path.resolve(custodyRoot, 'app', 'src', 'lib', 'ws-shim.ts'),
       },
     ],
+    /* One module record per package, whatever the import path.
+       This is not tidiness. Two copies of `compact-runtime` are two
+       `ChargedState` classes and a decode that fails `instanceof` on correct
+       objects; two copies of the ledger are two WASM instances and every
+       transaction that crosses between them is rejected. The repository root
+       still carries the LEDGER-8 stack for `examples/passport-funder`, so the
+       ledger-9 names below are the ones that must collapse onto this
+       workspace's copies. */
     dedupe: [
       '@midnight-ntwrk/compact-js',
       '@midnight-ntwrk/compact-runtime',
-      '@midnight-ntwrk/ledger-v8',
-      '@midnight-ntwrk/onchain-runtime-v3',
+      '@midnightntwrk/ledger-v9',
+      '@midnightntwrk/onchain-runtime-v4',
       '@midnight-ntwrk/midnight-js-contracts',
       '@midnight-ntwrk/midnight-js-network-id',
+      '@midnight-ntwrk/midnight-js-types',
+      '@midnight-ntwrk/wallet-sdk',
       'rxjs',
     ],
   },
@@ -112,20 +134,32 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    // WASM-carrying packages: pre-bundling them rewrites the `new URL(…,
+    // import.meta.url)` their loaders use to find their `.wasm`, and the
+    // module then fails to instantiate.
     exclude: [
-      '@midnight-ntwrk/ledger-v8',
-      '@midnight-ntwrk/onchain-runtime-v3',
+      '@midnightntwrk/ledger-v9',
+      '@midnightntwrk/onchain-runtime-v4',
       '@midnight-ntwrk/compact-runtime',
-      '@midnight-ntwrk/zswap',
       '@midnight-ntwrk/zkir-v2',
     ],
     // Compact's browser runtime imports this CommonJS dependency through an
     // ESM default import, so it must be explicitly pre-bundled in dev mode.
     include: ['object-inspect'],
   },
+  // `topLevelAwait()` is now absent from the WORKER graph too, and for a
+  // second, unrelated reason to the one recorded above for the main graph.
+  //
+  // Its build transform runs the chunk through SWC, and on the ledger-9 proof
+  // worker that throws `missing field \`type\`` inside `Compiler.printSync` —
+  // the plugin's pinned SWC cannot re-print the syntax the worker's module
+  // graph now contains. The plugin was never needed here: it only exists to
+  // serve browsers without native top-level await, `build.target` below is
+  // `esnext`, and any browser that can instantiate a 9 MB ledger WASM module
+  // in a module worker has had top-level await for years.
   worker: {
     format: 'es',
-    plugins: () => [wasm(), topLevelAwait()],
+    plugins: () => [wasm()],
   },
   build: {
     target: 'esnext',

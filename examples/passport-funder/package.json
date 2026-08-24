@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@midnight-ntwrk/compact-js": "2.5.0",
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
     "@midnight-ntwrk/ledger-v8": "8.0.3",
     "@midnight-ntwrk/midnight-js-contracts": "4.0.4",
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "4.0.4",
@@ -27,9 +28,17 @@
     "rxjs": "^7.8.2",
     "ws": "^8.19.0"
   },
-  "overrides": {
-    "@midnight-ntwrk/compact-runtime": "0.16.0"
-  },
+  "//compact-runtime": [
+    "0.16.0 is what the ledger-8 Midnames build this service bundles demands:",
+    "its `checkRuntimeVersion('0.16.0')` is a hard failure on anything else.",
+    "It used to be expressed as an `overrides` block here, which npm ignores in",
+    "a workspace package — it only reads the root's. It happened to resolve",
+    "correctly anyway, because the demo asked for 0.16.0 too and npm hoisted it.",
+    "The demo has since moved to ledger-9, so the hoisted copy is 0.18.0-rc.1",
+    "and this service needs its own. Declaring it as a real dependency is what",
+    "makes that happen; the inert `overrides` block has been dropped rather than",
+    "left to look as though it were doing the work."
+  ],
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",

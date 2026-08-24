@@ -19,9 +19,23 @@ Open `http://localhost:5175`. The port is pinned in the source, not in
 configuration: Passport frames apps by URL, and a handshake against a moving
 origin fails silently. Do not substitute `127.0.0.1`.
 
-Copy `.env.example` to `.env.local` to point the build at a different network,
-indexer, proof server, or sponsor. Every entry is optional — the defaults run
-against Preview. The file is local-only and ignored by Git.
+Copy `.env.example` to `.env.local` to point the build at a different indexer,
+proof server, or sponsor. Every entry is optional — the defaults run against
+**stagenet**. The file is local-only and ignored by Git.
+
+The contracts' ZK artefacts are staged by `npm run prepare:zk`, which `dev` and
+`build` both run: it copies `compiler/`, `keys/`, and `zkir/` into `public/zk`
+from the stagenet contract build in
+`examples/passport-balancer/contracts-stagenet`, and the compiled contract
+modules into `contracts/stagenet/`. Nothing is compiled here — the artefacts
+this app ships are byte-identical to the ones the harness deployed with, which
+is what lets `findDeployedContract` accept them.
+
+Stagenet publishes no proof server, so by default every circuit — the wallet's
+own balancing legs and the contracts' — is proved in this tab by the zkir-v2
+worker, which needs `node scripts/fetch-zk-params.mjs` run once. Set
+`VITE_MIDNIGHT_PROVING_URL` to use a server instead; the matching image is
+`midnightntwrk/proof-server:9.0.0-rc.6`.
 
 Validate the installable production build, manifest, icon set, service-worker
 registration source, and offline network boundary:
@@ -87,11 +101,26 @@ implements it yet.
 
 ## Validation boundary
 
-- Mainnet is hard-blocked in code. This pilot stays on Preview until the
-  artifact, fee model, recovery design, and operational review are approved.
-- Preprod is reachable and configured but not usable: a cold wallet cannot walk
-  its ~1.98M blocks in a browser tab. A depth guard in `src/lib/localWallet.ts`
-  refuses a from-genesis walk above 500k blocks with an honest error instead of
-  starting one and killing the tab. The measurements are in `.env.example`.
+- **Stagenet is the only network this build can transact on**, and that is a
+  fact about the binary rather than a policy. Since 2026/08/24 the app is built
+  on `@midnightntwrk/ledger-v9` and midnight-js 5, because the ledger-8 stack
+  cannot sync stagenet at all. Preview and Pre-production run the ledger-8
+  protocol; a ledger-9 module cannot decode their transactions. They remain
+  READABLE — an already-claimed name still resolves, its transactions still
+  link — and `src/lib/networks.ts` says exactly that through
+  `networkUnavailableReason()` rather than offering a switch that would not
+  work.
+- Mainnet is hard-blocked in code, and was before the move: a registration is a
+  paid transaction, and a wallet whose seed comes from a browser passkey has no
+  business spending real NIGHT.
+- A cold wallet still walks the chain from genesis. Stagenet was ~158k blocks
+  deep on 2026/08/24 and a fresh wallet synced in well under a minute, so the
+  depth guard in `src/lib/localWallet.ts` — which refuses a from-genesis walk
+  above 1M blocks rather than starting one that kills the tab — does not fire
+  there. The measurements that motivated it are in `.env.example`.
+- Sponsorship covers FEES, never the registration COST. `register_domain_for`
+  runs `receiveUnshielded(COIN_COLOR, COST)`, so a `.night` claim needs the
+  user's own NIGHT (600/140/10 atomic, by label length) from the stagenet
+  faucet, which is captcha-gated by design.
 - Nothing on screen is simulated. A balance, a transaction hash, or a resolved
   name is either read from the chain or absent — never substituted.
