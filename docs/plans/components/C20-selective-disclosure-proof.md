@@ -59,3 +59,9 @@ interop.**
   ([midnight-agent-did-manager](https://github.com/mzf11125/midnight-agent-did-manager),
   `contracts/did_registry.compact`); see
   [research/agent-did-registry.md](../../../research/agent-did-registry.md).
+- **External prior art.** Selective disclosure of a *threshold* rather than
+  a value is realised by [Kredz](https://github.com/zkos-labs/kredz)
+  (`kredz_score_profile.compact`): `prove_tier` returns only the tier and
+  `prove_score_hash` returns only a boolean match, never the exact score;
+  see
+  [research/kredz-credit-credentials.md](../../../research/kredz-credit-credentials.md).

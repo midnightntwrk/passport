@@ -59,3 +59,9 @@ intended for issuer A's schema is accepted under issuer B's.
   `contracts/did_registry.compact`): `issue_did` is gated on an on-chain
   issuer key, and request/issue state is stored as commitments; see
   [research/agent-did-registry.md](../../../research/agent-did-registry.md).
+- **External prior art.** A single-attestor credential is realised by
+  [Kredz](https://github.com/zkos-labs/kredz)
+  (`kredz_score_profile.compact`): `attest_score` is gated on a
+  witness-derived attestor key, and the score is stored only as a
+  `persistentHash(score, salt)` commitment; see
+  [research/kredz-credit-credentials.md](../../../research/kredz-credit-credentials.md).
