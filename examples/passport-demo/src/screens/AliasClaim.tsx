@@ -423,9 +423,12 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
             )}
             {primaryLabel}
           </button>
-          <button type="button" className="mnid-secondary" onClick={onSkip} disabled={busy}>
-            Choose a name later
-          </button>
+          {/* No skip. The name step IS the account ceremony — the custody
+              contract deploys and the name binds to it inside this one action,
+              and Home without an account is not a state onboarding may end in
+              (ruled 2026/08/24 after exactly that was seen live). `onSkip`
+              remains for the HOST's escape hatches (network unsupported), not
+              as a user choice on this screen. */}
         </div>
 
         <p className="mnid-foot">

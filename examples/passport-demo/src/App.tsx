@@ -3035,7 +3035,12 @@ export default function PassportDemo() {
     if (!identityStepArmed.current) return;
     identityStepArmed.current = false;
     if (loadAliasRecords()[selectedNetwork]) return;
-    if (storedNameStep(profile.passkey.credentialId)) return;
+    /* Only a DONE resolution suppresses the step. 'skipped' deliberately does
+       not any more: a skip used to be remembered per credential forever, so a
+       passkey that skipped once landed on Home with no name and no account on
+       every subsequent sign-in — seen live 2026/08/24. A stored skip now means
+       "ask again", and the screen itself no longer offers one. */
+    if (storedNameStep(profile.passkey.credentialId) === 'done') return;
     setIdentityStep('alias');
   }, [localSurfaces, localWalletStatus, profile, selectedNetwork]);
 
