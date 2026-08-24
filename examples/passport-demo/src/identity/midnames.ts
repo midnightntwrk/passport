@@ -13,27 +13,29 @@
  *      pays COST in unshielded NIGHT to the TLD owner and asserts the name is
  *      still free.
  *
- * This is a straight port of the Node integration proved in
- * `experiments/account-custody-prototype/src/integrations/midnames/preview.ts`
- * with three browser-shaped differences:
+ * This is a browser port of the Node integration first proved against preview,
+ * with two browser-shaped differences that survive every stack change:
  *
  *   - `node:crypto` is replaced with `crypto.subtle.digest` for the owner-key
  *     hash, so `deriveMidnamesOwnerKey` is async here;
  *   - `node:fs` asset discovery is replaced with the URL form of
- *     `CompiledContract.withCompiledFileAssets`, pointed at `/zk/midnames`
- *     (served in dev by the Vite middleware in `vite.config.ts`, and staged
- *     into `public/zk/midnames` for a production build by
- *     `scripts/prepare-midnames-assets.mjs`);
- *   - the TLD is not ours to deploy. It already exists on all three networks,
- *     so the register call goes through `findDeployedContract`.
+ *     `CompiledContract.withCompiledFileAssets`, pointed at `/zk/midnames` and
+ *     staged into `public/zk/midnames` by `scripts/prepare-zk-assets.mjs`.
  *
- * Verified live on 2026/08/05 against the deployed preview TLD: every one of
- * the eleven verifier keys in our pinned build (Midnames rev 83f8422b, compact
- * 0.31.1) is byte-identical to the key in the deployed contract state, so
- * `findDeployedContract` accepts it and `register_domain_for` is callable.
- * Re-verified against the PREPROD TLD on 2026/08/06, when the demo moved
- * there: its ledger decodes with the same pinned build (45 domains already
- * registered, `BUY_ENABLED = true`, identical COST_SHORT/MED/LONG). If
+ * ON STAGENET, THE TLD IS OURS (2026/08/24)
+ * -----------------------------------------
+ * On preview and pre-production the `.night` TLD was somebody else's, already
+ * deployed, and the register call simply went through `findDeployedContract`.
+ * The Midnames project publishes no stagenet registry, so ours was deployed
+ * there with the preview registry's own parameters — see
+ * {@link MIDNAMES_TLD_ADDRESSES}. Nothing in the claim path changes as a
+ * result: `findDeployedContract` is still how the register call reaches it,
+ * and the leaf is still ours to deploy per name.
+ *
+ * The verifier-key agreement that makes `findDeployedContract` work is now
+ * structural rather than a coincidence to re-verify: this app and the harness
+ * that deployed the TLD ship the SAME artefacts, from
+ * `examples/passport-balancer/contracts-stagenet` (compactc 0.33.0-rc.2). If
  * that ever stops being true the mismatch surfaces as a real failure
  * (`register-rejected`) and the UI queues the name — it is never papered over.
  *
@@ -44,14 +46,8 @@
  * which needs no ambient network id at all.
  */
 
-import {
-  nativeToken,
-  Transaction,
-  type Binding,
-  type Proof,
-  type SignatureEnabled,
-} from '@midnight-ntwrk/ledger-v8';
-import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
+import { nativeToken } from '@midnightntwrk/ledger-v9';
+import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk/address-format';
 import * as Rx from 'rxjs';
 
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
@@ -60,34 +56,59 @@ import {
   aliasRegistrationSupported,
   faucetAvailable,
 } from '../lib/networks.js';
+import { sponsorReadiness } from '../lib/sponsor.js';
 import {
-  sponsorBalanceOnly,
-  sponsorHexToBytes,
-  sponsorReadiness,
-  BALANCE_WITHOUT_DUST,
-} from '../lib/sponsor.js';
+  bytesToHex,
+  contractAddressBytes,
+  createContractProviders,
+  compiledContractFor,
+  feeWitness,
+  hexToBytes,
+  indexerWsFrom,
+  loadContractModule,
+  nativeColourBytes,
+  rawContractAddress,
+  resolveTransactionHash,
+  transactionId,
+  wait,
+} from './contractRuntime.js';
+
+/** Re-exported: every caller that stores an address normalises through this. */
+export { rawContractAddress };
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
 /* -------------------------------------------------------------------------- */
 
-export type MidnamesNetwork = 'preview' | 'preprod' | 'mainnet';
+export type MidnamesNetwork = 'stagenet' | 'preview' | 'preprod' | 'mainnet';
 
 /** The `.night` top-level domain. Every Passport alias is a label under it. */
 export const MIDNAMES_TLD = 'night';
 
 /**
- * Production Midnames TLD addresses, as shipped by the Midnames SDK's own
- * `NETWORK_REGISTRY`. All three were probed live on 2026/08/05: each decodes
- * with our pinned contract build, each reports `BUY_ENABLED = true`, and each
- * charges 600 / 140 / 10 atomic NIGHT for a name of ≤3 / 4 / ≥5 bytes.
+ * Midnames TLD addresses, by network.
+ *
+ * Preview, Pre-production, and mainnet are the production registries shipped by
+ * the Midnames SDK's own `NETWORK_REGISTRY`, probed live on 2026/08/05. They
+ * remain here so an already-claimed name on one of them can still be READ back
+ * and shown; this build cannot register on them, because its ledger cannot
+ * speak their protocol (see `../lib/networks.ts`).
+ *
+ * Stagenet is OURS. The Midnames project publishes no stagenet registry, so the
+ * `.night` TLD was deployed on 2026/08/24 by the stagenet deployment harness
+ * with the preview registry's own parameters read off chain the same day —
+ * `DOMAIN` "night", `COST` 600 / 140 / 10, `BUY_ENABLED` true, no parent — and
+ * only the two fields that MUST differ changed: the owner key, and the address
+ * `COST` is paid to. It is at block 157797, transaction
+ * 49e4c2398a92760a15afbc7d6a89945160c472d85263e339a543bdd81a66e710.
  */
 const TLD_OVERRIDE = (import.meta.env ?? {}).VITE_MIDNAMES_TLD_ADDRESS?.trim();
 
 export const MIDNAMES_TLD_ADDRESSES: Record<MidnamesNetwork, string> = {
   /* Demo override: a locally deployed TLD (devnet) can stand in for the
-     Preview registry — env-gated, unset in every public build. */
-  preview: TLD_OVERRIDE || 'e2655a6d554d5d3ceb03dfbee517ad4186d6c287c5e638a29258320dde3e0ba7',
+     stagenet registry — env-gated, unset in every public build. */
+  stagenet: TLD_OVERRIDE || '29be1e64846cff4600c5297fa54b27d4c9296b3ccc2cdba190eaba1d64c5f116',
+  preview: 'e2655a6d554d5d3ceb03dfbee517ad4186d6c287c5e638a29258320dde3e0ba7',
   preprod: '43b500cadaa57d174d82cd6fd596002e33e3e680d7cf8bd7ba3383f62ceb0749',
   mainnet: '0167c9ad2f166e717dd7b4a72606bf5cbba2fd462d5e1ca95e2d0452af288638',
 };
@@ -99,11 +120,12 @@ export const MIDNAMES_TLD_ADDRESSES: Record<MidnamesNetwork, string> = {
  */
 export const MIDNAMES_INDEXER_URLS: Record<MidnamesNetwork, string> = {
   /* When the TLD override is active, registry reads go to the wallet's own
-     configured indexer (the local one) instead of the public Preview host. */
-  preview: TLD_OVERRIDE
+     configured indexer (the local one) instead of the public stagenet host. */
+  stagenet: TLD_OVERRIDE
     ? ((import.meta.env ?? {}).VITE_INDEXER_URL ??
-       'https://indexer.preview.midnight.network/api/v4/graphql')
-    : 'https://indexer.preview.midnight.network/api/v4/graphql',
+       'https://indexer.stagenet.shielded.tools/api/v4/graphql')
+    : 'https://indexer.stagenet.shielded.tools/api/v4/graphql',
+  preview: 'https://indexer.preview.midnight.network/api/v4/graphql',
   preprod: 'https://indexer.preprod.midnight.network/api/v4/graphql',
   mainnet: 'https://indexer.mainnet.midnight.network/api/v4/graphql',
 };
@@ -142,22 +164,6 @@ const REGISTRY_CACHE_MS = 8_000;
 /* Small helpers                                                              */
 /* -------------------------------------------------------------------------- */
 
-function bytesToHex(value: Uint8Array): string {
-  let hex = '';
-  for (const byte of value) hex += byte.toString(16).padStart(2, '0');
-  return hex;
-}
-
-function hexToBytes(value: string): Uint8Array {
-  const normalized = value.replace(/^0x/, '');
-  if (normalized.length % 2 !== 0) throw new Error(`Odd-length hex string: ${value}`);
-  const bytes = new Uint8Array(normalized.length / 2);
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = Number.parseInt(normalized.slice(index * 2, index * 2 + 2), 16);
-  }
-  return bytes;
-}
-
 /** Formats atomic NIGHT on the same human scale the wallet surfaces use. */
 export function formatNight(atomic: bigint): string {
   const negative = atomic < 0n;
@@ -170,18 +176,6 @@ export function formatNight(atomic: bigint): string {
 /** `alice` → `alice.night`. */
 export function aliasDomain(alias: string): string {
   return `${alias}.${MIDNAMES_TLD}`;
-}
-
-export function rawContractAddress(value: string): string {
-  const normalized = value.trim().toLowerCase().replace(/^0x/, '').replace(/^0200/, '');
-  if (!/^[0-9a-f]{64}$/.test(normalized)) {
-    throw new Error(`Invalid Midnight contract address: ${value}`);
-  }
-  return normalized;
-}
-
-function contractAddressBytes(value: string): Uint8Array {
-  return hexToBytes(rawContractAddress(value));
 }
 
 /**
@@ -212,13 +206,6 @@ export async function deriveMidnamesOwnerKey(secret: Uint8Array): Promise<Uint8A
   const digest = await crypto.subtle.digest('SHA-256', payload as BufferSource);
   return new Uint8Array(digest);
 }
-
-function indexerWsFrom(indexerHttpUrl: string): string {
-  return `${indexerHttpUrl.replace(/\/+$/, '').replace(/^http/, 'ws')}/ws`;
-}
-
-const wait = (milliseconds: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 /* -------------------------------------------------------------------------- */
 /* Alias normalisation                                                        */
@@ -264,9 +251,11 @@ export function aliasCostAtomicNight(alias: string): bigint {
 /* -------------------------------------------------------------------------- */
 
 /**
- * The compiled leaf contract, imported straight from the prototype's managed
- * output so there is one build of it in this repository rather than a copy
- * that can drift. `src/localC1.ts` reaches across the same way.
+ * The compiled leaf contract, staged from the stagenet build by
+ * `scripts/prepare-zk-assets.mjs` so there is one build of it in this
+ * repository rather than a copy that can drift. See `./contractRuntime.ts` for
+ * why it is staged inside this workspace rather than imported from where it was
+ * built.
  */
 type MidnamesModule = {
   Contract: new (witnesses: unknown) => unknown;
@@ -303,32 +292,8 @@ export interface MidnamesLedger {
   };
 }
 
-let midnamesModule: Promise<MidnamesModule> | undefined;
-
 async function loadMidnames(): Promise<MidnamesModule> {
-  midnamesModule ??= import(
-    /* @vite-ignore */
-    '../../../../experiments/account-custody-prototype/contracts/managed/midnames/contract/index.js'
-  ) as Promise<MidnamesModule>;
-  return midnamesModule;
-}
-
-/** Where the browser fetches the leaf's prover keys, verifier keys, and ZKIR. */
-function midnamesAssetBase(): string {
-  /* The PWA serves the staged artefacts from its own origin. A Node harness
-     has no window — and must NOT fake one: a partial window stub flips the
-     wasm runtime's environment sniffing into browser paths and circuit
-     execution dies in an `unreachable` trap. Harnesses name their static
-     server with PASSPORT_ZK_ORIGIN, exactly as `./passportContract.ts` does. */
-  if (typeof window !== 'undefined') return `${window.location.origin}/zk/midnames`;
-  const harnessOrigin =
-    typeof process !== 'undefined' ? process.env.PASSPORT_ZK_ORIGIN : undefined;
-  if (!harnessOrigin) {
-    throw new Error(
-      'No origin to load Midnames artefacts from: neither window nor PASSPORT_ZK_ORIGIN.',
-    );
-  }
-  return `${harnessOrigin}/zk/midnames`;
+  return (await loadContractModule('midnames')) as unknown as MidnamesModule;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -366,7 +331,10 @@ async function readRegistry(
   );
   const { ledger } = await loadMidnames();
   const httpUrl = MIDNAMES_INDEXER_URLS[network];
-  const provider = indexerPublicDataProvider(httpUrl, indexerWsFrom(httpUrl));
+  const provider = indexerPublicDataProvider({
+    queryURL: httpUrl,
+    subscriptionURL: indexerWsFrom(httpUrl),
+  });
   const address = MIDNAMES_TLD_ADDRESSES[network];
   const state = await provider.queryContractState(address);
   if (!state) {
@@ -454,7 +422,10 @@ export async function resolveAliasTarget(
   );
   const { ledger } = await loadMidnames();
   const httpUrl = MIDNAMES_INDEXER_URLS[network];
-  const provider = indexerPublicDataProvider(httpUrl, indexerWsFrom(httpUrl));
+  const provider = indexerPublicDataProvider({
+    queryURL: httpUrl,
+    subscriptionURL: indexerWsFrom(httpUrl),
+  });
   const state = await provider.queryContractState(availability.resolverAddress);
   if (!state) return null;
   const leaf = ledger((state as { data: unknown }).data);
@@ -574,46 +545,17 @@ function unshieldedAddressBytes(wallet: LocalMidnightWallet): Uint8Array {
   return bytes;
 }
 
-function transactionId(result: unknown): string {
-  const view = result as { public?: { txId?: unknown; transactionHash?: unknown } };
-  const value = view?.public?.txId ?? view?.public?.transactionHash;
-  if (!value) throw new Error('The Midnames call returned without a transaction id.');
-  return String(value);
-}
-
 /**
- * The ids midnight-js reports are transaction *identifiers* (33 bytes, 66 hex
- * chars), not the 32-byte block-level hashes explorers resolve — a link built
- * from an identifier dies with "not found" (seen live on preview 2026/08/07:
- * identifier 00b819…, actual hash ea39f2…, block 312113). The indexer maps one
- * to the other via `transactions(offset: { identifier })`. The transaction is
- * already finalized when this runs, so the retries only cover indexer lag; if
- * every attempt fails the identifier is returned unchanged, which is exactly
- * the pre-resolution behaviour.
+ * The registry's own indexer, which is the one that can map this network's
+ * transaction identifiers to ledger hashes. See
+ * `./contractRuntime.ts#resolveTransactionHash` for why the mapping is needed
+ * at all.
  */
-async function resolveTransactionHash(
+async function resolveRegistryTxHash(
   network: MidnamesNetwork,
   identifier: string,
 ): Promise<string> {
-  const query = `{ transactions(offset: { identifier: "${identifier}" }) { hash } }`;
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      const response = await fetch(MIDNAMES_INDEXER_URLS[network], {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ query }),
-      });
-      const body = (await response.json()) as {
-        data?: { transactions?: Array<{ hash?: string }> };
-      };
-      const hash = body.data?.transactions?.[0]?.hash;
-      if (hash) return hash;
-    } catch {
-      // Transient network or parse failure — retried below.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
-  }
-  return identifier;
+  return resolveTransactionHash(MIDNAMES_INDEXER_URLS[network], identifier);
 }
 
 function maybeBytes(value?: Uint8Array): { is_some: boolean; value: Uint8Array } {
@@ -628,51 +570,7 @@ function emptyKvs() {
   return Array.from({ length: 10 }, () => ({ is_some: false, value: ['', ''] as [string, string] }));
 }
 
-function nativeColourBytes(): Uint8Array {
-  return hexToBytes(String(nativeToken().raw));
-}
-
-/** Session-lifetime private-state store, mirroring the custody prototype. */
-function inMemoryPrivateStateProvider(initial: Record<string, unknown>) {
-  const states = new Map<string, unknown>(Object.entries(initial));
-  const signingKeys = new Map<string, unknown>();
-  return {
-    setContractAddress() {},
-    async set(id: string, state: unknown) {
-      states.set(id, state);
-    },
-    async get(id: string) {
-      return states.has(id) ? states.get(id) : null;
-    },
-    async remove(id: string) {
-      states.delete(id);
-    },
-    async clear() {
-      states.clear();
-    },
-    async setSigningKey(address: string, key: unknown) {
-      signingKeys.set(address, key);
-    },
-    async getSigningKey(address: string) {
-      return signingKeys.get(address) ?? null;
-    },
-    async removeSigningKey(address: string) {
-      signingKeys.delete(address);
-    },
-    async clearSigningKeys() {
-      signingKeys.clear();
-    },
-    async exportPrivateStates(): Promise<never> {
-      throw new Error('Private-state export is not supported by the Passport demo.');
-    },
-  };
-}
-
 interface WalletFacadeState {
-  shielded: {
-    coinPublicKey: { toHexString(): string };
-    encryptionPublicKey: { toHexString(): string };
-  };
   unshielded: { balances: Record<string, bigint> };
   dust: { balance(now: Date): bigint };
 }
@@ -687,145 +585,44 @@ async function currentWalletState(wallet: LocalMidnightWallet): Promise<WalletFa
 }
 
 /**
- * Providers for the Midnames circuits, wired exactly like the custody
- * prototype's `createProviders`: the wallet balances, signs, finalises, and
- * submits; the HTTP proof server proves.
+ * Providers for the Midnames circuits.
+ *
+ * Both claim transactions go through one wallet provider — the resolver
+ * `deployContract` and the paid `register_domain_for` call — so sponsoring that
+ * one function sponsors the whole registration. Its sponsored and unsponsored
+ * balancing paths, and the rule that a covered fee is only ever reported once
+ * the service has actually answered, live in `./contractRuntime.ts`.
+ *
+ * The NIGHT the user pays the registry owner is untouched either way: the
+ * sponsor adds a DUST fee input and nothing else, so `COST` still comes out of
+ * the caller's own unshielded balance, and the user still signs.
  */
 async function createMidnamesProviders(
   wallet: LocalMidnightWallet,
   ownerSecretHex: string,
   privateStateId: string,
+  witness: ReturnType<typeof feeWitness>,
 ) {
-  const [
-    { indexerPublicDataProvider },
-    { FetchZkConfigProvider },
-    { httpClientProofProvider },
-  ] = await Promise.all([
-    import('@midnight-ntwrk/midnight-js-indexer-public-data-provider'),
-    import('@midnight-ntwrk/midnight-js-fetch-zk-config-provider'),
-    import('@midnight-ntwrk/midnight-js-http-client-proof-provider'),
-  ]);
-
-  const state = await currentWalletState(wallet);
-  const facade = wallet.facade as unknown as {
-    balanceUnboundTransaction(
-      tx: unknown,
-      keys: unknown,
-      options: { ttl: Date; tokenKindsToBalance?: readonly string[] },
-    ): Promise<unknown>;
-    signRecipe(recipe: unknown, sign: (data: Uint8Array) => unknown): Promise<unknown>;
-    finalizeRecipe(signed: unknown): Promise<{ serialize(): Uint8Array }>;
-    submitTransaction(tx: unknown): Promise<unknown>;
-    revert(recipe: unknown): Promise<unknown>;
-  };
-
-  /**
-   * Both claim transactions go through here — the resolver `deployContract`
-   * and the paid `register_domain_for` call — so sponsoring this one function
-   * sponsors the whole registration.
-   *
-   * The sponsored branch balances every token kind EXCEPT dust, proves locally,
-   * and asks the service for the fee input. The unsponsored branch is exactly
-   * the code that shipped before sponsorship existed, unchanged. The NIGHT the
-   * user pays the registry owner is untouched either way — only the fee
-   * disappears, and the user still signs.
-   */
-  const balanceLocally = async (tx: unknown, ttl: Date) => {
-    const recipe = await facade.balanceUnboundTransaction(tx, wallet.keys, { ttl });
-    const signed = await facade.signRecipe(recipe, (data: Uint8Array) =>
-      wallet.keys.unshieldedKeystore.signData(data),
-    );
-    return facade.finalizeRecipe(signed);
-  };
-
-  const balanceWithSponsor = async (tx: unknown, ttl: Date): Promise<unknown | null> => {
-    let recipe: unknown;
-    try {
-      recipe = await facade.balanceUnboundTransaction(tx, wallet.keys, {
-        ttl,
-        tokenKindsToBalance: BALANCE_WITHOUT_DUST,
-      });
-      const signed = await facade.signRecipe(recipe, (data: Uint8Array) =>
-        wallet.keys.unshieldedKeystore.signData(data),
-      );
-      const finalized = await facade.finalizeRecipe(signed);
-      const balanced = await sponsorBalanceOnly(finalized.serialize());
-      return Transaction.deserialize<SignatureEnabled, Proof, Binding>(
-        'signature',
-        'proof',
-        'binding',
-        sponsorHexToBytes(balanced.txBytes),
-      );
-    } catch (cause) {
-      console.warn(
-        '[midnames] the sponsored balancing failed; falling back to this wallet’s own DUST',
-        cause,
-      );
-      if (recipe !== undefined) {
-        try {
-          await facade.revert(recipe);
-        } catch (revertCause) {
-          console.debug('[midnames] could not revert an abandoned balancing recipe', revertCause);
-        }
-      }
-      return null;
-    }
-  };
-
-  const walletProvider = {
-    getCoinPublicKey: () => state.shielded.coinPublicKey.toHexString(),
-    getEncryptionPublicKey: () => state.shielded.encryptionPublicKey.toHexString(),
-    async balanceTx(tx: unknown, ttl?: Date) {
-      const deadline = ttl ?? new Date(Date.now() + 30 * 60 * 1_000);
-      if ((await sponsorReadiness()).state === 'ready') {
-        const sponsored = await balanceWithSponsor(tx, deadline);
-        if (sponsored !== null) return sponsored;
-      }
-      return balanceLocally(tx, deadline);
-    },
-    submitTx: (tx: unknown) => facade.submitTransaction(tx),
-  };
-
-  const zkConfigProvider = new FetchZkConfigProvider(
-    midnamesAssetBase(),
-    /* `globalThis`, not `window`: the identical call has to work under the
-       Node drill harness, which deliberately has no window. */
-    globalThis.fetch.bind(globalThis),
-  );
-
-  return {
-    privateStateProvider: inMemoryPrivateStateProvider({
-      [privateStateId]: { secretKey: ownerSecretHex },
-    }),
-    publicDataProvider: indexerPublicDataProvider(
-      wallet.network.indexerHttpUrl,
-      wallet.network.indexerWsUrl,
-    ),
-    zkConfigProvider,
-    proofProvider: httpClientProofProvider(
-      wallet.network.provingServerUrl,
-      zkConfigProvider as never,
-    ),
-    walletProvider,
-    midnightProvider: walletProvider,
-  };
+  return createContractProviders(wallet, {
+    contract: 'midnames',
+    privateStateId,
+    initialPrivateState: { secretKey: ownerSecretHex },
+    witness,
+  });
 }
 
 async function compiledLeafContract(ownerSecretHex: string) {
-  const [{ CompiledContract }, { Contract }] = await Promise.all([
-    import('@midnight-ntwrk/compact-js'),
-    loadMidnames(),
-  ]);
+  /* The leaf's one witness. It reads the secret out of the private state rather
+     than closing over `ownerSecretHex`, so the proof is always over the key the
+     provider is actually holding for this claim; the argument is the fall-back
+     for a private state that arrived without one. */
   const witnesses = {
     secretKey: ({ privateState }: { privateState: { secretKey: string } }) => [
       privateState,
       hexToBytes(privateState.secretKey ?? ownerSecretHex),
     ],
   };
-  return CompiledContract.make('passport-midnames-leaf', Contract as never).pipe(
-    CompiledContract.withWitnesses(witnesses as never),
-    CompiledContract.withCompiledFileAssets(midnamesAssetBase()),
-  );
+  return compiledContractFor('midnames', 'passport-midnames-leaf', witnesses);
 }
 
 /**
@@ -905,7 +702,6 @@ export async function claimAlias(
      public build; with the flag unset this branch is dead code and the real
      two-transaction registration below runs unchanged. */
   if (((import.meta.env ?? {}) as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1') {
-    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
     const fakeId = () =>
       [...crypto.getRandomValues(new Uint8Array(32))]
         .map((b) => b.toString(16).padStart(2, '0'))
@@ -921,8 +717,8 @@ export async function claimAlias(
       domain: `${label}.night`,
       /* Filed under the UI's selected network key so the identity card —
          which reads records for that key — sees the registered state. */
-      network: 'preview',
-      tldAddress: MIDNAMES_TLD_ADDRESSES.preview,
+      network: 'stagenet',
+      tldAddress: MIDNAMES_TLD_ADDRESSES.stagenet,
       resolverAddress: fakeId(),
       resolverDeployTxId: fakeId(),
       registerTxId: fakeId(),
@@ -986,8 +782,9 @@ export async function claimAlias(
   const ownerSecretHex = bytesToHex(ownerSecret);
   const ownerKey = await deriveMidnamesOwnerKey(ownerSecret);
   const privateStateId = `passport-midnames-${label}`;
+  const witness = feeWitness();
   const [providers, compiledContract, { AddressType }] = await Promise.all([
-    createMidnamesProviders(wallet, ownerSecretHex, privateStateId),
+    createMidnamesProviders(wallet, ownerSecretHex, privateStateId, witness),
     compiledLeafContract(ownerSecretHex),
     loadMidnames(),
   ]);
@@ -1077,8 +874,8 @@ export async function claimAlias(
   // Swap both identifiers for the block-level hashes explorers resolve; the
   // identifier survives only if the indexer never answers.
   [resolverDeployTxId, registerTxId] = await Promise.all([
-    resolveTransactionHash(network, resolverDeployTxId),
-    resolveTransactionHash(network, registerTxId),
+    resolveRegistryTxHash(network, resolverDeployTxId),
+    resolveRegistryTxHash(network, registerTxId),
   ]);
   invalidateAliasRegistry(network);
   const expectedTargetHex = bytesToHex(targetBytes);

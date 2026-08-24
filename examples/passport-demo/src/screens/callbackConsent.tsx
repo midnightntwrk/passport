@@ -78,9 +78,37 @@ interface CallbackConsentProps {
    * signature.
    */
   getSigningKeystore?: () => {
-    getPublicKey(): string;
-    signData(data: Uint8Array): string;
+    getPublicKey(): TaggedKeyMaterial;
+    signData(data: Uint8Array): TaggedKeyMaterial;
   } | null;
+}
+
+/**
+ * What a ledger-9 keystore hands back: `{ tag, value }`, where `tag` names the
+ * signature scheme (`schnorr` for the NightExternal role key) and `value` is
+ * the hex.
+ *
+ * On ledger-8 both were bare strings, and this seam took `string`. Structural
+ * rather than imported so this component keeps no dependency on the ledger, and
+ * so the shape is stated where it is consumed. See {@link encodeTagged} for why
+ * the tag is not thrown away.
+ */
+interface TaggedKeyMaterial {
+  readonly tag: string;
+  readonly value: string;
+}
+
+/**
+ * `"<scheme>:<hex>"` — the wire form of a ledger-9 key or signature.
+ *
+ * The tag is carried rather than dropped because an unqualified hex string of a
+ * schnorr key and of an ECDSA key are indistinguishable, and a receiver that
+ * cannot tell which scheme signed cannot verify at all. This is a deliberate
+ * change of the `v1` callback wire format, made at the same moment the app
+ * changed ledger; every party to it is on the ledger-9 build.
+ */
+function encodeTagged(material: TaggedKeyMaterial): string {
+  return `${material.tag}:${material.value}`;
 }
 
 /* Word for word `../profileConsent.tsx`, and for the reason given there: the
@@ -286,8 +314,8 @@ export function PassportCallbackConsent({
     let signer: PassportCallbackSigner | null = null;
     if (keystore) {
       signer = {
-        publicKey: keystore.getPublicKey(),
-        sign: (payload) => keystore.signData(payload),
+        publicKey: encodeTagged(keystore.getPublicKey()),
+        sign: (payload) => encodeTagged(keystore.signData(payload)),
       };
     }
     const envelope = sealPassportCallbackResponse(encoded, bytes, signer);

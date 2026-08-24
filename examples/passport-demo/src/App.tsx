@@ -99,6 +99,7 @@ import type {
   FeeReadiness,
   LocalMidnightWallet,
   LocalWalletBalances,
+  LocalWalletProvingMode,
   LocalWalletSurfaces,
   SendNightResult,
   SendShieldedResult,
@@ -761,7 +762,7 @@ export default function PassportDemo() {
    * right machine without a render-time ref read.
    */
   const [localWalletProvingMode, setLocalWalletProvingMode] = useState<
-    'browser' | 'http' | null
+    LocalWalletProvingMode | null
   >(null);
   /**
    * Whether the OPEN wallet's network is one Passport genuinely registers

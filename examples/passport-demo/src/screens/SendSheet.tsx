@@ -24,6 +24,7 @@ import {
    imports — is pulled into this chunk. */
 import type {
   FeeReadiness,
+  LocalWalletProvingMode,
   SendNightResult,
   SendShieldedResult,
   ShieldedHolding,
@@ -90,7 +91,7 @@ export interface SendSheetProps {
    * machine. `browser` proves in this tab; `http` proves on a proof server.
    * Either way it can take tens of seconds, which is what the line admits.
    */
-  provingMode: 'browser' | 'http'
+  provingMode: LocalWalletProvingMode
   /**
    * Reads the wallet's own fee readiness — the advisory `feeReadiness()` probe.
    * Called when the sheet opens; its answer is quoted, never paraphrased into a
@@ -843,9 +844,9 @@ export default function SendSheet(props: SendSheetProps) {
               <p className="mnhome-send-busy" role="status">
                 <Loader2 className="mnhome-send-spinner" size={14} aria-hidden="true" />
                 <span>
-                  {provingMode === 'browser'
-                    ? 'Proving and submitting. The proof is computed in this tab and can take tens of seconds — leave this open.'
-                    : 'Proving and submitting. The proof is computed on the proof server and can take tens of seconds — leave this open.'}
+                  {provingMode === 'http'
+                    ? 'Proving and submitting. The proof is computed on the proof server and can take tens of seconds — leave this open.'
+                    : 'Proving and submitting. The proof is computed on this device and can take tens of seconds — leave this open.'}
                 </span>
               </p>
             ) : null}

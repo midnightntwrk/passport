@@ -227,7 +227,18 @@ function workerProvingProvider(km: KmProvider): any {
 
 // ——— public surface ———
 
-export function wasmProofProvider(zkConfigProvider: ZkConfigProviderLike): any {
+/**
+ * The ledger's circuit-level `{ check, prove }` provider for CONTRACT circuits,
+ * resolving contract keys through the given ZK config provider and the four
+ * system (balancing) circuits from `/zk-params`.
+ *
+ * Returned at this level rather than as a finished `ProofProvider` because
+ * midnight-js 5 ships its own transaction-level adapter, `createProofProvider`,
+ * and going through it means the cost model and the prove/check sequencing are
+ * the library's rather than a second implementation of them here. See
+ * `../identity/contractRuntime.ts`.
+ */
+export function wasmProvingProvider(zkConfigProvider: ZkConfigProviderLike): any {
   const km: KmProvider = {
     lookupKey: async (keyLocation: string) => {
       console.debug(`[wasm-prover] lookupKey: ${keyLocation}`);
@@ -238,15 +249,33 @@ export function wasmProofProvider(zkConfigProvider: ZkConfigProviderLike): any {
     },
     getParams,
   };
-  const provingProvider = workerProvingProvider(km);
+  const inner = workerProvingProvider(km);
+  /* The busy signal belongs here rather than in the worker plumbing: a contract
+     proof is the slow thing a user waits through, and `onProving` is what the
+     UI listens to. */
   return {
-    async proveTx(unprovenTx: any) {
+    check: (preimage: Uint8Array, keyLocation: string) => inner.check(preimage, keyLocation),
+    prove: async (preimage: Uint8Array, keyLocation: string, obi?: bigint) => {
       proveStarted();
       try {
-        return await unprovenTx.prove(provingProvider, CostModel.initialCostModel());
+        return await inner.prove(preimage, keyLocation, obi);
       } finally {
         proveEnded();
       }
+    },
+  };
+}
+
+/**
+ * Transaction-level proving for contract circuits, kept for callers that want
+ * to drive `unprovenTx.prove` themselves. {@link wasmProvingProvider} through
+ * midnight-js's `createProofProvider` is the path the app takes.
+ */
+export function wasmProofProvider(zkConfigProvider: ZkConfigProviderLike): any {
+  const provingProvider = wasmProvingProvider(zkConfigProvider);
+  return {
+    async proveTx(unprovenTx: any) {
+      return unprovenTx.prove(provingProvider, CostModel.initialCostModel());
     },
   };
 }

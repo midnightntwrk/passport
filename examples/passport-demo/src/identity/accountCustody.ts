@@ -61,32 +61,32 @@
  */
 
 import {
-  Transaction,
   encodeCoinPublicKey,
   encodeShieldedCoinInfo,
   nativeToken,
-  type Binding,
-  type Proof,
-  type SignatureEnabled,
-} from '@midnight-ntwrk/ledger-v8';
+} from '@midnightntwrk/ledger-v9';
 import {
   MidnightBech32m,
   UnshieldedAddress,
   mainnet,
-} from '@midnight-ntwrk/wallet-sdk-address-format';
+} from '@midnight-ntwrk/wallet-sdk/address-format';
 import * as Rx from 'rxjs';
 
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
 /* Type-only, and through the SAME specifier {@link loadAccountContract} uses —
    a type has no instance, so this adds no module to either graph. */
-import type { Ledger as AccountLedger } from '../../../../experiments/account-custody-prototype/src/wallet/contract.js';
+import type { Ledger as AccountLedger } from '../../contracts/stagenet/account/index.js';
+import { sponsorReadiness } from '../lib/sponsor.js';
 import {
-  sponsorBalanceOnly,
-  sponsorHexToBytes,
-  sponsorReadiness,
-  BALANCE_WITHOUT_DUST,
-} from '../lib/sponsor.js';
+  createContractProviders,
+  compiledContractFor,
+  contractAssetBase,
+  feeWitness,
+  indexerWsFrom,
+  loadContractModule,
+} from './contractRuntime.js';
 import {
+  accountWitnesses,
   derivePassportContractSecrets,
   rawContractAddress,
   resolveDeployTxHashOnce,
@@ -116,10 +116,6 @@ function bytesToHex(value: Uint8Array): string {
 
 const wait = (milliseconds: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
-
-function indexerWsFrom(indexerHttpUrl: string): string {
-  return `${indexerHttpUrl.replace(/\/+$/, '').replace(/^http/, 'ws')}/ws`;
-}
 
 /**
  * The transaction identifier a midnight-js call answers with. Identical to
@@ -371,54 +367,29 @@ export { derivePassportContractSecrets };
 /* -------------------------------------------------------------------------- */
 
 /**
- * The compiled account contract and its witnesses, imported from the
- * prototype's managed output.
+ * The compiled account contract, staged from the stagenet build.
  *
- * THE SPECIFIER IS LOAD-BEARING. It is character-for-character the one
- * `./passportContract.ts`'s `loadAccountContract` uses, because there are two
- * installed copies of `@midnight-ntwrk/compact-runtime` in this workspace —
- * the root one and `experiments/account-custody-prototype/node_modules`'s — and
- * a module reached by a DIFFERENT specifier can end up bound to the other copy.
- * The two are the same version and structurally identical, and still nothing
- * works across them: a `ContractState` minted by one is rejected by the other's
- * `coerceToChargedState` with "has unexpected type" (reproduced 2026/08/24).
- * `vite.config.ts` collapses them with its `dedupe` list for the bundle; the
- * shared literal specifier is what keeps ONE module record either way.
- *
- * Dynamically imported so the Midnight ledger runtime behind it stays out of
- * the initial PWA bundle.
+ * THE SPECIFIER IS LOAD-BEARING, and both this module and
+ * `./passportContract.ts` now reach it through the SAME one —
+ * `loadContractModule('account')` in `./contractRuntime.ts`, which holds the
+ * single literal `import()`. There are two installed copies of
+ * `@midnight-ntwrk/compact-runtime` in this workspace (the ledger-9 one at the
+ * root, and the ledger-8 0.16.0 the funder needs), and a module reached by a
+ * DIFFERENT specifier can end up bound to the other copy. Even two copies of
+ * the SAME version do not interoperate: a `ContractState` minted by one is
+ * rejected by the other's `coerceToChargedState` with "has unexpected type"
+ * (reproduced 2026/08/24). One literal specifier, in one place, is what keeps
+ * ONE module record.
  */
-let accountModule:
-  | Promise<typeof import('../../../../experiments/account-custody-prototype/src/wallet/contract.js')>
-  | undefined;
-
 async function loadAccountContract() {
-  accountModule ??= import(
-    '../../../../experiments/account-custody-prototype/src/wallet/contract.js'
-  );
-  return accountModule;
+  return loadContractModule('account') as Promise<
+    typeof import('../../contracts/stagenet/account/index.js')
+  >;
 }
 
 /** Where the browser fetches this contract's prover keys, verifier keys, and ZKIR. */
 function accountAssetBase(): string {
-  /* The PWA serves the staged artefacts from its own origin. A Node harness
-     has no window — and must NOT fake one: a partial window stub flips the
-     wasm runtime's environment sniffing into browser paths and circuit
-     execution dies in an `unreachable` trap. Harnesses name their static
-     server with PASSPORT_ZK_ORIGIN, exactly as `./passportContract.ts` and
-     `./midnames.ts` do. */
-  if (typeof window !== 'undefined') return `${window.location.origin}/zk/account`;
-  const harnessOrigin =
-    typeof process !== 'undefined' ? process.env.PASSPORT_ZK_ORIGIN : undefined;
-  if (!harnessOrigin) {
-    /* A harness misconfiguration, not a user-facing outcome — so it gets the
-       sibling's bare Error rather than an {@link AccountCustodyError} code that
-       a surface might try to render. */
-    throw new Error(
-      'No origin to load contract artefacts from: neither window nor PASSPORT_ZK_ORIGIN.',
-    );
-  }
-  return `${harnessOrigin}/zk/account`;
+  return contractAssetBase('account');
 }
 
 /**
@@ -739,162 +710,37 @@ function inMemoryPrivateStateProvider(initial: Record<string, unknown>) {
 }
 
 /**
- * Providers for the account-custody circuits: the wallet balances, signs,
- * finalises, and submits; the proof server proves; the ZK artefacts arrive over
- * HTTP from `/zk/account`.
+ * Providers for the account-custody circuits.
  *
- * This is `./passportContract.ts`'s `createAccountProviders`, unchanged in
- * behaviour, with `[account-custody]` on its warnings so a fall-back logged
- * during a withdrawal is not read as one during a deployment.
+ * All of it — the wallet provider and its sponsored/local balancing pair, the
+ * ZK config provider, the indexer, and where a circuit actually gets proved —
+ * is `./contractRuntime.ts`'s, shared with `./passportContract.ts` and
+ * `./midnames.ts`. Three copies of the same provider set is how they drifted
+ * before; the behaviour is unchanged.
  *
- * `feeWitness` is an out-parameter, not a return value, because whether the
+ * `witness` is an out-parameter, not a return value, because whether the
  * sponsor really paid is only known *inside* `balanceTx` — after the service
  * has answered. Reporting a covered fee from anywhere else would be a guess.
+ *
+ * The NIGHT or shielded value a circuit itself moves is untouched by
+ * sponsorship either way: only the fee input changes hands.
  */
 async function createAccountProviders(
   wallet: LocalMidnightWallet,
   privateStateId: string,
   initialPrivateState: unknown,
-  feeWitness: { paidBy: AccountCustodyFeePayer },
+  witness: { paidBy: AccountCustodyFeePayer },
 ) {
-  const [
-    { indexerPublicDataProvider },
-    { FetchZkConfigProvider },
-    { httpClientProofProvider },
-  ] = await Promise.all([
-    import('@midnight-ntwrk/midnight-js-indexer-public-data-provider'),
-    import('@midnight-ntwrk/midnight-js-fetch-zk-config-provider'),
-    import('@midnight-ntwrk/midnight-js-http-client-proof-provider'),
-  ]);
-
-  const state = await currentWalletState(wallet);
-  const facade = wallet.facade as unknown as {
-    balanceUnboundTransaction(
-      tx: unknown,
-      keys: unknown,
-      options: { ttl: Date; tokenKindsToBalance?: readonly string[] },
-    ): Promise<unknown>;
-    signRecipe(recipe: unknown, sign: (data: Uint8Array) => unknown): Promise<unknown>;
-    finalizeRecipe(signed: unknown): Promise<{ serialize(): Uint8Array }>;
-    submitTransaction(tx: unknown): Promise<unknown>;
-    revert(recipe: unknown): Promise<unknown>;
-  };
-
-  /**
-   * The unsponsored path: exactly the code that would run if sponsorship had
-   * never existed. The wallet balances every token kind from its own funds,
-   * signs, and finalises.
-   */
-  const balanceLocally = async (tx: unknown, ttl: Date) => {
-    const recipe = await facade.balanceUnboundTransaction(tx, wallet.keys, { ttl });
-    const signed = await facade.signRecipe(recipe, (data: Uint8Array) =>
-      wallet.keys.unshieldedKeystore.signData(data),
-    );
-    return facade.finalizeRecipe(signed);
-  };
-
-  /**
-   * The sponsored path: balance every token kind EXCEPT dust, prove and sign
-   * locally, then ask the service to add the fee input. The user still signs —
-   * sponsorship removes the cost, not the approval. A failure anywhere here
-   * returns `null` and the caller falls back to the wallet's own DUST, so a
-   * sponsor outage degrades to real fees rather than to a dead transfer.
-   *
-   * The NIGHT or shielded value the circuit itself moves is untouched either
-   * way: only the fee input changes hands.
-   */
-  const balanceWithSponsor = async (tx: unknown, ttl: Date): Promise<unknown | null> => {
-    let recipe: unknown;
-    try {
-      recipe = await facade.balanceUnboundTransaction(tx, wallet.keys, {
-        ttl,
-        tokenKindsToBalance: BALANCE_WITHOUT_DUST,
-      });
-      const signed = await facade.signRecipe(recipe, (data: Uint8Array) =>
-        wallet.keys.unshieldedKeystore.signData(data),
-      );
-      const finalized = await facade.finalizeRecipe(signed);
-      const balanced = await sponsorBalanceOnly(finalized.serialize());
-      return Transaction.deserialize<SignatureEnabled, Proof, Binding>(
-        'signature',
-        'proof',
-        'binding',
-        sponsorHexToBytes(balanced.txBytes),
-      );
-    } catch (cause) {
-      console.warn(
-        '[account-custody] the sponsored balancing failed; falling back to this wallet’s own DUST',
-        cause,
-      );
-      if (recipe !== undefined) {
-        try {
-          await facade.revert(recipe);
-        } catch (revertCause) {
-          console.debug(
-            '[account-custody] could not revert an abandoned balancing recipe',
-            revertCause,
-          );
-        }
-      }
-      return null;
-    }
-  };
-
-  const walletProvider = {
-    getCoinPublicKey: () => state.shielded.coinPublicKey.toHexString(),
-    getEncryptionPublicKey: () => state.shielded.encryptionPublicKey.toHexString(),
-    async balanceTx(tx: unknown, ttl?: Date) {
-      const deadline = ttl ?? new Date(Date.now() + 30 * 60 * 1_000);
-      if ((await sponsorReadiness()).state === 'ready') {
-        const sponsored = await balanceWithSponsor(tx, deadline);
-        if (sponsored !== null) {
-          // Recorded only now, with the service's own answer in hand.
-          feeWitness.paidBy = 'sponsored';
-          return sponsored;
-        }
-      }
-      feeWitness.paidBy = 'own-dust';
-      return balanceLocally(tx, deadline);
-    },
-    submitTx: (tx: unknown) => facade.submitTransaction(tx),
-  };
-
-  const zkConfigProvider = new FetchZkConfigProvider(
-    accountAssetBase(),
-    /* `globalThis`, not `window`: the identical call has to work under the Node
-       drill harness, which deliberately has no window. */
-    globalThis.fetch.bind(globalThis),
-  );
-
-  return {
-    privateStateProvider: inMemoryPrivateStateProvider({
-      [privateStateId]: initialPrivateState,
-    }),
-    publicDataProvider: indexerPublicDataProvider(
-      wallet.network.indexerHttpUrl,
-      wallet.network.indexerWsUrl,
-    ),
-    zkConfigProvider,
-    proofProvider: httpClientProofProvider(
-      wallet.network.provingServerUrl,
-      zkConfigProvider as never,
-    ),
-    walletProvider,
-    midnightProvider: walletProvider,
-  };
+  return createContractProviders(wallet, {
+    contract: 'account',
+    privateStateId,
+    initialPrivateState,
+    witness,
+  });
 }
 
 async function compiledAccountContract(witnesses: unknown) {
-  const [{ CompiledContract }, { Contract }] = await Promise.all([
-    import('@midnight-ntwrk/compact-js'),
-    loadAccountContract(),
-  ]);
-  return CompiledContract.make('passport-account', Contract as never).pipe(
-    CompiledContract.withWitnesses(witnesses as never),
-    // URL form, NOT a filesystem path: the PWA fetches these over HTTP, and
-    // `FetchZkConfigProvider` is pointed at the same base.
-    CompiledContract.withCompiledFileAssets(accountAssetBase()),
-  );
+  return compiledContractFor('account', 'passport-account', witnesses);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1277,7 +1123,7 @@ async function decodeShieldedRecipient(
   networkId: string,
 ): Promise<{ coinPublicKey: Uint8Array; encryptionPublicKey: Uint8Array }> {
   const { MidnightBech32m, ShieldedAddress } = await import(
-    '@midnight-ntwrk/wallet-sdk-address-format'
+    '@midnight-ntwrk/wallet-sdk/address-format'
   );
   let parsed;
   try {

@@ -22,6 +22,7 @@ import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
 /* The two names this screen shares with the wallet (Contract W). Type-only. */
 import type {
   FeeReadiness,
+  LocalWalletProvingMode,
   SendNightResult,
   SendShieldedResult,
   ShieldedHolding,
@@ -127,7 +128,7 @@ export interface HomeScreenProps {
     /** The wallet's own network id, which a recipient must belong to. */
     networkId: string
     /** Where this wallet proves — the send sheet's progress line names it. */
-    provingMode: 'browser' | 'http'
+    provingMode: LocalWalletProvingMode
     readFeeReadiness: () => Promise<FeeReadiness>
     onSend: (params: {
       recipientAddress: string
