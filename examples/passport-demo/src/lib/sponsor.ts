@@ -65,21 +65,28 @@ export const SPONSOR_PENDING_RETRY_WINDOW_MS = 20_000;
  * fresh passkey wallet has NO fall-back — it holds no DUST — so giving up early
  * costs the whole operation, and the operation already takes tens of seconds.
  *
- * Three minutes because that is what the sponsor really needs. Measured against
- * the stagenet balancer on 2026/08/24: its FIRST `/balance-only` took ~100 s,
- * because it proves the DUST leg in-process with the WASM prover and has to
- * fetch and warm ~32 MB of circuit keys before it can start. Every subsequent
- * request is far quicker. At 20 s the client gave up mid-proof and the deploy
- * died with "could not balance dust" — while the sponsor was working correctly
- * and went on to finish.
+ * Ten minutes, and every shorter value here was measured and found wanting
+ * against the stagenet balancer on 2026/08/24. It proves the DUST leg
+ * in-process with the WASM prover, having first fetched and warmed ~32 MB of
+ * circuit keys, and it serialises balancing so a caller who arrives mid-proof
+ * is told `429 PENDING_TRANSACTION` and has to wait the whole thing out. Three
+ * observed service times: ~100 s, ~180 s, and one over 180 s. At 20 s and again
+ * at 180 s the client gave up while the sponsor was working correctly and went
+ * on to finish.
  *
- * Giving up early is worse than waiting in a second way, too. The service
- * reserves its DUST for a balanced transaction the moment it finalizes one, and
- * an abandoned request leaves that reservation standing until the sponsor
- * re-syncs — so an impatient client does not just fail itself, it takes the
- * sponsor's DUST out of circulation for everyone.
+ * Giving up early is worse than waiting in a second way, too, and this is the
+ * part that decided the number. The service reserves its DUST for a balanced
+ * transaction the moment it finalizes one, and an abandoned request leaves that
+ * reservation standing until it expires — so an impatient client does not just
+ * fail itself, it takes the sponsor's DUST out of circulation for everyone,
+ * for far longer than it would have waited. Measured: two abandoned requests
+ * put the sponsor at `available: 0` for roughly twenty minutes each.
+ *
+ * Ten minutes still sits inside the balanced transaction's own TTL (thirty
+ * minutes, see DEFAULT_TTL_MS in `../identity/contractRuntime.ts`), so a client
+ * that waits the full window never submits something already expired.
  */
-export const SPONSOR_CONTRACT_RETRY_WINDOW_MS = 180_000;
+export const SPONSOR_CONTRACT_RETRY_WINDOW_MS = 600_000;
 /** Floor on a retry delay, so a zero `retryAfterMs` cannot spin. */
 const SPONSOR_PENDING_RETRY_MIN_DELAY_MS = 250;
 /** Fallback delay when the service names no `retryAfterMs`. */
@@ -102,14 +109,16 @@ export const SPONSOR_PROBE_RETRY_DELAY_MS = 500;
 /**
  * Balancing proves a dust segment server-side, so it gets real room.
  *
- * 180 s rather than the 90 s it was until 2026/08/24, measured rather than
- * guessed: the stagenet balancer's FIRST `/balance-only` took ~100 s, because
- * it proves in-process with the WASM prover and warms ~32 MB of circuit keys
- * before the first proof. At 90 s the client aborted a request the sponsor then
- * completed — which fails the caller AND leaves the sponsor's DUST reserved
- * against a balanced transaction nobody will submit.
+ * 600 s rather than the 90 s it was until 2026/08/24, measured rather than
+ * guessed: the stagenet balancer proves in-process with the WASM prover and
+ * warms ~32 MB of circuit keys first, and its observed service times were
+ * ~100 s, ~180 s, and one longer still. At 90 s — and again at 180 s — the
+ * client aborted a request the sponsor then completed, which fails the caller
+ * AND leaves the sponsor's DUST reserved against a balanced transaction nobody
+ * will submit. Kept equal to {@link SPONSOR_CONTRACT_RETRY_WINDOW_MS} so that
+ * neither bound can silently undercut the other.
  */
-const SPONSOR_BALANCE_TIMEOUT_MS = 180_000;
+const SPONSOR_BALANCE_TIMEOUT_MS = 600_000;
 
 export interface SponsorConfig {
   /** Base URL, no trailing slash. */
