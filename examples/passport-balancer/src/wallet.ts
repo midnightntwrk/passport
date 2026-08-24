@@ -44,6 +44,7 @@ import WebSocket from 'ws';
 import * as Rx from 'rxjs';
 
 import * as ledger from '@midnightntwrk/ledger-v9';
+import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { Zkir, type KeyMaterialProvider } from '@midnight-ntwrk/zkir-v2';
 /* Everything else comes through the umbrella `@midnight-ntwrk/wallet-sdk`
    package, which is what this service actually depends on. The individual
@@ -224,6 +225,24 @@ export type ProvingReadiness =
   | { state: 'ready'; warmedInMs: number; bytes: number }
   | { state: 'failed'; reason: string };
 
+/**
+ * The midnight-js v5 `WalletProvider` / `MidnightProvider` pair, backed by the
+ * beta wallet SDK — what a contract deploy or circuit call balances, signs, and
+ * submits through.
+ *
+ * This is the join `deploy-stagenet` proved on chain: midnight-js hands out an
+ * `UnboundTransaction` and expects a `FinalizedTransaction` back, which is
+ * exactly `balanceUnboundTransaction` → `signRecipe` → `finalizeRecipe` on the
+ * facade. Both sides speak `@midnightntwrk/ledger-v9` 1.0.0-rc.3, so the
+ * objects cross the boundary unconverted.
+ */
+export interface ContractWalletProvider {
+  getCoinPublicKey(): unknown;
+  getEncryptionPublicKey(): unknown;
+  balanceTx(tx: unknown, ttl?: Date): Promise<unknown>;
+  submitTx(tx: unknown): Promise<string>;
+}
+
 export interface BalancerWallet {
   readonly address: string;
   /** `'server'` when an external prover is configured, `'wasm'` when in-process. */
@@ -259,13 +278,46 @@ export interface BalancerWallet {
    * wallet submits, exactly as the demo's `trySponsoredTransfer` expects.
    */
   balanceOnly(transactionBytes: Uint8Array): Promise<BalanceOnlyResult>;
-  /** True while a `balanceOnly` call holds the spend queue. */
+  /**
+   * True while anything holds the spend queue — a `balanceOnly` call, a
+   * sponsored registration, or an activation grant. All three move this
+   * wallet's coins, so from a caller's point of view they are one busy signal.
+   */
   isBalancing(): boolean;
+  /**
+   * Runs `task` with exclusive use of this wallet's coins.
+   *
+   * `/balance-only` reserves DUST; a sponsored registration spends NIGHT and
+   * DUST twice over. Concurrently they would contend for the same UTxOs and
+   * produce transactions the node rejects, so everything that spends queues
+   * here — including, deliberately, against the live droplet service's own
+   * balancing, which is why this exists rather than a per-endpoint flag.
+   *
+   * NOT re-entrant: {@link contractWalletProvider} deliberately does not
+   * re-acquire it, because a contract job holds it around the whole deploy and
+   * call, and a nested acquire would wait on a queue it is itself blocking.
+   */
+  exclusive<T>(task: () => Promise<T>): Promise<T>;
+  /**
+   * The provider midnight-js balances, signs, and submits contract
+   * transactions through. Built per job, because it snapshots the wallet's
+   * shielded keys; calls made through it MUST be inside {@link exclusive}.
+   */
+  contractWalletProvider(): ContractWalletProvider;
   saveSnapshot(): Promise<void>;
   close(): Promise<void>;
 }
 
 export async function openBalancerWallet(config: BalancerConfig): Promise<BalancerWallet> {
+  /* The wallet SDK takes its network as a field (point 2 above), but midnight-js
+     5 does NOT: it keeps the id in module-level state and `getNetworkId` THROWS
+     when it is unset — `Transaction.fromParts` and `parseCoinPublicKeyToHex`
+     both call it, so every contract deploy and every circuit call goes through
+     it. It is also the bech32m tag, so a mismatch here would silently produce
+     addresses for another network. Set once, here, where the network is first
+     known and before anything can use it. */
+  setNetworkId(config.networkId);
+
   const keys = deriveRoleKeys(config.seedHex);
   const shieldedSecretKeys = ledger.ZswapSecretKeys.fromSeed(keys[Roles.Zswap]);
   const dustSecretKey = ledger.DustSecretKey.fromSeed(keys[Roles.Dust]);
@@ -457,6 +509,35 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
      which is exactly the right behaviour for this queue. */
   let balancing = false;
 
+  /* The same rule, extended to the endpoints that SPEND rather than sponsor.
+     `/register-alias` deploys a resolver leaf and then calls the registry;
+     `/fund-account` deposits a grant. Each is a real transaction out of this
+     wallet, and two of them — or one of them and a `/balance-only` — running
+     together would select the same coins. `spending` is a counter rather than a
+     flag so that `isBalancing()` stays honest for the whole queue rather than
+     just the job at its head. */
+  let queue: Promise<unknown> = Promise.resolve();
+  let spending = 0;
+
+  const exclusive = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = async (): Promise<T> => {
+      spending += 1;
+      try {
+        return await task();
+      } finally {
+        spending -= 1;
+      }
+    };
+    /* `then(run, run)` so a failed predecessor does not poison the queue: the
+       next job runs either way, and its own rejection is its caller's. */
+    const next = queue.then(run, run);
+    queue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  };
+
   const dustBalance = async (state?: FacadeState): Promise<bigint> =>
     (state ?? (await currentState())).dust.balance(new Date());
 
@@ -589,7 +670,78 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
       return 'registered';
     },
 
-    isBalancing: () => balancing,
+    isBalancing: () => balancing || spending > 0,
+
+    exclusive,
+
+    contractWalletProvider(): ContractWalletProvider {
+      return {
+        getCoinPublicKey: () => shieldedSecretKeys.coinPublicKey,
+        getEncryptionPublicKey: () => shieldedSecretKeys.encryptionPublicKey,
+
+        async balanceTx(tx: unknown, ttl?: Date): Promise<unknown> {
+          const deadline = ttl ?? new Date(Date.now() + config.balanceTtlMs);
+
+          /* Under ledger-9 the fee is DUST, and DUST accrues per block. A wallet
+             a few Specks short is not broken, it is early — so the fee is
+             estimated first and the estimate is retried rather than turned into
+             a failed registration. `deploy-stagenet` needed exactly this to get
+             its TLD on chain. */
+          const budgetMs = 600_000;
+          const startedAt = Date.now();
+          for (;;) {
+            try {
+              await facade.estimateTransactionFee(tx as never, dustSecretKey, { ttl: deadline });
+              break;
+            } catch (cause) {
+              const message = cause instanceof Error ? cause.message : String(cause);
+              if (
+                !/insufficient funds|could not balance dust/i.test(message) ||
+                Date.now() - startedAt > budgetMs
+              ) {
+                throw cause;
+              }
+              console.log(`[contract] waiting for DUST (${message.slice(0, 80)})`);
+              await new Promise((settle) => setTimeout(settle, 10_000));
+            }
+          }
+
+          let recipe: BalancingRecipe | null = null;
+          try {
+            /* `facade.validateTransaction` is NOT called here, and must not be.
+               The beta SDK's validation service builds a BLANK ledger state
+               (`LedgerState.blank(networkId)` with only the real parameters) and
+               runs `wellFormed` against it, so any transaction that CALLS a
+               deployed contract fails with
+               `call to non-existant contract ContractAddress(…)` — measured on
+               stagenet against a TLD that demonstrably existed, at block 157797.
+               The check is sound for a self-contained transfer and structurally
+               impossible for a contract call. */
+            recipe = await facade.balanceUnboundTransaction(
+              tx as never,
+              { shieldedSecretKeys, dustSecretKey },
+              { ttl: deadline },
+            );
+            const signed = await facade.signRecipe(recipe, unshieldedKeystore.signDataAsync);
+            recipe = signed;
+            return await facade.finalizeRecipe(signed);
+          } catch (cause) {
+            if (recipe) {
+              try {
+                await facade.revert(recipe);
+              } catch {
+                // Reserved coins are released on restart anyway.
+              }
+            }
+            throw cause;
+          }
+        },
+
+        async submitTx(tx: unknown): Promise<string> {
+          return String(await facade.submitTransaction(tx as never));
+        },
+      };
+    },
 
     async balanceOnly(transactionBytes: Uint8Array): Promise<BalanceOnlyResult> {
       if (closed) {

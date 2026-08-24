@@ -1,22 +1,46 @@
 /**
- * passport-balancer — the stagenet counterpart of the fee sponsorship the
- * Passport demo already consumes.
+ * passport-balancer — the whole stagenet onboarding sponsor.
  *
- * It holds NIGHT, registers that NIGHT for DUST generation, and spends the
- * resulting DUST on OTHER people's transaction fees:
+ * It holds NIGHT, registers that NIGHT for DUST generation, and then pays for
+ * the three things a new Passport cannot pay for itself:
  *
  *   GET  /status         →  a human answer: network, address, balances, whether
  *                           the wallet is synced, how it proves, what the DUST
- *                           registration did, how many transactions it balanced
+ *                           registration did, how many transactions it balanced,
+ *                           how many names and accounts it has sponsored
  *   GET  /wallet-status  →  { total, available, wallets[] } — the exact shape
  *                           `examples/passport-demo/src/lib/sponsor.ts` parses,
  *                           down to `wallets[].dust.balance` being a STRING
  *   POST /balance-only   →  a serialised finalized transaction in, the same
  *                           transaction with a DUST fee leg attached and proved
  *                           out, as `{ txHash, txBytes, expiresAt }`
+ *   POST /register-alias →  { alias, ownerKey, contractAddress } in, a `.night`
+ *                           name registered TO the user's key and resolving to
+ *                           the user's contract out — the balancer paying the
+ *                           registry price and both fees
+ *   POST /fund-account   →  { contractAddress } in, an activation grant
+ *                           deposited INTO that account-custody contract out
  *
- * The protocol is not invented here. `sponsor.ts` is the ground truth and this
- * service answers it, which means three things are load-bearing:
+ * FEES, NAME, ACTIVATION — the three costs of onboarding, and none of them
+ * reaches the user's wallet. `/balance-only` is the fee sponsorship the demo
+ * already consumes on preview through the 1AM gateway. The other two are ports
+ * of `examples/passport-funder`, which does them on preview, onto the ledger-9
+ * stack stagenet needs; their policy order, their refusal codes, and their
+ * response shapes are the funder's, so a client written against one works
+ * against the other.
+ *
+ * Why they had to move here rather than stay in the funder: the funder's v8
+ * wallet SDK cannot read stagenet at all, and the ONE thing a migrated PWA
+ * still cannot do on stagenet is pay the 10 atomic NIGHT `register_domain_for`
+ * takes from its CALLER. A fresh passkey wallet holds nothing, and the stagenet
+ * faucet is captcha-gated, so there is no self-service path to that 10. The
+ * registry's entrypoint takes the owner as an ARGUMENT, so a third party can
+ * pay — and the balancer, which already holds NIGHT and DUST for the fee leg,
+ * is the third party already standing there.
+ *
+ * The sponsorship protocol is not invented here. `sponsor.ts` is the ground
+ * truth for `/balance-only` and this service answers it, which means three
+ * things are load-bearing:
  *
  *   1. **`available` is a capability claim, not a health check.** The client
  *      gates on `available > 0` precisely because the deployed preview gateway
@@ -32,6 +56,22 @@
  *      `BALANCE_FAILED` — each with the HTTP status `sponsor.ts` branches on.
  *      An unfunded balancer says `available: 0` and refuses; it never pretends.
  *
+ * Alias policy, in the order it is enforced — the funder's own, unchanged:
+ * well-formed and unreserved label, owner key, and contract address on THIS
+ * network → no other registration for the same alias or the same contract in
+ * flight → the name is free on the registry → the contract really exists on
+ * chain → once-only per contract address (persisted ledger) → global hourly
+ * rate limit → the balancer able to pay.
+ *
+ * Account-funding policy, likewise: well-formed contract address on THIS
+ * network → no other funding for the same contract in flight → the contract
+ * exists AND decodes as an account-custody contract → once-only per contract
+ * address (persisted ledger) → the account is not already holding a grant's
+ * worth → global hourly rate limit → the balancer able to pay.
+ *
+ * Every refusal is a clear JSON error, and nothing is reported as done until it
+ * has been read back off the chain.
+ *
  * Everything else — env-only configuration, a sync snapshot on disk, a CORS
  * allow-list, SIGTERM saving before it exits — is `examples/passport-funder`'s
  * shape, so an operator running both on the same droplet learns one service.
@@ -39,13 +79,60 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
+import {
+  MidnightBech32m,
+  UnshieldedAddress,
+  mainnet,
+} from '@midnight-ntwrk/wallet-sdk-address-format';
+
+import {
+  AccountFundingError,
+  createAccountFunder,
+  type AccountFunder,
+} from './account.js';
 import { applyEnvFile, loadConfig, type BalancerConfig } from './config.js';
+import { rawContractAddress } from './contractRuntime.js';
+import {
+  HourlyRateLimiter,
+  JsonLedger,
+  type AccountEntry,
+  type AliasEntry,
+} from './ledgers.js';
+import {
+  AliasSponsorError,
+  aliasCostAtomicNight,
+  aliasDomain,
+  createMidnamesSponsor,
+  normalisePassportAlias,
+  ownerKeyBytes,
+  type MidnamesSponsor,
+} from './midnames.js';
 import {
   BalanceRefusal,
   formatNight,
   openBalancerWallet,
   type BalancerWallet,
 } from './wallet.js';
+
+/**
+ * `MidnightBech32m.parse` reports mainnet as the exported `mainnet` symbol (a
+ * mainnet address carries no network segment), every other network as its
+ * string — the SDK's own normalisation, mirrored from the funder.
+ */
+function parsedNetworkName(value: string | typeof mainnet): string {
+  return value === mainnet ? 'mainnet' : value;
+}
+
+type Refusal = { status: number; error: string; message: string; extra?: Record<string, unknown> };
+
+function refusal(
+  status: number,
+  error: string,
+  message: string,
+  extra?: Record<string, unknown>,
+): Refusal {
+  return { status, error, message, ...(extra ? { extra } : {}) };
+}
 
 /** Bigger than any Midnight transaction the demo builds, small enough to bound. */
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
@@ -79,7 +166,56 @@ async function main(): Promise<void> {
   );
   console.log(`state     ${config.stateDir}`);
   console.log(`ttl       ${config.balanceTtlMs} ms on every balanced transaction`);
+  console.log(
+    `alias     ${config.midnamesTldAddress ? `.night TLD ${config.midnamesTldAddress}` : `no .night registry known for ${config.networkId} — /register-alias disabled`}`,
+  );
+  console.log(`alias cap ${config.aliasMaxPerHour} sponsored registrations per rolling hour`);
+  console.log(
+    `grant     ${config.accountGrantAtomic} atomic NIGHT (${formatNight(config.accountGrantAtomic)} NIGHT) into each account contract`,
+  );
+  console.log(`grant cap ${config.accountMaxPerHour} funded accounts per rolling hour`);
   console.log(`origins   ${config.allowedOrigins.join(', ')}\n`);
+
+  const aliasLedger = await JsonLedger.open<AliasEntry>(
+    config.stateDir,
+    config.networkId,
+    'aliases',
+  );
+  const accountLedger = await JsonLedger.open<AccountEntry>(
+    config.stateDir,
+    config.networkId,
+    'accounts',
+  );
+  const aliasLimiter = new HourlyRateLimiter(config.aliasMaxPerHour);
+  const accountLimiter = new HourlyRateLimiter(config.accountMaxPerHour);
+
+  /**
+   * Alias registrations in progress, keyed BOTH ways: `alias:<label>` and
+   * `contract:<address>`.
+   *
+   * Two keys because two different requests can collide. Two people racing for
+   * the same name would both read it as free on the registry and both pay for a
+   * resolver, and only one of those registrations can land — so the second is
+   * refused, not queued. One person double-clicking would pass the once-only
+   * ledger twice for the same contract, because that ledger is written only
+   * after the second transaction confirms. Both keys are claimed together,
+   * before any ledger read, and released in a `finally`.
+   *
+   * A Set is sufficient because this is one single-threaded process with one
+   * wallet. It is deliberately NOT a substitute for the ledger, which is what
+   * survives a restart.
+   */
+  const aliasInFlight = new Set<string>();
+  /**
+   * Account fundings in progress, keyed by contract address.
+   *
+   * One key, not two: an account funding is about exactly one thing, the
+   * contract being credited. Claimed before the once-only ledger is read,
+   * because that ledger is written only after the deposit confirms — two
+   * requests arriving in that window would both read "not funded" and both
+   * deposit.
+   */
+  const accountInFlight = new Set<string>();
 
   const startedAt = Date.now();
   process.stdout.write('opening the balancer wallet\n');
@@ -93,6 +229,138 @@ async function main(): Promise<void> {
   let registrationDetail: string | null = null;
   let balancesServed = 0;
   let lastBalanceAt: string | null = null;
+  let aliasesSponsored = 0;
+  let accountsFunded = 0;
+  /**
+   * When the balancer last SPENT — a sponsored registration or an activation
+   * grant — so a shortfall read straight afterwards can be reported as
+   * settling rather than as an empty wallet. A spend consumes its whole UTxO
+   * and the change comes back in a new one, so for a block or two the wallet
+   * really does read as holding nothing.
+   */
+  let lastSpendAt = 0;
+
+  /**
+   * The alias sponsor, built once at start-up so a missing or unreadable
+   * Midnames build is a start-up log line rather than a user's first failure.
+   * `null` means `/register-alias` is off — either this network has no known
+   * registry, or the artefacts could not be loaded, and the refusal says which.
+   *
+   * It is built BEFORE the wallet has synced, and deliberately so: it loads
+   * artefacts and providers, and none of that needs a synced chain. The gate
+   * that does need one is `readiness`, at the point of spending.
+   */
+  let sponsor: MidnamesSponsor | null = null;
+  let sponsorUnavailableReason = `The ${config.networkId} network has no known .night registry. Set BALANCER_MIDNAMES_TLD_ADDRESS to sponsor names against a deployed one.`;
+  if (config.midnamesTldAddress) {
+    try {
+      sponsor = await createMidnamesSponsor(config, wallet);
+      console.log(
+        `[alias] sponsoring .night registrations against ${sponsor.tldAddress} (artefacts ${sponsor.assetsPath}, proving ${sponsor.provingMode === 'server' ? config.provingServerUrl : 'in this process'})`,
+      );
+    } catch (cause) {
+      sponsorUnavailableReason = cause instanceof Error ? cause.message : String(cause);
+      console.warn(`[alias] sponsorship is DISABLED: ${sponsorUnavailableReason}`);
+    }
+  } else {
+    console.warn(`[alias] sponsorship is DISABLED: ${sponsorUnavailableReason}`);
+  }
+
+  /**
+   * The account funder, built once at start-up for the same reason as the alias
+   * sponsor. `null` means `/fund-account` is off, and the refusal says why.
+   */
+  let accountFunder: AccountFunder | null = null;
+  let accountFunderUnavailableReason =
+    'The compiled account-custody build could not be loaded, so activation grants cannot be deposited.';
+  try {
+    accountFunder = await createAccountFunder(config, wallet);
+    console.log(
+      `[account] funding accounts with ${formatNight(accountFunder.grantAtomic)} NIGHT from ${accountFunder.assetsPath} (proving ${accountFunder.provingMode === 'server' ? config.provingServerUrl : 'in this process'})`,
+    );
+  } catch (cause) {
+    accountFunderUnavailableReason = cause instanceof Error ? cause.message : String(cause);
+    console.warn(`[account] funding is DISABLED: ${accountFunderUnavailableReason}`);
+  }
+
+  /**
+   * A spend consumes its whole UTxO and the change comes back in a new one, so
+   * for a block or two after a spend the wallet really does hold nothing
+   * spendable. Measured on preview 2026/08/07 for the funder: a wallet holding
+   * ~5,000 NIGHT read zero immediately after a drip and was whole again 20 s
+   * later. Reporting that as an empty balancer would be false, so a shortfall
+   * is not believed until it has had time to settle.
+   */
+  const CHANGE_SETTLE_MS = 90_000;
+  const SETTLE_POLL_MS = 3_000;
+
+  /**
+   * Can the balancer pay for this, right now?
+   *
+   * Three ways it cannot, and they are genuinely different answers: the wallet
+   * has not finished walking the chain (say so and let the caller come back);
+   * it holds less NIGHT than the thing costs; it holds no DUST, so it cannot
+   * pay a fee at all. `funder-empty` and `funder-no-dust` keep the funder's own
+   * codes so a client can branch on one vocabulary across both services;
+   * `wallet-syncing` is new here because the funder blocks its HTTP server
+   * until it is synced and this one deliberately does not.
+   */
+  const readiness = async (
+    options: { settle?: boolean; requireNight?: bigint } = {},
+  ): Promise<{ ready: boolean; night: bigint; refuse: Refusal | null }> => {
+    const required = options.requireNight ?? 0n;
+    const deadline = Date.now() + (options.settle ? CHANGE_SETTLE_MS : 0);
+    for (;;) {
+      let isSynced = false;
+      let heldNight = 0n;
+      let heldDust = 0n;
+      try {
+        const state = await wallet.currentState();
+        isSynced = (await wallet.progress(state)).isSynced;
+        heldNight = await wallet.nightBalance(state);
+        heldDust = await wallet.dustBalance(state);
+      } catch {
+        // Reported through the refusals below rather than thrown at a caller.
+      }
+      if (isSynced && heldNight >= required && heldDust > 0n) {
+        return { ready: true, night: heldNight, refuse: null };
+      }
+      if (Date.now() >= deadline) {
+        if (!isSynced) {
+          return {
+            ready: false,
+            night: heldNight,
+            refuse: refusal(
+              503,
+              'wallet-syncing',
+              'The balancer wallet is still syncing and cannot spend yet. Try again shortly.',
+            ),
+          };
+        }
+        if (heldNight < required) {
+          return {
+            ready: false,
+            night: heldNight,
+            refuse: refusal(
+              503,
+              'funder-empty',
+              `The balancer holds ${formatNight(heldNight)} NIGHT, less than the ${formatNight(required)} NIGHT this needs. Its address (${wallet.address}) needs topping up from the ${config.networkId} faucet.`,
+            ),
+          };
+        }
+        return {
+          ready: false,
+          night: heldNight,
+          refuse: refusal(
+            503,
+            'funder-no-dust',
+            'The balancer cannot pay a transaction fee yet: its DUST is still accruing. Try again in a minute.',
+          ),
+        };
+      }
+      await new Promise((settle) => setTimeout(settle, SETTLE_POLL_MS));
+    }
+  };
 
   /* The wallet syncs in the background and the HTTP server starts NOW. A
      sponsor that is unreachable for the length of a chain walk looks, from
@@ -297,6 +565,14 @@ async function main(): Promise<void> {
     } catch {
       // Reported as `synced: false` below rather than as an HTTP failure.
     }
+    /* Same meaning as `available` on `/wallet-status`: able to pay for
+       somebody right now, not merely alive. Computed before the object so
+       `settling` can say why it is false. */
+    const ready =
+      (progress?.isSynced ?? false) &&
+      dust > 0n &&
+      !wallet.isBalancing() &&
+      ['ready', 'server'].includes(wallet.provingReadiness().state);
     return {
       network: config.networkId,
       address: wallet.address,
@@ -314,15 +590,569 @@ async function main(): Promise<void> {
       balancesServed,
       lastBalanceAt,
       balancing: wallet.isBalancing(),
+      /* Since this process started, and — for each `…Total` — the persisted
+         once-only ledger, which survives restarts. None of these is key
+         material and none of them names a user. */
+      aliasesSponsored,
+      aliasesSponsoredTotal: aliasLedger.count,
+      aliasSponsorship: sponsor ? 'available' : 'unavailable',
+      aliasTldAddress: sponsor?.tldAddress ?? null,
+      aliasSlotsRemainingThisHour: aliasLimiter.remaining(),
+      accountsFunded,
+      accountsFundedTotal: accountLedger.count,
+      accountFunding: accountFunder ? 'available' : 'unavailable',
+      accountGrantAtomic: config.accountGrantAtomic.toString(),
+      accountSlotsRemainingThisHour: accountLimiter.remaining(),
+      /* How CONTRACT circuits are proved, which is a different question from
+         `proving` above: that one is the wallet's own DUST and Zswap legs. */
+      contractProving: sponsor?.provingMode ?? accountFunder?.provingMode ?? null,
+      /* Not ready, but only because a spend's change is still in flight — the
+         funder's distinction, and it matters: change settling and a wallet
+         that is genuinely out of NIGHT read identically on the chain. */
+      settling: !ready && Date.now() - lastSpendAt < CHANGE_SETTLE_MS,
       uptimeSeconds: Math.round((Date.now() - startedAt) / 1_000),
-      /* Same meaning as `available` on `/wallet-status`: able to pay a fee for
-         somebody right now, not merely alive. */
-      ready:
-        (progress?.isSynced ?? false) &&
-        dust > 0n &&
-        !wallet.isBalancing() &&
-        ['ready', 'server'].includes(wallet.provingReadiness().state),
+      ready,
     };
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /* POST /fund-account                                                         */
+  /* -------------------------------------------------------------------------- */
+
+  interface FundAccountRequestBody {
+    contractAddress?: unknown;
+    /** Optional; when present it must name THIS service's network. */
+    network?: unknown;
+  }
+
+  /**
+   * Deposits one activation grant into a user's account-custody contract.
+   *
+   * Nothing is spent until every gate below has passed, and nothing is reported
+   * as funded until the account's own mirrored balance has been read back and
+   * seen carrying the credit.
+   */
+  const fundAccount = async (
+    body: FundAccountRequestBody,
+  ): Promise<{ status: number; body: Record<string, unknown> }> => {
+    const fail = (why: Refusal) => ({
+      status: why.status,
+      body: { error: why.error, message: why.message, ...(why.extra ?? {}) },
+    });
+
+    /* Captured, not re-read: `accountFunder` is a `let`, and TypeScript's
+       narrowing does not survive into the closures below. */
+    const funder = accountFunder;
+    if (!funder) {
+      return fail(refusal(503, 'funding-unsupported', accountFunderUnavailableReason));
+    }
+
+    /* 1. Shape. The address is validated before anything touches the chain. */
+    if (typeof body.contractAddress !== 'string') {
+      return fail(
+        refusal(
+          400,
+          'invalid-contract-address',
+          'POST a JSON body of the form {"contractAddress": "64 hex"}.',
+        ),
+      );
+    }
+    let contractAddress: string;
+    try {
+      contractAddress = rawContractAddress(body.contractAddress);
+    } catch (cause) {
+      return fail(
+        refusal(
+          400,
+          'invalid-contract-address',
+          cause instanceof Error ? cause.message : String(cause),
+        ),
+      );
+    }
+
+    if (body.network !== undefined && body.network !== config.networkId) {
+      return fail(
+        refusal(
+          400,
+          'wrong-network',
+          `That request names the ${String(body.network)} network; this balancer funds accounts on ${config.networkId}.`,
+        ),
+      );
+    }
+
+    /* 2. In flight. Claimed BEFORE any ledger or chain read, because those
+          reads cannot see a deposit that is still in the air. A second request
+          for the same account is refused outright rather than queued: the
+          honest answer is "one is already running", not a second grant. */
+    if (accountInFlight.has(contractAddress)) {
+      return fail(
+        refusal(
+          409,
+          'funding-in-flight',
+          'A funding for this Passport is already in progress. Wait for it to finish before asking again.',
+        ),
+      );
+    }
+    accountInFlight.add(contractAddress);
+    try {
+      /* 3. It has to BE an account. One indexer read that must both find state
+            and decode it as an account-custody contract. This is the gate that
+            keeps the balancer from paying coins into a stranger's contract: a
+            contract that is not an ACC has no `deposit_night`, and the grant
+            would be spent into something the user cannot reach. The decoded
+            balance is kept for gate 5 rather than read twice. */
+      let heldNight: bigint;
+      try {
+        heldNight = await funder.nightBalance(contractAddress);
+      } catch (cause) {
+        if (cause instanceof AccountFundingError) {
+          return fail(
+            refusal(
+              cause.code === 'indexer-unreachable' ? 503 : 400,
+              cause.code,
+              cause.message,
+              cause.detail ? { detail: cause.detail } : undefined,
+            ),
+          );
+        }
+        return fail(
+          refusal(
+            503,
+            'indexer-unreachable',
+            `The contract at ${contractAddress} could not be checked: ${cause instanceof Error ? cause.message : String(cause)}`,
+          ),
+        );
+      }
+
+      /* 4. Once per Passport, ever. Keyed on the contract address because that
+            is what a Passport has exactly one of. */
+      const previous = accountLedger.get(contractAddress);
+      if (previous) {
+        return fail(
+          refusal(
+            409,
+            'already-activated',
+            `This Passport was already funded on ${previous.at} (tx ${previous.txHash}). The activation grant is once per account.`,
+            { txHash: previous.txHash },
+          ),
+        );
+      }
+
+      /* 5. Not already funded. Read from the account's own `night_balances`
+            mirror at gate 3: an account that already holds a grant's worth does
+            not need an opening balance, whoever put it there. */
+      if (heldNight >= funder.grantAtomic) {
+        return fail(
+          refusal(
+            409,
+            'already-funded',
+            `That account already holds ${formatNight(heldNight)} NIGHT — at least one activation grant's worth — so it does not need funding.`,
+          ),
+        );
+      }
+
+      /* 6. The hourly ceiling, looked at without consuming a slot. */
+      if (accountLimiter.atCeiling()) {
+        return fail(
+          refusal(
+            429,
+            'rate-limited',
+            `The balancer has reached its ceiling of ${config.accountMaxPerHour} funded accounts per hour. Try again later.`,
+          ),
+        );
+      }
+
+      /* 7. Can the balancer actually pay? The grant plus a fee, waiting out any
+            change still in flight rather than turning the user away during a
+            settle window. */
+      const ready = await readiness({ settle: true, requireNight: funder.grantAtomic });
+      if (ready.refuse) return fail(ready.refuse);
+
+      /* The slot is consumed here and nowhere earlier: every refusal above
+         spent nothing, and an hourly ceiling exists to cap what the balancer
+         SPENDS. */
+      if (!accountLimiter.take()) {
+        return fail(
+          refusal(
+            429,
+            'rate-limited',
+            `The balancer has reached its ceiling of ${config.accountMaxPerHour} funded accounts per hour. Try again later.`,
+          ),
+        );
+      }
+
+      try {
+        /* Under the wallet's spend lock, so a fee-sponsorship request or an
+           alias registration cannot reserve the coins this deposit is
+           balancing against. */
+        const result = await wallet.exclusive(() => funder.fund(contractAddress));
+        accountsFunded += 1;
+        lastSpendAt = Date.now();
+        await accountLedger.record(contractAddress, {
+          txHash: result.txHash,
+          amountAtomic: result.amountAtomic.toString(),
+          balanceAfterAtomic: result.balanceAfterAtomic.toString(),
+          at: result.fundedAt,
+        });
+        console.log(
+          `[account] ${formatNight(result.amountAtomic)} NIGHT → ${contractAddress} (tx ${result.txHash}${result.block ? `, block ${result.block}` : ''}, holds ${result.balanceAfterAtomic} atomic)`,
+        );
+        return {
+          status: 200,
+          body: {
+            contractAddress: result.contractAddress,
+            txHash: result.txHash,
+            block: result.block,
+            amountAtomic: result.amountAtomic.toString(),
+            balanceAfterAtomic: result.balanceAfterAtomic.toString(),
+            fundedAt: result.fundedAt,
+          },
+        };
+      } catch (cause) {
+        if (cause instanceof AccountFundingError) {
+          console.error(
+            `[account] FAILED for ${contractAddress}: ${cause.code} — ${cause.message}${cause.detail ? ` (${cause.detail})` : ''}`,
+          );
+          /* `not-an-account` can still surface here: gate 3's read is a
+             snapshot, and the deposit re-reads before it spends. */
+          const status =
+            cause.code === 'indexer-unreachable' ? 503 : cause.code === 'not-an-account' ? 400 : 502;
+          return fail(
+            refusal(status, cause.code, cause.message, cause.detail ? { detail: cause.detail } : undefined),
+          );
+        }
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error(`[account] FAILED for ${contractAddress}: ${message}`);
+        return fail(
+          refusal(500, 'deposit-failed', `The activation grant could not be deposited: ${message}`),
+        );
+      }
+    } finally {
+      /* Released on every path — recorded, refused, or thrown — so a failure
+         can never leave a Passport permanently unfundable. */
+      accountInFlight.delete(contractAddress);
+    }
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /* POST /register-alias                                                       */
+  /* -------------------------------------------------------------------------- */
+
+  interface AliasRequestBody {
+    alias?: unknown;
+    ownerKey?: unknown;
+    contractAddress?: unknown;
+    /** Optional; when absent the leaf carries 32 zero bytes. See `./midnames.ts`. */
+    ownerAddress?: unknown;
+    /** Optional; when present it must name THIS service's network. */
+    network?: unknown;
+  }
+
+  /**
+   * Sponsors one `.night` registration.
+   *
+   * Nothing is spent until every gate below has passed, and nothing is reported
+   * as registered until the registry has been read back and seen resolving the
+   * name to the requested contract.
+   */
+  const registerAlias = async (
+    body: AliasRequestBody,
+  ): Promise<{ status: number; body: Record<string, unknown> }> => {
+    const fail = (why: Refusal) => ({
+      status: why.status,
+      body: { error: why.error, message: why.message, ...(why.extra ?? {}) },
+    });
+
+    /* Captured, not re-read: `sponsor` is a `let`, and TypeScript's narrowing
+       does not survive into the closures below. */
+    const midnames = sponsor;
+    if (!midnames) {
+      return fail(refusal(503, 'alias-unsupported', sponsorUnavailableReason));
+    }
+
+    /* 1. Shape. Every field is validated before anything touches the chain, and
+          the alias rules are the demo's own — same regex, same reserved list —
+          so a name the browser would refuse is refused here too. */
+    if (typeof body.alias !== 'string' || !body.alias.trim()) {
+      return fail(
+        refusal(
+          400,
+          'invalid-alias',
+          'POST a JSON body of the form {"alias": "…", "ownerKey": "64 hex", "contractAddress": "64 hex"}.',
+        ),
+      );
+    }
+    let label: string;
+    try {
+      label = normalisePassportAlias(body.alias);
+    } catch (cause) {
+      return fail(
+        refusal(400, 'invalid-alias', cause instanceof Error ? cause.message : String(cause)),
+      );
+    }
+
+    if (typeof body.ownerKey !== 'string') {
+      return fail(
+        refusal(400, 'invalid-owner-key', 'ownerKey must be a 64-hex Midnames owner key.'),
+      );
+    }
+    let ownerKey: Uint8Array;
+    try {
+      ownerKey = ownerKeyBytes(body.ownerKey);
+    } catch (cause) {
+      return fail(
+        refusal(400, 'invalid-owner-key', cause instanceof Error ? cause.message : String(cause)),
+      );
+    }
+
+    if (typeof body.contractAddress !== 'string') {
+      return fail(
+        refusal(
+          400,
+          'invalid-contract-address',
+          'contractAddress must be a 64-hex Midnight contract address.',
+        ),
+      );
+    }
+    let contractAddress: string;
+    try {
+      contractAddress = rawContractAddress(body.contractAddress);
+    } catch (cause) {
+      return fail(
+        refusal(
+          400,
+          'invalid-contract-address',
+          cause instanceof Error ? cause.message : String(cause),
+        ),
+      );
+    }
+
+    if (body.network !== undefined && body.network !== config.networkId) {
+      return fail(
+        refusal(
+          400,
+          'wrong-network',
+          `That request names the ${String(body.network)} network; this balancer sponsors on ${config.networkId}.`,
+        ),
+      );
+    }
+
+    /* The leaf's owner ADDRESS half is optional and is not the registry's
+       authority — see `AliasRegistrationRequest.ownerAddressBytes`. When one is
+       given it must be a real unshielded address on this network, because
+       silently discarding a malformed one would leave the user believing a
+       payment address was set. */
+    let ownerAddressBytes: Uint8Array | undefined;
+    if (body.ownerAddress !== undefined) {
+      if (typeof body.ownerAddress !== 'string' || !body.ownerAddress.trim()) {
+        return fail(
+          refusal(
+            400,
+            'invalid-owner-address',
+            'ownerAddress, when given, must be an mn_addr… unshielded address.',
+          ),
+        );
+      }
+      try {
+        const parsed = MidnightBech32m.parse(body.ownerAddress.trim());
+        if (parsedNetworkName(parsed.network) !== config.networkId) {
+          return fail(
+            refusal(
+              400,
+              'wrong-network',
+              `That owner address belongs to the ${parsedNetworkName(parsed.network)} network; this balancer sponsors on ${config.networkId}.`,
+            ),
+          );
+        }
+        ownerAddressBytes = new Uint8Array(parsed.decode(UnshieldedAddress, config.networkId).data);
+      } catch (cause) {
+        return fail(
+          refusal(
+            400,
+            'invalid-owner-address',
+            `That is not an unshielded Midnight address: ${cause instanceof Error ? cause.message : String(cause)}`,
+          ),
+        );
+      }
+    }
+
+    /* 2. In flight. Claimed BEFORE any ledger or registry read: those reads
+          cannot see a registration that is still in the air. */
+    const aliasKey = `alias:${label}`;
+    const contractKey = `contract:${contractAddress}`;
+    if (aliasInFlight.has(aliasKey) || aliasInFlight.has(contractKey)) {
+      return fail(
+        refusal(
+          409,
+          'registration-in-flight',
+          `A sponsored registration for ${aliasInFlight.has(aliasKey) ? aliasDomain(label) : 'this Passport'} is already in progress. Wait for it to finish before asking again.`,
+        ),
+      );
+    }
+    aliasInFlight.add(aliasKey);
+    aliasInFlight.add(contractKey);
+    try {
+      /* 3. Availability. A real read of the deployed registry, never a cache
+            and never an optimistic assumption: a registry we cannot read is
+            reported as unreachable, not as free. */
+      try {
+        if (!(await midnames.isAvailable(label))) {
+          return fail(
+            refusal(
+              409,
+              'name-taken',
+              `${aliasDomain(label)} is already registered on ${config.networkId}.`,
+            ),
+          );
+        }
+      } catch (cause) {
+        return fail(
+          refusal(
+            503,
+            'registry-unreachable',
+            cause instanceof Error ? cause.message : String(cause),
+          ),
+        );
+      }
+
+      /* 4. The target must exist. This is both a correctness gate — a name
+            bound to nothing is worse than no name — and the anti-spam gate:
+            deploying an account-custody contract costs a real transaction, so
+            an abuser cannot mint free targets faster than the chain allows. */
+      let targetExists: boolean;
+      try {
+        targetExists = await midnames.contractExists(contractAddress);
+      } catch (cause) {
+        return fail(
+          refusal(
+            503,
+            'registry-unreachable',
+            `The contract at ${contractAddress} could not be checked: ${cause instanceof Error ? cause.message : String(cause)}`,
+          ),
+        );
+      }
+      if (!targetExists) {
+        return fail(
+          refusal(
+            400,
+            'target-missing',
+            `No contract state is served at ${contractAddress}, so there is nothing for ${aliasDomain(label)} to resolve to. Deploy the account-custody contract first.`,
+          ),
+        );
+      }
+
+      /* 5. Once per Passport, ever. Keyed on the contract address because that
+            is what a Passport has exactly one of. */
+      const previous = aliasLedger.get(contractAddress);
+      if (previous) {
+        return fail(
+          refusal(
+            409,
+            'already-sponsored',
+            `This Passport already had ${aliasDomain(previous.alias)} sponsored on ${previous.at} (tx ${previous.registerTx}). One sponsored name per Passport.`,
+            { alias: previous.alias, registerTx: previous.registerTx },
+          ),
+        );
+      }
+
+      /* 6. The hourly ceiling, looked at without consuming a slot. */
+      if (aliasLimiter.atCeiling()) {
+        return fail(
+          refusal(
+            429,
+            'rate-limited',
+            `The balancer has reached its ceiling of ${config.aliasMaxPerHour} sponsored registrations per hour. Try again later.`,
+          ),
+        );
+      }
+
+      /* 7. Can the balancer actually pay? The registry price plus a fee,
+            waiting out any change still in flight rather than turning the user
+            away during a settle window. */
+      const cost = aliasCostAtomicNight(label);
+      const ready = await readiness({ settle: true, requireNight: cost });
+      if (ready.refuse) return fail(ready.refuse);
+
+      /* The slot is consumed here and nowhere earlier: every refusal above
+         spent nothing, and an hourly ceiling exists to cap what the balancer
+         SPENDS. */
+      if (!aliasLimiter.take()) {
+        return fail(
+          refusal(
+            429,
+            'rate-limited',
+            `The balancer has reached its ceiling of ${config.aliasMaxPerHour} sponsored registrations per hour. Try again later.`,
+          ),
+        );
+      }
+
+      try {
+        /* Both transactions run under the wallet's spend lock, so a fee
+           sponsorship cannot reserve the coins this registration is balancing
+           against. */
+        const result = await wallet.exclusive(() =>
+          midnames.register({ label, ownerKey, contractAddress, ownerAddressBytes }),
+        );
+        aliasesSponsored += 1;
+        lastSpendAt = Date.now();
+        await aliasLedger.record(contractAddress, {
+          alias: result.alias,
+          resolverAddress: result.resolverAddress,
+          resolverDeployTx: result.resolverDeployTx,
+          registerTx: result.registerTx,
+          costAtomic: result.costAtomic.toString(),
+          at: result.registeredAt,
+        });
+        console.log(
+          `[alias] ${result.domain} → ${contractAddress} (resolver ${result.resolverAddress}, deploy ${result.resolverDeployTx}, register ${result.registerTx}${result.registerBlock ? `, block ${result.registerBlock}` : ''})`,
+        );
+        return {
+          status: 200,
+          body: {
+            alias: result.alias,
+            domain: result.domain,
+            network: result.network,
+            tldAddress: result.tldAddress,
+            resolverAddress: result.resolverAddress,
+            resolverDeployTx: result.resolverDeployTx,
+            registerTx: result.registerTx,
+            resolverDeployBlock: result.resolverDeployBlock,
+            registerBlock: result.registerBlock,
+            target: result.target,
+            ownerKey: result.ownerKey,
+            costAtomic: result.costAtomic.toString(),
+            registeredAt: result.registeredAt,
+          },
+        };
+      } catch (cause) {
+        if (cause instanceof AliasSponsorError) {
+          console.error(
+            `[alias] FAILED for ${aliasDomain(label)}: ${cause.code} — ${cause.message}${cause.detail ? ` (${cause.detail})` : ''}`,
+          );
+          /* `name-taken` can still surface here: the availability read above is
+             a snapshot, and someone else's registration can land in between. */
+          const status =
+            cause.code === 'name-taken' ? 409 : cause.code === 'registry-unreachable' ? 503 : 502;
+          return fail(
+            refusal(status, cause.code, cause.message, cause.detail ? { detail: cause.detail } : undefined),
+          );
+        }
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error(`[alias] FAILED for ${aliasDomain(label)}: ${message}`);
+        return fail(
+          refusal(
+            500,
+            'registration-failed',
+            `The sponsored registration could not be completed: ${message}`,
+          ),
+        );
+      }
+    } finally {
+      /* Released on every path, so a failure can never leave a name or a
+         Passport permanently unregisterable. */
+      aliasInFlight.delete(aliasKey);
+      aliasInFlight.delete(contractKey);
+    }
   };
 
   /* -------------------------------------------------------------------------- */
@@ -461,9 +1291,43 @@ async function main(): Promise<void> {
         return;
       }
 
+      if (request.method === 'POST' && path === '/fund-account') {
+        let body: FundAccountRequestBody;
+        try {
+          body = JSON.parse((await readRawBody(request)).toString('utf8') || '{}') as FundAccountRequestBody;
+        } catch {
+          respond(request, response, 400, {
+            error: 'invalid-request',
+            message: 'The request body must be JSON of the form {"contractAddress": "64 hex"}.',
+          });
+          return;
+        }
+        const outcome = await fundAccount(body);
+        respond(request, response, outcome.status, outcome.body);
+        return;
+      }
+
+      if (request.method === 'POST' && path === '/register-alias') {
+        let body: AliasRequestBody;
+        try {
+          body = JSON.parse((await readRawBody(request)).toString('utf8') || '{}') as AliasRequestBody;
+        } catch {
+          respond(request, response, 400, {
+            error: 'invalid-request',
+            message:
+              'The request body must be JSON of the form {"alias": "…", "ownerKey": "64 hex", "contractAddress": "64 hex"}.',
+          });
+          return;
+        }
+        const outcome = await registerAlias(body);
+        respond(request, response, outcome.status, outcome.body);
+        return;
+      }
+
       respond(request, response, 404, {
         error: 'not-found',
-        message: 'Routes: GET /status, GET /wallet-status, POST /balance-only.',
+        message:
+          'Routes: GET /status, GET /wallet-status, POST /balance-only, POST /register-alias, POST /fund-account.',
       });
     })().catch((cause) => {
       console.error('[http] handler failed', cause);
@@ -477,7 +1341,7 @@ async function main(): Promise<void> {
 
   server.listen(config.port, config.host, () => {
     console.log(
-      `listening on http://${config.host}:${config.port} — GET /status, GET /wallet-status, POST /balance-only`,
+      `listening on http://${config.host}:${config.port} — GET /status, GET /wallet-status, POST /balance-only, POST /register-alias, POST /fund-account`,
     );
     console.log('(the wallet is still syncing; /wallet-status answers honestly meanwhile)\n');
   });

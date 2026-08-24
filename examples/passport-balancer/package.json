@@ -12,7 +12,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@midnight-ntwrk/compact-js": "2.5.5-rc.7",
+    "@midnight-ntwrk/compact-runtime": "0.18.0-rc.1",
+    "@midnight-ntwrk/midnight-js-contracts": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-network-id": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-types": "5.0.0-beta.6",
     "@midnight-ntwrk/wallet-sdk": "2.0.0-beta.2",
+    "@midnight-ntwrk/wallet-sdk-address-format": "4.0.0-beta.2",
     "@midnight-ntwrk/zkir-v2": "2.1.0",
     "@midnightntwrk/ledger-v9": "1.0.0-rc.3",
     "rxjs": "^7.8.2",

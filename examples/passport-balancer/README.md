@@ -1,10 +1,16 @@
 # passport-balancer
 
-A small self-hosted service that pays other people's Midnight transaction fees
-on **stagenet**.
+A small self-hosted service that pays for onboarding a Midnight Passport on
+**stagenet** — all three costs of it, none of which reach the user's wallet.
 
-It is the stagenet counterpart of the fee sponsorship the Passport demo already
-consumes on preview and preprod. The demo's client
+| The cost | The endpoint | Who pays |
+| --- | --- | --- |
+| The **fee** on the user's own transactions | `POST /balance-only` | the balancer's DUST |
+| The **name** — `alice.night` | `POST /register-alias` | the balancer's NIGHT and DUST |
+| The **activation grant** inside the user's account contract | `POST /fund-account` | the balancer's NIGHT and DUST |
+
+The fee leg is the stagenet counterpart of the sponsorship the Passport demo
+already consumes on preview and preprod. The demo's client
 (`examples/passport-demo/src/lib/sponsor.ts`) builds a transaction with
 `payFees: false`, balances every token kind **except** DUST locally, signs it,
 proves it, and then asks a sponsor to attach the fee. On preview that sponsor is
@@ -15,6 +21,25 @@ the resulting DUST on fee legs for transactions it did not build and will not
 submit. The user's NIGHT never moves to pay a fee and the user's own wallet
 still does the submitting, so sponsorship removes the cost without touching
 custody or the approval moment.
+
+### Why the other two endpoints are here and not in the funder
+
+`examples/passport-funder` does the name and the grant on **preview**, and this
+is a port of it — same policy order, same refusal codes, same response shapes,
+so a client written against one works against the other. It had to move rather
+than be pointed at stagenet for two reasons:
+
+1. The funder runs the **v8** wallet SDK, which cannot read stagenet at all — it
+   fails on the indexer's schema with a `ParseError`. Everything here is the
+   ledger-9 beta.
+2. Sponsoring a name is exactly the gap a migrated PWA still has.
+   `register_domain_for` takes the registry price from its **caller** in
+   unshielded NIGHT, a fresh passkey wallet holds none, and stagenet's faucet is
+   captcha-gated — so there is no self-service path to that 10 atomic NIGHT. The
+   registry's entrypoint takes the owner as an **argument**, so a third party can
+   pay while the registry still records the user's key as owner. The balancer,
+   already holding NIGHT and DUST for the fee leg, is the third party already
+   standing there.
 
 ---
 
@@ -60,6 +85,45 @@ it does not have.
 Set `BALANCER_PROVER_URL` to use an external proof server instead (a
 `9.0.0-rc.5_experimental` image exists and will be hosted). A server proves
 faster than a Node worker, so prefer it once it is up; nothing else changes.
+
+### …and that now covers CONTRACT circuits too
+
+`/register-alias` and `/fund-account` prove `register_domain_for` and
+`deposit_night`, which are **our** circuits: their prover keys, verifier keys,
+and ZKIR are on disk in `contracts-stagenet/managed/`, not published anywhere.
+`deploy-stagenet` proved them through a local Docker proof server, and that
+would have made Docker a new dependency of the droplet for the one endpoint
+whose whole point is removing dependencies.
+
+It is not required. The same WASM prover runs them here, because the join is
+only about **key material**:
+
+- `WasmProver` (`@midnight-ntwrk/wallet-sdk`) runs `@midnight-ntwrk/zkir-v2` in a
+  worker thread — so a two-minute proof does not block `/wallet-status` — and
+  exposes `asProvingProvider()`, a ledger `ProvingProvider`;
+- `createProofProvider` (`@midnight-ntwrk/midnight-js-types`) turns that into the
+  `ProofProvider` a contract call wants;
+- the `KeyMaterialProvider` those consult is the **union** of two sources,
+  resolved in the same order `httpClientProofProvider` resolves them: the
+  `ZKConfigRegistry`'s verifier-key join against our on-disk build first, the
+  flat provider second, the published ledger circuits last. BLS parameters
+  always come from the published source — they are a property of circuit size,
+  not of the contract.
+
+The registry's verifier-key join is worth having for its own sake: it refuses an
+artefact set whose verifier key does not match what the **deployed** contract
+carries, which catches a stale build before it produces a proof the node would
+reject.
+
+Measured on stagenet, in-process, no proof server: a whole sponsored
+registration — resolver-leaf deploy *and* the paid `register_domain_for`, two
+transactions with a chain confirmation between them — took **113 s**; an
+activation grant took **35 s**. `GET /status` reports which path is in use as
+`contractProving: "wasm" | "server"`.
+
+Setting `BALANCER_PROVER_URL` switches contract circuits to that server as well
+as the wallet's own legs — one knob, because a deployment that has a proof
+server should use it for everything.
 
 ---
 
@@ -144,11 +208,160 @@ Only DUST is balanced (`tokenKindsToBalance: ['dust']`). The caller balanced its
 own shielded and unshielded legs before asking — adding to those here would
 spend the balancer's NIGHT on somebody else's transfer.
 
+### `POST /register-alias`
+
+Registers a `.night` name **for** a user: the balancer pays the registry price
+and both transaction fees, and the registry records the **user's** key as owner.
+The user's wallet signs nothing, spends nothing, and needs to hold nothing.
+
+```sh
+curl -X POST http://127.0.0.1:8807/register-alias \
+  -H 'content-type: application/json' \
+  -d '{"alias":"alice","ownerKey":"<64 hex>","contractAddress":"<64 hex>"}'
+```
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `alias` | yes | 1–32 lowercase letters, digits, interior hyphens. A trailing `.night` is accepted and stripped. |
+| `ownerKey` | yes | The user's 32-byte Midnames owner key, `sha256(pad(32,'midnight.domains') ‖ secret)`, as 64 hex. |
+| `contractAddress` | yes | The user's account-custody contract, 64 hex. The name resolves to it. |
+| `ownerAddress` | no | An `mn_addr…` unshielded address for the leaf's `owner_address` half. Absent means 32 zero bytes — the balancer will not substitute its own, or a payment meant for the user would land here. |
+| `network` | no | Must be `stagenet` when given. |
+
+Two transactions happen, in order: a **resolver leaf** is deployed with
+`DOMAIN_TARGET = [contractAddress, ContractAddr]` and `DOMAIN_OWNER` set to the
+supplied key, then `register_domain_for(owner, domain, len, resolver)` is called
+on the TLD. Success is returned **only** after the registry has been read back
+and seen resolving the name to that contract — not merely after the transactions
+land:
+
+```json
+{
+  "alias": "alice", "domain": "alice.night", "network": "stagenet",
+  "tldAddress": "<64 hex>", "resolverAddress": "<64 hex>",
+  "resolverDeployTx": "<64-hex ledger hash>", "registerTx": "<64-hex ledger hash>",
+  "resolverDeployBlock": 159260, "registerBlock": 159274,
+  "target": { "kind": "contract", "address": "<64 hex>" },
+  "ownerKey": "<64 hex>", "costAtomic": "10", "registeredAt": "<ISO 8601>"
+}
+```
+
+The two `…Tx` fields are **ledger hashes**, resolved through the indexer, not
+the 33-byte identifiers midnight-js returns — a link built from an identifier
+dies with "not found". An identifier that never resolves is returned unchanged
+rather than replaced by a plausible-looking lie.
+
+Policy, in the order it is enforced — nothing is spent until every gate passes:
+
+1. well-formed, unreserved label, owner key, and contract address on this network
+2. no other registration for the same alias **or** the same contract in flight
+3. the name is free — a real read of the deployed registry, never a cache
+4. the target contract really exists on chain
+5. once-only per contract, from `state/aliases-stagenet.json`
+6. the hourly ceiling
+7. the balancer can pay the price plus a fee
+
+| Status | `error` | Meaning |
+| --- | --- | --- |
+| 400 | `invalid-alias` | Bad shape, or on the reserved list. |
+| 400 | `invalid-owner-key` / `invalid-contract-address` / `invalid-owner-address` | Bad field. |
+| 400 | `wrong-network` | The request names another network. |
+| 400 | `target-missing` | No contract state at `contractAddress`. |
+| 409 | `registration-in-flight` | One is already running for this name or this Passport. |
+| 409 | `name-taken` | Already in the registry. |
+| 409 | `already-sponsored` | This Passport already got one; carries `alias` and `registerTx`. |
+| 429 | `rate-limited` | Hourly ceiling reached. |
+| 503 | `alias-unsupported` | No registry configured, or the build could not be loaded. |
+| 503 | `registry-unreachable` | The registry could not be read, so nothing may be asserted. |
+| 503 | `wallet-syncing` / `funder-empty` / `funder-no-dust` | The balancer cannot pay right now. |
+| 502 | `deploy-failed` / `register-rejected` / `confirmation-failed` | A transaction failed, or landed without the binding appearing. |
+
+`funder-empty` and `funder-no-dust` keep the funder's own codes so a client
+branches on one vocabulary across both services. `wallet-syncing` is new here:
+the funder blocks its HTTP server until it is synced, and this one deliberately
+does not.
+
+### `POST /fund-account`
+
+Deposits one activation grant **into** the user's account-custody contract —
+not to their wallet address.
+
+```sh
+curl -X POST http://127.0.0.1:8807/fund-account \
+  -H 'content-type: application/json' \
+  -d '{"contractAddress":"<64 hex>"}'
+```
+
+The ACC's `deposit_night(color, amount)` is permissionless — no
+`require_device()`, no witness, no caller check. It calls
+`receiveUnshielded(color, amount)`, which makes the transaction owe the contract
+that many coins, and then mirrors the credit into `night_balances` so the
+balance is readable from decoded ledger state. Anyone may fund an account; the
+balancer is just the first anyone. The value exists **inside** the contract from
+the moment it exists, so the user never holds, watches, or moves it.
+
+The balancer's witness set for this contract is three refusals, one per declared
+witness (`device_secret`, `grant_secret`, `recovery_secret`). `deposit_night`
+asks for none of them, so the deposit is unaffected; every circuit that could
+move value *out* is impossible from this process by construction rather than by
+discipline.
+
+Success is returned only once the account's own mirrored balance has been read
+back and seen carrying **this** credit:
+
+```json
+{
+  "contractAddress": "<64 hex>", "txHash": "<64-hex ledger hash>", "block": 159286,
+  "amountAtomic": "2000", "balanceAfterAtomic": "2000", "fundedAt": "<ISO 8601>"
+}
+```
+
+Policy: shape → not already in flight → the contract exists **and** decodes as
+an account-custody contract → once-only per contract, from
+`state/accounts-stagenet.json` → not already holding a grant's worth → hourly
+ceiling → the balancer can pay.
+
+| Status | `error` | Meaning |
+| --- | --- | --- |
+| 400 | `invalid-contract-address` / `wrong-network` | Bad request. |
+| 400 | `not-an-account` | No state there, or state that is not an ACC. |
+| 409 | `funding-in-flight` / `already-activated` / `already-funded` | Already served, or being served. |
+| 429 | `rate-limited` | Hourly ceiling reached. |
+| 503 | `funding-unsupported` | The compiled account build could not be loaded. |
+| 503 | `indexer-unreachable` / `wallet-syncing` / `funder-empty` / `funder-no-dust` | Cannot establish or cannot pay. |
+| 502 | `deposit-failed` / `confirmation-failed` | The deposit failed, or the credit never appeared. |
+
+The `not-an-account` gate is deliberately **structural** rather than "the
+decoder did not throw": Compact decodes positionally, so a foreign contract can
+occasionally produce a plausible-looking object. Every real account has at least
+one device and exactly three recovery shares, and a candidate failing either
+test is not one. This is what keeps the balancer from paying coins into a
+stranger's contract, where the user could never reach them.
+
 ### `GET /status`
 
 The human answer, in the funder's idiom: network, address, NIGHT and DUST
 balances, `synced` and the raw `progress`, how it proves and whether that is
-ready, what the DUST registration did, how many transactions it has balanced.
+ready, what the DUST registration did, how many transactions it has balanced —
+plus the sponsorship counters:
+
+```
+aliasesSponsored / aliasesSponsoredTotal   this process / the persisted ledger
+aliasSponsorship                           available | unavailable
+aliasTldAddress                            the registry names go to
+aliasSlotsRemainingThisHour
+accountsFunded / accountsFundedTotal       this process / the persisted ledger
+accountFunding                             available | unavailable
+accountGrantAtomic
+accountSlotsRemainingThisHour
+contractProving                            wasm | server — how CONTRACT circuits
+                                           are proved, which is a different
+                                           question from `proving` above
+settling                                   not ready, but only because a spend's
+                                           change is still in flight
+```
+
+None of these is key material and none of them names a user.
 
 ---
 
@@ -171,6 +384,27 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_NODE_URL` | `wss://rpc.stagenet.shielded.tools` | Submission relay source. |
 | `BALANCER_FEE_BLOCKS_MARGIN` | `5` | Fee-estimate margin. A wallet with only a few blocks of DUST refuses its own transactions under a larger one. |
 | `BALANCER_BALANCE_TTL_MS` | `1800000` | TTL on every balanced transaction, and the `expiresAt` handed back. |
+| `BALANCER_MIDNAMES_TLD_ADDRESS` | our stagenet TLD | The `.night` registry names go to. Unset **and** no known default disables `/register-alias`. |
+| `BALANCER_ALIAS_MAX_PER_HOUR` | `20` | Sponsored registrations per rolling hour. |
+| `BALANCER_ACCOUNT_GRANT_ATOMIC` | `2000` | The activation grant, in atomic NIGHT (0.002 NIGHT). |
+| `BALANCER_ACCOUNT_MAX_PER_HOUR` | `30` | Funded accounts per rolling hour. |
+| `BALANCER_MIDNAMES_ASSETS` | `contracts-stagenet/managed/midnames` | Overrides where the compiled Midnames ZK artefacts are read from. |
+| `BALANCER_ACCOUNT_ASSETS` | `contracts-stagenet/managed/account` | Overrides where the compiled account ZK artefacts are read from. |
+
+The stagenet `.night` TLD default is **our own instance**, deployed by
+`deploy-stagenet/` on 2026/08/24 at block 157797 with the preview registry's own
+parameters — COST 600/140/10, `BUY_ENABLED`, the balancer's derived key as
+`DOMAIN_OWNER`:
+
+```
+29be1e64846cff4600c5297fa54b27d4c9296b3ccc2cdba190eaba1d64c5f116
+```
+
+Because that instance's `DOMAIN_OWNER` address is the balancer's own, the COST a
+sponsored registration pays comes straight back — the net NIGHT cost of a name
+on this registry is zero, and only the DUST fees are really spent. Point
+`BALANCER_MIDNAMES_TLD_ADDRESS` at the Midnames team's registry when there is
+one on stagenet and the price becomes real; nothing else changes.
 
 Stagenet endpoints (ledger-9 release-candidate stack: node 2.0.0-rc.4, indexer
 4.4.0-pre-alpha.16):
@@ -293,6 +527,24 @@ built `dist/`, then `npm install` on the droplet and
 the same TLS proxy the funder uses; `sponsor.ts` refuses a non-HTTPS sponsor URL
 for anything but localhost, because a signed transaction crosses that wire.
 
+**What the two sponsorship endpoints add to that deployment** — and it is
+deliberately as little as possible:
+
+| | Needed on the droplet |
+| --- | --- |
+| `contracts-stagenet/managed/{midnames,account}/` | **Yes** — rsync it. The ZK artefacts are read off disk; `dist/server.mjs` bundles the contract *modules* but not the ~100 MB of prover keys. Its own `node_modules/` is not needed. |
+| Extra npm packages | Already in `package.json` (`compact-js`, `compact-runtime`, `midnight-js-*`); `npm install` picks them up. |
+| A proof server / Docker | **No.** Contract circuits prove in-process. See above. |
+| Extra environment | **No.** The stagenet `.night` TLD, the grant, and both ceilings all have working defaults. |
+| Disk in `BALANCER_STATE_DIR` | `aliases-stagenet.json` and `accounts-stagenet.json`, a few KB. They are the once-only gates and **must survive restarts** — the same volume the sync snapshot already lives on. |
+| Memory | More headroom. The wallet's key material is ~31 MiB; a contract proof holds its own prover key and BLS parameters in a worker for the length of the proof. |
+
+Point `BALANCER_MIDNAMES_ASSETS` / `BALANCER_ACCOUNT_ASSETS` at the artefacts if
+they are staged somewhere other than beside `dist/`. If they are missing, the
+service still starts and still balances fees — the two endpoints refuse with
+`alias-unsupported` / `funding-unsupported` and `GET /status` says
+`unavailable`, rather than the whole service failing to come up.
+
 The service handles `SIGTERM` by saving its sync snapshot before exiting, so a
 restart resumes in under a second instead of walking the chain again.
 
@@ -313,10 +565,14 @@ they apply equally to the PWA's own upgrade.
   `SyntaxError: … does not provide an export named 'Clock'` at first import.
   `1.2.1` adds it, hence the `overrides` block in `package.json`. Do not remove
   it without checking whether the pin has been fixed upstream.
-- **There is no global network id.** `setNetworkId`/`getNetworkId` from
-  `@midnight-ntwrk/midnight-js-network-id` are gone. The network is a field on
-  the wallet configuration and an argument to `createKeystore`. `stagenet` is a
-  well-known id in `NetworkId`.
+- **The wallet SDK has no global network id.** The network is a field on the
+  wallet configuration and an argument to `createKeystore`; `stagenet` is a
+  well-known id in `NetworkId`. **midnight-js 5 is the opposite**, and this bit:
+  it still keeps the id in module-level state and `getNetworkId` *throws* when it
+  is unset — `Transaction.fromParts` and `parseCoinPublicKeyToHex` both call it,
+  so every contract deploy and every circuit call goes through it. So
+  `setNetworkId` from `@midnight-ntwrk/midnight-js-network-id` is called once, in
+  `openBalancerWallet`, where the network is first known.
 - **The keystore takes a tagged secret**: `createKeystore({ kind: 'schnorr',
   secret }, networkId)`. The HD wallet gained an `EcdsaUnshielded` role for the
   other scheme, but role *numbers* are unchanged, so a seed derives the same
@@ -422,4 +678,90 @@ This service deliberately does **not** paper over it with a tolerance: the SDK's
 verdict stays the source of truth, and a caller turned away for two minutes
 falls back to the unsponsored path, which is safe. It matters only that an
 operator topping the balancer up knows to expect it rather than reading it as a
+fault.
+
+---
+
+## The sponsorship endpoints, proven end to end on stagenet
+
+Run against live stagenet on 2026/08/24, in-process proving, **no proof
+server**. Every hash is on chain and every read-back was done independently of
+the service, through the indexer.
+
+**`POST /register-alias`** — a throwaway owner key with no wallet behind it, and
+the migration drill's own account-custody contract as the target:
+
+| | |
+| --- | --- |
+| Name | `pbdrill-2af91b.night` |
+| Owner key on chain | `295d3ce1c9f935fc01bcfa221e6ba53b2124446dfb53f1209e6a6164dcdc33b3` |
+| Resolver leaf | `ce6a3dde858a19274fd1010c6cf077ab4737d9a853f4fb282c7db759d8f7ff36` |
+| Leaf deploy tx | `7ffac4a41a734f08b5a87889d15b534cc47607246500f02c5d454bf7ebeb61fa`, block 159,260 |
+| `register_domain_for` tx | `47fbddc256a34edac8e768bce03693daabb3c7826627c95dd2ceeda8a61eeba5`, block 159,274 |
+| Resolves to | contract `1b9957e62f98527feb498e860af8204a3440a36ac41aa0516a02e9edde2f7a77` |
+| Cost | 10 atomic NIGHT, paid by the balancer |
+| Wall clock | 113 s for both transactions and the confirmation between them |
+
+The registry read back independently afterwards: two domains, costs 600/140/10,
+`BUY_ENABLED`, and `pbdrill-2af91b.night` owned by that key. **The owner key
+never held NIGHT** — it is 32 bytes posted over HTTP, with no wallet, no seed,
+and no address derived from it anywhere. The balancer paid the price and both
+fees.
+
+**`POST /fund-account`** — into the account-custody contract from the mini-drill:
+
+| | |
+| --- | --- |
+| Account | `008ede8b58a658a518c901befd7c71389c46cb0d6391c70105e82a467e4b0da4` |
+| `deposit_night` tx | `416721d6129dc5d2b0ba0351b45011f00b4fb7b4c1c7c9e5031f1379a0502abf`, block 159,286 |
+| Mirror before → after | `night_balances[native]` 0 → **2000** |
+| Wall clock | 35 s |
+
+The balancer's NIGHT went 4,999.000000 → 4,998.998000: exactly the 2,000 atomic
+grant. The registration cost nothing net, because our own TLD instance pays COST
+back to the balancer's own address.
+
+**Every refusal, exercised against the live service** — all of them before or
+after the two spends, none of them costing anything:
+
+| Request | Result |
+| --- | --- |
+| `alias: "midnight"` | 400 `invalid-alias` — reserved |
+| `alias: "-nope-"` | 400 `invalid-alias` — bad shape |
+| `alias: "passport-771a3f"` (already registered) | 409 `name-taken` |
+| `contractAddress: deadbeef…` | 400 `target-missing` |
+| `ownerKey: "nothex"` | 400 `invalid-owner-key` |
+| `network: "preview"` | 400 `wrong-network` |
+| same contract, second name | 409 `already-sponsored`, carrying the first `alias` and `registerTx` |
+| the name just taken, different contract | 409 `name-taken` |
+| `/fund-account` `contractAddress: "not-an-address"` | 400 `invalid-contract-address` |
+| `/fund-account` against the **TLD registry** | 400 `not-an-account` |
+| `/fund-account` against `deadbeef…` | 400 `not-an-account` — no state |
+| `/fund-account` same account again | 409 `already-activated`, carrying `txHash` |
+
+`GET /wallet-status` still reported `available: 1` throughout, so the demo's
+existing sponsorship gate is untouched by the two new endpoints.
+
+### The ACC fingerprint holds on the stagenet build
+
+`/fund-account` refuses anything whose state does not decode with
+`device_count >= 1` and `recovery_shares.size() === 3`. Checked against three
+live stagenet account-custody contracts — the migration drill's, the
+mini-drill's, and `deploy-stagenet`'s smoke-test ACC — all three report
+`device_count 1, recovery_shares 3`, and the compiled `index.d.ts` confirms
+`initialState` still takes `share_1`, `share_2`, `share_3`. The preview funder's
+fingerprint carries over unchanged; no adjustment was needed.
+
+### One trap worth writing down
+
+Reading contract state needs the contract module and the indexer provider to
+resolve the **same** `@midnight-ntwrk/compact-runtime`.
+`contracts-stagenet/node_modules` carries its own (symlinked to
+`deploy-stagenet`'s), so a scratch script that imports the build by relative path
+under plain Node gets two `onchain-runtime-v4` instances and dies on
+`expected instance of ChargedState` — reproduced here on the first attempt.
+`src/midnames.ts` and `src/account.ts` therefore import the build through a
+**literal** relative specifier, which esbuild inlines into `dist/server.mjs`, so
+the bundled contract and the indexer provider both resolve this package's own
+copy. A computed absolute path would not be inlined and would reintroduce the
 fault.

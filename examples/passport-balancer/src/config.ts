@@ -46,6 +46,21 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    * the number the client refuses on is the number the ledger refuses on.
    */
   balanceTtlMs: number;
+  /**
+   * The deployed `.night` TLD registry this service sponsors names against.
+   * `undefined` disables `/register-alias`, and the refusal says so.
+   */
+  midnamesTldAddress?: string;
+  /** Overrides the search for the compiled Midnames build's ZK artefacts. */
+  midnamesAssetsPath?: string;
+  /** Overrides the search for the compiled account-custody build's ZK artefacts. */
+  accountAssetsPath?: string;
+  /** Sponsored `.night` registrations allowed per rolling hour. */
+  aliasMaxPerHour: number;
+  /** The activation grant `/fund-account` deposits, in atomic NIGHT. */
+  accountGrantAtomic: bigint;
+  /** Accounts `/fund-account` will credit per rolling hour. */
+  accountMaxPerHour: number;
 }
 
 /**
@@ -109,6 +124,29 @@ export const DEFAULT_ALLOWED_ORIGINS = ['https://midnightpassport.com'];
 export const DEFAULT_FEE_BLOCKS_MARGIN = 5;
 /** Thirty minutes, the same window the demo builds its own transfers with. */
 export const DEFAULT_BALANCE_TTL_MS = 30 * 60 * 1_000;
+/** The funder's ceiling on preview, and the same reasoning applies here. */
+export const DEFAULT_ALIAS_MAX_PER_HOUR = 20;
+/** Two thousand atomic NIGHT — 0.002 NIGHT — as an account's opening balance. */
+export const DEFAULT_ACCOUNT_GRANT_ATOMIC = 2_000n;
+export const DEFAULT_ACCOUNT_MAX_PER_HOUR = 30;
+
+/**
+ * The `.night` TLD each network's registrations go to.
+ *
+ * Stagenet's is OUR instance, deployed by `deploy-stagenet` on 2026/08/24 at
+ * block 157797 with the preview registry's own parameters (COST 600/140/10,
+ * BUY_ENABLED, the balancer's derived key as `DOMAIN_OWNER`). It is the address
+ * `register_domain_for` was proved against in tx
+ * `6fd842da3319c0b445f7527ecfc37e59684a2db5bf68b7f3d4525723870494d0`.
+ *
+ * No other network has an entry: the balancer is a stagenet service, and
+ * pointing it at preview would need the preview registry's address given
+ * explicitly through `BALANCER_MIDNAMES_TLD_ADDRESS`, which is exactly the sort
+ * of thing that should be typed out rather than defaulted into.
+ */
+const MIDNAMES_TLD_DEFAULTS: Record<string, string> = {
+  stagenet: '29be1e64846cff4600c5297fa54b27d4c9296b3ccc2cdba190eaba1d64c5f116',
+};
 
 /** Resolves endpoints for a network, with per-endpoint env overrides. */
 export function networkEndpoints(
@@ -197,6 +235,45 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     throw new Error('BALANCER_BALANCE_TTL_MS must be a positive integer of milliseconds.');
   }
 
+  const aliasMaxPerHour = Number(trimmed(env.BALANCER_ALIAS_MAX_PER_HOUR) ?? DEFAULT_ALIAS_MAX_PER_HOUR);
+  if (!Number.isInteger(aliasMaxPerHour) || aliasMaxPerHour < 0) {
+    throw new Error('BALANCER_ALIAS_MAX_PER_HOUR must be a non-negative integer.');
+  }
+
+  const accountMaxPerHour = Number(
+    trimmed(env.BALANCER_ACCOUNT_MAX_PER_HOUR) ?? DEFAULT_ACCOUNT_MAX_PER_HOUR,
+  );
+  if (!Number.isInteger(accountMaxPerHour) || accountMaxPerHour < 0) {
+    throw new Error('BALANCER_ACCOUNT_MAX_PER_HOUR must be a non-negative integer.');
+  }
+
+  const grantRaw = trimmed(env.BALANCER_ACCOUNT_GRANT_ATOMIC);
+  let accountGrantAtomic = DEFAULT_ACCOUNT_GRANT_ATOMIC;
+  if (grantRaw !== undefined) {
+    if (!/^\d+$/.test(grantRaw)) {
+      throw new Error('BALANCER_ACCOUNT_GRANT_ATOMIC must be a whole number of atomic NIGHT.');
+    }
+    accountGrantAtomic = BigInt(grantRaw);
+    if (accountGrantAtomic <= 0n) {
+      throw new Error('BALANCER_ACCOUNT_GRANT_ATOMIC must be greater than zero.');
+    }
+  }
+
+  /* Normalised the moment it is read rather than at first use: a mistyped
+     registry address should stop the service at start-up, where an operator is
+     watching, not on somebody's first alias. */
+  const tldRaw = trimmed(env.BALANCER_MIDNAMES_TLD_ADDRESS) ?? MIDNAMES_TLD_DEFAULTS[networkId];
+  let midnamesTldAddress: string | undefined;
+  if (tldRaw !== undefined) {
+    const normalized = tldRaw.toLowerCase().replace(/^0x/, '').replace(/^0200/, '');
+    if (!/^[0-9a-f]{64}$/.test(normalized)) {
+      throw new Error(
+        `BALANCER_MIDNAMES_TLD_ADDRESS must be a 64-hex Midnight contract address, got: ${tldRaw}`,
+      );
+    }
+    midnamesTldAddress = normalized;
+  }
+
   return {
     networkId,
     ...networkEndpoints(networkId, env),
@@ -207,5 +284,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     host: trimmed(env.BALANCER_HOST) ?? '0.0.0.0',
     feeBlocksMargin,
     balanceTtlMs,
+    ...(midnamesTldAddress ? { midnamesTldAddress } : {}),
+    ...(trimmed(env.BALANCER_MIDNAMES_ASSETS)
+      ? { midnamesAssetsPath: trimmed(env.BALANCER_MIDNAMES_ASSETS) as string }
+      : {}),
+    ...(trimmed(env.BALANCER_ACCOUNT_ASSETS)
+      ? { accountAssetsPath: trimmed(env.BALANCER_ACCOUNT_ASSETS) as string }
+      : {}),
+    aliasMaxPerHour,
+    accountGrantAtomic,
+    accountMaxPerHour,
   };
 }

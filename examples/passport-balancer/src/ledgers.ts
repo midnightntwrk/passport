@@ -1,23 +1,20 @@
 /**
- * The funder's once-only ledgers and the rolling-hour rate limiter.
+ * The balancer's once-only ledgers and the rolling-hour rate limiter.
  *
- * A ledger is the hard once-only gate for whatever it keys on — one activation
- * per address, one sponsored alias per account-custody contract, one activation
- * grant per account-custody contract — persisted as a small JSON file in the
- * state directory so a restart cannot forget who has already been served. The
- * rate limiter is in-memory: a restart resets the window, which for a global
- * back-stop is fine.
+ * A ledger is the hard once-only gate for whatever it keys on — one sponsored
+ * alias per account-custody contract, one activation grant per account-custody
+ * contract — persisted as a small JSON file in the state directory so a restart
+ * cannot forget who has already been served. The rate limiter is in-memory: a
+ * restart resets the window, which for a global back-stop is fine.
+ *
+ * This is `examples/passport-funder/src/dripLedger.ts` with the drip ledger
+ * left out. The balancer has no `/activate` — it never sends NIGHT to a wallet
+ * address, because on stagenet a Passport's value belongs inside its account
+ * contract and the two endpoints here put it there directly.
  */
 
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-
-/** One activation drip, keyed by the recipient's unshielded address. */
-export interface DripEntry {
-  txHash: string;
-  amountAtomic: string;
-  at: string;
-}
 
 /**
  * One sponsored alias registration, keyed by the account-custody contract
@@ -50,8 +47,8 @@ export interface AccountEntry {
 
 /**
  * An append-mostly `Record<key, Entry>` on disk. Small enough to rewrite whole
- * on every record: the funder serves tens of entries a day, not thousands, and
- * a write-and-rename is atomic where a partial append would not be.
+ * on every record: the balancer serves tens of entries a day, not thousands,
+ * and a write-and-rename is atomic where a partial append would not be.
  */
 export class JsonLedger<Entry> {
   private constructor(
@@ -104,15 +101,22 @@ export class HourlyRateLimiter {
    * Whether the ceiling is reached, WITHOUT consuming a slot.
    *
    * The ceiling counts spends, not requests. A caller that refuses for some
-   * other reason — already served, wrong network, funder empty — has not
-   * used the funder's hourly budget, and burning a slot on it would let a
-   * stream of bad requests shut the funder down without a single NIGHT
-   * leaving it. So `take()` is called only once a spend is actually about to
-   * be attempted, and this exists for the cheap early refusal on the way in.
+   * other reason — already served, wrong network, balancer empty — has not used
+   * the hourly budget, and burning a slot on it would let a stream of bad
+   * requests shut the service down without a single NIGHT leaving it. So
+   * `take()` is called only once a spend is actually about to be attempted, and
+   * this exists for the cheap early refusal on the way in.
    */
   atCeiling(): boolean {
     const now = Date.now();
     this.stamps = this.stamps.filter((stamp) => now - stamp < 3_600_000);
     return this.stamps.length >= this.maxPerHour;
+  }
+
+  /** How many spends are still available in the current window. */
+  remaining(): number {
+    const now = Date.now();
+    this.stamps = this.stamps.filter((stamp) => now - stamp < 3_600_000);
+    return Math.max(0, this.maxPerHour - this.stamps.length);
   }
 }
