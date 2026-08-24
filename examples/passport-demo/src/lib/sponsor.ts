@@ -57,6 +57,29 @@
 export const SPONSOR_READINESS_TTL_MS = 30_000;
 /** Upper bound on the whole 429 `PENDING_TRANSACTION` retry window. */
 export const SPONSOR_PENDING_RETRY_WINDOW_MS = 20_000;
+/**
+ * The same window for a CONTRACT transaction, which is a different bet.
+ *
+ * 20 seconds is right for a transfer: the wallet can pay its own fee, so giving
+ * up early costs a slower path, not a failed one. A contract deploy from a
+ * fresh passkey wallet has NO fall-back — it holds no DUST — so giving up early
+ * costs the whole operation, and the operation already takes tens of seconds.
+ *
+ * Three minutes because that is what the sponsor really needs. Measured against
+ * the stagenet balancer on 2026/08/24: its FIRST `/balance-only` took ~100 s,
+ * because it proves the DUST leg in-process with the WASM prover and has to
+ * fetch and warm ~32 MB of circuit keys before it can start. Every subsequent
+ * request is far quicker. At 20 s the client gave up mid-proof and the deploy
+ * died with "could not balance dust" — while the sponsor was working correctly
+ * and went on to finish.
+ *
+ * Giving up early is worse than waiting in a second way, too. The service
+ * reserves its DUST for a balanced transaction the moment it finalizes one, and
+ * an abandoned request leaves that reservation standing until the sponsor
+ * re-syncs — so an impatient client does not just fail itself, it takes the
+ * sponsor's DUST out of circulation for everyone.
+ */
+export const SPONSOR_CONTRACT_RETRY_WINDOW_MS = 180_000;
 /** Floor on a retry delay, so a zero `retryAfterMs` cannot spin. */
 const SPONSOR_PENDING_RETRY_MIN_DELAY_MS = 250;
 /** Fallback delay when the service names no `retryAfterMs`. */
@@ -76,8 +99,17 @@ const SPONSOR_STATUS_RETRY_TIMEOUT_MS = 2_000;
  * both retrying paths — the readiness probe and the `/balance-only` POST.
  */
 export const SPONSOR_PROBE_RETRY_DELAY_MS = 500;
-/** Balancing proves a dust segment server-side, so it gets real room. */
-const SPONSOR_BALANCE_TIMEOUT_MS = 90_000;
+/**
+ * Balancing proves a dust segment server-side, so it gets real room.
+ *
+ * 180 s rather than the 90 s it was until 2026/08/24, measured rather than
+ * guessed: the stagenet balancer's FIRST `/balance-only` took ~100 s, because
+ * it proves in-process with the WASM prover and warms ~32 MB of circuit keys
+ * before the first proof. At 90 s the client aborted a request the sponsor then
+ * completed — which fails the caller AND leaves the sponsor's DUST reserved
+ * against a balanced transaction nobody will submit.
+ */
+const SPONSOR_BALANCE_TIMEOUT_MS = 180_000;
 
 export interface SponsorConfig {
   /** Base URL, no trailing slash. */

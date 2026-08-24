@@ -55,6 +55,7 @@ import {
   sponsorHexToBytes,
   sponsorReadiness,
   BALANCE_WITHOUT_DUST,
+  SPONSOR_CONTRACT_RETRY_WINDOW_MS,
 } from '../lib/sponsor.js';
 
 /* -------------------------------------------------------------------------- */
@@ -206,12 +207,15 @@ export async function compiledContractFor(
     import('@midnight-ntwrk/compact-js'),
     loadContractModule(name),
   ]);
-  const base = CompiledContract.make(label, module.Contract as never);
-  const withWitnesses =
+  /* ONE `pipe` call with both operators, not two chained ones: what `pipe`
+     returns is a plain compiled-contract object and carries no `pipe` of its
+     own, so a second `.pipe(…)` is a TypeError. */
+  return CompiledContract.make(label, module.Contract as never).pipe(
     witnesses === undefined
-      ? base.pipe(CompiledContract.withVacantWitnesses)
-      : base.pipe(CompiledContract.withWitnesses(witnesses as never));
-  return withWitnesses.pipe(CompiledContract.withCompiledFileAssets(contractAssetBase(name)));
+      ? CompiledContract.withVacantWitnesses
+      : CompiledContract.withWitnesses(witnesses as never),
+    CompiledContract.withCompiledFileAssets(contractAssetBase(name)),
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -345,7 +349,12 @@ export function walletProviderFor(wallet: LocalMidnightWallet, witness: FeeWitne
         wallet.keys.unshieldedKeystore.signDataAsync,
       );
       const finalized = await facade.finalizeRecipe(signed);
-      const balanced = await sponsorBalanceOnly(finalized.serialize());
+      /* A longer 429 window than a transfer gets, because the stakes differ:
+         a fresh passkey wallet has no DUST, so there is nothing to fall back
+         TO here. See SPONSOR_CONTRACT_RETRY_WINDOW_MS. */
+      const balanced = await sponsorBalanceOnly(finalized.serialize(), {
+        pendingRetryWindowMs: SPONSOR_CONTRACT_RETRY_WINDOW_MS,
+      });
       /* The sponsor stamps an expiry. An already expired balanced transaction
          is refused here, while falling back is still safe; an empty or
          unparseable stamp reads as "no expiry given". */
