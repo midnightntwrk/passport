@@ -125,6 +125,14 @@ function trimmed(value: string | undefined): string | undefined {
  * and stays unsponsored unless a URL is set explicitly.
  */
 const DEFAULT_SPONSOR_URLS: Record<string, string> = {
+  /* Stagenet is sponsored by our OWN balancer rather than a 1AM gateway,
+     because there is no 1AM gateway on stagenet. It speaks the identical wire
+     contract — `GET /wallet-status` and `POST /balance-only`, same bodies,
+     same error codes — so nothing else in this module changes. Probed live
+     2026/08/24: `{"total":1,"available":1,…,"dust":{"balance":
+     "288384879317778538","utxoCount":3,"isSynced":true}}`, i.e. genuinely
+     able to pay, which is the only thing rule 2 below accepts. */
+  stagenet: 'https://funder.midnightpassport.com/balancer',
   preview: 'https://api-preview.1am.xyz',
   preprod: 'https://api-preprod.1am.xyz',
 };
@@ -148,7 +156,7 @@ export function sponsorConfig(
   if (explicit === 'off') return null;
   const raw =
     explicit ??
-    DEFAULT_SPONSOR_URLS[trimmed(env.VITE_MIDNIGHT_NETWORK_ID) ?? 'preview'];
+    DEFAULT_SPONSOR_URLS[trimmed(env.VITE_MIDNIGHT_NETWORK_ID) ?? 'stagenet'];
   if (!raw) return null;
   const url = raw.replace(/\/+$/, '');
   assertSecureSponsorUrl(url);

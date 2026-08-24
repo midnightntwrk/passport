@@ -26,7 +26,7 @@ import {
   mainnet,
   MidnightBech32m,
   UnshieldedAddress,
-} from '@midnight-ntwrk/wallet-sdk-address-format'
+} from '@midnight-ntwrk/wallet-sdk/address-format'
 import type { PassportTxRequest, PassportTxResponse } from '../backend.js'
 import { explorerTxUrl } from './networks.js'
 

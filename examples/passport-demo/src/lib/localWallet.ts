@@ -45,27 +45,58 @@
  * index order, and no public indexer endpoint can fast-forward them. The
  * evidence, and the code that would do it if that ever changes, is in the
  * tip-bootstrap section of `./walletSnapshot.ts`. Nothing here calls it.
+ *
+ * THE LEDGER-9 PORT (2026/08/24)
+ * -----------------------------
+ * This module now runs on `@midnight-ntwrk/wallet-sdk` 2.0.0-beta.2 over
+ * `@midnightntwrk/ledger-v9`, because the ledger-8 stack cannot sync stagenet
+ * at all — its indexer schema parse fails before the first block. The shape of
+ * everything below is unchanged; five details are not.
+ *
+ *   1. **The ledger is the HYPHENLESS scope.** `@midnightntwrk/ledger-v9`, not
+ *      `@midnight-ntwrk/ledger-v9`. Two different WASM modules.
+ *   2. **Everything comes through the `@midnight-ntwrk/wallet-sdk` umbrella.**
+ *      Not for tidiness: this workspace still carries the LEDGER-8
+ *      `wallet-sdk-facade`, `wallet-sdk-shielded`, and friends for
+ *      `examples/passport-funder`, and they are the copies hoisted to the
+ *      repository root. A bare `import … from '@midnight-ntwrk/
+ *      wallet-sdk-facade'` here resolves to the ledger-8 one and hands this
+ *      wallet objects from a foreign ledger instance. The umbrella's subpaths
+ *      resolve inside its own nested tree, which is the ledger-9 one.
+ *   3. **The keystore takes a tagged secret**: `createKeystore({ kind:
+ *      'schnorr', secret }, networkId)`. Role numbers are unchanged, so a seed
+ *      derives the same address it did on ledger-8.
+ *   4. **Signing is async.** `signRecipe` takes `(data) => Promise<Signature>`;
+ *      the keystore ships `signDataAsync` for exactly that call site.
+ *   5. **Transaction history is an interface, not a stub.** The old
+ *      `{ upsert, getAll, get, serialize }` object is now
+ *      `NoOpTransactionHistoryStorage`.
  */
 
-import * as ledger from '@midnight-ntwrk/ledger-v8';
+import * as ledger from '@midnightntwrk/ledger-v9';
 import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { NoOpTransactionHistoryStorage } from '@midnight-ntwrk/wallet-sdk';
 import {
   mainnet,
   MidnightBech32m,
   ShieldedAddress,
   UnshieldedAddress,
-} from '@midnight-ntwrk/wallet-sdk-address-format';
-import { DustWallet } from '@midnight-ntwrk/wallet-sdk-dust-wallet';
-import type { BalancingRecipe, FacadeState } from '@midnight-ntwrk/wallet-sdk-facade';
-import { WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
-import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
-import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk-shielded';
+} from '@midnight-ntwrk/wallet-sdk/address-format';
+import { DustWallet } from '@midnight-ntwrk/wallet-sdk/dust';
+import type {
+  BalancingRecipe,
+  FacadeState,
+  UnprovenTransactionRecipe,
+} from '@midnight-ntwrk/wallet-sdk/facade';
+import { WalletFacade } from '@midnight-ntwrk/wallet-sdk/facade';
+import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk/hd';
+import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk/shielded';
 import {
   createKeystore,
   PublicKey,
   type UnshieldedKeystore,
   UnshieldedWallet,
-} from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
+} from '@midnight-ntwrk/wallet-sdk/unshielded';
 import * as Rx from 'rxjs';
 
 import type { PassportStateScope, PassportWalletSeedProvider } from '../backend.js';
@@ -105,14 +136,36 @@ export interface LocalWalletNetworkConfig {
   indexerWsUrl: string;
   /** Node relay WebSocket URL used for transaction submission. */
   relayUrl: string;
-  /** Proof server base URL used to prove balancing transactions. */
+  /**
+   * Proof server base URL for CONTRACT circuits, or `''` when there is none.
+   *
+   * Empty is a real, supported configuration and the stagenet default, because
+   * stagenet publishes no proof server. The wallet's own balancing circuits are
+   * proved in-tab either way (see {@link LocalWalletProvingMode}); it is the
+   * contract clients in `../identity/` that need this, and they say so plainly
+   * when it is absent rather than pretending a URL exists.
+   */
   provingServerUrl: string;
 }
 
-const DEFAULT_INDEXER_HTTP_URL = 'https://indexer.preview.midnight.network/api/v4/graphql';
-const DEFAULT_NODE_URL = 'https://rpc.preview.midnight.network';
-const DEFAULT_PROVING_SERVER_URL = 'https://proof-server.preview.midnight.network';
-const DEFAULT_NETWORK_ID = 'preview';
+/**
+ * Stagenet, as the compatibility matrix names it. This is the default because
+ * it is where the demo runs: preview is being promoted away, and the ledger-9
+ * stack this app is now built on cannot talk to it (see
+ * {@link ../lib/networks.ts} for what that costs).
+ */
+const DEFAULT_INDEXER_HTTP_URL = 'https://indexer.stagenet.shielded.tools/api/v4/graphql';
+const DEFAULT_NODE_URL = 'wss://rpc.stagenet.shielded.tools';
+/**
+ * No public proof server exists for stagenet. Left empty on purpose: a default
+ * pointing at preview's would be a URL that answers, with keys for another
+ * ledger, and the failure would arrive as an unreadable proving error rather
+ * than "no proof server is configured". `VITE_MIDNIGHT_PROVING_URL` names one —
+ * the local `midnightntwrk/proof-server:9.0.0-rc.6` container listens on
+ * http://127.0.0.1:6300 — and the in-tab prover covers the wallet's own legs.
+ */
+const DEFAULT_PROVING_SERVER_URL = '';
+const DEFAULT_NETWORK_ID = 'stagenet';
 
 /**
  * The indexer's WebSocket endpoint is its HTTP endpoint with `/ws` appended —
@@ -152,7 +205,7 @@ function devMode(): boolean {
  * "the proof server could not prove this" — so the mismatch is called out at
  * assembly time, naming the variable and both values.
  */
-const PUBLIC_NETWORK_IDS = new Set(['preview', 'preprod', 'mainnet']);
+const PUBLIC_NETWORK_IDS = new Set(['stagenet', 'preview', 'preprod', 'mainnet']);
 
 function isLoopbackUrl(url: string): boolean {
   try {
@@ -173,7 +226,9 @@ function isLoopbackUrl(url: string): boolean {
 function warnOnLoopbackEndpoints(config: LocalWalletNetworkConfig): void {
   if (!PUBLIC_NETWORK_IDS.has(config.networkId)) return;
   const endpoints: Array<[variable: string, url: string]> = [
-    ['VITE_MIDNIGHT_PROVING_URL', config.provingServerUrl],
+    /* The proof server is deliberately absent from this list. On stagenet there
+       is no public one, so `http://127.0.0.1:6300` is the CORRECT setting rather
+       than a stale localnet override, and warning about it would be noise. */
     ['VITE_INDEXER_URL', config.indexerHttpUrl],
     ['VITE_INDEXER_WS_URL', config.indexerWsUrl],
     ['VITE_MIDNIGHT_RELAY_URL (or the VITE_MIDNIGHT_NODE_URL it derives from)', config.relayUrl],
@@ -190,12 +245,13 @@ function warnOnLoopbackEndpoints(config: LocalWalletNetworkConfig): void {
  * Resolves the network the local wallet talks to. Everything is overridable so
  * the same build can be pointed at a localnet, and nothing is pinned to one.
  *
- *   VITE_MIDNIGHT_NETWORK_ID    default `preview`
- *   VITE_INDEXER_URL            default the Preview indexer (shared with indexerTx)
+ *   VITE_MIDNIGHT_NETWORK_ID    default `stagenet`
+ *   VITE_INDEXER_URL            default the stagenet indexer (shared with indexerTx)
  *   VITE_INDEXER_WS_URL         default derived from VITE_INDEXER_URL
- *   VITE_MIDNIGHT_NODE_URL      default the Preview RPC node
+ *   VITE_MIDNIGHT_NODE_URL      default the stagenet RPC node
  *   VITE_MIDNIGHT_RELAY_URL     default derived from VITE_MIDNIGHT_NODE_URL
- *   VITE_MIDNIGHT_PROVING_URL   default the Preview proof server
+ *   VITE_MIDNIGHT_PROVING_URL   default NONE — stagenet publishes no proof
+ *                               server. See {@link DEFAULT_PROVING_SERVER_URL}.
  */
 export function localWalletNetworkConfig(
   overrides: Partial<LocalWalletNetworkConfig> = {},
@@ -444,23 +500,15 @@ function deriveRoleKeys(seed: Uint8Array): Record<0 | 2 | 3, Uint8Array> {
 }
 
 /**
- * Transaction history is not a demo surface, so history is dropped rather than
- * stored. The SDK only requires that the four methods exist.
- */
-function noopTxHistoryStorage() {
-  return {
-    upsert: async () => undefined,
-    getAll: async () => [],
-    get: async () => undefined,
-    serialize: async () => '',
-  };
-}
-
-/**
- * Ported from the custody prototype: ledger-v8 8.0.3 can panic inside
+ * Ported from the custody prototype: ledger-v8 8.0.3 could panic inside
  * `MerkleTree::collapse` while applying a Zswap offer. Swallowing it leaves the
  * chain state untouched for that offer rather than tearing the wallet down.
  * Applied once per page, and only ever additive to the prototype's behaviour.
+ *
+ * Kept across the ledger-9 port. It has not been seen to fire on
+ * `@midnightntwrk/ledger-v9` 1.0.0-rc.3, which is a statement about what has
+ * been observed rather than about what the release candidate cannot do; the
+ * guard costs one wrapped call and removing it would be a bet, not a saving.
  */
 let zswapApplyGuardInstalled = false;
 function installZswapApplyGuard(): void {
@@ -478,7 +526,31 @@ function installZswapApplyGuard(): void {
   };
 }
 
-export type LocalWalletProvingMode = 'browser' | 'http';
+/**
+ * Where this wallet's OWN circuits — the Zswap spends and outputs and the DUST
+ * fee spend that balancing produces — are proved. Contract circuits are a
+ * separate question answered in `../identity/`.
+ *
+ *   `browser`  the in-tab zkir-v2 worker in `./wasmProver.ts`. Contacts no
+ *              proof server. Needs the `/zk-params` tree staged by
+ *              `scripts/fetch-zk-params.mjs`, and a `Worker` global — so it is
+ *              a browser answer, not a Node one.
+ *   `sdk-wasm` the beta SDK's own `makeWasmProvingService`, which pulls the
+ *              four ledger-9 circuit keys from Midnight's bucket and caches
+ *              them in memory. Works under Node; does NOT survive a Vite build,
+ *              because it starts its worker from a template-literal URL inside
+ *              `node_modules` that Vite's worker analysis does not rewrite.
+ *              This is the Node-harness answer.
+ *   `http`     the facade's default service, against
+ *              `network.provingServerUrl`.
+ *
+ * The default follows the configuration rather than a constant: `http` when a
+ * proof server URL is set, and otherwise the in-process prover that suits the
+ * host — `browser` in a tab, `sdk-wasm` under Node. Stagenet publishes no proof
+ * server, so on stagenet the default is a real in-process prove, not a URL that
+ * was never going to answer.
+ */
+export type LocalWalletProvingMode = 'browser' | 'sdk-wasm' | 'http';
 
 export interface CreateLocalMidnightWalletOptions {
   /** Per-call overrides on top of the `import.meta.env` configuration. */
@@ -490,12 +562,7 @@ export interface CreateLocalMidnightWalletOptions {
    * {@link CreateLocalMidnightWalletOptions.provingMode} when given.
    */
   provingService?: (configuration: unknown) => unknown;
-  /**
-   * `browser` proves in-tab with the zkir-v2 wasm prover and contacts no proof
-   * server; `http` proves against `network.provingServerUrl`. Defaults to
-   * `browser` when `?prover=browser` is in the URL or `VITE_BROWSER_PROVER=1`,
-   * otherwise `http`.
-   */
+  /** See {@link LocalWalletProvingMode} for the three modes and the default. */
   provingMode?: LocalWalletProvingMode;
   /**
    * `auto` (the default) resumes the chain walk from the cached sync snapshot
@@ -915,7 +982,13 @@ export { faucetAvailable, faucetUrlFor } from './networks.js';
 // Proving-mode selection
 // ---------------------------------------------------------------------------
 
-function defaultProvingMode(): LocalWalletProvingMode {
+/** `true` in a real tab: a `Worker` global AND a document to own it. */
+function inBrowser(): boolean {
+  return typeof window !== 'undefined' && typeof Worker !== 'undefined';
+}
+
+function defaultProvingMode(network: LocalWalletNetworkConfig): LocalWalletProvingMode {
+  // Explicit requests for the in-tab prover still win, whatever is configured.
   if (environment().VITE_BROWSER_PROVER === '1') return 'browser';
   try {
     if (
@@ -927,7 +1000,11 @@ function defaultProvingMode(): LocalWalletProvingMode {
   } catch {
     // A locked-down or non-browser context simply has no URL override.
   }
-  return 'http';
+  /* A configured proof server is faster than either in-process prover, so it
+     wins when there is one. When there is not — the stagenet default — proving
+     happens here, in whichever prover this host can actually run. */
+  if (network.provingServerUrl) return 'http';
+  return inBrowser() ? 'browser' : 'sdk-wasm';
 }
 
 // ---------------------------------------------------------------------------
@@ -1009,7 +1086,14 @@ export async function createLocalMidnightWallet(
   const shieldedSecretKeys = ledger.ZswapSecretKeys.fromSeed(roleKeys[Roles.Zswap]);
   const dustSecretKey = ledger.DustSecretKey.fromSeed(roleKeys[Roles.Dust]);
   const nightExternalKey = roleKeys[Roles.NightExternal];
-  const unshieldedKeystore = createKeystore(nightExternalKey, network.networkId);
+  /* ledger-9 tags the secret with its signature scheme. `schnorr` is what the
+     NightExternal role key has always been; the HD wallet grew a separate
+     `EcdsaUnshielded` role for the other one, and role NUMBERS did not move, so
+     a seed still derives the address it derived on ledger-8. */
+  const unshieldedKeystore = createKeystore(
+    { kind: 'schnorr', secret: nightExternalKey },
+    network.networkId,
+  );
   // The two ledger constructors above copy their seeds into wasm memory, so
   // those bytes can go immediately. `createKeystore` does the opposite: it
   // closes over its argument and re-reads it on every signature, so the
@@ -1023,19 +1107,44 @@ export async function createLocalMidnightWallet(
       indexerHttpUrl: network.indexerHttpUrl,
       indexerWsUrl: network.indexerWsUrl,
     },
-    provingServerUrl: new URL(network.provingServerUrl),
+    /* Only when one is configured. An empty string is not a URL, and the
+       facade treats an absent `provingServerUrl` as "no server" rather than
+       failing — which is the stagenet default. */
+    ...(network.provingServerUrl
+      ? { provingServerUrl: new URL(network.provingServerUrl) }
+      : {}),
     relayURL: new URL(network.relayUrl),
     costParameters: { feeBlocksMargin: options.feeBlocksMargin ?? 100 },
-    txHistoryStorage: noopTxHistoryStorage(),
+    txHistoryStorage: new NoOpTransactionHistoryStorage(),
   };
 
-  const provingMode = options.provingMode ?? defaultProvingMode();
-  // An explicit service wins; otherwise browser mode injects the in-tab wasm
-  // prover and http mode leaves the facade's default (network.provingServerUrl)
-  // in place. There is deliberately no cross-over: a browser-mode wallet that
-  // cannot find its /zk-params fails, it does not silently phone the server.
+  const provingMode = options.provingMode ?? defaultProvingMode(network);
+  /* An explicit service wins. Otherwise each mode injects its own and `http`
+     leaves the facade's default (built from `provingServerUrl`) in place.
+     There is deliberately no cross-over: an in-process prover that cannot find
+     its key material fails, it does not silently phone a server, because "the
+     proof was computed locally" must never be claimed falsely.
+
+     `sdk-wasm` is imported lazily so that the beta prover-client — and the
+     `new Worker(new URL(...))` inside it that Vite's worker analysis cannot
+     rewrite — never enters the browser module graph at all. */
   const provingService =
-    options.provingService ?? (provingMode === 'browser' ? () => wasmWalletProvingService() : undefined);
+    options.provingService ??
+    (provingMode === 'browser'
+      ? () => wasmWalletProvingService()
+      : provingMode === 'sdk-wasm'
+        ? async () => {
+            const { makeWasmProvingService } = await import(
+              /* @vite-ignore */ '@midnight-ntwrk/wallet-sdk/capabilities/proving'
+            );
+            return makeWasmProvingService({});
+          }
+        : undefined);
+  if (provingMode !== 'http' && !options.provingService && !network.provingServerUrl) {
+    console.debug(
+      `[localWallet] no proof server is configured for ${network.networkId}; this wallet's own circuits are proved in-process (${provingMode}).`,
+    );
+  }
 
   const unshieldedPublicKey = PublicKey.fromKeyStore(unshieldedKeystore);
   // Available before the facade exists, which is what lets a snapshot be looked
@@ -1322,6 +1431,21 @@ export async function createLocalMidnightWallet(
   // Sending — unshielded NIGHT and shielded colours share this machinery
   // -------------------------------------------------------------------------
 
+  /**
+   * What failed to prove, named by where the proving actually happens. A
+   * sentence that says "the proof server" when there is no proof server sends
+   * an operator looking for an outage that never happened.
+   */
+  const provingFailureSentence = (): string => {
+    if (provingMode === 'browser') {
+      return 'The in-browser prover could not prove this transaction.';
+    }
+    if (provingMode === 'sdk-wasm') {
+      return 'The in-process wasm prover could not prove this transaction.';
+    }
+    return `The proof server at ${network.provingServerUrl} (network ${network.networkId}) could not prove this transaction.`;
+  };
+
   const revertQuietly = async (recipe: BalancingRecipe): Promise<void> => {
     try {
       await facade.revert(recipe);
@@ -1364,14 +1488,10 @@ export async function createLocalMidnightWallet(
       new SendNightError('submit-rejected', 'The node rejected this sponsored transaction.', detail),
   ): Promise<{ txId: string; sponsorTxHash: string } | null> => {
     const reserved: BalancingRecipe[] = [];
-    let balancedTransaction: ledger.Transaction<
-      ledger.SignatureEnabled,
-      ledger.Proof,
-      ledger.Binding
-    >;
+    let balancedTransaction: ledger.FinalizedTransaction;
     let sponsorTxHash: string;
     try {
-      const base = await facade.transferTransaction(
+      const base: UnprovenTransactionRecipe = await facade.transferTransaction(
         outputs,
         { shieldedSecretKeys, dustSecretKey },
         { ttl, payFees: false },
@@ -1393,9 +1513,7 @@ export async function createLocalMidnightWallet(
         if (!/No balancing transaction was created/i.test(messageOf(cause))) throw cause;
       }
 
-      const signed = await facade.signRecipe(recipe, (data) =>
-        keys.unshieldedKeystore.signData(data),
-      );
+      const signed = await facade.signRecipe(recipe, keys.unshieldedKeystore.signDataAsync);
       const finalized = await facade.finalizeRecipe(signed);
       const balanced = await sponsorBalanceOnly(finalized.serialize());
       // The sponsor stamps an expiry on the balanced transaction. An already
@@ -1573,7 +1691,7 @@ export async function createLocalMidnightWallet(
 
     let signed: BalancingRecipe;
     try {
-      signed = await facade.signRecipe(recipe, (data) => keys.unshieldedKeystore.signData(data));
+      signed = await facade.signRecipe(recipe, keys.unshieldedKeystore.signDataAsync);
     } catch (cause) {
       await revertQuietly(recipe);
       throw cause;
@@ -1594,9 +1712,7 @@ export async function createLocalMidnightWallet(
       await releaseCoins();
       throw new SendNightError(
         'proving-failed',
-        provingMode === 'browser'
-          ? 'The in-browser prover could not prove this transaction.'
-          : `The proof server at ${network.provingServerUrl} (network ${network.networkId}) could not prove this transaction.`,
+        provingFailureSentence(),
         messageOf(cause),
       );
     }
@@ -1788,7 +1904,7 @@ export async function createLocalMidnightWallet(
 
     let signed: BalancingRecipe;
     try {
-      signed = await facade.signRecipe(recipe, (data) => keys.unshieldedKeystore.signData(data));
+      signed = await facade.signRecipe(recipe, keys.unshieldedKeystore.signDataAsync);
     } catch (cause) {
       await revertQuietly(recipe);
       throw cause;
@@ -1801,9 +1917,7 @@ export async function createLocalMidnightWallet(
       await revertQuietly(signed);
       throw new SendShieldedError(
         'proving-failed',
-        provingMode === 'browser'
-          ? 'The in-browser prover could not prove this transaction.'
-          : `The proof server at ${network.provingServerUrl} (network ${network.networkId}) could not prove this transaction.`,
+        provingFailureSentence(),
         messageOf(cause),
       );
     }

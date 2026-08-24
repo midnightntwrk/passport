@@ -21,19 +21,74 @@
  * Nothing here invents an endpoint. A network with no entry gets `null`, and
  * every caller renders that as "no link" rather than a link that goes nowhere.
  *
+ * WHAT THE LEDGER-9 MOVE DID TO THIS TABLE (2026/08/24)
+ * ----------------------------------------------------
+ * Stagenet is the default, and it is the only network this build can transact
+ * on. That is not a preference — it is what the stack allows.
+ *
+ * The app now runs on `@midnightntwrk/ledger-v9` 1.0.0-rc.3 and midnight-js
+ * 5.0.0-beta.6, because the ledger-8 stack cannot sync stagenet at all: its
+ * indexer client fails parsing the stagenet schema before the first block is
+ * applied. The move is not reversible per network. Preview and Pre-production
+ * run the ledger-8 protocol, and a ledger-9 wallet cannot decode their
+ * transactions or produce ones they will accept — a single build cannot serve
+ * both, because the ledger is a WASM module compiled against one protocol.
+ *
+ * Preview and Pre-production therefore remain KNOWN networks — records already
+ * stored against them still render, and their explorer links still resolve —
+ * but they are not selectable, not claimable, and not something this build's
+ * wallet can open. {@link TRANSACTABLE_NETWORKS} is the honest list, and
+ * {@link networkUnavailableReason} is the sentence to show instead of a
+ * pretence that switching would work.
+ *
  * This module imports nothing from the app, so anything may import it.
  */
 
-/** The three public Midnight networks Passport knows about. */
-export type PassportNetworkId = 'preview' | 'preprod' | 'mainnet';
+/** The public Midnight networks Passport knows about. */
+export type PassportNetworkId = 'stagenet' | 'preview' | 'preprod' | 'mainnet';
 
-const KNOWN_NETWORKS: readonly PassportNetworkId[] = ['preview', 'preprod', 'mainnet'];
+const KNOWN_NETWORKS: readonly PassportNetworkId[] = [
+  'stagenet',
+  'preview',
+  'preprod',
+  'mainnet',
+];
 
 /**
  * The network this build's local wallet is configured for. Mirrors the default
  * in `localWalletNetworkConfig()` — keep the two in step.
  */
-export const DEFAULT_NETWORK_ID = 'preview';
+export const DEFAULT_NETWORK_ID = 'stagenet';
+
+/**
+ * The networks whose protocol THIS BUILD's ledger can actually speak.
+ *
+ * One entry, and it is a statement about the WASM module linked into this
+ * bundle rather than about which hosts are up. See the module header.
+ */
+export const TRANSACTABLE_NETWORKS: readonly PassportNetworkId[] = ['stagenet'];
+
+/** Whether this build's wallet can open, sync, and sign on `network` at all. */
+export function networkIsTransactable(networkId: string | null | undefined): boolean {
+  return TRANSACTABLE_NETWORKS.includes(networkId as PassportNetworkId);
+}
+
+/**
+ * Why a known network cannot be used by this build, or `null` when it can.
+ * A sentence, not a code, because every surface that asks this question is
+ * about to show it to somebody.
+ */
+export function networkUnavailableReason(networkId: string | null | undefined): string | null {
+  if (networkIsTransactable(networkId)) return null;
+  const network = asPassportNetwork(networkId);
+  if (network === 'preview' || network === 'preprod') {
+    return `This build runs on the ledger-9 protocol, which ${network} does not speak. Names already registered there still resolve, and their transactions still link to the explorer, but this wallet cannot open an account on it.`;
+  }
+  if (network === 'mainnet') {
+    return 'Passport does not transact on mainnet: a wallet whose seed comes from a browser passkey has no business spending real NIGHT.';
+  }
+  return null;
+}
 
 /** Safe outside Vite, where there is no `import.meta.env`. See `localWallet.ts`. */
 function environment(): Record<string, string | undefined> {
@@ -52,7 +107,7 @@ export function configuredNetworkId(
   return env.VITE_MIDNIGHT_NETWORK_ID?.trim() || DEFAULT_NETWORK_ID;
 }
 
-/** Narrows an arbitrary network id to one of the three public networks. */
+/** Narrows an arbitrary network id to one of the public networks. */
 export function asPassportNetwork(networkId: string | null | undefined): PassportNetworkId | null {
   return KNOWN_NETWORKS.includes(networkId as PassportNetworkId)
     ? (networkId as PassportNetworkId)
@@ -68,12 +123,12 @@ export function walletNetwork(): PassportNetworkId | null {
   const network = asPassportNetwork(configuredNetworkId());
   if (network) return network;
   /* DEMO MASQUERADE, env-gated: a devnet build that also carries a local
-     Midnames TLD override presents itself as Preview so the identity card
-     and claim path light up. The wallet still signs on its real configured
-     network; the chain, the transactions, and the registry are the local
-     ones. Public builds never set VITE_MIDNAMES_TLD_ADDRESS, so this branch
-     is dead there and behaviour is byte-identical. */
-  if (environment().VITE_MIDNAMES_TLD_ADDRESS?.trim()) return 'preview';
+     Midnames TLD override presents itself as the default network so the
+     identity card and claim path light up. The wallet still signs on its real
+     configured network; the chain, the transactions, and the registry are the
+     local ones. Public builds never set VITE_MIDNAMES_TLD_ADDRESS, so this
+     branch is dead there and behaviour is byte-identical. */
+  if (environment().VITE_MIDNAMES_TLD_ADDRESS?.trim()) return DEFAULT_NETWORK_ID;
   return null;
 }
 
@@ -82,23 +137,25 @@ export function walletNetwork(): PassportNetworkId | null {
  * *something* in the switcher, so it falls back to the documented default.
  */
 export function defaultSelectedNetwork(): PassportNetworkId {
-  return walletNetwork() ?? 'preview';
+  return walletNetwork() ?? DEFAULT_NETWORK_ID;
 }
 
 /**
  * The networks Passport will genuinely REGISTER a `.night` name on — that is,
  * the ones where its wallet signs, submits, and can be held to the result.
  *
- * Mainnet is deliberately absent even though the Midnames TLD exists there: a
- * registration is a paid transaction, and a demo wallet whose seed comes from
- * a browser passkey has no business spending real NIGHT. A name chosen for
- * mainnet is queued, with that reason shown.
+ * Stagenet only, and for two independent reasons. Mainnet was always absent:
+ * a registration is a paid transaction, and a demo wallet whose seed comes
+ * from a browser passkey has no business spending real NIGHT. Preview and
+ * Pre-production left on 2026/08/24 for the reason in the module header —
+ * this build's ledger cannot speak their protocol. A name chosen for either is
+ * queued, with that reason shown.
  *
  * This lives here rather than in `identity/midnames.ts` so the UI can ask the
  * question without pulling the whole Midnight ledger runtime into the initial
  * bundle.
  */
-export const CLAIMABLE_NETWORKS: readonly PassportNetworkId[] = ['preview', 'preprod'];
+export const CLAIMABLE_NETWORKS: readonly PassportNetworkId[] = ['stagenet'];
 
 /** Whether a real `.night` registration is possible on `network` at all. */
 export function aliasRegistrationSupported(network: string | null | undefined): boolean {
@@ -106,17 +163,20 @@ export function aliasRegistrationSupported(network: string | null | undefined): 
 }
 
 /**
- * Public faucets, by network. Probed live 2026/08/06: both answer
- * `/api/health` with `{"status":"SERVING"}`. Mainnet has no faucet and never
- * will — its absence here is the point.
+ * Public faucets, by network. Mainnet has no faucet and never will — its
+ * absence here is the point.
  *
- * NOTE — deliberately no automated drip anywhere. `POST /drips` requires an
- * `X-Captcha-Token` from a Cloudflare Turnstile challenge, so no in-app code
- * can honestly obtain one. The only truthful funding flow is: copy the
+ * NOTE — deliberately no automated drip anywhere, on any of them. `POST
+ * {base}/drips` requires an `X-Captcha-Token` from a Cloudflare Turnstile
+ * challenge, so no in-app code can honestly obtain one. Confirmed for the
+ * stagenet faucet on 2026/08/24 by reading its own bundle: it posts
+ * `{ recipientAddress, amount }` with that header and then polls
+ * `{base}/drips/{dripId}`. The only truthful funding flow is: copy the
  * address, open the faucet, complete the captcha there, and let the wallet's
  * own sync report the arrival.
  */
 export const FAUCET_URLS: Partial<Record<PassportNetworkId, string>> = {
+  stagenet: 'https://faucet.stagenet.shielded.tools',
   preview: 'https://faucet.preview.midnight.network',
   preprod: 'https://faucet.preprod.midnight.network',
 };
@@ -127,8 +187,17 @@ export const FAUCET_URLS: Partial<Record<PassportNetworkId, string>> = {
  * 2026/08/07 with a real preview transaction
  * (`/tx/ea39f2…?network=preview`). Its `/tx/{hash}` route takes the 32-byte
  * ledger transaction HASH, never the 33-byte identifier `submitTransaction`
- * answers with. Mainnet is omitted until a link to it has been seen to
- * resolve.
+ * answers with.
+ *
+ * Stagenet is absent, and its absence is deliberate. The explorer's origin
+ * answers `200` for `?network=stagenet`, but that is its single-page shell
+ * answering for every path — it is not evidence that a stagenet transaction
+ * resolves there. Adding an entry on the strength of a `200` is exactly how
+ * this table produced dead links before. It goes in when a real stagenet
+ * transaction hash has been seen to render, and not before; until then
+ * stagenet transaction ids are shown as text, which is what
+ * {@link explorerTxUrl} returning `null` makes every caller do. Mainnet is
+ * omitted on the same rule.
  */
 export const EXPLORER_URLS: Partial<Record<PassportNetworkId, string>> = {
   preview: 'https://explorer.1am.xyz',

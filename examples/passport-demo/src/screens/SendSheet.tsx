@@ -17,7 +17,7 @@ import {
   MidnightBech32m,
   ShieldedAddress,
   UnshieldedAddress,
-} from '@midnight-ntwrk/wallet-sdk-address-format'
+} from '@midnight-ntwrk/wallet-sdk/address-format'
 
 /* The names this screen shares with the wallet (Contract W). Type-only, so
    nothing of `lib/localWallet.ts` — and none of the wallet SDK it statically
