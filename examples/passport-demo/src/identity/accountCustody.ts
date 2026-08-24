@@ -572,10 +572,10 @@ export async function readAccountState(
 
   let state: unknown;
   try {
-    const provider = indexerPublicDataProvider(
-      network.indexerHttpUrl,
-      network.indexerWsUrl ?? indexerWsFrom(network.indexerHttpUrl),
-    );
+    const provider = indexerPublicDataProvider({
+      queryURL: network.indexerHttpUrl,
+      subscriptionURL: network.indexerWsUrl ?? indexerWsFrom(network.indexerHttpUrl),
+    });
     state = await provider.queryContractState(address);
   } catch (cause) {
     throw new AccountCustodyError(
