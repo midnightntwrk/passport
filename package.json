@@ -28,8 +28,52 @@
     "deploy:hub": "npm run build --workspace passport-app-hub && node scripts/build-vercel-output.mjs examples/passport-app-hub && cd examples/passport-app-hub && vercel deploy --prebuilt --prod --yes",
     "deploy:docs": "npm run build --workspace passport-docs && node scripts/build-vercel-output.mjs examples/passport-docs && cd examples/passport-docs && vercel deploy --prebuilt --prod --yes"
   },
+  "//dependencies": [
+    "`compact-runtime` is pinned HERE so that npm's hoisting is a decision",
+    "rather than an accident, and it is pinned to the LEDGER-9 one.",
+    "",
+    "Why it has to be decided at all: a generated Compact contract module opens",
+    "with `import * as __compactRuntime from '@midnight-ntwrk/compact-runtime'`",
+    "and then `__compactRuntime.checkRuntimeVersion('<exact version>')`. Both",
+    "the bundler and Node resolve that specifier from the MODULE's directory,",
+    "walking upwards — so which copy a contract gets is decided by where the",
+    "contract file sits, not by which workspace asked for it. On top of that,",
+    "midnight-js decodes contract state through `ChargedState`, and two copies",
+    "of the runtime are two `ChargedState` classes: an `instanceof` check then",
+    "fails on objects that are correct in every other respect.",
+    "",
+    "So both stacks are made coherent from opposite ends. The root holds the",
+    "ledger-9 runtime, which is what `examples/passport-demo` and the ledger-9",
+    "midnight-js packages hoisted alongside it all share — ONE copy, including",
+    "the contract modules staged into `examples/passport-demo/contracts/",
+    "stagenet`. `examples/passport-funder` names 0.16.0 in its own dependencies,",
+    "so it gets a nested copy that its bundle resolves first at run time; that",
+    "is the version the ledger-8 contract build it loads demands."
+  ],
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.18.0-rc.1"
+  },
   "devDependencies": {
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
+  },
+  "//overrides": [
+    "Two Midnight stacks live in this workspace at once and must both resolve.",
+    "examples/passport-demo is on ledger-9 (wallet-sdk 2.0.0-beta.2, midnight-js",
+    "5.0.0-beta.6) for stagenet; examples/passport-funder stays on ledger-8",
+    "(wallet-sdk-* v3/v4, midnight-js 4.0.4) because preview is where it runs.",
+    "Every conflicting package is pinned to an exact version on both sides, so",
+    "npm nests the loser under the workspace that asks for it rather than",
+    "hoisting one over the other. The single override below is SCOPED BY",
+    "REQUESTED VERSION for that reason:",
+    "@midnight-ntwrk/wallet-sdk 2.0.0-beta.2 pins wallet-sdk-utilities 1.2.0,",
+    "which does not export Clock — the facade imports it and dies on load. 1.2.1",
+    "is the fixed publish. The ledger-8 packages request 1.1.1, which the",
+    "`@1.2.0` selector does not match, so the funder's tree is untouched. A bare",
+    "`\"@midnight-ntwrk/wallet-sdk-utilities\": \"1.2.1\"` override WOULD have",
+    "moved it and is deliberately not what is written here."
+  ],
+  "overrides": {
+    "@midnight-ntwrk/wallet-sdk-utilities@1.2.0": "1.2.1"
   }
 }
