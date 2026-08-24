@@ -157,3 +157,34 @@ function stage(name) {
 }
 
 for (const name of CONTRACTS) stage(name);
+
+/**
+ * The in-tab prover's own key material is a SEPARATE, much larger tree, and
+ * since the move to stagenet it is on the default path rather than behind
+ * `?prover=browser`: stagenet publishes no proof server, so with
+ * VITE_MIDNIGHT_PROVING_URL unset every circuit is proved in this tab.
+ *
+ * It is not fetched here. It is hundreds of megabytes of upstream binaries,
+ * and a build that names a proof server does not need a byte of it — so making
+ * `dev` and `build` download it would be wrong for one deployment and slow for
+ * the other. But its absence used to be a niche opt-in problem and is now the
+ * difference between an app that can prove and one that cannot, so it is said
+ * loudly here rather than discovered at the first transaction.
+ *
+ * Not a failure, for the same reason: a proof-server build is legitimate, and
+ * this script cannot see the environment the app will run with.
+ */
+if (!existsSync(resolve(appDirectory, 'public', 'zk-params', 'dust', '9', 'spend.prover'))) {
+  console.warn('');
+  console.warn('prepare-zk-assets: public/zk-params is not staged.');
+  console.warn('  Stagenet publishes no proof server, so with VITE_MIDNIGHT_PROVING_URL');
+  console.warn('  unset this app proves every circuit in the browser — and the in-tab');
+  console.warn('  prover reads its key material from there. Without it the first');
+  console.warn('  transaction fails with an explicit "missing …" error rather than');
+  console.warn('  anything subtle, but it does fail.');
+  console.warn('');
+  console.warn('  Stage it once:   node scripts/fetch-zk-params.mjs');
+  console.warn('  Or name a server: VITE_MIDNIGHT_PROVING_URL=http://127.0.0.1:6300');
+  console.warn('    (docker run -p 6300:6300 midnightntwrk/proof-server:9.0.0-rc.6)');
+  console.warn('');
+}
