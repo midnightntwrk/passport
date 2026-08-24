@@ -3018,22 +3018,24 @@ export default function PassportDemo() {
   );
 
   /**
-   * Decides once per session whether the name step runs.
+   * Decides once per session whether the name step runs — and the rule is the
+   * account invariant, not the session's history: a Passport with no name on
+   * this network is walked through the step, whoever opened it and however.
    *
-   * Three conditions, all of which must hold, and the first is the fix for the
-   * reported reset: ONLY a Passport this session just created is walked
-   * through the step. A sign-in, and a reload that silently restores a live
-   * session, go straight to the dashboard — they used to land on "STEP 2 OF 3"
-   * because the ref below is reset by every mount and a skipped name leaves no
-   * alias record to find. The stored resolution (A4) is the durable half:
-   * it survives sign-out, so a name once claimed or once declined is never
-   * asked for again on this device.
+   * This used to be gated on "only a Passport this session just created", so
+   * that a sign-in or a reload restoring a live session went straight to the
+   * dashboard. That gate existed for a world with a skip button, where "no
+   * name" was a choice; with the skip gone, "no name" can only mean an
+   * interrupted ceremony — and a reload mid-onboarding was landing users on a
+   * Home with no name and no account (seen live 2026/08/24, twice). The
+   * per-mount `identityStepResolved` ref still keeps this to one decision per
+   * session; the stored resolution keeps a completed name from ever being
+   * asked for again.
    */
   useEffect(() => {
     if (localWalletStatus !== 'ready' || !localSurfaces || !profile) return;
     if (identityStepResolved.current) return;
     identityStepResolved.current = true;
-    if (!identityStepArmed.current) return;
     identityStepArmed.current = false;
     if (loadAliasRecords()[selectedNetwork]) return;
     /* Only a DONE resolution suppresses the step. 'skipped' deliberately does

@@ -156,7 +156,7 @@ export default function OnboardingScreen(props: OnboardingProps) {
       {/* The footer carries the honesty note alone — there is no second route
           to link to. */}
       <footer className="mnob-foot">
-        <span>Preview network demo — not production</span>
+        <span>Test network demo — not production</span>
       </footer>
     </section>
   )

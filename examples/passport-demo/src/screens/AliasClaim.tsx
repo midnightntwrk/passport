@@ -434,12 +434,12 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
         <p className="mnid-foot">
           <Check size={13} aria-hidden="true" />
           <span>
-            Names are 1–32 characters: lowercase letters, numbers, and hyphens inside. A real
-            registration pays the registry owner in unshielded NIGHT from this wallet
+            Names are 1–32 characters: lowercase letters, numbers, and hyphens inside. This is a
+            real registration on the network
             {feesSponsored
-              ? ', and its network fee in DUST is expected to be covered by the fee sponsor'
-              : ', and its fee in DUST from this wallet too'}{' '}
-            — which is why Passport only performs one where it can.
+              ? ', paid for by the Passport service — you hold nothing and spend nothing'
+              : '; with no sponsor available right now it would be paid from this account'}
+            .
           </span>
         </p>
       </div>
@@ -487,9 +487,10 @@ function AvailabilityLine({
       <p className="mnid-status mnid-status-available" role="status">
         <span className="mnid-status-dot" aria-hidden="true" />
         <span>
-          {aliasDomain(field.alias)} is available ·{' '}
-          <span className="mnid-cost">{formatNight(cost ?? 0n)}</span> NIGHT
-          {canPay === false ? ' · more NIGHT needed' : ''}
+          {/* No price and no "more NIGHT needed": the registration is sponsored
+              and the user's balance is not part of it. `canPay` still drives
+              the host's fallback logic; it is simply not the user's concern. */}
+          {aliasDomain(field.alias)} is available
         </span>
       </p>
     )
