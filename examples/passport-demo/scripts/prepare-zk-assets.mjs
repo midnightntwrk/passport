@@ -164,12 +164,13 @@ for (const name of CONTRACTS) stage(name);
  * `?prover=browser`: stagenet publishes no proof server, so with
  * VITE_MIDNIGHT_PROVING_URL unset every circuit is proved in this tab.
  *
- * It is not fetched here. It is hundreds of megabytes of upstream binaries,
- * and a build that names a proof server does not need a byte of it — so making
- * `dev` and `build` download it would be wrong for one deployment and slow for
- * the other. But its absence used to be a niche opt-in problem and is now the
- * difference between an app that can prove and one that cannot, so it is said
- * loudly here rather than discovered at the first transaction.
+ * It is not fetched here. 45 MB measured on 2026/08/24 (the eight KZG SRS
+ * slices k=9..16 plus the four system circuits), which is a download a build
+ * naming a proof server has no use for at all — so making `dev` and `build`
+ * pull it would be wrong for one deployment and slow for the other. But its
+ * absence used to be a niche opt-in problem and is now the difference between
+ * an app that can prove and one that cannot, so it is said loudly here rather
+ * than discovered at the first transaction.
  *
  * Not a failure, for the same reason: a proof-server build is legitimate, and
  * this script cannot see the environment the app will run with.
