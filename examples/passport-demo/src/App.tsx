@@ -175,7 +175,7 @@ const signingNetworkLabel = configuredWalletNetwork
  * configured for — see `lib/networks.ts`.
  */
 const MIDNIGHT_INDEXER_URL =
-  import.meta.env.VITE_INDEXER_URL ?? 'https://indexer.preview.midnight.network/api/v4/graphql';
+  import.meta.env.VITE_INDEXER_URL ?? 'https://indexer.stagenet.shielded.tools/api/v4/graphql';
 /**
  * Optional activation funder (`VITE_FUNDER_URL`, see
  * `examples/passport-funder`). When set, Passport asks this self-hosted
