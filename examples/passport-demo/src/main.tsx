@@ -1,3 +1,7 @@
+// First import, deliberately: defines the Buffer global before any SDK chunk
+// that references it evaluates. See the module's own header for the incident.
+import './lib/bufferPolyfill.js';
+
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import '@fontsource/space-grotesk/700.css';
