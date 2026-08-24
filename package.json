@@ -64,16 +64,44 @@
     "(wallet-sdk-* v3/v4, midnight-js 4.0.4) because preview is where it runs.",
     "Every conflicting package is pinned to an exact version on both sides, so",
     "npm nests the loser under the workspace that asks for it rather than",
-    "hoisting one over the other. The single override below is SCOPED BY",
-    "REQUESTED VERSION for that reason:",
-    "@midnight-ntwrk/wallet-sdk 2.0.0-beta.2 pins wallet-sdk-utilities 1.2.0,",
-    "which does not export Clock — the facade imports it and dies on load. 1.2.1",
-    "is the fixed publish. The ledger-8 packages request 1.1.1, which the",
-    "`@1.2.0` selector does not match, so the funder's tree is untouched. A bare",
-    "`\"@midnight-ntwrk/wallet-sdk-utilities\": \"1.2.1\"` override WOULD have",
-    "moved it and is deliberately not what is written here."
+    "hoisting one over the other — npm gives the beta meta-package its whole",
+    "ledger-9 tree under node_modules/@midnight-ntwrk/wallet-sdk/node_modules,",
+    "and leaves the ledger-8 copies of the same names at the root.",
+    "",
+    "The one override below exists because @midnight-ntwrk/wallet-sdk",
+    "2.0.0-beta.2 pins wallet-sdk-utilities 1.2.0, a publish that does not",
+    "export `Clock`. wallet-sdk-facade imports `Clock`, so the whole wallet dies",
+    "— at build time, as the rollup error 'Clock is not exported by",
+    "…/wallet-sdk-utilities/dist/index.js'. 1.2.1 is the fixed publish.",
+    "",
+    "It is written GLOBALLY, which is the blunt form, because the two surgical",
+    "forms were tried against this tree and neither reaches the copy that",
+    "matters. `\"…-utilities@1.2.0\": \"1.2.1\"` (by requested version) and",
+    "`{\"@midnight-ntwrk/wallet-sdk\": {\"@midnight-ntwrk/wallet-sdk-utilities\":",
+    "\"1.2.1\"}}` (scoped to the parent) both leave 1.2.0 sitting inside",
+    "node_modules/@midnight-ntwrk/wallet-sdk/node_modules — which is exactly",
+    "where the beta tree lives, and where the broken copy is.",
+    "",
+    "So it moves the funder's copy too, from 1.1.1 to 1.2.1, and that is",
+    "checked rather than assumed: passport-funder typechecks and builds clean",
+    "afterwards. Two packages in its own tree were already resolving 1.2.1",
+    "before this change, so it was never running 1.1.1 throughout."
+  ],
+  "//overrides-ledger-v8": [
+    "A drift guard, not a version choice. examples/passport-funder pins",
+    "ledger-v8 8.0.3 exactly, but the wallet-sdk packages it depends on ask for",
+    "`^8.0.3`, and 8.1.x has since been published. Without this the funder gets",
+    "TWO copies — its own 8.0.3 and a hoisted 8.1.1 — and its typecheck fails",
+    "with pages of 'ZswapSecretKeys is not assignable to ZswapSecretKeys'. The",
+    "committed lockfile used to hold this still; it stops holding it the moment",
+    "the lockfile is regenerated, which the demo's move to ledger-9 required.",
+    "",
+    "Global is safe here BECAUSE the demo no longer uses ledger-v8 at all: this",
+    "reaches nothing but the funder's own tree, and 8.0.3 is the version the",
+    "funder already asked for."
   ],
   "overrides": {
-    "@midnight-ntwrk/wallet-sdk-utilities@1.2.0": "1.2.1"
+    "@midnight-ntwrk/wallet-sdk-utilities": "1.2.1",
+    "@midnight-ntwrk/ledger-v8": "8.0.3"
   }
 }

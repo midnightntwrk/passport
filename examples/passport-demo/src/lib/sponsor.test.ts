@@ -59,8 +59,23 @@ describe('sponsorConfig', () => {
      therefore means "this network's default gateway", `off` means disabled,
      and a network with no gateway entry stays unsponsored. */
   it('falls back to the network gateway when VITE_SPONSOR_URL is unset', () => {
-    expect(sponsorConfig({})).toEqual({ url: 'https://api-preview.1am.xyz' });
+    /* An unset network id means stagenet, which this build's wallet runs on,
+       and stagenet's gateway is our own balancer rather than a 1AM one — there
+       is no 1AM gateway on stagenet. It speaks the identical wire contract, so
+       every other assertion in this file is unaffected. */
+    expect(sponsorConfig({})).toEqual({
+      url: 'https://funder.midnightpassport.com/balancer',
+    });
     expect(sponsorConfig({ VITE_SPONSOR_URL: '   ' })).toEqual({
+      url: 'https://funder.midnightpassport.com/balancer',
+    });
+    expect(sponsorConfig({ VITE_MIDNIGHT_NETWORK_ID: 'stagenet' })).toEqual({
+      url: 'https://funder.midnightpassport.com/balancer',
+    });
+    /* The ledger-8 networks keep their entries: this build cannot transact on
+       them, but the table is still the one place that says which gateway each
+       network uses, and dropping them would lose that. */
+    expect(sponsorConfig({ VITE_MIDNIGHT_NETWORK_ID: 'preview' })).toEqual({
       url: 'https://api-preview.1am.xyz',
     });
     expect(sponsorConfig({ VITE_MIDNIGHT_NETWORK_ID: 'preprod' })).toEqual({
