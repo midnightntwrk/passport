@@ -348,6 +348,13 @@ export function walletProviderFor(wallet: LocalMidnightWallet, witness: FeeWitne
         recipe,
         wallet.keys.unshieldedKeystore.signDataAsync,
       );
+      /* The SIGNED recipe supersedes the one it was made from, and it is the
+         one `finalizeRecipe` books as pending. Reverting the earlier one would
+         leave that booking standing, so the local fall-back below would then
+         try to balance against coins this wallet has already reserved against
+         a transaction nobody will submit — and fail for a reason that looks
+         nothing like "the sponsor was unavailable". */
+      recipe = signed;
       const finalized = await facade.finalizeRecipe(signed);
       /* A longer 429 window than a transfer gets, because the stakes differ:
          a fresh passkey wallet has no DUST, so there is nothing to fall back
