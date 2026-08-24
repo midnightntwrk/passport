@@ -3,8 +3,7 @@
  *
  * WHAT THIS IS
  * ------------
- * `./passportContract.ts` DEPLOYS one instance of
- * `experiments/account-custody-prototype/contracts/account.compact` per
+ * `./passportContract.ts` DEPLOYS one instance of `account.compact` per
  * Passport. This module is that module's other half: it READS the deployed
  * instance's ledger and CALLS its circuits. Under the ruling that every value
  * flow routes through the ACC, the balances Home shows are the contract's
@@ -24,27 +23,27 @@
  * real Compact contract on the network the open wallet signs on", so this
  * module copies them deliberately rather than inventing a third way:
  *
- *   - the compiled contract module is imported through the SAME literal
- *     specifier `./passportContract.ts` uses, so the bundler and Node both
- *     resolve ONE module record (see the two-runtime note on
- *     {@link loadAccountContract});
+ *   - the compiled contract module is loaded through the SAME single literal
+ *     specifier both siblings use — `loadContractModule` in
+ *     `./contractRuntime.ts` — so the bundler and Node both resolve ONE module
+ *     record (see the two-runtime note on {@link loadAccountContract});
  *   - ZK artefacts load over URL through `FetchZkConfigProvider` pointed at
- *     `/zk/account` — the directory `scripts/prepare-c1.mjs` already stages
- *     and the Vite middleware already serves. Nothing here touches `node:fs`;
+ *     `/zk/account` — the directory `scripts/prepare-zk-assets.mjs` stages and
+ *     the Vite middleware serves. Nothing here touches `node:fs`;
  *   - fees are sponsored when the sponsor service has really said it can pay,
  *     and self-paid from the wallet's own DUST otherwise, through the exact
- *     `balanceWithSponsor` / `balanceLocally` pair both siblings carry —
- *     including the fall-back and recipe-revert rules.
+ *     balancing pair both siblings use — including the fall-back and
+ *     recipe-revert rules.
  *
- * WHY THE PROVIDER PLUMBING IS DUPLICATED RATHER THAN SHARED
- * ---------------------------------------------------------
- * `./midnames.ts` and `./passportContract.ts` each carry their own copy of
- * `bytesToHex`, `indexerWsFrom`, `inMemoryPrivateStateProvider`,
- * `currentWalletState`, and the balancing pair. That is this demo's convention:
- * one self-contained module per flow, so a change to one flow's fee handling
- * cannot silently move another's. This module follows it. Where a sibling
- * already EXPORTS the thing (`resolveDeployTxHashOnce`, `rawContractAddress`,
- * `derivePassportContractSecrets`) it is imported, never re-typed.
+ * THE PROVIDER PLUMBING IS NOW SHARED, NOT DUPLICATED (2026/08/24)
+ * ---------------------------------------------------------------
+ * Until the ledger-9 port, each of the three modules carried its own copy of
+ * the provider set, the private-state store, and the balancing pair — on the
+ * argument that one self-contained module per flow keeps a change to one
+ * flow's fee handling from silently moving another's. Three copies of the same
+ * six API differences is not a port, it is three ports, and the copies had
+ * already drifted. They now share `./contractRuntime.ts`, which is where the
+ * differences are documented; the behaviour is unchanged.
  *
  * THE DEVICE SECRET IS NOT OURS TO INVENT
  * ---------------------------------------
@@ -80,12 +79,12 @@ import { sponsorReadiness } from '../lib/sponsor.js';
 import {
   createContractProviders,
   compiledContractFor,
-  contractAssetBase,
   feeWitness,
   indexerWsFrom,
   loadContractModule,
 } from './contractRuntime.js';
 import {
+  accountPrivateStateFrom,
   accountWitnesses,
   derivePassportContractSecrets,
   rawContractAddress,
@@ -387,11 +386,6 @@ async function loadAccountContract() {
   >;
 }
 
-/** Where the browser fetches this contract's prover keys, verifier keys, and ZKIR. */
-function accountAssetBase(): string {
-  return contractAssetBase('account');
-}
-
 /**
  * The grant commitment for a secret, derived through the contract's OWN
  * exported pure circuit — so the client and the circuit can never disagree on
@@ -673,42 +667,6 @@ async function currentWalletState(wallet: LocalMidnightWallet): Promise<WalletFa
   return state as WalletFacadeState;
 }
 
-/** Session-lifetime private-state store, mirroring both siblings. */
-function inMemoryPrivateStateProvider(initial: Record<string, unknown>) {
-  const states = new Map<string, unknown>(Object.entries(initial));
-  const signingKeys = new Map<string, unknown>();
-  return {
-    setContractAddress() {},
-    async set(id: string, state: unknown) {
-      states.set(id, state);
-    },
-    async get(id: string) {
-      return states.has(id) ? states.get(id) : null;
-    },
-    async remove(id: string) {
-      states.delete(id);
-    },
-    async clear() {
-      states.clear();
-    },
-    async setSigningKey(address: string, key: unknown) {
-      signingKeys.set(address, key);
-    },
-    async getSigningKey(address: string) {
-      return signingKeys.get(address) ?? null;
-    },
-    async removeSigningKey(address: string) {
-      signingKeys.delete(address);
-    },
-    async clearSigningKeys() {
-      signingKeys.clear();
-    },
-    async exportPrivateStates(): Promise<never> {
-      throw new Error('Private-state export is not supported by the Passport demo.');
-    },
-  };
-}
-
 /**
  * Providers for the account-custody circuits.
  *
@@ -851,14 +809,20 @@ async function callAccountCircuit(
   onPhase?: (progress: AccountCustodyProgress) => void,
 ): Promise<AccountCustodyTxResult> {
   const address = rawContractAddress(options.contractAddress);
-  const feeWitness: { paidBy: AccountCustodyFeePayer } = { paidBy: 'own-dust' };
+  const witness: { paidBy: AccountCustodyFeePayer } = feeWitness();
   const nonce = new Uint8Array(8);
   globalThis.crypto.getRandomValues(nonce);
   const privateStateId = `passport-account-${address.slice(0, 8)}-${bytesToHex(nonce)}`;
 
   onPhase?.({ phase: 'connecting' });
-  /* The prototype's own witness factory and private-state builder, unchanged.
-     `makeWitnesses()` THROWS when a requested secret is absent ("witness …
+  /* The witness factory and private-state builder from `./passportContract.ts`
+     — the module that DEPLOYED this contract, so the two cannot disagree about
+     what the private state looks like. They used to be imported from
+     `experiments/account-custody-prototype/src/wallet/witnesses.js`, which
+     binds that tree's own ledger-8 midnight-js and compact-runtime; the
+     behaviour is unchanged, the resolution is not.
+
+     `accountWitnesses()` THROWS when a requested secret is absent ("witness …
      requested but the secret is not in the private state") rather than
      substituting zeros, which is exactly the behaviour this module wants.
 
@@ -872,13 +836,10 @@ async function callAccountCircuit(
      The GRANT secret is carried when the caller has one, so the grant-authorised
      circuits (`grant_withdraw_night` / `grant_withdraw_shielded`) can be reached
      through this same plumbing later without changing it. */
-  const { privateStateFromSecrets, makeWitnesses } = await import(
-    '../../../../experiments/account-custody-prototype/src/wallet/witnesses.js'
-  );
-  const initialPrivateState = privateStateFromSecrets(options.secrets);
+  const initialPrivateState = accountPrivateStateFrom(options.secrets);
   const [providers, compiledContract, { findDeployedContract }] = await Promise.all([
-    createAccountProviders(wallet, privateStateId, initialPrivateState, feeWitness),
-    compiledAccountContract(makeWitnesses()),
+    createAccountProviders(wallet, privateStateId, initialPrivateState, witness),
+    compiledAccountContract(accountWitnesses()),
     import('@midnight-ntwrk/midnight-js-contracts'),
   ]);
 
@@ -955,7 +916,7 @@ async function callAccountCircuit(
     txId,
     txIdResolved: resolved,
     network: wallet.network.networkId,
-    feePaidBy: feeWitness.paidBy,
+    feePaidBy: witness.paidBy,
     submittedAt: new Date().toISOString(),
   };
 }
