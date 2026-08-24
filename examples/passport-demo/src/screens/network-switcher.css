@@ -81,3 +81,13 @@
   font-size: 11px;
   line-height: 1.45;
 }
+
+/* The read-only explanation for a network this build cannot transact on. It
+   wraps, unlike the note above it, because it is a sentence rather than a
+   label — and it carries no border, so the two read as one block. */
+.mnnet-note-warning {
+  display: block;
+  border-top: none;
+  padding-top: 0;
+  margin-top: 2px;
+}
