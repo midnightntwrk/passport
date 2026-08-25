@@ -329,14 +329,14 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
           <div className="mnid-panel" role="status">
             <p className="mnid-panel-head">
               <Sparkles size={15} aria-hidden="true" />
-              This Passport will be activated for you
+              Registered for you
             </p>
+            {/* No price, no grant, no "this wallet is empty": the service
+                registers the name and pays for it, and the user's balance is
+                not part of the ceremony. The panel only says what will happen. */}
             <p>
-              {aliasDomain(alias ?? '')} costs{' '}
-              <span className="mnid-cost">{formatNight(cost ?? 0n)}</span> NIGHT, paid to the
-              registry owner, and this wallet is empty. Press claim: a small NIGHT grant is
-              sent to it first, and the registration follows once the grant lands — usually
-              within a few seconds.
+              Press claim and Passport registers {aliasDomain(alias ?? '')} for you — the
+              service pays for it, and you hold nothing. It usually takes a minute or two.
             </p>
           </div>
         ) : null}
