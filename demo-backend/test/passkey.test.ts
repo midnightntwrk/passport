@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   MAX_ACCOUNT_BLOB_BYTES,
   PassportEnrolmentConflictError,
+  PassportPasskeyDiscoveryError,
   WebAuthnPrfKeyProvider,
   decodeAccountBlob,
   encodeAccountBlob,
@@ -747,6 +748,82 @@ describe('enrolment overwrite guard', () => {
       expect(publicKey.excludeCredentials).toHaveLength(1);
       outcome.enrolled?.prf?.dispose();
     }
+  });
+
+  it('refuses to create over a passkey that answered without a PRF result', async () => {
+    // The dangerous case: a resident credential exists and answers, but the
+    // authenticator returns no PRF output. Treating that as "nothing there"
+    // would create a second credential for the same user handle — and the
+    // platform replaces the first, orphaning every secret derived from it.
+    let creations = 0;
+    replaceNavigator({
+      credentials: {
+        get: async () => ({
+          rawId: new Uint8Array([9, 9]).buffer,
+          getClientExtensionResults: () => ({}),
+        }),
+        create: async () => {
+          creations += 1;
+          throw new Error('discoverOrEnroll must not create over an answering passkey');
+        },
+      },
+    });
+
+    const attempt = WebAuthnPrfKeyProvider.discoverOrEnroll({
+      label: 'Midnight Passport',
+      userId: 'local-answered',
+      rpId: 'localhost',
+    });
+    await expect(attempt).rejects.toBeInstanceOf(PassportPasskeyDiscoveryError);
+    await expect(attempt).rejects.toMatchObject({ reason: 'prf-missing' });
+    expect(creations).toBe(0);
+  });
+
+  it('does not treat an unknown discovery failure as an empty device', async () => {
+    let creations = 0;
+    replaceNavigator({
+      credentials: {
+        get: async () => {
+          const error = new Error('The operation is insecure.');
+          error.name = 'SecurityError';
+          throw error;
+        },
+        create: async () => {
+          creations += 1;
+          throw new Error('unreachable');
+        },
+      },
+    });
+
+    const attempt = WebAuthnPrfKeyProvider.discoverOrEnroll({
+      label: 'Midnight Passport',
+      userId: 'local-unknown',
+      rpId: 'localhost',
+    });
+    await expect(attempt).rejects.toMatchObject({
+      name: 'PassportPasskeyDiscoveryError',
+      reason: 'failed',
+    });
+    expect(creations).toBe(0);
+  });
+
+  it('reports a dismissed picker as cancelled, with the reason preserved', async () => {
+    replaceNavigator({
+      credentials: {
+        get: async () => {
+          const error = new Error('The user cancelled.');
+          error.name = 'NotAllowedError';
+          throw error;
+        },
+        create: async () => {
+          throw new Error('unreachable');
+        },
+      },
+    });
+    await expect(WebAuthnPrfKeyProvider.discover({ rpId: 'localhost' })).rejects.toMatchObject({
+      name: 'PassportPasskeyDiscoveryError',
+      reason: 'cancelled',
+    });
   });
 });
 

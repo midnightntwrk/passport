@@ -77,6 +77,32 @@ export class PassportEnrolmentConflictError extends Error {
   }
 }
 
+/** Why a discoverable assertion produced no usable Passport. */
+export type PassportPasskeyDiscoveryFailure =
+  /** The user dismissed the picker, or it held no resident credential. */
+  | 'cancelled'
+  /** A resident credential ANSWERED, but without a PRF result. */
+  | 'prf-missing'
+  /** The authenticator failed for another reason; its state is unknown. */
+  | 'failed';
+
+/**
+ * {@link WebAuthnPrfKeyProvider.discover} failed, with the reason preserved
+ * instead of flattened into text. The distinction matters for the overwrite
+ * guard: only `cancelled` means there is nothing on the device to sign in to.
+ * `prf-missing` means a passkey is there — creating another over it would
+ * replace the credential every derived secret depends on.
+ */
+export class PassportPasskeyDiscoveryError extends Error {
+  constructor(
+    readonly reason: PassportPasskeyDiscoveryFailure,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'PassportPasskeyDiscoveryError';
+  }
+}
+
 /**
  * What {@link WebAuthnPrfKeyProvider.discoverOrEnroll} did: signed in to a
  * resident credential that already existed, or enrolled a new one. Exactly
@@ -290,6 +316,15 @@ function excludedCredentialIds(options: EnrollPassportPasskeyOptions): string[] 
  * matched something it already holds. The name is the only signal WebAuthn
  * gives, and it is on the DOMException the client throws.
  */
+/** WebAuthn reports a dismissed picker, and an empty one, as `NotAllowedError`. */
+function isUserCancellation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { name?: unknown }).name === 'NotAllowedError'
+  );
+}
+
 function isExclusionConflict(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -573,14 +608,16 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
    * handle without creating anything. Only an empty discovery proceeds to
    * enrolment — which still carries `knownCredentialIds` as a second line.
    *
-   * A discovery that FAILS counts as "nothing there". The user cancelling
-   * (`NotAllowedError`) is the case the reviewer named, but {@link discover}
-   * flattens the DOMException into a plain `Error` before this sees it, so the
-   * name is not recoverable here and every failure is treated alike. That is
-   * the safe reading in both directions: no credential was obtained, so there
-   * is nothing to sign in to, and the create that follows is still guarded by
-   * exclusion and reports {@link PassportEnrolmentConflictError} if it was
-   * wrong. Callers MUST dispose whichever handle comes back.
+   * Only a discovery that ended with NO credential answering proceeds to
+   * enrolment: the user dismissing the picker, or a picker with nothing in it
+   * (both surface as `NotAllowedError`, reported here as
+   * {@link PassportPasskeyDiscoveryError} with reason `cancelled`). A
+   * credential that answered without a PRF result is a passkey that EXISTS,
+   * so this refuses to create over it and rethrows with reason `prf-missing`;
+   * any other failure leaves the device's state unknown and is rethrown too,
+   * because "unknown" is not "empty". The create that does run is still
+   * guarded by exclusion and reports {@link PassportEnrolmentConflictError}
+   * if discovery was wrong. Callers MUST dispose whichever handle comes back.
    */
   static async discoverOrEnroll(
     options: EnrollPassportPasskeyOptions,
@@ -590,8 +627,12 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
       discovered = await WebAuthnPrfKeyProvider.discover(
         options.rpId ? { rpId: options.rpId } : {},
       );
-    } catch {
-      discovered = null;
+    } catch (error) {
+      if (error instanceof PassportPasskeyDiscoveryError && error.reason === 'cancelled') {
+        discovered = null;
+      } else {
+        throw error;
+      }
     }
     if (discovered) return { outcome: 'existing', discovered, enrolled: null };
     return {
@@ -688,17 +729,31 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
           ...(rpId ? { rpId } : {}),
         },
       })) as PublicKeyCredential | null;
-      if (!assertion) throw new Error('Passport passkey selection was cancelled.');
+      if (!assertion) {
+        throw new PassportPasskeyDiscoveryError(
+          'cancelled',
+          'Passport passkey selection was cancelled.',
+        );
+      }
       const extension = assertion.getClientExtensionResults() as PrfExtensionResults;
       const result = extension.prf?.results?.first;
-      if (!result) throw new Error('The authenticator did not return a PRF result.');
+      if (!result) {
+        throw new PassportPasskeyDiscoveryError(
+          'prf-missing',
+          'A Passport passkey answered, but the authenticator did not return a PRF result.',
+        );
+      }
       return oneShotFromPrf(
         toBase64(new Uint8Array(assertion.rawId)),
         result,
         decodeAccountBlob(extension.largeBlob?.blob),
       );
     } catch (error) {
-      throw new Error(errorMessage(error));
+      if (error instanceof PassportPasskeyDiscoveryError) throw error;
+      throw new PassportPasskeyDiscoveryError(
+        isUserCancellation(error) ? 'cancelled' : 'failed',
+        errorMessage(error),
+      );
     }
   }
 

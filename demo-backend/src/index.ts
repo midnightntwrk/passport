@@ -2,6 +2,7 @@ export { PassportStateInjection, joinWithPassportState } from './injection.js';
 export {
   MAX_ACCOUNT_BLOB_BYTES,
   PassportEnrolmentConflictError,
+  PassportPasskeyDiscoveryError,
   WebAuthnPrfKeyProvider,
   decodeAccountBlob,
   encodeAccountBlob,
@@ -40,6 +41,7 @@ export type {
   PassportAccountBlob,
   PassportAccountBlobWriteResult,
   PassportPasskeyOnboarding,
+  PassportPasskeyDiscoveryFailure,
   PassportPasskeyReference,
 } from './passkey.js';
 export type {
