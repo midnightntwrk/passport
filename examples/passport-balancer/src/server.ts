@@ -313,7 +313,13 @@ async function main(): Promise<void> {
    * later. Reporting that as an empty balancer would be false, so a shortfall
    * is not believed until it has had time to settle.
    */
-  const CHANGE_SETTLE_MS = 90_000;
+  /* Long enough to outlast the wallet's own post-spend "syncing" flap, which
+     was measured at ~2 minutes (the SDK scores being one event AHEAD of the
+     stream the same as being behind). A fund-account request arrives seconds
+     after the registration that caused the flap; 90 s turned it away with
+     `wallet-syncing` on the live site (2026/08/25) while the flap self-healed
+     30 s later. */
+  const CHANGE_SETTLE_MS = 300_000;
   const SETTLE_POLL_MS = 3_000;
 
   /**
@@ -671,10 +677,15 @@ async function main(): Promise<void> {
   const fundAccount = async (
     body: FundAccountRequestBody,
   ): Promise<{ status: number; body: Record<string, unknown> }> => {
-    const fail = (why: Refusal) => ({
-      status: why.status,
-      body: { error: why.error, message: why.message, ...(why.extra ?? {}) },
-    });
+    const fail = (why: Refusal) => {
+      /* Every refusal is logged: a 503 that leaves no trace made tonight's
+         `wallet-syncing` invisible until the client's console showed it. */
+      console.warn(`[account] refused: ${why.error} — ${why.message}`);
+      return {
+        status: why.status,
+        body: { error: why.error, message: why.message, ...(why.extra ?? {}) },
+      };
+    };
 
     /* Captured, not re-read: `accountFunder` is a `let`, and TypeScript's
        narrowing does not survive into the closures below. */
@@ -1017,10 +1028,13 @@ async function main(): Promise<void> {
   const registerAlias = async (
     body: AliasRequestBody,
   ): Promise<{ status: number; body: Record<string, unknown> }> => {
-    const fail = (why: Refusal) => ({
-      status: why.status,
-      body: { error: why.error, message: why.message, ...(why.extra ?? {}) },
-    });
+    const fail = (why: Refusal) => {
+      console.warn(`[alias] refused: ${why.error} — ${why.message}`);
+      return {
+        status: why.status,
+        body: { error: why.error, message: why.message, ...(why.extra ?? {}) },
+      };
+    };
 
     /* Captured, not re-read: `sponsor` is a `let`, and TypeScript's narrowing
        does not survive into the closures below. */
