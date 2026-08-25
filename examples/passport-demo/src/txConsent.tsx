@@ -14,7 +14,7 @@ import {
   shortAddress,
   transferErrorFrom,
   txBoundaryCopy,
-  walletHoldsCopy,
+  accountHoldsCopy,
   type PassportTransferContext,
   type PassportTxResponseBody,
 } from './lib/txApproval.js';
@@ -261,11 +261,11 @@ export function PassportTxConsent({
       reply(pending, {
         status: 'failed',
         error: 'wallet-unavailable',
-        detail: 'The Passport wallet session closed before this could be signed.',
+        detail: 'The Passport signing session closed before this could be signed.',
       });
       setOutcome({
         kind: 'failed',
-        message: 'The Passport wallet session closed before this could be signed.',
+        message: 'The Passport signing session closed before this could be signed.',
       });
       return;
     }
@@ -280,7 +280,7 @@ export function PassportTxConsent({
         origin: pending.origin,
       });
       /* Nothing is ever reported as submitted without the node's own id. */
-      if (!txId) throw new Error('The wallet returned no transaction id.');
+      if (!txId) throw new Error('Passport returned no transaction id.');
       reply(pending, { status: 'submitted', txId });
       setOutcome({ kind: 'submitted', txId });
     } catch (cause) {
@@ -325,7 +325,7 @@ export function PassportTxConsent({
             <Wallet size={20} />
           </span>
           <div>
-            <p>Passport wallet</p>
+            <p>Passport</p>
             <h2 id="tx-consent-title">
               {outcome?.kind === 'submitted'
                 ? 'Transaction submitted.'
@@ -353,7 +353,7 @@ export function PassportTxConsent({
               {outcome.kind === 'submitted' ? (
                 <>
                   Sent — {amount === null ? '' : `${formatNight(amount)} NIGHT `}went out of
-                  this wallet. The node accepted the transaction and returned its identifier;{' '}
+                  your account. The node accepted the transaction and returned its identifier;{' '}
                   {pending.origin} has been told the same id.
                   <br />
                   <code>{outcome.txId}</code>
@@ -373,7 +373,7 @@ export function PassportTxConsent({
                 </>
               ) : (
                 <>
-                  Nothing was sent — no NIGHT moved from this wallet. {outcome.message}
+                  Nothing was sent — no NIGHT moved from your account. {outcome.message}
                 </>
               )}
             </p>
@@ -422,8 +422,8 @@ export function PassportTxConsent({
               </li>
               <li>
                 <Check size={15} />
-                <span>This wallet holds</span>
-                <small>{walletHoldsCopy(transferContext?.formattedBalance)}</small>
+                <span>Your account holds</span>
+                <small>{accountHoldsCopy(transferContext?.formattedBalance)}</small>
               </li>
             </ul>
             <div className="profile-consent-boundary">{txBoundaryCopy(networkId)}</div>

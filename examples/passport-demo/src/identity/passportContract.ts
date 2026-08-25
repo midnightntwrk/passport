@@ -50,16 +50,14 @@
  * indexer was afterwards seen serving state at that address.
  */
 
-import * as Rx from 'rxjs';
 
 import { split } from '../../../../experiments/account-custody-prototype/src/wallet/shamir.js';
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
-import { sponsorReadiness } from '../lib/sponsor.js';
+import { sponsorFeeRefusal, sponsorReadiness } from '../lib/sponsor.js';
 import {
   bytesToHex,
   createContractProviders,
   compiledContractFor,
-  feeWitness,
   hexToBytes,
   indexerWsFrom,
   loadContractModule,
@@ -78,8 +76,6 @@ export { rawContractAddress };
 /* Constants                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/** How long the wallet facade gets to answer with a state snapshot. */
-const STATE_TIMEOUT_MS = 15_000;
 /** Attempts, at two seconds apart, to see the indexer serve the new state. */
 const LEDGER_CONFIRM_ATTEMPTS = 30;
 const LEDGER_CONFIRM_INTERVAL_MS = 2_000;
@@ -223,7 +219,7 @@ export async function deviceCommitment(secret: Uint8Array): Promise<bigint> {
 
 export type PassportContractErrorCode =
   | 'wallet-not-open'
-  | 'insufficient-dust'
+  | 'fee-unavailable'
   | 'deploy-failed'
   | 'network-unreachable';
 
@@ -247,7 +243,11 @@ export interface PassportContractProgress {
   phase: 'deriving' | 'deploying' | 'confirming';
 }
 
-/** How the deployment fee was really paid. Mirrors `FeeReadiness`'s vocabulary. */
+/**
+ * Who paid the deployment fee. One value — see {@link ContractFeePayer}: the
+ * fee sponsor is a Passport's only fee payer, and a deployment that exists is
+ * a deployment the sponsor balanced.
+ */
 export type PassportContractFeePayer = ContractFeePayer;
 
 export interface PassportContractDeployment {
@@ -272,30 +272,14 @@ export interface PassportContractDeployment {
    */
   ledgerConfirmed: boolean;
   /**
-   * Which side really paid the fee, decided by what the sponsor did — not by
-   * what it promised. `sponsored` only when a `/balance-only` response came
-   * back and the transaction it returned is the one that was submitted.
+   * Who paid the fee. `sponsored` is the only answer there is, and it is not a
+   * promise being repeated back: `balanceTx` refuses to balance at all unless
+   * the sponsor is ready, and the transaction it returns is the one the
+   * sponsor's `/balance-only` response carried, so a deployment reaching this
+   * line IS the evidence.
    */
   feePaidBy: PassportContractFeePayer;
   deployedAt: string;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Wallet state                                                               */
-/* -------------------------------------------------------------------------- */
-
-interface WalletFacadeState {
-  unshielded: { balances: Record<string, bigint> };
-  dust: { balance(now: Date): bigint };
-}
-
-async function currentWalletState(wallet: LocalMidnightWallet): Promise<WalletFacadeState> {
-  const state = await Rx.firstValueFrom(
-    (wallet.facade.state() as Rx.Observable<unknown>).pipe(
-      Rx.timeout({ first: STATE_TIMEOUT_MS }),
-    ),
-  );
-  return state as WalletFacadeState;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -348,38 +332,25 @@ export async function confirmPassportContractOnLedger(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Re-checks, WITHOUT any passkey prompt, whether this wallet can pay for the
- * deployment right now. The deployment moves no NIGHT of its own — it is a fee
- * question only — so a funded sponsor is sufficient and a dustless wallet is
- * refused only when there is no sponsor to cover it.
+ * Re-checks, WITHOUT any passkey prompt, whether the deployment's fee can be
+ * covered right now.
+ *
+ * The deployment moves no NIGHT of its own — it is a fee question only — and a
+ * Passport has exactly one fee payer, so this is a question about the SPONSOR
+ * and nothing else. No balance is read, because there is no balance a refusal
+ * here could be about: the holder is never asked to fund a fee, so telling
+ * them what they hold would only invite a step that does not exist.
  *
  * Exposed separately from {@link deployPassportContract} so a re-run can fail
  * closed with the honest reason before asking the user to touch their
  * authenticator.
  */
-export async function checkPassportContractFunds(
-  wallet: LocalMidnightWallet,
-): Promise<{ ok: true } | { ok: false; reason: string }> {
-  if ((await sponsorReadiness()).state === 'ready') return { ok: true };
-  try {
-    const state = await currentWalletState(wallet);
-    if (state.dust.balance(new Date()) <= 0n) {
-      return {
-        ok: false,
-        reason:
-          'This wallet has no DUST, so it cannot pay the deployment fee yet. DUST accrues while NIGHT is held.',
-      };
-    }
-  } catch (cause) {
-    // "We could not tell" is not "no funds" — say which it was.
-    return {
-      ok: false,
-      reason: `The wallet could not report its DUST balance: ${
-        cause instanceof Error ? cause.message : String(cause)
-      }`,
-    };
-  }
-  return { ok: true };
+export async function checkPassportContractFunds(): Promise<
+  { ok: true } | { ok: false; reason: string }
+> {
+  const readiness = await sponsorReadiness();
+  if (readiness.state === 'ready') return { ok: true };
+  return { ok: false, reason: sponsorFeeRefusal(readiness) };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -408,12 +379,11 @@ export async function deployPassportContract(
 
   // Fees before secrets: refuse early, with the honest reason, rather than
   // after the user has watched a prover run.
-  const funds = await checkPassportContractFunds(wallet);
-  if (!funds.ok) throw new PassportContractError('insufficient-dust', funds.reason);
+  const funds = await checkPassportContractFunds();
+  if (!funds.ok) throw new PassportContractError('fee-unavailable', funds.reason);
 
   const { deviceSecret, recoverySecret } = await derivePassportContractSecrets(rootSecret);
   const privateStateId = `passport-account-${wallet.network.networkId}`;
-  const witness = feeWitness();
 
   try {
     const accountModule = await loadAccountContract();
@@ -424,7 +394,6 @@ export async function deployPassportContract(
         contract: 'account',
         privateStateId,
         initialPrivateState,
-        witness,
       }),
       compiledContractFor('account', 'passport-account', accountWitnesses()),
     ]);
@@ -506,7 +475,9 @@ export async function deployPassportContract(
         .derive_device_commitment(deviceSecret)
         .toString(),
       ledgerConfirmed,
-      feePaidBy: witness.paidBy,
+      /* Constant because there is one fee payer, and true because `balanceTx`
+         refused to produce this transaction any other way. */
+      feePaidBy: 'sponsored',
       deployedAt: new Date().toISOString(),
     };
   } finally {

@@ -130,18 +130,10 @@ export interface HomeScreenProps {
   /** Selected network context; filters the app grid, does not move the wallet. */
   network: PassportNetwork
   onSelectNetwork: (network: PassportNetwork) => void
-  /**
-   * The payment address the `.night` resolver leaf carries — this Passport's
-   * unshielded address, and the only address left on this surface (open
-   * decision D1). Shown inside Receive, beneath the name.
-   */
-  unshieldedAddress: string | null
   /** Failure from any control on this screen — copy, send, refresh. */
   error?: string | null
   onDismissError?: () => void
   onRefresh: () => void
-  /** Copies {@link HomeScreenProps.unshieldedAddress}. */
-  onCopyAddress: () => void
   /**
    * The Send seam — a withdrawal from the account contract, plus the
    * fee-readiness probe whose answer the sheet quotes.
@@ -222,11 +214,9 @@ export default function HomeScreen(props: HomeScreenProps) {
     syncPercent,
     network,
     onSelectNetwork,
-    unshieldedAddress,
     error,
     onDismissError,
     onRefresh,
-    onCopyAddress,
     send,
     appsProfile,
     onProfileShared,
@@ -262,17 +252,11 @@ export default function HomeScreen(props: HomeScreenProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [receiveOpen])
 
-  const handleCopy = useCallback(() => {
-    onCopyAddress()
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1_600)
-  }, [onCopyAddress])
-
-  /* The name is copied here rather than through `onCopyAddress`: that seam is
-     the host's clipboard write for the ADDRESS, and widening it to carry a
-     name would change the props contract the integrator implements. A local
-     clipboard write keeps the interface untouched. No clipboard, no tick —
-     nothing is claimed falsely. */
+  /* Every copy on this screen is a LOCAL clipboard write. The host used to
+     hand down an `onCopyAddress` seam for the engine's unshielded address; it
+     went on 2026/08/25 with the address it copied, because nothing on this
+     surface offers that address any more. No clipboard, no tick — nothing is
+     claimed falsely. */
   /* The account is what the user IS on chain: the contract the `.night` name
      resolves to. Receive shows it, and only it — the passkey wallet's address
      is machinery and is never handed out as somewhere to send value. */
@@ -366,7 +350,7 @@ export default function HomeScreen(props: HomeScreenProps) {
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(syncPercent)}
-          aria-label={`Wallet sync ${Math.round(syncPercent)} per cent complete`}
+          aria-label={`Passport sync ${Math.round(syncPercent)} per cent complete`}
         >
           <span className="mnhome-syncstrip-track" aria-hidden="true">
             <span

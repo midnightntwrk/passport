@@ -393,7 +393,7 @@ export default function AppsScreen(props: AppsScreenProps) {
         ) : null}
 
         <p className="mnapps-note">
-          Passport cannot inject a wallet into an app served from another origin
+          Passport cannot inject a wallet provider into an app served from another origin
           — the browser's same-origin policy forbids it, and no framework works
           around that. Apps that speak the Passport profile protocol ask over
           postMessage instead, and every request surfaces here for your approval.

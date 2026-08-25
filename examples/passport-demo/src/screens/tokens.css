@@ -67,12 +67,6 @@
    In dark mode shadows deepen (pure black at higher alpha) rather
    than lighten; elevation is mostly carried by surface value there.
 
-   DUST battery ring
-   -----------------
-   Charge (a real DUST balance)  → stroke: var(--mn-accent)  — blue.
-   Sync gauge (walking the chain)→ stroke: var(--mn-text-muted) — grey.
-   Track stays --mn-border-hairline-ish grey. Caps rounded.
-
    Themes
    ------
    Light is the default. Dark is applied when the document element

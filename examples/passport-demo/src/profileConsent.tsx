@@ -35,18 +35,24 @@ interface PendingRequest {
   source: Window;
 }
 
-/* The `midnightAddresses` field still carries the unshielded, shielded, and
-   DUST addresses on the wire — the label simply does not name them. Passport
-   surfaces the .night name as the identity and keeps the three addresses out
-   of the primary UI, so a consent sheet must not be the one place a user meets
-   the word DUST.
+/* The `midnightAddresses` field still carries all three of the transaction
+   engine's addresses on the wire — the label simply does not name them.
+   Passport surfaces the .night name as the identity and keeps the three
+   addresses out of the primary UI, so a consent sheet must not be the one
+   place a user meets the fee token.
+
+   The in-Passport browser's own sheet (`screens/AppBrowser.tsx`) shows a detail
+   line under each label; its line for this field says outright that these are
+   engine addresses and that funds belong at the ACCOUNT address instead. This
+   sheet has no detail line, so its label carries the whole message and must
+   stay as neutral as it is — "technical", never "receiving".
 
    FOLLOW-UP (2026/08/25): `midnightAddresses` should leave the profile protocol
    altogether. A Passport user's identity is their account-custody contract —
    `passportContract` — and that is what an app should key on; the raffle was
-   moved to it on this date. The three wallet addresses are a signing detail no
+   moved to it on this date. The three engine addresses are a signing detail no
    dApp has a legitimate use for, and offering them here invites an app to pay
-   a wallet the account cannot see. Removing the field is a WIRE change, so it
+   an address the account cannot see. Removing the field is a WIRE change, so it
    waits for a version bump of `demo-backend/src/profileProtocol.ts` and its two
    vendored copies, which must stay byte-identical. */
 const FIELD_LABELS: Record<PassportProfileField, string> = {

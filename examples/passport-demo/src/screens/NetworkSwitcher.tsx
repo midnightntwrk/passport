@@ -143,10 +143,11 @@ export default function NetworkSwitcher({ network, onSelect }: NetworkSwitcherPr
               <span className="mnnet-option-copy">
                 <strong>{NETWORK_LABELS[candidate]}</strong>
                 {candidate === WALLET_NETWORK ? (
-                  <small>Demo wallet lives here</small>
+                  <small>Passport signs here</small>
                 ) : networkIsTransactable(candidate) ? null : (
                   /* Selecting a network only filters the app list — it never
-                     moves the wallet, which is what the note below says. But
+                     moves where Passport signs, which is what the note below
+                     says. But
                      this build's ledger cannot transact on the ledger-8
                      networks at all, so saying "read-only" here is the
                      difference between a filter and a promise. */
@@ -158,7 +159,7 @@ export default function NetworkSwitcher({ network, onSelect }: NetworkSwitcherPr
           ))}
           <p className="mnnet-note">
             <Globe size={12} aria-hidden="true" />
-            Switching filters the app list. The demo wallet stays on{' '}
+            Switching filters the app list. Passport keeps signing on{' '}
             {WALLET_NETWORK ? NETWORK_LABELS[WALLET_NETWORK] : 'its configured network'}.
           </p>
           {/* Why the selected network is read-only, in the words networks.ts

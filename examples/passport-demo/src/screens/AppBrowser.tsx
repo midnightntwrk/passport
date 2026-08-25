@@ -35,7 +35,7 @@ import {
   shortAddress,
   transferErrorFrom,
   txBoundaryCopy,
-  walletHoldsCopy,
+  accountHoldsCopy,
   type PassportTxResponseBody,
 } from '../lib/txApproval.js'
 import type { RegistryApp } from '../lib/registry.js'
@@ -129,10 +129,11 @@ type TransferOutcome =
   | { kind: 'declined' }
   | { kind: 'failed'; message: string }
 
-/* Word for word `../profileConsent.tsx`, and for the reason given there: the
-   wire field still carries all three addresses, but the three addresses are
-   kept out of Passport's primary UI and a consent sheet must not be where the
-   word DUST first reaches a user. */
+/* Word for word `../../profileConsent.tsx`, and for the reason given there:
+   the wire field still carries all three addresses, but the three addresses
+   are kept out of Passport's primary UI, a consent sheet must not be where the
+   fee token first reaches a user, and — since the account-custody ruling — the
+   detail line must not read as an invitation to pay one of them. */
 const FIELD_LABELS: Record<PassportProfileField, string> = {
   displayName: 'Passport display name',
   passportContract: 'Your Passport account — its address and network',
@@ -142,7 +143,8 @@ const FIELD_LABELS: Record<PassportProfileField, string> = {
 const FIELD_DETAILS: Record<PassportProfileField, string> = {
   displayName: 'The public name attached to this Passport.',
   passportContract: 'The account this Passport IS — where its money lives and what its .night name resolves to.',
-  midnightAddresses: 'Public receiving addresses — never the keys behind them.',
+  midnightAddresses:
+    'Technical Midnight addresses used by this Passport’s transaction engine — send funds to your account address, not to these.',
 }
 
 function randomNonce(bytes = 24): string {
@@ -573,11 +575,11 @@ export default function AppBrowser(props: AppBrowserProps) {
       postTx(pendingTx.request, {
         status: 'failed',
         error: 'wallet-unavailable',
-        detail: 'The Passport wallet session closed before this could be signed.',
+        detail: 'The Passport signing session closed before this could be signed.',
       })
       setTxOutcome({
         kind: 'failed',
-        message: 'The Passport wallet session closed before this could be signed.',
+        message: 'The Passport signing session closed before this could be signed.',
       })
       return
     }
@@ -590,7 +592,7 @@ export default function AppBrowser(props: AppBrowserProps) {
         origin: pendingTx.origin,
       })
       /* Nothing is ever reported as submitted without the node's own id. */
-      if (!txId) throw new Error('The wallet returned no transaction id.')
+      if (!txId) throw new Error('Passport returned no transaction id.')
       postTx(pendingTx.request, { status: 'submitted', txId })
       setTxOutcome({ kind: 'submitted', txId })
       /* No toast is raised here. The send seam this component is handed
@@ -893,7 +895,7 @@ export default function AppBrowser(props: AppBrowserProps) {
                 <Wallet size={19} strokeWidth={2} />
               </span>
               <div>
-                <p>Passport wallet</p>
+                <p>Passport</p>
                 <h2 id="mnapps-tx-title">
                   {txOutcome?.kind === 'submitted'
                     ? 'Transaction submitted.'
@@ -918,8 +920,8 @@ export default function AppBrowser(props: AppBrowserProps) {
                 <p>
                   {txOutcome.kind === 'submitted' ? (
                     <>
-                      Sent — {formatNight(pendingTx.amount)} NIGHT went out of this
-                      wallet. The node accepted the transaction and returned its
+                      Sent — {formatNight(pendingTx.amount)} NIGHT went out of your
+                      account. The node accepted the transaction and returned its
                       identifier; the app has been told the same id.
                       <br />
                       <code className="mnapps-tx-hash">{txOutcome.txId}</code>
@@ -945,7 +947,7 @@ export default function AppBrowser(props: AppBrowserProps) {
                     </>
                   ) : (
                     <>
-                      Nothing was sent — no NIGHT moved from this wallet.{' '}
+                      Nothing was sent — no NIGHT moved from your account.{' '}
                       {txOutcome.message}
                     </>
                   )}
@@ -997,8 +999,8 @@ export default function AppBrowser(props: AppBrowserProps) {
                     </dd>
                   </div>
                   <div className="mnapps-tx-row">
-                    <dt>This wallet holds</dt>
-                    <dd>{walletHoldsCopy(transferContext?.formattedBalance)}</dd>
+                    <dt>Your account holds</dt>
+                    <dd>{accountHoldsCopy(transferContext?.formattedBalance)}</dd>
                   </div>
                 </dl>
 

@@ -53,6 +53,7 @@ import type { LocalMidnightWallet } from '../lib/localWallet.js';
 import {
   sponsorBalanceOnly,
   sponsorHexToBytes,
+  sponsorFeeRefusal,
   sponsorReadiness,
   BALANCE_WITHOUT_DUST,
   SPONSOR_CONTRACT_RETRY_WINDOW_MS,
@@ -262,23 +263,17 @@ export function inMemoryPrivateStateProvider(initial: Record<string, unknown> = 
 /* The wallet provider                                                        */
 /* -------------------------------------------------------------------------- */
 
-/** How a contract transaction's fee was really paid. */
-export type ContractFeePayer = 'sponsored' | 'own-dust';
-
 /**
- * Records which side paid, written only once the answer is known. It is an
- * out-parameter rather than a return value because whether the sponsor really
- * paid is only decided INSIDE `balanceTx`, after the service has answered;
- * reporting a covered fee from anywhere else would be a guess.
+ * How a contract transaction's fee was paid. One value, and deliberately.
+ *
+ * The fee sponsor is the only fee payer a Passport has. `balanceTx` below
+ * cannot produce a transaction any other way — it refuses before it builds
+ * anything when the sponsor is not ready — so a submitted transaction IS the
+ * proof that the sponsor paid for it. There is nothing left to witness after
+ * the fact, which is why the out-parameter that used to carry the answer back
+ * out of `balanceTx` is gone.
  */
-export interface FeeWitness {
-  paidBy: ContractFeePayer;
-}
-
-/** A fresh witness, pessimistic until a `/balance-only` response proves otherwise. */
-export function feeWitness(): FeeWitness {
-  return { paidBy: 'own-dust' };
-}
+export type ContractFeePayer = 'sponsored';
 
 /**
  * The midnight-js 5 `WalletProvider` + `MidnightProvider`, backed by the beta
@@ -290,19 +285,19 @@ export function feeWitness(): FeeWitness {
  * facade. Both sides speak `@midnightntwrk/ledger-v9`, so nothing is
  * re-serialised across the boundary.
  *
- * Two balancing paths, and the choice between them is made per transaction:
+ * ONE balancing path, and it is the sponsored one: balance every token kind
+ * EXCEPT dust, sign and prove locally, then ask the service to add the fee
+ * input. The user still signs; sponsorship removes the cost, not the approval.
  *
- *   sponsored — balance every token kind EXCEPT dust, sign and prove locally,
- *               then ask the service to add the fee input. The user still
- *               signs; sponsorship removes the cost, not the approval.
- *   local     — exactly the code that would run if sponsorship had never
- *               existed: the wallet balances every kind from its own funds.
- *
- * A sponsored attempt that fails anywhere returns to the local path with the
- * reserved coins released, so a sponsor outage degrades to real fees rather
- * than to a dead deployment.
+ * There is no second path. A Passport holder's fees are covered, full stop, so
+ * a sponsor outage is a refusal rather than a bill: `balanceTx` throws with the
+ * sponsor's own reason and the reserved coins are released. Nothing here reads
+ * or spends the wallet's own dust, and `BALANCE_WITHOUT_DUST` is what keeps
+ * that true at the SDK boundary — the facade still knows what dust is, because
+ * it must to build a transaction at all, but no code path in this app can make
+ * it pay one.
  */
-export function walletProviderFor(wallet: LocalMidnightWallet, witness: FeeWitness) {
+export function walletProviderFor(wallet: LocalMidnightWallet) {
   const facade = wallet.facade as unknown as {
     balanceUnboundTransaction(
       tx: unknown,
@@ -325,19 +320,10 @@ export function walletProviderFor(wallet: LocalMidnightWallet, witness: FeeWitne
     }
   };
 
-  const balanceLocally = async (tx: unknown, ttl: Date): Promise<ledger.FinalizedTransaction> => {
-    const recipe = await facade.balanceUnboundTransaction(tx, wallet.keys, { ttl });
-    const signed = await facade.signRecipe(
-      recipe,
-      wallet.keys.unshieldedKeystore.signDataAsync,
-    );
-    return facade.finalizeRecipe(signed);
-  };
-
   const balanceWithSponsor = async (
     tx: unknown,
     ttl: Date,
-  ): Promise<ledger.FinalizedTransaction | null> => {
+  ): Promise<ledger.FinalizedTransaction> => {
     let recipe: unknown;
     try {
       recipe = await facade.balanceUnboundTransaction(tx, wallet.keys, {
@@ -357,14 +343,15 @@ export function walletProviderFor(wallet: LocalMidnightWallet, witness: FeeWitne
       recipe = signed;
       const finalized = await facade.finalizeRecipe(signed);
       /* A longer 429 window than a transfer gets, because the stakes differ:
-         a fresh passkey wallet has no DUST, so there is nothing to fall back
-         TO here. See SPONSOR_CONTRACT_RETRY_WINDOW_MS. */
+         there is nothing to fall back TO here — a busy sponsor is worth
+         waiting out rather than turning into a refusal. See
+         SPONSOR_CONTRACT_RETRY_WINDOW_MS. */
       const balanced = await sponsorBalanceOnly(finalized.serialize(), {
         pendingRetryWindowMs: SPONSOR_CONTRACT_RETRY_WINDOW_MS,
       });
       /* The sponsor stamps an expiry. An already expired balanced transaction
-         is refused here, while falling back is still safe; an empty or
-         unparseable stamp reads as "no expiry given". */
+         is refused here rather than submitted; an empty or unparseable stamp
+         reads as "no expiry given". */
       const expiresAtMs = Date.parse(balanced.expiresAt);
       if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
         throw new Error(
@@ -377,12 +364,18 @@ export function walletProviderFor(wallet: LocalMidnightWallet, witness: FeeWitne
         ledger.Binding
       >('signature', 'proof', 'binding', sponsorHexToBytes(balanced.txBytes));
     } catch (cause) {
-      console.warn(
-        '[contract] the sponsored balancing failed; falling back to this wallet’s own DUST',
-        cause,
-      );
+      /* The reserved coins are released first, and only then does the failure
+         travel: there is nowhere for it to fall back to, so leaving a booking
+         standing would strand shielded or unshielded inputs against a
+         transaction nobody will ever submit. */
       await revertQuietly(recipe);
-      return null;
+      throw new Error(
+        sponsorFeeRefusal({
+          state: 'unavailable',
+          reason: cause instanceof Error ? cause.message : String(cause),
+        }),
+        { cause },
+      );
     }
   };
 
@@ -394,16 +387,13 @@ export function walletProviderFor(wallet: LocalMidnightWallet, witness: FeeWitne
 
     async balanceTx(tx: unknown, ttl?: Date): Promise<ledger.FinalizedTransaction> {
       const deadline = ttl ?? new Date(Date.now() + DEFAULT_TTL_MS);
-      if ((await sponsorReadiness()).state === 'ready') {
-        const sponsored = await balanceWithSponsor(tx, deadline);
-        if (sponsored !== null) {
-          // Recorded only now, with the service's own answer in hand.
-          witness.paidBy = 'sponsored';
-          return sponsored;
-        }
-      }
-      witness.paidBy = 'own-dust';
-      return balanceLocally(tx, deadline);
+      /* The gate, and the last one: nothing is balanced, signed, or proved
+         until the sponsor has said it can pay. A refusal here costs the user a
+         sentence; the alternative would cost them a fee they were promised
+         they would never be asked for. */
+      const readiness = await sponsorReadiness();
+      if (readiness.state !== 'ready') throw new Error(sponsorFeeRefusal(readiness));
+      return balanceWithSponsor(tx, deadline);
     },
 
     submitTx: (tx: unknown) => facade.submitTransaction(tx),
@@ -422,8 +412,6 @@ export interface ContractProvidersOptions {
   /** The private-state key, when the contract has witnesses that need one. */
   privateStateId?: string;
   initialPrivateState?: unknown;
-  /** Written when `balanceTx` learns who really paid. */
-  witness: FeeWitness;
 }
 
 /**
@@ -459,7 +447,7 @@ export async function createContractProviders(
 
   const proofProvider = await createContractProofProvider(wallet, zkConfigProvider);
 
-  const walletProvider = walletProviderFor(wallet, options.witness);
+  const walletProvider = walletProviderFor(wallet);
 
   return {
     privateStateProvider: inMemoryPrivateStateProvider(

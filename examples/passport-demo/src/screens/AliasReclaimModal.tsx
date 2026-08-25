@@ -126,7 +126,7 @@ export default function AliasReclaimModal(props: AliasReclaimModalProps) {
         <p className="mnid-lede">
           Names are registered per network, and {aliasDomain(currentAlias)} already belongs to
           somebody else here. Pick another name for this network, or keep {currentAlias} where you
-          already hold it. Your passkey and wallet do not change either way.
+          already hold it. Your passkey and your account do not change either way.
         </p>
 
         {suggestions.length > 0 ? (

@@ -109,8 +109,12 @@ export function messageOf(cause: unknown): string {
  * value is the account module's `AccountCustodyError` shape — `{ code, message }`
  * — but this is postMessage-adjacent code, so an unrecognised throw becomes
  * `submit-failed` with its real message rather than a guess at a nicer code.
- * `insufficient-night` and `insufficient-dust` are still recognised: App.tsx
- * translates the contract's own codes into this vocabulary before they arrive.
+ * `insufficient-night` is recognised because App.tsx translates the contract's
+ * own shortfall codes into this vocabulary before they arrive. `fee-unavailable`
+ * deliberately is NOT mapped to `insufficient-funds`: the fee sponsor standing
+ * down is not the user running short, and telling an app otherwise would put
+ * the shortfall on the wrong party. It falls through to `submit-failed`,
+ * carrying the sponsor's own sentence as the detail.
  */
 export function transferErrorFrom(cause: unknown): {
   error: NonNullable<PassportTxResponse['error']>
@@ -121,13 +125,13 @@ export function transferErrorFrom(cause: unknown): {
       ? (cause as { code: string }).code
       : null
   const detail = messageOf(cause)
-  if (code === 'insufficient-night' || code === 'insufficient-dust') {
-    return { error: 'insufficient-funds', detail }
-  }
+  if (code === 'insufficient-night') return { error: 'insufficient-funds', detail }
   if (code === 'wrong-network') return { error: 'network-mismatch', detail }
   if (code === 'invalid-recipient') return { error: 'invalid-request', detail }
-  /* The wallet went away between the sheet appearing and the approval landing —
-     a genuinely unavailable wallet, not a failed submission. */
+  /* The signing session went away between the sheet appearing and the approval
+     landing — genuinely unavailable, not a failed submission. The wire code is
+     `wallet-unavailable` because that is the versioned protocol's word for it;
+     nothing a user reads says "wallet". */
   if (code === 'wallet-closed') return { error: 'wallet-unavailable', detail }
   /* The session's passkey could not be asserted at all, so no transaction can
      be approved until the user signs in again. */
@@ -185,7 +189,7 @@ export function evaluateTxRequest(
       body: {
         status: 'failed',
         error: 'wallet-unavailable',
-        detail: 'No Passport wallet session is open in this browser, so nothing can be signed or sent.',
+        detail: 'No Passport session is open in this browser, so nothing can be signed or sent.',
       },
     }
   }
@@ -213,7 +217,7 @@ export function evaluateTxRequest(
       body: {
         status: 'failed',
         error: 'network-mismatch',
-        detail: `That address belongs to the ${recipientNetwork} network; this Passport wallet is on ${transferContext.networkId}.`,
+        detail: `That address belongs to the ${recipientNetwork} network; this Passport is on ${transferContext.networkId}.`,
       },
     }
   }
@@ -237,10 +241,13 @@ export function evaluateTxRequest(
 }
 
 /**
- * The balance line. Never guesses: a balance the indexer has not answered with
- * yet is reported as unknown rather than as zero.
+ * The balance line. It is the ACCOUNT-CUSTODY CONTRACT's NIGHT — what the user
+ * owns and what a transfer is drawn from — and not the passkey engine's, which
+ * is machinery and holds nothing a user is told about. Never guesses: a balance
+ * the indexer has not answered with yet is reported as unknown rather than as
+ * zero.
  */
-export function walletHoldsCopy(formattedBalance: string | null | undefined): string {
+export function accountHoldsCopy(formattedBalance: string | null | undefined): string {
   return formattedBalance
     ? `${formattedBalance} NIGHT`
     : 'Not known yet — the balance is still being read from the indexer.'

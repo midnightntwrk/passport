@@ -30,10 +30,11 @@
  *   - ZK artefacts load over URL through `FetchZkConfigProvider` pointed at
  *     `/zk/account` — the directory `scripts/prepare-zk-assets.mjs` stages and
  *     the Vite middleware serves. Nothing here touches `node:fs`;
- *   - fees are sponsored when the sponsor service has really said it can pay,
- *     and self-paid from the wallet's own DUST otherwise, through the exact
- *     balancing pair both siblings use — including the fall-back and
- *     recipe-revert rules.
+ *   - fees are sponsored, and only sponsored. Every write here goes through
+ *     the one balancing path both siblings use: when the sponsor has not said
+ *     it can pay, the call is refused with the sponsor's own reason and
+ *     nothing is built, proved, or signed. No path reads or spends this
+ *     wallet's dust.
  *
  * THE PROVIDER PLUMBING IS NOW SHARED, NOT DUPLICATED (2026/08/24)
  * ---------------------------------------------------------------
@@ -75,11 +76,10 @@ import type { LocalMidnightWallet } from '../lib/localWallet.js';
 /* Type-only, and through the SAME specifier {@link loadAccountContract} uses —
    a type has no instance, so this adds no module to either graph. */
 import type { Ledger as AccountLedger } from '../../contracts/stagenet/account/index.js';
-import { sponsorReadiness } from '../lib/sponsor.js';
+import { sponsorFeeRefusal, sponsorReadiness } from '../lib/sponsor.js';
 import {
   createContractProviders,
   compiledContractFor,
-  feeWitness,
   indexerWsFrom,
   loadContractModule,
 } from './contractRuntime.js';
@@ -429,8 +429,12 @@ export type AccountCustodyErrorCode =
   | 'insufficient-balance'
   /** The calling WALLET holds less of that colour than the deposit would move. */
   | 'insufficient-funds'
-  /** No sponsor to pay the fee, and no DUST of our own to pay it with. */
-  | 'insufficient-dust'
+  /**
+   * The fee sponsor is not covering this call, so it was refused before
+   * anything was built. There is no second payer to fall back to — see
+   * {@link checkAccountCustodyFees}.
+   */
+  | 'fee-unavailable'
   /** The circuit ran and the network refused it, or proving failed. */
   | 'call-rejected';
 
@@ -457,8 +461,13 @@ export interface AccountCustodyProgress {
   phase: 'checking' | 'connecting' | 'submitting' | 'confirming';
 }
 
-/** How the fee was really paid. Mirrors `PassportContractFeePayer`. */
-export type AccountCustodyFeePayer = 'sponsored' | 'own-dust';
+/**
+ * Who paid the fee. Mirrors `PassportContractFeePayer`, including its one
+ * value: a Passport's fees are covered by the fee sponsor and by nothing else,
+ * and `contractRuntime`'s `balanceTx` refuses to build a transaction on any
+ * other terms.
+ */
+export type AccountCustodyFeePayer = 'sponsored';
 
 export interface AccountCustodyTxResult {
   /** Which circuit really ran, in the contract's own spelling. */
@@ -670,30 +679,25 @@ async function currentWalletState(wallet: LocalMidnightWallet): Promise<WalletFa
 /**
  * Providers for the account-custody circuits.
  *
- * All of it — the wallet provider and its sponsored/local balancing pair, the
- * ZK config provider, the indexer, and where a circuit actually gets proved —
- * is `./contractRuntime.ts`'s, shared with `./passportContract.ts` and
+ * All of it — the sponsored wallet provider, the ZK config provider, the
+ * indexer, and where a circuit actually gets proved — is
+ * `./contractRuntime.ts`'s, shared with `./passportContract.ts` and
  * `./midnames.ts`. Three copies of the same provider set is how they drifted
  * before; the behaviour is unchanged.
  *
- * `witness` is an out-parameter, not a return value, because whether the
- * sponsor really paid is only known *inside* `balanceTx` — after the service
- * has answered. Reporting a covered fee from anywhere else would be a guess.
- *
  * The NIGHT or shielded value a circuit itself moves is untouched by
- * sponsorship either way: only the fee input changes hands.
+ * sponsorship: only the fee input changes hands, and it never comes from this
+ * wallet.
  */
 async function createAccountProviders(
   wallet: LocalMidnightWallet,
   privateStateId: string,
   initialPrivateState: unknown,
-  witness: { paidBy: AccountCustodyFeePayer },
 ) {
   return createContractProviders(wallet, {
     contract: 'account',
     privateStateId,
     initialPrivateState,
-    witness,
   });
 }
 
@@ -734,37 +738,21 @@ async function resolveTransactionHash(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Re-checks, WITHOUT any passkey prompt, whether this wallet can pay for an
- * account-custody call right now.
+ * Re-checks, WITHOUT any passkey prompt, whether an account-custody call's fee
+ * can be covered right now.
  *
- * The same rule both siblings keep: a funded sponsor is sufficient, and a
- * dustless wallet is refused only when there is no sponsor to cover it.
- * Exposed so a surface can fail closed with the honest reason before asking the
- * user to touch their authenticator.
+ * The same rule both siblings keep, and it is a question about the SPONSOR
+ * alone: a Passport holder has one fee payer and it is never themselves, so no
+ * balance is read and no refusal here names a token. Exposed so a surface can
+ * fail closed with the honest reason before asking the user to touch their
+ * authenticator.
  */
-export async function checkAccountCustodyFees(
-  wallet: LocalMidnightWallet,
-): Promise<{ ok: true } | { ok: false; reason: string }> {
-  if ((await sponsorReadiness()).state === 'ready') return { ok: true };
-  try {
-    const state = await currentWalletState(wallet);
-    if (state.dust.balance(new Date()) <= 0n) {
-      return {
-        ok: false,
-        reason:
-          'This wallet cannot pay the transaction fee yet: fees are normally covered by the fee sponsor, and this wallet holds no DUST of its own.',
-      };
-    }
-  } catch (cause) {
-    // "We could not tell" is not "no funds" — say which it was.
-    return {
-      ok: false,
-      reason: `The wallet could not report its DUST balance: ${
-        cause instanceof Error ? cause.message : String(cause)
-      }`,
-    };
-  }
-  return { ok: true };
+export async function checkAccountCustodyFees(): Promise<
+  { ok: true } | { ok: false; reason: string }
+> {
+  const readiness = await sponsorReadiness();
+  if (readiness.state === 'ready') return { ok: true };
+  return { ok: false, reason: sponsorFeeRefusal(readiness) };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -809,7 +797,6 @@ async function callAccountCircuit(
   onPhase?: (progress: AccountCustodyProgress) => void,
 ): Promise<AccountCustodyTxResult> {
   const address = rawContractAddress(options.contractAddress);
-  const witness: { paidBy: AccountCustodyFeePayer } = feeWitness();
   const nonce = new Uint8Array(8);
   globalThis.crypto.getRandomValues(nonce);
   const privateStateId = `passport-account-${address.slice(0, 8)}-${bytesToHex(nonce)}`;
@@ -838,7 +825,7 @@ async function callAccountCircuit(
      through this same plumbing later without changing it. */
   const initialPrivateState = accountPrivateStateFrom(options.secrets);
   const [providers, compiledContract, { findDeployedContract }] = await Promise.all([
-    createAccountProviders(wallet, privateStateId, initialPrivateState, witness),
+    createAccountProviders(wallet, privateStateId, initialPrivateState),
     compiledAccountContract(accountWitnesses()),
     import('@midnight-ntwrk/midnight-js-contracts'),
   ]);
@@ -916,7 +903,9 @@ async function callAccountCircuit(
     txId,
     txIdResolved: resolved,
     network: wallet.network.networkId,
-    feePaidBy: witness.paidBy,
+    /* Constant because there is one fee payer, and true because `balanceTx`
+       refused to produce this transaction any other way. */
+    feePaidBy: 'sponsored',
     submittedAt: new Date().toISOString(),
   };
 }
@@ -933,12 +922,12 @@ function requirePositiveAmount(amount: bigint, what: string): void {
 
 /**
  * The fee gate every write shares, run before the user waits on a prover.
- * Throws `insufficient-dust` with the honest sentence rather than letting the
- * SDK's own funds error surface halfway through a proof.
+ * Throws `fee-unavailable` with the sponsor's own reason rather than letting
+ * the SDK's funds error surface halfway through a proof.
  */
-async function requireFees(wallet: LocalMidnightWallet): Promise<void> {
-  const fees = await checkAccountCustodyFees(wallet);
-  if (!fees.ok) throw new AccountCustodyError('insufficient-dust', fees.reason);
+async function requireFees(): Promise<void> {
+  const fees = await checkAccountCustodyFees();
+  if (!fees.ok) throw new AccountCustodyError('fee-unavailable', fees.reason);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -983,7 +972,7 @@ export async function withdrawNight(
   const colour = colourHexToBytes(request.colourHex);
   const recipient = unshieldedAddressBytes(request.recipientAddress, handle.network.networkId);
   requirePositiveAmount(request.amount, 'A withdrawal');
-  await requireFees(handle);
+  await requireFees();
 
   const state = await readAccountState(handle.network, request.contractAddress);
   const held = state.nightBalances.get(bytesToHex(colour)) ?? 0n;
@@ -1046,7 +1035,7 @@ export async function withdrawShielded(
     request.recipientShieldedAddress,
     handle.network.networkId,
   );
-  await requireFees(handle);
+  await requireFees();
 
   const state = await readAccountState(handle.network, request.contractAddress);
   const held = state.shieldedCoins.get(bytesToHex(colour)) ?? 0n;
@@ -1155,7 +1144,7 @@ export async function depositNight(
   onPhase?.({ phase: 'checking' });
   const colour = colourHexToBytes(request.colourHex);
   requirePositiveAmount(request.amount, 'A deposit');
-  await requireFees(handle);
+  await requireFees();
 
   const walletState = await currentWalletState(handle);
   const held = walletState.unshielded.balances[bytesToHex(colour)] ?? 0n;
@@ -1220,7 +1209,7 @@ export async function depositShielded(
     );
   }
   requirePositiveAmount(coin.value, 'A deposit');
-  await requireFees(handle);
+  await requireFees();
 
   return callAccountCircuit(
     handle,
@@ -1279,7 +1268,7 @@ export async function addGrantByCommitment(
   const colour = colourHexToBytes(request.colourHex);
   const commitment = grantCommitmentField(request.grantCommitment);
   requirePositiveAmount(request.cap, 'A grant cap');
-  await requireFees(handle);
+  await requireFees();
 
   return callAccountCircuit(
     handle,

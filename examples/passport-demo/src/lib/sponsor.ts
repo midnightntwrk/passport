@@ -458,6 +458,30 @@ export type SponsorReadiness =
   | { state: 'unavailable'; url: string; reason: string };
 
 /**
+ * The one refusal sentence every fee gate gives when the sponsor cannot cover
+ * a transaction.
+ *
+ * There is no second fee payer to fall back to, and deliberately: a Passport
+ * holder never funds their own fees, so a refusal here is a fact about the
+ * SPONSOR and says so. It names no token and reads no balance — a user has
+ * nothing to top up and nothing to wait for, and telling them otherwise would
+ * invite a step that does not exist.
+ *
+ * The parameter is the shape of a non-`ready` {@link SponsorReadiness} rather
+ * than the union itself, so a caller that learned the sponsor had stood down
+ * some other way — a `/balance-only` that failed mid-flight, say — can report
+ * it in the same words, while a `ready` readiness still cannot be passed at
+ * all.
+ */
+export function sponsorFeeRefusal(
+  readiness: { state: 'disabled' } | { state: 'unavailable'; reason: string },
+): string {
+  return readiness.state === 'disabled'
+    ? 'Network fees on this Passport are covered by the fee sponsor, and this build has no sponsor configured, so nothing can be submitted.'
+    : `Network fees on this Passport are covered by the fee sponsor, and the sponsor cannot cover this one right now: ${readiness.reason}`;
+}
+
+/**
  * Why one probe attempt produced no verdict, tagged so the final reason can
  * say WHICH thing went wrong.
  *

@@ -798,28 +798,6 @@ function newDeviceSecret(): Uint8Array {
   return value;
 }
 
-async function copyText(value: string): Promise<void> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return;
-    }
-  } catch {
-    // Some embedded browsers deny the Clipboard API despite a direct user gesture.
-  }
-
-  const fallback = document.createElement('textarea');
-  fallback.value = value;
-  fallback.setAttribute('readonly', '');
-  fallback.style.position = 'fixed';
-  fallback.style.opacity = '0';
-  document.body.appendChild(fallback);
-  fallback.select();
-  const copied = document.execCommand('copy');
-  fallback.remove();
-  if (!copied) throw new Error('Your browser did not allow this address to be copied.');
-}
-
 /**
  * What the signed-in Passport's account-custody contract holds, as Home shows
  * it. These figures are the CONTRACT's `night_balances` and `coins`, read
@@ -904,10 +882,11 @@ export default function PassportDemo() {
   const [aliasError, setAliasError] = useState<string | null>(null);
   /**
    * Whether the fee sponsor has really told us it can pay this registration's
-   * DUST fee — `available > 0` on its own `/wallet-status`, never an
-   * assumption. It starts false and only a live probe may raise it, so the
-   * claim screen's baseline copy ("its fee in DUST from this wallet too")
-   * stands unless the service itself contradicts it.
+   * fee — `available > 0` on its own `/wallet-status`, never an assumption. It
+   * starts false and only a live probe may raise it, so the claim screen's
+   * baseline copy — the name is kept and registered when the service is back,
+   * and nothing is ever spent from the user's Passport for it — stands unless
+   * the service itself contradicts it.
    *
    * Until 2026/08/06 the claim path consulted the sponsor but the screen never
    * did, so this sentence could not have told the truth on an environment
@@ -1277,7 +1256,7 @@ export default function PassportDemo() {
       }
       let wallet: LocalMidnightWallet;
       try {
-        setOnboardingBusyLabel('Opening your Midnight wallet');
+        setOnboardingBusyLabel('Opening your Passport');
         wallet = await createLocalMidnightWallet(seed);
       } finally {
         // The seed's only job is done. Nothing retains it past this point.
@@ -1621,14 +1600,14 @@ export default function PassportDemo() {
     addActivity({
       label: 'Passport bound to passkey',
       detail:
-        'A chosen passkey with no Passport here now holds its own profile and on-device wallet.',
+        'A chosen passkey with no Passport here now holds its own profile and on-device Passport.',
       status: 'complete',
       source: 'local',
     });
     pushToast({
       tone: 'success',
       title: 'Passport created',
-      body: 'This passkey now holds its own Midnight wallet.',
+      body: 'This passkey now holds its own Passport on this device.',
     });
     storeLastPasskey(discovered.credentialId);
     return nextProfile;
@@ -1660,7 +1639,7 @@ export default function PassportDemo() {
     if (existing) {
       setLocalPassportKnown(true);
       throw new Error(
-        'This browser already holds a Passport passkey. Choose Sign in to reopen its wallet.',
+        'This browser already holds a Passport passkey. Choose Sign in to reopen it.',
       );
     }
     setOnboardingBusyLabel('Checking this device for a Passport passkey');
@@ -1841,7 +1820,7 @@ export default function PassportDemo() {
       setOnboardingError(null);
       addActivity({
         label: created ? 'Passport passkey enrolled' : 'Passport passkey unlocked',
-        detail: 'On-device Midnight wallet derived from this passkey.',
+        detail: 'On-device Passport derived from this passkey.',
         status: 'complete',
         source: 'local',
       });
@@ -1849,7 +1828,7 @@ export default function PassportDemo() {
         pushToast({
           tone: 'success',
           title: 'Passport created',
-          body: 'Your passkey now holds a Midnight wallet.',
+          body: 'Your passkey now holds a Passport on this device.',
         });
       }
     } catch (cause) {
@@ -1938,7 +1917,7 @@ export default function PassportDemo() {
         // Read by the incoming-transfer watch below, which must not mistake the
         // chain walk's own climbing balance for money arriving.
         localWalletSynced.current = true;
-        pushToast({ tone: 'success', title: 'Wallet synced' });
+        pushToast({ tone: 'success', title: 'Passport synced' });
         void refreshLocalBalances();
       }
     });
@@ -2162,8 +2141,10 @@ export default function PassportDemo() {
    *
    * Deliberately the send sheet's wording, including its hedging: `sponsored`
    * earns "expected to be covered" because the probe is a prediction and a
-   * sponsor can drain between this quote and the submit. A wallet that cannot
-   * answer leaves the note null rather than guessing at a mode.
+   * sponsor can drain between this quote and the submit. There is no third
+   * sentence, because there is no second fee payer — an unsponsored fee is a
+   * refusal, not a bill. A wallet that cannot answer leaves the note null
+   * rather than guessing at a mode.
    */
   useEffect(() => {
     /* The same condition `localSessionActive` expresses, spelled out because
@@ -2192,9 +2173,7 @@ export default function PassportDemo() {
         setContractFeeNote(
           readiness.mode === 'sponsored'
             ? 'Network fee expected to be covered by the fee sponsor.'
-            : readiness.mode === 'own-dust'
-              ? 'Network fee paid by this Passport.'
-              : /* The wallet's own refusal sentence, verbatim. */ readiness.reason,
+            : /* The sponsor's own refusal sentence, verbatim. */ readiness.reason,
         );
       } catch {
         // "We could not tell" must not be printed as a fee mode.
@@ -2610,7 +2589,7 @@ export default function PassportDemo() {
       if (!aliasRegistrationSupported(network)) {
         throw new AliasClaimError(
           'unsupported-network',
-          `Passport registers names on ${CLAIMABLE_NETWORKS.join(' and ')} only; this wallet is on ${network}.`,
+          `Passport registers names on ${CLAIMABLE_NETWORKS.join(' and ')} only; this Passport signs on ${network}.`,
         );
       }
       const registryNetwork = network as MidnamesNetwork;
@@ -2786,7 +2765,7 @@ export default function PassportDemo() {
                and retried, never bought from the wallet (ruled 2026/08/25). */
             throw new AliasClaimError(
               'register-rejected',
-              `${cause.message} Passport registers names through its service and does not spend from your wallet — the name is kept for you to register again shortly.`,
+              `${cause.message} Passport registers names through its service and does not spend from your account — the name is kept for you to register again shortly.`,
             );
           }
         }
@@ -2797,7 +2776,7 @@ export default function PassportDemo() {
              this path rather than a gap in it. */
           throw new AliasClaimError(
             'network-unreachable',
-            'The Passport service that registers names is not available right now. Your name is kept for you and can be registered when it is back — Passport does not spend from your wallet for this.',
+            'The Passport service that registers names is not available right now. Your name is kept for you and can be registered when it is back — Passport does not spend from your account for this.',
           );
         }
 
@@ -2842,7 +2821,7 @@ export default function PassportDemo() {
       const handle = localWalletRef.current;
       const activeProfile = profile;
       if (!handle || !activeProfile) {
-        setAliasError('Your wallet is not open yet. Wait for it to finish opening and try again.');
+        setAliasError('Your Passport is not open yet. Wait for it to finish opening and try again.');
         return;
       }
       setAliasError(null);
@@ -2936,7 +2915,7 @@ export default function PassportDemo() {
       queueAlias(
         alias,
         network,
-        `Passport's wallet signs and submits on ${signingNetworkLabel} only, so ${alias}.night is reserved for you locally but is NOT registered on ${NETWORK_LABELS[network]}.`,
+        `Passport signs and submits on ${signingNetworkLabel} only, so ${alias}.night is reserved for you locally but is NOT registered on ${NETWORK_LABELS[network]}.`,
       );
     },
     [
@@ -3145,9 +3124,10 @@ export default function PassportDemo() {
           import('./identity/passportContract.js'),
           import('./lib/localWallet.js'),
         ]);
-      // Funds first, before any passkey prompt: a wallet that cannot pay should
-      // be told so rather than asked to touch its authenticator and then fail.
-      const funds = await checkPassportContractFunds(handle);
+      // The fee question first, before any passkey prompt: a deployment nobody
+      // will pay for should be refused with the sponsor's reason rather than
+      // asked to touch an authenticator and then fail.
+      const funds = await checkPassportContractFunds();
       if (!funds.ok) {
         savePassportContractRecord({
           credentialId,
@@ -3408,24 +3388,6 @@ export default function PassportDemo() {
     void runLocalOnboarding(intent);
   };
 
-  /**
-   * Copies the one address Home still shows: the payment address the resolver
-   * leaf carries, which is this Passport's unshielded wallet address. The
-   * shielded and DUST rows left the Receive sheet with the ruling that a user's
-   * identity is their `.night` name — they survive only where a dApp genuinely
-   * asks for them, behind consent.
-   */
-  const copyReceivingAddress = () => {
-    const address = activeSurfaces?.unshieldedAddress;
-    if (!address) return;
-    void copyText(address).then(
-      () => pushToast({ tone: 'success', title: 'Address copied' }),
-      (cause: unknown) => {
-        setError(cause instanceof Error ? cause.message : String(cause));
-      },
-    );
-  };
-
   const refreshMobile = () => {
     void refreshLocalBalances();
   };
@@ -3566,7 +3528,7 @@ export default function PassportDemo() {
          — without a value import of `identity/accountCustody.ts`, which
          statically pulls the ledger and the wallet SDK in behind it. */
       throw Object.assign(
-        new Error('The Passport wallet session closed before this could be signed.'),
+        new Error('The Passport signing session closed before this could be signed.'),
         { code: 'wallet-closed' as const },
       );
     }
@@ -3707,14 +3669,14 @@ export default function PassportDemo() {
   /* ---------------------------------------------------------------------- */
 
   /**
-   * How the next transfer's fee would really be paid. Advisory — the send path
-   * re-checks everything — so a failure here is thrown, not smoothed into
-   * `no-dust`: "we could not tell" and "you cannot pay" are different
-   * sentences, and the sheet says whichever is true.
+   * Whether the next transfer's fee would really be covered. Advisory — the
+   * send path re-checks everything — so a failure here is thrown, not smoothed
+   * into `unsponsored`: "we could not check" and "the sponsor is not covering
+   * this" are different sentences, and the sheet says whichever is true.
    */
   const readLocalFeeReadiness = useCallback(async (): Promise<FeeReadiness> => {
     const handle = localWalletRef.current;
-    if (!handle) throw new Error('The Passport wallet session is not open.');
+    if (!handle) throw new Error('The Passport signing session is not open.');
     return handle.feeReadiness();
   }, []);
 
@@ -3768,12 +3730,10 @@ export default function PassportDemo() {
                  title claims exactly that much and no more. */
               title: 'NIGHT accepted by the network — confirming',
               /* A covered fee is claimed on the strength of what the sponsor
-                 really did, which is what `feePaidBy` records — a sponsored
-                 attempt that fell back reports `own-dust` and says so. */
-              body:
-                result.feePaidBy === 'sponsored'
-                  ? 'The fee sponsor covered the network fee.'
-                  : 'The network fee was paid by this Passport.',
+                 really did: `balanceTx` refuses to build a transaction the
+                 sponsor has not agreed to pay for, so a submitted transfer is
+                 itself the evidence. */
+              body: 'The fee sponsor covered the network fee.',
               link: explorerTxLink(result.txId, result.network),
             });
             // The account's balance has moved; the session row already carries
@@ -3890,10 +3850,7 @@ export default function PassportDemo() {
               tone: 'success',
               /* Accepted, not yet included — the same claim the NIGHT path makes. */
               title: 'Shielded transfer accepted by the network — confirming',
-              body:
-                result.feePaidBy === 'sponsored'
-                  ? 'The fee sponsor covered the network fee.'
-                  : 'The network fee was paid by this Passport.',
+              body: 'The fee sponsor covered the network fee.',
               link: explorerTxLink(result.txId, result.network),
             });
             void refreshLocalBalances();
@@ -3958,7 +3915,7 @@ export default function PassportDemo() {
       await confirmLocalApproval('Move your funds into your account');
       entryId = addActivity({
         label: 'Moving funds into your account',
-        detail: `${formatNightUnits(held)} NIGHT from this device's wallet into ${compactAddress(
+        detail: `${formatNightUnits(held)} NIGHT from your receiving address into ${compactAddress(
           account.address,
         )}.`,
         status: 'pending',
@@ -4173,7 +4130,7 @@ export default function PassportDemo() {
         return {
           ran: false,
           reason:
-            'no wallet is open, so there was no indexer to ask. The check runs at your next sign-in.',
+            'no Passport is open, so there was no indexer to ask. The check runs at your next sign-in.',
         };
       }
       const network = handle.network.networkId;
@@ -4300,16 +4257,16 @@ export default function PassportDemo() {
       ? null /* demo mode: the mock claim needs no gating */
       : activeAliasRecord?.status === 'queued'
       ? selectedNetwork !== configuredWalletNetwork
-        ? `Passport's wallet signs and submits on ${signingNetworkLabel} only, so ${activeAliasRecord.domain} cannot be registered on ${NETWORK_LABELS[selectedNetwork]} from here.`
+        ? `Passport signs and submits on ${signingNetworkLabel} only, so ${activeAliasRecord.domain} cannot be registered on ${NETWORK_LABELS[selectedNetwork]} from here.`
         : !localSessionActive
-          ? 'Sign in with your passkey to open the wallet before registering this name.'
+          ? 'Sign in with your passkey to open Passport before registering this name.'
           : localWalletNetworkId !== configuredNetworkId() || !aliasClaimSupported
             /* Compared against the RAW configured id: under the env-gated demo
                masquerade the wallet's real network is a devnet presented as
                Preview, and that pairing is exactly the sanctioned one. */
-            ? `This wallet session runs on ${localWalletNetworkId ?? 'an unknown network'}; names register on ${signingNetworkLabel} only.`
+            ? `This Passport session runs on ${localWalletNetworkId ?? 'an unknown network'}; names register on ${signingNetworkLabel} only.`
             : walletStillSyncing
-              ? 'The wallet is still syncing. Registration opens once the sync completes.'
+              ? 'Passport is still syncing. Registration opens once the sync completes.'
               : null
       : null;
   /** Everything the identity card needs to re-run a queued claim honestly. */
@@ -4356,11 +4313,11 @@ export default function PassportDemo() {
    * the network the wallet signs on, so a browsing switch cannot make it lie.
    */
   const contractDeployDisabledReason = !localSessionActive
-    ? 'Sign in with your passkey to open the wallet before deploying your contract.'
+    ? 'Sign in with your passkey to open Passport before deploying your contract.'
     : selectedNetwork !== walletPresentedNetwork
-      ? `This Passport's wallet signs on ${signingNetworkLabel}, so its contract can only be deployed there.`
+      ? `This Passport signs on ${signingNetworkLabel}, so its contract can only be deployed there.`
       : walletStillSyncing
-        ? 'The wallet is still syncing. Deployment opens once the sync completes.'
+        ? 'Passport is still syncing. Deployment opens once the sync completes.'
         : null;
   /**
    * The card. Present only when a passkey wallet session is genuinely open and
@@ -4562,15 +4519,16 @@ export default function PassportDemo() {
               onSelectNetwork={handleSelectNetwork}
               syncPercent={localSyncPercent}
               /* The account's ledger, not the wallet's — see `homeAccount`.
-                 The wallet's own balances, its DUST charge, and its shielded
-                 and DUST addresses are no longer on this screen at all. */
+                 The engine's own balances, its fee charge, and its three
+                 technical addresses are no longer on this screen at all, and
+                 the props that used to carry an address here went with them:
+                 Receive offers the ACCOUNT address, which Home derives for
+                 itself. */
               account={homeAccount}
               legacyFunds={homeLegacyFunds}
-              unshieldedAddress={activeSurfaces?.unshieldedAddress ?? null}
               error={error}
               onDismissError={() => setError(null)}
               onRefresh={refreshMobile}
-              onCopyAddress={copyReceivingAddress}
               /* The Send seam. `null` when no wallet session is open or this
                  Passport has no account contract, which is what makes Home
                  render no Send control at all. */

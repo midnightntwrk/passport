@@ -19,8 +19,8 @@ import {
   UnshieldedAddress,
 } from '@midnight-ntwrk/wallet-sdk/address-format'
 
-/* The two names this screen shares with the wallet (Contract W) — both about
-   the FEE, which is still the wallet's to pay. Type-only, so nothing of
+/* The two names this screen shares with the transaction engine (Contract W) —
+   both about the FEE, which the sponsor pays. Type-only, so nothing of
    `lib/localWallet.ts` — and none of the wallet SDK it statically imports — is
    pulled into this chunk. */
 import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js'
@@ -289,7 +289,7 @@ function classifyRecipient(
   const recipientNetwork = networkNameOf(parsed.network)
   if (recipientNetwork !== networkId) {
     return {
-      error: `That address belongs to the ${recipientNetwork} network; this wallet is on ${networkId}.`,
+      error: `That address belongs to the ${recipientNetwork} network; your account is on ${networkId}.`,
     }
   }
   try {
@@ -339,8 +339,8 @@ export default function SendSheet(props: SendSheetProps) {
   const [fee, setFee] = useState<FeeReadiness | null>(null)
   const [feeUnknown, setFeeUnknown] = useState<string | null>(null)
   const [feeChanged, setFeeChanged] = useState(false)
-  /* `null` while nothing has been read yet — never a stand-in for an empty
-     wallet, which is `[]` and gets its own sentence. */
+  /* `null` while nothing has been read yet — never a stand-in for an account
+     that holds nothing, which is `[]` and gets its own sentence. */
   const [holdings, setHoldings] = useState<SendSheetHolding[] | null>(null)
   const [holdingsError, setHoldingsError] = useState<string | null>(null)
   const [tokenType, setTokenType] = useState<string | null>(null)
@@ -349,9 +349,9 @@ export default function SendSheet(props: SendSheetProps) {
 
   const shieldedSupported = Boolean(readShieldedHoldings && onSendShielded)
 
-  /* The fee sentence describes what will really happen, so it is read from the
-     wallet when the sheet opens rather than assumed. Until it answers, nothing
-     is said about who pays. */
+  /* The fee sentence describes what will really happen, so the sponsor is
+     probed when the sheet opens rather than assumed ready. Until it answers,
+     nothing is said about the fee. */
   useEffect(() => {
     let live = true
     void (async () => {
@@ -454,10 +454,11 @@ export default function SendSheet(props: SendSheetProps) {
 
   const amount = parsedAmount && !('error' in parsedAmount) ? parsedAmount.amount : null
   const recipientReady = recipient.trim().length > 0 && recipientError === null
-  /* A balance the wallet tried and failed to read. Distinct from one still in
-     flight: with no ceiling to compare against, sending stays disabled rather
-     than proceeding uncapped. The shielded read has the same two states, and
-     an empty holdings list is neither — it is a known, empty wallet. */
+  /* A balance Passport tried and failed to read off the account. Distinct from
+     one still in flight: with no ceiling to compare against, sending stays
+     disabled rather than proceeding uncapped. The shielded read has the same
+     two states, and an empty holdings list is neither — it is an account known
+     to hold nothing. */
   const balanceUnreadable =
     mode === 'shielded'
       ? holdingsError !== null || holdings === null
@@ -479,24 +480,20 @@ export default function SendSheet(props: SendSheetProps) {
      It says only what the probe reported, and as the prediction it is:
      `feeReadiness()` is advisory and a sponsor can drain between this quote and
      the submit, so `sponsored` earns "expected to be covered" and nothing
-     stronger. What changed on 2026/08/24 is the vocabulary, not the honesty:
-     the fee's own token, and the sponsor's internal reason for standing down,
-     are the wallet's business and no longer appear here. `own-dust` therefore
-     reads as this Passport paying — which is exactly what happens — and
-     `no-dust` gets this sheet's own sentence rather than the wallet's, which
-     names the token twice. */
+     stronger. There are two sentences because there are two outcomes: the
+     sponsor covers this transfer, or it does not and nothing is sent. The user
+     is never the second payer, so no sentence here names a token they would
+     have to hold, and none of them invites a top-up. */
   const feeNote =
     fee === null
       ? feeUnknown
-        ? `Passport could not report how this fee would be paid: ${feeUnknown}`
-        : 'Checking how this fee will be paid…'
+        ? `Passport could not check the fee sponsor: ${feeUnknown}`
+        : 'Checking with the fee sponsor…'
       : fee.mode === 'sponsored'
         ? 'Network fee expected to be covered by the fee sponsor.'
-        : fee.mode === 'own-dust'
-          ? 'Network fee paid by this Passport.'
-          : 'The fee sponsor is not covering this transfer, and this Passport cannot pay the network fee itself yet.'
+        : /* The sponsor's own refusal sentence, verbatim. */ fee.reason
 
-  const feeBlocksSend = fee?.mode === 'no-dust'
+  const feeBlocksSend = fee?.mode === 'unsponsored'
 
   /**
    * What the sheet says while the transfer is in flight.
@@ -510,7 +507,7 @@ export default function SendSheet(props: SendSheetProps) {
    */
   const busyLine =
     phase === 'checking'
-      ? 'Checking your account’s balance and how the fee will be paid.'
+      ? 'Checking your account’s balance and the fee sponsor.'
       : phase === 'connecting'
         ? 'Opening your account contract and verifying it against this build.'
         : phase === 'confirming'
@@ -535,14 +532,14 @@ export default function SendSheet(props: SendSheetProps) {
     setFailure(null)
     setFeeChanged(false)
     /* The fee quote was read when the sheet opened and is only a prediction —
-       a sponsor can drain in the meantime, and the send would then quietly
-       fall back to this Passport paying for itself. Re-read before submitting;
-       a different answer means the quoted sentence is no longer true, so
-       nothing is sent until it has been confirmed against the new one. A
-       probe that fails outright is handled the same way: the line falls back
-       to "could not report", and a second confirm against that sentence — the
-       modes then match — proceeds, because the probe is advisory and the send
-       path keeps its own authoritative checks. */
+       a sponsor can drain in the meantime, and the send would then be refused
+       rather than billed to anyone. Re-read before submitting; a different
+       answer means the quoted sentence is no longer true, so nothing is sent
+       until it has been confirmed against the new one. A probe that fails
+       outright is handled the same way: the line falls back to "could not
+       check", and a second confirm against that sentence — the modes then
+       match — proceeds, because the probe is advisory and the send path keeps
+       its own authoritative checks. */
     const quotedMode = fee?.mode ?? null
     let recheckedMode: FeeReadiness['mode'] | null
     try {
@@ -723,7 +720,7 @@ export default function SendSheet(props: SendSheetProps) {
             <label className="mnhome-send-field">
               <span className="mnhome-send-label">
                 Amount
-                {/* Max means "everything this wallet holds". With nothing held,
+                {/* Max means "everything your account holds". With nothing held,
                     and with the balance not yet known, there is no such figure —
                     the hint line below already says which of the two it is. */}
                 <button
@@ -875,7 +872,7 @@ export default function SendSheet(props: SendSheetProps) {
                 <AlertTriangle size={14} aria-hidden="true" />
                 <span>
                   Nothing was sent — {mode === 'shielded' ? 'no shielded token' : 'no NIGHT'}{' '}
-                  moved from this wallet. {failure.message}
+                  moved from your account. {failure.message}
                   {failure.detail ? ` ${failure.detail}` : ''}
                 </span>
               </p>

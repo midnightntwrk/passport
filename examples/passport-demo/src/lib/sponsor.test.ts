@@ -24,6 +24,7 @@ import {
   sponsorBalanceOnly,
   sponsorCanPay,
   sponsorConfig,
+  sponsorFeeRefusal,
   sponsorHexToBytes,
   sponsorReadiness,
   sponsorRetryDelayMs,
@@ -733,5 +734,65 @@ describe('SponsorError classification', () => {
     expect(createSponsorError(503, { error: 'PENDING_TRANSACTION' }).isPendingTransaction).toBe(
       false,
     );
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The refusal every fee gate gives                                           */
+/* -------------------------------------------------------------------------- */
+
+describe('sponsorFeeRefusal', () => {
+  /* This one sentence is what `checkPassportContractFunds`,
+     `checkAccountCustodyFees`, `feeReadiness()`, and `balanceTx` all say when
+     the fee cannot be covered. It replaced four different sentences that each
+     told the user their own wallet was short of DUST — a fee a Passport holder
+     is never asked for, and a top-up no surface offers. */
+
+  it('names the sponsor, and never a token the user would have to hold', () => {
+    const sentences = [
+      sponsorFeeRefusal({ state: 'disabled' }),
+      sponsorFeeRefusal({ state: 'unavailable', reason: 'the wallet is still syncing' }),
+    ];
+    for (const sentence of sentences) {
+      expect(sentence).toContain('fee sponsor');
+      // No token, and no second payer for the user to be nudged towards.
+      expect(sentence).not.toMatch(/dust/i);
+      expect(sentence).not.toMatch(/\bNIGHT\b/);
+      expect(sentence).not.toMatch(/your wallet|this wallet/i);
+    }
+  });
+
+  it('carries the sponsor’s own reason when there is one', () => {
+    expect(sponsorFeeRefusal({ state: 'unavailable', reason: 'the wallet is still syncing' }))
+      .toBe(
+        'Network fees on this Passport are covered by the fee sponsor, and the sponsor cannot ' +
+          'cover this one right now: the wallet is still syncing',
+      );
+  });
+
+  it('says the build has no sponsor when none is configured, rather than inventing a reason', () => {
+    expect(sponsorFeeRefusal({ state: 'disabled' })).toBe(
+      'Network fees on this Passport are covered by the fee sponsor, and this build has no ' +
+        'sponsor configured, so nothing can be submitted.',
+    );
+  });
+
+  it('asks for nothing the user could do, because there is nothing they could do', () => {
+    /* The template itself must not send anyone looking for a balance they are
+       not supposed to have. A sponsor-supplied reason is quoted verbatim and
+       is the sponsor's own business; these are the words this module chooses. */
+    for (const sentence of [
+      sponsorFeeRefusal({ state: 'disabled' }),
+      sponsorFeeRefusal({ state: 'unavailable', reason: 'wallet-status returned HTTP 502' }),
+    ]) {
+      expect(sentence).not.toMatch(/top up|faucet|fund your|your balance/i);
+    }
+  });
+
+  it('takes a real non-ready readiness straight from `sponsorReadiness`', () => {
+    /* The gates pass the readiness value through untouched, so the shape the
+       probe returns has to be the shape this accepts — url and all. */
+    const readiness = { state: 'unavailable', url: 'https://example.test', reason: 'no funds' } as const;
+    expect(sponsorFeeRefusal(readiness)).toContain('no funds');
   });
 });

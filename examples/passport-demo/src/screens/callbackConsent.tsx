@@ -112,10 +112,10 @@ function encodeTagged(material: TaggedKeyMaterial): string {
 }
 
 /* Word for word `../profileConsent.tsx`, and for the reason given there: the
-   wire field still carries all three addresses, but the three addresses are
-   kept out of Passport's primary UI and a consent sheet must not be where the
-   word DUST first reaches a user. The two sheets are one object in the user's
-   mind, so the labels cannot drift apart. */
+   wire field still carries all three of the transaction engine's addresses,
+   but they are kept out of Passport's primary UI and a consent sheet must not
+   be where the fee token first reaches a user. The two sheets are one object
+   in the user's mind, so the labels cannot drift apart. */
 const FIELD_LABELS = {
   displayName: 'Passport display name',
   passportContract: 'Your Passport account — its address and network',

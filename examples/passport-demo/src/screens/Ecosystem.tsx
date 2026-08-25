@@ -126,11 +126,13 @@ export function EcosystemIdentity(props: EcosystemProps) {
             stated differently for the ones that predate the choice.
 
             A name claimed from 2026/08/19 resolves to this Passport's
-            account-custody contract. Names claimed before that resolve to the
-            wallet's unshielded address, because that was the only path the code
-            had; those records carry no `resolverTarget` at all and are NOT
-            back-filled. Saying so plainly is the point: an older record is not
-            broken, it is simply bound to a different thing. */}
+            account-custody contract. Names claimed before that resolve to a
+            technical address of the transaction engine, because that was the
+            only path the code had; those records carry no `resolverTarget` at
+            all and are NOT back-filled. Saying so plainly is the point: an
+            older record is not broken, it is simply bound to a different
+            thing — and the copy no longer calls that thing a wallet, because a
+            Passport holder has an account, not one of those. */}
         {record?.status === 'registered' ? (
           <p className="mnid-reason">
             {record.resolverTarget === 'contract'
@@ -138,9 +140,9 @@ export function EcosystemIdentity(props: EcosystemProps) {
                   record.resolverTargetHex ? ` (${shortHash(record.resolverTargetHex)})` : ''
                 }.`
               : record.resolverTarget === 'wallet'
-                ? "Resolves to this wallet's unshielded address."
-                : 'Claimed before names bound to the account contract, so it resolves to this ' +
-                  "wallet's unshielded address."}
+                ? 'Resolves to one of this Passport’s technical addresses, not to your account.'
+                : 'Claimed before names bound to the account contract, so it resolves to one of ' +
+                  'this Passport’s technical addresses rather than to your account.'}
           </p>
         ) : null}
 
@@ -291,7 +293,7 @@ export default function EcosystemScreen(props: EcosystemProps) {
         <p className="mnid-lede">
           {record
             ? 'Your name, its registration, and everything you redeem across the ecosystem live here.'
-            : 'Your passkey and wallet are ready. Claim a name whenever you like — apps will recognise it once you do.'}
+            : 'Your Passport is ready. Claim a name whenever you like — apps will recognise it once you do.'}
         </p>
 
         <EcosystemIdentity {...props} variant="screen" />

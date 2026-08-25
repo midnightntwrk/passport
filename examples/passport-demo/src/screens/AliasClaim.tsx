@@ -185,7 +185,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
    */
   const sponsorRegisters = registrationSupported && isAvailable && nameSponsored === true
 
-  const queueReasonForNetwork = `Passport's wallet signs and submits on ${signingNetworkLabel} only, so this name is reserved for you locally but is NOT registered on ${NETWORK_LABELS[networkId]}.`
+  const queueReasonForNetwork = `Passport signs and submits on ${signingNetworkLabel} only, so this name is reserved for you locally but is NOT registered on ${NETWORK_LABELS[networkId]}.`
   const queueReasonForRegistry = isUnreachable
     ? `The .night registry on ${NETWORK_LABELS[networkId]} could not be reached when the name was chosen: ${
         availability?.status === 'unreachable' ? availability.detail : 'no detail reported'
@@ -251,8 +251,8 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
             </>
           ) : (
             <>
-              This is the name people send to and apps recognise you by. Passport&apos;s wallet
-              signs and submits on {signingNetworkLabel} only, so a name chosen for{' '}
+              This is the name people send to and apps recognise you by. Passport signs and
+              submits on {signingNetworkLabel} only, so a name chosen for{' '}
               {NETWORK_LABELS[networkId]} is queued here rather than registered — and Passport says
               so wherever it appears.
             </>
@@ -288,7 +288,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
               <Sparkles size={15} aria-hidden="true" />
               Registered for you
             </p>
-            {/* No price, no grant, no "this wallet is empty": the service
+            {/* No price, no grant, no "your account is empty": the service
                 registers the name and pays for it, and the user's balance is
                 not part of the ceremony. The panel only says what will happen. */}
             <p>

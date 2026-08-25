@@ -103,7 +103,7 @@ import {
 import * as Rx from 'rxjs';
 
 import type { PassportStateScope, PassportWalletSeedProvider } from '../backend.js';
-import { sponsorReadiness } from './sponsor.js';
+import { sponsorFeeRefusal, sponsorReadiness } from './sponsor.js';
 import { wasmWalletProvingService } from './wasmProver.js';
 import {
   clearWalletSnapshots,
@@ -325,20 +325,6 @@ function formatUnits(value: bigint, decimals: number): string {
   const fraction = digits.slice(digits.length - decimals).replace(/0+$/, '');
   return `${negative ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`;
 }
-
-/**
- * The honest refusal a wallet with no DUST of its own receives, reported by the
- * advisory {@link LocalMidnightWallet.feeReadiness}.
- *
- * There is no `registerDust()` here, and deliberately: on a sponsored network
- * asking a Passport holder to register their own NIGHT for DUST generation is a
- * dead user step. The reference implementation survives where it is genuinely
- * operational — the funder service registers its own NIGHT
- * (`examples/passport-funder/src/wallet.ts`, `registerDustIfNeeded`) — and that
- * is where to start from if a self-paid fee ever becomes a user-facing option.
- */
-const NO_DUST_SENTENCE =
-  'Fees are paid in DUST and are normally covered by the fee sponsor. No sponsor is covering this one, and this wallet holds no DUST of its own, so it cannot pay a fee yet.';
 
 /** Default floor between {@link LocalMidnightWallet.subscribeBalances} calls. */
 const DEFAULT_BALANCE_MIN_INTERVAL_MS = 4_000;
@@ -680,34 +666,34 @@ export interface ShieldedHolding {
 }
 
 /**
- * How the fee on this wallet's ONE transaction would be paid, as far as can be
- * told *before* it is built.
+ * Whether the fee on this wallet's ONE transaction would be covered, as far as
+ * can be told *before* it is built.
  *
- *   `sponsored` — a fee sponsor answered and holds a wallet that can pay:
- *                 `sponsorReadiness()` reporting `ready`, which itself gates on
- *                 the service's own `available > 0`. Nothing weaker earns this
- *                 word, and nothing may tell a user a fee was covered on the
- *                 strength of anything less.
- *   `own-dust`  — no sponsor, but this wallet holds DUST and can pay its own
- *                 fee. Carries the formatted balance it would pay from.
- *   `no-dust`   — no sponsor and no DUST, with the reason a deploy would give.
+ *   `sponsored`   — a fee sponsor answered and holds a wallet that can pay:
+ *                   `sponsorReadiness()` reporting `ready`, which itself gates
+ *                   on the service's own `available > 0`. Nothing weaker earns
+ *                   this word, and nothing may tell a user a fee was covered on
+ *                   the strength of anything less.
+ *   `unsponsored` — the sponsor is not covering this one, with the sponsor's
+ *                   own reason.
  *
- * When a sponsor URL is configured but the service is not ready, the fallback
- * modes carry `sponsorUnavailableReason` — the reason `sponsorReadiness()`
- * gave — so a surface can say "fee sponsor unavailable (reason), paying from
- * your own DUST" instead of silently pretending sponsorship never existed.
- * Absent when sponsorship is simply not configured.
+ * Two modes, and there will not be a third. A Passport holder does not fund
+ * their own fees: this wallet is the transaction engine, the account-custody
+ * contract is the custodian, and no path in this app reads or spends the
+ * engine's dust to pay for anything. `unsponsored` is therefore a fact about
+ * the SPONSOR, and {@link sponsorFeeRefusal} is the one sentence that states
+ * it — there is no balance for a surface to report and no top-up for a user to
+ * make.
  *
- * Advisory only. It is a *prediction*, made from a state that may be a block
- * old by the time anything is built, so the account-contract deploy and every
- * account circuit re-check what they need for themselves and their refusals
- * remain the authority. A surface may use this to explain what is about to
- * happen; nothing may use it to skip a check.
+ * Advisory only. It is a *prediction*, made from a probe that may be stale by
+ * the time anything is built, so the account-contract deploy and every account
+ * circuit re-check for themselves and their refusals remain the authority. A
+ * surface may use this to explain what is about to happen; nothing may use it
+ * to skip a check.
  */
 export type FeeReadiness =
   | { mode: 'sponsored' }
-  | { mode: 'own-dust'; dustBalance: string; sponsorUnavailableReason?: string }
-  | { mode: 'no-dust'; reason: string; sponsorUnavailableReason?: string };
+  | { mode: 'unsponsored'; reason: string };
 
 export interface LocalMidnightWallet {
   readonly network: LocalWalletNetworkConfig;
@@ -790,7 +776,7 @@ export interface LocalMidnightWallet {
    * Advisory: the account-contract deploy keeps its own authoritative checks.
    *
    * Throws if this wallet's state cannot be read at all, because "we could not
-   * tell" must not be reported as `no-dust`.
+   * tell" must not be reported as `unsponsored`.
    */
   feeReadiness(): Promise<FeeReadiness>;
   /** Addresses plus a balance refresh, in the shape the Home screen consumes. */
@@ -1241,24 +1227,11 @@ export async function createLocalMidnightWallet(
     // sponsorship is configured.
     const sponsorship = await sponsorReadiness();
     if (sponsorship.state === 'ready') return { mode: 'sponsored' };
-    // `unavailable` means a sponsor URL is configured but the service cannot
-    // pay right now; that fact travels with the fallback mode so the UI can
-    // name it. `disabled` carries nothing — there is no sponsor to miss.
-    const sponsorUnavailableReason =
-      sponsorship.state === 'unavailable' ? sponsorship.reason : undefined;
-    const dust = (await currentState()).dust.balance(new Date());
-    if (dust > 0n) {
-      return {
-        mode: 'own-dust',
-        dustBalance: formatUnits(dust, DUST_DECIMALS),
-        ...(sponsorUnavailableReason !== undefined ? { sponsorUnavailableReason } : {}),
-      };
-    }
-    return {
-      mode: 'no-dust',
-      reason: NO_DUST_SENTENCE,
-      ...(sponsorUnavailableReason !== undefined ? { sponsorUnavailableReason } : {}),
-    };
+    /* No balance is consulted on the way out. `unavailable` means a sponsor URL
+       is configured but the service cannot pay right now and `disabled` means
+       there is no sponsor at all; either way nothing this wallet holds would
+       change the answer, so nothing this wallet holds is read. */
+    return { mode: 'unsponsored', reason: sponsorFeeRefusal(sponsorship) };
   };
 
   // -------------------------------------------------------------------------

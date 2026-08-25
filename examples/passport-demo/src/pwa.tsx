@@ -330,7 +330,7 @@ export function PassportPwaShell({ children }: { children: ReactNode }) {
         <div className="pwa-offline-bar" role="status" aria-live="polite">
           <WifiOff size={15} aria-hidden="true" />
           <span>
-            Offline shell. Sign-in, wallet sync, proofs, and transactions require a connection.
+            Offline shell. Sign-in, syncing, proofs, and transactions require a connection.
           </span>
         </div>
       )}
