@@ -51,10 +51,15 @@ export default defineConfig({
   reporter: [['list']],
   /* Proving is minutes, not seconds, on the live tier. The mocked tier never
      goes near a prover and finishes in a fraction of this. */
-  timeout: live ? 10 * 60 * 1000 : 90 * 1000,
+  timeout: live ? 25 * 60 * 1000 : 90 * 1000,
   expect: { timeout: live ? 5 * 60 * 1000 : 15 * 1000 },
   use: {
     baseURL: live ? 'https://midnightpassport.com' : 'http://localhost:4173',
+    /* No action may wait for ever. Without this a click on a control that has
+       gone — inside a poll, say — blocks the worker rather than the test, and
+       the run hangs past its own test timeout with nothing to show for it.
+       Measured here on 2026/08/25, on the live tier's balance poll. */
+    actionTimeout: 30_000,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off',

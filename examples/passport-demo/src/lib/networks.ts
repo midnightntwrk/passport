@@ -82,10 +82,10 @@ export function networkUnavailableReason(networkId: string | null | undefined): 
   if (networkIsTransactable(networkId)) return null;
   const network = asPassportNetwork(networkId);
   if (network === 'preview' || network === 'preprod') {
-    return `This build runs on the ledger-9 protocol, which ${network} does not speak. Names already registered there still resolve, and their transactions still link to the explorer, but this wallet cannot open an account on it.`;
+    return `This build runs on the ledger-9 protocol, which ${network} does not speak. Names already registered there still resolve, and their transactions still link to the explorer, but Passport cannot open an account on it.`;
   }
   if (network === 'mainnet') {
-    return 'Passport does not transact on mainnet: a wallet whose seed comes from a browser passkey has no business spending real NIGHT.';
+    return 'Passport does not transact on mainnet: a signing key whose seed comes from a browser passkey has no business spending real NIGHT.';
   }
   return null;
 }

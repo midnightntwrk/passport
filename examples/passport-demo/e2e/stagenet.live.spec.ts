@@ -93,30 +93,61 @@ test.describe('@live the account model on stagenet', () => {
     await page.getByLabel('Your Midnight name').fill(alias);
     await expect(page.getByText(`${alias}.night is available`)).toBeVisible({ timeout: 60_000 });
 
-    await page.getByRole('button', { name: new RegExp(`Claim ${alias}\\.night`) }).click();
+    /* Two attempts, and the second is not papering over a flake. The sponsor
+       serialises balancing and RESERVES its DUST for a balanced transaction
+       the moment it finalises one, so a claim that arrives while another is in
+       flight is genuinely refused — and the app's own answer to that is the
+       claim button, still there, still armed. Retrying once is what a user
+       would do, and it is the difference between this spec reporting on
+       Passport and reporting on the sponsor's calendar. */
+    const attempts = 2;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      await page.getByRole('button', { name: new RegExp(`Claim ${alias}\\.night`) }).click();
 
-    /* Three proved transactions, narrated. The account contract is deployed as
-       part of claiming — it is the ONE transaction this passkey wallet
-       originates in its life — and the name is bound to it. Any of the four
-       phases proves the ceremony started; which one is showing when this runs
-       depends on how fast the prover got through the one before it. */
-    await expect(
-      page.getByRole('button', {
-        name: /Deploying your Passport account contract|Deploying your name's resolver|Registering |Waiting for the registry/i,
-      }),
-    ).toBeVisible({ timeout: 2 * 60_000 });
+      /* Three proved transactions, narrated. The account contract is deployed
+         as part of claiming — it is the ONE transaction this passkey wallet
+         originates in its life — and the name is bound to it. Any of the four
+         phases proves the ceremony started; which one is showing depends on
+         how fast the prover got through the one before it. */
+      await expect(
+        page.getByRole('button', {
+          name: /Deploying your Passport account contract|Deploying your name's resolver|Registering |Waiting for the registry/i,
+        }),
+      ).toBeVisible({ timeout: 2 * 60_000 });
 
-    /* A claim that did not complete says so on the card, and the reason is the
-       service's. Surfaced here rather than left to a timeout, because "the
-       sponsor stood down" and "the app is broken" are different mornings. */
-    const refusal = page.getByText(/The claim did not complete/i);
-    await expect(refusal).toHaveCount(0);
+      /* Then whichever comes first: Home, or the card saying the claim did not
+         complete. Raced rather than waited on in sequence, because a refusal
+         that arrives in ten seconds should not be found nine minutes later by
+         a timeout that says nothing about why. */
+      const home = page
+        .getByRole('button', { name: /^Receive$/ })
+        .waitFor({ state: 'visible', timeout: 9 * 60_000 })
+        .then(() => 'home' as const)
+        .catch(() => 'timeout' as const);
+      const refused = page
+        .getByText(/The claim did not complete/i)
+        .waitFor({ state: 'visible', timeout: 9 * 60_000 })
+        .then(() => 'refused' as const)
+        .catch(() => 'timeout' as const);
+      const outcome = await Promise.race([home, refused]);
 
-    // Home, once the registry has answered.
-    await expect(page.getByRole('button', { name: /^Receive$/ })).toBeVisible({
-      timeout: 9 * 60_000,
-    });
+      if (outcome === 'home') break;
+      const detail =
+        outcome === 'refused'
+          ? (await page.locator('.mnid-panel[role="alert"]').innerText()).trim()
+          : 'the claim neither completed nor reported a failure inside nine minutes';
+      /* The name is never left in a false state: a refused claim keeps the
+         name and says so. What is asserted is that the app said which. */
+      expect(detail.length, 'a claim that did not complete must say why').toBeGreaterThan(0);
+      console.log(`[live] attempt ${attempt} did not complete:\n${detail}`);
+      expect(attempt, `the claim did not complete twice:\n${detail}`).toBeLessThan(attempts);
+      // Long enough for the sponsor's reservation to clear.
+      await page.waitForTimeout(90_000);
+    }
+
+    await expect(page.getByRole('button', { name: /^Receive$/ })).toBeVisible();
     await expect(page.getByText(`${alias}.night`).first()).toBeVisible();
+    console.log(`[live] ${alias}.night registered`);
   });
 
   test('the name resolves to the account contract, and Home says the same address', async () => {
@@ -198,32 +229,120 @@ test.describe('@live the account model on stagenet', () => {
     const balanceBefore = await readNightBalance(page);
     expect(balanceBefore).toBeGreaterThan(0);
 
-    await page.getByRole('button', { name: /^Send$/ }).first().click();
-    // The recipient is a textarea carrying the network's own address prefix.
-    await page.getByPlaceholder(/^mn_addr_stagenet1/).fill(RECIPIENT);
-    await page.locator('.mnhome-send-amount input').fill(SEND_NIGHT);
+    /* WAIT FOR THE SPONSOR FIRST, and this is not politeness.
+       The activation grant in the previous test is a spend by the SAME
+       balancer that covers this send's fee, and it reserves its DUST for a
+       balanced transaction the moment it finalises one. A send issued straight
+       afterwards is refused — "this wallet holds no DUST of its own", which is
+       the wallet's honest answer to a sponsor that has stood down. Measured
+       twice on 2026/08/25 before this wait existed. The account model is not
+       what fails there; the sponsor's calendar is. */
+    await waitForSponsor();
 
-    // The fee sentence names who is expected to pay, never which token it costs.
-    expect(await page.locator('body').innerText()).not.toMatch(/dust/i);
+    /* Two attempts, for the same reason the claim has two: another client can
+       take the sponsor between the probe above and the submit. */
+    const attempts = 2;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      await page.getByRole('button', { name: /^Send$/ }).first().click();
+      // The recipient is a textarea carrying the network's own address prefix.
+      await page.getByPlaceholder(/^mn_addr_stagenet1/).fill(RECIPIENT);
+      await page.locator('.mnhome-send-amount input').fill(SEND_NIGHT);
 
-    await page.getByRole('button', { name: /^Review$/ }).click();
-    /* One passkey ceremony, then `withdraw_night` proved and submitted. The
-       virtual authenticator answers the ceremony; the prover takes minutes. */
-    await page.locator('.mnhome-send-actions button.mnhome-send-primary').click();
+      // The fee sentence names who is expected to pay, never which token it costs.
+      expect(await page.locator('body').innerText()).not.toMatch(/dust/i);
+
+      await page.getByRole('button', { name: /^Review$/ }).click();
+      const sheet = page.locator('[aria-labelledby="mnhome-send-title"]');
+      await expect(sheet).toBeVisible();
+
+      /* One passkey ceremony, then `withdraw_night` proved and submitted. The
+         virtual authenticator answers the ceremony; the prover takes minutes. */
+      await page.locator('.mnhome-send-actions button.mnhome-send-primary').click();
+
+      /* Whichever the sheet does first. It gets out of the way ONLY when a real
+         transaction id came back from the node, so a closed sheet is the
+         submission having happened; anything else it can do, it says in words,
+         and those words are the failure rather than a bare timeout. */
+      const closed = sheet
+        .waitFor({ state: 'hidden', timeout: 9 * 60_000 })
+        .then(() => 'submitted' as const)
+        .catch(() => 'timeout' as const);
+      const refused = sheet
+        .locator('.mnhome-notice[role="alert"]')
+        .waitFor({ state: 'visible', timeout: 9 * 60_000 })
+        .then(() => 'refused' as const)
+        .catch(() => 'timeout' as const);
+      const outcome = await Promise.race([closed, refused]);
+      if (outcome === 'submitted') break;
+
+      const said =
+        outcome === 'refused'
+          ? (await sheet.locator('.mnhome-notice[role="alert"]').innerText()).trim()
+          : (await sheet.innerText()).trim();
+      /* Nothing was sent, and the sheet says so in words — which is the
+         behaviour under test as much as a successful send is. */
+      expect(said, 'a send that did not happen must say so').toMatch(/Nothing was sent/i);
+      console.log(`[live] send attempt ${attempt} did not submit:\n${said}`);
+      expect(attempt, `the send did not submit twice:\n${said}`).toBeLessThan(attempts);
+      await page.getByRole('button', { name: /^Close$/ }).click({ timeout: 10_000 }).catch(() => undefined);
+      await page.keyboard.press('Escape');
+      await waitForSponsor();
+    }
 
     /* The only assertion that proves a withdrawal happened: the ACCOUNT holds
        less than it did. The wallet is not consulted, because under the account
        model it never held any of this. */
     await expect
-      .poll(async () => readNightBalance(page), {
-        timeout: 9 * 60_000,
-        intervals: [5_000],
-        message: 'the account NIGHT balance did not drop after the withdrawal',
-      })
+      .poll(
+        async () => {
+          /* The card is re-read from the contract on demand — the control is
+             on Home for exactly this reason, and a balance that only settles
+             after a manual refresh is still a balance the user can get to. */
+          await page
+            .getByRole('button', { name: /Refresh balances/i })
+            .click({ timeout: 10_000 })
+            .catch(() => undefined);
+          await page.waitForTimeout(2_000);
+          return readNightBalance(page);
+        },
+        {
+          timeout: 8 * 60_000,
+          intervals: [8_000],
+          message: 'the account NIGHT balance did not drop after the withdrawal',
+        },
+      )
       .toBeLessThan(balanceBefore);
     console.log(`[live] balance fell from ${balanceBefore} after sending ${SEND_NIGHT} NIGHT`);
   });
 });
+
+/**
+ * Blocks until the fee sponsor reports a wallet that can pay, or gives up.
+ *
+ * `available > 0` is the same gate `src/lib/sponsor.ts` applies, and for the
+ * same reason: a wallet that is merely READY, synced, and holding no DUST
+ * cannot sponsor anything. Read straight from the service rather than through
+ * the page, because the page's own probe is cached for thirty seconds and this
+ * needs the current answer.
+ */
+async function waitForSponsor(timeoutMs = 6 * 60_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let last = 'never answered';
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch('https://funder.midnightpassport.com/balancer/wallet-status');
+      const body = (await response.json()) as { available?: unknown; total?: unknown };
+      last = `available ${String(body.available)}/${String(body.total)}`;
+      if (typeof body.available === 'number' && body.available > 0) return;
+    } catch (cause) {
+      last = cause instanceof Error ? cause.message : String(cause);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
+  }
+  /* Not a failure of its own: the send below will be refused in the sponsor's
+     own words, which is a better message than this function could write. */
+  console.log(`[live] the fee sponsor never reported a payer (${last}); sending anyway`);
+}
 
 /** The two halves of a middle-elided address, however wide the elision. */
 interface ElidedAddress {
