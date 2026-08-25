@@ -68,6 +68,10 @@ import type {
   PassportContractDeployment,
   PassportContractProgress,
 } from './identity/passportContract.js';
+/* The account-custody contract's own progress vocabulary. Type-only, so the
+   module — and the ledger it statically imports — stays behind the dynamic
+   imports every call site below uses. */
+import type { AccountCustodyProgress } from './identity/accountCustody.js';
 import type { PassportBackupLedgerCheck } from './identity/backup.js';
 import {
   NETWORK_LABELS,
@@ -101,13 +105,9 @@ import type {
   LocalWalletBalances,
   LocalWalletProvingMode,
   LocalWalletSurfaces,
-  SendNightResult,
-  SendShieldedResult,
-  ShieldedHolding,
 } from './lib/localWallet.js';
 
 type ActivityStatus = 'pending' | 'complete' | 'blocked' | 'error';
-type AddressKind = 'unshielded' | 'shielded' | 'dust';
 type ProfileStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
 type ActivitySource = 'local' | 'wallet' | 'chain';
 type OnboardingIntent = 'local-create' | 'local-signin';
@@ -189,6 +189,158 @@ const FUNDER_URL =
   null;
 /** Ceiling on the wait for a funder grant to show up in the balance stream. */
 const FUNDER_WAIT_CEILING_MS = 45_000;
+/**
+ * Ceiling on the `/fund-account` round-trip.
+ *
+ * The sponsor proves and submits a `deposit_night` — and, where it holds one,
+ * a shielded stablecoin deposit as well — before it answers, so this is a
+ * chain-work wait rather than an HTTP one. It is deliberately generous and
+ * deliberately never blocking: the caller fires this and moves on.
+ */
+const FUND_ACCOUNT_TIMEOUT_MS = 600_000;
+/**
+ * Which account contracts this browser has already asked the sponsor to
+ * activate. Keyed by contract address because that is what a Passport has
+ * exactly one of, and persisted so a reload does not ask a second time. The
+ * sponsor's own once-per-account ledger is the real gate; this only keeps
+ * Passport from knocking on a door it has already been through.
+ */
+const ACCOUNT_FUNDED_STORAGE_PREFIX = 'mn-passport:account-funded:';
+
+function accountFundingAttempted(contractAddress: string): boolean {
+  try {
+    return window.localStorage.getItem(`${ACCOUNT_FUNDED_STORAGE_PREFIX}${contractAddress}`) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function rememberAccountFunding(contractAddress: string): void {
+  try {
+    window.localStorage.setItem(
+      `${ACCOUNT_FUNDED_STORAGE_PREFIX}${contractAddress}`,
+      new Date().toISOString(),
+    );
+  } catch {
+    // Best-effort: without it the sponsor is asked once more and refuses itself.
+  }
+}
+
+/**
+ * A token colour as both the ledger and {@link colourHexToBytes} quote it — 64
+ * lowercase hex characters — or `null` for anything that is not one.
+ *
+ * Strict on purpose, and for the module's own reason: a short value is a
+ * misconfiguration rather than an abbreviation, and padding it would make
+ * Passport show one colour's balance under another colour's name.
+ */
+function normalisedColourHex(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase().replace(/^0x/, '');
+  return /^[0-9a-f]{64}$/.test(normalized) ? normalized : null;
+}
+
+/**
+ * The stablecoin colour this build was configured with, when it was. The
+ * sponsor's own `/status` is the first source (see {@link probeStablecoin});
+ * this is the fall-back for a build that knows the colour without being able
+ * to ask.
+ */
+const CONFIGURED_STABLECOIN_COLOUR = normalisedColourHex(
+  (import.meta.env as Record<string, string | undefined>).VITE_MUSD_COLOUR_HEX,
+);
+
+/** A colour, shortened for a label. It identifies nothing to a reader whole. */
+function shortColour(colourHex: string): string {
+  return colourHex.length <= 18 ? colourHex : `${colourHex.slice(0, 10)}…${colourHex.slice(-6)}`;
+}
+
+/**
+ * Which shielded colour the demo shows as its stablecoin, and what to call it.
+ *
+ * The sponsor mints it, so the sponsor is the only honest source for its
+ * colour: `GET /status` carries `assetColourHex` and `assetSymbol` where the
+ * service holds one. A build with no sponsor, or a sponsor that does not
+ * publish an asset, falls back to {@link CONFIGURED_STABLECOIN_COLOUR}, and
+ * failing that returns `null` — Home then shows the account's shielded coins
+ * by their short colour rather than under a name nobody has verified.
+ */
+async function probeStablecoin(): Promise<{ symbol: string; colourHex: string } | null> {
+  const configured = CONFIGURED_STABLECOIN_COLOUR
+    ? { symbol: 'mUSD', colourHex: CONFIGURED_STABLECOIN_COLOUR }
+    : null;
+  if (!FUNDER_URL) return configured;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4_000);
+    let body: { assetColourHex?: unknown; assetSymbol?: unknown };
+    try {
+      const response = await fetch(`${FUNDER_URL}/status`, { signal: controller.signal });
+      if (!response.ok) return configured;
+      body = (await response.json()) as { assetColourHex?: unknown; assetSymbol?: unknown };
+    } finally {
+      clearTimeout(timer);
+    }
+    const colourHex = normalisedColourHex(
+      typeof body.assetColourHex === 'string' ? body.assetColourHex : null,
+    );
+    if (!colourHex) return configured;
+    return {
+      symbol:
+        typeof body.assetSymbol === 'string' && body.assetSymbol.trim()
+          ? body.assetSymbol.trim()
+          : 'mUSD',
+      colourHex,
+    };
+  } catch {
+    // Unreachable or unparseable: the configured colour, or nothing at all.
+    return configured;
+  }
+}
+
+/**
+ * Turns a failed passkey ceremony into the vocabulary `lib/passkeyPresence.ts`
+ * defines, so an account-contract call refuses exactly as a presence
+ * confirmation used to.
+ *
+ * `WebAuthnPrfKeyProvider.assertOnce` re-wraps whatever WebAuthn threw as a
+ * plain `Error`, so the `DOMException` name that module branches on is gone by
+ * the time it reaches here. What survives is the platform's own sentence, and
+ * every browser says "cancelled" or "timed out or was not allowed" when a user
+ * dismisses the sheet. Anything else is read as a ceremony that could not run
+ * at all. Both codes mean the same thing to every caller — nothing was signed
+ * and nothing was sent — so a misread costs precision, never honesty.
+ */
+function passkeyCeremonyFailure(cause: unknown): PasskeyPresenceError {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  if (/cancell?ed|timed out or was not allowed|not allowed/i.test(message)) {
+    return new PasskeyPresenceError(
+      'approval-cancelled',
+      'Approval cancelled — nothing was signed or sent.',
+    );
+  }
+  return new PasskeyPresenceError(
+    'presence-unavailable',
+    message ||
+      'Passport could not use the passkey this session signed in with, so nothing was signed or sent.',
+  );
+}
+
+/**
+ * An account-custody refusal, in the vocabulary `lib/txApproval.ts` already
+ * maps for a framed or redirected app.
+ *
+ * The app-facing protocol is unchanged by the move to the account contract, so
+ * the contract's own codes are translated here rather than in the bridge: a
+ * shortfall is a shortfall whether the coins were the wallet's or the
+ * account's, and an address the contract will not take is the same
+ * `invalid-request` the wallet's own send reported.
+ */
+function appTransferCodeFor(code: string | null): string | null {
+  if (code === 'insufficient-balance' || code === 'insufficient-funds') return 'insufficient-night';
+  if (code === 'invalid-request') return 'invalid-recipient';
+  return code;
+}
 /** Appended to the queue reason when activation was attempted and failed. */
 const FUNDER_UNAVAILABLE_SENTENCE =
   'Automatic activation was unavailable just now, so the wallet still needs funding.';
@@ -594,24 +746,10 @@ async function clearPersistedWalletSession(): Promise<void> {
 }
 
 /**
- * Reads a human-scale formatted amount. Both the DUST balance and its cap come
- * from `getFormattedBalances()`, so group separators are the only noise to
- * strip — no Specks conversion belongs here.
- */
-function parseFormattedAmount(value: string | null): number | null {
-  if (value === null) return null;
-  const cleaned = value.replace(/[^0-9.]/g, '');
-  if (!cleaned) return null;
-  const parsed = Number.parseFloat(cleaned);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-/**
- * NIGHT is quoted to six decimals — Contract W's `formatUnits(night, 6)`, with
- * trailing zeroes already stripped. These two undo and redo exactly that, in
- * whole micro-NIGHT, so an arriving transfer is compared and named without a
- * float ever touching a balance. `parseFormattedAmount` above is deliberately
- * not reused: it is a lossy read for a percentage gauge, and money is not that.
+ * NIGHT is quoted to six decimals — Contract W's `formatUnits(night, 6)`, and
+ * the same scale the account contract's atomic `night_balances` are on. These
+ * two undo and redo exactly that, in whole micro-NIGHT, so every figure on
+ * screen is reached without a float ever touching a balance.
  */
 const NIGHT_DECIMALS = 6n;
 const NIGHT_UNITS = 1_000_000n;
@@ -632,14 +770,6 @@ function formatNightUnits(units: bigint): string {
   const whole = digits.slice(0, digits.length - Number(NIGHT_DECIMALS));
   const fraction = digits.slice(digits.length - Number(NIGHT_DECIMALS)).replace(/0+$/, '');
   return `${negative ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`;
-}
-
-/** DUST charge as a 0-100 percentage, or null when either side is unknown. */
-function dustFillPercentFrom(balance: string | null, cap: string | null): number | null {
-  const heldValue = parseFormattedAmount(balance);
-  const capValue = parseFormattedAmount(cap);
-  if (heldValue === null || capValue === null || capValue <= 0) return null;
-  return Math.max(0, Math.min(100, (heldValue / capValue) * 100));
 }
 
 /**
@@ -720,12 +850,31 @@ function IconButton({
   return <button className="icon-button" onClick={onClick} disabled={disabled} aria-label={label} title={label}>{children}</button>;
 }
 
-interface AddressChoice {
-  kind: AddressKind;
-  label: string;
-  address: string | null;
-  detail: string;
+/**
+ * What the signed-in Passport's account-custody contract holds, as Home shows
+ * it. These figures are the CONTRACT's `night_balances` and `coins`, read
+ * through `identity/accountCustody.ts` — never the passkey wallet's own.
+ */
+interface AccountBalances {
+  /** Atomic NIGHT the contract holds. `null` means unknown, never a zero. */
+  night: bigint | null;
+  /** Every shielded colour the contract holds a positive balance of. */
+  shielded: { colourHex: string; amount: bigint }[];
+  /**
+   * `idle` means there is no deployed contract to read — a different fact from
+   * a read that failed, and Home shows nothing rather than zeros for it.
+   */
+  status: 'idle' | 'loading' | 'ready' | 'unavailable';
+  /** Present only on `unavailable`, in the module's own words. */
+  error: string | null;
 }
+
+const NO_ACCOUNT_BALANCES: AccountBalances = {
+  night: null,
+  shielded: [],
+  status: 'idle',
+  error: null,
+};
 
 export default function PassportDemo() {
   // Selected network context: filters the app registry. The demo wallet runs
@@ -811,6 +960,27 @@ export default function PassportDemo() {
   /** The live phase of a deployment in flight; null when none is running. */
   const [contractPhase, setContractPhase] = useState<PassportContractProgress['phase'] | null>(null);
   const [contractBusy, setContractBusy] = useState(false);
+  /* ---------------------------------------------------------------------- */
+  /* The account is the account (2026/08/24)                                */
+  /*                                                                        */
+  /* Every value flow after onboarding runs through the account-custody      */
+  /* contract's circuits: Home's figures are its ledger, a send is a         */
+  /* `withdraw_*`, and a dApp payment is a `withdraw_night` behind the same  */
+  /* consent. The passkey wallet is still the signer and the fee payer, and  */
+  /* is no longer anything a user is shown.                                 */
+  /* ---------------------------------------------------------------------- */
+  const [accountBalances, setAccountBalances] = useState<AccountBalances>(NO_ACCOUNT_BALANCES);
+  /** The live phase of an account-contract call in flight; null when none is. */
+  const [accountPhase, setAccountPhase] = useState<AccountCustodyProgress['phase'] | null>(null);
+  /**
+   * Which shielded colour this deployment shows as its stablecoin, and what to
+   * call it. `null` until the sponsor has been asked and answered — Home then
+   * shows the account's shielded coins by their short colour, which is honest
+   * rather than empty.
+   */
+  const [stablecoin, setStablecoin] = useState<{ symbol: string; colourHex: string } | null>(null);
+  /** True while the one-time sweep of legacy wallet funds is running. */
+  const [depositBusy, setDepositBusy] = useState(false);
   /**
    * Contract deploys in flight, keyed by credential and network.
    *
@@ -873,6 +1043,18 @@ export default function PassportDemo() {
   // render-scoped snapshot.
   const localWalletRef = useRef<LocalMidnightWallet | null>(null);
   /**
+   * The signed-in profile, readable from callbacks that must NOT re-identify
+   * when it changes.
+   *
+   * `refreshLocalBalances` is a dependency of the session-restore effect and of
+   * `openLocalWalletWithSeed`, so it has to keep a stable identity across
+   * renders; it now also refreshes the account contract's balances, and that
+   * read needs the credential the contract is keyed by. A ref is how the two
+   * requirements meet without making the restore effect re-run every time a
+   * profile field is written.
+   */
+  const profileRef = useRef<DemoPassportProfile | null>(null);
+  /**
    * Has the open wallet finished walking the chain at least once?
    *
    * Only the incoming-transfer watch reads it, and it has to: while the walk is
@@ -881,6 +1063,10 @@ export default function PassportDemo() {
    * by the sync-progress effect, which owns the same handle's stream.
    */
   const localWalletSynced = useRef(false);
+
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
 
   const addActivity = useCallback((entry: Omit<ActivityEntry, 'id' | 'createdAt'>) => {
     const value = { ...entry, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
@@ -1038,7 +1224,86 @@ export default function PassportDemo() {
     }
   }, []);
 
+  /**
+   * The open wallet and the account contract it signs for, or `null`.
+   *
+   * Read from the contract STORE rather than from `contractRecords` state, so
+   * this can be a stable callback: the store is the same source that state
+   * subscribes to, and a synchronous read of it can never be a render behind.
+   * Both halves are required — a contract with no wallet cannot be called, and
+   * a wallet with no contract has nothing to call.
+   */
+  const accountContractOf = useCallback((): {
+    handle: LocalMidnightWallet;
+    address: string;
+  } | null => {
+    const handle = localWalletRef.current;
+    const activeProfile = profileRef.current;
+    if (!handle || !activeProfile) return null;
+    const record = loadPassportContractRecord(
+      activeProfile.passkey.credentialId,
+      handle.network.networkId,
+    );
+    if (record?.status !== 'deployed' || !record.address) return null;
+    return { handle, address: record.address };
+  }, []);
+
+  /**
+   * Reads the account contract's own ledger — the figures Home shows.
+   *
+   * Deliberately uncached and deliberately not smoothed: a read that could not
+   * be made is `unavailable` with the module's own sentence, because an empty
+   * balance map and a failed read look identical to a screen handed zeros, and
+   * only one of them means this account holds nothing. With no deployed
+   * contract there is nothing to read at all, which is `idle` — the asset row
+   * is then absent rather than showing a balance nobody can spend.
+   */
+  const refreshAccountBalances = useCallback(async () => {
+    const account = accountContractOf();
+    if (!account) {
+      setAccountBalances(NO_ACCOUNT_BALANCES);
+      return;
+    }
+    setAccountBalances((current) => ({ ...current, status: 'loading', error: null }));
+    try {
+      const { nightColourHex, readAccountState } = await import('./identity/accountCustody.js');
+      const state = await readAccountState(account.handle.network, account.address);
+      // A stale handle's read must never write over a newer wallet's figures.
+      if (localWalletRef.current !== account.handle) return;
+      const nightColour = normalisedColourHex(nightColourHex());
+      setAccountBalances({
+        night: (nightColour ? state.nightBalances.get(nightColour) : undefined) ?? 0n,
+        shielded: [...state.shieldedCoins]
+          .filter(([, amount]) => amount > 0n)
+          .map(([colourHex, amount]) => ({ colourHex, amount })),
+        status: 'ready',
+        error: null,
+      });
+    } catch (cause) {
+      if (localWalletRef.current !== account.handle) return;
+      /* The figures go with the read that failed. Keeping the last ones on
+         screen beneath a notice saying they could not be read would be the
+         screen telling two stories at once — and a stale balance is exactly the
+         thing a user would act on. */
+      setAccountBalances({
+        night: null,
+        shielded: [],
+        status: 'unavailable',
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  }, [accountContractOf]);
+
+  /**
+   * Refreshes the wallet's own surfaces AND the account contract's balances.
+   *
+   * One call, because they are one refresh to every caller: the wallet is what
+   * pays the fee and what a legacy balance may still be sitting in, and the
+   * account is what the user is shown. The account read is not awaited — it is
+   * an indexer round-trip, and nothing that calls this is waiting on a figure.
+   */
   const refreshLocalBalances = useCallback(async () => {
+    void refreshAccountBalances();
     const handle = localWalletRef.current;
     if (!handle) return;
     setLocalSurfaces((current) =>
@@ -1052,7 +1317,7 @@ export default function PassportDemo() {
       ...(current ?? initialLocalSurfaceState(handle)),
       ...balances,
     }));
-  }, []);
+  }, [refreshAccountBalances]);
 
   /**
    * Builds the wallet from an already-derived seed and publishes its address
@@ -1816,7 +2081,12 @@ export default function PassportDemo() {
       const amount = formatNightUnits(next - previous);
       addActivity({
         label: 'NIGHT received',
-        detail: `${amount} NIGHT arrived at this Passport's unshielded address.`,
+        /* It arrived at the address the resolver leaf carries, which is the
+           wallet's — so it is NOT yet in the account, and the contract cannot
+           see it until a `deposit_night` moves it. Home offers exactly that;
+           saying so here is the difference between a balance a user can find
+           and one they cannot. */
+        detail: `${amount} NIGHT arrived at this Passport's receiving address. Move it into your account to spend it.`,
         status: 'complete',
         source: 'chain',
       });
@@ -1889,6 +2159,59 @@ export default function PassportDemo() {
   useEffect(() => subscribeAliasRecords(setAliasRecords), []);
   useEffect(() => subscribeIncentives(setIncentives), []);
   useEffect(() => subscribePassportContractRecords(setContractRecords), []);
+
+  /**
+   * The stored record for THIS credential on the network the WALLET signs on.
+   * Read per credential as well as per network: a second passkey in the same
+   * browser must never be shown — or spend from — the first one's contract.
+   *
+   * Declared here, above every flow that needs it, because since 2026/08/24 it
+   * is not merely what a status card shows: it is the account every send,
+   * every dApp payment, and every balance on Home is made against.
+   */
+  const activeContractRecord =
+    profile && localWalletNetworkId
+      ? contractRecords[
+          passportContractRecordKey(profile.passkey.credentialId, localWalletNetworkId)
+        ] ?? null
+      : null;
+  /** The account contract to call, or `null` when this Passport has none yet. */
+  const accountContractAddress =
+    activeContractRecord?.status === 'deployed' ? activeContractRecord.address ?? null : null;
+
+  /**
+   * The account's balances follow the account: read them the moment there IS
+   * one to read, and again whenever the contract this Passport holds changes.
+   *
+   * This covers the three arrivals no explicit refresh does — a wallet opening,
+   * a session silently restored, and the contract's own deployment landing in
+   * the record store. Every deliberate refresh (a send, a deposit, a pull) goes
+   * through {@link refreshLocalBalances} instead.
+   */
+  useEffect(() => {
+    if (localWalletStatus !== 'ready' || !accountContractAddress) return;
+    void refreshAccountBalances();
+  }, [accountContractAddress, localWalletStatus, refreshAccountBalances]);
+
+  /**
+   * Which colour the sponsor calls its stablecoin. Asked once a session, and
+   * only where there is a wallet open to spend it: a probe that fails leaves
+   * the name unknown, which Home renders as the colour itself rather than as a
+   * label nobody has verified.
+   */
+  useEffect(() => {
+    if (localWalletStatus !== 'ready') return undefined;
+    let live = true;
+    void probeStablecoin().then((found) => {
+      /* A probe that could not answer leaves whatever is already known in
+         place: the sponsor may have named the colour on a funding response, and
+         a later unreachable `/status` is not evidence that it changed. */
+      if (live) setStablecoin((current) => found ?? current);
+    });
+    return () => {
+      live = false;
+    };
+  }, [localWalletStatus]);
 
   /**
    * The contract card's fee sentence, read from the wallet's own advisory
@@ -2239,6 +2562,147 @@ export default function PassportDemo() {
   );
 
   /**
+   * Asks the sponsor to put this Passport's opening balance INSIDE its account
+   * contract — the activation grant, deposited where the account can spend it.
+   *
+   * This replaces the old wallet drip as the shape of activation. `/activate`
+   * dripped NIGHT to the wallet ADDRESS, which under the account ruling is
+   * money the Passport cannot see: the contract's `night_balances` mirror is
+   * what a withdrawal is checked against, and NIGHT that reaches the wallet by
+   * any other route is invisible to it. `/fund-account` proves a `deposit_night`
+   * (and, where the sponsor holds one, a shielded stablecoin deposit) against
+   * the contract itself.
+   *
+   * NEVER BLOCKING, and never fatal. The name is registered and the contract is
+   * deployed by the time this runs; a sponsor that is out of funds, rate
+   * limited, or simply absent leaves a Passport with a name and an empty
+   * account, which is a state the surfaces already describe honestly. So it is
+   * fired and forgotten, and it swallows nothing — every outcome is recorded in
+   * the activity feed in the sponsor's own words.
+   *
+   * ONCE PER CONTRACT. `already-activated` and `already-funded` are the
+   * sponsor's way of saying the grant exists, so they are recorded as done
+   * rather than as failures, and the marker stops this browser asking again.
+   */
+  const fundAccountOnce = useCallback(
+    async (contractAddress: string): Promise<void> => {
+      if (!FUNDER_URL) return;
+      if (accountFundingAttempted(contractAddress)) return;
+      let response: Response;
+      let body: {
+        txHash?: unknown;
+        amountAtomic?: unknown;
+        assetTx?: unknown;
+        assetAmount?: unknown;
+        assetColourHex?: unknown;
+        assetSymbol?: unknown;
+        assetError?: unknown;
+        error?: unknown;
+        message?: unknown;
+      };
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), FUND_ACCOUNT_TIMEOUT_MS);
+        try {
+          response = await fetch(`${FUNDER_URL}/fund-account`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ contractAddress }),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+        body = (await response.json().catch(() => ({}))) as typeof body;
+      } catch (cause) {
+        addActivity({
+          label: 'Opening balance not requested',
+          detail: `The sponsor could not be reached, so no opening balance was deposited into ${compactAddress(
+            contractAddress,
+          )}: ${cause instanceof Error ? cause.message : String(cause)}`,
+          status: 'blocked',
+          source: 'chain',
+        });
+        return;
+      }
+
+      const code = typeof body.error === 'string' ? body.error : null;
+      if (!response.ok) {
+        /* The grant already exists. That is the outcome this call wanted, so it
+           is recorded as reached — and the marker is written, because asking
+           again would only earn the same refusal. */
+        if (code === 'already-activated' || code === 'already-funded') {
+          rememberAccountFunding(contractAddress);
+          void refreshAccountBalances();
+          return;
+        }
+        addActivity({
+          label: 'Opening balance not deposited',
+          detail:
+            typeof body.message === 'string'
+              ? body.message
+              : `The sponsor refused with status ${response.status}.`,
+          status: 'blocked',
+          source: 'chain',
+        });
+        return;
+      }
+
+      rememberAccountFunding(contractAddress);
+      /* The sponsor names the colour it just deposited, so a `/status` probe
+         that had not answered — or answered before the sponsor had an asset —
+         is corrected here. Only ever fills a gap: a colour already known came
+         from the same service and must not be overwritten mid-session. */
+      const fundedColour = normalisedColourHex(
+        typeof body.assetColourHex === 'string' ? body.assetColourHex : null,
+      );
+      if (fundedColour) {
+        setStablecoin(
+          (current) =>
+            current ?? {
+              symbol:
+                typeof body.assetSymbol === 'string' && body.assetSymbol.trim()
+                  ? body.assetSymbol.trim()
+                  : 'mUSD',
+              colourHex: fundedColour,
+            },
+        );
+      }
+      const txHash = typeof body.txHash === 'string' ? body.txHash : undefined;
+      /* The two legs are independent, and the sponsor says so: a 200 can carry
+         a landed NIGHT deposit and an `assetError` where the stablecoin half
+         failed. Each is reported as what it was — never one sentence covering
+         both on the strength of the status code. */
+      const assetTx = typeof body.assetTx === 'string' && body.assetTx ? body.assetTx : null;
+      const assetError = typeof body.assetError === 'string' ? body.assetError : null;
+      addActivity({
+        label: 'Opening balance deposited',
+        detail: `The sponsor deposited ${
+          typeof body.amountAtomic === 'string' ? body.amountAtomic : 'an opening'
+        } atomic NIGHT into your account contract ${compactAddress(contractAddress)}.${
+          assetError ? ` The stablecoin half did not land: ${assetError}` : ''
+        }`,
+        status: 'complete',
+        source: 'chain',
+        ...(txHash ? { txHash } : {}),
+      });
+      if (assetTx) {
+        addActivity({
+          label: 'Stablecoin deposited',
+          detail: `${
+            typeof body.assetAmount === 'string' ? body.assetAmount : 'The sponsor’s stablecoin'
+          } went into your account contract ${compactAddress(contractAddress)} alongside the NIGHT.`,
+          status: 'complete',
+          source: 'chain',
+          txHash: assetTx,
+        });
+      }
+      void refreshAccountBalances();
+    },
+    [addActivity, refreshAccountBalances],
+  );
+
+  /**
    * ONE user action, from the passkey prompt to the registered name.
    *
    * Hector, 2026/08/19: "which account is basically being related? … this needs
@@ -2489,7 +2953,17 @@ export default function PassportDemo() {
           );
         }
 
-        /* (5) Attach the account to the passkey, so a device that has never
+        /* (5) The opening balance, into the ACCOUNT rather than into the
+           wallet. Fired here because this is the moment the Passport is whole
+           — a deployed contract with a name pointing at it — and deliberately
+           NOT awaited: the sponsor proves two deposits before it answers, and
+           the name's success does not depend on a grant landing. It is fired
+           on the self-paid path too, because the grant is about the account and
+           not about who paid for the name; `fundAccountOnce` is a no-op with no
+           sponsor configured, and once-per-contract either way. */
+        void fundAccountOnce(contractAddress);
+
+        /* (6) Attach the account to the passkey, so a device that has never
            seen this Passport can find the contract again. Deliberately NOT
            awaited: the name is registered and the contract is deployed, and a
            largeBlob write is a separate assertion the specification will not
@@ -2507,7 +2981,7 @@ export default function PassportDemo() {
         contractRootSecret.fill(0);
       }
     },
-    [addActivity, deployPassportContractOnce, rememberAccountOnPasskey],
+    [addActivity, deployPassportContractOnce, fundAccountOnce, rememberAccountOnPasskey],
   );
 
   /**
@@ -3056,6 +3530,10 @@ export default function PassportDemo() {
     setLocalWalletStatus('idle');
     setLocalWalletNetworkId(null);
     setLocalWalletProvingMode(null);
+    /* The account's figures belong to the Passport that just left. Nothing may
+       carry them into the next sign-in, which may be a different passkey. */
+    setAccountBalances(NO_ACCOUNT_BALANCES);
+    setAccountPhase(null);
     passportKeyProviders.current.clear();
     setProfile(null);
     setActivity([]);
@@ -3082,26 +3560,6 @@ export default function PassportDemo() {
     setTransactions([]);
     setTransactionsStatus('loading');
   };
-  const addressChoices: AddressChoice[] = [
-    {
-      kind: 'unshielded',
-      label: 'Midnight address',
-      address: activeSurfaces?.unshieldedAddress ?? null,
-      detail: 'Public, unshielded NIGHT and incoming transfers',
-    },
-    {
-      kind: 'shielded',
-      label: 'Shielded address',
-      address: activeSurfaces?.shieldedAddress ?? null,
-      detail: 'Private assets and shielded transfers',
-    },
-    {
-      kind: 'dust',
-      label: 'DUST address',
-      address: activeSurfaces?.dustAddress ?? null,
-      detail: 'DUST fee-generation surface',
-    },
-  ];
 
   /* ---------------------------------------------------------------------- */
   /* Mobile experience                                                      */
@@ -3184,10 +3642,17 @@ export default function PassportDemo() {
     });
   };
 
-  const copyAddressOfKind = (kind: AddressKind) => {
-    const choice = addressChoices.find((candidate) => candidate.kind === kind);
-    if (!choice?.address) return;
-    void copyText(choice.address).then(
+  /**
+   * Copies the one address Home still shows: the payment address the resolver
+   * leaf carries, which is this Passport's unshielded wallet address. The
+   * shielded and DUST rows left the Receive sheet with the ruling that a user's
+   * identity is their `.night` name — they survive only where a dApp genuinely
+   * asks for them, behind consent.
+   */
+  const copyReceivingAddress = () => {
+    const address = activeSurfaces?.unshieldedAddress;
+    if (!address) return;
+    void copyText(address).then(
       () => pushToast({ tone: 'success', title: 'Address copied' }),
       (cause: unknown) => {
         setError(cause instanceof Error ? cause.message : String(cause));
@@ -3216,12 +3681,15 @@ export default function PassportDemo() {
   };
 
   /* ---------------------------------------------------------------------- */
-  /* The app-to-wallet seam — a framed dApp asking Passport to pay          */
+  /* The app-to-account seam — a framed dApp asking Passport to pay          */
   /*                                                                        */
-  /* An app never touches the wallet. It posts a transaction request, the    */
-  /* in-app browser shows the approval sheet, and only on approval does the  */
-  /* callback below run — the same `sendUnshieldedNight` the wallet uses for */
-  /* everything else, with the same pre-checks and the same real txid.       */
+  /* An app never touches the wallet, and since 2026/08/24 neither does the  */
+  /* payment: it posts a transaction request, the in-app browser shows the   */
+  /* approval sheet, and only on approval does the callback below run a      */
+  /* `withdraw_night` against this Passport's account-custody contract. The  */
+  /* wallet signs the transaction and its fee is sponsored; the value moves  */
+  /* out of the ACCOUNT. The response protocol is unchanged — a txId only    */
+  /* ever accompanies a transaction the node really took.                    */
   /* ---------------------------------------------------------------------- */
 
   /**
@@ -3234,6 +3702,13 @@ export default function PassportDemo() {
    * action: a flow that makes several chain transactions from one approval
    * calls this once. A session restored without its profile has no credential
    * to assert against, and fails closed rather than skipping the ceremony.
+   *
+   * This remains the ceremony for the ONE flow that needs no secret of its own
+   * — the permissionless deposit that sweeps legacy wallet funds into the
+   * account. Every gated account call uses {@link withAccountDeviceSecret}
+   * instead, because the assertion that yields the device secret IS a
+   * user-verified assertion and a `confirmPresence` on top of it would
+   * double-prompt for one user action.
    */
   const confirmLocalApproval = useCallback(
     async (reason: string): Promise<void> => {
@@ -3250,13 +3725,111 @@ export default function PassportDemo() {
   );
 
   /**
+   * ONE user-verified assertion, turned into the account contract's device
+   * secret, held for exactly one call, and zeroed.
+   *
+   * THE CEREMONY AND THE SECRET ARE THE SAME EVENT. `assertOnce` runs one
+   * assertion with `userVerification: 'required'`, so the platform's own
+   * verification sheet is what the user answers — the same sheet
+   * `confirmPresence` raises, and the same approval. Deriving through
+   * {@link PASSPORT_CONTRACT_SCOPE} then costs no further prompt, exactly as
+   * `claimAliasBoundToAccount` and `deployPassportContractOnChain` already do
+   * it, and yields byte-identical material to either of them: same PRF salt,
+   * same HKDF constants, so the device secret this produces is the one the
+   * contract was DEPLOYED with and nothing else will pass `require_device`.
+   *
+   * The derivation is not ours to vary: `deriveAccountDeviceSecret` is
+   * `derivePassportContractSecrets`'s own device half, re-exposed by
+   * `identity/accountCustody.ts` so no caller re-derives from memory.
+   *
+   * Nothing outlives the call. The PRF handle is disposed the moment the root
+   * secret exists, the root is zeroed the moment the device secret exists, and
+   * the device secret is zeroed however `run` settles.
+   */
+  const withAccountDeviceSecret = useCallback(
+    async <T,>(run: (deviceSecret: Uint8Array) => Promise<T>): Promise<T> => {
+      const passkey = profile?.passkey;
+      if (!passkey?.credentialId) {
+        throw new PasskeyPresenceError(
+          'presence-unavailable',
+          'Passport cannot find the passkey this session signed in with, so nothing was signed or sent. Sign in again, then retry.',
+        );
+      }
+      let oneShot: DiscoveredPassportPasskey;
+      try {
+        oneShot = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.assertOnce(passkey));
+      } catch (cause) {
+        // Nothing has been built, proved, or submitted at this point.
+        throw passkeyCeremonyFailure(cause);
+      }
+      let rootSecret: Uint8Array;
+      try {
+        const { deriveWalletSeed } = await import('./lib/localWallet.js');
+        rootSecret = await deriveWalletSeed(oneShot, PASSPORT_CONTRACT_SCOPE);
+      } finally {
+        oneShot.dispose();
+      }
+      let deviceSecret: Uint8Array;
+      try {
+        const { deriveAccountDeviceSecret } = await import('./identity/accountCustody.js');
+        deviceSecret = await deriveAccountDeviceSecret(rootSecret);
+      } finally {
+        rootSecret.fill(0);
+      }
+      try {
+        return await run(deviceSecret);
+      } finally {
+        deviceSecret.fill(0);
+      }
+    },
+    [profile],
+  );
+
+  /**
+   * The account this Passport spends from, or the refusal a caller should
+   * surface instead of a send.
+   *
+   * `wallet-closed` and a missing contract are different failures and get
+   * different sentences: one is a session that went away mid-flow, the other is
+   * a Passport whose account was never deployed — which is a state onboarding
+   * is supposed to have left behind, and which no amount of retrying will fix.
+   */
+  const requireAccount = useCallback((): { handle: LocalMidnightWallet; address: string } => {
+    const handle = localWalletRef.current;
+    if (!handle) {
+      /* Structurally a `SendNightError` — `{ code, message }` — without a value
+         import of `lib/localWallet.ts`, which statically pulls in the whole
+         wallet SDK. */
+      throw Object.assign(
+        new Error('The Passport wallet session closed before this could be signed.'),
+        { code: 'wallet-closed' as const },
+      );
+    }
+    const account = accountContractOf();
+    if (!account) {
+      throw Object.assign(
+        new Error(
+          'This Passport has no account contract on this network yet, so there is nothing to pay from. Claim your name to have one deployed.',
+        ),
+        { code: 'contract-not-found' as const },
+      );
+    }
+    return account;
+  }, [accountContractOf]);
+
+  /**
    * Signs and submits a real unshielded NIGHT transfer for a framed app.
    *
    * Handed to the in-app browser ONLY while a local wallet is genuinely open —
    * an undefined callback is what makes the browser answer `wallet-unavailable`
-   * instead of showing a sheet it could not honour. Every refusal from the
-   * wallet is rethrown untouched so the browser can map it onto the bridge's
-   * vocabulary; nothing is swallowed and nothing is invented.
+   * instead of showing a sheet it could not honour.
+   *
+   * The circuit is `withdraw_night`, from this Passport's account contract to
+   * the address the app asked for, in the native NIGHT colour. The consent is
+   * unchanged — the sheet the browser already showed, and the one platform
+   * verification that {@link withAccountDeviceSecret} raises. Refusals are
+   * rethrown carrying a code `lib/txApproval.ts` maps, so the bridge's own
+   * vocabulary is unchanged too; nothing is swallowed and nothing is invented.
    */
   const executeAppTransfer = useCallback(
     async (intent: {
@@ -3265,78 +3838,109 @@ export default function PassportDemo() {
       purpose: string;
       origin: string;
     }): Promise<{ txId: string }> => {
-      const handle = localWalletRef.current;
-      if (!handle) {
-        throw Object.assign(
-          new Error('The Passport wallet session closed before this could be signed.'),
-          { code: 'wallet-closed' },
-        );
-      }
-      // The approval sheet's Approve tap lands here; the ceremony IS the
-      // popup. No verification, no submission — the browser maps a refusal
-      // onto the bridge's own vocabulary.
-      await confirmLocalApproval(intent.purpose);
-      const entry = addActivity({
-        label: intent.purpose,
-        detail: `Requested by ${intent.origin}.`,
-        status: 'pending',
-        source: 'wallet',
-      });
+      const account = requireAccount();
       try {
-        const result = await handle.sendUnshieldedNight({
-          recipientAddress: intent.recipientAddress,
-          amount: intent.amount,
+        const { nightColourHex, withdrawNight } = await import('./identity/accountCustody.js');
+        /* The approval sheet's Approve tap lands here; the ceremony IS the
+           platform's verification sheet, raised once, and it is what yields the
+           device secret the circuit is gated on. */
+        return await withAccountDeviceSecret(async (deviceSecret) => {
+          /* Raised only now the ceremony has answered: a cancelled approval
+             signed nothing, so it leaves no trace in the feed either. */
+          const entry = addActivity({
+            label: intent.purpose,
+            detail: `Requested by ${intent.origin}.`,
+            status: 'pending',
+            source: 'wallet',
+          });
+          try {
+            const result = await withdrawNight(
+              account.handle,
+              deviceSecret,
+              {
+                contractAddress: account.address,
+                colourHex: nightColourHex(),
+                amount: intent.amount,
+                recipientAddress: intent.recipientAddress,
+              },
+              (progress) => setAccountPhase(progress.phase),
+            );
+            updateActivity(entry.id, {
+              status: 'complete',
+              detail: `Paid from your account contract for ${intent.origin}.`,
+              source: 'chain',
+              txHash: result.txId,
+            });
+            pushToast({
+              tone: 'success',
+              title: 'Payment submitted',
+              body: intent.purpose,
+              link: explorerTxLink(result.txId, result.network),
+            });
+            // The account's balance has moved and the indexer needs a moment to
+            // see it; the session row already carries the transaction meanwhile.
+            void refreshLocalBalances();
+            window.setTimeout(() => void refreshTransactions(), 5_000);
+            return { txId: result.txId };
+          } catch (cause) {
+            updateActivity(entry.id, {
+              status: 'error',
+              detail: cause instanceof Error ? cause.message : String(cause),
+              source: 'local',
+            });
+            throw cause;
+          }
         });
-        updateActivity(entry.id, {
-          status: 'complete',
-          detail: `Submitted from this device for ${intent.origin}.`,
-          source: 'chain',
-          txHash: result.txId,
-        });
-        pushToast({
-          tone: 'success',
-          title: 'Payment submitted',
-          body: intent.purpose,
-          link: explorerTxLink(result.txId, localWalletNetworkId),
-        });
-        // The balance has moved and the indexer needs a moment to see the
-        // transaction; the session row already carries it in the meantime.
-        void refreshLocalBalances();
-        window.setTimeout(() => void refreshTransactions(), 5_000);
-        return { txId: result.txId };
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        updateActivity(entry.id, {
-          status: 'error',
-          detail: message,
-          source: 'local',
-        });
+        const code =
+          typeof cause === 'object' && cause !== null &&
+          typeof (cause as { code?: unknown }).code === 'string'
+            ? (cause as { code: string }).code
+            : null;
+        const mapped = appTransferCodeFor(code);
+        /* The contract's vocabulary translated into the app protocol's, and
+           only where they differ — the object is otherwise rethrown untouched
+           so its `detail` reaches the app unchanged. */
+        if (mapped !== null && mapped !== code && cause instanceof Error) {
+          throw Object.assign(cause, { code: mapped });
+        }
         throw cause;
+      } finally {
+        setAccountPhase(null);
       }
     },
-    [addActivity, confirmLocalApproval, localWalletNetworkId, refreshLocalBalances, refreshTransactions, updateActivity],
+    [
+      addActivity,
+      refreshLocalBalances,
+      refreshTransactions,
+      requireAccount,
+      updateActivity,
+      withAccountDeviceSecret,
+    ],
   );
 
   /**
-   * What an app is told about the wallet it is asking to spend from: the
-   * network a recipient must belong to, and the balance the sheet quotes.
+   * What an app is told about the account it is asking to spend from: the
+   * network a recipient must belong to, and the balance the sheet quotes —
+   * the ACCOUNT's NIGHT, because that is what the payment will come out of.
    * `null` whenever no local wallet is open.
    */
   const appTransferContext =
     localSessionActive && localWalletNetworkId
       ? {
           networkId: localWalletNetworkId,
-          formattedBalance: activeSurfaces?.unshieldedBalance ?? null,
+          formattedBalance:
+            accountBalances.night === null ? null : formatNightUnits(accountBalances.night),
         }
       : null;
 
   /* ---------------------------------------------------------------------- */
-  /* The user's own Send — the same wallet call, initiated by the owner      */
+  /* The user's own Send — the same account call, initiated by the owner     */
   /*                                                                        */
   /* `executeAppTransfer` above is a framed app asking Passport to pay. This  */
   /* is the user asking Passport to pay, from the Send sheet on Home. The     */
-  /* wallet call, the activity row, the explorer link, and the two refreshes  */
-  /* are deliberately the same — one transfer path, one set of side effects.  */
+  /* circuit, the activity row, the explorer link, and the two refreshes are  */
+  /* deliberately the same — one transfer path, one set of side effects.      */
   /* ---------------------------------------------------------------------- */
 
   /**
@@ -3352,69 +3956,78 @@ export default function PassportDemo() {
   }, []);
 
   /**
-   * Signs and submits the user's own unshielded NIGHT transfer.
+   * The user's own NIGHT transfer, as a withdrawal from their account.
    *
-   * Every refusal is rethrown untouched: the Send sheet maps `SendNightError.code`
-   * onto its own copy and keeps the wallet's message, so nothing is swallowed
-   * and no code is invented on the way through.
+   * The circuit is `withdraw_night` and the recipient is whatever `mn_addr…`
+   * was pasted or scanned. Every refusal is rethrown untouched: an
+   * `AccountCustodyError` already carries `{ code, message, detail }`, which is
+   * exactly the shape the Send sheet renders, so nothing is swallowed and no
+   * sentence is rewritten on the way through.
    */
   const executeOwnSend = useCallback(
-    async (params: { recipientAddress: string; amount: bigint }): Promise<SendNightResult> => {
-      const handle = localWalletRef.current;
-      if (!handle) {
-        /* Structurally a `SendNightError` — `{ code, message }` — without a
-           value import of `lib/localWallet.ts`, which statically pulls in the
-           whole wallet SDK. Same reason `executeAppTransfer` does it this way. */
-        throw Object.assign(
-          new Error('The Passport wallet session closed before this could be signed.'),
-          { code: 'wallet-closed' as const },
-        );
-      }
-      // The Send sheet's confirm lands here; the ceremony IS the popup. A
-      // refusal is rethrown for the sheet's own failure line — nothing was
-      // signed, so no activity row is written for it either.
-      await confirmLocalApproval('Send NIGHT');
-      const entry = addActivity({
-        label: 'Sent NIGHT',
-        detail: `To ${params.recipientAddress}.`,
-        status: 'pending',
-        source: 'wallet',
-      });
+    async (params: { recipientAddress: string; amount: bigint }): Promise<void> => {
+      const account = requireAccount();
       try {
-        const result = await handle.sendUnshieldedNight(params);
-        updateActivity(entry.id, {
-          status: 'complete',
-          detail: `Submitted from this device to ${params.recipientAddress}.`,
-          source: 'chain',
-          txHash: result.txId,
+        const { nightColourHex, withdrawNight } = await import('./identity/accountCustody.js');
+        /* The Send sheet's confirm lands here; the ceremony IS the platform's
+           verification sheet, and it is what yields the device secret
+           `withdraw_night` is gated on. */
+        await withAccountDeviceSecret(async (deviceSecret) => {
+          /* Raised only now the ceremony has answered: a cancelled approval
+             signed nothing, so it writes no activity row either. */
+          const entry = addActivity({
+            label: 'Sent NIGHT',
+            detail: `To ${params.recipientAddress}.`,
+            status: 'pending',
+            source: 'wallet',
+          });
+          try {
+            const result = await withdrawNight(
+              account.handle,
+              deviceSecret,
+              {
+                contractAddress: account.address,
+                colourHex: nightColourHex(),
+                amount: params.amount,
+                recipientAddress: params.recipientAddress,
+              },
+              (progress) => setAccountPhase(progress.phase),
+            );
+            updateActivity(entry.id, {
+              status: 'complete',
+              detail: `Withdrawn from your account contract to ${params.recipientAddress}.`,
+              source: 'chain',
+              txHash: result.txId,
+            });
+            pushToast({
+              tone: 'success',
+              /* The node has accepted the transaction, not yet included it — the
+                 title claims exactly that much and no more. */
+              title: 'NIGHT accepted by the network — confirming',
+              /* A covered fee is claimed on the strength of what the sponsor
+                 really did, which is what `feePaidBy` records — a sponsored
+                 attempt that fell back reports `own-dust` and says so. */
+              body:
+                result.feePaidBy === 'sponsored'
+                  ? 'The fee sponsor covered the network fee.'
+                  : 'The network fee was paid by this Passport.',
+              link: explorerTxLink(result.txId, result.network),
+            });
+            // The account's balance has moved and the indexer needs a moment to
+            // see it; the session row already carries the transaction meanwhile.
+            void refreshLocalBalances();
+            window.setTimeout(() => void refreshTransactions(), 5_000);
+          } catch (cause) {
+            updateActivity(entry.id, {
+              status: 'error',
+              detail: cause instanceof Error ? cause.message : String(cause),
+              source: 'local',
+            });
+            throw cause;
+          }
         });
-        pushToast({
-          tone: 'success',
-          /* The node has accepted the transaction, not yet included it — the
-             title claims exactly that much and no more. */
-          title: 'NIGHT accepted by the network — confirming',
-          /* A covered fee is claimed on the strength of the flag's own
-             contract and nothing else — a sponsored attempt that fell back to
-             the user's own DUST reports `false` and is described as such. */
-          body: result.sponsored
-            ? 'The fee sponsor covered the network fee.'
-            : 'The network fee was paid from your DUST.',
-          link: explorerTxLink(result.txId, localWalletNetworkId),
-        });
-        // The balance has moved and the indexer needs a moment to see the
-        // transaction; the session row already carries it in the meantime.
-        // The live balance stream will also catch this, but an own send is
-        // the one case where waiting for a throttle window is needless.
-        void refreshLocalBalances();
-        window.setTimeout(() => void refreshTransactions(), 5_000);
-        return result;
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        updateActivity(entry.id, {
-          status: 'error',
-          detail: message,
-          source: 'local',
-        });
         const code =
           typeof cause === 'object' && cause !== null &&
           typeof (cause as { code?: unknown }).code === 'string'
@@ -3425,80 +4038,116 @@ export default function PassportDemo() {
           pushToast({ tone: 'error', title: 'Nothing was sent', body: message });
         }
         throw cause;
+      } finally {
+        setAccountPhase(null);
       }
     },
-    [addActivity, confirmLocalApproval, localWalletNetworkId, refreshLocalBalances, refreshTransactions, updateActivity],
+    [
+      addActivity,
+      refreshLocalBalances,
+      refreshTransactions,
+      requireAccount,
+      updateActivity,
+      withAccountDeviceSecret,
+    ],
   );
 
   /**
-   * The shielded colours this Passport holds, straight from the wallet.
+   * The shielded colours the ACCOUNT holds, from its own `coins` map.
    *
-   * Thrown, not smoothed, when the wallet cannot be asked: "we could not read
+   * Not the wallet's: the wallet may hold shielded notes of its own and none of
+   * them is spendable by a `withdraw_shielded`, which moves what the CONTRACT
+   * holds. Reading them here would offer the user a colour the circuit would
+   * then refuse.
+   *
+   * Thrown, not smoothed, when the account cannot be read: "we could not read
    * your shielded balances" and "you hold none" are different sentences, and
    * the Send sheet shows whichever is true.
    */
-  const readLocalShieldedHoldings = useCallback(async (): Promise<ShieldedHolding[]> => {
-    const handle = localWalletRef.current;
-    if (!handle) throw new Error('The Passport wallet session is not open.');
-    return handle.shieldedHoldings();
-  }, []);
+  const readAccountShieldedHoldings = useCallback(async (): Promise<
+    { tokenType: string; amount: bigint }[]
+  > => {
+    const account = accountContractOf();
+    if (!account) {
+      throw new Error('This Passport has no account contract on this network yet.');
+    }
+    const { readAccountState } = await import('./identity/accountCustody.js');
+    const state = await readAccountState(account.handle.network, account.address);
+    return [...state.shieldedCoins]
+      .filter(([, amount]) => amount > 0n)
+      .map(([tokenType, amount]) => ({ tokenType, amount }));
+  }, [accountContractOf]);
 
   /**
-   * Signs and submits the user's own shielded transfer — the Otrix totem case:
-   * a QR carrying a `mn_shield-addr…` deposit address, paid from this
-   * Passport's shielded account.
+   * The user's own shielded transfer — the Otrix totem case: a QR carrying a
+   * `mn_shield-addr…` deposit address, paid out of this Passport's account.
    *
-   * Deliberately the same shape as {@link executeOwnSend}: one approval
-   * ceremony, one activity row, the wallet's refusals rethrown untouched, and
-   * a covered fee claimed only on the strength of the result's own flag.
+   * The circuit is `withdraw_shielded`, and it takes the WHOLE recipient
+   * address rather than the coin key inside it: midnight-js builds the note's
+   * ciphertext client-side and needs the recipient's encryption key, which only
+   * the full bech32m address carries. See `WithdrawShieldedRequest`.
+   *
+   * Deliberately the same shape as {@link executeOwnSend}: one ceremony, one
+   * activity row, refusals rethrown untouched, and a covered fee claimed only
+   * on the strength of what the sponsor really did.
    */
   const executeOwnShieldedSend = useCallback(
     async (params: {
       recipientAddress: string;
       tokenType: string;
       amount: bigint;
-    }): Promise<SendShieldedResult> => {
-      const handle = localWalletRef.current;
-      if (!handle) {
-        throw Object.assign(
-          new Error('The Passport wallet session closed before this could be signed.'),
-          { code: 'wallet-closed' as const },
-        );
-      }
-      await confirmLocalApproval('Send a shielded token');
-      const entry = addActivity({
-        label: 'Sent a shielded token',
-        detail: `To ${params.recipientAddress}.`,
-        status: 'pending',
-        source: 'wallet',
-      });
+    }): Promise<void> => {
+      const account = requireAccount();
       try {
-        const result = await handle.sendShieldedToken(params);
-        updateActivity(entry.id, {
-          status: 'complete',
-          detail: `Submitted from this device to ${params.recipientAddress}.`,
-          source: 'chain',
-          txHash: result.txId,
+        const { withdrawShielded } = await import('./identity/accountCustody.js');
+        await withAccountDeviceSecret(async (deviceSecret) => {
+          const entry = addActivity({
+            label: 'Sent a shielded token',
+            detail: `To ${params.recipientAddress}.`,
+            status: 'pending',
+            source: 'wallet',
+          });
+          try {
+            const result = await withdrawShielded(
+              account.handle,
+              deviceSecret,
+              {
+                contractAddress: account.address,
+                colourHex: params.tokenType,
+                amount: params.amount,
+                recipientShieldedAddress: params.recipientAddress,
+              },
+              (progress) => setAccountPhase(progress.phase),
+            );
+            updateActivity(entry.id, {
+              status: 'complete',
+              detail: `Withdrawn from your account contract to ${params.recipientAddress}.`,
+              source: 'chain',
+              txHash: result.txId,
+            });
+            pushToast({
+              tone: 'success',
+              /* Accepted, not yet included — the same claim the NIGHT path makes. */
+              title: 'Shielded transfer accepted by the network — confirming',
+              body:
+                result.feePaidBy === 'sponsored'
+                  ? 'The fee sponsor covered the network fee.'
+                  : 'The network fee was paid by this Passport.',
+              link: explorerTxLink(result.txId, result.network),
+            });
+            void refreshLocalBalances();
+            window.setTimeout(() => void refreshTransactions(), 5_000);
+          } catch (cause) {
+            updateActivity(entry.id, {
+              status: 'error',
+              detail: cause instanceof Error ? cause.message : String(cause),
+              source: 'local',
+            });
+            throw cause;
+          }
         });
-        pushToast({
-          tone: 'success',
-          /* Accepted, not yet included — the same claim the NIGHT path makes. */
-          title: 'Shielded transfer accepted by the network — confirming',
-          body: result.sponsored
-            ? 'The fee sponsor covered the network fee.'
-            : 'The network fee was paid from your DUST.',
-          link: explorerTxLink(result.txId, localWalletNetworkId),
-        });
-        void refreshLocalBalances();
-        window.setTimeout(() => void refreshTransactions(), 5_000);
-        return result;
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        updateActivity(entry.id, {
-          status: 'error',
-          detail: message,
-          source: 'local',
-        });
         const code =
           typeof cause === 'object' && cause !== null &&
           typeof (cause as { code?: unknown }).code === 'string'
@@ -3508,29 +4157,169 @@ export default function PassportDemo() {
           pushToast({ tone: 'error', title: 'Nothing was sent', body: message });
         }
         throw cause;
+      } finally {
+        setAccountPhase(null);
       }
     },
-    [addActivity, confirmLocalApproval, localWalletNetworkId, refreshLocalBalances, refreshTransactions, updateActivity],
+    [
+      addActivity,
+      refreshLocalBalances,
+      refreshTransactions,
+      requireAccount,
+      updateActivity,
+      withAccountDeviceSecret,
+    ],
   );
 
   /**
+   * Sweeps NIGHT the passkey WALLET still holds into the account contract.
+   *
+   * The one flow that runs the other way, and the one that needs no device
+   * secret: `deposit_night` is permissionless, so anybody may fund an account,
+   * and what makes the money move is the balancing — `receiveUnshielded` leaves
+   * the transaction short and the wallet provider covers it from the wallet's
+   * own funds. The approval is therefore a plain presence confirmation.
+   *
+   * It exists because the contract's own header is explicit that NIGHT reaching
+   * it by any route other than `deposit_night` is invisible to it. A Passport
+   * from before the account ruling — or one a faucet dripped straight to its
+   * wallet address — holds funds that no `withdraw_night` can see, and this is
+   * the only way to make them spendable again.
+   */
+  const moveWalletFundsIntoAccount = useCallback(async (): Promise<void> => {
+    if (depositBusy) return;
+    const account = accountContractOf();
+    if (!account) return;
+    const held = atomicNightFromFormatted(localSurfaces?.unshieldedBalance ?? null);
+    if (held === null || held <= 0n) return;
+    setDepositBusy(true);
+    setError(null);
+    let entryId: string | null = null;
+    try {
+      await confirmLocalApproval('Move your funds into your account');
+      entryId = addActivity({
+        label: 'Moving funds into your account',
+        detail: `${formatNightUnits(held)} NIGHT from this device's wallet into ${compactAddress(
+          account.address,
+        )}.`,
+        status: 'pending',
+        source: 'wallet',
+      }).id;
+      const { depositNight, nightColourHex } = await import('./identity/accountCustody.js');
+      const result = await depositNight(
+        account.handle,
+        { contractAddress: account.address, colourHex: nightColourHex(), amount: held },
+        (progress) => setAccountPhase(progress.phase),
+      );
+      updateActivity(entryId, {
+        status: 'complete',
+        detail: `${formatNightUnits(held)} NIGHT now sits in your account contract.`,
+        source: 'chain',
+        txHash: result.txId,
+      });
+      pushToast({
+        tone: 'success',
+        title: 'Funds moved into your account',
+        body: `${formatNightUnits(held)} NIGHT is now spendable from your Passport.`,
+        link: explorerTxLink(result.txId, result.network),
+      });
+      void refreshLocalBalances();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      const detail = (cause as { detail?: string })?.detail;
+      const reason = detail ? `${message} (${detail})` : message;
+      if (entryId) {
+        updateActivity(entryId, { status: 'error', detail: reason, source: 'local' });
+      }
+      setError(reason);
+    } finally {
+      setAccountPhase(null);
+      setDepositBusy(false);
+    }
+  }, [
+    accountContractOf,
+    addActivity,
+    confirmLocalApproval,
+    depositBusy,
+    localSurfaces?.unshieldedBalance,
+    refreshLocalBalances,
+    updateActivity,
+  ]);
+
+  /**
    * The Send seam handed to Home — `null` unless a local wallet session is
-   * genuinely open AND has an unshielded address to send from. Home renders no
-   * Send control at all in that case, rather than a disabled one implying the
-   * wallet nearly could.
+   * genuinely open AND this Passport has a deployed account contract to spend
+   * from. Home renders no Send control at all in that case, rather than a
+   * disabled one implying the account nearly could.
    */
   const homeSend =
-    localSessionActive &&
-    localWalletNetworkId &&
-    localWalletProvingMode &&
-    localSurfaces?.unshieldedAddress
+    localSessionActive && localWalletNetworkId && localWalletProvingMode && accountContractAddress
       ? {
           networkId: localWalletNetworkId,
           provingMode: localWalletProvingMode,
           readFeeReadiness: readLocalFeeReadiness,
           onSend: executeOwnSend,
-          readShieldedHoldings: readLocalShieldedHoldings,
+          readShieldedHoldings: readAccountShieldedHoldings,
           onSendShielded: executeOwnShieldedSend,
+          phase: accountPhase,
+        }
+      : null;
+
+  /**
+   * What Home shows as this Passport's money: the account contract's own
+   * ledger, split into the stablecoin the sponsor named and everything else.
+   *
+   * `null` when there is no deployed contract — the asset row is then absent
+   * rather than showing zeros against an account that does not exist. The
+   * contract card directly below already says why.
+   */
+  const homeAccount = accountContractAddress
+    ? {
+        nightBalance:
+          accountBalances.night === null ? null : formatNightUnits(accountBalances.night),
+        stablecoin: stablecoin
+          ? {
+              symbol: stablecoin.symbol,
+              /* A colour the account does not hold is a real zero — the sponsor
+                 named the colour, so the row belongs on screen either way. */
+              amount:
+                accountBalances.shielded.find((held) => held.colourHex === stablecoin.colourHex)
+                  ?.amount ?? 0n,
+            }
+          : null,
+        otherShielded: accountBalances.shielded.filter(
+          (held) => held.colourHex !== stablecoin?.colourHex,
+        ),
+        status: accountBalances.status,
+        error: accountBalances.error,
+      }
+    : null;
+
+  /**
+   * Funds still sitting in the passkey wallet rather than in the account.
+   *
+   * Offered only where there is really something to move AND somewhere to move
+   * it to. It is not a state a Passport created today can reach — onboarding
+   * funds the account directly — so this is the older-account path, and it says
+   * so in the screen's own words rather than implying the user did something
+   * wrong.
+   */
+  /**
+   * The dApp payment seam, handed over only when there is genuinely an account
+   * to pay from. Withheld, an app is answered `wallet-unavailable` before a
+   * sheet is ever shown — the same rule the Send control keeps, and better than
+   * an approval that could only end in a refusal.
+   */
+  const appTransferSeam =
+    localSessionActive && accountContractAddress ? executeAppTransfer : undefined;
+
+  const walletHeldNight = atomicNightFromFormatted(localSurfaces?.unshieldedBalance ?? null);
+  const homeLegacyFunds =
+    accountContractAddress && walletHeldNight !== null && walletHeldNight > 0n
+      ? {
+          balance: formatNightUnits(walletHeldNight),
+          busy: depositBusy,
+          onMove: () => void moveWalletFundsIntoAccount(),
         }
       : null;
 
@@ -3777,17 +4566,6 @@ export default function PassportDemo() {
   /* ---------------------------------------------------------------------- */
 
   /**
-   * The stored record for THIS credential on the network the card is showing.
-   * Read per credential as well as per network: a second passkey in the same
-   * browser must never be shown the first one's contract.
-   */
-  const activeContractRecord =
-    profile && localWalletNetworkId
-      ? contractRecords[
-          passportContractRecordKey(profile.passkey.credentialId, localWalletNetworkId)
-        ] ?? null
-      : null;
-  /**
    * What the two consent sheets may offer as "your Passport contract".
    *
    * One writer, one record: the contract the passkey wallet deploys from the
@@ -3972,7 +4750,7 @@ export default function PassportDemo() {
           app and a framed one are answered by the same rules. */}
       <PassportTxConsent
         sessionActive={sessionActive}
-        executeTransfer={localSessionActive ? executeAppTransfer : undefined}
+        executeTransfer={appTransferSeam}
         transferContext={appTransferContext}
       />
     </>
@@ -4057,26 +4835,23 @@ export default function PassportDemo() {
               network={selectedNetwork}
               onSelectNetwork={handleSelectNetwork}
               syncPercent={localSyncPercent}
-              unshieldedBalance={activeSurfaces?.unshieldedBalance ?? null}
-              shieldedTokenCount={activeSurfaces?.shieldedTokenCount ?? null}
-              dustBalance={activeSurfaces?.dustBalance ?? null}
-              dustCap={activeSurfaces?.dustCap ?? null}
-              dustFillPercent={dustFillPercentFrom(activeSurfaces?.dustBalance ?? null, activeSurfaces?.dustCap ?? null)}
-              dustSyncing={activeSurfaces?.dustSyncing ?? false}
-              balanceStatus={activeSurfaces?.balanceStatus ?? 'loading'}
+              /* The account's ledger, not the wallet's — see `homeAccount`.
+                 The wallet's own balances, its DUST charge, and its shielded
+                 and DUST addresses are no longer on this screen at all. */
+              account={homeAccount}
+              legacyFunds={homeLegacyFunds}
               unshieldedAddress={activeSurfaces?.unshieldedAddress ?? null}
-              shieldedAddress={activeSurfaces?.shieldedAddress ?? null}
-              dustAddress={activeSurfaces?.dustAddress ?? null}
               error={error}
               onDismissError={() => setError(null)}
               onRefresh={refreshMobile}
-              onCopyAddress={copyAddressOfKind}
-              /* The Send seam. `null` when no local wallet session is open,
-                 which is what makes Home render no Send control at all. */
+              onCopyAddress={copyReceivingAddress}
+              /* The Send seam. `null` when no wallet session is open or this
+                 Passport has no account contract, which is what makes Home
+                 render no Send control at all. */
               send={homeSend}
               appsProfile={appsProfile}
               onProfileShared={handleProfileShared}
-              executeTransfer={localSessionActive ? executeAppTransfer : undefined}
+              executeTransfer={appTransferSeam}
                     transferContext={appTransferContext}
               onIncentiveRedeemed={handleIncentiveRedeemed}
               supportUrl={(import.meta.env.VITE_TELEGRAM_URL as string | undefined) ?? null}
@@ -4092,7 +4867,7 @@ export default function PassportDemo() {
               onProfileShared={handleProfileShared}
               network={selectedNetwork}
               onSelectNetwork={handleSelectNetwork}
-              executeTransfer={localSessionActive ? executeAppTransfer : undefined}
+              executeTransfer={appTransferSeam}
                     transferContext={appTransferContext}
               onIncentiveRedeemed={handleIncentiveRedeemed}
             />

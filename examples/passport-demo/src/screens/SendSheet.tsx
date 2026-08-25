@@ -19,30 +19,30 @@ import {
   UnshieldedAddress,
 } from '@midnight-ntwrk/wallet-sdk/address-format'
 
-/* The names this screen shares with the wallet (Contract W). Type-only, so
-   nothing of `lib/localWallet.ts` — and none of the wallet SDK it statically
-   imports — is pulled into this chunk. */
-import type {
-  FeeReadiness,
-  LocalWalletProvingMode,
-  SendNightResult,
-  SendShieldedResult,
-  ShieldedHolding,
-} from '../lib/localWallet.js'
+/* The two names this screen shares with the wallet (Contract W) — both about
+   the FEE, which is still the wallet's to pay. Type-only, so nothing of
+   `lib/localWallet.ts` — and none of the wallet SDK it statically imports — is
+   pulled into this chunk. */
+import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js'
 
 import './home.css'
 
 /**
- * The Send sheet — a real transfer from the on-device wallet.
+ * The Send sheet — a real withdrawal from this Passport's account.
+ *
+ * Since 2026/08/24 the money on this surface is the account-custody contract's,
+ * not the passkey wallet's: confirming here runs `withdraw_night` or
+ * `withdraw_shielded` against the contract, with the wallet signing and the
+ * sponsor paying. Nothing about that changes what the sheet owes the user.
  *
  * Everything on this surface describes something that will actually happen. The
  * recipient is validated with the wallet SDK's own codec, so its refusals are
- * the wallet's own taxonomy rather than a regular expression's guess; the
- * amount is converted to atomic units by string arithmetic, never through a
- * float; the fee sentence is whatever the wallet's sponsor probe reported —
- * quoted as the prediction it is, and re-read immediately before submitting so
- * a stale quote is never silently acted on; and the sheet only reports success
- * once the node has returned a transaction id.
+ * the SDK's own taxonomy rather than a regular expression's guess; the amount
+ * is converted to atomic units by string arithmetic, never through a float; the
+ * fee sentence is whatever the sponsor probe reported — quoted as the
+ * prediction it is, and re-read immediately before submitting so a stale quote
+ * is never silently acted on; and the sheet only reports success once the node
+ * has returned a transaction id.
  *
  * TWO KINDS OF RECIPIENT, DECIDED BY THE ADDRESS
  * ----------------------------------------------
@@ -50,15 +50,15 @@ import './home.css'
  * Midnight the two are not interchangeable:
  *
  *   `mn_addr…`         unshielded — NIGHT, quoted with six decimals.
- *   `mn_shield-addr…`  shielded — one of the shielded colours this wallet
+ *   `mn_shield-addr…`  shielded — one of the shielded colours this account
  *                      holds, quoted in whole units.
  *
  * NIGHT cannot be sent to a shielded address. `nativeToken()` is tagged
- * `unshielded`, the ledger keys its balance check by that tag, and no wallet
- * SDK primitive crosses the boundary — so the shielded mode offers the wallet's
+ * `unshielded`, the ledger keys its balance check by that tag, and the contract
+ * keeps the two in separate maps — so the shielded mode offers the ACCOUNT's
  * own shielded colours and says plainly when there are none. The two modes
  * therefore quote different balances, different units, and different refusals;
- * what they share is the fee sentence, because the fee is DUST either way.
+ * what they share is the fee sentence, because the fee is the same either way.
  *
  * The shielded mode exists only when the host supplies both
  * {@link SendSheetProps.readShieldedHoldings} and
@@ -66,24 +66,40 @@ import './home.css'
  * refused, which is the honest answer when nothing behind the sheet could act
  * on one.
  *
- * The host mounts this ONLY while a local wallet session is genuinely open. A
- * closed wallet has no Send button at all — a control that cannot work is
- * absent, not disabled and lying about why.
+ * The host mounts this ONLY while there is genuinely an account to withdraw
+ * from. Without one there is no Send button at all — a control that cannot work
+ * is absent, not disabled and lying about why.
  */
 
 const NIGHT_DECIMALS = 6
 
+/**
+ * One colour the account holds, and how much of it.
+ *
+ * `tokenType` is the raw ledger colour the contract's `coins` map is keyed by —
+ * not a name, a symbol, or a contract. A shielded colour is minted by a
+ * contract and carries no on-chain ticker and no on-chain decimal scale, so
+ * `amount` is in that colour's own atomic units and nothing here invents a way
+ * to make it prettier.
+ */
+export interface SendSheetHolding {
+  tokenType: string
+  amount: bigint
+}
+
 export interface SendSheetProps {
-  /** The open wallet's network id — the network a recipient must belong to. */
+  /** The network a recipient must belong to. */
   networkId: string
-  /** Formatted NIGHT available to send. `null` means genuinely not known yet. */
+  /**
+   * Formatted NIGHT the ACCOUNT holds and can therefore withdraw. `null` means
+   * genuinely not known yet.
+   */
   availableBalance: string | null
   /**
-   * Why the balance is `null`, when it is — the wallet's
-   * `LocalWalletBalanceStatus`. `'unavailable'` is a read that failed and
-   * disables sending; anything else while the balance is `null` reads as a
-   * read still in flight. Optional, so a host with no status to report gets
-   * the loading copy, never the failure one.
+   * Why the balance is `null`, when it is. `'unavailable'` is a read that
+   * failed and disables sending; anything else while the balance is `null`
+   * reads as a read still in flight. Optional, so a host with no status to
+   * report gets the loading copy, never the failure one.
    */
   balanceStatus?: string
   /**
@@ -99,31 +115,38 @@ export interface SendSheetProps {
    */
   readFeeReadiness: () => Promise<FeeReadiness>
   /**
-   * Signs and submits the transfer, resolving with the node's transaction id.
-   * Refusals arrive as Contract W's `SendNightError` — `{ code, message,
+   * Runs the withdrawal, resolving only once the node has taken it. Refusals
+   * arrive as the account module's `AccountCustodyError` — `{ code, message,
    * detail? }` — and are shown untouched.
    */
-  onSend: (params: { recipientAddress: string; amount: bigint }) => Promise<SendNightResult>
+  onSend: (params: { recipientAddress: string; amount: bigint }) => Promise<void>
   /**
-   * Reads the shielded colours this wallet holds, in the wallet's own atomic
+   * Reads the shielded colours the ACCOUNT holds, in each colour's own atomic
    * units. Called once, when a shielded recipient first turns up. An empty
-   * array is a real answer — this Passport holds nothing shielded — and the
-   * sheet says so rather than offering a control that cannot work.
+   * array is a real answer — this Passport's account holds nothing shielded —
+   * and the sheet says so rather than offering a control that cannot work.
    *
    * Optional together with {@link SendSheetProps.onSendShielded}: a host that
    * supplies neither leaves shielded addresses refused.
    */
-  readShieldedHoldings?: () => Promise<ShieldedHolding[]>
+  readShieldedHoldings?: () => Promise<SendSheetHolding[]>
   /**
-   * Signs and submits the shielded transfer, resolving with the node's
-   * transaction id. Refusals arrive as Contract W's `SendShieldedError` —
-   * `{ code, message, detail? }` — and are shown untouched.
+   * Runs the shielded withdrawal, resolving only once the node has taken it.
+   * `recipientAddress` is the WHOLE `mn_shield-addr…` string: the note's
+   * ciphertext is built client-side from the recipient's encryption key, and
+   * only the full address carries it.
    */
   onSendShielded?: (params: {
     recipientAddress: string
     tokenType: string
     amount: bigint
-  }) => Promise<SendShieldedResult>
+  }) => Promise<void>
+  /**
+   * The live phase of the account call, when the host reports one. It narrates
+   * the wait rather than measuring it: the prover reports no figure, so no
+   * percentage is invented.
+   */
+  phase?: 'checking' | 'connecting' | 'submitting' | 'confirming' | null
   onClose: () => void
 }
 
@@ -186,8 +209,12 @@ function parseShieldedUnits(input: string): { amount: bigint } | { error: string
   return { amount }
 }
 
-/** A shielded colour is 64 hex characters and identifies nothing to a reader. */
-function shortToken(tokenType: string): string {
+/**
+ * A shielded colour is 64 hex characters and identifies nothing to a reader.
+ * Exported because Home labels the account's unnamed colours the same way, and
+ * two spellings of the same shortening would read as two different tokens.
+ */
+export function shortToken(tokenType: string): string {
   return tokenType.length <= 18 ? tokenType : `${tokenType.slice(0, 10)}…${tokenType.slice(-6)}`
 }
 
@@ -298,6 +325,7 @@ export default function SendSheet(props: SendSheetProps) {
     onSend,
     readShieldedHoldings,
     onSendShielded,
+    phase,
     onClose,
   } = props
 
@@ -313,7 +341,7 @@ export default function SendSheet(props: SendSheetProps) {
   const [feeChanged, setFeeChanged] = useState(false)
   /* `null` while nothing has been read yet — never a stand-in for an empty
      wallet, which is `[]` and gets its own sentence. */
-  const [holdings, setHoldings] = useState<ShieldedHolding[] | null>(null)
+  const [holdings, setHoldings] = useState<SendSheetHolding[] | null>(null)
   const [holdingsError, setHoldingsError] = useState<string | null>(null)
   const [tokenType, setTokenType] = useState<string | null>(null)
 
@@ -418,8 +446,8 @@ export default function SendSheet(props: SendSheetProps) {
     if ('error' in parsedAmount) return parsedAmount.error
     if (availableAtomic !== null && parsedAmount.amount > availableAtomic) {
       return mode === 'shielded'
-        ? `That is more than this wallet holds — ${availableAtomic.toString()} units of this token are available.`
-        : `That is more than this wallet holds — ${availableBalance} NIGHT is available.`
+        ? `That is more than your account holds — ${availableAtomic.toString()} units of this token are available.`
+        : `That is more than your account holds — ${availableBalance} NIGHT is available.`
     }
     return null
   }, [availableAtomic, availableBalance, mode, parsedAmount])
@@ -445,35 +473,51 @@ export default function SendSheet(props: SendSheetProps) {
     !balanceUnreadable &&
     (mode === 'unshielded' || tokenType !== null)
 
-  /* Why no sponsor is covering the fee, when the wallet says. The field is
-     being added to `feeReadiness()`'s answer and may not exist yet, so it is
-     read defensively — absence simply says nothing. */
-  const sponsorUnavailableReason = useMemo(() => {
-    if (fee === null || fee.mode === 'sponsored') return null
-    const reason = (fee as { sponsorUnavailableReason?: unknown }).sponsorUnavailableReason
-    return typeof reason === 'string' && reason ? reason : null
-  }, [fee])
+  /* The fee note, and the one place on this surface where the machinery is
+     deliberately not named.
 
-  /* The fee note. It says only what the wallet reported, and as the prediction
-     it is: `feeReadiness()` is advisory and a sponsor can drain between this
-     quote and the submit, so `sponsored` earns "expected to be covered" and
-     nothing stronger. `no-dust` replaces the send control with the wallet's
-     own refusal rather than a rewrite of it. */
-  const feeNoteBase =
+     It says only what the probe reported, and as the prediction it is:
+     `feeReadiness()` is advisory and a sponsor can drain between this quote and
+     the submit, so `sponsored` earns "expected to be covered" and nothing
+     stronger. What changed on 2026/08/24 is the vocabulary, not the honesty:
+     the fee's own token, and the sponsor's internal reason for standing down,
+     are the wallet's business and no longer appear here. `own-dust` therefore
+     reads as this Passport paying — which is exactly what happens — and
+     `no-dust` gets this sheet's own sentence rather than the wallet's, which
+     names the token twice. */
+  const feeNote =
     fee === null
       ? feeUnknown
-        ? `The wallet could not report how this fee would be paid: ${feeUnknown}`
+        ? `Passport could not report how this fee would be paid: ${feeUnknown}`
         : 'Checking how this fee will be paid…'
       : fee.mode === 'sponsored'
         ? 'Network fee expected to be covered by the fee sponsor.'
         : fee.mode === 'own-dust'
-          ? `Network fee paid from your DUST (${fee.dustBalance} DUST available).`
-          : /* The wallet's own refusal sentence, verbatim. */ fee.reason
-  const feeNote = sponsorUnavailableReason
-    ? `${feeNoteBase} ${sponsorUnavailableReason}`
-    : feeNoteBase
+          ? 'Network fee paid by this Passport.'
+          : 'The fee sponsor is not covering this transfer, and this Passport cannot pay the network fee itself yet.'
 
   const feeBlocksSend = fee?.mode === 'no-dust'
+
+  /**
+   * What the sheet says while the transfer is in flight.
+   *
+   * Each sentence describes the step the account module says it is on, and
+   * nothing further ahead: `connecting` is a real read of the deployed
+   * contract's verifier keys, `submitting` covers build-prove-balance-sign-
+   * submit and is the long one, and `confirming` is the indexer being asked for
+   * the ledger hash — by which point the transaction is already finalised. Only
+   * that step names where proving happened; the others have not reached it.
+   */
+  const busyLine =
+    phase === 'checking'
+      ? 'Checking your account’s balance and how the fee will be paid.'
+      : phase === 'connecting'
+        ? 'Opening your account contract and verifying it against this build.'
+        : phase === 'confirming'
+          ? 'Submitted. Waiting for the network to report the transaction.'
+          : provingMode === 'http'
+            ? 'Proving and submitting. The proof is computed on the proof server and can take tens of seconds — leave this open.'
+            : 'Proving and submitting. The proof is computed on this device and can take tens of seconds — leave this open.'
 
   const handleMax = useCallback(() => {
     if (mode === 'shielded') {
@@ -492,7 +536,7 @@ export default function SendSheet(props: SendSheetProps) {
     setFeeChanged(false)
     /* The fee quote was read when the sheet opened and is only a prediction —
        a sponsor can drain in the meantime, and the send would then quietly
-       fall back to the user's own DUST. Re-read immediately before submitting;
+       fall back to this Passport paying for itself. Re-read before submitting;
        a different answer means the quoted sentence is no longer true, so
        nothing is sent until it has been confirmed against the new one. A
        probe that fails outright is handled the same way: the line falls back
@@ -633,8 +677,8 @@ export default function SendSheet(props: SendSheetProps) {
               ) : mode === 'shielded' ? (
                 <span className="mnhome-send-hint">
                   A shielded {networkId} address. This pays one of the shielded tokens this
-                  Passport holds — not NIGHT, which is unshielded and cannot reach a shielded
-                  account.
+                  Passport&rsquo;s account holds — not NIGHT, which is unshielded and cannot
+                  reach a shielded account.
                 </span>
               ) : (
                 <span className="mnhome-send-hint">
@@ -655,7 +699,7 @@ export default function SendSheet(props: SendSheetProps) {
                 <span className="mnhome-send-label">Token</span>
                 <span className="mnhome-send-hint">
                   <code>{shortToken(holdings[0].tokenType)}</code> — the only shielded token this
-                  Passport holds.
+                  Passport&rsquo;s account holds.
                 </span>
               </div>
             ) : null}
@@ -715,8 +759,8 @@ export default function SendSheet(props: SendSheetProps) {
                     : holdings === null
                       ? 'Reading which shielded tokens this Passport holds…'
                       : holdings.length === 0
-                        ? 'This Passport holds no shielded tokens, so there is nothing to pay a shielded address with. Shielded tokens are minted by contracts; NIGHT is unshielded and never appears here.'
-                        : `${(selectedHolding?.amount ?? 0n).toString()} units of this token available. A shielded token has no decimal scale on the ledger, so this is a whole-unit count. Fees are paid in DUST, so the whole balance can go.`}
+                        ? 'This Passport’s account holds no shielded tokens, so there is nothing to pay a shielded address with. Shielded tokens are minted by contracts; NIGHT is unshielded and never appears here.'
+                        : `${(selectedHolding?.amount ?? 0n).toString()} units of this token available. A shielded token has no decimal scale on the ledger, so this is a whole-unit count. The network fee does not come out of it, so the whole balance can go.`}
                 </span>
               ) : (
                 <span className="mnhome-send-hint">
@@ -724,7 +768,7 @@ export default function SendSheet(props: SendSheetProps) {
                     ? balanceUnreadable
                       ? 'The balance could not be read, so sending is disabled until it can be.'
                       : 'The balance is still being read from the indexer, so nothing is capped yet.'
-                    : `${availableBalance} NIGHT available. Fees are paid in DUST, so the whole balance can go.`}
+                    : `${availableBalance} NIGHT available in your account. The network fee does not come out of it, so the whole balance can go.`}
                 </span>
               )}
             </label>
@@ -839,15 +883,12 @@ export default function SendSheet(props: SendSheetProps) {
 
             {busy ? (
               /* An honest progress line, not a percentage nobody measured: the
-                 proving step reports no figure, so none is invented. It does
-                 say where the work happens and that it genuinely takes time. */
+                 proving step reports no figure, so none is invented. It names
+                 the phase the account module actually reports, where the work
+                 happens, and that it genuinely takes time. */
               <p className="mnhome-send-busy" role="status">
                 <Loader2 className="mnhome-send-spinner" size={14} aria-hidden="true" />
-                <span>
-                  {provingMode === 'http'
-                    ? 'Proving and submitting. The proof is computed on the proof server and can take tens of seconds — leave this open.'
-                    : 'Proving and submitting. The proof is computed on this device and can take tens of seconds — leave this open.'}
-                </span>
+                <span>{busyLine}</span>
               </p>
             ) : null}
 

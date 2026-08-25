@@ -3,6 +3,7 @@ import {
   ArrowDownLeft,
   Droplets,
   Check,
+  Coins,
   Copy,
   ExternalLink,
   Layers,
@@ -14,27 +15,21 @@ import {
   Wallet,
   X,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 import type { AliasRecord } from '../identity/aliasStore.js'
 import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
-/* The two names this screen shares with the wallet (Contract W). Type-only. */
-import type {
-  FeeReadiness,
-  LocalWalletProvingMode,
-  SendNightResult,
-  SendShieldedResult,
-  ShieldedHolding,
-} from '../lib/localWallet.js'
+/* The names this screen shares with the wallet (Contract W). Type-only, and
+   only the two that describe the FEE — a fee is still the wallet's to pay. */
+import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js'
 import { faucetUrlFor, walletNetwork } from '../lib/networks.js'
 import { FeaturedApps, type AppsScreenProps, type FeaturedAppsProps } from './Apps.js'
 import { EcosystemIdentity } from './Ecosystem.js'
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
 import NotificationToggle from './NotificationToggle.js'
 import PassportContractCard, { type PassportContractCardProps } from './PassportContract.js'
-import SendSheet from './SendSheet.js'
-import SyncRing from './SyncRing.js'
+import SendSheet, { shortToken, type SendSheetHolding } from './SendSheet.js'
 import ThemeToggle from './ThemeToggle.js'
 import './home.css'
 
@@ -87,16 +82,44 @@ export interface HomeScreenProps {
    * identity card, doing nothing until the user asks.
    */
   passportContract?: Omit<PassportContractCardProps, 'network'> | null
-  /** Formatted NIGHT. `null` means unknown, `'0'` means a real zero. */
-  unshieldedBalance: string | null
-  shieldedTokenCount: number | null
-  /** Formatted DUST. */
-  dustBalance: string | null
-  /** Formatted cap, may be null. */
-  dustCap: string | null
-  /** 0-100, `null` means unknown. */
-  dustFillPercent: number | null
-  dustSyncing: boolean
+  /**
+   * What this Passport's account-custody contract holds — the ONLY money this
+   * screen shows since 2026/08/24.
+   *
+   * These are the contract's own `night_balances` and `coins`, not the passkey
+   * wallet's balances: the wallet is the signer and the fee payer, and is not
+   * something a Passport user is shown. `null` when the Passport has no
+   * deployed contract, and the asset row is then absent rather than showing
+   * zeros against an account that does not exist.
+   */
+  account?: {
+    /** Formatted NIGHT the account holds. `null` means unknown, `'0'` a real zero. */
+    nightBalance: string | null
+    /**
+     * The stablecoin row, when the fee sponsor has named its colour. `amount`
+     * is that colour's own atomic units — a shielded colour carries no decimal
+     * scale on the ledger, so nothing here invents one.
+     */
+    stablecoin: { symbol: string; amount: bigint } | null
+    /** Every other shielded colour the account holds, shown by short colour. */
+    otherShielded: { colourHex: string; amount: bigint }[]
+    /** `idle` means there is nothing to read; `unavailable` means a read failed. */
+    status: 'idle' | 'loading' | 'ready' | 'unavailable'
+    /** Present only on `unavailable`, in the reader's own words. */
+    error: string | null
+  } | null
+  /**
+   * NIGHT still held by this device's wallet rather than by the account — an
+   * older Passport, or a faucet drip that landed at the wallet address. The
+   * account cannot see it until a `deposit_night` moves it, so the screen
+   * offers exactly that. Omit or `null` and no row appears.
+   */
+  legacyFunds?: {
+    /** Formatted NIGHT the wallet holds. */
+    balance: string
+    busy: boolean
+    onMove: () => void
+  } | null
   /**
    * Live wallet sync progress, 0–100, as the on-device wallet reports it.
    * null = no figure known.
@@ -105,47 +128,49 @@ export interface HomeScreenProps {
   /** Selected network context; filters the app grid, does not move the wallet. */
   network: PassportNetwork
   onSelectNetwork: (network: PassportNetwork) => void
-  balanceStatus: string
+  /**
+   * The payment address the `.night` resolver leaf carries — this Passport's
+   * unshielded address, and the only address left on this surface (open
+   * decision D1). Shown inside Receive, beneath the name.
+   */
   unshieldedAddress: string | null
-  shieldedAddress: string | null
-  dustAddress: string | null
   /** Failure from any control on this screen — copy, send, refresh. */
   error?: string | null
   onDismissError?: () => void
   onRefresh: () => void
-  onCopyAddress: (kind: 'unshielded' | 'shielded' | 'dust') => void
+  /** Copies {@link HomeScreenProps.unshieldedAddress}. */
+  onCopyAddress: () => void
   /**
-   * The Send seam — the open on-device wallet's own `sendUnshieldedNight`, plus
-   * the fee-readiness probe whose answer the sheet quotes.
+   * The Send seam — a withdrawal from the account contract, plus the
+   * fee-readiness probe whose answer the sheet quotes.
    *
-   * Omitted or `null` whenever no local wallet session is genuinely open.
-   * The Send control is then ABSENT rather than
+   * Omitted or `null` whenever no wallet session is open or this Passport has
+   * no account to spend from. The Send control is then ABSENT rather than
    * disabled: a button that cannot work should not be on screen claiming it
    * nearly could. Receive needs no seam — it is the address sheet, which is
-   * driven by the addresses this screen already has.
+   * driven by the name and address this screen already has.
    */
   send?: {
-    /** The wallet's own network id, which a recipient must belong to. */
+    /** The network a recipient must belong to. */
     networkId: string
     /** Where this wallet proves — the send sheet's progress line names it. */
     provingMode: LocalWalletProvingMode
     readFeeReadiness: () => Promise<FeeReadiness>
-    onSend: (params: {
-      recipientAddress: string
-      amount: bigint
-    }) => Promise<SendNightResult>
+    onSend: (params: { recipientAddress: string; amount: bigint }) => Promise<void>
     /**
      * The shielded half of the send seam — see the Send sheet's own header
      * comment. Supplied together or not at all: a host that offers neither
      * leaves a shielded recipient refused, which is honest, because nothing
      * behind the sheet could pay one.
      */
-    readShieldedHoldings?: () => Promise<ShieldedHolding[]>
+    readShieldedHoldings?: () => Promise<SendSheetHolding[]>
     onSendShielded?: (params: {
       recipientAddress: string
       tokenType: string
       amount: bigint
-    }) => Promise<SendShieldedResult>
+    }) => Promise<void>
+    /** The live phase of the account call, narrated by the sheet. */
+    phase?: 'checking' | 'connecting' | 'submitting' | 'confirming' | null
   } | null
   /** Fed to the embedded apps grid and its in-Passport browser. */
   appsProfile: AppsScreenProps['profile']
@@ -171,11 +196,6 @@ export interface HomeScreenProps {
   onSignOut: () => void
 }
 
-type AddressKind = 'unshielded' | 'shielded' | 'dust'
-
-const RING_RADIUS = 34
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
-
 function truncateHash(hash: string): string {
   if (hash.length <= 18) return hash
   return `${hash.slice(0, 9)}...${hash.slice(-7)}`
@@ -189,30 +209,18 @@ function timeOfDayGreeting(date = new Date()): string {
   return 'Good evening'
 }
 
-function clampPercent(value: number | null): number | null {
-  if (value === null || !Number.isFinite(value)) return null
-  return Math.max(0, Math.min(100, value))
-}
-
 export default function HomeScreen(props: HomeScreenProps) {
   const {
     displayName,
     aliasLabel,
     identity,
     passportContract,
-    unshieldedBalance,
-    shieldedTokenCount,
-    dustBalance,
-    dustCap,
-    dustFillPercent,
-    dustSyncing,
+    account,
+    legacyFunds,
     syncPercent,
     network,
     onSelectNetwork,
-    balanceStatus,
     unshieldedAddress,
-    shieldedAddress,
-    dustAddress,
     error,
     onDismissError,
     onRefresh,
@@ -228,14 +236,17 @@ export default function HomeScreen(props: HomeScreenProps) {
     onSignOut,
   } = props
 
-  const [copied, setCopied] = useState<AddressKind | null>(null)
+  const [copied, setCopied] = useState(false)
   const [copiedName, setCopiedName] = useState(false)
   /* The Receive sheet, opened only from the Receive action in the money row.
      The top-bar address pill that also opened it was cut on 2026/08/19: a
-     Passport user never sees their three addresses in the everyday UI — their
+     Passport user never sees their addresses in the everyday UI — their
      visible identity is their `.night` name, and everything else is registered
      to that. Receiving still needs a real address until senders can resolve
-     names, so the address survives INSIDE this sheet, beneath the name. */
+     names, so ONE address survives inside this sheet, beneath the name: the
+     payment address the resolver leaf carries. The shielded and DUST rows that
+     sat under "Technical details" went with the account ruling of
+     2026/08/24 — they describe the wallet, and the wallet is machinery. */
   const [receiveOpen, setReceiveOpen] = useState(false)
   const [sendOpen, setSendOpen] = useState(false)
 
@@ -249,19 +260,17 @@ export default function HomeScreen(props: HomeScreenProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [receiveOpen])
 
-  const handleCopy = useCallback(
-    (kind: AddressKind) => {
-      onCopyAddress(kind)
-      setCopied(kind)
-      window.setTimeout(() => setCopied((current) => (current === kind ? null : current)), 1_600)
-    },
-    [onCopyAddress],
-  )
+  const handleCopy = useCallback(() => {
+    onCopyAddress()
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1_600)
+  }, [onCopyAddress])
 
   /* The name is copied here rather than through `onCopyAddress`: that seam is
-     keyed by address kind, and giving it a 'name' kind would change the props
-     contract the integrator implements. A local clipboard write keeps the
-     interface untouched. No clipboard, no tick — nothing is claimed falsely. */
+     the host's clipboard write for the ADDRESS, and widening it to carry a
+     name would change the props contract the integrator implements. A local
+     clipboard write keeps the interface untouched. No clipboard, no tick —
+     nothing is claimed falsely. */
   const handleCopyName = useCallback((name: string) => {
     void navigator.clipboard?.writeText(name).then(
       () => {
@@ -272,65 +281,15 @@ export default function HomeScreen(props: HomeScreenProps) {
     )
   }, [])
 
-  const balancesLoading = balanceStatus === 'loading'
-  const fill = clampPercent(dustFillPercent)
+  /* The account's own read, in the vocabulary the cards already speak: a
+     figure still being read is 'Syncing', a read that failed is 'Unavailable',
+     and neither is ever a zero. */
+  const balancesLoading = account?.status === 'loading' || account?.status === 'idle'
 
-  /* One legible story for the battery when the fill is unknown: say whether
-     we are still waiting, whether the wallet is unreachable, or whether there
-     is simply no DUST yet. */
-  /* While the wallet is still walking the chain, the ring becomes a live
-     sync gauge when the source reports a percentage; the DUST charge takes
-     over once the fill is known. */
-  const stillSyncing = balancesLoading || dustSyncing
-  const showSyncGauge = fill === null && stillSyncing && syncPercent != null
-  const ringLabel =
-    fill !== null
-      ? `${Math.round(fill)}%`
-      : showSyncGauge
-        ? `${Math.round(syncPercent)}%`
-        : stillSyncing
-          ? 'Syncing'
-          : balanceStatus === 'unavailable'
-            ? 'Unknown'
-            : 'No charge'
-  const ringAriaLabel =
-    fill !== null
-      ? `DUST charge ${Math.round(fill)} per cent`
-      : showSyncGauge
-        ? `Wallet sync ${Math.round(syncPercent)} per cent complete`
-        : stillSyncing
-          ? 'DUST charge still syncing'
-          : balanceStatus === 'unavailable'
-            ? 'DUST charge unknown — wallet unavailable'
-            : 'DUST battery empty'
-
-  const dustDetail = dustCap
-    ? `Cap ${dustCap}${dustSyncing ? ' · charging' : ''}`
-    : balancesLoading
-      ? showSyncGauge
-        ? `Syncing the wallet — ${Math.round(syncPercent)}% of the chain walked`
-        : 'Checking DUST state with the wallet'
-      : balanceStatus === 'unavailable'
-        ? 'DUST state unavailable — refresh once the wallet reconnects'
-        : dustSyncing
-          ? showSyncGauge
-            ? `Syncing the wallet — ${Math.round(syncPercent)}% of the chain walked`
-            : 'No charge reported yet — the wallet is still syncing'
-          : fill === null
-            ? /* No DUST coins at all. Deliberately a state, not an
-                 instruction: registering NIGHT is not a user step here —
-                 fees on these networks are sponsored. */
-              'No DUST yet — DUST pays transaction fees'
-            : 'Empty — DUST accrues while NIGHT is held'
-
-  const ringDash = useMemo(() => {
-    const shown = fill ?? (showSyncGauge ? syncPercent : 0) ?? 0
-    const filled = (shown / 100) * RING_CIRCUMFERENCE
-    return `${filled} ${RING_CIRCUMFERENCE - filled}`
-  }, [fill, showSyncGauge, syncPercent])
-
-  /* Sending needs a seam AND an address to send from. Both, or no button. */
-  const canSend = Boolean(send) && Boolean(unshieldedAddress)
+  /* Sending needs a seam. The host withholds it unless a wallet session is
+     open AND there is an account contract to withdraw from, so this is one
+     test rather than two. */
+  const canSend = Boolean(send)
 
   /* The user's visible identity: the `.night` name held on this network. The
      record carries it whole (`alice.night`); `aliasLabel` is only the bare
@@ -341,17 +300,6 @@ export default function HomeScreen(props: HomeScreenProps) {
      failed one still shows its name — hiding it would be its own confusion —
      but says plainly that the address below is what works meanwhile. */
   const nameResolves = identity?.record?.status === 'registered'
-
-  /* Shielded and DUST are out of the primary Receive surface entirely: they
-     sit behind one quiet disclosure, for the operator who needs them. The
-     unshielded address is handled on its own above — it is the one a sender
-     can actually use today. */
-  const technicalAddressRows: { kind: AddressKind; label: string; value: string | null }[] = [
-    { kind: 'shielded', label: 'Shielded', value: shieldedAddress },
-    { kind: 'dust', label: 'DUST', value: dustAddress },
-  ].filter((row): row is { kind: AddressKind; label: string; value: string | null } =>
-    Boolean(row.value),
-  )
 
   return (
     <section className="mnhome-screen" aria-busy={balancesLoading}>
@@ -387,9 +335,11 @@ export default function HomeScreen(props: HomeScreenProps) {
       </header>
 
       {/* Compact sync status: a hairline progress strip under the bar while
-          the wallet walks the chain — the sync percent's home now that the
-          DUST card no longer doubles as a gauge. Gone once synced. */}
-      {syncPercent != null && syncPercent < 100 && stillSyncing ? (
+          the wallet walks the chain. The wallet is machinery now, but its
+          sync still gates whether a transaction can be signed at all, so the
+          strip stays — it is the one thing about the wallet a user needs. Gone
+          once synced. */}
+      {syncPercent != null && syncPercent < 100 ? (
         <div
           className="mnhome-syncstrip"
           role="progressbar"
@@ -439,10 +389,10 @@ export default function HomeScreen(props: HomeScreenProps) {
           </p>
         ) : null}
 
-        {/* The money row. Send is present only when a local wallet session is
-            genuinely open and has an unshielded address to send from — see the
-            `send` prop. Receive opens the sheet below: the `.night` name to be
-            paid at, the address beneath it, the faucet, and nothing else. */}
+        {/* The money row. Send is present only when there is an account to
+            withdraw from — see the `send` prop. Receive opens the sheet below:
+            the `.night` name to be paid at, the address beneath it, the
+            faucet, and nothing else. */}
         {canSend || unshieldedAddress ? (
           <div className="mnhome-actions">
             {canSend ? (
@@ -470,86 +420,75 @@ export default function HomeScreen(props: HomeScreenProps) {
           </div>
         ) : null}
 
-        <div className="mnhome-assets">
-          <BalanceCard
-            icon={<Layers size={14} aria-hidden="true" />}
-            label="Shielded"
-            value={
-              shieldedTokenCount === null
-                ? null
-                : `${shieldedTokenCount}`
-            }
-            unit={shieldedTokenCount === 1 ? 'token type' : 'token types'}
-            loading={balancesLoading}
-          />
-          <BalanceCard
-            icon={<Wallet size={14} aria-hidden="true" />}
-            label="Unshielded"
-            value={unshieldedBalance}
-            unit="NIGHT"
-            loading={balancesLoading}
-          />
+        {/* What this Passport holds — the account contract's own ledger. The
+            DUST battery that used to sit here went with the account ruling of
+            2026/08/24: it described the wallet's fee charge, the wallet is
+            machinery, and fees are the sponsor's. */}
+        {account ? (
+          <div className="mnhome-assets">
+            <BalanceCard
+              icon={<Wallet size={14} aria-hidden="true" />}
+              label="NIGHT"
+              value={account.nightBalance}
+              unit="native token"
+              loading={balancesLoading}
+            />
+            {account.stablecoin ? (
+              <BalanceCard
+                icon={<Coins size={14} aria-hidden="true" />}
+                label={account.stablecoin.symbol}
+                value={account.stablecoin.amount.toString()}
+                unit="stablecoin"
+                loading={balancesLoading}
+              />
+            ) : null}
+            {/* Any other shielded colour the account holds. With no symbol to
+                put on it the colour itself is the honest label — naming it
+                would be Passport inventing a ticker the ledger does not carry. */}
+            {account.otherShielded.map((held) => (
+              <BalanceCard
+                key={held.colourHex}
+                icon={<Layers size={14} aria-hidden="true" />}
+                label="Shielded"
+                value={held.amount.toString()}
+                unit={shortToken(held.colourHex)}
+                loading={balancesLoading}
+              />
+            ))}
+          </div>
+        ) : null}
 
-          {/* The DUST card reports this wallet's charge, and asks nothing of
-              the user: fees are covered by the sponsor, so there is no
-              registration step to offer. Sync progress lives in the strip up
-              top. The localnet demo hides the card outright, as it always has
-              — the 'Generate Dust' pill that stood in its place there went
-              with the rest of user-side registration. */}
-          {(import.meta.env as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1' ? null : (
-          <article className="mnhome-dust">
-            <div className={`mnhome-battery${dustSyncing ? ' mnhome-battery-charging' : ''}`}>
-              {fill !== null ? (
-                /* A real DUST charge — the accent-blue animated ring. */
-                <SyncRing percent={fill} tone="charge" label={ringAriaLabel} />
-              ) : showSyncGauge && syncPercent != null ? (
-                /* Live chain-walk progress — the muted animated gauge. */
-                <SyncRing percent={syncPercent} tone="sync" label={ringAriaLabel} />
-              ) : (
-                /* Word states — Syncing / Unknown / No charge — keep the
-                   static ring; there is no numeral to animate towards. */
-                <>
-                  <svg viewBox="0 0 80 80" role="img" aria-label={ringAriaLabel}>
-                    <circle className="mnhome-battery-track" cx="40" cy="40" r={RING_RADIUS} />
-                    <circle
-                      className="mnhome-battery-fill"
-                      cx="40"
-                      cy="40"
-                      r={RING_RADIUS}
-                      strokeDasharray={ringDash}
-                      strokeDashoffset="0"
-                    />
-                  </svg>
-                  <span className="mnhome-battery-value mnhome-battery-value-label">
-                    {ringLabel}
-                  </span>
-                </>
-              )}
-            </div>
-
-            <div className="mnhome-dust-copy">
-              <p className="mnhome-micro">DUST battery</p>
-              <p className={`mnhome-dust-balance${dustBalance === null ? ' mnhome-dust-balance-muted' : ''}`}>
-                {dustBalance === null ? (
-                  balancesLoading || dustSyncing ? 'Syncing' : 'Unavailable'
-                ) : (
-                  <>
-                    {dustBalance}
-                    <span>DUST</span>
-                  </>
-                )}
-              </p>
-              <p className="mnhome-dust-cap">{dustDetail}</p>
-            </div>
-          </article>
-          )}
-        </div>
-
-        {balanceStatus === 'unavailable' ? (
+        {account?.status === 'unavailable' ? (
           <p className="mnhome-notice">
             <AlertTriangle size={14} aria-hidden="true" />
-            <span>Balances are unavailable. Pull a refresh once the wallet reconnects.</span>
+            <span>
+              Your account&rsquo;s balances could not be read, so none is shown.
+              {account.error ? ` ${account.error}` : ''} Refresh once the network is reachable.
+            </span>
           </p>
+        ) : null}
+
+        {/* Funds the account cannot see. `deposit_night` is the only route
+            that makes them spendable — see the `legacyFunds` prop. */}
+        {legacyFunds ? (
+          <article className="mnhome-card">
+            <p className="mnhome-card-head">
+              <Wallet size={14} aria-hidden="true" />
+              <span className="mnhome-micro">Funds outside your account</span>
+            </p>
+            <p className="mnhome-card-unit">
+              {legacyFunds.balance} NIGHT arrived at your receiving address rather than in your
+              account, so your account cannot spend it yet. Moving it in is one transaction.
+            </p>
+            <button
+              type="button"
+              className="mnhome-send-primary"
+              onClick={legacyFunds.onMove}
+              disabled={legacyFunds.busy}
+            >
+              <span>{legacyFunds.busy ? 'Moving…' : 'Move into your account'}</span>
+            </button>
+          </article>
         ) : null}
 
         {/* Identity: the name held on this network, its real registration
@@ -589,8 +528,10 @@ export default function HomeScreen(props: HomeScreenProps) {
         {sendOpen && send ? (
           <SendSheet
             networkId={send.networkId}
-            availableBalance={unshieldedBalance}
-            balanceStatus={balanceStatus}
+            /* The ACCOUNT's NIGHT, because that is what a withdrawal comes out
+               of, with the account's own read status behind it. */
+            availableBalance={account?.nightBalance ?? null}
+            balanceStatus={account?.status ?? 'loading'}
             provingMode={send.provingMode}
             readFeeReadiness={send.readFeeReadiness}
             onSend={send.onSend}
@@ -598,14 +539,14 @@ export default function HomeScreen(props: HomeScreenProps) {
               ? { readShieldedHoldings: send.readShieldedHoldings }
               : {})}
             {...(send.onSendShielded ? { onSendShielded: send.onSendShielded } : {})}
+            phase={send.phase ?? null}
             onClose={() => setSendOpen(false)}
           />
         ) : null}
 
         {/* Receive. The name leads; the address is the technical detail under
             it, because until senders resolve names an address is still what a
-            transfer needs. Shielded and DUST are behind the one disclosure at
-            the foot — off the everyday surface, not deleted from the build. */}
+            transfer needs. It is the only address on this surface. */}
         {receiveOpen
           ? createPortal(
               <div
@@ -657,20 +598,24 @@ export default function HomeScreen(props: HomeScreenProps) {
                     </div>
                   ) : null}
 
+                  {/* One address, labelled as what it is to the person reading
+                      it. It is the payment address the `.night` resolver leaf
+                      carries, so a sender who resolves the name and a sender
+                      who copies this row reach the same place. */}
                   <ul className="mnhome-addresses">
                     <li className="mnhome-address">
-                      <span className="mnhome-address-label">Address</span>
+                      <span className="mnhome-address-label">Your address</span>
                       <code className="mnhome-address-value">
                         {unshieldedAddress ? truncateHash(unshieldedAddress) : 'Not available'}
                       </code>
                       <button
                         type="button"
                         className="mnhome-icon-button"
-                        onClick={() => handleCopy('unshielded')}
+                        onClick={handleCopy}
                         disabled={!unshieldedAddress}
                         aria-label="Copy your receiving address"
                       >
-                        {copied === 'unshielded' ? (
+                        {copied ? (
                           <Check size={14} aria-hidden="true" />
                         ) : (
                           <Copy size={14} aria-hidden="true" />
@@ -710,37 +655,11 @@ export default function HomeScreen(props: HomeScreenProps) {
                     ) : null}
                   </div>
 
-                  {technicalAddressRows.length > 0 ? (
-                    /* One quiet native disclosure — `details`/`summary` carries
-                       its own keyboard and screen-reader behaviour, so no ARIA
-                       is re-implemented here. Closed on every open. */
-                    <details className="mnhome-recv-more">
-                      <summary className="mnhome-recv-more-summary">Technical details</summary>
-                      <ul className="mnhome-addresses">
-                        {technicalAddressRows.map((row) => (
-                          <li key={row.kind} className="mnhome-address">
-                            <span className="mnhome-address-label">{row.label}</span>
-                            <code className="mnhome-address-value">
-                              {row.value ? truncateHash(row.value) : 'Not available'}
-                            </code>
-                            <button
-                              type="button"
-                              className="mnhome-icon-button"
-                              onClick={() => handleCopy(row.kind)}
-                              disabled={!row.value}
-                              aria-label={`Copy ${row.label.toLowerCase()} address`}
-                            >
-                              {copied === row.kind ? (
-                                <Check size={14} aria-hidden="true" />
-                              ) : (
-                                <Copy size={14} aria-hidden="true" />
-                              )}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  ) : null}
+                  {/* The "Technical details" disclosure that held the shielded
+                      and DUST addresses was removed on 2026/08/24. Both belong
+                      to the passkey wallet, which is machinery under the
+                      account ruling; a dApp that genuinely needs one still gets
+                      it through the consent sheet, where the user is asked. */}
                 </div>
               </div>,
               document.body,
