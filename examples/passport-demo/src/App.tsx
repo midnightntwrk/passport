@@ -2257,7 +2257,7 @@ export default function PassportDemo() {
           readiness.mode === 'sponsored'
             ? 'Network fee expected to be covered by the fee sponsor.'
             : readiness.mode === 'own-dust'
-              ? `Network fee paid from your DUST (${readiness.dustBalance} DUST available).`
+              ? 'Network fee paid by this Passport.'
               : /* The wallet's own refusal sentence, verbatim. */ readiness.reason,
         );
       } catch {
@@ -2812,8 +2812,10 @@ export default function PassportDemo() {
         ? await checkAliasSponsorship(FUNDER_URL, registryNetwork)
         : false;
       if (!sponsored) {
-        const funds = await checkAliasClaimFunds(handle, alias);
-        if (!funds.ok) throw new AliasClaimError('insufficient-night', funds.reason);
+        /* Refused HERE — before the passkey ceremony and before any deploy —
+           rather than deploying an account and then refusing the name. The
+           wallet's balance is never consulted: it pays for nothing. */
+        throw new AliasClaimError('network-unreachable', SPONSOR_UNAVAILABLE_SENTENCE);
       }
 
       /* (2) The one ceremony. Both secrets, one assertion, handle disposed. */
@@ -2931,7 +2933,11 @@ export default function PassportDemo() {
               alias,
               ownerKey: await deriveMidnamesOwnerKey(ownerSecret),
               contractAddress,
-              ownerAddress: handle.unshieldedAddress,
+              /* No payment address: the leaf's owner-address half used to carry
+                 the wallet's address, which a resolver honouring it would PAY —
+                 outside the account model. The service zero-fills it; the
+                 registry's authority is the owner key, and the target is the
+                 account (audit finding, 2026/08/25). */
               network: registryNetwork,
             });
           } catch (cause) {

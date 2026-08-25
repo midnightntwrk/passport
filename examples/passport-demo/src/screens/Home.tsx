@@ -41,7 +41,13 @@ import './home.css'
    filters the app grid and never moves the wallet, so its faucet would drip to
    a chain this address does not live on. */
 const receiveFaucetNetwork = walletNetwork()
-const receiveFaucetUrl = faucetUrlFor(receiveFaucetNetwork)
+/* No faucet link on Receive. A faucet drips to a WALLET address, and the
+   account is a contract: a drip sent to it never reaches the account's
+   mirror, and a drip sent to the wallet puts value where the account model
+   says none may sit. Test NIGHT arrives through the sponsor's activation
+   instead. `faucetUrlFor` stays exported for the network tables. */
+const receiveFaucetUrl: string | null = null
+void faucetUrlFor
 
 export interface HomeScreenProps {
   displayName: string | null
@@ -274,7 +280,10 @@ export default function HomeScreen(props: HomeScreenProps) {
   /* The account is what the user IS on chain: the contract the `.night` name
      resolves to. Receive shows it, and only it — the passkey wallet's address
      is machinery and is never handed out as somewhere to send value. */
-  const accountAddress = identity?.record?.resolverTargetHex ?? null
+  const accountAddress =
+    (passportContract?.record?.status === 'deployed' ? passportContract.record.address : null) ??
+    identity?.record?.resolverTargetHex ??
+    null
   const handleCopyAccount = useCallback(() => {
     if (!accountAddress) return
     void navigator.clipboard?.writeText(accountAddress).then(
@@ -408,7 +417,7 @@ export default function HomeScreen(props: HomeScreenProps) {
             withdraw from — see the `send` prop. Receive opens the sheet below:
             the `.night` name to be paid at, the address beneath it, the
             faucet, and nothing else. */}
-        {canSend || unshieldedAddress ? (
+        {canSend || accountAddress ? (
           <div className="mnhome-actions">
             {canSend ? (
               <button
@@ -421,7 +430,7 @@ export default function HomeScreen(props: HomeScreenProps) {
                 <span>Send</span>
               </button>
             ) : null}
-            {unshieldedAddress ? (
+            {accountAddress ? (
               <button
                 type="button"
                 className="mnhome-action"

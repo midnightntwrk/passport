@@ -141,11 +141,10 @@ export interface SponsorAliasRequest {
   ownerKey: Uint8Array;
   /** The user's account-custody contract — the name's target. */
   contractAddress: string;
-  /**
-   * This Passport's unshielded `mn_addr…` address, for the leaf's payment
-   * half — exactly what the self-paid path writes there.
-   */
-  ownerAddress: string;
+  /* Deliberately no payment address. The leaf has an owner-address half that
+     a resolver may pay; filling it with the wallet's address would route
+     value to the wallet, which the account model forbids. The service
+     zero-fills it, and the account remains the only target. */
   network: MidnamesNetwork;
 }
 
@@ -189,7 +188,6 @@ export async function sponsorAliasRegistration(
         alias: request.alias,
         ownerKey: bytesToHex(request.ownerKey),
         contractAddress: request.contractAddress,
-        ownerAddress: request.ownerAddress,
         network: request.network,
       }),
     });
@@ -274,7 +272,9 @@ export async function sponsorAliasRegistration(
        identifiers before answering, so explorer links work as-is. */
     resolverDeployTxId: success.resolverDeployTx,
     registerTxId: success.registerTx,
-    targetUnshieldedAddress: request.ownerAddress,
+    /* The leaf's owner-address half is zero-filled by the service — there is
+       no payment address on a sponsored name, by design. */
+    targetUnshieldedAddress: '',
     resolverTarget: 'contract',
     resolverTargetHex: request.contractAddress,
     claimedAt: success.registeredAt,
