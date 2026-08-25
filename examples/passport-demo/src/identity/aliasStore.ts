@@ -82,15 +82,26 @@ export function loadAliasRecord(network: string): AliasRecord | null {
   return readAll()[network] ?? null;
 }
 
-export function saveAliasRecord(record: AliasRecord): void {
+/**
+ * Why this record may not be stored, in the store's own words, or null when it
+ * may.
+ *
+ * Split out of {@link saveAliasRecord} so the bulk path below enforces the SAME
+ * invariants instead of a second copy of them that could drift.
+ */
+function refuseAliasRecord(record: AliasRecord): string | null {
   if (record.status === 'registered' && (!record.resolverDeployTxId || !record.registerTxId)) {
-    throw new Error(
-      'A registered alias record must carry both the resolver deployment and registration transaction ids.',
-    );
+    return 'A registered alias record must carry both the resolver deployment and registration transaction ids.';
   }
   if (record.status !== 'registered' && !record.queuedReason) {
-    throw new Error('A queued or failed alias record must explain itself with a queuedReason.');
+    return 'A queued or failed alias record must explain itself with a queuedReason.';
   }
+  return null;
+}
+
+export function saveAliasRecord(record: AliasRecord): void {
+  const refusal = refuseAliasRecord(record);
+  if (refusal) throw new Error(refusal);
   try {
     const records = readAll();
     records[record.network] = { ...record, updatedAt: record.updatedAt || new Date().toISOString() };
@@ -99,6 +110,65 @@ export function saveAliasRecord(record: AliasRecord): void {
     // The claim still happened; only the memory of it is lost on reload.
   }
   publish();
+}
+
+/** What became of one record a bulk write was asked to store. */
+export interface AliasRecordWriteOutcome {
+  network: string;
+  /**
+   * True ONLY when the record was read back out of storage afterwards. A
+   * `setItem` that throws (private browsing, quota) and a record this store's
+   * own reader filters out on load both land here as `false` with the reason,
+   * because a caller that counts writes must count what survived, not what was
+   * attempted.
+   */
+  written: boolean;
+  /** Why it was not written. Never absent when {@link written} is false. */
+  reason?: string;
+}
+
+/**
+ * Writes many records in ONE read and ONE `setItem`, notifying subscribers ONCE.
+ *
+ * {@link saveAliasRecord} re-reads and re-serialises the whole map and publishes
+ * on every call, which is right for the one-record path every claim takes and
+ * quadratic for a restore carrying dozens. This is the bulk path for
+ * `../identity/backup.ts`, and it reports per record whether the write actually
+ * survived rather than assuming it did.
+ */
+export function restoreAliasRecords(records: AliasRecord[]): AliasRecordWriteOutcome[] {
+  const next = readAll();
+  const now = new Date().toISOString();
+  const staged: string[] = [];
+  const outcomes = records.map<AliasRecordWriteOutcome>((record) => {
+    const refusal = refuseAliasRecord(record);
+    if (refusal) return { network: record.network, written: false, reason: refusal };
+    next[record.network] = { ...record, updatedAt: record.updatedAt || now };
+    staged.push(record.network);
+    return { network: record.network, written: true };
+  });
+  if (staged.length === 0) return outcomes;
+
+  let failure: string | null = null;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch (cause) {
+    failure = cause instanceof Error ? cause.message : String(cause);
+  }
+  const readBack = failure ? {} : readAll();
+  for (const outcome of outcomes) {
+    if (!outcome.written) continue;
+    if (failure) {
+      outcome.written = false;
+      outcome.reason = `this browser refused to store the record: ${failure}`;
+    } else if (!readBack[outcome.network]) {
+      outcome.written = false;
+      outcome.reason =
+        'the record was stored but did not read back, so this browser does not hold it';
+    }
+  }
+  publish();
+  return outcomes;
 }
 
 export function clearAliasRecords(): void {

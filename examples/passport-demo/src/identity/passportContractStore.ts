@@ -127,25 +127,35 @@ export function loadPassportContractRecord(
  * record that does not say why. The throw is deliberate — it turns a
  * would-be silent falsehood into a visible bug.
  */
-export function savePassportContractRecord(record: PassportContractRecord): void {
+/**
+ * Why this record may not be stored, in the store's own words, or null when it
+ * may.
+ *
+ * Split out of {@link savePassportContractRecord} so the bulk path below
+ * enforces the SAME invariants instead of a second copy of them that could
+ * drift.
+ */
+function refusePassportContractRecord(record: PassportContractRecord): string | null {
   if (record.status === 'deployed' && record.recovered) {
     /* The recovered case, and the only one exempt from the transaction-id
        rule: this device did not witness the deployment, so it has no id to
        carry. In exchange the bar is higher — the address must have been
        confirmed against the chain before the record may exist at all. */
     if (!record.address || record.ledgerConfirmed !== true) {
-      throw new Error(
-        'A recovered Passport contract record must carry the contract address and a confirmed on-chain read-back.',
-      );
+      return 'A recovered Passport contract record must carry the contract address and a confirmed on-chain read-back.';
     }
   } else if (record.status === 'deployed' && (!record.address || !record.deployTxId)) {
-    throw new Error(
-      'A deployed Passport contract record must carry both the contract address and the deployment transaction id.',
-    );
+    return 'A deployed Passport contract record must carry both the contract address and the deployment transaction id.';
   }
   if (record.status === 'failed' && !record.failureReason) {
-    throw new Error('A failed Passport contract record must explain itself with a failureReason.');
+    return 'A failed Passport contract record must explain itself with a failureReason.';
   }
+  return null;
+}
+
+export function savePassportContractRecord(record: PassportContractRecord): void {
+  const refusal = refusePassportContractRecord(record);
+  if (refusal) throw new Error(refusal);
   try {
     const records = readAll();
     records[passportContractRecordKey(record.credentialId, record.network)] = {
@@ -157,6 +167,64 @@ export function savePassportContractRecord(record: PassportContractRecord): void
     // The deployment still happened; only the memory of it is lost on reload.
   }
   publish();
+}
+
+/** What became of one record a bulk write was asked to store. */
+export interface PassportContractWriteOutcome {
+  /** The {@link passportContractRecordKey} the record was written under. */
+  key: string;
+  /**
+   * True ONLY when the record was read back out of storage afterwards — see
+   * `./aliasStore.ts`'s outcome type for why an attempted write is not a write.
+   */
+  written: boolean;
+  /** Why it was not written. Never absent when {@link written} is false. */
+  reason?: string;
+}
+
+/**
+ * Writes many records in ONE read and ONE `setItem`, notifying subscribers ONCE.
+ *
+ * The bulk path for `../identity/backup.ts`, for the reason given on
+ * `restoreAliasRecords`: a restore that saved record by record re-serialised
+ * this whole map and re-rendered every subscriber once per record.
+ */
+export function restorePassportContractRecords(
+  records: PassportContractRecord[],
+): PassportContractWriteOutcome[] {
+  const next = readAll();
+  const now = new Date().toISOString();
+  let stagedCount = 0;
+  const outcomes = records.map<PassportContractWriteOutcome>((record) => {
+    const key = passportContractRecordKey(record.credentialId, record.network);
+    const refusal = refusePassportContractRecord(record);
+    if (refusal) return { key, written: false, reason: refusal };
+    next[key] = { ...record, updatedAt: record.updatedAt || now };
+    stagedCount += 1;
+    return { key, written: true };
+  });
+  if (stagedCount === 0) return outcomes;
+
+  let failure: string | null = null;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch (cause) {
+    failure = cause instanceof Error ? cause.message : String(cause);
+  }
+  const readBack = failure ? {} : readAll();
+  for (const outcome of outcomes) {
+    if (!outcome.written) continue;
+    if (failure) {
+      outcome.written = false;
+      outcome.reason = `this browser refused to store the record: ${failure}`;
+    } else if (!readBack[outcome.key]) {
+      outcome.written = false;
+      outcome.reason =
+        'the record was stored but did not read back, so this browser does not hold it';
+    }
+  }
+  publish();
+  return outcomes;
 }
 
 /** Subscribes to record changes. Returns an unsubscribe function. */

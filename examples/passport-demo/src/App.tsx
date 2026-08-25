@@ -9,6 +9,9 @@ import {
 import type { DiscoveredPassportPasskey, PassportAccountBlob } from './backend.js';
 
 import { compactAddress } from './lib/address.js';
+import { normalisedColourHex, shortColour } from './lib/colour.js';
+import { classifyFundAccountAnswer } from './lib/activation.js';
+import type { FundAccountAnswer } from './lib/activation.js';
 import { requestPassportStoragePersistence } from './pwa.js';
 import {
   listLocalProfiles,
@@ -235,20 +238,6 @@ function pause(ms: number): Promise<void> {
 }
 
 /**
- * A token colour as both the ledger and {@link colourHexToBytes} quote it — 64
- * lowercase hex characters — or `null` for anything that is not one.
- *
- * Strict on purpose, and for the module's own reason: a short value is a
- * misconfiguration rather than an abbreviation, and padding it would make
- * Passport show one colour's balance under another colour's name.
- */
-function normalisedColourHex(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const normalized = value.trim().toLowerCase().replace(/^0x/, '');
-  return /^[0-9a-f]{64}$/.test(normalized) ? normalized : null;
-}
-
-/**
  * The stablecoin colour this build was configured with, when it was. The
  * sponsor's own `/status` is the first source (see {@link probeStablecoin});
  * this is the fall-back for a build that knows the colour without being able
@@ -257,11 +246,6 @@ function normalisedColourHex(value: string | null | undefined): string | null {
 const CONFIGURED_STABLECOIN_COLOUR = normalisedColourHex(
   (import.meta.env as Record<string, string | undefined>).VITE_MUSD_COLOUR_HEX,
 );
-
-/** A colour, shortened for a label. It identifies nothing to a reader whole. */
-function shortColour(colourHex: string): string {
-  return colourHex.length <= 18 ? colourHex : `${colourHex.slice(0, 10)}…${colourHex.slice(-6)}`;
-}
 
 /**
  * Which shielded colour the demo shows as its stablecoin, and what to call it.
@@ -2414,38 +2398,23 @@ export default function PassportDemo() {
   /**
    * ONE attempt at the activation grant, classified by what really came back.
    *
-   *   `deposited` — a 200, or the sponsor saying the grant already exists. The
-   *                 localStorage marker is written HERE and nowhere else, so a
-   *                 contract is only ever marked funded on evidence that it is.
-   *   `refused`   — a refusal time cannot fix (out of NIGHT, rate ceiling, a
-   *                 malformed request). Recorded, and not retried.
-   *   `retry`     — a 5xx, a 429, a timeout, or a transport failure. Carries
-   *                 the sponsor's own words for the caller's schedule to keep.
-   *
-   * The 503 is the one this taxonomy exists for: the sponsor reports itself
-   * SYNCING for a minute or two after its own spends, which is exactly the
-   * moment a freshly registered name asks it for an opening balance.
+   * The taxonomy — `deposited`, `refused`, `retry` — and every rule behind it
+   * live in {@link classifyFundAccountAnswer}, which is pure and drilled
+   * exhaustively in `lib/activation.test.ts`. What stays here is the half that
+   * genuinely needs this component: the request, and the effects the plan asks
+   * for. The localStorage marker is written where the plan says so and nowhere
+   * else, so a contract is only ever marked funded on evidence that it is.
    */
   const requestAccountFunding = useCallback(
     async (
       contractAddress: string,
     ): Promise<{ kind: 'deposited' | 'refused' } | { kind: 'retry'; reason: string }> => {
       if (!FUNDER_URL) return { kind: 'refused' };
-      let response: Response;
-      let body: {
-        txHash?: unknown;
-        amountAtomic?: unknown;
-        assetTx?: unknown;
-        assetAmount?: unknown;
-        assetColourHex?: unknown;
-        assetSymbol?: unknown;
-        assetError?: unknown;
-        error?: unknown;
-        message?: unknown;
-      };
+      let answer: FundAccountAnswer;
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), FUND_ACCOUNT_TIMEOUT_MS);
+        let response: Response;
         try {
           response = await fetch(`${FUNDER_URL}/fund-account`, {
             method: 'POST',
@@ -2456,105 +2425,33 @@ export default function PassportDemo() {
         } finally {
           clearTimeout(timer);
         }
-        body = (await response.json().catch(() => ({}))) as typeof body;
+        answer = {
+          kind: 'response',
+          ok: response.ok,
+          status: response.status,
+          body: await response.json().catch(() => ({})),
+        };
       } catch (cause) {
-        /* Unreachable, or the round-trip ceiling. Nothing is recorded yet: a
+        /* Unreachable, or the round-trip ceiling. Nothing is recorded: a
            network that is down for one attempt is not a verdict on the grant,
            and the schedule above will ask again. */
-        return { kind: 'retry', reason: cause instanceof Error ? cause.message : String(cause) };
+        answer = {
+          kind: 'transport-failure',
+          message: cause instanceof Error ? cause.message : String(cause),
+        };
       }
 
-      const code = typeof body.error === 'string' ? body.error : null;
-      const sponsorSentence =
-        typeof body.message === 'string' && body.message
-          ? body.message
-          : `The sponsor answered with status ${response.status}.`;
-      if (!response.ok) {
-        /* The grant already exists. That is the outcome this call wanted, so it
-           is recorded as reached — and the marker is written, because asking
-           again would only earn the same refusal. */
-        if (code === 'already-activated' || code === 'already-funded') {
-          rememberAccountFunding(contractAddress);
-          void refreshAccountBalances();
-          return { kind: 'deposited' };
-        }
-        /* The sponsor is up but cannot answer YET — it is syncing behind its own
-           spends, or shedding load. Waiting is the honest response, so no marker
-           is written and no failure is claimed. */
-        if (response.status >= 500 || response.status === 429) {
-          return { kind: 'retry', reason: sponsorSentence };
-        }
-        addActivity({
-          label: 'Opening balance not deposited',
-          detail: sponsorSentence,
-          status: 'blocked',
-          source: 'chain',
-        });
-        return { kind: 'refused' };
-      }
-
-      rememberAccountFunding(contractAddress);
-      /* The sponsor names the colour it just deposited, so a `/status` probe
-         that had not answered — or answered before the sponsor had an asset —
-         is corrected here. Only ever fills a gap: a colour already known came
-         from the same service and must not be overwritten mid-session. */
-      const fundedColour = normalisedColourHex(
-        typeof body.assetColourHex === 'string' ? body.assetColourHex : null,
-      );
-      if (fundedColour) {
-        setStablecoin(
-          (current) =>
-            current ?? {
-              symbol:
-                typeof body.assetSymbol === 'string' && body.assetSymbol.trim()
-                  ? body.assetSymbol.trim()
-                  : 'mUSD',
-              colourHex: fundedColour,
-            },
-        );
-      }
-      const txHash = typeof body.txHash === 'string' ? body.txHash : undefined;
-      /* The two legs are independent, and the sponsor says so: a 200 can carry
-         a landed NIGHT deposit and an `assetError` where the stablecoin half
-         failed. Each is reported as what it was — never one sentence covering
-         both on the strength of the status code. */
-      const assetTx = typeof body.assetTx === 'string' && body.assetTx ? body.assetTx : null;
-      const assetError = typeof body.assetError === 'string' ? body.assetError : null;
-      /* A landed NIGHT deposit with a FAILED stablecoin half is not a finished
-         activation. The sponsor performs only the missing leg on the next
-         request, so this is a retry, not a result: the funded marker stays
-         unwritten, the schedule keeps going, and the NIGHT already in the
-         account shows up through the balance refresh. Nothing is announced
-         until both halves are in (seen live 2026/08/25: one account opened
-         with NIGHT and no mUSD, and stopped asking). */
-      if (!assetTx && assetError) {
-        void refreshAccountBalances();
-        return { kind: 'retry', reason: assetError };
-      }
-      addActivity({
-        label: 'Opening balance deposited',
-        detail: `The sponsor deposited ${
-          typeof body.amountAtomic === 'string' ? body.amountAtomic : 'an opening'
-        } atomic NIGHT into your account contract ${compactAddress(contractAddress)}.${
-          assetError ? ` The stablecoin half did not land: ${assetError}` : ''
-        }`,
-        status: 'complete',
-        source: 'chain',
-        ...(txHash ? { txHash } : {}),
-      });
-      if (assetTx) {
-        addActivity({
-          label: 'Stablecoin deposited',
-          detail: `${
-            typeof body.assetAmount === 'string' ? body.assetAmount : 'The sponsor’s stablecoin'
-          } went into your account contract ${compactAddress(contractAddress)} alongside the NIGHT.`,
-          status: 'complete',
-          source: 'chain',
-          txHash: assetTx,
-        });
-      }
-      void refreshAccountBalances();
-      return { kind: 'deposited' };
+      const plan = classifyFundAccountAnswer(answer, contractAddress);
+      if (plan.rememberFunded) rememberAccountFunding(contractAddress);
+      const namedStablecoin = plan.stablecoin;
+      /* Only ever fills a gap: a colour already known came from the same
+         service and must not be overwritten mid-session. */
+      if (namedStablecoin) setStablecoin((current) => current ?? namedStablecoin);
+      for (const activity of plan.activities) addActivity({ ...activity, source: 'chain' });
+      if (plan.refreshBalances) void refreshAccountBalances();
+      return plan.outcome === 'retry'
+        ? { kind: 'retry', reason: plan.reason }
+        : { kind: plan.outcome };
     },
     [addActivity, refreshAccountBalances],
   );
@@ -4634,7 +4531,6 @@ export default function PassportDemo() {
            `./identity/backup.ts` for what that file holds and what it
            deliberately cannot. */
         <BackupScreen
-          hasEncryptedRecord={Boolean(profile)}
           onExport={exportPassportState}
           onRestore={restorePassportState}
           onDone={() => setIdentityStep(null)}

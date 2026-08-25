@@ -148,9 +148,14 @@ export const BALANCE_WITHOUT_DUST: ('shielded' | 'unshielded')[] = ['shielded', 
  * `subscribeBalances` died in `sponsorConfig` on the bare read.
  */
 function environment(): Record<string, string | undefined> {
-  return (
-    (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {}
-  );
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  /* The `?? {}` half is the Node-harness case in the comment above. Under
+     vitest and in the browser `import.meta.env` always exists, and a test
+     cannot delete it from ANOTHER module's `import.meta`, so that branch is
+     unreachable from a unit test. Every caller below takes an explicit env
+     object instead, and those are drilled. */
+  /* v8 ignore next */
+  return env ?? {};
 }
 
 function trimmed(value: string | undefined): string | undefined {

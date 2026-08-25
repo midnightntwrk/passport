@@ -80,6 +80,8 @@ import {
   coinPublicKeyBytes,
   colourHexToBytes,
   decodeAccountState,
+  deriveAccountDeviceSecret,
+  derivePassportContractSecrets,
   deriveDeviceCommitment,
   deriveGrantCommitment,
   formatFieldHex,
@@ -393,5 +395,58 @@ describe('decodeAccountState', () => {
     const [colourHex] = [...decodeAccountState(ledger).nightBalances.keys()];
     // The round trip a caller makes when it withdraws what it just read.
     expect(colourHexToBytes(colourHex)).toEqual(nightColourBytes());
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The device secret, and the one address shape a recipient field must refuse  */
+/* -------------------------------------------------------------------------- */
+
+describe('deriveAccountDeviceSecret', () => {
+  it('is the contract’s own derivation, and nothing beside it', async () => {
+    /* The contract checks `derive_device_commitment(secret)` against the
+       commitment burned into its constructor, so a second derivation here
+       would produce an "unknown device" rejection rather than a
+       different-but-valid device. This asserts they are the same bytes. */
+    const rootSecret = Uint8Array.from({ length: 32 }, (_unused, index) => index * 3);
+    const { deviceSecret } = await derivePassportContractSecrets(rootSecret);
+    expect(await deriveAccountDeviceSecret(rootSecret)).toEqual(deviceSecret);
+    expect(deviceSecret).toHaveLength(32);
+  });
+
+  it('is deterministic, and different for a different root', async () => {
+    const first = await deriveAccountDeviceSecret(new Uint8Array(32).fill(1));
+    const again = await deriveAccountDeviceSecret(new Uint8Array(32).fill(1));
+    const other = await deriveAccountDeviceSecret(new Uint8Array(32).fill(2));
+    expect(first).toEqual(again);
+    expect(first).not.toEqual(other);
+  });
+
+  it('commits to that secret the way the contract does', async () => {
+    const deviceSecret = await deriveAccountDeviceSecret(new Uint8Array(32).fill(7));
+    const commitment = await deriveDeviceCommitment(deviceSecret);
+    expect(typeof commitment).toBe('bigint');
+    expect(formatFieldHex(commitment)).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe('unshieldedAddressBytes, on the address kinds a recipient field sees', () => {
+  it('refuses a well-formed SHIELDED address with its own sentence', () => {
+    /* A `mn_shield-addr…` parses as a Midnight address and then fails the
+       unshielded decode. Both refusals are 'invalid-request', and the
+       difference between them is the sentence the user reads. */
+    const shielded =
+      'mn_shield-addr_preview1eqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
+    const refusal = (() => {
+      try {
+        unshieldedAddressBytes(shielded);
+        return null;
+      } catch (cause) {
+        return cause as AccountCustodyError;
+      }
+    })();
+    expect(refusal).toBeInstanceOf(AccountCustodyError);
+    expect(refusal?.code).toBe('invalid-request');
+    expect(refusal?.message).toMatch(/not a Midnight address|not an unshielded/);
   });
 });

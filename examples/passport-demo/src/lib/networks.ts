@@ -92,9 +92,14 @@ export function networkUnavailableReason(networkId: string | null | undefined): 
 
 /** Safe outside Vite, where there is no `import.meta.env`. See `localWallet.ts`. */
 function environment(): Record<string, string | undefined> {
-  return (
-    (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {}
-  );
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  /* The `?? {}` half is the outside-Vite case named above. Under vitest and in
+     the browser `import.meta.env` always exists, and a test cannot delete it
+     from ANOTHER module's `import.meta`, so the branch is unreachable from a
+     unit test. Every exported function here takes an explicit env object
+     instead, and those are drilled. */
+  /* v8 ignore next */
+  return env ?? {};
 }
 
 /**
@@ -119,8 +124,10 @@ export function asPassportNetwork(networkId: string | null | undefined): Passpor
  * pointed at a devnet. Everything that used to be gated on `'preview'` is
  * gated on this.
  */
-export function walletNetwork(): PassportNetworkId | null {
-  const network = asPassportNetwork(configuredNetworkId());
+export function walletNetwork(
+  env: Record<string, string | undefined> = environment(),
+): PassportNetworkId | null {
+  const network = asPassportNetwork(configuredNetworkId(env));
   if (network) return network;
   /* DEMO MASQUERADE, env-gated: a devnet build that also carries a local
      Midnames TLD override presents itself as the default network so the
@@ -128,7 +135,7 @@ export function walletNetwork(): PassportNetworkId | null {
      configured network; the chain, the transactions, and the registry are the
      local ones. Public builds never set VITE_MIDNAMES_TLD_ADDRESS, so this
      branch is dead there and behaviour is byte-identical. */
-  if (environment().VITE_MIDNAMES_TLD_ADDRESS?.trim()) return DEFAULT_NETWORK_ID;
+  if (env.VITE_MIDNAMES_TLD_ADDRESS?.trim()) return DEFAULT_NETWORK_ID;
   return null;
 }
 
@@ -136,8 +143,10 @@ export function walletNetwork(): PassportNetworkId | null {
  * The public network the UI opens on. A devnet build still has to show
  * *something* in the switcher, so it falls back to the documented default.
  */
-export function defaultSelectedNetwork(): PassportNetworkId {
-  return walletNetwork() ?? DEFAULT_NETWORK_ID;
+export function defaultSelectedNetwork(
+  env: Record<string, string | undefined> = environment(),
+): PassportNetworkId {
+  return walletNetwork(env) ?? DEFAULT_NETWORK_ID;
 }
 
 /**

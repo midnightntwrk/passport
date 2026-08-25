@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowRight,
   Database,
@@ -10,7 +10,7 @@ import {
   Upload,
 } from 'lucide-react'
 
-import { describeBackupPassword } from '../identity/backup.js'
+import { collectPassportBackup, describeBackupPassword } from '../identity/backup.js'
 import type { PassportBackupExport, PassportBackupSummary } from '../identity/backup.js'
 import ThemeToggle from './ThemeToggle.js'
 import './identity.css'
@@ -45,8 +45,6 @@ import './identity.css'
  */
 
 export interface BackupProps {
-  /** True when an encrypted Passport record genuinely exists in this browser. */
-  hasEncryptedRecord: boolean
   /**
    * Seals the allow-listed stores under `password` and hands the envelope to
    * the configured backend. Rejects with a message this screen shows verbatim.
@@ -64,8 +62,15 @@ function errorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
 }
 
+/** What this browser actually holds, counted from the stores an export reads. */
+interface Holdings {
+  aliases: number
+  passportContracts: number
+  incentives: number
+}
+
 export default function BackupScreen(props: BackupProps) {
-  const { hasEncryptedRecord, onExport, onRestore, onDone } = props
+  const { onExport, onRestore, onDone } = props
 
   const [busy, setBusy] = useState<Busy>(null)
 
@@ -80,23 +85,68 @@ export default function BackupScreen(props: BackupProps) {
   const [restoreError, setRestoreError] = useState<string | null>(null)
   const [restored, setRestored] = useState<PassportBackupSummary | null>(null)
 
+  /**
+   * Whether there is anything to back up, asked of the STORES an export
+   * actually serialises.
+   *
+   * This used to be a `hasEncryptedRecord` prop, and the only caller could
+   * fill it with nothing better than "is a profile open" — so it was constant
+   * true, its false branch was unreachable copy, and the export button was
+   * gated on a session rather than on the records it writes. `collectPassportBackup`
+   * takes no arguments and reads exactly those records, so it can answer the
+   * question the screen is really asking. Re-read after a restore, because a
+   * restore is the thing most likely to change the answer.
+   */
+  const [holdings, setHoldings] = useState<Holdings | null>(null)
+  const [holdingsProblem, setHoldingsProblem] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void collectPassportBackup()
+      .then((contents) => {
+        if (cancelled) return
+        setHoldingsProblem(null)
+        setHoldings({
+          aliases: Object.keys(contents.aliases).length,
+          passportContracts: Object.keys(contents.passportContracts).length,
+          incentives: contents.incentives.length,
+        })
+      })
+      .catch((cause: unknown) => {
+        /* Storage denied, or a record this build refuses to put in a file.
+           Either way the honest answer is that the records could not be read —
+           not "there is nothing here", which is a different fact. */
+        if (cancelled) return
+        setHoldings(null)
+        setHoldingsProblem(errorMessage(cause))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [restored])
+
+  const heldRecords =
+    holdings === null ? null : holdings.aliases + holdings.passportContracts + holdings.incentives
+
   const hint = password ? describeBackupPassword(password) : null
   const mismatch = confirmation.length > 0 && confirmation !== password
   const canExport =
-    !busy && password.length >= 8 && confirmation === password && hasEncryptedRecord
+    !busy && password.length >= 8 && confirmation === password && (heldRecords ?? 0) > 0
 
+  /* Cleared in `finally`, not on the success path: a sealing or writing error
+     used to leave the plaintext password sitting in React state and in the
+     input's `value` until the user navigated away. Retyping it is the price,
+     and it is a small one next to a password left in the DOM. */
   const runExport = async () => {
     setBusy('export')
     setExportError(null)
     setExported(null)
     try {
       setExported(await onExport(password))
-      // The password is not kept a moment longer than the operation needs it.
-      setPassword('')
-      setConfirmation('')
     } catch (cause) {
       setExportError(errorMessage(cause))
     } finally {
+      setPassword('')
+      setConfirmation('')
       setBusy(null)
     }
   }
@@ -108,10 +158,10 @@ export default function BackupScreen(props: BackupProps) {
     setRestored(null)
     try {
       setRestored(await onRestore(picked, restorePassword))
-      setRestorePassword('')
     } catch (cause) {
       setRestoreError(errorMessage(cause))
     } finally {
+      setRestorePassword('')
       setBusy(null)
     }
   }
@@ -156,11 +206,7 @@ export default function BackupScreen(props: BackupProps) {
               <Database size={17} aria-hidden="true" />
             </span>
             <div>
-              <strong>
-                {hasEncryptedRecord
-                  ? 'Your Passport state is encrypted in this browser'
-                  : 'Passport state is encrypted in this browser as you use it'}
-              </strong>
+              <strong>Passport state is encrypted in this browser as you use it</strong>
               <small>
                 Passport&apos;s private state is stored in this browser&apos;s IndexedDB,
                 encrypted under a key that only a live passkey assertion can produce.
@@ -254,12 +300,27 @@ export default function BackupScreen(props: BackupProps) {
             </button>
           </div>
 
-          {!hasEncryptedRecord ? (
+          {holdingsProblem ? (
             <p className="mnid-foot">
               <Info size={13} aria-hidden="true" />
-              There is no Passport in this browser yet, so there is nothing to back up.
+              What this browser holds could not be read, so there is nothing to seal:{' '}
+              {holdingsProblem}
             </p>
-          ) : null}
+          ) : holdings === null ? null : heldRecords === 0 ? (
+            <p className="mnid-foot">
+              <Info size={13} aria-hidden="true" />
+              This browser holds no name claim, no account contract, and no rewards yet, so there
+              is nothing to back up.
+            </p>
+          ) : (
+            <p className="mnid-foot">
+              <Info size={13} aria-hidden="true" />
+              This browser holds {holdings.aliases}{' '}
+              {holdings.aliases === 1 ? 'name claim' : 'name claims'}, {holdings.passportContracts}{' '}
+              {holdings.passportContracts === 1 ? 'contract record' : 'contract records'}, and{' '}
+              {holdings.incentives} {holdings.incentives === 1 ? 'reward' : 'rewards'}.
+            </p>
+          )}
 
           {exportError ? (
             <p className="mnid-status mnid-status-error">
@@ -406,6 +467,22 @@ export default function BackupScreen(props: BackupProps) {
                   The restored contract records were not re-checked against the chain:{' '}
                   {restored.ledgerCheck.reason} Until the indexer answers for one, it is a
                   record, not a proof.
+                </p>
+              )}
+              {/* And the same for a restored NAME. A file can say a name was
+                  confirmed; only the registry can. See `confirmRestoredAliases`
+                  in `../identity/backup.ts`. */}
+              {restored.registryCheck === undefined || !restored.registryCheck.ran ? null : (
+                <p>
+                  Names re-checked against the registry: {restored.registryCheck.confirmed}{' '}
+                  confirmed
+                  {restored.registryCheck.unconfirmed > 0
+                    ? `, ${restored.registryCheck.unconfirmed} still awaiting the registry — restored as a record, not as a confirmed identity`
+                    : ''}
+                  {restored.registryCheck.otherNetworks > 0
+                    ? `, ${restored.registryCheck.otherNetworks} on a network Passport does not read names from`
+                    : ''}
+                  .
                 </p>
               )}
             </div>

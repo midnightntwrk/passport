@@ -17,10 +17,12 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   assertSecureSponsorUrl,
   createSponsorError,
+  describeSponsorWalletStatus,
   normaliseSponsorHex,
   parseSponsorWalletStatus,
   resetSponsorReadinessCache,
   sponsorBalanceOnly,
+  sponsorCanPay,
   sponsorConfig,
   sponsorHexToBytes,
   sponsorReadiness,
@@ -483,6 +485,253 @@ describe('sponsorBalanceOnly', () => {
   it('refuses to run at all when sponsorship is not configured', async () => {
     await expect(sponsorBalanceOnly(bytes, { config: null })).rejects.toThrow(
       /VITE_SPONSOR_URL is unset/,
+    );
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The seams every caller in the app actually uses                            */
+/* -------------------------------------------------------------------------- */
+
+describe('the zero-argument forms the app calls', () => {
+  it('reads the build’s own environment without being handed one', () => {
+    /* `sponsorConfig()` with no argument is what `resolveConfig` falls back to,
+       and what every call site in `App.tsx` and `contractRuntime.ts` reaches.
+       Which URL it answers with depends on the build, so what is asserted is
+       the invariant that holds for every build: sponsorship is either off, or
+       it is pointed somewhere a signed transaction may safely go. */
+    const config = sponsorConfig();
+    if (config !== null) {
+      expect(config.url).not.toMatch(/\/$/);
+      expect(() => assertSecureSponsorUrl(config.url)).not.toThrow();
+    }
+  });
+
+  it('resolves that configuration only when `config` is absent, not when it is null', async () => {
+    resetSponsorReadinessCache();
+    // An explicit `null` means "disabled" and must not be re-resolved from the
+    // environment — otherwise a caller could not switch sponsorship off.
+    expect(await sponsorReadiness({ config: null })).toEqual({ state: 'disabled' });
+
+    /* An ABSENT `config` is the opposite instruction: go and read the build's
+       own environment. Which answer that produces is the build's business, so
+       what is asserted is that the service was consulted exactly when a
+       configuration was found, and not otherwise. */
+    resetSponsorReadinessCache();
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 500 }));
+    const readiness = await sponsorReadiness({ fetch: fetchSpy as never });
+    if (readiness.state === 'disabled') expect(fetchSpy).not.toHaveBeenCalled();
+    else expect(fetchSpy).toHaveBeenCalledTimes(1);
+    resetSponsorReadinessCache();
+  });
+
+  it('falls back to the ambient fetch when none is injected', async () => {
+    resetSponsorReadinessCache();
+    const ambient = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          total: 1,
+          available: 1,
+          wallets: [{ index: 0, ready: true, dust: { balance: '1', utxoCount: 1, isSynced: true } }],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', ambient);
+    try {
+      const readiness = await sponsorReadiness({ config: { url: 'https://sponsor.example' } });
+      expect(readiness.state).toBe('ready');
+      expect(ambient).toHaveBeenCalledTimes(1);
+
+      // And the same for the POST path.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response(JSON.stringify({ txHash: 'aa', txBytes: 'bb' }), { status: 200 })),
+      );
+      await expect(
+        sponsorBalanceOnly(Uint8Array.from([1]), {
+          config: { url: 'https://sponsor.example' },
+        }),
+      ).resolves.toMatchObject({ txBytes: 'bb' });
+    } finally {
+      vi.unstubAllGlobals();
+      resetSponsorReadinessCache();
+    }
+  });
+
+  it('really waits between attempts when no sleep is injected', async () => {
+    resetSponsorReadinessCache();
+    /* The default sleep is a real timer, and it is the one production uses.
+       Fake timers are what make asserting on it cheap; the point of the
+       assertion is that the retry is scheduled at all. */
+    vi.useFakeTimers();
+    try {
+      const fetchSpy = vi.fn(async () => {
+        throw new TypeError('fetch failed');
+      });
+      const pending = sponsorReadiness({
+        config: { url: 'https://sponsor.example' },
+        fetch: fetchSpy as never,
+      });
+      await vi.advanceTimersByTimeAsync(SPONSOR_PROBE_RETRY_DELAY_MS + 1);
+      const readiness = await pending;
+      expect(readiness.state).toBe('unavailable');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+      resetSponsorReadinessCache();
+    }
+  });
+
+  it('shares one in-flight probe between concurrent callers', async () => {
+    resetSponsorReadinessCache();
+    let release!: (response: Response) => void;
+    const fetchSpy = vi.fn(
+      () => new Promise<Response>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const options = { config: { url: 'https://sponsor.example' }, fetch: fetchSpy as never };
+    const first = sponsorReadiness(options);
+    const second = sponsorReadiness(options);
+    release(
+      new Response(
+        JSON.stringify({
+          total: 1,
+          available: 1,
+          wallets: [{ index: 0, ready: true, dust: { balance: '9', utxoCount: 1, isSynced: true } }],
+        }),
+        { status: 200 },
+      ),
+    );
+    expect(await first).toEqual(await second);
+    // A send must not queue behind a second copy of a probe already running.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    resetSponsorReadinessCache();
+  });
+
+  it('names a non-Error transport failure rather than printing [object Object]', async () => {
+    resetSponsorReadinessCache();
+    const fetchSpy = vi.fn(async () => {
+      // eslint-disable-next-line no-throw-literal
+      throw 'the worker went away';
+    });
+    const readiness = await sponsorReadiness({
+      config: { url: 'https://sponsor.example' },
+      fetch: fetchSpy as never,
+      sleep: async () => {},
+    });
+    expect(readiness).toMatchObject({
+      state: 'unavailable',
+      reason: 'wallet-status could not be fetched, twice: the worker went away',
+    });
+    resetSponsorReadinessCache();
+  });
+});
+
+describe('sponsorCanPay', () => {
+  it('is true only for a ready sponsor', async () => {
+    resetSponsorReadinessCache();
+    expect(await sponsorCanPay({ config: null })).toBe(false);
+
+    resetSponsorReadinessCache();
+    const ready = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          total: 1,
+          available: 1,
+          wallets: [{ index: 0, ready: true, dust: { balance: '9', utxoCount: 1, isSynced: true } }],
+        }),
+        { status: 200 },
+      ),
+    );
+    expect(
+      await sponsorCanPay({ config: { url: 'https://sponsor.example' }, fetch: ready as never }),
+    ).toBe(true);
+
+    resetSponsorReadinessCache();
+    const empty = vi.fn(async () =>
+      new Response(JSON.stringify(LIVE_PREVIEW_WALLET_STATUS), { status: 200 }),
+    );
+    expect(
+      await sponsorCanPay({ config: { url: 'https://sponsor.example' }, fetch: empty as never }),
+    ).toBe(false);
+    resetSponsorReadinessCache();
+  });
+});
+
+describe('parseSponsorWalletStatus, on bodies the gateway has really sent', () => {
+  it('tolerates a missing or non-array wallets list', () => {
+    expect(parseSponsorWalletStatus({ total: 0, available: 0 })).toEqual({
+      total: 0,
+      available: 0,
+      wallets: [],
+    });
+    expect(parseSponsorWalletStatus({ total: 1, available: 1, wallets: 'one' })?.wallets).toEqual([]);
+  });
+
+  it('drops entries that are not objects and fills in the fields they omit', () => {
+    const status = parseSponsorWalletStatus({
+      total: 3,
+      available: 1,
+      wallets: [null, 'wallet', { ready: true }, { index: '0', dust: 'none' }],
+    });
+    expect(status?.wallets).toEqual([
+      // No index, no dust: the defaults say so rather than inventing a wallet.
+      { index: -1, ready: true, dust: { balance: '0', utxoCount: 0, isSynced: false } },
+      { index: -1, ready: false, dust: { balance: '0', utxoCount: 0, isSynced: false } },
+    ]);
+    // `syncState` is present only when the service sent a string.
+    expect(status?.wallets[0]).not.toHaveProperty('syncState');
+  });
+
+  it('refuses a body whose totals are not numbers', () => {
+    expect(parseSponsorWalletStatus({ total: '1', available: 1 })).toBeNull();
+    expect(parseSponsorWalletStatus({ total: 1, available: null })).toBeNull();
+    expect(parseSponsorWalletStatus([])).toBeNull();
+  });
+});
+
+describe('describeSponsorWalletStatus', () => {
+  it('names each wallet’s dust, and says nothing extra when there are none', () => {
+    expect(
+      describeSponsorWalletStatus({
+        total: 2,
+        available: 0,
+        wallets: [
+          { index: 0, ready: true, dust: { balance: '0', utxoCount: 0, isSynced: true } },
+          { index: 1, ready: false, dust: { balance: '12', utxoCount: 1, isSynced: false } },
+        ],
+      }),
+    ).toBe('sponsor reports 0/2 wallets available (#0 dust 0, #1 dust 12)');
+    expect(describeSponsorWalletStatus({ total: 0, available: 0, wallets: [] })).toBe(
+      'sponsor reports 0/0 wallets available',
+    );
+  });
+});
+
+describe('SponsorError classification', () => {
+  it('names the two causes a caller shows differently', () => {
+    const syncing = createSponsorError(503, { error: 'WALLET_SYNCING' });
+    expect(syncing.isWalletSyncing).toBe(true);
+    expect(syncing.isInsufficientDust).toBe(false);
+
+    const dry = createSponsorError(503, { error: 'INSUFFICIENT_DUST' });
+    expect(dry.isInsufficientDust).toBe(true);
+    expect(dry.isWalletSyncing).toBe(false);
+    expect(dry.isRetryable).toBe(true);
+    expect(createSponsorError(400, { error: 'BAD_REQUEST' }).isRetryable).toBe(false);
+  });
+
+  it('recognises a pending transaction named only in the assembled message', () => {
+    /* `message` is `${code}: ${detail}`, so a service that puts the phrase in
+       its CODE is still recognised — the detail alone would miss it. */
+    const error = createSponsorError(429, { error: 'ALREADY PENDING', message: 'wait' });
+    expect(error.detail).toBe('wait');
+    expect(error.isPendingTransaction).toBe(true);
+    // And a 503 carrying the same words is not a pending transaction.
+    expect(createSponsorError(503, { error: 'PENDING_TRANSACTION' }).isPendingTransaction).toBe(
+      false,
     );
   });
 });

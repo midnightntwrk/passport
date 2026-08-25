@@ -366,3 +366,225 @@ describe('notify', () => {
     await expect(notify('Title', 'Body')).resolves.toBe(false);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* The paths a browser takes and a happy desktop does not                      */
+/* -------------------------------------------------------------------------- */
+
+/** A `localStorage` that throws on ACCESS — private mode, or disabled by policy. */
+function installUnreachableStorage(): void {
+  Object.defineProperty(globalThis, 'localStorage', {
+    get() {
+      throw new DOMException('The operation is insecure.', 'SecurityError');
+    },
+    configurable: true,
+  });
+}
+
+/** A `localStorage` that exists but refuses to write — a full or partitioned quota. */
+function installReadOnlyStorage(): void {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+      },
+      removeItem: () => {},
+    },
+    configurable: true,
+    writable: true,
+  });
+}
+
+describe('storage that is not there, or will not take a write', () => {
+  it('keeps working when reading localStorage throws outright', () => {
+    installUnreachableStorage();
+    installNotification({ permission: 'granted' });
+    // The preference simply does not persist. The default is ON, so a granted
+    // permission is still an active one.
+    expect(notificationsEnabled()).toBe(true);
+    expect(notificationsState().active).toBe(true);
+  });
+
+  it('keeps working where there is no localStorage property at all', () => {
+    // A worker, or the node process these tests run in before anything is
+    // installed. `storage()` answers null and the default preference stands.
+    Reflect.deleteProperty(globalThis, 'localStorage');
+    installNotification({ permission: 'granted' });
+    expect(notificationsEnabled()).toBe(true);
+    expect(setNotificationsEnabled(false).enabled).toBe(true);
+  });
+
+  it('still tells subscribers when the write is refused', () => {
+    installReadOnlyStorage();
+    installNotification({ permission: 'granted' });
+    const seen: boolean[] = [];
+    const unsubscribe = subscribeToNotifications((state) => seen.push(state.active));
+    // The mute is lost for the next session, and said out loud for this one.
+    const state = setNotificationsEnabled(false);
+    expect(state.enabled).toBe(true);
+    expect(seen).toEqual([true]);
+    unsubscribe();
+  });
+});
+
+describe('the Permissions API listener', () => {
+  /** A `navigator.permissions` whose `query` behaves as `shape` says. */
+  function installPermissions(shape: 'resolves' | 'rejects' | 'throws' | 'absent' | 'not-a-function'): {
+    listeners: (() => void)[];
+    queries: number;
+  } {
+    const listeners: (() => void)[] = [];
+    const record = { queries: 0 };
+    const permissions =
+      shape === 'absent'
+        ? undefined
+        : {
+            query: shape === 'not-a-function'
+              ? 'nope'
+              : () => {
+                  record.queries += 1;
+                  if (shape === 'throws') throw new Error('unsupported permission name');
+                  if (shape === 'rejects') return Promise.reject(new Error('refused'));
+                  return Promise.resolve({
+                    addEventListener: (_name: string, listener: () => void) => {
+                      listeners.push(listener);
+                    },
+                  });
+                },
+          };
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { permissions },
+      configurable: true,
+      writable: true,
+    });
+    return { listeners, get queries() { return record.queries; } };
+  }
+
+  it('re-reports state when the browser says the permission changed', async () => {
+    installNotification({ permission: 'granted' });
+    const permissions = installPermissions('resolves');
+    const seen: string[] = [];
+    const unsubscribe = subscribeToNotifications((state) => seen.push(state.permission));
+    // The query is asynchronous; the listener is attached once it settles.
+    await Promise.resolve();
+    expect(permissions.listeners).toHaveLength(1);
+
+    // The user revoked it in site settings — the only channel that reports this.
+    installNotification({ permission: 'denied' });
+    permissions.listeners[0]?.();
+    expect(seen).toEqual(['denied']);
+    unsubscribe();
+  });
+
+  it('binds exactly once however many subscribers arrive', async () => {
+    installNotification({ permission: 'granted' });
+    const permissions = installPermissions('resolves');
+    const first = subscribeToNotifications(() => {});
+    const second = subscribeToNotifications(() => {});
+    await Promise.resolve();
+    expect(permissions.queries).toBe(1);
+    first();
+    second();
+  });
+
+  it('carries on when the query rejects, throws, or is simply absent', async () => {
+    /* Safari has historically thrown on the 'notifications' name. The control
+       keeps whatever it last read, which is no worse than the alternative. */
+    for (const shape of ['rejects', 'throws', 'absent', 'not-a-function'] as const) {
+      resetNotificationsForTest();
+      installNotification({ permission: 'granted' });
+      installPermissions(shape);
+      const unsubscribe = subscribeToNotifications(() => {});
+      await Promise.resolve();
+      expect(notificationsState().active).toBe(true);
+      unsubscribe();
+    }
+  });
+
+  it('does not look for a Permissions API where there is no navigator', () => {
+    installNotification({ permission: 'granted' });
+    const unsubscribe = subscribeToNotifications(() => {});
+    expect(notificationsState().permission).toBe('granted');
+    unsubscribe();
+  });
+});
+
+describe('what a click on the notification does', () => {
+  /** A Notification fake that hands back the instance, so its `onclick` can be run. */
+  function installClickableNotification(): { shown: { onclick: (() => void) | null; closed: boolean }[] } {
+    const shown: { onclick: (() => void) | null; closed: boolean }[] = [];
+    class ClickableNotification {
+      static permission = 'granted';
+      static requestPermission(): Promise<string> {
+        return Promise.resolve('granted');
+      }
+      onclick: (() => void) | null = null;
+      closed = false;
+      constructor() {
+        shown.push(this);
+      }
+      close(): void {
+        this.closed = true;
+      }
+    }
+    Object.defineProperty(globalThis, 'Notification', {
+      value: ClickableNotification,
+      configurable: true,
+      writable: true,
+    });
+    return { shown };
+  }
+
+  it('focuses the tab and closes the shade', async () => {
+    const { shown } = installClickableNotification();
+    const focus = vi.fn();
+    Object.defineProperty(globalThis, 'focus', { value: focus, configurable: true, writable: true });
+
+    await expect(notify('Name registered', 'alice.night is yours.')).resolves.toBe(true);
+    expect(shown).toHaveLength(1);
+
+    // The constructor path is the one that can focus the tab — which is why it
+    // is tried before the worker, even where the worker would also work.
+    shown[0]?.onclick?.();
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(shown[0]?.closed).toBe(true);
+    Reflect.deleteProperty(globalThis, 'focus');
+  });
+
+  it('still closes the shade when the browser refuses the focus', async () => {
+    const { shown } = installClickableNotification();
+    Object.defineProperty(globalThis, 'focus', {
+      value: () => {
+        throw new Error('focus is not allowed here');
+      },
+      configurable: true,
+      writable: true,
+    });
+    await notify('Title', 'Body');
+    expect(() => shown[0]?.onclick?.()).not.toThrow();
+    expect(shown[0]?.closed).toBe(true);
+    Reflect.deleteProperty(globalThis, 'focus');
+  });
+
+  it('closes the shade in a context with no focus at all', async () => {
+    const { shown } = installClickableNotification();
+    Reflect.deleteProperty(globalThis, 'focus');
+    await notify('Title', 'Body');
+    shown[0]?.onclick?.();
+    expect(shown[0]?.closed).toBe(true);
+  });
+});
+
+describe('the worker path', () => {
+  it('reports failure where there is no service-worker container at all', async () => {
+    // An iOS Safari tab: no constructor, and no worker to fall back to.
+    installNotification({ permission: 'granted', constructorThrows: true });
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {},
+      configurable: true,
+      writable: true,
+    });
+    await expect(notify('Title', 'Body')).resolves.toBe(false);
+  });
+});
