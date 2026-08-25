@@ -344,6 +344,12 @@ function appTransferCodeFor(code: string | null): string | null {
 /** Appended to the queue reason when activation was attempted and failed. */
 const FUNDER_UNAVAILABLE_SENTENCE =
   'Automatic activation was unavailable just now, so the wallet still needs funding.';
+/**
+ * The queue reason when the sponsor cannot register a name right now. Never
+ * followed by a wallet-funded attempt: the wallet does not pay for names.
+ */
+const SPONSOR_UNAVAILABLE_SENTENCE =
+  'The Passport service that registers names is not available right now. Your name is kept for you and can be registered when it is back.';
 
 /**
  * Whether the funder is sponsoring `.night` registrations on `network` right
@@ -2940,16 +2946,24 @@ export default function PassportDemo() {
                  the funder's own sentence. */
               throw new AliasClaimError('register-rejected', cause.message);
             }
-            claimed = null; // Fall through to the self-paid claim below.
+            /* The wallet never pays for a name. Under the account model the
+               only transaction the wallet originates is the account deploy;
+               a registration the sponsor will not carry right now is kept
+               and retried, never bought from the wallet (ruled 2026/08/25). */
+            throw new AliasClaimError(
+              'register-rejected',
+              `${cause.message} Passport registers names through its service and does not spend from your wallet — the name is kept for you to register again shortly.`,
+            );
           }
         }
         if (!claimed) {
-          claimed = await claimAlias(
-            handle,
-            ownerSecret,
-            alias,
-            { kind: 'contract', contractAddress },
-            (progress) => onPhase(progress.phase),
+          /* No sponsor on offer at all: same rule, same outcome. The self-paid
+             `claimAlias` path stays in `identity/midnames.ts` for the drills
+             that prove the registry, and is deliberately never reached from
+             the app. */
+          throw new AliasClaimError(
+            'network-unreachable',
+            'The Passport service that registers names is not available right now. Your name is kept for you and can be registered when it is back — Passport does not spend from your wallet for this.',
           );
         }
 
@@ -3088,17 +3102,10 @@ export default function PassportDemo() {
            A funder that SPONSORS registrations makes the grant itself
            pointless: it will register the name with its own NIGHT, so the
            user's balance is not consulted at all and no drip is requested. */
-        const sponsored = await aliasSponsorshipLikely(localWalletNetworkId);
-        const shortfall =
-          FUNDER_URL && !sponsored ? await claimNightShortfall(alias) : null;
-        if (shortfall !== null) {
-          setClaimPhase('activating');
-          try {
-            await activateWalletViaFunder(shortfall);
-          } finally {
-            setClaimPhase(null);
-          }
-        }
+        /* No activation grant to the wallet, ever: the service registers the
+           name from its own funds and, once the account exists, funds THE
+           ACCOUNT. A wallet-address drip would put value where the account
+           model says none may sit (ruled 2026/08/25). */
         await claimAliasOnChain(alias);
         return;
       }
@@ -3183,17 +3190,11 @@ export default function PassportDemo() {
       if (!sponsored) {
         let funds = await checkAliasClaimFunds(handle, record.alias);
         if (!funds.ok) {
-          const shortfall = FUNDER_URL ? await claimNightShortfall(record.alias) : null;
-          const activated = shortfall !== null && (await activateWalletViaFunder(shortfall));
-          if (activated) funds = await checkAliasClaimFunds(handle, record.alias);
-          if (!funds.ok) {
-            requeue(
-              shortfall !== null && !activated
-                ? `${funds.reason} ${FUNDER_UNAVAILABLE_SENTENCE}`
-                : funds.reason,
-            );
-            return;
-          }
+          /* No drip and no self-paid registration: without the sponsor the
+             name simply stays queued, with the reason the wallet must never
+             be asked to fix (ruled 2026/08/25). */
+          requeue(SPONSOR_UNAVAILABLE_SENTENCE);
+          return;
         }
       }
       // (3) The onboarding claim's exact path, contract and all: one passkey
@@ -4649,38 +4650,10 @@ export default function PassportDemo() {
     // fees exactly as today). Every other queue reason — wrong network,
     // unreachable registry — passes through untouched, as does everything
     // when no funder is configured.
-    if (
-      FUNDER_URL &&
-      selectedNetwork === localWalletNetworkId &&
-      aliasClaimSupported &&
-      // While the funder sponsors registrations, a claim never fails for lack
-      // of NIGHT in the first place — dripping a grant here would fund a
-      // wallet that is not going to spend it.
-      !(await aliasSponsorshipLikely(selectedNetwork))
-    ) {
-      const shortfall = await claimNightShortfall(alias);
-      // The probe keeps this branch honest: a name queued because the REGISTRY
-      // was unreachable (or taken meanwhile) must queue exactly as before —
-      // only a claim that would succeed given funds is worth activating for.
-      const claimable =
-        shortfall !== null &&
-        (await probeAlias(selectedNetwork, alias).catch(() => null))?.status === 'available';
-      if (shortfall !== null && claimable) {
-        const activated = await activateWalletViaFunder(shortfall);
-        // The user may have skipped or signed out during the wait; springing
-        // a passkey prompt (or a queue toast) on them then would be worse
-        // than doing nothing — their own action already resolved the step.
-        if (identityStepRef.current !== 'alias') return;
-        if (activated) {
-          await claimAliasOnChain(alias);
-          return;
-        }
-        queueAlias(alias, selectedNetwork, `${reason} ${FUNDER_UNAVAILABLE_SENTENCE}`);
-        if (profile) storeNameStep(profile.passkey.credentialId, 'done');
-        setIdentityStep(null);
-        return;
-      }
-    }
+    /* A queued name stays queued. There is no activation grant to the wallet
+       and no wallet-funded registration to fall back to: the sponsor
+       registers names from its own funds, and when it cannot, the name
+       waits (ruled 2026/08/25). */
     queueAlias(alias, selectedNetwork, reason);
     if (profile) storeNameStep(profile.passkey.credentialId, 'done');
     setIdentityStep(null);

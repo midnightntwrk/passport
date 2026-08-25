@@ -271,6 +271,21 @@ export default function HomeScreen(props: HomeScreenProps) {
      name would change the props contract the integrator implements. A local
      clipboard write keeps the interface untouched. No clipboard, no tick —
      nothing is claimed falsely. */
+  /* The account is what the user IS on chain: the contract the `.night` name
+     resolves to. Receive shows it, and only it — the passkey wallet's address
+     is machinery and is never handed out as somewhere to send value. */
+  const accountAddress = identity?.record?.resolverTargetHex ?? null
+  const handleCopyAccount = useCallback(() => {
+    if (!accountAddress) return
+    void navigator.clipboard?.writeText(accountAddress).then(
+      () => {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1_600)
+      },
+      () => undefined,
+    )
+  }, [accountAddress])
+
   const handleCopyName = useCallback((name: string) => {
     void navigator.clipboard?.writeText(name).then(
       () => {
@@ -598,22 +613,21 @@ export default function HomeScreen(props: HomeScreenProps) {
                     </div>
                   ) : null}
 
-                  {/* One address, labelled as what it is to the person reading
-                      it. It is the payment address the `.night` resolver leaf
-                      carries, so a sender who resolves the name and a sender
-                      who copies this row reach the same place. */}
+                  {/* One address: the account contract the name resolves to.
+                      Not the wallet's — under the account model nothing is
+                      ever sent to the wallet, so nothing here invites it. */}
                   <ul className="mnhome-addresses">
                     <li className="mnhome-address">
-                      <span className="mnhome-address-label">Your address</span>
+                      <span className="mnhome-address-label">Your account</span>
                       <code className="mnhome-address-value">
-                        {unshieldedAddress ? truncateHash(unshieldedAddress) : 'Not available'}
+                        {accountAddress ? truncateHash(accountAddress) : 'Not available'}
                       </code>
                       <button
                         type="button"
                         className="mnhome-icon-button"
-                        onClick={handleCopy}
-                        disabled={!unshieldedAddress}
-                        aria-label="Copy your receiving address"
+                        onClick={handleCopyAccount}
+                        disabled={!accountAddress}
+                        aria-label="Copy your account address"
                       >
                         {copied ? (
                           <Check size={14} aria-hidden="true" />
