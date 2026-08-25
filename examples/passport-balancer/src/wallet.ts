@@ -870,13 +870,15 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
       const ttl = new Date(Date.now() + config.balanceTtlMs);
       let recipe: BalancingRecipe | null = null;
       try {
-        /* The transaction arrives from a third party, so it is checked before
-           anything is built against it. `verifySignatures` is on because the
-           signatures are already present; balancing and limits are not, because
-           the missing fee leg is precisely what this service is here to add. */
-        await facade.validateTransaction(incoming, {
-          flags: { enforceBalancing: false, verifySignatures: true, enforceLimits: false },
-        });
+        /* `facade.validateTransaction` is deliberately NOT run on the incoming
+           transaction — the same finding the registration path records above:
+           the beta SDK validates against a BLANK ledger state, so any
+           transaction that CALLS a deployed contract fails with `call to
+           non-existant contract`. Transfers and deploys passed it, which is why
+           this only surfaced on the first account withdrawal from the live app
+           (2026/08/25: withdraw_night, refused as BALANCE_FAILED). The ledger's
+           own deserialisation above is the structural guard; the node is the
+           judge of validity, and it rejects what it rejects with a real reason. */
 
         /* DUST and nothing else. The caller balanced its own shielded and
            unshielded legs before it asked (`BALANCE_WITHOUT_DUST` in
