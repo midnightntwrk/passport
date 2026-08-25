@@ -57,8 +57,8 @@ export interface PassportContractCardProps {
   phase?: PassportContractPhase | null
   /**
    * When set, the retry renders disabled with this sentence beneath it — the
-   * honest reason it cannot run right now (wallet still opening, no DUST and no
-   * sponsor, unsupported network).
+   * honest reason it cannot run right now (Passport is still starting up, the
+   * fee sponsor is unavailable, the network is not one this build deploys on).
    */
   disabledReason?: string | null
   /**
@@ -153,21 +153,36 @@ export default function PassportContractCard(props: PassportContractCardProps) {
         </p>
       ) : null}
 
-      {/* Submitted, but the indexer had not caught up. The transaction id and
-          address are real either way; this says which claim is being made. */}
+      {/* An unconfirmed record has two entirely different stories behind it,
+          and they were being told with one sentence. A record this device
+          wrote carries a deployment IT submitted; a record a restore wrote
+          carries an address a FILE asserted, and nothing on this device has
+          ever seen it. `restoredFromBackup` is set only by
+          `../identity/backup.ts`, which is what separates them. */}
       {deployed && record.ledgerConfirmed === false ? (
-        <p className="mnid-reason">
-          The deployment was submitted and returned a real address and transaction id. The indexer
-          had not yet served the contract&apos;s state when this was written — reopen Passport to
-          re-check.
-        </p>
+        record.restoredFromBackup ? (
+          <p className="mnid-reason">
+            This record was restored from a backup; it is awaiting confirmation on{' '}
+            {NETWORK_LABELS[network]}. Nothing on this device submitted the deployment, so the
+            address above is what the backup said — reopen Passport to re-check it against the
+            indexer.
+          </p>
+        ) : (
+          <p className="mnid-reason">
+            The deployment was submitted and returned a real address and transaction id. The indexer
+            had not yet served the contract&apos;s state when this was written — reopen Passport to
+            re-check.
+          </p>
+        )
       ) : null}
 
+      {/* Fees are the sponsor's, and the user has no fee balance to reason
+          about — so this says who covered it and never how. */}
       {deployed && record.feePaidBy ? (
         <p className="mnid-reason">
           {record.feePaidBy === 'sponsored'
             ? 'The deployment fee was covered by the fee sponsor.'
-            : 'The deployment fee was paid from this wallet’s own DUST.'}
+            : 'The fee sponsor did not cover this one.'}
         </p>
       ) : null}
 

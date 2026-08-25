@@ -60,6 +60,18 @@ export interface PassportContractRecord {
    * can never be written on the strength of the blob alone.
    */
   recovered?: boolean;
+  /**
+   * True when this record was written by a RESTORE from a backup file rather
+   * than by a deployment this device performed.
+   *
+   * `../identity/backup.ts` sets it on every record it writes and no other
+   * path sets it at all, so it is the only thing that distinguishes "this
+   * browser submitted a deployment and the indexer has not caught up" from
+   * "a file said this address exists and nothing here has checked". Both carry
+   * `ledgerConfirmed: false`, and the card must not tell the second story with
+   * the first one's words.
+   */
+  restoredFromBackup?: boolean;
   updatedAt: string;
 }
 
@@ -77,13 +89,24 @@ export function passportContractRecordKey(credentialId: string, network: string)
   return `${credentialId}::${network}`;
 }
 
+/**
+ * A null-prototype map, for the reason spelled out on `./aliasStore.ts`:
+ * `__proto__` is a legal JSON key, an ordinary object turns a write to it into
+ * a prototype assignment that stores nothing, and the read-back this store
+ * reports its counts from would then answer from `Object.prototype` and call
+ * that a written record.
+ */
+function emptyRecordMap(): Record<string, PassportContractRecord> {
+  return Object.create(null) as Record<string, PassportContractRecord>;
+}
+
 function readAll(): Record<string, PassportContractRecord> {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
+    if (!raw) return emptyRecordMap();
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object') return {};
-    const records: Record<string, PassportContractRecord> = {};
+    if (!parsed || typeof parsed !== 'object') return emptyRecordMap();
+    const records: Record<string, PassportContractRecord> = emptyRecordMap();
     for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
       const record = value as PassportContractRecord;
       if (
@@ -98,7 +121,7 @@ function readAll(): Record<string, PassportContractRecord> {
     return records;
   } catch {
     // Storage denied or corrupt: the session simply has no remembered contract.
-    return {};
+    return emptyRecordMap();
   }
 }
 
@@ -118,7 +141,9 @@ export function loadPassportContractRecord(
   credentialId: string,
   network: string,
 ): PassportContractRecord | null {
-  return readAll()[passportContractRecordKey(credentialId, network)] ?? null;
+  const records = readAll();
+  const key = passportContractRecordKey(credentialId, network);
+  return Object.hasOwn(records, key) ? records[key]! : null;
 }
 
 /**
@@ -211,13 +236,13 @@ export function restorePassportContractRecords(
   } catch (cause) {
     failure = cause instanceof Error ? cause.message : String(cause);
   }
-  const readBack = failure ? {} : readAll();
+  const readBack = failure ? emptyRecordMap() : readAll();
   for (const outcome of outcomes) {
     if (!outcome.written) continue;
     if (failure) {
       outcome.written = false;
       outcome.reason = `this browser refused to store the record: ${failure}`;
-    } else if (!readBack[outcome.key]) {
+    } else if (!Object.hasOwn(readBack, outcome.key)) {
       outcome.written = false;
       outcome.reason =
         'the record was stored but did not read back, so this browser does not hold it';

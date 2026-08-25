@@ -195,7 +195,7 @@ export default function BackupScreen(props: BackupProps) {
                 The passkey you created is a platform credential. If your device syncs
                 passkeys — iCloud Keychain on Apple devices, Google Password Manager on
                 Android and Chrome — it is already on your other devices, and signing in
-                there re-derives the same Midnight wallet. Passport does not run that sync
+                there reopens the same Passport. Passport does not run that sync
                 and cannot see it: if your platform does not sync passkeys, this passkey
                 exists on this device only.
               </small>
@@ -225,7 +225,7 @@ export default function BackupScreen(props: BackupProps) {
           <p className="mnid-lede">
             One encrypted file holding what this browser knows and cannot work out again:
             the name you claimed, your account contract, and anything apps have granted you.
-            Your wallet&apos;s sync state is left out — a new device rebuilds it from the
+            Chain sync state is left out — a new device rebuilds it from the
             chain.
           </p>
 
@@ -485,6 +485,16 @@ export default function BackupScreen(props: BackupProps) {
                   .
                 </p>
               )}
+              {/* A count cannot tell "the indexer was down" from "that name
+                  belongs to somebody else now", and the second is the one the
+                  user has to act on. Each unconfirmed name says which. */}
+              {restored.registryCheck?.ran
+                ? (restored.registryCheck.unconfirmedReasons ?? []).map((entry) => (
+                    <p key={`registry-${entry.network}`}>
+                      <code>{entry.network}</code> was not confirmed: {entry.reason}.
+                    </p>
+                  ))
+                : null}
             </div>
           ) : null}
         </div>

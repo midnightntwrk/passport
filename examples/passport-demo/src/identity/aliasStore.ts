@@ -42,13 +42,30 @@ export interface AliasRecord {
 
 const STORAGE_KEY = 'passport-alias:v1';
 
+/**
+ * Every map this store hands out has a NULL prototype, and every read-back
+ * asks {@link Object.hasOwn}.
+ *
+ * `__proto__` is a legal JSON key and an illegal storage key: on an ordinary
+ * object `next['__proto__'] = record` sets the prototype and stores nothing,
+ * and the read-back that follows finds `Object.prototype` sitting there and
+ * reports a write that never happened. A restore counts what it reads back, so
+ * a lookup that can answer from the prototype chain is a count that can lie.
+ * A null prototype removes the setter, and `Object.hasOwn` removes the
+ * inherited answer. `../identity/backup.ts` refuses the key by name as well —
+ * this is the half that makes the COUNT honest whatever reaches it.
+ */
+function emptyRecordMap(): Record<string, AliasRecord> {
+  return Object.create(null) as Record<string, AliasRecord>;
+}
+
 function readAll(): Record<string, AliasRecord> {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
+    if (!raw) return emptyRecordMap();
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object') return {};
-    const records: Record<string, AliasRecord> = {};
+    if (!parsed || typeof parsed !== 'object') return emptyRecordMap();
+    const records: Record<string, AliasRecord> = emptyRecordMap();
     for (const [network, value] of Object.entries(parsed as Record<string, unknown>)) {
       const record = value as AliasRecord;
       if (
@@ -63,7 +80,7 @@ function readAll(): Record<string, AliasRecord> {
     return records;
   } catch {
     // Storage denied or corrupt: the session simply has no remembered alias.
-    return {};
+    return emptyRecordMap();
   }
 }
 
@@ -79,7 +96,8 @@ export function loadAliasRecords(): Record<string, AliasRecord> {
 }
 
 export function loadAliasRecord(network: string): AliasRecord | null {
-  return readAll()[network] ?? null;
+  const records = readAll();
+  return Object.hasOwn(records, network) ? records[network]! : null;
 }
 
 /**
@@ -155,13 +173,13 @@ export function restoreAliasRecords(records: AliasRecord[]): AliasRecordWriteOut
   } catch (cause) {
     failure = cause instanceof Error ? cause.message : String(cause);
   }
-  const readBack = failure ? {} : readAll();
+  const readBack = failure ? emptyRecordMap() : readAll();
   for (const outcome of outcomes) {
     if (!outcome.written) continue;
     if (failure) {
       outcome.written = false;
       outcome.reason = `this browser refused to store the record: ${failure}`;
-    } else if (!readBack[outcome.network]) {
+    } else if (!Object.hasOwn(readBack, outcome.network)) {
       outcome.written = false;
       outcome.reason =
         'the record was stored but did not read back, so this browser does not hold it';

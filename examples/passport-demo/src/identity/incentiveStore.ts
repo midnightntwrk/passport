@@ -78,6 +78,17 @@ function redeemedAtRank(value: string): number {
   return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
 }
 
+/** Newest first, with an unreadable date sorting last rather than first. */
+function newestFirst(
+  left: PassportIncentiveRecord,
+  right: PassportIncentiveRecord,
+): number {
+  const leftRank = redeemedAtRank(left.redeemedAt);
+  const rightRank = redeemedAtRank(right.redeemedAt);
+  if (leftRank === rightRank) return 0;
+  return leftRank > rightRank ? -1 : 1;
+}
+
 /**
  * Writes many redemptions in ONE read and ONE `setItem`, notifying subscribers
  * ONCE, and — the part {@link saveIncentive} cannot do for a batch — keeping
@@ -85,22 +96,31 @@ function redeemedAtRank(value: string): number {
  *
  * `saveIncentive` prepends, so replaying a newest-first backup through it one
  * record at a time leaves the store oldest-first and lets the
- * {@link INCENTIVE_LIMIT} cap fall on the NEWEST records. Here the merged list
- * is ordered by `redeemedAt` before the cap is applied, so the cap always
- * discards the oldest, and every record the cap discards comes back to the
- * caller as `written: false` with that as its reason.
+ * {@link INCENTIVE_LIMIT} cap fall on the NEWEST records. Here the incoming
+ * records are ordered by `redeemedAt` before the cap is applied, so the cap
+ * always falls on the oldest of them, and every record the cap leaves out
+ * comes back to the caller as `written: false` with that as its reason.
+ *
+ * THE CAP APPLIES TO THE FILE, NEVER TO WHAT IS ALREADY HERE
+ * ---------------------------------------------------------
+ * A restore is not allowed to cost the user a reward they already hold. The
+ * merged list used to be capped as a whole, so fifty future-dated rewards in a
+ * file evicted fifty genuine local ones and reported `skipped: 0` — the file
+ * won every place and nothing said so. Now the records already in this browser
+ * keep their places unconditionally, the file's records fill whatever room is
+ * left (newest first), and each one that finds no room is reported with the cap
+ * as its reason.
  */
 export function restoreIncentives(records: PassportIncentiveRecord[]): IncentiveWriteOutcome[] {
   if (records.length === 0) return [];
   const incoming = new Set(records.map((record) => record.id));
-  const merged = [...records, ...loadIncentives().filter((record) => !incoming.has(record.id))];
-  merged.sort((left, right) => {
-    const leftRank = redeemedAtRank(left.redeemedAt);
-    const rightRank = redeemedAtRank(right.redeemedAt);
-    if (leftRank === rightRank) return 0;
-    return leftRank > rightRank ? -1 : 1;
-  });
-  const kept = merged.slice(0, INCENTIVE_LIMIT);
+  /* A file record REPLACES the local record of the same id rather than
+     competing with it for room — same redemption, one place. */
+  const local = loadIncentives().filter((record) => !incoming.has(record.id));
+  const room = Math.max(0, INCENTIVE_LIMIT - local.length);
+  const admitted = [...records].sort(newestFirst).slice(0, room);
+  const admittedIds = new Set(admitted.map((record) => record.id));
+  const kept = [...local, ...admitted].sort(newestFirst);
 
   let failure: string | null = null;
   try {
@@ -121,9 +141,9 @@ export function restoreIncentives(records: PassportIncentiveRecord[]): Incentive
     return {
       id: record.id,
       written: false,
-      reason: kept.includes(record)
+      reason: admittedIds.has(record.id)
         ? 'the record was stored but did not read back, so this browser does not hold it'
-        : `this browser keeps the ${INCENTIVE_LIMIT} most recent rewards and this one is older than all of them`,
+        : `this browser keeps the ${INCENTIVE_LIMIT} most recent rewards; the rewards already here are never evicted by a restore, and the newer rewards in the file took the places that were left`,
     };
   });
   publish();
