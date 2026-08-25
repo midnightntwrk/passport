@@ -11,33 +11,34 @@
  * its own DUST. The user's wallet signs nothing, spends nothing, and needs to
  * hold nothing.
  *
- * This module is the client half: one probe that asks the funder whether it is
+ * This module is the client half: one probe that asks the service whether it is
  * sponsoring right now, and one call that asks it to register. Everything the
- * funder refuses comes back as a typed {@link AliasSponsorRefusal} so the
- * caller can decide — honestly, per code — whether the self-paid path is worth
- * offering instead. The self-paid path in `midnames.ts` is unchanged and
- * remains the fallback, not a dead branch: it is what runs when no funder is
- * configured, when the funder is out of NIGHT, or when this Passport already
- * had its one sponsored name and the user wants another.
+ * service refuses comes back as a typed {@link AliasSponsorRefusal}, and
+ * `selfPayWorthTrying` says only whether a RETRY could honestly land — never
+ * whether the wallet should buy the name instead. It should not, and since
+ * 2026/08/25 it cannot: the self-paid `claimAlias` is gone from `midnames.ts`,
+ * because the passkey wallet originates exactly one transaction in its life
+ * and that is the account-custody deploy. A refusal this module reports ends
+ * with the name QUEUED for a later attempt.
  *
  * The service stands in for Midnames-side sponsorship until the Midnames team
  * runs their own; nothing in the protocol is Passport-specific.
- * WHERE THIS STANDS ON STAGENET (2026/08/24)
- * ------------------------------------------
- * Nowhere, and by design rather than by omission. This module is pure
- * transport — it holds no ledger, no SDK, and no contract — so the move to
- * ledger-9 changed nothing in it. What changed is the answer it gets:
- * {@link checkAliasSponsorship} requires the funder's own `/status` to report
- * the network being claimed on, and the deployed funder reports
- * `network: "preview"`. On stagenet it therefore returns `false`, every time,
- * and the caller takes the self-paid path.
  *
- * That is the correct behaviour and it needs no gate of its own: the funder
- * genuinely cannot register a stagenet name — it holds preview NIGHT, on a
- * preview wallet, against the preview registry. The stagenet balancer at
- * `/balancer` sponsors FEES and nothing else; it has no `/register-alias` and
- * does not send NIGHT. So on stagenet a registration's COST is the user's, and
- * the code already says so rather than hoping.
+ * WHO SPEAKS THIS ON STAGENET (2026/08/25)
+ * ----------------------------------------
+ * The stagenet balancer does. `examples/passport-balancer` serves the same
+ * three routes this client uses — `GET /status`, `POST /register-alias`,
+ * `POST /fund-account` — against the stagenet `.night` TLD deployed on
+ * 2026/08/24 (see `midnames.ts#MIDNAMES_TLD_ADDRESSES`), and it holds stagenet
+ * NIGHT to pay the registry price with. An earlier version of this comment said
+ * the balancer had no `/register-alias` and that a stagenet registration's COST
+ * was therefore the user's; both halves were wrong by the time it was read.
+ *
+ * This module is pure transport — no ledger, no SDK, no contract — so it did
+ * not have to move for ledger-9, and it does not care which of the two services
+ * answers. {@link checkAliasSponsorship} still requires the service's own
+ * `/status` to name the network being claimed on, so a service pointed at
+ * another network reads as unavailable and the name queues.
  */
 
 import type { AliasClaimResult, MidnamesNetwork } from './midnames.js';
@@ -64,10 +65,14 @@ export class AliasSponsorRefusal extends Error {
     readonly code: string,
     message: string,
     /**
-     * Whether falling back to the SELF-PAID claim is honest for this code.
-     * False where the fallback could double-register (`registration-in-flight`,
-     * `confirmation-failed` — the sponsored name may have landed) or where it
-     * would fail identically (`name-taken`).
+     * Whether asking again later could honestly land this name.
+     *
+     * False where a second attempt could DOUBLE-REGISTER
+     * (`registration-in-flight`, `confirmation-failed` — the name may already
+     * have landed) or where it would fail identically (`name-taken`). The
+     * caller uses it to choose between "queued, we will try again" and "stop,
+     * with the service's own sentence"; it has never been permission to spend
+     * from the wallet, and there is no longer a wallet-funded claim to permit.
      */
     readonly selfPayWorthTrying: boolean,
   ) {
@@ -76,7 +81,7 @@ export class AliasSponsorRefusal extends Error {
   }
 }
 
-/** Codes after which the self-paid path must NOT be attempted. */
+/** Codes after which the name must NOT be re-attempted — see `selfPayWorthTrying`. */
 const NO_FALLBACK_CODES = new Set([
   'name-taken',
   'registration-in-flight',
@@ -103,7 +108,7 @@ async function fetchWithTimeout(url: string, ms: number, init?: RequestInit): Pr
  * Whether the funder is sponsoring registrations on this network RIGHT NOW —
  * its own `/status` saying `aliasSponsorship: "available"` on the matching
  * network, never a hopeful assumption. Any transport failure, timeout, or
- * unexpected body is `false`: the self-paid path is the honest answer when the
+ * unexpected body is `false`: a queued name is the honest answer when the
  * sponsor cannot be confirmed. Cached for {@link PROBE_TTL_MS} per funder URL.
  */
 export async function checkAliasSponsorship(
@@ -169,11 +174,12 @@ const bytesToHex = (bytes: Uint8Array): string =>
  * confirmed. The funder's 200 already means IT read the name back resolving to
  * the requested contract; the local read is this client refusing to take that
  * on faith. A local read that has not caught up yet downgrades
- * `registryConfirmed` to `false` — the same honest "awaiting the registry"
- * the self-paid path reports — it never fails the claim.
+ * `registryConfirmed` to `false` — the honest "awaiting the registry" the UI
+ * already has copy for — it never fails the claim.
  *
  * Refusals throw {@link AliasSponsorRefusal}; the caller inspects
- * `selfPayWorthTrying` before offering the self-paid path.
+ * `selfPayWorthTrying` to decide whether the name is worth queueing for another
+ * attempt or whether it must stop with the service's own sentence.
  */
 export async function sponsorAliasRegistration(
   funderUrl: string,
@@ -231,8 +237,8 @@ export async function sponsorAliasRegistration(
     success?.target?.address !== request.contractAddress
   ) {
     /* A 200 whose body does not name THIS contract as the target is treated as
-       no registration at all — but without a fallback, because something DID
-       land and a self-paid attempt on top of it could double-register. */
+       no registration at all — but with no retry, because something DID land
+       and a second attempt on top of it could double-register. */
     throw new AliasSponsorRefusal(
       'confirmation-failed',
       'The sponsorship service answered success but its answer did not name this Passport’s account contract, so the claim is not trusted.',

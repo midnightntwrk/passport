@@ -65,11 +65,13 @@ interface TxConsentProps {
    */
   sessionActive: boolean;
   /**
-   * Signs and submits a real unshielded NIGHT transfer, resolving with the
-   * node's transaction id. Wired by the host to the open local wallet's
-   * `sendUnshieldedNight`, exactly as the in-app browser's is. Left undefined
-   * when there is no wallet session: the approval sheet is then never shown
-   * and the app is told `wallet-unavailable` rather than being left waiting.
+   * Signs and submits a real unshielded NIGHT payment, resolving with the
+   * node's transaction id. Wired by the host to a `withdraw_night` on this
+   * Passport's account-custody contract — the money is the ACCOUNT's, the
+   * wallet only signs — exactly as the in-app browser's is. Left undefined
+   * when there is no wallet session OR no deployed account: the approval sheet
+   * is then never shown and the app is told `wallet-unavailable` rather than
+   * being left waiting.
    */
   executeTransfer?: (intent: {
     recipientAddress: string;

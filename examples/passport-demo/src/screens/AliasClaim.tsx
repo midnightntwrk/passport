@@ -1,24 +1,19 @@
 import {
-  AlertTriangle,
   ArrowRight,
   Sparkles,
   Check,
   CircleSlash,
-  ExternalLink,
   Loader2,
   Wifi,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
-  aliasCostAtomicNight,
   aliasDomain,
-  formatNight,
   normalizePassportAlias,
   type AliasAvailability,
   type AliasClaimProgress,
 } from '../identity/midnames.js'
-import { faucetUrlFor } from '../lib/networks.js'
 import { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
 import ThemeToggle from './ThemeToggle.js'
 import './identity.css'
@@ -33,14 +28,19 @@ import './identity.css'
  *
  *   - availability is `domains.member()` on the deployed `.night` TLD, probed
  *     live as the user types (debounced);
- *   - the cost shown is the deployed contract's own COST_SHORT / COST_MED /
- *     COST_LONG for the length typed;
- *   - claiming deploys a resolver and calls `register_domain_for`, and the two
- *     transaction ids that come back are real.
+ *   - claiming deploys the account-custody contract if this Passport has none,
+ *     then registers the name against it, and the transaction ids that come
+ *     back are real.
  *
- * When the registry cannot be reached, or the wallet cannot pay, the screen
- * says exactly that and offers to QUEUE the name. A queued name is never shown
- * as registered.
+ * NO PRICE, AND NO BALANCE (2026/08/25). The registry's COST is paid by the
+ * Passport service, from its own NIGHT — the user's wallet pays for nothing and
+ * originates exactly one transaction in its life, the account deploy. So this
+ * screen shows no price, reads no balance, and has no faucet link and no
+ * not-enough-NIGHT panel: none of them describe anything that can happen here.
+ *
+ * When the registry cannot be reached, or Passport cannot register on the
+ * network being shown, the screen says exactly that and offers to QUEUE the
+ * name. A queued name is never shown as registered.
  */
 
 const DEBOUNCE_MS = 500
@@ -64,8 +64,6 @@ export interface AliasClaimProps {
    * names land cannot drift from the one the Home card shows.
    */
   signingNetworkLabel: string
-  /** Formatted NIGHT, as the wallet surfaces report it. `null` = unknown. */
-  nightBalance: string | null
   checkAvailability: (alias: string) => Promise<AliasAvailability>
   /** Runs the REAL claim. Rejects with a message the caller has already shown. */
   onClaim: (alias: string) => Promise<void>
@@ -79,30 +77,22 @@ export interface AliasClaimProps {
   claimPhase: AliasClaimProgress['phase'] | null
   error: string | null
   /**
-   * Whether the DUST fee for this registration is genuinely covered by the
-   * fee sponsor — reported by the claim path, never assumed here.
+   * Whether the Passport service will genuinely REGISTER this name — its own
+   * `/status` reporting `aliasSponsorship: "available"` on this network, read
+   * by the host and never assumed here.
    *
-   * `undefined` (the default) keeps the honest baseline copy: the fee comes
-   * out of this wallet. Only a `true` that the sponsor path actually produced
-   * may soften it, and even then only the FEE is described as covered — the
-   * NIGHT paid to the registry owner still leaves the user's wallet. If the
-   * sponsor is unreachable or unauthorised, this must stay false and the
-   * screen goes back to naming the real cost.
+   * `undefined` (the default) and `false` keep the honest baseline: the name is
+   * kept and registered when the service is back. Only a `true` the probe
+   * actually produced may promise a registration, because the service is the
+   * only thing that can make one — the wallet pays for nothing and there is no
+   * self-paid claim behind this screen.
    *
-   * Even a `true` is a prediction: it comes from the same advisory probe the
-   * send sheet and the contract card quote, and a sponsor can drain between
-   * that probe and the submit. So the copy below carries the send sheet's
-   * hedging and the send sheet's noun — "expected to be covered by the fee
-   * sponsor" — rather than asserting a cover this screen cannot guarantee.
+   * Even a `true` is a prediction. A service can run out of NIGHT between the
+   * probe and the call, and when it does the claim ends with the name queued
+   * and the service's own sentence on the card — which is why nothing on this
+   * screen reports a registration before one has happened.
    */
-  feesSponsored?: boolean
-  /**
-   * True when an activation funder is configured, so an empty wallet can be
-   * granted enough NIGHT to register on the spot. It turns the shortfall from
-   * a dead end into a step: the claim button stays live, and the panel says a
-   * grant arrives first rather than sending the user to a captcha faucet.
-   */
-  autoActivates?: boolean
+  nameSponsored?: boolean
 }
 
 type FieldState =
@@ -111,18 +101,7 @@ type FieldState =
   | { kind: 'checking'; alias: string }
   | { kind: 'answered'; alias: string; availability: AliasAvailability }
 
-/** Parses a formatted NIGHT figure back to atomic units, exactly. */
-function atomicNightFrom(formatted: string | null): bigint | null {
-  if (formatted === null) return null
-  const cleaned = formatted.replace(/[\s,]/g, '')
-  if (!/^\d*(\.\d*)?$/.test(cleaned) || cleaned === '' || cleaned === '.') return null
-  const [whole, fraction = ''] = cleaned.split('.')
-  const padded = `${fraction}000000`.slice(0, 6)
-  return BigInt(whole || '0') * 1_000_000n + BigInt(padded || '0')
-}
-
 const PHASE_COPY: Record<AliasClaimProgress['phase'], (domain: string) => string> = {
-  activating: () => 'Activating this Passport…',
   /* The account contract is deployed as part of claiming, so the button names
      it. A step the user is paying for and waiting on is a step they are told
      about — silence here would be the "transparent" that means hidden. */
@@ -138,15 +117,13 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     walletReady,
     registrationSupported,
     signingNetworkLabel,
-    nightBalance,
     checkAvailability,
     onClaim,
     onQueue,
     onSkip,
     claimPhase,
     error,
-    feesSponsored,
-    autoActivates = false,
+    nameSponsored,
   } = props
 
   const [value, setValue] = useState('')
@@ -194,35 +171,26 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
   }, [checkAvailability, value])
 
   const alias = field.kind === 'checking' || field.kind === 'answered' ? field.alias : null
-  const cost = useMemo(() => (alias ? aliasCostAtomicNight(alias) : null), [alias])
-  const heldAtomic = atomicNightFrom(nightBalance)
-  const canPay = cost === null || heldAtomic === null ? null : heldAtomic >= cost
   const availability = field.kind === 'answered' ? field.availability : null
   const isAvailable = availability?.status === 'available'
   const isUnreachable = availability?.status === 'unreachable'
-  // No payment is attempted where Passport cannot register, so the funding
-  // panel would be answering a question nobody asked.
-  const shortOfNight = registrationSupported && isAvailable && canPay === false
 
   /**
-   * With an activation funder configured, an empty wallet is a step in the
-   * claim rather than a wall in front of it: pressing Claim asks the funder
-   * for a grant, waits for it to land, and registers. So the shortfall stops
-   * disabling the button and stops rerouting to the queue — it only changes
-   * what the panel says will happen next.
+   * What the panel promises, and it is the whole of what a claim does: the
+   * service registers the name and pays for it. There is no balance to check
+   * and no shortfall to warn about — the wallet pays for nothing, so an empty
+   * one is not a wall in front of this screen and never was the user's problem.
+   * With no sponsor the claim QUEUES; the host says so, and this screen simply
+   * does not promise a registration nobody is going to make.
    */
-  const activationCovers = shortOfNight && autoActivates
-  const blockedByFunds = shortOfNight && !autoActivates
+  const sponsorRegisters = registrationSupported && isAvailable && nameSponsored === true
 
-  const faucetUrl = faucetUrlFor(networkId)
   const queueReasonForNetwork = `Passport's wallet signs and submits on ${signingNetworkLabel} only, so this name is reserved for you locally but is NOT registered on ${NETWORK_LABELS[networkId]}.`
   const queueReasonForRegistry = isUnreachable
     ? `The .night registry on ${NETWORK_LABELS[networkId]} could not be reached when the name was chosen: ${
         availability?.status === 'unreachable' ? availability.detail : 'no detail reported'
       }`
     : ''
-  const queueReasonForFunds =
-    'Wallet has no NIGHT to pay the registration fee — visit the faucet, then claim the name.'
 
   const handleSubmit = useCallback(() => {
     if (!alias || busy) return
@@ -232,10 +200,6 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     }
     if (!registrationSupported) {
       void onQueue(alias, queueReasonForNetwork)
-      return
-    }
-    if (blockedByFunds) {
-      void onQueue(alias, queueReasonForFunds)
       return
     }
     void onClaim(alias)
@@ -248,7 +212,6 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     queueReasonForNetwork,
     queueReasonForRegistry,
     registrationSupported,
-    blockedByFunds,
   ])
 
   const primaryLabel = busy
@@ -264,8 +227,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     !walletReady ||
     alias === null ||
     availability === null ||
-    availability.status === 'taken' ||
-    blockedByFunds
+    availability.status === 'taken'
 
   return (
     <section className="mnid-screen" aria-busy={busy}>
@@ -318,14 +280,9 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
           <span className="mnid-suffix">.night</span>
         </div>
 
-        <AvailabilityLine
-          field={field}
-          cost={cost}
-          canPay={canPay}
-          networkId={networkId}
-        />
+        <AvailabilityLine field={field} networkId={networkId} />
 
-        {activationCovers ? (
+        {sponsorRegisters ? (
           <div className="mnid-panel" role="status">
             <p className="mnid-panel-head">
               <Sparkles size={15} aria-hidden="true" />
@@ -338,47 +295,6 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
               Press claim and Passport registers {aliasDomain(alias ?? '')} for you — the
               service pays for it, and you hold nothing. It usually takes a minute or two.
             </p>
-          </div>
-        ) : null}
-
-        {blockedByFunds ? (
-          <div className="mnid-panel" role="status">
-            <p className="mnid-panel-head">
-              <AlertTriangle size={15} aria-hidden="true" />
-              Not enough NIGHT to register yet
-            </p>
-            <p>
-              {aliasDomain(alias ?? '')} costs{' '}
-              <span className="mnid-cost">{formatNight(cost ?? 0n)}</span> NIGHT, paid to the
-              registry owner. This wallet holds{' '}
-              {nightBalance === null ? (
-                'an unknown amount'
-              ) : (
-                <>
-                  <span className="mnid-cost">{nightBalance}</span> NIGHT
-                </>
-              )}
-              .{' '}
-              {faucetUrl
-                ? `Top it up from the ${NETWORK_LABELS[networkId]} faucet — it needs a captcha, so it opens in a new tab — then come back and claim.`
-                : `${NETWORK_LABELS[networkId]} has no public faucet, so this wallet has to be funded from elsewhere before the name can be registered.`}
-            </p>
-            <div className="mnid-panel-actions">
-              {faucetUrl ? (
-                <a className="mnid-link" href={faucetUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink size={14} aria-hidden="true" />
-                  Open the faucet
-                </a>
-              ) : null}
-              <button
-                type="button"
-                className="mnid-link"
-                disabled={busy}
-                onClick={() => alias && void onQueue(alias, queueReasonForFunds)}
-              >
-                Queue name instead
-              </button>
-            </div>
           </div>
         ) : null}
 
@@ -436,9 +352,9 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
           <span>
             Names are 1–32 characters: lowercase letters, numbers, and hyphens inside. This is a
             real registration on the network
-            {feesSponsored
+            {nameSponsored
               ? ', paid for by the Passport service — you hold nothing and spend nothing'
-              : '; with no sponsor available right now it would be paid from this account'}
+              : '; with no sponsor available right now the name is kept for you and registered when the service is back — nothing is ever spent from your Passport for it'}
             .
           </span>
         </p>
@@ -449,13 +365,9 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
 
 function AvailabilityLine({
   field,
-  cost,
-  canPay,
   networkId,
 }: {
   field: FieldState
-  cost: bigint | null
-  canPay: boolean | null
   networkId: PassportNetwork
 }) {
   if (field.kind === 'empty') {
@@ -487,9 +399,9 @@ function AvailabilityLine({
       <p className="mnid-status mnid-status-available" role="status">
         <span className="mnid-status-dot" aria-hidden="true" />
         <span>
-          {/* No price and no "more NIGHT needed": the registration is sponsored
-              and the user's balance is not part of it. `canPay` still drives
-              the host's fallback logic; it is simply not the user's concern. */}
+          {/* No price and no "more NIGHT needed": the service registers the
+              name and pays for it, so the user's balance is not part of this
+              screen at all. */}
           {aliasDomain(field.alias)} is available
         </span>
       </p>

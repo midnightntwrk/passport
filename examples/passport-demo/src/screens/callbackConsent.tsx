@@ -118,7 +118,7 @@ function encodeTagged(material: TaggedKeyMaterial): string {
    mind, so the labels cannot drift apart. */
 const FIELD_LABELS = {
   displayName: 'Passport display name',
-  passportContract: 'Passport contract address and network',
+  passportContract: 'Your Passport account — its address and network',
   midnightAddresses: 'Midnight technical addresses',
 } as const;
 

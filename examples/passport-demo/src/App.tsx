@@ -1,9 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import {
-  ArrowUpRight,
-  Copy,
-  X,
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   EncryptedPassportPrivateStateStore,
   IndexedDbPassportEncryptedRecordStore,
@@ -82,7 +77,6 @@ import {
 import AppsScreen from './screens/Apps.js';
 import PassportNav, { type MobileTab } from './screens/Nav.js';
 import PassportToasts, { pushToast } from './screens/ToastStack.js';
-import { fetchRecentTransactions, type RecentTransaction } from './lib/indexerTx.js';
 // In-app notifications only — a closed Passport notifies nobody. The module's
 // header says exactly what background Web Push would additionally need.
 import { notify } from './lib/notifications.js';
@@ -112,7 +106,6 @@ type ProfileStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
 type ActivitySource = 'local' | 'wallet' | 'chain';
 type OnboardingIntent = 'local-create' | 'local-signin';
 type LocalWalletStatus = 'idle' | 'opening' | 'ready' | 'error';
-type TransactionsStatus = 'loading' | 'ready' | 'empty' | 'unavailable';
 
 interface ActivityEntry {
   id: string;
@@ -170,27 +163,19 @@ const signingNetworkLabel = configuredWalletNetwork
   ? NETWORK_LABELS[configuredWalletNetwork]
   : 'its configured network';
 /**
- * The indexer this build reads history from. `fetchRecentTransactions` derives
- * its own WebSocket URL from it, and it must be the same network the wallet is
- * configured for — see `lib/networks.ts`.
- */
-const MIDNIGHT_INDEXER_URL =
-  import.meta.env.VITE_INDEXER_URL ?? 'https://indexer.stagenet.shielded.tools/api/v4/graphql';
-/**
- * Optional activation funder (`VITE_FUNDER_URL`, see
- * `examples/passport-funder`). When set, Passport asks this self-hosted
- * service to drip an activation-sized NIGHT grant to a brand-new wallet, so
- * the first `.night` claim executes immediately instead of queueing until the
- * user has visited the captcha faucet. Unset, the queue behaviour is exactly
- * what it always was.
+ * The optional Passport service (`VITE_FUNDER_URL`, see
+ * `examples/passport-funder` and `examples/passport-balancer`). It does two
+ * things for a Passport, and neither of them puts value in the wallet: it
+ * REGISTERS the `.night` name from its own NIGHT (`POST /register-alias`), and
+ * it funds the ACCOUNT contract once that account exists (`POST
+ * /fund-account`). Unset, a name simply queues until a service is back — the
+ * wallet is never asked to pay for one.
  */
 const FUNDER_URL =
   (import.meta.env as Record<string, string | undefined>).VITE_FUNDER_URL?.trim().replace(/\/+$/, '') ||
   null;
-/** Ceiling on the wait for a funder grant to show up in the balance stream. */
-const FUNDER_WAIT_CEILING_MS = 45_000;
 /**
- * Ceiling on the `/fund-account` round-trip.
+ * Ceiling on ONE `/fund-account` round-trip.
  *
  * The sponsor proves and submits a `deposit_night` — and, where it holds one,
  * a shielded stablecoin deposit as well — before it answers, so this is a
@@ -198,6 +183,22 @@ const FUNDER_WAIT_CEILING_MS = 45_000;
  * deliberately never blocking: the caller fires this and moves on.
  */
 const FUND_ACCOUNT_TIMEOUT_MS = 600_000;
+/**
+ * Backoff between activation attempts, in order.
+ *
+ * The sponsor is not always able to answer the moment a name lands: it has just
+ * spent from its own wallet to register that name, and it reports itself
+ * SYNCING — a 503 — for a minute or two afterwards while its wallet catches up.
+ * Observed live on 2026/08/24, and the account sat at zero because a single
+ * attempt was all it got. So a refusal that time can fix is retried rather than
+ * recorded as the end of the story: five retries, ~10 minutes of patience in
+ * total, all of it in the background and none of it able to touch the name.
+ *
+ * Separate from {@link FUND_ACCOUNT_TIMEOUT_MS}, which bounds one request. A
+ * slow answer is the sponsor doing chain work and is waited out; a fast refusal
+ * is what this schedule exists for.
+ */
+const FUND_ACCOUNT_RETRY_DELAYS_MS = [20_000, 40_000, 80_000, 160_000, 320_000];
 /**
  * Which account contracts this browser has already asked the sponsor to
  * activate. Keyed by contract address because that is what a Passport has
@@ -224,6 +225,13 @@ function rememberAccountFunding(contractAddress: string): void {
   } catch {
     // Best-effort: without it the sponsor is asked once more and refuses itself.
   }
+}
+
+/** Sleeps, for the activation backoff. Nothing here races it. */
+function pause(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 /**
@@ -341,9 +349,6 @@ function appTransferCodeFor(code: string | null): string | null {
   if (code === 'invalid-request') return 'invalid-recipient';
   return code;
 }
-/** Appended to the queue reason when activation was attempted and failed. */
-const FUNDER_UNAVAILABLE_SENTENCE =
-  'Automatic activation was unavailable just now, so the wallet still needs funding.';
 /**
  * The queue reason when the sponsor cannot register a name right now. Never
  * followed by a wallet-funded attempt: the wallet does not pay for names.
@@ -353,11 +358,11 @@ const SPONSOR_UNAVAILABLE_SENTENCE =
 
 /**
  * Whether the funder is sponsoring `.night` registrations on `network` right
- * now — its own `/status` answer, cached briefly, `false` on any doubt. When
- * this is true the activation drip is NOT the path to a name: the funder
- * registers the name itself (see `identity/sponsoredAlias.ts`) and the user's
- * NIGHT balance is simply not part of the claim, so the callers below skip
- * the shortfall-and-drip dance rather than sending a grant nobody will spend.
+ * now — its own `/status` answer, cached briefly, `false` on any doubt. It is
+ * the whole of the answer: the funder registers the name itself (see
+ * `identity/sponsoredAlias.ts`) and the user's NIGHT balance is never part of
+ * the claim, so `false` means the name waits rather than that the wallet is
+ * asked to buy it.
  */
 async function aliasSponsorshipLikely(network: string | null | undefined): Promise<boolean> {
   if (!FUNDER_URL || !aliasRegistrationSupported(network)) return false;
@@ -367,7 +372,10 @@ async function aliasSponsorshipLikely(network: string | null | undefined): Promi
 
 /**
  * Parses a formatted (6-decimal) NIGHT figure back to atomic units, exactly.
- * Mirrors `atomicNightFrom` in `screens/AliasClaim.tsx`.
+ *
+ * One caller: the legacy-funds gate, which needs to know whether the passkey
+ * wallet holds a POSITIVE balance. Nothing else in this file reads a wallet
+ * balance at all.
  */
 function atomicNightFromFormatted(formatted: string | null): bigint | null {
   if (formatted === null) return null;
@@ -806,16 +814,6 @@ function newDeviceSecret(): Uint8Array {
   return value;
 }
 
-function activitySource(entry: ActivityEntry): ActivitySource {
-  return entry.source ?? (entry.txHash ? 'chain' : 'local');
-}
-
-function sourceLabel(source: ActivitySource): string {
-  if (source === 'chain') return 'On-chain';
-  if (source === 'wallet') return 'Wallet';
-  return 'Local';
-}
-
 async function copyText(value: string): Promise<void> {
   try {
     if (navigator.clipboard?.writeText) {
@@ -836,24 +834,6 @@ async function copyText(value: string): Promise<void> {
   const copied = document.execCommand('copy');
   fallback.remove();
   if (!copied) throw new Error('Your browser did not allow this address to be copied.');
-}
-
-function ActivityPill({ status }: { status: ActivityStatus }) {
-  return <span className={`status-pill ${status}`}>{status}</span>;
-}
-
-function IconButton({
-  label,
-  onClick,
-  disabled,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  children: ReactNode;
-}) {
-  return <button className="icon-button" onClick={onClick} disabled={disabled} aria-label={label} title={label}>{children}</button>;
 }
 
 /**
@@ -898,15 +878,12 @@ export default function PassportDemo() {
   const [profile, setProfile] = useState<DemoPassportProfile | null>(null);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTx, setSelectedTx] = useState<ActivityEntry | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>('home');
   // One-button onboarding (2026/08/05): there is no separate "choose" step
   // any more, so the screen only distinguishes idle from working.
   const [onboardingIntent, setOnboardingIntent] = useState<OnboardingIntent | null>(null);
   const [onboardingBusyLabel, setOnboardingBusyLabel] = useState<string | null>(null);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
-  const [transactions, setTransactions] = useState<RecentTransaction[]>([]);
-  const [transactionsStatus, setTransactionsStatus] = useState<TransactionsStatus>('loading');
   const [localSurfaces, setLocalSurfaces] = useState<LocalWalletSurfaces | null>(null);
   const [localWalletStatus, setLocalWalletStatus] = useState<LocalWalletStatus>('idle');
   const [localSyncPercent, setLocalSyncPercent] = useState<number | null>(null);
@@ -954,7 +931,7 @@ export default function PassportDemo() {
    * the sponsor is unset (and where the service reports `available: 0` even
    * when it is set), the probe leaves this false and the baseline copy stands.
    */
-  const [feesSponsored, setFeesSponsored] = useState(false);
+  const [nameSponsored, setNameSponsored] = useState(false);
   /** True while a queued name's "Register now" re-run is in flight. */
   const [registerNowBusy, setRegisterNowBusy] = useState(false);
   /* ---------------------------------------------------------------------- */
@@ -1043,7 +1020,6 @@ export default function PassportDemo() {
     sessionRestoreCancel.current = null;
   }, []);
   const onboardingRunning = useRef(false);
-  const transactionsRequest = useRef(0);
   // The live handle is held in a ref, not in state: it is an object with a
   // socket behind it, and every consumer wants the current one rather than a
   // render-scoped snapshot.
@@ -1115,51 +1091,14 @@ export default function PassportDemo() {
   );
 
   /**
-   * The one surfaces object every shared consumer reads — Home, the address
-   * picker, the Apps profile, the dApp consent bridge, and the recent
-   * transaction lookup. There is one wallet behind it now, so this is an alias
-   * rather than a choice; the loading / ready / partial / unavailable
-   * semantics — including the distinction between a real `'0'` and an unknown
-   * `null` — are the local wallet's own.
+   * The one surfaces object every shared consumer reads — the Receive sheet,
+   * the Apps profile, the dApp consent bridge, and the legacy-funds gate. There
+   * is one wallet behind it now, so this is an alias rather than a choice; the
+   * loading / ready / partial / unavailable semantics — including the
+   * distinction between a real `'0'` and an unknown `null` — are the local
+   * wallet's own.
    */
   const activeSurfaces: LocalWalletSurfaces | null = localSurfaces;
-
-  const unshieldedAddress = activeSurfaces?.unshieldedAddress ?? null;
-
-  const refreshTransactions = useCallback(async () => {
-    if (!unshieldedAddress) {
-      setTransactions([]);
-      setTransactionsStatus('loading');
-      return;
-    }
-    const token = transactionsRequest.current + 1;
-    transactionsRequest.current = token;
-    setTransactionsStatus('loading');
-    try {
-      const result = await fetchRecentTransactions(MIDNIGHT_INDEXER_URL, { unshieldedAddress });
-      if (token !== transactionsRequest.current) return;
-      if (result.scope !== 'address') {
-        // A chain-scoped result is a sample of everybody's recent blocks, not
-        // this account's history: its rows may belong to anyone, and an empty
-        // walk proves nothing. The per-address view is simply unavailable.
-        setTransactions([]);
-        setTransactionsStatus('unavailable');
-        return;
-      }
-      setTransactions(result.rows);
-      setTransactionsStatus(result.rows.length > 0 ? 'ready' : 'empty');
-    } catch {
-      // fetchRecentTransactions only ever throws IndexerUnavailableError.
-      if (token !== transactionsRequest.current) return;
-      setTransactions([]);
-      setTransactionsStatus('unavailable');
-    }
-  }, [unshieldedAddress]);
-
-  useEffect(() => {
-    if (!unshieldedAddress) return;
-    void refreshTransactions();
-  }, [refreshTransactions, unshieldedAddress]);
 
   const keyProviderFor = useCallback((passkey: DemoPassportProfile['passkey']) => {
     let keyProvider = passportKeyProviders.current.get(passkey.credentialId);
@@ -1304,9 +1243,16 @@ export default function PassportDemo() {
    * Refreshes the wallet's own surfaces AND the account contract's balances.
    *
    * One call, because they are one refresh to every caller: the wallet is what
-   * pays the fee and what a legacy balance may still be sitting in, and the
-   * account is what the user is shown. The account read is not awaited — it is
-   * an indexer round-trip, and nothing that calls this is waiting on a figure.
+   * pays the fee on the one transaction it originates, and the account is what
+   * the user is shown. The account read is not awaited — it is an indexer
+   * round-trip, and nothing that calls this is waiting on a figure.
+   *
+   * WHY THE WALLET'S OWN BALANCE IS STILL READ. Exactly one surface consumes
+   * it: the legacy-funds gate (`walletHeldNight` → `homeLegacyFunds`), which
+   * offers to `deposit_night` money that reached the wallet address from
+   * outside. Nothing else on any screen shows a wallet balance, nothing spends
+   * from one, and no claim consults one. If that card ever goes, this read goes
+   * with it.
    */
   const refreshLocalBalances = useCallback(async () => {
     void refreshAccountBalances();
@@ -2138,27 +2084,33 @@ export default function PassportDemo() {
   /* ---------------------------------------------------------------------- */
 
   /**
-   * Probe the sponsor once the name step is actually on screen, so the fee
-   * sentence there describes what will really happen. A failed or disabled
-   * probe leaves `feesSponsored` false — the honest baseline — and is never
-   * surfaced as an error, because unsponsored is a working state, not a fault.
+   * Probe the NAME sponsor once the name step is actually on screen, so the
+   * sentence there describes what will really happen.
+   *
+   * Deliberately `aliasSponsorshipLikely` and not the fee sponsor. The claim
+   * screen makes exactly one promise — the Passport service registers this name
+   * and pays for it — and only `/status` reporting `aliasSponsorship:
+   * "available"` on THIS network makes that true. The fee sponsor is a
+   * different service answering a different question (who pays the DUST on the
+   * account deploy), and quoting it here once let the screen promise a
+   * registration nobody was going to make.
+   *
+   * A failed or disabled probe leaves this false — the honest baseline, under
+   * which the screen says the name is kept and registered when the service is
+   * back — and is never surfaced as an error, because queued is a working
+   * state, not a fault.
    */
   useEffect(() => {
     if (identityStep !== 'alias') return undefined;
     let live = true;
     void (async () => {
-      try {
-        const { sponsorReadiness } = await import('./lib/sponsor.js');
-        const readiness = await sponsorReadiness();
-        if (live) setFeesSponsored(readiness.state === 'ready');
-      } catch {
-        if (live) setFeesSponsored(false);
-      }
+      const sponsored = await aliasSponsorshipLikely(selectedNetwork).catch(() => false);
+      if (live) setNameSponsored(sponsored);
     })();
     return () => {
       live = false;
     };
-  }, [identityStep]);
+  }, [identityStep, selectedNetwork]);
 
   // The stores are the seam every writer shares: Contract R's connector calls
   // `saveIncentive` directly, and this subscription is what re-renders Home.
@@ -2397,114 +2349,6 @@ export default function PassportDemo() {
     [],
   );
 
-  /* ---------------------------------------------------------------------- */
-  /* Activation funding — VITE_FUNDER_URL only                               */
-  /* ---------------------------------------------------------------------- */
-
-  /**
-   * Wallet addresses this session has already asked the funder to activate.
-   * One attempt per wallet per session, whatever the outcome — the funder's
-   * own once-only ledger is the real gate; this ref just avoids asking twice.
-   */
-  const funderActivationAttempted = useRef(new Set<string>());
-  /** The identity step, readable from async funder waits without a stale closure. */
-  const identityStepRef = useRef<IdentityStep>(null);
-  useEffect(() => {
-    identityStepRef.current = identityStep;
-  }, [identityStep]);
-
-  /**
-   * The registration cost of `alias` when the open wallet holds LESS than it,
-   * or `null` when the wallet can already pay (or cannot be read — an unknown
-   * balance must not trigger a drip request).
-   */
-  const claimNightShortfall = useCallback(async (alias: string): Promise<bigint | null> => {
-    const handle = localWalletRef.current;
-    if (!handle) return null;
-    try {
-      const { aliasCostAtomicNight } = await import('./identity/midnames.js');
-      const cost = aliasCostAtomicNight(alias);
-      const held = atomicNightFromFormatted((await handle.getBalances()).unshieldedBalance);
-      if (held === null || held >= cost) return null;
-      return cost;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  /**
-   * Asks the funder to activate the open wallet, then waits for the grant on
-   * the SAME live balance stream that feeds the Home surfaces — the wallet's
-   * push-based `subscribeBalances`, never a `getBalances` poll — with a 45 s
-   * ceiling. Resolves `true` only when the wallet really holds
-   * `requiredAtomic`; every failure resolves `false` and the caller's queue
-   * path stands unchanged.
-   */
-  const activateWalletViaFunder = useCallback(
-    async (requiredAtomic: bigint): Promise<boolean> => {
-      if (!FUNDER_URL) return false;
-      const handle = localWalletRef.current;
-      if (!handle) return false;
-      const address = handle.unshieldedAddress;
-      if (funderActivationAttempted.current.has(address)) return false;
-      funderActivationAttempted.current.add(address);
-      pushToast({
-        tone: 'info',
-        title: 'Activating this Passport',
-        body: 'A small NIGHT grant is on its way.',
-      });
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15_000);
-        let response: Response;
-        try {
-          response = await fetch(`${FUNDER_URL}/activate`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ address }),
-            signal: controller.signal,
-          });
-        } finally {
-          clearTimeout(timer);
-        }
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        // `already-funded` and `already-activated` both mean the NIGHT exists
-        // on chain and only this wallet's own sync is behind, so the wait
-        // below still applies. Every other refusal means no grant is coming.
-        if (!response.ok && body.error !== 'already-funded' && body.error !== 'already-activated') {
-          console.warn('[funder] activation refused:', body);
-          return false;
-        }
-        return await new Promise<boolean>((resolve) => {
-          let unsubscribe: (() => void) | null = null;
-          let settled = false;
-          const finish = (outcome: boolean) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(ceiling);
-            unsubscribe?.();
-            resolve(outcome);
-          };
-          const ceiling = setTimeout(() => finish(false), FUNDER_WAIT_CEILING_MS);
-          unsubscribe = handle.subscribeBalances(
-            (balances) => {
-              const held = atomicNightFromFormatted(balances.unshieldedBalance);
-              if (held !== null && held >= requiredAtomic) finish(true);
-            },
-            { minIntervalMs: 1_000 },
-          );
-          // The listener fires synchronously with the current state, so the
-          // wait may already be over by the time the unsubscriber exists.
-          if (settled) unsubscribe();
-        });
-      } catch (cause) {
-        console.warn('[funder] activation failed:', cause);
-        return false;
-      }
-    },
-    [],
-  );
-
   /**
    * The one gate every contract deploy passes through.
    *
@@ -2568,32 +2412,25 @@ export default function PassportDemo() {
   );
 
   /**
-   * Asks the sponsor to put this Passport's opening balance INSIDE its account
-   * contract — the activation grant, deposited where the account can spend it.
+   * ONE attempt at the activation grant, classified by what really came back.
    *
-   * This replaces the old wallet drip as the shape of activation. `/activate`
-   * dripped NIGHT to the wallet ADDRESS, which under the account ruling is
-   * money the Passport cannot see: the contract's `night_balances` mirror is
-   * what a withdrawal is checked against, and NIGHT that reaches the wallet by
-   * any other route is invisible to it. `/fund-account` proves a `deposit_night`
-   * (and, where the sponsor holds one, a shielded stablecoin deposit) against
-   * the contract itself.
+   *   `deposited` — a 200, or the sponsor saying the grant already exists. The
+   *                 localStorage marker is written HERE and nowhere else, so a
+   *                 contract is only ever marked funded on evidence that it is.
+   *   `refused`   — a refusal time cannot fix (out of NIGHT, rate ceiling, a
+   *                 malformed request). Recorded, and not retried.
+   *   `retry`     — a 5xx, a 429, a timeout, or a transport failure. Carries
+   *                 the sponsor's own words for the caller's schedule to keep.
    *
-   * NEVER BLOCKING, and never fatal. The name is registered and the contract is
-   * deployed by the time this runs; a sponsor that is out of funds, rate
-   * limited, or simply absent leaves a Passport with a name and an empty
-   * account, which is a state the surfaces already describe honestly. So it is
-   * fired and forgotten, and it swallows nothing — every outcome is recorded in
-   * the activity feed in the sponsor's own words.
-   *
-   * ONCE PER CONTRACT. `already-activated` and `already-funded` are the
-   * sponsor's way of saying the grant exists, so they are recorded as done
-   * rather than as failures, and the marker stops this browser asking again.
+   * The 503 is the one this taxonomy exists for: the sponsor reports itself
+   * SYNCING for a minute or two after its own spends, which is exactly the
+   * moment a freshly registered name asks it for an opening balance.
    */
-  const fundAccountOnce = useCallback(
-    async (contractAddress: string): Promise<void> => {
-      if (!FUNDER_URL) return;
-      if (accountFundingAttempted(contractAddress)) return;
+  const requestAccountFunding = useCallback(
+    async (
+      contractAddress: string,
+    ): Promise<{ kind: 'deposited' | 'refused' } | { kind: 'retry'; reason: string }> => {
+      if (!FUNDER_URL) return { kind: 'refused' };
       let response: Response;
       let body: {
         txHash?: unknown;
@@ -2621,18 +2458,17 @@ export default function PassportDemo() {
         }
         body = (await response.json().catch(() => ({}))) as typeof body;
       } catch (cause) {
-        addActivity({
-          label: 'Opening balance not requested',
-          detail: `The sponsor could not be reached, so no opening balance was deposited into ${compactAddress(
-            contractAddress,
-          )}: ${cause instanceof Error ? cause.message : String(cause)}`,
-          status: 'blocked',
-          source: 'chain',
-        });
-        return;
+        /* Unreachable, or the round-trip ceiling. Nothing is recorded yet: a
+           network that is down for one attempt is not a verdict on the grant,
+           and the schedule above will ask again. */
+        return { kind: 'retry', reason: cause instanceof Error ? cause.message : String(cause) };
       }
 
       const code = typeof body.error === 'string' ? body.error : null;
+      const sponsorSentence =
+        typeof body.message === 'string' && body.message
+          ? body.message
+          : `The sponsor answered with status ${response.status}.`;
       if (!response.ok) {
         /* The grant already exists. That is the outcome this call wanted, so it
            is recorded as reached — and the marker is written, because asking
@@ -2640,18 +2476,21 @@ export default function PassportDemo() {
         if (code === 'already-activated' || code === 'already-funded') {
           rememberAccountFunding(contractAddress);
           void refreshAccountBalances();
-          return;
+          return { kind: 'deposited' };
+        }
+        /* The sponsor is up but cannot answer YET — it is syncing behind its own
+           spends, or shedding load. Waiting is the honest response, so no marker
+           is written and no failure is claimed. */
+        if (response.status >= 500 || response.status === 429) {
+          return { kind: 'retry', reason: sponsorSentence };
         }
         addActivity({
           label: 'Opening balance not deposited',
-          detail:
-            typeof body.message === 'string'
-              ? body.message
-              : `The sponsor refused with status ${response.status}.`,
+          detail: sponsorSentence,
           status: 'blocked',
           source: 'chain',
         });
-        return;
+        return { kind: 'refused' };
       }
 
       rememberAccountFunding(contractAddress);
@@ -2704,9 +2543,98 @@ export default function PassportDemo() {
         });
       }
       void refreshAccountBalances();
+      return { kind: 'deposited' };
     },
     [addActivity, refreshAccountBalances],
   );
+
+  /**
+   * Activation chains this browser tab is already running, keyed by contract
+   * address. The localStorage marker is the cross-session gate; this is the
+   * within-session one, so the claim that fires this and the wallet-open effect
+   * that finishes a pending one cannot both be knocking at the same door.
+   */
+  const accountFundingInFlight = useRef(new Set<string>());
+
+  /**
+   * Asks the sponsor to put this Passport's opening balance INSIDE its account
+   * contract — the activation grant, deposited where the account can spend it.
+   *
+   * This replaces the old wallet drip as the shape of activation. A drip to the
+   * wallet ADDRESS is, under the account ruling, money the Passport cannot see:
+   * the contract's `night_balances` mirror is what a withdrawal is checked
+   * against, and NIGHT that reaches the wallet by any other route is invisible
+   * to it. `/fund-account` proves a `deposit_night` (and, where the sponsor
+   * holds one, a shielded stablecoin deposit) against the contract itself.
+   *
+   * NEVER BLOCKING, and never fatal. The name is registered and the contract is
+   * deployed by the time this runs, and nothing about the name depends on a
+   * grant landing. So it is fired and forgotten — and it is PATIENT, because
+   * the sponsor's commonest refusal is "not yet" rather than "no": see
+   * {@link FUND_ACCOUNT_RETRY_DELAYS_MS}.
+   *
+   * QUIET WHILE IT WAITS. A retry earns no activity row and no toast; the feed
+   * gets exactly one row when the grant lands, and one row if the schedule is
+   * spent without it landing. A user watching Home sees the balance appear, not
+   * a running commentary on the sponsor's health.
+   *
+   * ONCE PER CONTRACT, ACROSS SESSIONS. The marker is written only on evidence
+   * the grant exists, so a Passport whose activation never landed is still
+   * PENDING on the next launch — and the wallet-open effect below finishes it.
+   */
+  const fundAccountOnce = useCallback(
+    async (contractAddress: string): Promise<void> => {
+      if (!FUNDER_URL) return;
+      if (accountFundingAttempted(contractAddress)) return;
+      if (accountFundingInFlight.current.has(contractAddress)) return;
+      accountFundingInFlight.current.add(contractAddress);
+      try {
+        for (let attempt = 0; ; attempt += 1) {
+          const outcome = await requestAccountFunding(contractAddress);
+          if (outcome.kind !== 'retry') return;
+          const delayMs = FUND_ACCOUNT_RETRY_DELAYS_MS[attempt];
+          if (delayMs === undefined) {
+            /* The schedule is spent. The account is empty and the screen already
+               says so honestly; this row is why, in the sponsor's own words. */
+            addActivity({
+              label: 'Opening balance not deposited',
+              detail: `The sponsor could not fund your account contract ${compactAddress(
+                contractAddress,
+              )} within ten minutes of trying: ${outcome.reason}`,
+              status: 'blocked',
+              source: 'chain',
+            });
+            return;
+          }
+          await pause(delayMs);
+          // Another surface — or another tab — may have finished it meanwhile.
+          if (accountFundingAttempted(contractAddress)) return;
+        }
+      } finally {
+        accountFundingInFlight.current.delete(contractAddress);
+      }
+    },
+    [addActivity, requestAccountFunding],
+  );
+
+  /**
+   * Finishes an activation that never landed.
+   *
+   * A grant can be left pending by anything that outlives the tab it started
+   * in: the sponsor syncing past this browser's patience, a reload during the
+   * backoff, a laptop closed mid-claim. The marker is only written on evidence
+   * the grant exists, so "pending" is simply a deployed contract with no
+   * marker — and this is where a session that finds one picks it up, the
+   * moment a wallet is open on the contract's own network.
+   *
+   * Costs nothing when there is nothing to do: `fundAccountOnce` returns
+   * immediately on a marked contract and on one already in flight, so the
+   * claim's own call and this effect can never both run a schedule.
+   */
+  useEffect(() => {
+    if (localWalletStatus !== 'ready' || !accountContractAddress) return;
+    void fundAccountOnce(accountContractAddress);
+  }, [accountContractAddress, fundAccountOnce, localWalletStatus]);
 
   /**
    * ONE user action, from the passkey prompt to the registered name.
@@ -2756,13 +2684,7 @@ export default function PassportDemo() {
       const credentialId = activeProfile.passkey.credentialId;
       const network = handle.network.networkId;
       const [
-        {
-          AliasClaimError,
-          checkAliasAvailability,
-          checkAliasClaimFunds,
-          claimAlias,
-          deriveMidnamesOwnerKey,
-        },
+        { AliasClaimError, checkAliasAvailability, deriveMidnamesOwnerKey },
         { deployPassportContract },
         { deriveWalletSeed },
         { AliasSponsorRefusal, checkAliasSponsorship, sponsorAliasRegistration },
@@ -2785,9 +2707,9 @@ export default function PassportDemo() {
       }
       const registryNetwork = network as MidnamesNetwork;
 
-      /* (1) Both gates before the prompt. `claimAlias` runs them again for
-         itself; running them here as well is what keeps the ACCOUNT CONTRACT
-         from being deployed for a claim that was never going to land. */
+      /* (1) Both gates before the prompt, so the ACCOUNT CONTRACT is never
+         deployed for a claim that was going to be refused anyway. Neither gate
+         reads the wallet's balance: the wallet does not pay for names. */
       const availability = await checkAliasAvailability(registryNetwork, alias, { fresh: true });
       if (availability.status === 'taken') {
         throw new AliasClaimError(
@@ -2803,11 +2725,10 @@ export default function PassportDemo() {
           availability.detail,
         );
       }
-      /* Sponsorship first, funds second. When the funder says it is sponsoring
-         registrations on this network, the user's own NIGHT is simply not part
-         of the claim — a wallet holding NOTHING gets its name — so gating on it
-         would refuse exactly the person this exists for. The funds gate still
-         runs, unchanged, whenever the sponsor cannot be confirmed. */
+      /* Sponsorship, and nothing else. The user's own NIGHT is not part of a
+         claim at all — a wallet holding NOTHING gets its name — so there is no
+         funds gate to run beside this one, and no balance whose emptiness could
+         refuse exactly the person this exists for. */
       const sponsored = FUNDER_URL
         ? await checkAliasSponsorship(FUNDER_URL, registryNetwork)
         : false;
@@ -2916,15 +2837,14 @@ export default function PassportDemo() {
         /* (4) The claim itself, bound to the contract address the chain gave
            us — never to a value assembled from anything else.
 
-           Sponsored first: the funder registers the name FOR this Passport —
-           user's key as owner, this contract as target — paying the registry
-           price and the fees itself, so the user-side ceremony is already
-           over (the one passkey assertion above). The self-paid path is the
-           honest fallback, not a dead branch: it runs when no funder is
-           configured, when the funder refuses for a reason self-paying can
-           fix (out of NIGHT, rate ceiling, one-sponsored-name-per-Passport),
-           and it re-runs its own funds gates, so a broke wallet still gets
-           the truthful insufficient-night message rather than a retry loop. */
+           Sponsored, and only sponsored: the service registers the name FOR
+           this Passport — user's key as owner, this contract as target —
+           paying the registry price and the fees itself, so the user-side
+           ceremony is already over (the one passkey assertion above). There is
+           no self-paid branch beneath this one. The wallet originates exactly
+           one transaction in its life, the account deploy above; a name it
+           bought would be a second, and a registration the service will not
+           carry right now is kept and retried instead. */
         let claimed: AliasClaimResult | null = null;
         if (sponsored && FUNDER_URL) {
           onPhase('registering');
@@ -2963,10 +2883,10 @@ export default function PassportDemo() {
           }
         }
         if (!claimed) {
-          /* No sponsor on offer at all: same rule, same outcome. The self-paid
-             `claimAlias` path stays in `identity/midnames.ts` for the drills
-             that prove the registry, and is deliberately never reached from
-             the app. */
+          /* No sponsor on offer at all: same rule, same outcome. There is no
+             self-paid registration left anywhere in the app to fall through
+             to — the name waits for the service, which is the honest end of
+             this path rather than a gap in it. */
           throw new AliasClaimError(
             'network-unreachable',
             'The Passport service that registers names is not available right now. Your name is kept for you and can be registered when it is back — Passport does not spend from your wallet for this.',
@@ -2976,11 +2896,10 @@ export default function PassportDemo() {
         /* (5) The opening balance, into the ACCOUNT rather than into the
            wallet. Fired here because this is the moment the Passport is whole
            — a deployed contract with a name pointing at it — and deliberately
-           NOT awaited: the sponsor proves two deposits before it answers, and
-           the name's success does not depend on a grant landing. It is fired
-           on the self-paid path too, because the grant is about the account and
-           not about who paid for the name; `fundAccountOnce` is a no-op with no
-           sponsor configured, and once-per-contract either way. */
+           NOT awaited: the sponsor proves two deposits before it answers, it
+           may well answer "syncing" for the first minute or two, and the name's
+           success depends on none of that. `fundAccountOnce` owns the patience
+           (see its own comment); here it is fired and forgotten. */
         void fundAccountOnce(contractAddress);
 
         /* (6) Attach the account to the passkey, so a device that has never
@@ -3098,20 +3017,11 @@ export default function PassportDemo() {
   const claimOrQueueAlias = useCallback(
     async (alias: string, network: PassportNetwork): Promise<void> => {
       if (network === localWalletNetworkId && aliasClaimSupported) {
-        /* A brand-new Passport holds nothing, and its first act should not be
-           a trip to a captcha faucet. Where a funder is configured, the grant
-           is fetched and waited for HERE, before the claim — so the one button
-           the user pressed does the whole thing. A funder that refuses or
-           never lands is not fatal: the claim proceeds and fails with its own
-           honest insufficient-funds message.
-
-           A funder that SPONSORS registrations makes the grant itself
-           pointless: it will register the name with its own NIGHT, so the
-           user's balance is not consulted at all and no drip is requested. */
-        /* No activation grant to the wallet, ever: the service registers the
-           name from its own funds and, once the account exists, funds THE
-           ACCOUNT. A wallet-address drip would put value where the account
-           model says none may sit (ruled 2026/08/25). */
+        /* Straight to the claim. A brand-new Passport holds nothing and never
+           needs to: the service registers the name from its own funds and,
+           once the account exists, funds THE ACCOUNT. There is no grant to the
+           wallet address to fetch and wait for first — value at the wallet is
+           value the account model says may not sit there (ruled 2026/08/25). */
         await claimAliasOnChain(alias);
         return;
       }
@@ -3122,10 +3032,8 @@ export default function PassportDemo() {
       );
     },
     [
-      activateWalletViaFunder,
       aliasClaimSupported,
       claimAliasOnChain,
-      claimNightShortfall,
       localWalletNetworkId,
       queueAlias,
       signingNetworkLabel,
@@ -3138,10 +3046,13 @@ export default function PassportDemo() {
    * Order matters, and every early exit leaves the record queued with a FRESH
    * `queuedReason`: (1) the live TLD is re-probed — the name may have been
    * taken since, in which case the existing alternative-picker opens; (2) the
-   * funds are re-checked without any passkey prompt; (3) only then does the
-   * real `claimAlias` run, with the same progress phases as onboarding.
-   * Success upgrades the record to `registered` with both real transaction
-   * ids. Failures are surfaced inline on the card, never as a toast.
+   * sponsor is re-probed, because it is the only thing that registers a name;
+   * (3) only then does the real claim run, with the same progress phases as
+   * onboarding. Success upgrades the record to `registered` with both real
+   * transaction ids. Failures are surfaced inline on the card, never as a toast.
+   *
+   * The wallet's balance is consulted at no point. It never was the thing that
+   * paid for a name, and since 2026/08/25 there is no path in which it could be.
    */
   const registerQueuedAlias = useCallback(async (): Promise<void> => {
     if (registerNowBusy) return;
@@ -3160,9 +3071,7 @@ export default function PassportDemo() {
         updatedAt: new Date().toISOString(),
       });
     try {
-      const { checkAliasAvailability, checkAliasClaimFunds } = await import(
-        './identity/midnames.js'
-      );
+      const { checkAliasAvailability } = await import('./identity/midnames.js');
       // (1) The name may have been taken while it sat in the queue. It is
       // re-probed on the network the record is FILED under — which is the one
       // the wallet signs on, because `registerNowDisabledReason` has already
@@ -3184,24 +3093,15 @@ export default function PassportDemo() {
         setReclaim({ target: selectedNetwork, alias: record.alias });
         return;
       }
-      // (2) Funds, before any passkey prompt — SKIPPED entirely while the
-      // funder is sponsoring registrations, because the sponsored claim never
-      // consults the user's balance (see `claimAliasBoundToAccount`, which
-      // re-probes and falls back to these same gates itself). Otherwise: with
-      // a funder configured, a NIGHT shortfall earns one automatic activation
-      // attempt before the record goes honestly back in the queue — and the
-      // re-check afterwards is the same gate run again, never an assumption
-      // that the drip landed.
+      // (2) The sponsor, before any passkey prompt. It is the only thing that
+      // registers a name, so its absence is the whole answer: the record stays
+      // queued with the reason the wallet must never be asked to fix (ruled
+      // 2026/08/25). `claimAliasBoundToAccount` re-probes for itself; this
+      // spares the user a ceremony that could only end in the same sentence.
       const sponsored = await aliasSponsorshipLikely(selectedNetwork);
       if (!sponsored) {
-        let funds = await checkAliasClaimFunds(handle, record.alias);
-        if (!funds.ok) {
-          /* No drip and no self-paid registration: without the sponsor the
-             name simply stays queued, with the reason the wallet must never
-             be asked to fix (ruled 2026/08/25). */
-          requeue(SPONSOR_UNAVAILABLE_SENTENCE);
-          return;
-        }
+        requeue(SPONSOR_UNAVAILABLE_SENTENCE);
+        return;
       }
       // (3) The onboarding claim's exact path, contract and all: one passkey
       // ceremony, the account contract deployed if this Passport has none on
@@ -3271,7 +3171,14 @@ export default function PassportDemo() {
       setClaimPhase(null);
       setRegisterNowBusy(false);
     }
-  }, [activateWalletViaFunder, addActivity, claimAliasBoundToAccount, claimNightShortfall, profile, refreshLocalBalances, registerNowBusy, selectedNetwork]);
+  }, [
+    addActivity,
+    claimAliasBoundToAccount,
+    profile,
+    refreshLocalBalances,
+    registerNowBusy,
+    selectedNetwork,
+  ]);
 
   /**
    * RETRY ONLY, since 2026/08/19. Deploys this Passport's account-custody
@@ -3545,7 +3452,6 @@ export default function PassportDemo() {
     setProfile(null);
     setActivity([]);
     setError(null);
-    setSelectedTx(null);
     setMobileTab('home');
     setOnboardingIntent(null);
     setOnboardingBusyLabel(null);
@@ -3563,9 +3469,6 @@ export default function PassportDemo() {
     // sign-in, and lands on the dashboard. The stored per-credential
     // resolution is deliberately left in place for the same reason.
     identityStepArmed.current = false;
-    transactionsRequest.current += 1;
-    setTransactions([]);
-    setTransactionsStatus('loading');
   };
 
   /* ---------------------------------------------------------------------- */
@@ -3597,58 +3500,6 @@ export default function PassportDemo() {
     void runLocalOnboarding(intent);
   };
 
-  // Transactions confirmed in this session are already known locally; the
-  // indexer may not have caught up yet, so session rows lead the feed.
-  const sessionTransactions: RecentTransaction[] = activity
-    .filter((entry): entry is ActivityEntry & { txHash: string } => Boolean(entry.txHash))
-    .map((entry) => ({
-      hash: entry.txHash,
-      timestamp: entry.createdAt,
-      involvesUser: true,
-      kind: entry.label,
-    }));
-  const mergedTransactions: RecentTransaction[] = [];
-  const seenTransactionHashes = new Set<string>();
-  for (const row of [...sessionTransactions, ...transactions]) {
-    if (seenTransactionHashes.has(row.hash)) continue;
-    seenTransactionHashes.add(row.hash);
-    mergedTransactions.push(row);
-  }
-  // The indexer's own status is handed to HomeScreen untouched: session rows
-  // must never mask an unavailable indexer, and the screen decides how to show
-  // rows and a status notice together.
-  const mobileTransactionsStatus: TransactionsStatus = transactionsStatus;
-
-  const openTransactionByHash = (hash: string) => {
-    const known = activity.find((entry) => entry.txHash === hash);
-    if (known) {
-      setSelectedTx(known);
-      return;
-    }
-    const row = mergedTransactions.find((candidate) => candidate.hash === hash);
-    const status: ActivityStatus =
-      row?.applyStage === 'SUCCESS'
-        ? 'complete'
-        : row?.applyStage === 'FAILURE'
-          ? 'error'
-          : row?.applyStage === 'PARTIAL_SUCCESS'
-            // Finalised, but only partly applied — never still in flight.
-            ? 'blocked'
-            : 'pending';
-    setSelectedTx({
-      id: hash,
-      label: row?.kind ?? 'Midnight transaction',
-      detail:
-        typeof row?.blockHeight === 'number'
-          ? `Read from the Midnight indexer in block ${row.blockHeight}.`
-          : 'Read from the Midnight indexer.',
-      status,
-      source: 'chain',
-      txHash: hash,
-      createdAt: row?.timestamp ?? new Date().toISOString(),
-    });
-  };
-
   /**
    * Copies the one address Home still shows: the payment address the resolver
    * leaf carries, which is this Passport's unshielded wallet address. The
@@ -3669,7 +3520,6 @@ export default function PassportDemo() {
 
   const refreshMobile = () => {
     void refreshLocalBalances();
-    void refreshTransactions();
   };
 
   /** Shared by Home's embedded apps grid and the Apps tab: feed plus toast. */
@@ -3804,9 +3654,9 @@ export default function PassportDemo() {
   const requireAccount = useCallback((): { handle: LocalMidnightWallet; address: string } => {
     const handle = localWalletRef.current;
     if (!handle) {
-      /* Structurally a `SendNightError` — `{ code, message }` — without a value
-         import of `lib/localWallet.ts`, which statically pulls in the whole
-         wallet SDK. */
+      /* The account module's `AccountCustodyError` shape — `{ code, message }`
+         — without a value import of `identity/accountCustody.ts`, which
+         statically pulls the ledger and the wallet SDK in behind it. */
       throw Object.assign(
         new Error('The Passport wallet session closed before this could be signed.'),
         { code: 'wallet-closed' as const },
@@ -3884,10 +3734,9 @@ export default function PassportDemo() {
               body: intent.purpose,
               link: explorerTxLink(result.txId, result.network),
             });
-            // The account's balance has moved and the indexer needs a moment to
-            // see it; the session row already carries the transaction meanwhile.
+            // The account's balance has moved; the session row already carries
+            // the transaction meanwhile.
             void refreshLocalBalances();
-            window.setTimeout(() => void refreshTransactions(), 5_000);
             return { txId: result.txId };
           } catch (cause) {
             updateActivity(entry.id, {
@@ -3919,7 +3768,6 @@ export default function PassportDemo() {
     [
       addActivity,
       refreshLocalBalances,
-      refreshTransactions,
       requireAccount,
       updateActivity,
       withAccountDeviceSecret,
@@ -4020,10 +3868,9 @@ export default function PassportDemo() {
                   : 'The network fee was paid by this Passport.',
               link: explorerTxLink(result.txId, result.network),
             });
-            // The account's balance has moved and the indexer needs a moment to
-            // see it; the session row already carries the transaction meanwhile.
+            // The account's balance has moved; the session row already carries
+            // the transaction meanwhile.
             void refreshLocalBalances();
-            window.setTimeout(() => void refreshTransactions(), 5_000);
           } catch (cause) {
             updateActivity(entry.id, {
               status: 'error',
@@ -4052,7 +3899,6 @@ export default function PassportDemo() {
     [
       addActivity,
       refreshLocalBalances,
-      refreshTransactions,
       requireAccount,
       updateActivity,
       withAccountDeviceSecret,
@@ -4143,7 +3989,6 @@ export default function PassportDemo() {
               link: explorerTxLink(result.txId, result.network),
             });
             void refreshLocalBalances();
-            window.setTimeout(() => void refreshTransactions(), 5_000);
           } catch (cause) {
             updateActivity(entry.id, {
               status: 'error',
@@ -4171,7 +4016,6 @@ export default function PassportDemo() {
     [
       addActivity,
       refreshLocalBalances,
-      refreshTransactions,
       requireAccount,
       updateActivity,
       withAccountDeviceSecret,
@@ -4303,15 +4147,6 @@ export default function PassportDemo() {
     : null;
 
   /**
-   * Funds still sitting in the passkey wallet rather than in the account.
-   *
-   * Offered only where there is really something to move AND somewhere to move
-   * it to. It is not a state a Passport created today can reach — onboarding
-   * funds the account directly — so this is the older-account path, and it says
-   * so in the screen's own words rather than implying the user did something
-   * wrong.
-   */
-  /**
    * The dApp payment seam, handed over only when there is genuinely an account
    * to pay from. Withheld, an app is answered `wallet-unavailable` before a
    * sheet is ever shown — the same rule the Send control keeps, and better than
@@ -4320,6 +4155,24 @@ export default function PassportDemo() {
   const appTransferSeam =
     localSessionActive && accountContractAddress ? executeAppTransfer : undefined;
 
+  /**
+   * NIGHT that reached the passkey wallet's ADDRESS from outside this app, and
+   * the one honest remediation for it.
+   *
+   * Nothing Passport does puts money there: the service registers the name and
+   * funds the ACCOUNT, and every value flow the user can start is an account
+   * circuit. But an address is an address — a faucet, an old Passport, or
+   * somebody paying the receiving address by hand will all land NIGHT at the
+   * wallet, where the account cannot see it and `withdraw_night` cannot spend
+   * it. So the card offers a `deposit_night` and says plainly that this money
+   * is outside the account.
+   *
+   * Gated on a POSITIVE balance and on there being an account to move it into.
+   * `null` — an unknown balance — is not an offer to move nothing, and an
+   * account that does not exist is nowhere to move it to. `walletHeldNight` is
+   * the sole consumer of the wallet's own balance in this component; see
+   * {@link refreshLocalBalances}.
+   */
   const walletHeldNight = atomicNightFromFormatted(localSurfaces?.unshieldedBalance ?? null);
   const homeLegacyFunds =
     accountContractAddress && walletHeldNight !== null && walletHeldNight > 0n
@@ -4650,16 +4503,10 @@ export default function PassportDemo() {
    * dashboard, where the queued card carries the "Register now" action.
    */
   const queueFromClaimScreen = async (alias: string, reason: string) => {
-    // With a funder configured, an insufficient-NIGHT queue on the wallet's
-    // own network becomes an activation attempt first: drip, wait for the
-    // grant on the live balance stream, then run the REAL claim (sponsored
-    // fees exactly as today). Every other queue reason — wrong network,
-    // unreachable registry — passes through untouched, as does everything
-    // when no funder is configured.
-    /* A queued name stays queued. There is no activation grant to the wallet
-       and no wallet-funded registration to fall back to: the sponsor
-       registers names from its own funds, and when it cannot, the name
-       waits (ruled 2026/08/25). */
+    /* A queued name stays queued, whatever the reason. There is no grant to
+       the wallet to fetch first and no wallet-funded registration to fall back
+       to: the sponsor registers names from its own funds, and when it cannot,
+       the name waits (ruled 2026/08/25). */
     queueAlias(alias, selectedNetwork, reason);
     if (profile) storeNameStep(profile.passkey.credentialId, 'done');
     setIdentityStep(null);
@@ -4681,7 +4528,6 @@ export default function PassportDemo() {
 
   const overlays = (
     <>
-      {selectedTx && <TransactionModal entry={selectedTx} onClose={() => setSelectedTx(null)} />}
       <PassportProfileConsent
         sessionActive={sessionActive}
         displayName={sessionActive ? sessionDisplayName : null}
@@ -4756,13 +4602,7 @@ export default function PassportDemo() {
           walletReady={localSessionActive}
           registrationSupported={selectedNetwork === localWalletNetworkId && aliasClaimSupported}
           signingNetworkLabel={signingNetworkLabel}
-          feesSponsored={feesSponsored}
-          autoActivates={
-            Boolean(FUNDER_URL) &&
-            selectedNetwork === localWalletNetworkId &&
-            aliasClaimSupported
-          }
-          nightBalance={activeSurfaces?.unshieldedBalance ?? null}
+          nameSponsored={nameSponsored}
           checkAvailability={checkAliasOnActiveNetwork}
           onClaim={(alias) => claimOrQueueAlias(alias, selectedNetwork)}
           onQueue={queueFromClaimScreen}
@@ -4870,29 +4710,6 @@ export default function PassportDemo() {
       ) : null}
       {overlays}
       <PassportToasts />
-    </div>
-  );
-}
-
-function TransactionModal({ entry, onClose }: { entry: ActivityEntry; onClose: () => void }) {
-  const source = activitySource(entry);
-  // Activity rows carry no network of their own, so the link is built for the
-  // network this build runs on — and omitted entirely where that network has
-  // no public explorer, rather than pointing at another network's.
-  const explorerHref = explorerTxUrl(configuredWalletNetwork, entry.txHash);
-
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <div className="transaction-modal" role="dialog" aria-modal="true" aria-label="Transaction detail" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="modal-heading"><div><p>Transaction detail</p><h2>{entry.label}</h2></div><IconButton label="Close transaction detail" onClick={onClose}><X size={16} /></IconButton></div>
-        <dl><div><dt>Status</dt><dd><ActivityPill status={entry.status} /></dd></div><div><dt>Source</dt><dd><span className={`source-pill ${source}`}>{sourceLabel(source)}</span></dd></div><div><dt>Recorded</dt><dd>{new Date(entry.createdAt).toLocaleString()}</dd></div><div><dt>Detail</dt><dd>{entry.detail}</dd></div><div><dt>Transaction hash</dt><dd>{entry.txHash ? <code>{entry.txHash}</code> : 'No on-chain transaction was produced.'}</dd></div></dl>
-        {entry.txHash && (
-          <div className="modal-actions">
-            <button className="modal-secondary" onClick={() => void copyText(entry.txHash!)}><Copy size={16} /> Copy hash</button>
-            {explorerHref ? <a className="modal-copy modal-explorer" href={explorerHref} target="_blank" rel="noreferrer"><ArrowUpRight size={16} /> Open explorer</a> : null}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

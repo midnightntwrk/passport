@@ -188,10 +188,10 @@ function parsedNetworkName(value: string | typeof mainnet): string {
  * whatever address the user scanned or pasted. So this one takes the address
  * itself, and the decode is the same two-step the sibling performs.
  *
- * `expectedNetworkId`, when given, is enforced BEFORE the decode, exactly as
- * `sendUnshieldedNight` in `../lib/localWallet.ts` enforces it: a preview
+ * `expectedNetworkId`, when given, is enforced BEFORE the decode, and it is
+ * enforced here because there is nowhere else left to enforce it: a preview
  * address and a preprod address are both well-formed and decode to 32 perfectly
- * good bytes, and paying one from a wallet on the other is a loss the chain
+ * good bytes, and paying one from an account on the other is a loss the chain
  * will not undo. {@link withdrawNight} always passes the wallet's own network.
  */
 export function unshieldedAddressBytes(address: string, expectedNetworkId?: string): Uint8Array {

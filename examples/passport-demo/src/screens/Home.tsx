@@ -1,11 +1,9 @@
 import {
   AlertTriangle,
   ArrowDownLeft,
-  Droplets,
   Check,
   Coins,
   Copy,
-  ExternalLink,
   Layers,
   LogOut,
   RefreshCw,
@@ -23,7 +21,6 @@ import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
 /* The names this screen shares with the wallet (Contract W). Type-only, and
    only the two that describe the FEE — a fee is still the wallet's to pay. */
 import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js'
-import { faucetUrlFor, walletNetwork } from '../lib/networks.js'
 import { FeaturedApps, type AppsScreenProps, type FeaturedAppsProps } from './Apps.js'
 import { EcosystemIdentity } from './Ecosystem.js'
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
@@ -33,21 +30,14 @@ import SendSheet, { shortToken, type SendSheetHolding } from './SendSheet.js'
 import ThemeToggle from './ThemeToggle.js'
 import './home.css'
 
-/* The wallet's own network and its faucet, both fixed for the life of a build
-   (`VITE_MIDNIGHT_NETWORK_ID`), so they are resolved once here rather than per
-   render. `receiveFaucetUrl` is null wherever no public faucet exists —
-   mainnet, and any devnet build — and the Receive sheet then shows no link at
-   all. Deliberately NOT the network chosen in the switcher: that selection
-   filters the app grid and never moves the wallet, so its faucet would drip to
-   a chain this address does not live on. */
-const receiveFaucetNetwork = walletNetwork()
-/* No faucet link on Receive. A faucet drips to a WALLET address, and the
-   account is a contract: a drip sent to it never reaches the account's
-   mirror, and a drip sent to the wallet puts value where the account model
-   says none may sit. Test NIGHT arrives through the sponsor's activation
-   instead. `faucetUrlFor` stays exported for the network tables. */
-const receiveFaucetUrl: string | null = null
-void faucetUrlFor
+/* NO FAUCET ON RECEIVE, and no dead branch for one either (2026/08/25). A
+   faucet drips to a WALLET address, and the account is a contract: a drip sent
+   to the contract never reaches the account's mirror, and one sent to the
+   wallet puts value where the account model says none may sit — which is the
+   very state the legacy-funds card exists to remediate. Test NIGHT arrives
+   through the service's activation deposit instead (`POST /fund-account`).
+   `faucetUrlFor` stays in `../lib/networks.ts` for the network tables; nothing
+   on this screen calls it. */
 
 export interface HomeScreenProps {
   displayName: string | null
@@ -115,10 +105,16 @@ export interface HomeScreenProps {
     error: string | null
   } | null
   /**
-   * NIGHT still held by this device's wallet rather than by the account — an
-   * older Passport, or a faucet drip that landed at the wallet address. The
-   * account cannot see it until a `deposit_night` moves it, so the screen
-   * offers exactly that. Omit or `null` and no row appears.
+   * NIGHT sitting at this device's wallet ADDRESS rather than inside the
+   * account — an older Passport, or anyone who paid the receiving address by
+   * hand. It is money outside the account: the contract's own `night_balances`
+   * mirror is what a withdrawal is checked against, so the account can neither
+   * see it nor spend it until a `deposit_night` moves it, and the card offers
+   * exactly that.
+   *
+   * The host supplies this ONLY when the wallet really holds a positive
+   * balance and there is an account to move it into; omit or `null` and no card
+   * appears. Nothing else on this screen shows a wallet balance.
    */
   legacyFunds?: {
     /** Formatted NIGHT the wallet holds. */
@@ -415,8 +411,7 @@ export default function HomeScreen(props: HomeScreenProps) {
 
         {/* The money row. Send is present only when there is an account to
             withdraw from — see the `send` prop. Receive opens the sheet below:
-            the `.night` name to be paid at, the address beneath it, the
-            faucet, and nothing else. */}
+            the `.night` name to be paid at, and the address beneath it. */}
         {canSend || accountAddress ? (
           <div className="mnhome-actions">
             {canSend ? (
@@ -492,17 +487,20 @@ export default function HomeScreen(props: HomeScreenProps) {
           </p>
         ) : null}
 
-        {/* Funds the account cannot see. `deposit_night` is the only route
-            that makes them spendable — see the `legacyFunds` prop. */}
+        {/* Money that is OUTSIDE the account. Rendered only when the wallet
+            genuinely holds NIGHT — the host gates on a positive balance — and
+            `deposit_night` is the only route that makes it spendable. See the
+            `legacyFunds` prop. */}
         {legacyFunds ? (
           <article className="mnhome-card">
             <p className="mnhome-card-head">
               <Wallet size={14} aria-hidden="true" />
-              <span className="mnhome-micro">Funds outside your account</span>
+              <span className="mnhome-micro">Money outside your account</span>
             </p>
             <p className="mnhome-card-unit">
-              {legacyFunds.balance} NIGHT arrived at your receiving address rather than in your
-              account, so your account cannot spend it yet. Moving it in is one transaction.
+              {legacyFunds.balance} NIGHT is sitting at your receiving address, outside your
+              Passport account. Your account cannot see it or spend it until it is moved in, and
+              moving it in is one transaction.
             </p>
             <button
               type="button"
@@ -651,31 +649,6 @@ export default function HomeScreen(props: HomeScreenProps) {
                     <p className="mnhome-addr-note">
                       A public receiving address — never the keys behind it.
                     </p>
-                    {receiveFaucetUrl ? (
-                      /* The faucet lives here, beside the address it funds —
-                         and it is the faucet of the network THAT ADDRESS is on,
-                         which is the wallet's network, not the one selected in
-                         the switcher. The switcher only filters the app grid;
-                         a drip requested from the selected network's faucet
-                         would land nowhere this address can see it.
-
-                         The URL comes from `faucetUrlFor`, the one place that
-                         records which networks have a faucet at all. A network
-                         with none — mainnet, or a devnet build — yields null
-                         and the link simply is not rendered, rather than a
-                         hand-built host that would 404. */
-                      <a
-                        className="mnhome-addr-faucet"
-                        href={receiveFaucetUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Open the ${receiveFaucetNetwork} faucet to get test NIGHT`}
-                      >
-                        <Droplets size={14} aria-hidden="true" />
-                        <span>Get test NIGHT</span>
-                        <ExternalLink size={12} aria-hidden="true" />
-                      </a>
-                    ) : null}
                   </div>
 
                   {/* The "Technical details" disclosure that held the shielded

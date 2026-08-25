@@ -87,11 +87,12 @@ export interface AppBrowserProps {
   onClose: () => void
   onProfileShared?: (appName: string, fields: string[]) => void
   /**
-   * Signs and submits a real unshielded NIGHT transfer, resolving with the
-   * node's transaction id. Wired by the host to the open local wallet's
-   * `sendUnshieldedNight`. Left undefined when there is no wallet session: the
-   * approval sheet is then never shown and the app is told
-   * `wallet-unavailable` rather than being left waiting.
+   * Signs and submits a real unshielded NIGHT payment, resolving with the
+   * node's transaction id. Wired by the host to a `withdraw_night` on this
+   * Passport's account-custody contract — the money is the ACCOUNT's, the
+   * wallet only signs. Left undefined when there is no wallet session OR no
+   * deployed account: the approval sheet is then never shown and the app is
+   * told `wallet-unavailable` rather than being left waiting.
    */
   executeTransfer?: (intent: PassportTransferIntent) => Promise<{ txId: string }>
   /**
@@ -134,13 +135,13 @@ type TransferOutcome =
    word DUST first reaches a user. */
 const FIELD_LABELS: Record<PassportProfileField, string> = {
   displayName: 'Passport display name',
-  passportContract: 'Passport contract address and network',
+  passportContract: 'Your Passport account — its address and network',
   midnightAddresses: 'Midnight technical addresses',
 }
 
 const FIELD_DETAILS: Record<PassportProfileField, string> = {
   displayName: 'The public name attached to this Passport.',
-  passportContract: 'The C1 address this Passport is deployed at.',
+  passportContract: 'The account this Passport IS — where its money lives and what its .night name resolves to.',
   midnightAddresses: 'Public receiving addresses — never the keys behind them.',
 }
 

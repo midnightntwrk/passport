@@ -1,17 +1,27 @@
 /**
- * Midnames engine — browser edition.
+ * Midnames engine — browser edition, READ SIDE.
  *
  * A Passport alias IS a Midnames `.night` name. Nothing in this module
  * simulates a registry: availability is decoded from the deployed top-level
- * domain contract's own ledger, and a claim is two real transactions —
+ * domain contract's own ledger, and a name's target is decoded from the
+ * resolver leaf that name points at.
  *
- *   1. a resolver "leaf" contract deployed with this Passport's DOMAIN_TARGET —
- *      since 2026/08/19 the account-custody contract's ADDRESS where the caller
- *      supplies one, and the wallet's unshielded address only where it does
- *      not (see {@link AliasResolverTarget}) — and
- *   2. a paid `register_domain_for` call on the shared `.night` TLD, which
- *      pays COST in unshielded NIGHT to the TLD owner and asserts the name is
- *      still free.
+ * WHAT LEFT, AND WHY (2026/08/25)
+ * ------------------------------
+ * The self-paid `claimAlias` — a resolver-leaf deploy plus a paid
+ * `register_domain_for`, both signed and funded by the passkey wallet — is
+ * gone, along with the funds gate in front of it and its screen-recording
+ * mock. Under the account ruling the wallet originates exactly one transaction
+ * in its life, the account-custody deploy; a name it bought would be a second.
+ * Registration now happens ONE way: the Passport service registers the name
+ * for the user, from its own NIGHT, against the user's own Midnames owner key
+ * and account contract (`./sponsoredAlias.ts`). With no service on offer the
+ * name QUEUES — the wallet is never asked to buy it.
+ *
+ * What survives here is everything a sponsored claim and a resolver lookup
+ * genuinely need: the registry snapshot and its availability probe, the
+ * `DOMAIN_TARGET` decoder, the owner-key derivation the service is handed, the
+ * published price table, and the naming rules.
  *
  * This is a browser port of the Node integration first proved against preview,
  * with two browser-shaped differences that survive every stack change:
@@ -25,16 +35,14 @@
  * ON STAGENET, THE TLD IS OURS (2026/08/24)
  * -----------------------------------------
  * On preview and pre-production the `.night` TLD was somebody else's, already
- * deployed, and the register call simply went through `findDeployedContract`.
- * The Midnames project publishes no stagenet registry, so ours was deployed
- * there with the preview registry's own parameters — see
- * {@link MIDNAMES_TLD_ADDRESSES}. Nothing in the claim path changes as a
- * result: `findDeployedContract` is still how the register call reaches it,
- * and the leaf is still ours to deploy per name.
+ * deployed. The Midnames project publishes no stagenet registry, so ours was
+ * deployed there with the preview registry's own parameters — see
+ * {@link MIDNAMES_TLD_ADDRESSES}. Both the service's register call and this
+ * module's reads address it exactly as they addressed a foreign one.
  *
- * The verifier-key agreement that makes `findDeployedContract` work is now
- * structural rather than a coincidence to re-verify: this app and the harness
- * that deployed the TLD ship the SAME artefacts, from
+ * The verifier-key agreement that makes the service's `findDeployedContract`
+ * work is structural rather than a coincidence to re-verify: this app, the
+ * service, and the harness that deployed the TLD ship the SAME artefacts, from
  * `examples/passport-balancer/contracts-stagenet` (compactc 0.33.0-rc.2). If
  * that ever stops being true the mismatch surfaces as a real failure
  * (`register-rejected`) and the UI queues the name — it is never papered over.
@@ -46,31 +54,12 @@
  * which needs no ambient network id at all.
  */
 
-import { nativeToken } from '@midnightntwrk/ledger-v9';
-import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk/address-format';
-import * as Rx from 'rxjs';
-
-import type { LocalMidnightWallet } from '../lib/localWallet.js';
-import {
-  CLAIMABLE_NETWORKS,
-  aliasRegistrationSupported,
-  faucetAvailable,
-} from '../lib/networks.js';
-import { sponsorReadiness } from '../lib/sponsor.js';
+import { CLAIMABLE_NETWORKS, aliasRegistrationSupported } from '../lib/networks.js';
 import {
   bytesToHex,
-  contractAddressBytes,
-  createContractProviders,
-  compiledContractFor,
-  feeWitness,
-  hexToBytes,
   indexerWsFrom,
   loadContractModule,
-  nativeColourBytes,
   rawContractAddress,
-  resolveTransactionHash,
-  transactionId,
-  wait,
 } from './contractRuntime.js';
 
 /** Re-exported: every caller that stores an address normalises through this. */
@@ -156,7 +145,6 @@ export const RESERVED_ALIASES: readonly string[] = [
 
 /** NIGHT is quoted with 6 decimals, matching `lib/localWallet.ts`. */
 const NIGHT_DECIMALS = 6;
-const STATE_TIMEOUT_MS = 15_000;
 /** How long a decoded registry snapshot is reused while the user types. */
 const REGISTRY_CACHE_MS = 8_000;
 
@@ -439,6 +427,15 @@ export async function resolveAliasTarget(
 /* Claiming                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Every way a claim can fail, and there is no longer a funding one among them.
+ *
+ * `insufficient-night` and `insufficient-dust` were the self-paid claim's
+ * refusals; nothing has consulted the wallet's balance for a name since
+ * 2026/08/25, so a code for "you cannot afford this" would name a state the
+ * app cannot reach. A service that will not register right now is
+ * `register-rejected` or `network-unreachable`, and the name queues.
+ */
 export type AliasClaimErrorCode =
   | 'taken'
   /**
@@ -447,9 +444,6 @@ export type AliasClaimErrorCode =
    * wallet address as a silent consolation prize for a failed contract.
    */
   | 'account-contract-failed'
-  | 'insufficient-night'
-  | 'insufficient-dust'
-  | 'deploy-failed'
   | 'register-rejected'
   | 'network-unreachable'
   | 'unsupported-network';
@@ -467,36 +461,34 @@ export class AliasClaimError extends Error {
 
 export interface AliasClaimProgress {
   /**
-   * `activating` and `attaching-account` both belong to the CALLER, not to
-   * `claimAlias`: the first covers the activation grant a funder sends an empty
-   * wallet, the second covers deploying this Passport's account-custody
-   * contract so the name has a contract to bind to. They are named here because
-   * the button that narrates a claim narrates all of it — a user watching one
-   * action should not be shown a vocabulary that skips two of its steps. The
-   * three that follow are this module's own.
+   * The phases a claim really has, in the order they happen.
+   *
+   * `attaching-account` belongs to the CALLER rather than to this module: it
+   * covers deploying this Passport's account-custody contract so the name has a
+   * contract to bind to. It is named here because the button that narrates a
+   * claim narrates all of it — a user watching one action should not be shown a
+   * vocabulary that skips its longest step.
+   *
+   * There is no `activating` phase. It described a NIGHT grant sent to the
+   * wallet address before a claim, and the wallet neither receives nor spends
+   * anything for a name; the service registers it and, once the account exists,
+   * funds the ACCOUNT (ruled 2026/08/25).
    */
-  phase:
-    | 'activating'
-    | 'attaching-account'
-    | 'deploying-resolver'
-    | 'registering'
-    | 'confirming';
+  phase: 'attaching-account' | 'deploying-resolver' | 'registering' | 'confirming';
 }
 
 /**
- * What the resolver leaf this claim deploys will point at.
+ * What a resolver leaf points at.
  *
- * `contract` is the shape Passport ships: the name resolves to this Passport's
- * account-custody contract, so "who is alice.night" and "which account is
- * alice.night" are the same answer. It is expressed in the leaf's constructor
- * as `[address, AddressType.ContractAddr]`, which the generated contract turns
- * into the LEFT branch of `DOMAIN_TARGET` — see {@link decodeDomainTarget}.
+ * `contract` is the only shape Passport registers: the name resolves to this
+ * Passport's account-custody contract, so "who is alice.night" and "which
+ * account is alice.night" are the same answer. It sits in the LEFT branch of
+ * the leaf's `DOMAIN_TARGET` — see {@link decodeDomainTarget}.
  *
- * `wallet` is the pre-2026/08/19 shape, kept because it is what every already
- * registered Passport name carries and because a claim must still be possible
- * (and honest) on a Passport with no contract. Nothing in this module picks
- * between them: the caller says which, so a name can never be bound to a
- * contract address that the caller did not watch land on chain.
+ * `wallet` is the pre-2026/08/19 shape. Nothing writes it any more; it is kept
+ * because it is what an already registered Passport name may carry, and a
+ * resolver read has to be able to say so honestly rather than misreporting an
+ * old name as pointing at an account.
  */
 export type AliasResolverTarget =
   | { kind: 'contract'; contractAddress: string }
@@ -532,403 +524,6 @@ export interface AliasClaimResult {
    * "awaiting the registry" rather than claiming a confirmed lookup.
    */
   registryConfirmed: boolean;
-}
-
-/** The 32 target bytes of a bech32m `mn_addr…` unshielded address. */
-function unshieldedAddressBytes(wallet: LocalMidnightWallet): Uint8Array {
-  const parsed = MidnightBech32m.parse(wallet.unshieldedAddress);
-  const decoded = parsed.decode(UnshieldedAddress, parsed.network);
-  const bytes = new Uint8Array(decoded.data);
-  if (bytes.length !== 32) {
-    throw new Error(`Expected a 32-byte unshielded address, got ${bytes.length}.`);
-  }
-  return bytes;
-}
-
-/**
- * The registry's own indexer, which is the one that can map this network's
- * transaction identifiers to ledger hashes. See
- * `./contractRuntime.ts#resolveTransactionHash` for why the mapping is needed
- * at all.
- */
-async function resolveRegistryTxHash(
-  network: MidnamesNetwork,
-  identifier: string,
-): Promise<string> {
-  return resolveTransactionHash(MIDNAMES_INDEXER_URLS[network], identifier);
-}
-
-function maybeBytes(value?: Uint8Array): { is_some: boolean; value: Uint8Array } {
-  return value ? { is_some: true, value } : { is_some: false, value: new Uint8Array(32) };
-}
-
-function maybeString(value?: string): { is_some: boolean; value: string } {
-  return value ? { is_some: true, value } : { is_some: false, value: '' };
-}
-
-function emptyKvs() {
-  return Array.from({ length: 10 }, () => ({ is_some: false, value: ['', ''] as [string, string] }));
-}
-
-interface WalletFacadeState {
-  unshielded: { balances: Record<string, bigint> };
-  dust: { balance(now: Date): bigint };
-}
-
-async function currentWalletState(wallet: LocalMidnightWallet): Promise<WalletFacadeState> {
-  const state = await Rx.firstValueFrom(
-    (wallet.facade.state() as Rx.Observable<unknown>).pipe(
-      Rx.timeout({ first: STATE_TIMEOUT_MS }),
-    ),
-  );
-  return state as WalletFacadeState;
-}
-
-/**
- * Providers for the Midnames circuits.
- *
- * Both claim transactions go through one wallet provider — the resolver
- * `deployContract` and the paid `register_domain_for` call — so sponsoring that
- * one function sponsors the whole registration. Its sponsored and unsponsored
- * balancing paths, and the rule that a covered fee is only ever reported once
- * the service has actually answered, live in `./contractRuntime.ts`.
- *
- * The NIGHT the user pays the registry owner is untouched either way: the
- * sponsor adds a DUST fee input and nothing else, so `COST` still comes out of
- * the caller's own unshielded balance, and the user still signs.
- */
-async function createMidnamesProviders(
-  wallet: LocalMidnightWallet,
-  ownerSecretHex: string,
-  privateStateId: string,
-  witness: ReturnType<typeof feeWitness>,
-) {
-  return createContractProviders(wallet, {
-    contract: 'midnames',
-    privateStateId,
-    initialPrivateState: { secretKey: ownerSecretHex },
-    witness,
-  });
-}
-
-async function compiledLeafContract(ownerSecretHex: string) {
-  /* The leaf's one witness. It reads the secret out of the private state rather
-     than closing over `ownerSecretHex`, so the proof is always over the key the
-     provider is actually holding for this claim; the argument is the fall-back
-     for a private state that arrived without one. */
-  const witnesses = {
-    secretKey: ({ privateState }: { privateState: { secretKey: string } }) => [
-      privateState,
-      hexToBytes(privateState.secretKey ?? ownerSecretHex),
-    ],
-  };
-  return compiledContractFor('midnames', 'passport-midnames-leaf', witnesses);
-}
-
-/**
- * Re-checks, WITHOUT any passkey prompt, whether this wallet can pay for
- * `alias` right now: NIGHT >= {@link aliasCostAtomicNight} and a non-zero DUST
- * balance for the fee. The same checks {@link claimAlias} enforces, exposed
- * separately so a re-run can fail closed with the honest reason before asking
- * the user to touch their authenticator.
- */
-export async function checkAliasClaimFunds(
-  wallet: LocalMidnightWallet,
-  alias: string,
-): Promise<{ ok: true } | { ok: false; reason: string }> {
-  if (((import.meta.env ?? {}) as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1') {
-    /* Demo mode: the staged mock claim needs no funds. */
-    return { ok: true };
-  }
-  const label = normalizePassportAlias(alias);
-  const cost = aliasCostAtomicNight(label);
-  const state = await currentWalletState(wallet);
-  const night = state.unshielded.balances[String(nativeToken().raw)] ?? 0n;
-  if (night < cost) {
-    return {
-      ok: false,
-      reason: `Registering ${aliasDomain(label)} costs ${formatNight(cost)} NIGHT, and this wallet holds ${formatNight(night)}.${
-        faucetAvailable(wallet.network.networkId)
-          ? ` Top up from the ${wallet.network.networkId} faucet, then try again.`
-          : ''
-      }`,
-    };
-  }
-  // A funded sponsor pays the fee, so a dustless wallet is no longer a reason
-  // to refuse. The gate is `available > 0` on the service's own
-  // `/wallet-status` — never a hopeful assumption.
-  if ((await sponsorReadiness()).state === 'ready') return { ok: true };
-  const dust = state.dust.balance(new Date());
-  if (dust <= 0n) {
-    return {
-      ok: false,
-      reason:
-        'This wallet cannot pay the transaction fee yet: fees are normally covered by the fee sponsor, and this wallet holds no DUST of its own.',
-    };
-  }
-  return { ok: true };
-}
-
-/**
- * Claims `alias` as `<alias>.night` on whichever network the open wallet is
- * actually on, resolving to whatever `target` names.
- *
- * `target` is REQUIRED and has no default. The caller decides — and can only
- * decide `{ kind: 'contract' }` by holding a contract address the chain gave
- * it — so this function can never quietly bind a name to a wallet address
- * because a contract deploy went missing.
- *
- * The registration always happens on `wallet.network.networkId` and nowhere
- * else: the wallet's keys, its NIGHT, and its proof server all belong to that
- * network, so a "claim" anywhere else would be a claim we cannot make. Callers
- * hand every other network to the queue path instead. Until 2026/08/06 this
- * was pinned to preview; it now follows the build, which is what let the demo
- * move to pre-production without the UI lying about where names land.
- *
- * Every failure mode is a real one. Nothing here reports success without both
- * transaction ids in hand.
- */
-export async function claimAlias(
-  wallet: LocalMidnightWallet,
-  ownerSecret: Uint8Array,
-  alias: string,
-  target: AliasResolverTarget,
-  onProgress?: (progress: AliasClaimProgress) => void,
-): Promise<AliasClaimResult> {
-  const label = normalizePassportAlias(alias);
-  /* DEMO MOCK, env-gated (VITE_LOCALNET_DEMO=1): the owner's screen-recording
-     mode. Stages the phases over ~6 seconds and returns a fabricated success
-     with random ids — NO transaction is pushed to any chain. Never set in a
-     public build; with the flag unset this branch is dead code and the real
-     two-transaction registration below runs unchanged. */
-  if (((import.meta.env ?? {}) as Record<string, string | undefined>).VITE_LOCALNET_DEMO === '1') {
-    const fakeId = () =>
-      [...crypto.getRandomValues(new Uint8Array(32))]
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-    onProgress?.({ phase: 'deploying-resolver' });
-    await wait(2500);
-    onProgress?.({ phase: 'registering' });
-    await wait(2500);
-    onProgress?.({ phase: 'confirming' });
-    await wait(1000);
-    return {
-      alias: label,
-      domain: `${label}.night`,
-      /* Filed under the UI's selected network key so the identity card —
-         which reads records for that key — sees the registered state. */
-      network: 'stagenet',
-      tldAddress: MIDNAMES_TLD_ADDRESSES.stagenet,
-      resolverAddress: fakeId(),
-      resolverDeployTxId: fakeId(),
-      registerTxId: fakeId(),
-      targetUnshieldedAddress: wallet.unshieldedAddress,
-      resolverTarget: target.kind,
-      resolverTargetHex:
-        target.kind === 'contract' ? rawContractAddress(target.contractAddress) : fakeId(),
-      registryConfirmed: true,
-      claimedAt: new Date().toISOString(),
-    } as AliasClaimResult;
-  }
-  const walletNetworkId = wallet.network.networkId;
-  if (!aliasRegistrationSupported(walletNetworkId)) {
-    throw new AliasClaimError(
-      'unsupported-network',
-      `Passport registers names on ${CLAIMABLE_NETWORKS.join(' and ')} only; this wallet is on ${walletNetworkId}.`,
-    );
-  }
-  const network = walletNetworkId as MidnamesNetwork;
-
-  const availability = await checkAliasAvailability(network, label, { fresh: true });
-  if (availability.status === 'taken') {
-    throw new AliasClaimError(
-      'taken',
-      `${aliasDomain(label)} is already registered on ${network}.`,
-      availability.resolverAddress,
-    );
-  }
-  if (availability.status === 'unreachable') {
-    throw new AliasClaimError(
-      'network-unreachable',
-      'The .night registry could not be reached, so the name cannot be claimed right now.',
-      availability.detail,
-    );
-  }
-
-  const cost = aliasCostAtomicNight(label);
-  const state = await currentWalletState(wallet);
-  const night = state.unshielded.balances[String(nativeToken().raw)] ?? 0n;
-  if (night < cost) {
-    throw new AliasClaimError(
-      'insufficient-night',
-      `Registering ${aliasDomain(label)} costs ${formatNight(cost)} NIGHT, and this wallet holds ${formatNight(night)}.`,
-    );
-  }
-  // Same rule as `checkAliasClaimFunds`: only a sponsor that has really told us
-  // it can pay lets a dustless wallet through. If the sponsor then fails
-  // mid-claim, `balanceTx` falls back to local DUST and the SDK's own
-  // insufficient-funds error surfaces as `deploy-failed` / `register-rejected`
-  // with the real reason attached.
-  if ((await sponsorReadiness()).state !== 'ready') {
-    const dust = state.dust.balance(new Date());
-    if (dust <= 0n) {
-      throw new AliasClaimError(
-        'insufficient-dust',
-        'This wallet cannot pay the transaction fee yet: fees are normally covered by the fee sponsor, and this wallet holds no DUST of its own.',
-      );
-    }
-  }
-
-  const ownerSecretHex = bytesToHex(ownerSecret);
-  const ownerKey = await deriveMidnamesOwnerKey(ownerSecret);
-  const privateStateId = `passport-midnames-${label}`;
-  const witness = feeWitness();
-  const [providers, compiledContract, { AddressType }] = await Promise.all([
-    createMidnamesProviders(wallet, ownerSecretHex, privateStateId, witness),
-    compiledLeafContract(ownerSecretHex),
-    loadMidnames(),
-  ]);
-  const { deployContract, findDeployedContract } = await import(
-    '@midnight-ntwrk/midnight-js-contracts'
-  );
-
-  const tldAddress = MIDNAMES_TLD_ADDRESSES[network];
-  /* The leaf's OWNER address stays this wallet's, always: `DOMAIN_OWNER` is who
-     may later call `set_resolver` / `transfer_domain`, and that authority
-     belongs to the passkey wallet whichever way the name resolves. */
-  const ownerAddressBytes = unshieldedAddressBytes(wallet);
-  /* The leaf's TARGET is what the name RESOLVES to, and is the caller's
-     choice. `AddressType.ContractAddr` puts the account-custody contract's
-     address in the LEFT branch of `DOMAIN_TARGET`; `UnshieldedAddr` puts the
-     wallet's 32 target bytes in the innermost RIGHT branch. Both are real
-     constructor arguments to a contract we deploy ourselves — the deployed
-     `.night` TLD is never asked to represent either, it only records which
-     leaf address a name points at. */
-  const [targetBytes, targetType] =
-    target.kind === 'contract'
-      ? ([contractAddressBytes(target.contractAddress), AddressType.ContractAddr] as const)
-      : ([ownerAddressBytes, AddressType.UnshieldedAddr] as const);
-  const { key: labelKey, len } = domainToKey(label);
-
-  onProgress?.({ phase: 'deploying-resolver' });
-  let resolverAddress: string;
-  let resolverDeployTxId: string;
-  try {
-    const deployed = await deployContract(providers as never, {
-      compiledContract,
-      privateStateId,
-      initialPrivateState: { secretKey: ownerSecretHex },
-      args: [
-        maybeBytes(domainToKey(MIDNAMES_TLD).key),
-        { bytes: contractAddressBytes(tldAddress) },
-        [targetBytes, targetType],
-        maybeBytes(labelKey),
-        nativeColourBytes(),
-        0n,
-        0n,
-        0n,
-        maybeString(),
-        false,
-        ownerKey,
-        { bytes: ownerAddressBytes },
-        emptyKvs(),
-      ],
-    } as never);
-    const deployTxData = (deployed as { deployTxData: unknown }).deployTxData as {
-      public: { contractAddress: string };
-    };
-    resolverAddress = rawContractAddress(deployTxData.public.contractAddress);
-    resolverDeployTxId = transactionId(deployTxData);
-  } catch (cause) {
-    throw new AliasClaimError(
-      'deploy-failed',
-      `The resolver contract for ${aliasDomain(label)} could not be deployed.`,
-      cause instanceof Error ? cause.message : String(cause),
-    );
-  }
-
-  onProgress?.({ phase: 'registering' });
-  let registerTxId: string;
-  try {
-    const tld = await findDeployedContract(providers as never, {
-      compiledContract,
-      contractAddress: tldAddress,
-      privateStateId,
-      initialPrivateState: { secretKey: ownerSecretHex },
-    } as never);
-    const callTx = (tld as { callTx: Record<string, (...args: unknown[]) => Promise<unknown>> })
-      .callTx;
-    const registration = await callTx.register_domain_for(ownerKey, labelKey, len, {
-      bytes: contractAddressBytes(resolverAddress),
-    });
-    registerTxId = transactionId(registration);
-  } catch (cause) {
-    throw new AliasClaimError(
-      'register-rejected',
-      `The .night registry rejected the registration of ${aliasDomain(label)}.`,
-      cause instanceof Error ? cause.message : String(cause),
-    );
-  }
-
-  onProgress?.({ phase: 'confirming' });
-  // Swap both identifiers for the block-level hashes explorers resolve; the
-  // identifier survives only if the indexer never answers.
-  [resolverDeployTxId, registerTxId] = await Promise.all([
-    resolveRegistryTxHash(network, resolverDeployTxId),
-    resolveRegistryTxHash(network, registerTxId),
-  ]);
-  invalidateAliasRegistry(network);
-  const expectedTargetHex = bytesToHex(targetBytes);
-  let registryConfirmed = false;
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const confirmation = await checkAliasAvailability(network, label, { fresh: true });
-    if (confirmation.status === 'taken' && confirmation.resolverAddress === resolverAddress) {
-      /* The name is in the registry. The decisive question is what it points
-         at, so the leaf is read back too — the same decode any resolver would
-         run. A mismatch is not "not yet": it leaves `registryConfirmed` false
-         rather than asserting a binding we did not observe. */
-      let resolved: Awaited<ReturnType<typeof resolveAliasTarget>> = null;
-      try {
-        resolved = await resolveAliasTarget(network, label);
-      } catch {
-        /* An indexer hiccup during the read-back is not a verdict on the
-           registration. The transaction has already landed — refusing the
-           claim here would report a failure for a name that is genuinely in
-           the registry, purely because one query out of thirty did not
-           answer. So a throw means only "not confirmed on THIS attempt": the
-           loop waits and asks again, exactly as it does for a leaf that has
-           not caught up yet, and if every attempt is spent the caller gets
-           `registryConfirmed: false` — the same honest "landed, not yet
-           verified" the lag path returns. */
-        resolved = null;
-      }
-      const expectedKind = target.kind === 'contract' ? 'contract' : 'wallet';
-      if (
-        resolved &&
-        resolved.target.kind === expectedKind &&
-        resolved.target.hex === expectedTargetHex
-      ) {
-        registryConfirmed = true;
-        break;
-      }
-    }
-    await wait(2_000);
-  }
-
-  return {
-    alias: label,
-    domain: aliasDomain(label),
-    network,
-    tldAddress,
-    resolverAddress,
-    resolverDeployTxId,
-    registerTxId,
-    targetUnshieldedAddress: wallet.unshieldedAddress,
-    resolverTarget: target.kind,
-    resolverTargetHex: bytesToHex(targetBytes),
-    claimedAt: new Date().toISOString(),
-    registryConfirmed,
-  };
 }
 
 /**

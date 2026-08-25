@@ -310,7 +310,8 @@ export interface BalancerWallet {
    * The whole point of the service: take somebody else's finalized transaction,
    * add a DUST fee leg paid from this wallet, prove that leg, and hand the
    * merged transaction back. Nothing is submitted here — the caller's own
-   * wallet submits, exactly as the demo's `trySponsoredTransfer` expects.
+   * wallet submits, which is what the demo's balancing path in
+   * `examples/passport-demo/src/identity/contractRuntime.ts` expects.
    */
   balanceOnly(transactionBytes: Uint8Array): Promise<BalanceOnlyResult>;
   /**
@@ -819,8 +820,8 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
 
       /* Deserialise BEFORE claiming the queue: a malformed body is the caller's
          mistake and must not lock anybody else out. The three markers say what
-         kind of transaction is on the wire — a FINALIZED one, which is what
-         `trySponsoredTransfer` sends after it has signed and proved locally. */
+         kind of transaction is on the wire — a FINALIZED one, which is what a
+         caller sends after it has signed and proved locally. */
       let incoming: ledger.FinalizedTransaction;
       try {
         incoming = ledger.Transaction.deserialize<

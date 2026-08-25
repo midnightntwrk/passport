@@ -105,10 +105,12 @@ export function messageOf(cause: unknown): string {
 }
 
 /**
- * Maps a wallet failure onto the bridge's fixed error vocabulary. The thrown
- * value is Contract W's `SendNightError` shape — `{ code, message }` — but this
- * is postMessage-adjacent code, so an unrecognised throw becomes
+ * Maps a payment failure onto the bridge's fixed error vocabulary. The thrown
+ * value is the account module's `AccountCustodyError` shape — `{ code, message }`
+ * — but this is postMessage-adjacent code, so an unrecognised throw becomes
  * `submit-failed` with its real message rather than a guess at a nicer code.
+ * `insufficient-night` and `insufficient-dust` are still recognised: App.tsx
+ * translates the contract's own codes into this vocabulary before they arrive.
  */
 export function transferErrorFrom(cause: unknown): {
   error: NonNullable<PassportTxResponse['error']>

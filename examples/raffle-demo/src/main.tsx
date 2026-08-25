@@ -98,7 +98,18 @@ const PASSPORT_WINDOW = 'midnight-passport';
 
 const ENTRY_PURPOSE = 'F1 Grand Prix raffle entry';
 
-const REQUEST_FIELDS: PassportProfileField[] = ['displayName', 'midnightAddresses'];
+/**
+ * What the raffle asks Passport for, and it is deliberately not an address.
+ *
+ * A Passport user's identity IS their account-custody contract: the `.night`
+ * name resolves to it, the money the entry payment comes out of lives in it,
+ * and the wallet behind it exists to sign, not to be known. So the raffle keys
+ * a ticket on `passportContract.address` — one account, one entry, stable
+ * across every device that passkey opens — and never asks for
+ * `midnightAddresses` at all. It has no use for a receiving address: entries
+ * are PAID to the collection address below, not to the entrant.
+ */
+const REQUEST_FIELDS: PassportProfileField[] = ['displayName', 'passportContract'];
 
 const ENTRY_STORAGE_PREFIX = 'mn-raffle-entry:';
 
@@ -117,6 +128,11 @@ const ENTRY_PRICE = formatNight(ENTRY_AMOUNT);
 function randomHex(bytes = 24): string {
   const value = crypto.getRandomValues(new Uint8Array(bytes));
   return [...value].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** The account this Passport is, or `null` before Passport has answered. */
+function accountOf(profile: PassportProfileResponse | null): string | null {
+  return profile?.profile?.passportContract?.address ?? null;
 }
 
 function shortAddress(value: string): string {
@@ -140,7 +156,7 @@ function shortHash(value: string): string {
   return `${value.slice(0, 10)}…${value.slice(-6)}`;
 }
 
-/** Deterministic ticket number: the last six hex digits of the unshielded
+/** Deterministic ticket number: the last six hex digits of the account
  *  address, so re-entering with the same Passport shows the same ticket. */
 function ticketFromAddress(address: string): string {
   const hex = address.toLowerCase().replace(/[^0-9a-f]/g, '');
@@ -211,23 +227,23 @@ function App() {
      treatment rather than a spinner with no end. */
   const connectTimer = useRef<number | null>(null);
   const connectPoll = useRef<number | null>(null);
-  /* The message listeners are registered once, so anything they need about the
-     connected Passport lives in a ref rather than in a render-scoped closure
-     that would still be holding the first render's `null`. */
-  const connectedAddress = useRef<string | null>(null);
+  /* The connected Passport's ACCOUNT contract address — the thing a ticket is
+     keyed on. The message listeners are registered once, so anything they need
+     about the connected Passport lives in a ref rather than in a render-scoped
+     closure that would still be holding the first render's `null`. */
+  const connectedAccount = useRef<string | null>(null);
 
   const settle = (profileResponse: PassportProfileResponse) => {
     // Passport answered, so neither connect watcher has anything left to do.
     clearConnectWatch();
     setResponse(profileResponse);
-    connectedAddress.current =
-      profileResponse.profile?.midnightAddresses?.unshielded ?? null;
+    connectedAccount.current = accountOf(profileResponse);
     if (!profileResponse.approved) {
       setState('denied');
       setDetail('The Passport request was declined. No data was shared.');
       return;
     }
-    const address = profileResponse.profile?.midnightAddresses?.unshielded;
+    const address = accountOf(profileResponse);
     const stored = address ? loadEntry(address) : null;
     setEntry(stored);
     if (entryIsValid(stored)) {
@@ -237,7 +253,7 @@ function App() {
       setState('connected');
       setDetail(
         ON_CHAIN
-          ? `Passport connected. Entry costs ${ENTRY_PRICE} NIGHT, paid from your Passport wallet.`
+          ? `Passport connected. Entry costs ${ENTRY_PRICE} NIGHT, paid from your Passport account.`
           : 'Passport connected. Your entry is one tap away.',
       );
     }
@@ -382,7 +398,7 @@ function App() {
     responseDetail: string | undefined,
     exchange: { requestId: string; nonce: string },
   ) => {
-    const address = connectedAddress.current;
+    const address = connectedAccount.current;
 
     if (status === 'submitted' && txId && address) {
       storeEntry(address, txId);
@@ -412,26 +428,26 @@ function App() {
     setState('connected');
     if (error === 'insufficient-funds') {
       setDetail(
-        `Your Passport wallet has no NIGHT to pay the ${ENTRY_PRICE} NIGHT entry, so nothing was sent. Fund the wallet with preview NIGHT and try again.`,
+        `Your Passport account does not hold the ${ENTRY_PRICE} NIGHT this entry costs, so nothing was sent. Top the account up and try again.`,
       );
       return;
     }
     if (error === 'wallet-unavailable') {
       setDetail(
-        'No Passport wallet session is open, so the entry payment could not be signed. Sign in to Passport and try again.',
+        'Passport has no open session or no account to pay from, so the entry payment could not be signed. Sign in to Passport and try again.',
       );
       return;
     }
     if (error === 'network-mismatch') {
       /* The fault here is as likely to be the raffle's own configuration as
-         the user's wallet, so name both sides — and log the full configured
+         the user's Passport, so name both sides — and log the full configured
          address so an operator can spot a stale env instantly. */
       console.warn(
         `Raffle collection address configured as: ${COLLECTION_ADDRESS || '(empty)'} — check VITE_RAFFLE_COLLECTION_ADDRESS.`,
       );
       const collectionNetwork = addressNetwork(COLLECTION_ADDRESS);
       setDetail(
-        `This raffle's collection address is on ${collectionNetwork ?? 'an unrecognised network'}; your Passport wallet is on a different network — check the raffle's VITE_RAFFLE_COLLECTION_ADDRESS configuration. ${responseDetail ?? ''}`.trim(),
+        `This raffle's collection address is on ${collectionNetwork ?? 'an unrecognised network'}; your Passport is on a different network — check the raffle's VITE_RAFFLE_COLLECTION_ADDRESS configuration. ${responseDetail ?? ''}`.trim(),
       );
       return;
     }
@@ -607,10 +623,12 @@ function App() {
   };
 
   const enterRaffle = () => {
-    const address = response?.profile?.midnightAddresses?.unshielded;
+    const address = accountOf(response);
     if (!address) {
       setState('error');
-      setDetail('Passport did not share an address, so a ticket cannot be issued.');
+      setDetail(
+        'Passport did not share an account, so a ticket cannot be issued. A Passport has one once its account contract is deployed.',
+      );
       return;
     }
 
@@ -737,7 +755,7 @@ function App() {
 
   const busy = state === 'opening' || state === 'waiting';
   const name = response?.profile?.displayName ?? 'there';
-  const address = response?.profile?.midnightAddresses?.unshielded;
+  const address = accountOf(response);
   const ticketTxId = entry?.txId;
 
   return (
