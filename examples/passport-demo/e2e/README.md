@@ -79,7 +79,28 @@ activation grant, and spends from the account:
   fixed figure — its leg has been failing on stagenet, and a hard 100 would
   make a red test mean "the sponsor is behaving as documented";
 - the send asserts the **account's** balance drops. Nothing else proves a
-  withdrawal happened.
+  withdrawal happened;
+- and the **shielded** send does the same for `withdraw_shielded`, which is a
+  different circuit over a different map and is not exercised by the NIGHT
+  path at all. It waits for the sponsor's 100 mUSD leg to land, pays 10 units
+  to a shielded address, and holds the result to two witnesses: the card falls
+  to 90, and the indexer records a `withdraw_shielded` action on this account.
+
+### The shielded recipient
+
+A shielded withdrawal cannot be pointed at another Passport: the receive
+surface offers the account **contract** and nothing else, so a second
+freshly-onboarded Passport has no `mn_shield-addr…` to publish. Nor does the
+sponsor publish one — `/balancer/status` and `/balancer/wallet-status` carry
+its unshielded address alone.
+
+The recipient in the spec is therefore the fee sponsor's **own** shielded
+address, derived on the balancer host from the seed the service already holds
+(HD account 0, role Zswap, index 0 — the same derivation
+`passport-balancer/src/wallet.ts` uses) by a throwaway script that printed the
+address and nothing else. The seed was never printed, logged, or copied. So the
+10 mUSD returns to the service that granted the 100, rather than landing at an
+address nobody holds the keys to.
 
 ### It can fail for a reason that is not a bug
 
@@ -102,6 +123,8 @@ If either fails twice the message carries the service's own sentence. Check
 `GET https://funder.midnightpassport.com/balancer/wallet-status` before
 concluding the app is broken.
 
-A clean run is about four and a half minutes; a run that has to wait out a
-reservation is longer. Do not run the two tiers concurrently, and leave a few
-minutes between live runs.
+A clean run is about seven minutes; a run that has to wait out a reservation is
+longer. The shielded test runs last for the same reason: the stablecoin leg is
+a second deposit on the sponsor's own backoff schedule (~ten minutes of
+patience) and can land minutes after the NIGHT half. Do not run the two tiers
+concurrently, and leave a few minutes between live runs.

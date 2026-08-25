@@ -178,9 +178,9 @@ describe('explorer links', () => {
   it('has an explorer only where a real transaction has been seen to render', () => {
     expect(explorerUrlFor('preview')).toBe('https://explorer.1am.xyz');
     expect(explorerUrlFor('preprod')).toBe(EXPLORER_URLS.preprod);
-    // Stagenet's absence is deliberate: the explorer origin answers 200 for
-    // every path, which is not evidence that a stagenet transaction resolves.
-    expect(explorerUrlFor('stagenet')).toBeNull();
+    // Stagenet went in on 2026/08/25, once a real stagenet transaction was
+    // seen to render there; mainnet still has not been.
+    expect(explorerUrlFor('stagenet')).toBe('https://explorer.1am.xyz');
     expect(explorerUrlFor('mainnet')).toBeNull();
     expect(explorerUrlFor('undeployed')).toBeNull();
     expect(explorerUrlFor(null)).toBeNull();
@@ -202,8 +202,11 @@ describe('explorer links', () => {
     expect(explorerTxUrl('preview', TX_HASH)).toBe(
       `https://explorer.1am.xyz/tx/${TX_HASH}?network=preview`,
     );
+    expect(explorerTxUrl('stagenet', TX_HASH)).toBe(
+      `https://explorer.1am.xyz/tx/${TX_HASH}?network=stagenet`,
+    );
     // Every way this can fail lands on null, and the caller renders text.
-    expect(explorerTxUrl('stagenet', TX_HASH)).toBeNull();
+    expect(explorerTxUrl('mainnet', TX_HASH)).toBeNull();
     expect(explorerTxUrl('undeployed', TX_HASH)).toBeNull();
     expect(explorerTxUrl(null, TX_HASH)).toBeNull();
     expect(explorerTxUrl('preview', TX_IDENTIFIER)).toBeNull();

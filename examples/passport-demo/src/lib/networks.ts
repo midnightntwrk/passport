@@ -198,19 +198,18 @@ export const FAUCET_URLS: Partial<Record<PassportNetworkId, string>> = {
  * ledger transaction HASH, never the 33-byte identifier `submitTransaction`
  * answers with.
  *
- * Stagenet is absent, and its absence is deliberate. The explorer's origin
- * answers `200` for `?network=stagenet`, but that is its single-page shell
- * answering for every path — it is not evidence that a stagenet transaction
- * resolves there. Adding an entry on the strength of a `200` is exactly how
- * this table produced dead links before. It goes in when a real stagenet
- * transaction hash has been seen to render, and not before; until then
- * stagenet transaction ids are shown as text, which is what
- * {@link explorerTxUrl} returning `null` makes every caller do. Mainnet is
- * omitted on the same rule.
+ * Stagenet went in on 2026/08/25, on the same rule it was kept out by: the
+ * explorer gained stagenet as a first-class network that day, and a real
+ * stagenet transaction was seen to render —
+ * `/tx/5941d2a7…86b2?network=stagenet`, a `withdraw_night` call in block
+ * 172961 — along with `/contract/{address}` and `/block/{height}` on the
+ * same query parameter. Mainnet is still omitted: no mainnet transaction of
+ * ours has been seen to render, and a `200` from the shell is not evidence.
  */
 export const EXPLORER_URLS: Partial<Record<PassportNetworkId, string>> = {
   preview: 'https://explorer.1am.xyz',
   preprod: 'https://explorer.1am.xyz',
+  stagenet: 'https://explorer.1am.xyz',
 };
 
 /** The faucet for a network, or `null` where there is none. */

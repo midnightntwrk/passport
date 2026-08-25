@@ -55,10 +55,47 @@ test.describe('@live the account model on stagenet', () => {
    */
   const RECIPIENT =
     'mn_addr_stagenet127xnp9uuxwhh7a8an77mxv02ypt6u09xkk63c9zvdkjsrj4mj68qg7c5ad';
+  /**
+   * The shielded recipient, and why it is this one.
+   *
+   * A shielded withdrawal cannot be pointed at a Passport: the receive surface
+   * offers the account CONTRACT and nothing else, so a second freshly-onboarded
+   * Passport has no `mn_shield-addr…` to publish. Nor does the sponsor publish
+   * one — `/balancer/status` and `/balancer/wallet-status` carry its unshielded
+   * address alone.
+   *
+   * So this is the fee sponsor's OWN shielded address, derived on the balancer
+   * host from the seed the service already holds — HD account 0, role Zswap,
+   * index 0, the same derivation `passport-balancer/src/wallet.ts` uses — by a
+   * script that printed the address and nothing else. It is therefore a real
+   * third party that genuinely controls what lands: the 10 mUSD goes back to
+   * the service that granted the 100, rather than to an address nobody holds
+   * the keys to.
+   *
+   * It is checked here rather than trusted: `decodeShieldedRecipient` in
+   * `src/identity/accountCustody.ts` and `classifyRecipient` in
+   * `src/screens/SendSheet.tsx` both run it through the wallet SDK's own
+   * `ShieldedAddress` codec, and the sheet's title turning into "Send a
+   * shielded token" is that codec having accepted it.
+   */
+  const SHIELDED_RECIPIENT =
+    'mn_shield-addr_stagenet1vgzgswr3hh63g4kjgymcupyugl9jy75j9w73kr4dr6m0crkrxgrvmmq4969xqusmk8q3wrlsej3p7ev8r4jl9g4fnxg5dqewc9dw5ns5e03lu';
   /** What the balancer's `/fund-account` really deposits, in NIGHT. */
   const GRANT_NIGHT = '0.002';
   /** Small enough to leave a visible remainder after the send. */
   const SEND_NIGHT = '0.001';
+  /**
+   * The stablecoin half of the same grant, in the units the LEDGER keeps it in.
+   *
+   * A shielded colour is minted by a contract and carries no decimal scale on
+   * chain, so this is a whole count and not a scaled figure — which is why the
+   * card, the Send sheet, and this constant all spell it the same way. `100` is
+   * the sponsor's own published `assetGrant`.
+   */
+  const GRANT_MUSD = '100';
+  /** Ten units out, ninety left — a remainder the card can be read against. */
+  const SEND_MUSD = '10';
+  const REMAINING_MUSD = '90';
 
   let page: Page;
   const alias = uniqueAlias('walk');
@@ -314,6 +351,190 @@ test.describe('@live the account model on stagenet', () => {
       .toBeLessThan(balanceBefore);
     console.log(`[live] balance fell from ${balanceBefore} after sending ${SEND_NIGHT} NIGHT`);
   });
+
+  /**
+   * The shielded leg, and the one assertion the NIGHT send cannot make.
+   *
+   * `withdraw_night` and `withdraw_shielded` are different circuits over
+   * different maps — the contract keeps unshielded NIGHT and shielded colours
+   * apart, and midnight-js has to build the recipient's note ciphertext
+   * client-side from an encryption key only a full `mn_shield-addr…` carries.
+   * None of that is exercised by the NIGHT path, so a green NIGHT send says
+   * nothing about whether a shielded one works.
+   *
+   * It runs LAST rather than straight after activation, and deliberately: the
+   * stablecoin leg is a second deposit on the sponsor's own backoff schedule
+   * (`FUND_ACCOUNT_RETRY_DELAYS_MS`, ~ten minutes of patience), so it can land
+   * minutes after the NIGHT half the activation test already saw. Waiting for
+   * it here costs nothing the earlier tests were not already spending.
+   *
+   * Two witnesses, because either alone would be weak. The CARD says the
+   * account holds ten fewer — which is what a user can see — and the INDEXER
+   * says a `withdraw_shielded` action now exists on this contract, which is
+   * what makes the drop a withdrawal rather than a re-read.
+   */
+  test('a shielded withdrawal pays mUSD out of the account, and the chain records withdraw_shielded', async () => {
+    /* THE ADDRESS THE REST OF THIS TEST IS ABOUT.
+       Home only ever shows the account contract elided — nine characters and
+       seven — and the indexer query below needs all sixty-four. So the whole
+       address is read out of the record the deployment wrote, and then CHECKED
+       against what the receive row shows: querying an address the screen never
+       named would prove something about a different contract. */
+    const account = await storedAccountContract(page);
+    await page.getByRole('button', { name: /^Receive$/ }).click();
+    const shown = elidedAddress((await page.locator('.mnhome-address code').innerText()).trim());
+    expect(shown, 'the receive row showed no address').not.toBeNull();
+    expect(
+      account.startsWith(shown!.head) && account.endsWith(shown!.tail),
+      `the stored account ${account} is not the one the receive row shows`,
+    ).toBe(true);
+    await page.keyboard.press('Escape');
+    const rawAccount = account.trim().toLowerCase().replace(/^0x/, '').replace(/^0200/, '');
+    expect(rawAccount, 'the stored account is not a 64-hex contract address').toMatch(
+      /^[0-9a-f]{64}$/,
+    );
+    console.log(`[live] account contract ${rawAccount}`);
+
+    /* THE GRANT HAS TO HAVE LANDED FIRST — 100 mUSD, exactly, because that is
+       the figure the sponsor publishes as `assetGrant` and this send is quoted
+       against it. Refreshed while it waits: the card is re-read from the
+       contract on demand, which is why the control is on Home at all. */
+    await expect
+      .poll(async () => refreshedStablecoinValue(page), {
+        timeout: 12 * 60_000,
+        intervals: [10_000],
+        message:
+          'the mUSD activation grant never reached the account — check GET https://funder.midnightpassport.com/balancer/status for assetFunding and assetUnavailableReason',
+      })
+      .toBe(GRANT_MUSD);
+    console.log(`[live] activation stablecoin: ${GRANT_MUSD} mUSD in the account`);
+
+    /* The same wait the NIGHT send makes, for the same reason: one service
+       covers both the grant above and this send's fee, and it reserves its DUST
+       for a balanced transaction the moment it finalises one. */
+    await waitForSponsor();
+    /* The colour the sponsor named, so a Passport that happens to hold more
+       than one shielded token still sends the stablecoin rather than whichever
+       colour sorted first. `null` when the service cannot be read — the sheet
+       then keeps its own default and the balance assertions still decide. */
+    const colour = await sponsorStablecoinColour();
+
+    const attempts = 2;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      await page.getByRole('button', { name: /^Send$/ }).first().click();
+      /* Choosing mUSD over NIGHT is not a control on this sheet — it is the
+         ADDRESS. The recipient field is the same textarea the NIGHT send uses,
+         carrying the network's unshielded prefix as its placeholder, and what
+         decides the ledger is the wallet SDK's codec reading what was pasted
+         into it. The title changing is that codec having said "shielded". */
+      await page.getByPlaceholder(/^mn_addr_stagenet1/).fill(SHIELDED_RECIPIENT);
+      await expect(page.locator('#mnhome-send-title')).toHaveText('Send a shielded token');
+
+      /* The account's own colours, read from the contract when a shielded
+         recipient first turns up. This line appearing IS that read having
+         returned something — an account holding nothing shielded says so
+         instead, and takes the Send control with it. */
+      await expect(page.getByText(/units of this token available/)).toBeVisible({
+        timeout: 3 * 60_000,
+      });
+      const tokenSelect = page.locator('.mnhome-send-form select');
+      if (colour !== null && (await tokenSelect.count()) > 0) {
+        await tokenSelect.selectOption(colour);
+      }
+      await expect(page.getByText(`${GRANT_MUSD} units of this token available`)).toBeVisible();
+
+      await page.locator('.mnhome-send-amount input').fill(SEND_MUSD);
+      // Whole units, not NIGHT: the unit beside the field says which ledger.
+      await expect(page.locator('.mnhome-send-unit')).toHaveText('units');
+      // The fee sentence still names who pays, never which token it costs.
+      expect(await page.locator('body').innerText()).not.toMatch(/dust/i);
+
+      await page.getByRole('button', { name: /^Review$/ }).click();
+      const sheet = page.locator('[aria-labelledby="mnhome-send-title"]');
+      await expect(sheet).toBeVisible();
+      await expect(sheet.getByText(`${SEND_MUSD} units`)).toBeVisible();
+
+      /* Armed BEFORE the submit. The success toast lives twelve seconds and is
+         pushed on the same tick the sheet closes, so a wait started afterwards
+         would be racing its own dismissal. */
+      const announced = page
+        .locator('.mntoast-success .mntoast-title')
+        .filter({ hasText: /Shielded transfer accepted/i })
+        .waitFor({ state: 'visible', timeout: 9 * 60_000 })
+        .then(() => true)
+        .catch(() => false);
+
+      /* One passkey ceremony, then `withdraw_shielded` proved and submitted. */
+      await page.locator('.mnhome-send-actions button.mnhome-send-primary').click();
+
+      const closed = sheet
+        .waitFor({ state: 'hidden', timeout: 9 * 60_000 })
+        .then(() => 'submitted' as const)
+        .catch(() => 'timeout' as const);
+      const refused = sheet
+        .locator('.mnhome-notice[role="alert"]')
+        .waitFor({ state: 'visible', timeout: 9 * 60_000 })
+        .then(() => 'refused' as const)
+        .catch(() => 'timeout' as const);
+      const outcome = await Promise.race([closed, refused]);
+
+      if (outcome === 'submitted') {
+        /* The sheet gets out of the way only on a real transaction id, and the
+           toast is the host saying the same thing in words. Both, so a sheet
+           that closed for any other reason cannot pass for a send. */
+        expect(
+          await announced,
+          'the sheet closed but nothing reported a shielded transfer',
+        ).toBe(true);
+        break;
+      }
+
+      const said =
+        outcome === 'refused'
+          ? (await sheet.locator('.mnhome-notice[role="alert"]').innerText()).trim()
+          : (await sheet.innerText()).trim();
+      /* Nothing moved, and the sheet says so in the shielded path's own words. */
+      expect(said, 'a shielded send that did not happen must say so').toMatch(
+        /Nothing was sent/i,
+      );
+      console.log(`[live] shielded send attempt ${attempt} did not submit:\n${said}`);
+      expect(attempt, `the shielded send did not submit twice:\n${said}`).toBeLessThan(attempts);
+      await page
+        .getByRole('button', { name: /^Close$/ })
+        .click({ timeout: 10_000 })
+        .catch(() => undefined);
+      await page.keyboard.press('Escape');
+      await waitForSponsor();
+    }
+
+    /* WITNESS ONE: the account holds ten fewer, on the surface the user reads. */
+    await expect
+      .poll(async () => refreshedStablecoinValue(page), {
+        timeout: 8 * 60_000,
+        intervals: [8_000],
+        message: 'the account mUSD balance did not fall after the shielded withdrawal',
+      })
+      .toBe(REMAINING_MUSD);
+    console.log(
+      `[live] mUSD fell from ${GRANT_MUSD} to ${REMAINING_MUSD} after sending ${SEND_MUSD} units`,
+    );
+
+    /* WITNESS TWO: the ledger names the circuit. A balance that fell is a
+       withdrawal only if the chain recorded one, and `withdraw_shielded` is the
+       entry point that moves a shielded colour out of the account — no other
+       call on this contract could have done it. Polled, because the indexer
+       trails the node by a block or two. */
+    const withdrawal = await waitForContractCall(rawAccount, 'withdraw_shielded');
+    expect(
+      withdrawal,
+      `the account's mUSD fell but the indexer records no withdraw_shielded on ${rawAccount}`,
+    ).not.toBeNull();
+    console.log(
+      `[live] withdraw_shielded on ${rawAccount} — tx ${withdrawal!.transaction.hash} in block ${
+        withdrawal!.transaction.block.height
+      }`,
+    );
+  });
 });
 
 /**
@@ -376,6 +597,134 @@ async function nightCardValue(page: Page): Promise<string> {
   const card = page.locator('.mnhome-card', { hasText: 'native token' }).first();
   if ((await card.count()) === 0) return '';
   return (await card.locator('.mnhome-card-value').innerText()).trim();
+}
+
+/**
+ * The stablecoin card's figure, after asking Home to re-read the contract.
+ *
+ * Read off the rendered card for the same reason {@link nightCardValue} is: a
+ * balance the user cannot see is not a balance this demo has delivered. The
+ * refresh is part of the read because the account's balances are pulled on
+ * demand, and a click on a control that is momentarily gone is not a failure
+ * worth ending a poll over.
+ */
+async function refreshedStablecoinValue(page: Page): Promise<string> {
+  await page
+    .getByRole('button', { name: /Refresh balances/i })
+    .click({ timeout: 10_000 })
+    .catch(() => undefined);
+  await page.waitForTimeout(2_000);
+  const card = page.locator('.mnhome-card', { hasText: /stablecoin/i }).first();
+  if ((await card.count()) === 0) return '';
+  return (await card.locator('.mnhome-card-value').innerText()).trim();
+}
+
+/**
+ * This Passport's account contract, whole, from the record the deployment
+ * wrote — `passport-contract:v1`, the same store `App.tsx` reads to decide
+ * which contract every send is made against.
+ *
+ * Home never renders the untruncated address, and the indexer needs all of it.
+ * The caller checks this against what the receive row shows rather than
+ * trusting the store, so nothing here can quietly point the chain query at a
+ * contract the screen never named.
+ */
+async function storedAccountContract(page: Page): Promise<string> {
+  const raw = await page.evaluate(() => window.localStorage.getItem('passport-contract:v1'));
+  expect(raw, 'this browser holds no Passport contract record').not.toBeNull();
+  const records = JSON.parse(raw as string) as Record<
+    string,
+    { network?: string; status?: string; address?: string }
+  >;
+  const deployed = Object.values(records).find(
+    (record) =>
+      record.status === 'deployed' &&
+      record.network === 'stagenet' &&
+      typeof record.address === 'string' &&
+      record.address.length > 0,
+  );
+  expect(deployed, 'no deployed stagenet account contract in this browser').toBeDefined();
+  return (deployed as { address: string }).address;
+}
+
+/**
+ * The shielded colour the fee sponsor grants, as it publishes it.
+ *
+ * Read from the service rather than written down here: the colour is minted by
+ * whichever asset contract the balancer is pointed at, and a constant would go
+ * stale the day that changes. `null` when the service cannot be read — the
+ * sheet then keeps whichever colour it chose, and the balance assertions still
+ * decide whether the right one moved.
+ */
+async function sponsorStablecoinColour(): Promise<string | null> {
+  try {
+    const response = await fetch('https://funder.midnightpassport.com/balancer/status');
+    const body = (await response.json()) as { assetColourHex?: unknown };
+    return typeof body.assetColourHex === 'string' && body.assetColourHex ? body.assetColourHex : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One action the indexer records against a contract. */
+interface ContractCallAction {
+  __typename: string;
+  entryPoint?: string;
+  transaction: { hash: string; block: { height: number } };
+}
+
+/** The stagenet indexer the deployed site is built against. */
+const INDEXER_URL = 'https://indexer.stagenet.shielded.tools/api/v4/graphql';
+
+/**
+ * Waits for the indexer to record a named entry point on a contract.
+ *
+ * This is the ledger's own account of what happened, and it is the difference
+ * between "the card shows less" and "a withdrawal was proved, submitted, and
+ * included". Polled rather than asked once: the indexer trails the node, and a
+ * single query the moment the sheet closed would routinely find nothing.
+ *
+ * `null` when the deadline passes, with the last thing the indexer said logged
+ * — the caller turns that into the failure, because a bare timeout here would
+ * say nothing about whether the contract was reachable at all.
+ */
+async function waitForContractCall(
+  address: string,
+  entryPoint: string,
+  timeoutMs = 6 * 60_000,
+): Promise<ContractCallAction | null> {
+  const query = `{ contract(address:"${address}") { actions { __typename ... on ContractCall { entryPoint } transaction { hash block { height } } } } }`;
+  const deadline = Date.now() + timeoutMs;
+  let last = 'the indexer was never asked';
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(INDEXER_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+      const body = (await response.json()) as {
+        data?: { contract?: { actions?: ContractCallAction[] } | null } | null;
+        errors?: unknown;
+      };
+      const actions = body.data?.contract?.actions ?? [];
+      const match = actions.find(
+        (action) => action.__typename === 'ContractCall' && action.entryPoint === entryPoint,
+      );
+      if (match) return match;
+      const named = actions
+        .map((action) => action.entryPoint ?? action.__typename)
+        .join(', ');
+      last = body.errors
+        ? `the indexer answered with errors: ${JSON.stringify(body.errors).slice(0, 300)}`
+        : `${actions.length} action(s) on the contract [${named}], none of them ${entryPoint}`;
+    } catch (cause) {
+      last = cause instanceof Error ? cause.message : String(cause);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+  }
+  console.log(`[live] the indexer never reported ${entryPoint}: ${last}`);
+  return null;
 }
 
 async function readNightBalance(page: Page): Promise<number> {
