@@ -2520,6 +2520,17 @@ export default function PassportDemo() {
          both on the strength of the status code. */
       const assetTx = typeof body.assetTx === 'string' && body.assetTx ? body.assetTx : null;
       const assetError = typeof body.assetError === 'string' ? body.assetError : null;
+      /* A landed NIGHT deposit with a FAILED stablecoin half is not a finished
+         activation. The sponsor performs only the missing leg on the next
+         request, so this is a retry, not a result: the funded marker stays
+         unwritten, the schedule keeps going, and the NIGHT already in the
+         account shows up through the balance refresh. Nothing is announced
+         until both halves are in (seen live 2026/08/25: one account opened
+         with NIGHT and no mUSD, and stopped asking). */
+      if (!assetTx && assetError) {
+        void refreshAccountBalances();
+        return { kind: 'retry', reason: assetError };
+      }
       addActivity({
         label: 'Opening balance deposited',
         detail: `The sponsor deposited ${
