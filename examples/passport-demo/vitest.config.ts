@@ -70,6 +70,13 @@
  *
  * WHAT IS OUT, AND WHY — everything else
  * --------------------------------------
+ *   `src/verify/**`     The step verifier: a separate, read-only operator page
+ *                       served at `/verify/`. Every function in it is either an
+ *                       indexer query, a contract-state decode behind one, or
+ *                       DOM construction — the same three reasons `indexerTx.ts`
+ *                       and the `.tsx` files are out. It is exercised against
+ *                       the real stagenet indexer in a headless browser, which
+ *                       is the only place its answers mean anything.
  *   `*.tsx`, `main.tsx`, `pwa.tsx`, `backend.ts`, `publicProfile.ts`
  *                       React components and the browser bring-up around them.
  *                       There is no jsdom in this workspace and adding one
