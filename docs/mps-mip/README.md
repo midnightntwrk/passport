@@ -36,6 +36,15 @@ together; the upstream copies are canonical.
 
 ## In draft
 
+- `mips/mip-xxxx-signature-schemes.md` — **Signature Schemes for
+  Custody-Account Authorisation (C5 signing primitive)**: the scheme
+  registry MIP-0013's Versioning section anticipates, plus the first
+  successor scheme (v2: WebAuthn ECDSA over secp256r1, verified with
+  the signing envelope in a dedicated per-scheme circuit). The interim
+  secp256k1 arm is documented with its migration path. Open items are
+  tagged in the file: circuit design, cryptographic review of the
+  envelope binding and normalisation, and two editorial rulings.
+  Tracked by passport issue #51.
 - **Recovery paths (building block three; not yet drafted)**:
   total-loss recovery behind the seam; the prototype realises this
   with BUSS, and the standard stays scheme-agnostic at the contract
