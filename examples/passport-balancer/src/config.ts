@@ -61,6 +61,18 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
   accountGrantAtomic: bigint;
   /** Accounts `/fund-account` will credit per rolling hour. */
   accountMaxPerHour: number;
+  /**
+   * The mUSD faucet the asset grant is minted from. `undefined` disables the
+   * asset leg of `/fund-account`, and the response says so.
+   */
+  assetFaucetAddress?: string;
+  /** Overrides the search for the compiled faucet build's ZK artefacts. */
+  assetAssetsPath?: string;
+  /**
+   * The asset grant `/fund-account` deposits into the account's `coins` map,
+   * in whole mUSD. Zero disables the asset leg.
+   */
+  assetGrant: bigint;
 }
 
 /**
@@ -129,6 +141,36 @@ export const DEFAULT_ALIAS_MAX_PER_HOUR = 20;
 /** Two thousand atomic NIGHT — 0.002 NIGHT — as an account's opening balance. */
 export const DEFAULT_ACCOUNT_GRANT_ATOMIC = 2_000n;
 export const DEFAULT_ACCOUNT_MAX_PER_HOUR = 30;
+
+/**
+ * The asset an account opens holding, and how much of it.
+ *
+ * mUSD is the demo's stand-in stablecoin, minted by the faucet contract below.
+ * The symbol is fixed rather than configurable because the DOMAIN SEPARATOR is:
+ * the colour a coin carries is `rawTokenType(separator, faucet address)`, so a
+ * different symbol would be a different colour and a different faucet, not a
+ * different label on the same one.
+ */
+export const ASSET_SYMBOL = 'mUSD';
+/** One hundred mUSD, the balance a new Passport opens with. */
+export const DEFAULT_ASSET_GRANT = 100n;
+
+/**
+ * The mUSD faucet each network's asset grant is minted from.
+ *
+ * Stagenet's is the instance `deploy-stagenet` put on chain at block 157,776 —
+ * the same one `deploy-stagenet/src/shielded-receipt-drill.mjs` minted 500 mUSD
+ * out of on 2026/08/24, proving the mint → `deposit_shielded` path end to end.
+ * Its `mint_shielded` is permissionless, which is what lets the balancer mint
+ * to its own shielded address and then pay the coin into somebody's account.
+ *
+ * No other network has an entry, for the reason {@link MIDNAMES_TLD_DEFAULTS}
+ * has none: the balancer is a stagenet service, and another network's faucet is
+ * the sort of thing that should be typed out rather than defaulted into.
+ */
+const ASSET_FAUCET_DEFAULTS: Record<string, string> = {
+  stagenet: '4fc92e152e8d854ef9337275504244e18bd6e3d7d41fd81ed2dabf62be78e92f',
+};
 
 /**
  * The `.night` TLD each network's registrations go to.
@@ -259,20 +301,38 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     }
   }
 
-  /* Normalised the moment it is read rather than at first use: a mistyped
-     registry address should stop the service at start-up, where an operator is
-     watching, not on somebody's first alias. */
-  const tldRaw = trimmed(env.BALANCER_MIDNAMES_TLD_ADDRESS) ?? MIDNAMES_TLD_DEFAULTS[networkId];
-  let midnamesTldAddress: string | undefined;
-  if (tldRaw !== undefined) {
-    const normalized = tldRaw.toLowerCase().replace(/^0x/, '').replace(/^0200/, '');
-    if (!/^[0-9a-f]{64}$/.test(normalized)) {
-      throw new Error(
-        `BALANCER_MIDNAMES_TLD_ADDRESS must be a 64-hex Midnight contract address, got: ${tldRaw}`,
-      );
+  const assetGrantRaw = trimmed(env.BALANCER_ASSET_GRANT);
+  let assetGrant = DEFAULT_ASSET_GRANT;
+  if (assetGrantRaw !== undefined) {
+    if (!/^\d+$/.test(assetGrantRaw)) {
+      throw new Error(`BALANCER_ASSET_GRANT must be a whole number of ${ASSET_SYMBOL}.`);
     }
-    midnamesTldAddress = normalized;
+    /* Zero is the off switch, and deliberately so: an operator who wants the
+       NIGHT leg without the asset leg should not have to break the faucet
+       address to get it. */
+    assetGrant = BigInt(assetGrantRaw);
   }
+
+  /* Normalised the moment they are read rather than at first use: a mistyped
+     contract address should stop the service at start-up, where an operator is
+     watching, not on somebody's first alias or first activation. */
+  const contractAddressFrom = (variable: string, raw: string | undefined): string | undefined => {
+    if (raw === undefined) return undefined;
+    const normalized = raw.toLowerCase().replace(/^0x/, '').replace(/^0200/, '');
+    if (!/^[0-9a-f]{64}$/.test(normalized)) {
+      throw new Error(`${variable} must be a 64-hex Midnight contract address, got: ${raw}`);
+    }
+    return normalized;
+  };
+
+  const midnamesTldAddress = contractAddressFrom(
+    'BALANCER_MIDNAMES_TLD_ADDRESS',
+    trimmed(env.BALANCER_MIDNAMES_TLD_ADDRESS) ?? MIDNAMES_TLD_DEFAULTS[networkId],
+  );
+  const assetFaucetAddress = contractAddressFrom(
+    'BALANCER_ASSET_FAUCET_ADDRESS',
+    trimmed(env.BALANCER_ASSET_FAUCET_ADDRESS) ?? ASSET_FAUCET_DEFAULTS[networkId],
+  );
 
   return {
     networkId,
@@ -291,8 +351,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     ...(trimmed(env.BALANCER_ACCOUNT_ASSETS)
       ? { accountAssetsPath: trimmed(env.BALANCER_ACCOUNT_ASSETS) as string }
       : {}),
+    ...(trimmed(env.BALANCER_ASSET_ASSETS)
+      ? { assetAssetsPath: trimmed(env.BALANCER_ASSET_ASSETS) as string }
+      : {}),
     aliasMaxPerHour,
     accountGrantAtomic,
     accountMaxPerHour,
+    ...(assetFaucetAddress ? { assetFaucetAddress } : {}),
+    assetGrant,
   };
 }

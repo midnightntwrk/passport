@@ -32,17 +32,51 @@ export interface AliasEntry {
 }
 
 /**
+ * The ASSET half of an activation — the mUSD minted from the faucet and paid
+ * into the account's `coins` map by `deposit_shielded`.
+ *
+ * Two hashes because it is two transactions: the mint pays a fresh coin to the
+ * balancer's OWN shielded address, and the deposit spends that coin into the
+ * account. Only the second one is the account's credit, which is why it is the
+ * one reported as `assetTx`.
+ */
+export interface AccountAssetEntry {
+  symbol: string;
+  /** `rawTokenType(domain separator, faucet address)`, as 64 lower-case hex. */
+  colourHex: string;
+  amount: string;
+  mintTx: string;
+  depositTx: string;
+  /** The account's own `coins[colour].value` once the credit was seen. */
+  balanceAfter: string;
+  at: string;
+}
+
+/**
  * One activation grant paid into an account-custody contract, keyed by that
  * contract's address. Keyed on the CONTRACT for the same reason
  * {@link AliasEntry} is: the limit being enforced is "one opening balance per
  * Passport", and the contract address is the thing a Passport has exactly one
  * of. The address it was deployed FROM is not — a user can hold several.
+ *
+ * THE TWO LEGS ARE RECORDED SEPARATELY, and that is the point of the shape. An
+ * activation is a NIGHT deposit and an mUSD deposit, and the second can fail
+ * after the first has landed on chain. A single flag would then force a choice
+ * between forgetting a real NIGHT credit and never retrying the asset leg;
+ * recording them apart lets a retry do exactly the missing half.
+ *
+ * The NIGHT fields are OPTIONAL for two reasons. Entries written before the
+ * asset leg existed carry them and no `asset`, which reads correctly as "NIGHT
+ * done, mUSD outstanding" with no migration. And an account that already holds
+ * a grant's worth of NIGHT from elsewhere can still need its mUSD, in which case
+ * this service never paid a NIGHT leg and should not claim to have.
  */
 export interface AccountEntry {
-  txHash: string;
-  amountAtomic: string;
-  balanceAfterAtomic: string;
+  txHash?: string;
+  amountAtomic?: string;
+  balanceAfterAtomic?: string;
   at: string;
+  asset?: AccountAssetEntry;
 }
 
 /**
@@ -73,6 +107,11 @@ export class JsonLedger<Entry> {
 
   get count(): number {
     return Object.keys(this.entries).length;
+  }
+
+  /** How many entries satisfy `predicate` — one leg of a two-leg entry, say. */
+  countWhere(predicate: (entry: Entry) => boolean): number {
+    return Object.values(this.entries).filter(predicate).length;
   }
 
   async record(key: string, entry: Entry): Promise<void> {

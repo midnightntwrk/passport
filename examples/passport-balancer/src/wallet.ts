@@ -173,6 +173,23 @@ export interface WalletProgress {
   complete: boolean;
 }
 
+/**
+ * One spendable shielded coin, flattened to the three fields a Compact
+ * `ShieldedCoinInfo` argument needs.
+ *
+ * Deliberately NOT the SDK's `AvailableCoin`: the asset grant's only interest in
+ * the wallet's coin set is "which coin do I hand to `deposit_shielded`", and
+ * keeping the SDK's shielded types out of `./account.ts` is what stops that
+ * module from acquiring a second opinion about which ledger package is in play.
+ * `nonce` and `type` are the ledger's own string forms — hex, `0x`-prefixed or
+ * not, exactly as the wallet reports them.
+ */
+export interface ShieldedCoin {
+  readonly nonce: string;
+  readonly type: string;
+  readonly value: bigint;
+}
+
 export interface BalanceOnlyResult {
   txHash: string;
   /** Lower-case hex, no `0x` prefix — what `sponsor.ts` normalises to. */
@@ -262,6 +279,24 @@ export interface BalancerWallet {
   nightBalance(state?: FacadeState): Promise<bigint>;
   /** Spendable DUST (Specks) right now. */
   dustBalance(state?: FacadeState): Promise<bigint>;
+  /**
+   * This wallet's own shielded balance of one raw token type — the colour a
+   * minted mUSD coin carries, not NIGHT.
+   */
+  shieldedBalance(tokenType: string, state?: FacadeState): Promise<bigint>;
+  /**
+   * The spendable shielded coins this wallet holds of one colour.
+   *
+   * Read from the wallet's own coin set rather than assumed from what a mint
+   * was called with: a coin is only spendable once the wallet has really seen
+   * it, and that is the thing the asset grant has to wait for.
+   */
+  availableShieldedCoins(tokenType: string, state?: FacadeState): Promise<ShieldedCoin[]>;
+  /**
+   * The 32 bytes a Compact `CoinPublicKey` argument takes for THIS wallet — the
+   * recipient a mint pays to when the balancer is minting to itself.
+   */
+  shieldedCoinPublicKeyBytes(): Promise<Uint8Array>;
   /** How many DUST UTxOs back that balance — `/wallet-status` reports it. */
   dustUtxoCount(state?: FacadeState): Promise<number>;
   /**
@@ -629,6 +664,32 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
     async dustUtxoCount(state?: FacadeState): Promise<number> {
       const current = state ?? (await currentState());
       return current.dust.availableCoins.length;
+    },
+
+    async shieldedBalance(tokenType: string, state?: FacadeState): Promise<bigint> {
+      const current = state ?? (await currentState());
+      return current.shielded.balances[tokenType] ?? 0n;
+    },
+
+    async availableShieldedCoins(tokenType: string, state?: FacadeState): Promise<ShieldedCoin[]> {
+      const current = state ?? (await currentState());
+      return current.shielded.availableCoins
+        .filter((entry) => String(entry.coin.type) === tokenType)
+        .map((entry) => ({
+          nonce: String(entry.coin.nonce),
+          type: String(entry.coin.type),
+          value: entry.coin.value,
+        }));
+    },
+
+    async shieldedCoinPublicKeyBytes(): Promise<Uint8Array> {
+      /* Taken from the wallet's own address rather than from
+         `shieldedSecretKeys.coinPublicKey`, which is the ledger's string form:
+         the circuit argument is 32 raw bytes, and the address object is where
+         those bytes already are. This is the same read the shielded-receipt
+         drill minted against. */
+      const shieldedAddress = await facade.shielded.getAddress();
+      return new Uint8Array(shieldedAddress.coinPublicKey.data);
     },
 
     async registerDustIfNeeded(): Promise<

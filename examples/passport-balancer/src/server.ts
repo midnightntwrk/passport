@@ -19,7 +19,9 @@
  *                           the user's contract out — the balancer paying the
  *                           registry price and both fees
  *   POST /fund-account   →  { contractAddress } in, an activation grant
- *                           deposited INTO that account-custody contract out
+ *                           deposited INTO that account-custody contract out —
+ *                           BOTH legs: NIGHT into `night_balances`, and 100 mUSD
+ *                           minted from the faucet and paid into `coins`
  *
  * FEES, NAME, ACTIVATION — the three costs of onboarding, and none of them
  * reaches the user's wallet. `/balance-only` is the fee sponsorship the demo
@@ -69,6 +71,13 @@
  * address (persisted ledger) → the account is not already holding a grant's
  * worth → global hourly rate limit → the balancer able to pay.
  *
+ * The once-only gate is asked PER LEG, because an activation is two credits and
+ * the second can fail after the first has landed. A request whose asset leg
+ * fails answers 200 with `assetTx: null` and an `assetError` — the NIGHT credit
+ * is real and must not be reported as a failure — and the persisted ledger
+ * records only the leg that actually happened, so the next `/fund-account` for
+ * that contract performs the missing half and nothing else.
+ *
  * Every refusal is a clear JSON error, and nothing is reported as done until it
  * has been read back off the chain.
  *
@@ -90,11 +99,12 @@ import {
   createAccountFunder,
   type AccountFunder,
 } from './account.js';
-import { applyEnvFile, loadConfig, type BalancerConfig } from './config.js';
+import { ASSET_SYMBOL, applyEnvFile, loadConfig, type BalancerConfig } from './config.js';
 import { rawContractAddress } from './contractRuntime.js';
 import {
   HourlyRateLimiter,
   JsonLedger,
+  type AccountAssetEntry,
   type AccountEntry,
   type AliasEntry,
 } from './ledgers.js';
@@ -174,6 +184,9 @@ async function main(): Promise<void> {
     `grant     ${config.accountGrantAtomic} atomic NIGHT (${formatNight(config.accountGrantAtomic)} NIGHT) into each account contract`,
   );
   console.log(`grant cap ${config.accountMaxPerHour} funded accounts per rolling hour`);
+  console.log(
+    `asset     ${config.assetGrant > 0n && config.assetFaucetAddress ? `${config.assetGrant} ${ASSET_SYMBOL} minted from faucet ${config.assetFaucetAddress} into each account contract` : `no ${ASSET_SYMBOL} grant — the asset leg of /fund-account is off`}`,
+  );
   console.log(`origins   ${config.allowedOrigins.join(', ')}\n`);
 
   const aliasLedger = await JsonLedger.open<AliasEntry>(
@@ -223,7 +236,6 @@ async function main(): Promise<void> {
   console.log(`balancer address ${wallet.address}`);
   console.log(`proving via      ${wallet.provingMode === 'server' ? 'proof server' : 'WASM, in this process'}\n`);
 
-  let synced = false;
   let syncSeconds: number | null = null;
   let registration: RegistrationState = 'pending';
   let registrationDetail: string | null = null;
@@ -231,6 +243,8 @@ async function main(): Promise<void> {
   let lastBalanceAt: string | null = null;
   let aliasesSponsored = 0;
   let accountsFunded = 0;
+  /** Asset legs completed since this process started, counted apart from NIGHT. */
+  let assetsFunded = 0;
   /**
    * When the balancer last SPENT — a sponsored registration or an activation
    * grant — so a shortfall read straight afterwards can be reported as
@@ -278,6 +292,14 @@ async function main(): Promise<void> {
     console.log(
       `[account] funding accounts with ${formatNight(accountFunder.grantAtomic)} NIGHT from ${accountFunder.assetsPath} (proving ${accountFunder.provingMode === 'server' ? config.provingServerUrl : 'in this process'})`,
     );
+    if (accountFunder.assetAvailable) {
+      console.log(
+        `[asset] each account also opens holding ${accountFunder.assetGrant} ${accountFunder.assetSymbol}, minted from faucet ${accountFunder.assetFaucetAddress} (artefacts ${accountFunder.assetAssetsPath})`,
+      );
+      console.log(`[asset] colour ${accountFunder.assetColourHex}`);
+    } else {
+      console.warn(`[asset] the asset leg is DISABLED: ${accountFunder.assetUnavailableReason}`);
+    }
   } catch (cause) {
     accountFunderUnavailableReason = cause instanceof Error ? cause.message : String(cause);
     console.warn(`[account] funding is DISABLED: ${accountFunderUnavailableReason}`);
@@ -395,7 +417,6 @@ async function main(): Promise<void> {
           `[sync ${elapsed(syncStartedAt).padStart(9)}] shielded ${progress.shielded.applied}/${progress.shielded.highestRelevant}  unshielded ${progress.unshielded.applied}/${progress.unshielded.highestRelevant}  dust ${progress.dust.applied}/${progress.dust.highestRelevant}`,
         );
       });
-      synced = true;
       syncSeconds = (Date.now() - syncStartedAt) / 1_000;
       console.log(`[sync] synced in ${elapsed(syncStartedAt)}`);
 
@@ -603,6 +624,21 @@ async function main(): Promise<void> {
       accountFunding: accountFunder ? 'available' : 'unavailable',
       accountGrantAtomic: config.accountGrantAtomic.toString(),
       accountSlotsRemainingThisHour: accountLimiter.remaining(),
+      /* The ASSET half of an activation, counted separately from the NIGHT half
+         because it can succeed or fail separately. `assetColourHex` is the
+         colour a client should look for in the account's own `coins` map —
+         `rawTokenType(domain separator, faucet address)`, bound to the faucet
+         rather than asserted by this service. */
+      assetSymbol: accountFunder?.assetSymbol ?? ASSET_SYMBOL,
+      assetColourHex: accountFunder?.assetColourHex ?? null,
+      assetGrant: config.assetGrant.toString(),
+      assetFaucetAddress: accountFunder?.assetFaucetAddress ?? null,
+      assetsFunded,
+      assetsFundedTotal: accountLedger.countWhere((entry) => entry.asset !== undefined),
+      assetFunding: accountFunder?.assetAvailable ? 'available' : 'unavailable',
+      assetUnavailableReason: accountFunder?.assetAvailable
+        ? null
+        : (accountFunder?.assetUnavailableReason ?? accountFunderUnavailableReason),
       /* How CONTRACT circuits are proved, which is a different question from
          `proving` above: that one is the wallet's own DUST and Zswap legs. */
       contractProving: sponsor?.provingMode ?? accountFunder?.provingMode ?? null,
@@ -699,11 +735,12 @@ async function main(): Promise<void> {
             and decode it as an account-custody contract. This is the gate that
             keeps the balancer from paying coins into a stranger's contract: a
             contract that is not an ACC has no `deposit_night`, and the grant
-            would be spent into something the user cannot reach. The decoded
-            balance is kept for gate 5 rather than read twice. */
-      let heldNight: bigint;
+            would be spent into something the user cannot reach. BOTH balances
+            come out of that one decode, so the two legs cannot end up
+            disagreeing about what they are looking at. */
+      let held: { night: bigint; asset: bigint };
       try {
-        heldNight = await funder.nightBalance(contractAddress);
+        held = await funder.balances(contractAddress);
       } catch (cause) {
         if (cause instanceof AccountFundingError) {
           return fail(
@@ -724,29 +761,44 @@ async function main(): Promise<void> {
         );
       }
 
-      /* 4. Once per Passport, ever. Keyed on the contract address because that
-            is what a Passport has exactly one of. */
-      const previous = accountLedger.get(contractAddress);
-      if (previous) {
-        return fail(
-          refusal(
-            409,
-            'already-activated',
-            `This Passport was already funded on ${previous.at} (tx ${previous.txHash}). The activation grant is once per account.`,
-            { txHash: previous.txHash },
-          ),
-        );
-      }
+      /* 4 and 5, now asked PER LEG. An activation is two credits — NIGHT into
+            `night_balances`, mUSD into `coins` — and the second can fail after
+            the first has landed on chain. So neither the persisted ledger nor
+            the balance check is allowed to speak for both: each leg is needed
+            when this service has no record of having paid it AND the account
+            does not already hold it, whoever put it there.
 
-      /* 5. Not already funded. Read from the account's own `night_balances`
-            mirror at gate 3: an account that already holds a grant's worth does
-            not need an opening balance, whoever put it there. */
-      if (heldNight >= funder.grantAtomic) {
+            That is what makes a retry after a half-success do exactly the
+            missing half, and it is also what stops a second full request from
+            paying twice. An entry written before the asset leg existed carries
+            NIGHT and no `asset`, which reads correctly as "NIGHT done, mUSD
+            outstanding" with no migration. */
+      const previous = accountLedger.get(contractAddress);
+      const assetSupported = funder.assetAvailable;
+      const nightNeeded = previous === null && held.night < funder.grantAtomic;
+      const assetNeeded =
+        assetSupported && previous?.asset === undefined && held.asset < funder.assetGrant;
+
+      if (!nightNeeded && !assetNeeded) {
+        if (previous) {
+          return fail(
+            refusal(
+              409,
+              'already-activated',
+              `This Passport was already funded on ${previous.at}${previous.txHash ? ` (tx ${previous.txHash})` : ''}. The activation grant is once per account.`,
+              {
+                txHash: previous.txHash ?? null,
+                nightTx: previous.txHash ?? null,
+                assetTx: previous.asset?.depositTx ?? null,
+              },
+            ),
+          );
+        }
         return fail(
           refusal(
             409,
             'already-funded',
-            `That account already holds ${formatNight(heldNight)} NIGHT — at least one activation grant's worth — so it does not need funding.`,
+            `That account already holds ${formatNight(held.night)} NIGHT${assetSupported ? ` and ${held.asset} ${funder.assetSymbol}` : ''} — at least one activation grant's worth — so it does not need funding.`,
           ),
         );
       }
@@ -764,8 +816,13 @@ async function main(): Promise<void> {
 
       /* 7. Can the balancer actually pay? The grant plus a fee, waiting out any
             change still in flight rather than turning the user away during a
-            settle window. */
-      const ready = await readiness({ settle: true, requireNight: funder.grantAtomic });
+            settle window. The asset leg needs no NIGHT of its own — the faucet
+            mints the coin — so a request that is only topping up the mUSD asks
+            for nothing but a synced wallet and some DUST. */
+      const ready = await readiness({
+        settle: true,
+        requireNight: nightNeeded ? funder.grantAtomic : 0n,
+      });
       if (ready.refuse) return fail(ready.refuse);
 
       /* The slot is consumed here and nowhere earlier: every refusal above
@@ -781,52 +838,154 @@ async function main(): Promise<void> {
         );
       }
 
-      try {
-        /* Under the wallet's spend lock, so a fee-sponsorship request or an
-           alias registration cannot reserve the coins this deposit is
-           balancing against. */
-        const result = await wallet.exclusive(() => funder.fund(contractAddress));
-        accountsFunded += 1;
-        lastSpendAt = Date.now();
-        await accountLedger.record(contractAddress, {
-          txHash: result.txHash,
-          amountAtomic: result.amountAtomic.toString(),
-          balanceAfterAtomic: result.balanceAfterAtomic.toString(),
-          at: result.fundedAt,
-        });
-        console.log(
-          `[account] ${formatNight(result.amountAtomic)} NIGHT → ${contractAddress} (tx ${result.txHash}${result.block ? `, block ${result.block}` : ''}, holds ${result.balanceAfterAtomic} atomic)`,
-        );
-        return {
-          status: 200,
-          body: {
-            contractAddress: result.contractAddress,
+      /* ---------------------------------------------------------------- */
+      /* The NIGHT leg                                                     */
+      /* ---------------------------------------------------------------- */
+
+      /* Carried forward so the asset leg's ledger write keeps whatever the
+         NIGHT leg recorded, whether that happened just now or in an earlier
+         request that ended with the asset leg outstanding. */
+      let nightEntry: AccountEntry | null = previous;
+      let nightTxHash: string | null = previous?.txHash ?? null;
+      let nightBlock: number | null = null;
+      let nightAmount = previous?.amountAtomic ?? '0';
+      let nightBalanceAfter = previous?.balanceAfterAtomic ?? held.night.toString();
+      let fundedAt = previous?.at ?? new Date().toISOString();
+
+      if (nightNeeded) {
+        try {
+          /* Under the wallet's spend lock, so a fee-sponsorship request or an
+             alias registration cannot reserve the coins this deposit is
+             balancing against. */
+          const result = await wallet.exclusive(() => funder.fund(contractAddress));
+          accountsFunded += 1;
+          lastSpendAt = Date.now();
+          nightTxHash = result.txHash;
+          nightBlock = result.block;
+          nightAmount = result.amountAtomic.toString();
+          nightBalanceAfter = result.balanceAfterAtomic.toString();
+          fundedAt = result.fundedAt;
+          nightEntry = {
             txHash: result.txHash,
-            block: result.block,
-            amountAtomic: result.amountAtomic.toString(),
-            balanceAfterAtomic: result.balanceAfterAtomic.toString(),
-            fundedAt: result.fundedAt,
-          },
-        };
-      } catch (cause) {
-        if (cause instanceof AccountFundingError) {
-          console.error(
-            `[account] FAILED for ${contractAddress}: ${cause.code} — ${cause.message}${cause.detail ? ` (${cause.detail})` : ''}`,
+            amountAtomic: nightAmount,
+            balanceAfterAtomic: nightBalanceAfter,
+            at: result.fundedAt,
+          };
+          /* Written the moment the credit is confirmed, and not held back until
+             the asset leg finishes: the NIGHT is on chain, and a crash between
+             the two legs must not be able to lose that fact and pay it twice. */
+          await accountLedger.record(contractAddress, nightEntry);
+          console.log(
+            `[account] ${formatNight(result.amountAtomic)} NIGHT → ${contractAddress} (tx ${result.txHash}${result.block ? `, block ${result.block}` : ''}, holds ${result.balanceAfterAtomic} atomic)`,
           );
-          /* `not-an-account` can still surface here: gate 3's read is a
-             snapshot, and the deposit re-reads before it spends. */
-          const status =
-            cause.code === 'indexer-unreachable' ? 503 : cause.code === 'not-an-account' ? 400 : 502;
+        } catch (cause) {
+          if (cause instanceof AccountFundingError) {
+            console.error(
+              `[account] FAILED for ${contractAddress}: ${cause.code} — ${cause.message}${cause.detail ? ` (${cause.detail})` : ''}`,
+            );
+            /* `not-an-account` can still surface here: gate 3's read is a
+               snapshot, and the deposit re-reads before it spends. */
+            const status =
+              cause.code === 'indexer-unreachable'
+                ? 503
+                : cause.code === 'not-an-account'
+                  ? 400
+                  : 502;
+            return fail(
+              refusal(
+                status,
+                cause.code,
+                cause.message,
+                cause.detail ? { detail: cause.detail } : undefined,
+              ),
+            );
+          }
+          const message = cause instanceof Error ? cause.message : String(cause);
+          console.error(`[account] FAILED for ${contractAddress}: ${message}`);
           return fail(
-            refusal(status, cause.code, cause.message, cause.detail ? { detail: cause.detail } : undefined),
+            refusal(500, 'deposit-failed', `The activation grant could not be deposited: ${message}`),
           );
         }
-        const message = cause instanceof Error ? cause.message : String(cause);
-        console.error(`[account] FAILED for ${contractAddress}: ${message}`);
-        return fail(
-          refusal(500, 'deposit-failed', `The activation grant could not be deposited: ${message}`),
-        );
       }
+
+      /* ---------------------------------------------------------------- */
+      /* The ASSET leg                                                     */
+      /* ---------------------------------------------------------------- */
+
+      /* A failure here is NOT a failed activation. By this point the NIGHT
+         credit is real and on chain — either this request put it there or an
+         earlier one did — and reporting the whole thing as an error would tell
+         the caller to retry something that has already been paid for. So the
+         asset leg reports itself: `assetTx` when it landed, `assetError` when it
+         did not, and the once-only ledger records only what actually happened,
+         so the next `/fund-account` for this contract runs the missing half and
+         nothing else. */
+      let assetEntry: AccountAssetEntry | null = previous?.asset ?? null;
+      let assetBlock: number | null = null;
+      let assetError: string | null = null;
+
+      if (assetNeeded) {
+        try {
+          /* Takes the spend lock itself, twice — mint, then deposit — with the
+             wait for the minted coin to become spendable in between and outside
+             it. See `fundAsset` for why. */
+          const grant = await funder.fundAsset(contractAddress);
+          assetsFunded += 1;
+          lastSpendAt = Date.now();
+          assetBlock = grant.depositBlock;
+          assetEntry = {
+            symbol: funder.assetSymbol,
+            colourHex: grant.colourHex,
+            amount: grant.amount.toString(),
+            mintTx: grant.mintTxHash,
+            depositTx: grant.depositTxHash,
+            balanceAfter: grant.balanceAfter.toString(),
+            at: grant.fundedAt,
+          };
+          await accountLedger.record(contractAddress, {
+            ...(nightEntry ?? { at: grant.fundedAt }),
+            asset: assetEntry,
+          });
+          console.log(
+            `[asset] ${grant.amount} ${funder.assetSymbol} → ${contractAddress} (mint ${grant.mintTxHash}, deposit ${grant.depositTxHash}${grant.depositBlock ? `, block ${grant.depositBlock}` : ''}, holds ${grant.balanceAfter})`,
+          );
+        } catch (cause) {
+          const detail =
+            cause instanceof AccountFundingError
+              ? `${cause.code}: ${cause.message}${cause.detail ? ` (${cause.detail})` : ''}`
+              : cause instanceof Error
+                ? cause.message
+                : String(cause);
+          assetError = detail;
+          console.error(`[asset] FAILED for ${contractAddress}: ${detail}`);
+        }
+      } else if (!assetSupported) {
+        assetError = funder.assetUnavailableReason;
+      }
+
+      return {
+        status: 200,
+        body: {
+          contractAddress,
+          /* `txHash` is the old name for the NIGHT leg and stays, so a client
+             written against the single-leg endpoint keeps working; `nightTx` is
+             the same value under the name that says which leg it is. */
+          txHash: nightTxHash,
+          nightTx: nightTxHash,
+          block: nightBlock,
+          amountAtomic: nightAmount,
+          balanceAfterAtomic: nightBalanceAfter,
+          fundedAt,
+          assetSymbol: funder.assetSymbol,
+          assetTx: assetEntry?.depositTx ?? null,
+          assetMintTx: assetEntry?.mintTx ?? null,
+          assetBlock,
+          assetColourHex: funder.assetColourHex,
+          assetAmount: assetEntry?.amount ?? (assetSupported ? funder.assetGrant.toString() : '0'),
+          assetBalanceAfter: assetEntry?.balanceAfter ?? held.asset.toString(),
+          ...(assetError ? { assetError } : {}),
+        },
+      };
     } finally {
       /* Released on every path — recorded, refused, or thrown — so a failure
          can never leave a Passport permanently unfundable. */

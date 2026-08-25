@@ -8,6 +8,13 @@ A small self-hosted service that pays for onboarding a Midnight Passport on
 | The **fee** on the user's own transactions | `POST /balance-only` | the balancer's DUST |
 | The **name** — `alice.night` | `POST /register-alias` | the balancer's NIGHT and DUST |
 | The **activation grant** inside the user's account contract | `POST /fund-account` | the balancer's NIGHT and DUST |
+| The **opening balance** — 100 mUSD, inside the same contract | `POST /fund-account` | the mUSD faucet, and the balancer's DUST |
+
+A new Passport therefore opens holding money, in the contract rather than in a
+wallet, with **no user-side transaction of any kind**. `/fund-account` does both
+legs: `deposit_night` for the NIGHT that makes the account operable, and a
+faucet mint followed by `deposit_shielded` for the 100 mUSD that makes it worth
+opening.
 
 The fee leg is the stagenet counterpart of the sponsorship the Passport demo
 already consumes on preview and preprod. The demo's client
@@ -283,8 +290,9 @@ does not.
 
 ### `POST /fund-account`
 
-Deposits one activation grant **into** the user's account-custody contract —
-not to their wallet address.
+Opens an account: an activation grant of NIGHT **and** 100 mUSD, both deposited
+**into** the user's account-custody contract rather than to their wallet
+address, and neither requiring the user to sign anything.
 
 ```sh
 curl -X POST http://127.0.0.1:8807/fund-account \
@@ -292,44 +300,105 @@ curl -X POST http://127.0.0.1:8807/fund-account \
   -d '{"contractAddress":"<64 hex>"}'
 ```
 
-The ACC's `deposit_night(color, amount)` is permissionless — no
-`require_device()`, no witness, no caller check. It calls
+**The NIGHT leg.** The ACC's `deposit_night(color, amount)` is permissionless —
+no `require_device()`, no witness, no caller check. It calls
 `receiveUnshielded(color, amount)`, which makes the transaction owe the contract
 that many coins, and then mirrors the credit into `night_balances` so the
 balance is readable from decoded ledger state. Anyone may fund an account; the
 balancer is just the first anyone. The value exists **inside** the contract from
 the moment it exists, so the user never holds, watches, or moves it.
 
-The balancer's witness set for this contract is three refusals, one per declared
-witness (`device_secret`, `grant_secret`, `recovery_secret`). `deposit_night`
-asks for none of them, so the deposit is unaffected; every circuit that could
-move value *out* is impossible from this process by construction rather than by
-discipline.
+**The asset leg**, two transactions, proved on stagenet on 2026/08/24 by
+`deploy-stagenet/src/shielded-receipt-drill.mjs`:
 
-Success is returned only once the account's own mirrored balance has been read
-back and seen carrying **this** credit:
+1. `mint_shielded(separator, amount, nonce, recipient)` on the mUSD faucet, with
+   the **balancer's own** coin public key as the recipient. The faucet is
+   permissionless, so the coin lands in the balancer's own shielded wallet.
+2. `deposit_shielded(coin)` on the user's account, spending that coin. Like
+   `deposit_night` it is permissionless, so `receive(coin)` writes the credit
+   into the account's own `coins` map, where the indexer reads it back.
+
+The colour is bound to the minting contract —
+`rawTokenType(domain separator, faucet address)` — so "mUSD" is not a label this
+service applies but a fact about where the coin came from. It is reported as
+`assetColourHex` for exactly that reason, and a client should match on it rather
+than on a name:
+
+```
+1a2917fbed8b5ce44d12ebc7d337689045f6c96a6bbd39cf3d8691ab310ef6a6
+```
+
+The balancer's witness set for the account contract is three refusals, one per
+declared witness (`device_secret`, `grant_secret`, `recovery_secret`). Neither
+`deposit_night` nor `deposit_shielded` asks for any of them, so both deposits
+are unaffected; every circuit that could move value *out* — including
+`withdraw_shielded` — is impossible from this process by construction rather
+than by discipline.
+
+Success is returned only once **each** credit has been read back off the chain:
+`night_balances[native]` for the NIGHT, `coins[mUSD].value` for the asset.
 
 ```json
 {
-  "contractAddress": "<64 hex>", "txHash": "<64-hex ledger hash>", "block": 159286,
-  "amountAtomic": "2000", "balanceAfterAtomic": "2000", "fundedAt": "<ISO 8601>"
+  "contractAddress": "<64 hex>",
+  "nightTx": "<64-hex ledger hash>",
+  "txHash": "<the same value, under its old name>",
+  "block": 159286,
+  "amountAtomic": "2000",
+  "balanceAfterAtomic": "2000",
+  "fundedAt": "<ISO 8601>",
+  "assetSymbol": "mUSD",
+  "assetTx": "<64-hex ledger hash of deposit_shielded>",
+  "assetMintTx": "<64-hex ledger hash of mint_shielded>",
+  "assetBlock": 159412,
+  "assetColourHex": "1a2917fb…",
+  "assetAmount": "100",
+  "assetBalanceAfter": "100"
 }
 ```
 
-Policy: shape → not already in flight → the contract exists **and** decodes as
-an account-custody contract → once-only per contract, from
-`state/accounts-stagenet.json` → not already holding a grant's worth → hourly
-ceiling → the balancer can pay.
+`txHash` and `nightTx` are the same value: the old single-leg name is kept so a
+client written before the asset leg existed keeps working unchanged.
+
+**The two legs succeed and fail separately, and the response says so.** If the
+asset leg fails after the NIGHT credit has landed, the answer is still **200**,
+with `assetTx: null` and an `assetError` string. The NIGHT is on chain and
+reporting the whole activation as a failure would tell the caller to retry
+something already paid for.
+
+So a client reads the asset side off **two** fields, not one:
+
+| `assetTx` | `assetBalanceAfter` | What it means |
+| --- | --- | --- |
+| a hash | `"100"` | This request deposited the mUSD. Done. |
+| `null`, with `assetError` | `"0"` | The account is open; the mUSD is outstanding. Call `/fund-account` again for this contract — the once-only ledger records the legs apart, so the retry performs only the missing half. |
+| `null`, no `assetError` | `"100"` or more | The account already held its mUSD before this request; nothing to do. |
+
+`assetBalanceAfter` is the account's own `coins[mUSD].value` as last read from
+the indexer, so it is the field to trust when the two disagree.
+
+Policy, now asked **per leg**: shape → not already in flight → the contract
+exists **and** decodes as an account-custody contract → for each leg, this
+service has no record of having paid it (`state/accounts-stagenet.json`) **and**
+the account does not already hold it → hourly ceiling → the balancer can pay.
+An entry written before the asset leg existed carries NIGHT and no `asset`,
+which reads correctly as "NIGHT done, mUSD outstanding" — no migration needed.
 
 | Status | `error` | Meaning |
 | --- | --- | --- |
 | 400 | `invalid-contract-address` / `wrong-network` | Bad request. |
 | 400 | `not-an-account` | No state there, or state that is not an ACC. |
-| 409 | `funding-in-flight` / `already-activated` / `already-funded` | Already served, or being served. |
+| 409 | `funding-in-flight` / `already-activated` / `already-funded` | Already served, or being served. `already-activated` carries `nightTx` and `assetTx`. |
 | 429 | `rate-limited` | Hourly ceiling reached. |
 | 503 | `funding-unsupported` | The compiled account build could not be loaded. |
 | 503 | `indexer-unreachable` / `wallet-syncing` / `funder-empty` / `funder-no-dust` | Cannot establish or cannot pay. |
-| 502 | `deposit-failed` / `confirmation-failed` | The deposit failed, or the credit never appeared. |
+| 502 | `deposit-failed` / `confirmation-failed` | The **NIGHT** deposit failed, or its credit never appeared. Nothing was credited. |
+| 200 | — with `assetError` | The NIGHT credit is real; the asset leg did not land. Retry to get only the asset leg. |
+
+`assetError` is prefixed with the internal code that caused it —
+`asset-unsupported`, `mint-failed`, `mint-not-visible`,
+`asset-deposit-failed`, or `asset-confirmation-failed` — so an operator reading
+a log can tell a missing faucet build from a coin that never became spendable.
 
 The `not-an-account` gate is deliberately **structural** rather than "the
 decoder did not throw": Compact decodes positionally, so a foreign contract can
@@ -337,6 +406,10 @@ occasionally produce a plausible-looking object. Every real account has at least
 one device and exactly three recovery shares, and a candidate failing either
 test is not one. This is what keeps the balancer from paying coins into a
 stranger's contract, where the user could never reach them.
+
+Setting `BALANCER_ASSET_GRANT=0` turns the asset leg off entirely; the endpoint
+then behaves exactly as it did before, answering with `assetTx: null` and an
+`assetError` saying why.
 
 ### `GET /status`
 
@@ -354,12 +427,28 @@ accountsFunded / accountsFundedTotal       this process / the persisted ledger
 accountFunding                             available | unavailable
 accountGrantAtomic
 accountSlotsRemainingThisHour
+assetSymbol                                mUSD
+assetColourHex                             rawTokenType(separator, faucet) — the
+                                           colour to look for in the account's
+                                           own `coins` map
+assetGrant                                 100
+assetFaucetAddress                         where the mUSD is minted from
+assetsFunded / assetsFundedTotal           this process / ledger entries whose
+                                           asset leg has landed. Counted apart
+                                           from the NIGHT leg, because the two
+                                           succeed and fail apart
+assetFunding                               available | unavailable
+assetUnavailableReason                     null, or why the asset leg is off
 contractProving                            wasm | server — how CONTRACT circuits
                                            are proved, which is a different
                                            question from `proving` above
 settling                                   not ready, but only because a spend's
                                            change is still in flight
 ```
+
+`assetsFundedTotal` can lag `accountsFundedTotal`: an activation whose asset leg
+failed is a real, recorded NIGHT credit with no asset entry, and the gap is
+precisely the set of accounts a retried `/fund-account` would top up.
 
 None of these is key material and none of them names a user.
 
@@ -387,9 +476,26 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_MIDNAMES_TLD_ADDRESS` | our stagenet TLD | The `.night` registry names go to. Unset **and** no known default disables `/register-alias`. |
 | `BALANCER_ALIAS_MAX_PER_HOUR` | `20` | Sponsored registrations per rolling hour. |
 | `BALANCER_ACCOUNT_GRANT_ATOMIC` | `2000` | The activation grant, in atomic NIGHT (0.002 NIGHT). |
-| `BALANCER_ACCOUNT_MAX_PER_HOUR` | `30` | Funded accounts per rolling hour. |
+| `BALANCER_ACCOUNT_MAX_PER_HOUR` | `30` | Funded accounts per rolling hour. Counts activations, not legs. |
+| `BALANCER_ASSET_GRANT` | `100` | The opening balance, in whole mUSD. **`0` turns the asset leg off.** |
+| `BALANCER_ASSET_FAUCET_ADDRESS` | our stagenet faucet | The mUSD faucet the grant is minted from. Unset **and** no known default disables the asset leg. |
 | `BALANCER_MIDNAMES_ASSETS` | `contracts-stagenet/managed/midnames` | Overrides where the compiled Midnames ZK artefacts are read from. |
 | `BALANCER_ACCOUNT_ASSETS` | `contracts-stagenet/managed/account` | Overrides where the compiled account ZK artefacts are read from. |
+| `BALANCER_ASSET_ASSETS` | `contracts-stagenet/managed/faucet` | Overrides where the compiled faucet ZK artefacts are read from. |
+
+The stagenet mUSD faucet default is the instance `deploy-stagenet/` put on chain
+at block 157,776 — the one the shielded-receipt drill minted 500 mUSD out of:
+
+```
+4fc92e152e8d854ef9337275504244e18bd6e3d7d41fd81ed2dabf62be78e92f
+```
+
+Its `mint_shielded` is permissionless, which is the whole reason the balancer
+can mint to its own shielded address and then pay the coin into somebody else's
+account. The colour that mint produces is
+`rawTokenType(0x06…, 4fc92e15…)` = `1a2917fb…`, and it changes if either the
+separator or the faucet does — so pointing `BALANCER_ASSET_FAUCET_ADDRESS`
+somewhere else mints a **different currency**, not the same one from elsewhere.
 
 The stagenet `.night` TLD default is **our own instance**, deployed by
 `deploy-stagenet/` on 2026/08/24 at block 157797 with the preview registry's own
@@ -532,18 +638,28 @@ deliberately as little as possible:
 
 | | Needed on the droplet |
 | --- | --- |
-| `contracts-stagenet/managed/{midnames,account}/` | **Yes** — rsync it. The ZK artefacts are read off disk; `dist/server.mjs` bundles the contract *modules* but not the ~100 MB of prover keys. Its own `node_modules/` is not needed. |
-| Extra npm packages | Already in `package.json` (`compact-js`, `compact-runtime`, `midnight-js-*`); `npm install` picks them up. |
-| A proof server / Docker | **No.** Contract circuits prove in-process. See above. |
-| Extra environment | **No.** The stagenet `.night` TLD, the grant, and both ceilings all have working defaults. |
+| `contracts-stagenet/managed/{midnames,account,faucet}/` | **Yes — rsync all three**, `faucet/` included. The ZK artefacts are read off disk; `dist/server.mjs` bundles the contract *modules* but not the prover keys, and `managed/*/keys/` and `managed/*/zkir/` are **gitignored**, so a `git pull` on the droplet will not bring them. Its own `node_modules/` is not needed. |
+| Extra npm packages | **No.** Already in `package.json` (`compact-js`, `compact-runtime`, `midnight-js-*`); the asset leg adds no dependency. |
+| A proof server / Docker | **No.** Contract circuits prove in-process, `deposit_shielded` included. |
+| Extra environment | **No.** The faucet address, the mUSD grant, the `.night` TLD, the NIGHT grant, and both ceilings all have working defaults. |
 | Disk in `BALANCER_STATE_DIR` | `aliases-stagenet.json` and `accounts-stagenet.json`, a few KB. They are the once-only gates and **must survive restarts** — the same volume the sync snapshot already lives on. |
-| Memory | More headroom. The wallet's key material is ~31 MiB; a contract proof holds its own prover key and BLS parameters in a worker for the length of the proof. |
+| Memory | More headroom, and the asset leg is the reason. `deposit_shielded.prover` is **19.5 MB** against `deposit_night.prover`'s 288 KB, and the WASM prover holds it plus the BLS parameters for that circuit size in a worker for the length of the proof. |
 
-Point `BALANCER_MIDNAMES_ASSETS` / `BALANCER_ACCOUNT_ASSETS` at the artefacts if
-they are staged somewhere other than beside `dist/`. If they are missing, the
-service still starts and still balances fees — the two endpoints refuse with
-`alias-unsupported` / `funding-unsupported` and `GET /status` says
-`unavailable`, rather than the whole service failing to come up.
+So the deploy is: **rsync `src/`, `dist/`, `package.json`, and
+`contracts-stagenet/managed/`** (all three builds, with their `keys/` and
+`zkir/`), then `npm install` and `systemctl restart passport-balancer`. No
+schema migration: the existing `accounts-stagenet.json` entries carry NIGHT and
+no `asset`, which the per-leg gate reads as "NIGHT done, mUSD outstanding", so
+already-activated Passports can be topped up by calling `/fund-account` again
+and everything else is refused exactly as before.
+
+Point `BALANCER_MIDNAMES_ASSETS` / `BALANCER_ACCOUNT_ASSETS` /
+`BALANCER_ASSET_ASSETS` at the artefacts if they are staged somewhere other than
+beside `dist/`. If they are missing, the service still starts and still balances
+fees — `/register-alias` refuses with `alias-unsupported`, `/fund-account`
+refuses with `funding-unsupported`, and a missing **faucet** build alone costs
+only the asset leg: `GET /status` reports `assetFunding: "unavailable"` with the
+reason, and activations still deposit their NIGHT.
 
 The service handles `SIGTERM` by saving its sync snapshot before exiting, so a
 restart resumes in under a second instead of walking the chain again.
@@ -717,6 +833,8 @@ fees.
 | Mirror before → after | `night_balances[native]` 0 → **2000** |
 | Wall clock | 35 s |
 
+(That run predates the asset leg. The two-leg endpoint is proved below.)
+
 The balancer's NIGHT went 4,999.000000 → 4,998.998000: exactly the 2,000 atomic
 grant. The registration cost nothing net, because our own TLD instance pays COST
 back to the balancer's own address.
@@ -764,4 +882,82 @@ under plain Node gets two `onchain-runtime-v4` instances and dies on
 **literal** relative specifier, which esbuild inlines into `dist/server.mjs`, so
 the bundled contract and the indexer provider both resolve this package's own
 copy. A computed absolute path would not be inlined and would reintroduce the
-fault.
+fault. The faucet module the asset leg loads is imported the same way, for the
+same reason.
+
+---
+
+## The asset leg, proven end to end on stagenet
+
+Run against live stagenet on 2026/08/25, **in-process WASM proving, no proof
+server** — the droplet's own configuration. The target was
+`1b9957e62f98527feb498e860af8204a3440a36ac41aa0516a02e9edde2f7a77`, a real
+account-custody contract that had never been funded: `night_balances[native] 0`,
+`coins` map **empty**, read off the indexer beforehand.
+
+One `POST /fund-account`, three transactions, no user-side signature anywhere:
+
+| Leg | Transaction | Block | Wall clock |
+| --- | --- | --- | --- |
+| `deposit_night(native, 2000)` | `14de09060c36c17933a875bd646beadd32a8688bdc33aad1fddf604c3958df4d` | 165,065 | 45 s |
+| `mint_shielded(0x06…, 100, nonce, balancer cpk)` | `86591ff4dc9bde87158e40a3a9a80624bfbf233ebf35f4e76b0d4424ed776230` | 165,078 | 64 s |
+| `deposit_shielded(coin)` | `e622a8328ee0f7a37ad85eb044a56c87557b61a6ea83903615b5e9ca0093d2a4` | 165,112 | 204 s |
+| Confirmation and hash resolution | — | — | 13 s |
+| **End to end** | | | **326.6 s** |
+
+Read back from the indexer afterwards, by a script that had no part in the
+request:
+
+```
+night_balances[native] 2000
+coins[mUSD]            100
+coins map size         1
+mUSD colour            1a2917fbed8b5ce44d12ebc7d337689045f6c96a6bbd39cf3d8691ab310ef6a6
+```
+
+`deposit_shielded` is where the time goes, and its prover key says why:
+**19.5 MB**, against 288 KB for `deposit_night`. Proving it in-process is
+comfortably possible — that is the number above — but it is the single most
+expensive thing this service does, and it is worth knowing before an operator
+reads a five-minute activation as a hang.
+
+**Every refusal, exercised against the same live instance**, none of them
+costing anything:
+
+| Request | Result |
+| --- | --- |
+| the same contract again | 409 `already-activated`, carrying `nightTx` **and** `assetTx` |
+| the `.night` TLD registry | 400 `not-an-account` |
+| the mUSD faucet itself | 400 `not-an-account` |
+| `deadbeef…` | 400 `not-an-account` — no state |
+| `contractAddress: "not-an-address"` | 400 `invalid-contract-address` |
+| `network: "preview"` | 400 `wrong-network` |
+
+### The half-done retry
+
+The branch that matters most, because it is the one a partial failure lands in.
+The persisted entry was rewritten to the shape entries had **before** the asset
+leg existed — NIGHT, no `asset`, byte for byte what the droplet's
+`accounts-stagenet.json` holds today — and the service restarted. It reported
+`accountsFundedTotal: 1, assetsFundedTotal: 0`, which is exactly the gap an
+operator should read as "one account open, one asset leg outstanding".
+
+`POST /fund-account` for that contract then performed **the asset leg and
+nothing else** — the grant was raised to 200 mUSD for the run purely so the
+"already holds a grant's worth" check would not short-circuit an account that
+already held 100:
+
+| | |
+| --- | --- |
+| `deposit_night` calls in the whole process | **0** (`accountsFunded: 0`, and no `NIGHT →` line in the log) |
+| `nightTx` in the 200 body | `14de0906…` — the *recorded* hash, with `block: null` and the original `fundedAt`, because this request did not put it there |
+| `mint_shielded` | `7600c5e021b49ec35851257ea15dfcc7cd83f939500e77a9f6f95c86c27102f6` |
+| `deposit_shielded` | `629bbae39abfa48bea1130492ea08e50f948e8fa684aba1ca15e1320e3d152c7`, block 165,190 |
+| `assetBalanceAfter` | 100 → **300** |
+| Wall clock | 329.3 s |
+| Ledger afterwards | the NIGHT fields untouched, the `asset` sub-entry added beside them |
+
+Read back independently: `night_balances[native] 2000`, `coins[mUSD] 300`. The
+balancer's own NIGHT moved 4998.998 → 4998.996 across both runs — exactly the
+2,000 atomic of the one NIGHT leg, and nothing for either asset leg, because the
+faucet mints the coin rather than the balancer paying for it.
