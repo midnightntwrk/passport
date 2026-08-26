@@ -110,7 +110,18 @@ export class PassportPasskeyDiscoveryError extends Error {
  */
 export type PassportPasskeyOnboarding =
   | { outcome: 'existing'; discovered: DiscoveredPassportPasskey; enrolled: null }
-  | { outcome: 'enrolled'; discovered: null; enrolled: EnrolledPassportPasskey };
+  | { outcome: 'enrolled'; discovered: null; enrolled: EnrolledPassportPasskey }
+  /* A credential answered and cannot open a Passport — it returned no PRF
+     output. Nothing was created, because creating under the same handle may
+     replace it. The caller decides: ask the user to pick another passkey, or
+     enrol deliberately. */
+  | {
+      outcome: 'unusable-credential';
+      discovered: null;
+      enrolled: null;
+      reason: PassportPasskeyDiscoveryFailure;
+      message: string;
+    };
 
 export interface DiscoverPassportPasskeyOptions {
   /** Relying-party id. Defaults to the current hostname, matching enrolment. */
@@ -628,10 +639,30 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
         options.rpId ? { rpId: options.rpId } : {},
       );
     } catch (error) {
-      if (error instanceof PassportPasskeyDiscoveryError && error.reason === 'cancelled') {
+      /* A discovery that produced no usable credential must not become a dead
+         end. Enrolment still carries `knownCredentialIds` in
+         `excludeCredentials`, so the authenticator itself refuses to replace a
+         credential this browser knows about, and reports
+         {@link PassportEnrolmentConflictError} when it does.
+
+         `prf-missing` is the one case worth telling the caller about: a
+         resident credential answered but returned no PRF output, so it cannot
+         open a Passport, and creating another under the same handle may
+         replace it. That is surfaced — not thrown — so a caller can ask the
+         user rather than fail or overwrite silently. */
+      if (error instanceof PassportPasskeyDiscoveryError) {
+        if (error.reason === 'prf-missing') {
+          return {
+            outcome: 'unusable-credential',
+            discovered: null,
+            enrolled: null,
+            reason: error.reason,
+            message: error.message,
+          };
+        }
         discovered = null;
       } else {
-        throw error;
+        discovered = null;
       }
     }
     if (discovered) return { outcome: 'existing', discovered, enrolled: null };

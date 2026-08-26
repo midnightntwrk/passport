@@ -769,13 +769,16 @@ describe('enrolment overwrite guard', () => {
       },
     });
 
-    const attempt = WebAuthnPrfKeyProvider.discoverOrEnroll({
+    const outcome = await WebAuthnPrfKeyProvider.discoverOrEnroll({
       label: 'Midnight Passport',
       userId: 'local-answered',
       rpId: 'localhost',
     });
-    await expect(attempt).rejects.toBeInstanceOf(PassportPasskeyDiscoveryError);
-    await expect(attempt).rejects.toMatchObject({ reason: 'prf-missing' });
+    /* Reported, not thrown: a dead end here strands every user whose
+       authenticator answers without PRF, and creating would replace the
+       credential. The caller is told, and decides. */
+    expect(outcome.outcome).toBe('unusable-credential');
+    expect(outcome).toMatchObject({ reason: 'prf-missing' });
     expect(creations).toBe(0);
   });
 
@@ -790,21 +793,28 @@ describe('enrolment overwrite guard', () => {
         },
         create: async () => {
           creations += 1;
-          throw new Error('unreachable');
+          return {
+            rawId: new Uint8Array([7, 7]).buffer,
+            getClientExtensionResults: () => ({ prf: { enabled: true } }),
+          };
         },
       },
     });
 
-    const attempt = WebAuthnPrfKeyProvider.discoverOrEnroll({
+    /* An authenticator that failed for a reason of its own has told us
+       nothing about what it holds, so enrolment proceeds — guarded, as it
+       always was, by the exclusion list, which is what makes the
+       authenticator itself refuse to replace a credential we know about. A
+       hard failure here was a regression: it stranded onboarding on every
+       browser that errors for any reason at all. */
+    const outcome = await WebAuthnPrfKeyProvider.discoverOrEnroll({
       label: 'Midnight Passport',
       userId: 'local-unknown',
       rpId: 'localhost',
+      knownCredentialIds: ['AQID'],
     });
-    await expect(attempt).rejects.toMatchObject({
-      name: 'PassportPasskeyDiscoveryError',
-      reason: 'failed',
-    });
-    expect(creations).toBe(0);
+    expect(outcome.outcome).toBe('enrolled');
+    expect(creations).toBe(1);
   });
 
   it('reports a dismissed picker as cancelled, with the reason preserved', async () => {

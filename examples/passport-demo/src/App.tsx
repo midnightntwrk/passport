@@ -1712,6 +1712,15 @@ export default function PassportDemo() {
         recovered.dispose();
       }
     }
+    if (onboarding.outcome === 'unusable-credential') {
+      /* A passkey for this site answered and cannot open a Passport: it
+         returned no PRF output. Creating one under the same handle could
+         replace it, so this stops and says what to do. "Use a different
+         passkey" runs enrolment deliberately, which is the way out. */
+      throw new Error(
+        'A passkey on this device answered but does not support the extension Passport needs. Choose "Use a different passkey" to create one, or try another browser or security key.',
+      );
+    }
     if (onboarding.outcome === 'existing') {
       /* A passkey answered, so this device already has a Passport whatever
          local storage says. Sign in to it — one prompt, no enrolment, and the
