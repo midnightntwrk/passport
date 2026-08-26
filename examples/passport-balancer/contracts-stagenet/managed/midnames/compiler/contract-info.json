@@ -1,0 +1,749 @@
+{
+  "compiler-version": "0.33.0",
+  "language-version": "0.25.0",
+  "runtime-version": "0.18.0-rc.1",
+  "circuits": [
+    {
+      "name": "update_color",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "c",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "update_costs",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "cost_short",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 340282366920938463463374607431768211455
+          }
+        },
+        {
+          "name": "cost_med",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 340282366920938463463374607431768211455
+          }
+        },
+        {
+          "name": "cost_long",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 340282366920938463463374607431768211455
+          }
+        },
+        {
+          "name": "enabled",
+          "type": {
+            "type-name": "Boolean"
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "update_default_field",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "d",
+          "type": {
+            "type-name": "Struct",
+            "name": "Maybe",
+            "elements": [
+              {
+                "name": "is_some",
+                "type": {
+                  "type-name": "Boolean"
+                }
+              },
+              {
+                "name": "value",
+                "type": {
+                  "type-name": "Opaque",
+                  "tsType": "string"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "add_multiple_fields",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "kvs",
+          "type": {
+            "type-name": "Vector",
+            "length": 10,
+            "type": {
+              "type-name": "Struct",
+              "name": "Maybe",
+              "elements": [
+                {
+                  "name": "is_some",
+                  "type": {
+                    "type-name": "Boolean"
+                  }
+                },
+                {
+                  "name": "value",
+                  "type": {
+                    "type-name": "Tuple",
+                    "types": [
+                      {
+                        "type-name": "Opaque",
+                        "tsType": "string"
+                      },
+                      {
+                        "type-name": "Opaque",
+                        "tsType": "string"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "clear_field",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "k",
+          "type": {
+            "type-name": "Opaque",
+            "tsType": "string"
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "clear_all_fields",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "register_domain_for",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "owner",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
+          "name": "domain",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
+          "name": "len",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 4294967295
+          }
+        },
+        {
+          "name": "resolver",
+          "type": {
+            "type-name": "Struct",
+            "name": "ContractAddress",
+            "elements": [
+              {
+                "name": "bytes",
+                "type": {
+                  "type-name": "Bytes",
+                  "length": 32
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "set_resolver",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "domain",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
+          "name": "resolver",
+          "type": {
+            "type-name": "Struct",
+            "name": "ContractAddress",
+            "elements": [
+              {
+                "name": "bytes",
+                "type": {
+                  "type-name": "Bytes",
+                  "length": 32
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "update_domain_target",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "new_target",
+          "type": {
+            "type-name": "Struct",
+            "name": "Either",
+            "elements": [
+              {
+                "name": "is_left",
+                "type": {
+                  "type-name": "Boolean"
+                }
+              },
+              {
+                "name": "left",
+                "type": {
+                  "type-name": "Struct",
+                  "name": "ContractAddress",
+                  "elements": [
+                    {
+                      "name": "bytes",
+                      "type": {
+                        "type-name": "Bytes",
+                        "length": 32
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "right",
+                "type": {
+                  "type-name": "Struct",
+                  "name": "Either",
+                  "elements": [
+                    {
+                      "name": "is_left",
+                      "type": {
+                        "type-name": "Boolean"
+                      }
+                    },
+                    {
+                      "name": "left",
+                      "type": {
+                        "type-name": "Struct",
+                        "name": "ZswapCoinPublicKey",
+                        "elements": [
+                          {
+                            "name": "bytes",
+                            "type": {
+                              "type-name": "Bytes",
+                              "length": 32
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "name": "right",
+                      "type": {
+                        "type-name": "Struct",
+                        "name": "UserAddress",
+                        "elements": [
+                          {
+                            "name": "bytes",
+                            "type": {
+                              "type-name": "Bytes",
+                              "length": 32
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "transfer_domain",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "domain",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
+          "name": "new_owner",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "change_owner",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "new_owner",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
+          "name": "new_address",
+          "type": {
+            "type-name": "Struct",
+            "name": "UserAddress",
+            "elements": [
+              {
+                "name": "bytes",
+                "type": {
+                  "type-name": "Bytes",
+                  "length": 32
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    }
+  ],
+  "witnesses": [
+    {
+      "name": "secretKey",
+      "arguments": [
+      ],
+      "result type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    }
+  ],
+  "contracts": [
+  ],
+  "ledger": [
+    {
+      "name": "PARENT_DOMAIN",
+      "index": 0,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Struct",
+        "name": "Maybe",
+        "elements": [
+          {
+            "name": "is_some",
+            "type": {
+              "type-name": "Boolean"
+            }
+          },
+          {
+            "name": "value",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PARENT_RESOLVER",
+      "index": 1,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Struct",
+        "name": "ContractAddress",
+        "elements": [
+          {
+            "name": "bytes",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "DOMAIN",
+      "index": 2,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Struct",
+        "name": "Maybe",
+        "elements": [
+          {
+            "name": "is_some",
+            "type": {
+              "type-name": "Boolean"
+            }
+          },
+          {
+            "name": "value",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "DOMAIN_OWNER",
+      "index": 3,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Tuple",
+        "types": [
+          {
+            "type-name": "Bytes",
+            "length": 32
+          },
+          {
+            "type-name": "Struct",
+            "name": "UserAddress",
+            "elements": [
+              {
+                "name": "bytes",
+                "type": {
+                  "type-name": "Bytes",
+                  "length": 32
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "DOMAIN_TARGET",
+      "index": 4,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Struct",
+        "name": "Either",
+        "elements": [
+          {
+            "name": "is_left",
+            "type": {
+              "type-name": "Boolean"
+            }
+          },
+          {
+            "name": "left",
+            "type": {
+              "type-name": "Struct",
+              "name": "ContractAddress",
+              "elements": [
+                {
+                  "name": "bytes",
+                  "type": {
+                    "type-name": "Bytes",
+                    "length": 32
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "right",
+            "type": {
+              "type-name": "Struct",
+              "name": "Either",
+              "elements": [
+                {
+                  "name": "is_left",
+                  "type": {
+                    "type-name": "Boolean"
+                  }
+                },
+                {
+                  "name": "left",
+                  "type": {
+                    "type-name": "Struct",
+                    "name": "ZswapCoinPublicKey",
+                    "elements": [
+                      {
+                        "name": "bytes",
+                        "type": {
+                          "type-name": "Bytes",
+                          "length": 32
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "right",
+                  "type": {
+                    "type-name": "Struct",
+                    "name": "UserAddress",
+                    "elements": [
+                      {
+                        "name": "bytes",
+                        "type": {
+                          "type-name": "Bytes",
+                          "length": 32
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "domains",
+      "index": 5,
+      "exported": true,
+      "storage": "Map",
+      "key": {
+        "type-name": "Bytes",
+        "length": 32
+      },
+      "value": {
+        "type-name": "Struct",
+        "name": "DomainData",
+        "elements": [
+          {
+            "name": "owner",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "resolver",
+            "type": {
+              "type-name": "Struct",
+              "name": "ContractAddress",
+              "elements": [
+                {
+                  "name": "bytes",
+                  "type": {
+                    "type-name": "Bytes",
+                    "length": 32
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "domains_owned",
+      "index": 6,
+      "exported": true,
+      "storage": "Map",
+      "key": {
+        "type-name": "Bytes",
+        "length": 32
+      },
+      "value": {
+        "type-name": "Set",
+        "type": {
+          "type-name": "Bytes",
+          "length": 32
+        }
+      }
+    },
+    {
+      "name": "fields",
+      "index": 7,
+      "exported": true,
+      "storage": "Map",
+      "key": {
+        "type-name": "Opaque",
+        "tsType": "string"
+      },
+      "value": {
+        "type-name": "Opaque",
+        "tsType": "string"
+      }
+    },
+    {
+      "name": "DEFAULT_FIELD",
+      "index": 8,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Struct",
+        "name": "Maybe",
+        "elements": [
+          {
+            "name": "is_some",
+            "type": {
+              "type-name": "Boolean"
+            }
+          },
+          {
+            "name": "value",
+            "type": {
+              "type-name": "Opaque",
+              "tsType": "string"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "BUY_ENABLED",
+      "index": 9,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Boolean"
+      }
+    },
+    {
+      "name": "COIN_COLOR",
+      "index": 10,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
+    {
+      "name": "COST_SHORT",
+      "index": 11,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Uint",
+        "maxval": 340282366920938463463374607431768211455
+      }
+    },
+    {
+      "name": "COST_MED",
+      "index": 12,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Uint",
+        "maxval": 340282366920938463463374607431768211455
+      }
+    },
+    {
+      "name": "COST_LONG",
+      "index": 13,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Uint",
+        "maxval": 340282366920938463463374607431768211455
+      }
+    }
+  ]
+}

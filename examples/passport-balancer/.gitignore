@@ -1,0 +1,10 @@
+dist/
+node_modules/
+
+# Runtime state: the sync snapshot. Every state directory, whatever it is
+# named, stays out of the repository.
+state/
+state-*/
+
+# Live verification harness. Disposable, never committed.
+.live-drill/
