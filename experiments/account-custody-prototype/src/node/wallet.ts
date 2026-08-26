@@ -202,9 +202,11 @@ export function userAddressBytes(walletCtx: WalletContext): Uint8Array {
           ? Buffer.from(pk.bytes).toString('hex')
           : String(pk);
   const clean = hex.replace(/^0x/, '');
-  const out = new Uint8Array(32);
-  out.set(Buffer.from(clean, 'hex').subarray(0, 32));
-  return out;
+  const bytes = Buffer.from(clean, 'hex');
+  if (bytes.length !== 32) {
+    throw new Error(`unshielded public key: expected 32 bytes, got ${bytes.length}`);
+  }
+  return new Uint8Array(bytes);
 }
 
 // The user's Zswap coin public key bytes, as ZswapCoinPublicKey expects.
@@ -213,7 +215,9 @@ export function coinPublicKeyBytes(state: any): Uint8Array {
   const hex: string =
     typeof cpk?.toHexString === 'function' ? cpk.toHexString() : String(cpk?.bytes ?? cpk);
   const clean = hex.replace(/^0x/, '');
-  const out = new Uint8Array(32);
-  out.set(Buffer.from(clean, 'hex').subarray(0, 32));
-  return out;
+  const bytes = Buffer.from(clean, 'hex');
+  if (bytes.length !== 32) {
+    throw new Error(`coin public key: expected 32 bytes, got ${bytes.length}`);
+  }
+  return new Uint8Array(bytes);
 }

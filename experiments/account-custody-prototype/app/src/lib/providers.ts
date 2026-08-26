@@ -258,15 +258,19 @@ export function compiledFaucetContract() {
 export function userAddressBytes(walletCtx: WalletContext): Uint8Array {
   const pk: any = walletCtx.unshieldedKeystore.getPublicKey();
   const hex: string = typeof pk?.toHexString === 'function' ? pk.toHexString() : String(pk?.bytes ?? pk);
-  const out = new Uint8Array(32);
-  out.set(hexToBytes(hex.replace(/^0x/, '')).subarray(0, 32));
-  return out;
+  const bytes = hexToBytes(hex.replace(/^0x/, ''));
+  if (bytes.length !== 32) {
+    throw new Error(`unshielded public key: expected 32 bytes, got ${bytes.length}`);
+  }
+  return bytes;
 }
 
 export function coinPublicKeyBytes(state: any): Uint8Array {
   const cpk = state.shielded.coinPublicKey;
   const hex: string = typeof cpk?.toHexString === 'function' ? cpk.toHexString() : String(cpk?.bytes ?? cpk);
-  const out = new Uint8Array(32);
-  out.set(hexToBytes(hex.replace(/^0x/, '')).subarray(0, 32));
-  return out;
+  const bytes = hexToBytes(hex.replace(/^0x/, ''));
+  if (bytes.length !== 32) {
+    throw new Error(`coin public key: expected 32 bytes, got ${bytes.length}`);
+  }
+  return bytes;
 }
