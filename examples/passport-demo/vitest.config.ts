@@ -19,6 +19,14 @@
  *
  * WHAT IS OUT, AND WHY — `src/lib`
  * --------------------------------
+ * `src/lib/feeReadinessPoll.ts` went IN on 2026/08/25 rather than out with the
+ * screens it serves: it is the sponsor watcher, it holds no DOM and no React,
+ * and its whole contract — probe now, probe again every five seconds, publish
+ * every change, and send the sponsor's diagnostic to a log rather than towards
+ * a screen — is drivable on a fake clock. The React that consumes it is three
+ * lines of `useEffect` in `SendSheet.tsx`, which stays out with the rest of the
+ * `.tsx`.
+ *
  *   assert-shim.ts      A three-line stand-in for Node's `assert`, aliased in
  *                       by `vite.config.ts` for @subsquid/scale-codec. It has
  *                       no behaviour of ours in it.
@@ -58,6 +66,11 @@
  *                       `deriveMidnamesOwnerKey`, `suggestAliasAlternatives` —
  *                       are drilled in `src/identity/midnames.test.ts`. The
  *                       rest is registry reads against a network's own indexer.
+ * `src/identity/timestamps.ts` went IN on 2026/08/26 with the module itself: it
+ * is the ISO-8601 reader `backup.ts` and `incentiveStore.ts` now share, it is
+ * four lines of pure decision, and both of its answers are drilled by
+ * `backup.test.ts`.
+ *
  *   aliasStore.ts,      Thin `window.localStorage` records. They are exercised
  *   incentiveStore.ts,  for real (not mocked) by `backup.test.ts`, which
  *   passportContract-   restores through their own save functions so their
@@ -70,6 +83,13 @@
  *
  * WHAT IS OUT, AND WHY — everything else
  * --------------------------------------
+ *   `src/verify/**`     The step verifier: a separate, read-only operator page
+ *                       served at `/verify/`. Every function in it is either an
+ *                       indexer query, a contract-state decode behind one, or
+ *                       DOM construction — the same three reasons `indexerTx.ts`
+ *                       and the `.tsx` files are out. It is exercised against
+ *                       the real stagenet indexer in a headless browser, which
+ *                       is the only place its answers mean anything.
  *   `*.tsx`, `main.tsx`, `pwa.tsx`, `backend.ts`, `publicProfile.ts`
  *                       React components and the browser bring-up around them.
  *                       There is no jsdom in this workspace and adding one
@@ -101,12 +121,14 @@ export default mergeConfig(
           'src/lib/activation.ts',
           'src/lib/address.ts',
           'src/lib/colour.ts',
+          'src/lib/feeReadinessPoll.ts',
           'src/lib/networks.ts',
           'src/lib/notifications.ts',
           'src/lib/qrScan.ts',
           'src/lib/sponsor.ts',
           'src/identity/backup.ts',
           'src/identity/sponsoredAlias.ts',
+          'src/identity/timestamps.ts',
         ],
         /* A file in the list with nothing exercising it must show as 0% rather
            than vanish from the report. */
