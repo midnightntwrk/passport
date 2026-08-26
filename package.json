@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "demo-backend"
+    "demo-backend",
+    "examples/passport-demo"
   ],
   "scripts": {
     "test:backend": "npm run test --workspace demo-backend"
