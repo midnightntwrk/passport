@@ -26,11 +26,14 @@
  * ------------
  *   node scripts/build-vercel-output.mjs <app-directory>
  *
- * Use `npm run deploy:passport` / `npm run deploy:raffle` from the repository
- * root, which build with the right VITE_* values, call this, and upload.
+ * The Passport demo is deployed by .github/workflows/deploy-demo.yml, from a
+ * published GitHub release, which sets the VITE_* values, calls this, and
+ * uploads. `npm run deploy:passport:manual` does the same from a laptop and is
+ * break-glass only — see docs/demo/deployment.md. `npm run deploy:raffle` and
+ * the other deploy:* scripts are still the normal path for their apps.
  *
- * One of those values reads like a special case and is not. `deploy:passport`
- * sets `VITE_RAFFLE_URL` — not `VITE_LOCAL_APP_URL`, the variable third-party
+ * One of those values reads like a special case and is not. The Passport
+ * deployment sets `VITE_RAFFLE_URL` — not `VITE_LOCAL_APP_URL`, the variable third-party
  * developers are handed for the same grid slot. The two are deliberately
  * separate entries in `examples/passport-demo/src/lib/registry.ts`: the raffle
  * one carries the id `raffle-demo`, its own description, and the illustrated

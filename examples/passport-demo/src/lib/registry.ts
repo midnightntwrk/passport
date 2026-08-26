@@ -69,9 +69,10 @@ const RAFFLE_FALLBACK_URL = 'http://localhost:5177'
  * shows the handshake. Both halves of the entry read from the environment on
  * the same terms the local-app slot uses — `VITE_RAFFLE_URL`/`VITE_RAFFLE_NAME`
  * against `VITE_LOCAL_APP_URL`/`VITE_LOCAL_APP_NAME` — because a build that
- * moves the raffle to a deployed origin (`npm run deploy:passport`) must be
- * able to rename it there too, rather than shipping a label naming a demo the
- * configured origin may no longer serve.
+ * moves the raffle to a deployed origin (the release deployment, or the
+ * break-glass `npm run deploy:passport:manual`) must be able to rename it there
+ * too, rather than shipping a label naming a demo the configured origin may no
+ * longer serve.
  */
 export const RAFFLE_DEMO_APP: RegistryApp = {
   id: 'raffle-demo',

@@ -1,0 +1,259 @@
+# Runs the demo's gates on every pull request that touches it, so drift is
+# caught before merge rather than after a deploy.
+#
+# WHY THIS EXISTS
+# ---------------
+# Nothing in CI ran the demo's typecheck or its tests before this workflow.
+# The gap that mattered most is the demo backend: `demo-backend/dist` is
+# gitignored (root `.gitignore`, `dist/`), the PWA imports the backend through
+# that dist's `.d.ts` files, and a stale dist type-checks cleanly against
+# exports that no longer exist.
+#
+# Measured in this repository on 2026/08/26: deleting `parsePassportIncentiveReport`
+# from `demo-backend/src/index.ts` and leaving the built dist alone left
+# `tsc --noEmit` in `examples/passport-demo` completely green. Rebuilding the
+# dist first turned the same tree into
+#
+#   src/backend.ts(15,3): error TS2724: '"passport-demo-backend"' has no
+#   exported member named 'parsePassportIncentiveReport'.
+#
+# So the ordering in the `gates` job below — build the backend, THEN type-check
+# the app — is the whole point of the job, not housekeeping.
+#
+# TWO JOBS, BECAUSE THE GATES HAVE DIFFERENT INPUTS
+# -------------------------------------------------
+# `gates` needs nothing that is not in a git checkout. `bundle` needs the ~97 MB
+# of prover keys and ZKIR that `vite build` stages, which are deliberately not
+# in git. See the header of `deploy-demo.yml` for where those come from and why
+# they cannot be rebuilt in CI.
+
+name: Verify Passport demo
+
+on:
+  pull_request:
+    paths:
+      - 'examples/passport-demo/**'
+      - 'demo-backend/**'
+      - 'examples/passport-balancer/contracts-stagenet/**'
+      - 'scripts/build-vercel-output.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/verify-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-demo-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  ZK_BUNDLE_ASSET: passport-zk-artefacts.tar.zst
+  MANAGED_ROOT: examples/passport-balancer/contracts-stagenet/managed
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Everything that can be established from a plain checkout. This job is the
+  # drift guard and it must never be conditional on an artefact being available.
+  # ---------------------------------------------------------------------------
+  gates:
+    name: Typecheck and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Refuse to run against a ref that has no demo
+        run: |
+          set -euo pipefail
+          missing=0
+          for path in \
+            examples/passport-demo/package.json \
+            demo-backend/package.json \
+            "${MANAGED_ROOT}/account/contract/index.d.ts" \
+            "${MANAGED_ROOT}/midnames/contract/index.d.ts"
+          do
+            if [ ! -f "$path" ]; then
+              echo "::error::${path} is missing on ${GITHUB_REF}."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::This workflow verifies examples/passport-demo. Refusing to report success on a ref that does not contain it."
+            exit 1
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # `vite build` stages these through `prepare-zk-assets.mjs`, which also
+      # wants the prover keys and refuses to run without them. The typecheck and
+      # the unit tests need only the contract MODULE, and those four files are
+      # tracked — so they are staged directly here and this job stays free of
+      # the artefact bundle. Verified 2026/08/26 with keys/ and zkir/ moved
+      # aside: typecheck and `test:coverage` both pass on the tracked files alone.
+      - name: Stage the contract modules the app type-checks against
+        run: |
+          set -euo pipefail
+          for contract in account midnames; do
+            destination="examples/passport-demo/contracts/stagenet/${contract}"
+            mkdir -p "$destination"
+            for file in index.js index.d.ts; do
+              source="${MANAGED_ROOT}/${contract}/contract/${file}"
+              if [ ! -f "$source" ]; then
+                echo "::error::${source} is missing — the tracked contract build is incomplete."
+                exit 1
+              fi
+              cp "$source" "$destination/$file"
+            done
+          done
+
+      # BEFORE the app's typecheck. See the header.
+      - name: Rebuild the demo backend the app type-checks against
+        run: |
+          set -euo pipefail
+          if [ -n "$(git ls-files demo-backend/dist)" ]; then
+            echo "::error::demo-backend/dist is tracked in git now, but this step assumes it is generated."
+            echo "::error::Either untrack it, or replace this step with: npm run build --workspace passport-demo-backend && git diff --exit-code -- demo-backend/dist"
+            exit 1
+          fi
+          npm run build --workspace passport-demo-backend
+
+      - name: Typecheck the app
+        run: npm run typecheck --workspace passport-demo
+
+      - name: Typecheck the demo backend
+        run: npx tsc -p demo-backend/tsconfig.json --noEmit
+
+      - name: Demo backend unit tests
+        run: npm run test --workspace passport-demo-backend
+
+      - name: App unit tests with coverage
+        run: npm run test:coverage --workspace passport-demo
+
+  # ---------------------------------------------------------------------------
+  # The gates that need a real `vite build`, and therefore the ZK artefacts.
+  # ---------------------------------------------------------------------------
+  bundle:
+    name: PWA checks and tier-1 end-to-end
+    runs-on: ubuntu-latest
+    needs: gates
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Restore the pinned ZK artefacts
+        id: zk-cache
+        uses: actions/cache@v4
+        with:
+          key: zk-artefacts-${{ hashFiles('examples/passport-balancer/contracts-stagenet/managed/*/compiler/contract-manifest.json') }}
+          path: |
+            examples/passport-balancer/contracts-stagenet/managed/account/keys
+            examples/passport-balancer/contracts-stagenet/managed/account/zkir
+            examples/passport-balancer/contracts-stagenet/managed/midnames/keys
+            examples/passport-balancer/contracts-stagenet/managed/midnames/zkir
+
+      # On a pull request this is allowed to come up empty: the bundle is
+      # published with a release, and before the first release there is nothing
+      # to fetch. The build-dependent gates below then skip LOUDLY — the reason
+      # is written into the job summary. `deploy-demo.yml` makes the same step
+      # a hard failure, because a deploy that cannot build must never be green.
+      - name: Fetch the ZK artefact bundle from the latest release
+        id: zk-fetch
+        if: steps.zk-cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release download --pattern "${ZK_BUNDLE_ASSET}" --dir /tmp --clobber 2>/tmp/gh.err; then
+            tar --zstd -xf "/tmp/${ZK_BUNDLE_ASSET}" -C .
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### PWA and end-to-end gates were skipped"
+              echo
+              echo "No \`${ZK_BUNDLE_ASSET}\` asset could be downloaded from a release, and the"
+              echo "cache held no copy. Those ~97 MB of prover keys and ZKIR are not in git and"
+              echo "cannot be rebuilt in CI — the compiler that produced them, 0.33.0-rc.2, is not"
+              echo "an installable version. \`npm run test:pwa\` and the Playwright tier-1 run need"
+              echo "a real \`vite build\`, so they did not run on this pull request."
+              echo
+              echo "See \`docs/demo/deployment.md\` for how to publish the bundle."
+              echo
+              echo "\`gh release download\` said:"
+              echo '```'
+              cat /tmp/gh.err
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::ZK artefact bundle unavailable — the PWA and end-to-end gates did not run."
+          fi
+
+      - name: Note whether the build-dependent gates can run
+        id: buildable
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.zk-cache.outputs.cache-hit }}" = "true" ] || [ "${{ steps.zk-fetch.outputs.available }}" = "true" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Every file the manifests name, hashed and compared. This is what stops a
+      # bundle from a DIFFERENT build of the same contracts reaching a build:
+      # two builds are two verifier keys, and the deployed contract only knows
+      # one of them. Verified locally 2026/08/26 — 88 files pass in 0.2s, and
+      # appending a single byte to one ZKIR file fails the step.
+      - name: Verify the ZK artefacts against the committed manifests
+        if: steps.buildable.outputs.ok == 'true'
+        run: node .github/workflows/scripts/verify-zk-artefacts.mjs
+
+      - name: Rebuild the demo backend
+        if: steps.buildable.outputs.ok == 'true'
+        run: npm run build --workspace passport-demo-backend
+
+      # `test:pwa` is `npm run build && npm run check:pwa` in the workspace.
+      - name: PWA manifest and build-output checks
+        if: steps.buildable.outputs.ok == 'true'
+        run: npm run test:pwa
+
+      - name: Install Chromium
+        if: steps.buildable.outputs.ok == 'true'
+        run: npx playwright install --with-deps chromium
+        working-directory: examples/passport-demo
+
+      # Tier 1 only. `stagenet.live.spec.ts` is tagged `@live`, and it also
+      # self-skips without RUN_LIVE=1 — grep-invert is belt, the skip is braces.
+      # Selecting by tag rather than by filename keeps this working when specs
+      # are renamed.
+      - name: Tier-1 end-to-end
+        if: steps.buildable.outputs.ok == 'true'
+        run: npx playwright test --project=chromium --grep-invert=@live
+        working-directory: examples/passport-demo
+
+      - name: Upload the Playwright report on failure
+        if: failure() && steps.buildable.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: examples/passport-demo/playwright-report
+          retention-days: 7

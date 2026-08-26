@@ -60,5 +60,6 @@ partner dApp.
 | Document | What it records |
 |---|---|
 | [`runbook.md`](runbook.md) | How to run the demo end to end, what to walk through, and the result language. |
+| [`deployment.md`](deployment.md) | How the PWA reaches <https://midnightpassport.com>: only from `main`, only by a published release. Secrets, rollback, and the break-glass path. |
 | [`validation-log.md`](validation-log.md) | Observed results only — no claimed ones. |
 | [`pwa-feasibility-report.md`](pwa-feasibility-report.md) | The #102 feasibility deliverable for the installable PWA, dated 2026/07/23 and partly superseded by the removal of Dynamic. |

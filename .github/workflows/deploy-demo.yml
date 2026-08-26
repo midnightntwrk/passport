@@ -1,0 +1,306 @@
+# The only sanctioned way https://midnightpassport.com is updated.
+#
+# THE RULE
+# --------
+# Only what is on `main` is deployed. A release is the trigger, and the guard
+# below refuses any ref whose commit is not an ancestor of `origin/main` — so a
+# release cut from a feature branch cannot ship, however it was tagged. This
+# replaces `npm run deploy:passport` from a developer laptop, which is now
+# `deploy:passport:manual` and is break-glass only. See docs/demo/deployment.md.
+#
+# WHY THIS IS NOT A PLAIN `npm ci && npm run build`
+# --------------------------------------------------
+# `examples/passport-demo`'s build stages ~97 MB of prover keys and ZKIR from
+# `examples/passport-balancer/contracts-stagenet/managed/*/{keys,zkir}`. Those
+# two directories are gitignored; the `contract/` and `compiler/` halves beside
+# them are tracked. A fresh checkout therefore fails at `prepare:zk` with
+# "the account build is incomplete — keys/ is missing" (confirmed in this repo
+# on 2026/08/26), which is the honest failure but not a deploy.
+#
+# They cannot be rebuilt here. The manifests name compiler 0.33.0 (0.33.0-rc.2)
+# and `compact list` offers 0.31.1 then 0.34.0 — the compiler that produced what
+# is deployed on stagenet is not installable. Recompiling with a different one
+# would produce different verifier keys, and the deployed contract knows only
+# the keys it was deployed with.
+#
+# So the bundle travels WITH the release, as an asset, and is verified against
+# the tracked manifests before anything is built. Cutting a release therefore
+# has one manual step — attaching that asset — and docs/demo/deployment.md
+# gives the exact command.
+
+name: Deploy Passport demo
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release whose ZK artefact bundle to use. Blank uses the latest published release. The commit deployed is this run''s ref, which must still be on main.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# One production deploy at a time, and never cancel one halfway.
+concurrency:
+  group: deploy-passport-demo
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  VERCEL_CLI_VERSION: '59.3.0'
+  ZK_BUNDLE_ASSET: passport-zk-artefacts.tar.zst
+  MANAGED_ROOT: examples/passport-balancer/contracts-stagenet/managed
+
+  # Exactly the values the old `deploy:passport` built with. Kept here rather
+  # than in the npm script so that what ships is visible in the run log, and so
+  # `deploy:passport:manual` and this workflow cannot drift apart silently.
+  VITE_MIDNIGHT_NETWORK_ID: stagenet
+  VITE_MIDNIGHT_PROVING_URL: https://funder.midnightpassport.com/prover
+  VITE_SPONSOR_URL: https://funder.midnightpassport.com/balancer
+  VITE_FUNDER_URL: https://funder.midnightpassport.com/balancer
+  VITE_RAFFLE_URL: https://raffle.midnightpassport.com
+
+jobs:
+  deploy:
+    name: Build and deploy to Vercel production
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # fetch-depth: 0 — `git merge-base --is-ancestor` below needs real
+      # history, and a shallow clone has none.
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # ---------------------------------------------------------------------
+      # THE GUARD. Nothing installs, builds, or deploys before this passes.
+      # ---------------------------------------------------------------------
+      - name: Refuse to deploy a commit that is not on main
+        env:
+          # Through env, never interpolated into the shell: a tag name is
+          # attacker-shaped input the moment anyone can cut a release.
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --quiet origin main
+
+          if [ "$EVENT_NAME" = "release" ]; then
+            git fetch --quiet origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}" || true
+            target="$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
+            echo "Release ${RELEASE_TAG} points at ${target}."
+          else
+            target="${GITHUB_SHA}"
+            echo "Manual run against ${GITHUB_REF} (${target})."
+          fi
+
+          if git merge-base --is-ancestor "$target" origin/main; then
+            echo "${target} is on origin/main ($(git rev-parse origin/main)). Proceeding."
+          else
+            echo "::error::${target} is NOT an ancestor of origin/main ($(git rev-parse origin/main))."
+            echo "::error::Only what is on main is deployed. Merge this work into main and cut the release from main."
+            exit 1
+          fi
+
+      # main did not carry examples/passport-demo when this workflow was
+      # written — the app was still on a stack of feature branches. Without this
+      # step, a release cut before the merge lands would sail through every gate
+      # (npm test on nothing, a build of nothing) and upload an empty directory
+      # over the live site.
+      - name: Refuse to deploy a ref that has no demo
+        run: |
+          set -euo pipefail
+          missing=0
+          for path in \
+            examples/passport-demo/package.json \
+            examples/passport-demo/vercel.json \
+            examples/passport-demo/.vercel-output-exclude \
+            scripts/build-vercel-output.mjs \
+            demo-backend/package.json \
+            "${MANAGED_ROOT}/account/compiler/contract-manifest.json" \
+            "${MANAGED_ROOT}/midnames/compiler/contract-manifest.json"
+          do
+            if [ ! -f "$path" ]; then
+              echo "::error::${path} is missing on this ref."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Refusing to deploy: this ref does not contain the Passport demo. Deploying it would overwrite the live site with nothing."
+            exit 1
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # ---------------------------------------------------------------------
+      # Build inputs that are deliberately not in git.
+      # ---------------------------------------------------------------------
+      - name: Restore the pinned ZK artefacts
+        id: zk-cache
+        uses: actions/cache@v4
+        with:
+          key: zk-artefacts-${{ hashFiles('examples/passport-balancer/contracts-stagenet/managed/*/compiler/contract-manifest.json') }}
+          path: |
+            examples/passport-balancer/contracts-stagenet/managed/account/keys
+            examples/passport-balancer/contracts-stagenet/managed/account/zkir
+            examples/passport-balancer/contracts-stagenet/managed/midnames/keys
+            examples/passport-balancer/contracts-stagenet/managed/midnames/zkir
+
+      # Hard failure here, unlike verify-demo.yml. A deploy that cannot build
+      # must not be green.
+      - name: Fetch the ZK artefact bundle from the release
+        if: steps.zk-cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          # Written as two calls rather than one with an array argument: under
+          # `set -u`, expanding an empty array is an unbound-variable error on
+          # bash 3.2. Runners carry bash 5, but this costs nothing to avoid.
+          download() {
+            if [ -n "${RELEASE_TAG}" ]; then
+              echo "Downloading ${ZK_BUNDLE_ASSET} from release ${RELEASE_TAG}."
+              gh release download "${RELEASE_TAG}" --pattern "${ZK_BUNDLE_ASSET}" --dir /tmp --clobber
+            else
+              echo "Downloading ${ZK_BUNDLE_ASSET} from the latest published release."
+              gh release download --pattern "${ZK_BUNDLE_ASSET}" --dir /tmp --clobber
+            fi
+          }
+
+          if ! download; then
+            echo "::error::Could not download ${ZK_BUNDLE_ASSET} from the release."
+            echo "::error::The PWA build stages ~97 MB of prover keys and ZKIR that are not in git and cannot be rebuilt in CI (compiler 0.33.0-rc.2 is not installable)."
+            echo "::error::Attach the bundle to the release and re-run. docs/demo/deployment.md has the command."
+            exit 1
+          fi
+          tar --zstd -xf "/tmp/${ZK_BUNDLE_ASSET}" -C .
+
+      - name: Verify the ZK artefacts against the committed manifests
+        run: node .github/workflows/scripts/verify-zk-artefacts.mjs
+
+      # zk-params are the in-tab prover's KZG SRS slices — ~45 MB fetched from a
+      # public bucket, not part of the contract build and not in the manifests.
+      # This deploy sets VITE_MIDNIGHT_PROVING_URL, so the default path uses the
+      # proof server and `prepare:zk` only warns when they are absent. They are
+      # staged anyway because `.vercel-output-exclude` does not exclude them:
+      # they ship today, and `?prover=browser` on the live site needs them.
+      - name: Stage the browser prover's parameters
+        id: zk-params-cache
+        uses: actions/cache@v4
+        with:
+          key: zk-params-${{ hashFiles('examples/passport-demo/scripts/fetch-zk-params.mjs') }}
+          path: examples/passport-demo/public/zk-params
+
+      - name: Fetch the browser prover's parameters
+        if: steps.zk-params-cache.outputs.cache-hit != 'true'
+        run: node scripts/fetch-zk-params.mjs
+        working-directory: examples/passport-demo
+
+      # ---------------------------------------------------------------------
+      # The gates. Same set verify-demo.yml runs on every pull request, run
+      # again here because a release can be cut from a merge that never had one.
+      # ---------------------------------------------------------------------
+      - name: Rebuild the demo backend the app type-checks against
+        run: npm run build --workspace passport-demo-backend
+
+      - name: Typecheck the app
+        run: npm run typecheck --workspace passport-demo
+
+      - name: Demo backend unit tests
+        run: npm run test --workspace passport-demo-backend
+
+      - name: App unit tests with coverage
+        run: npm run test:coverage --workspace passport-demo
+
+      - name: PWA manifest and build-output checks
+        run: npm run test:pwa
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: examples/passport-demo
+
+      - name: Tier-1 end-to-end
+        run: npx playwright test --project=chromium --grep-invert=@live
+        working-directory: examples/passport-demo
+
+      - name: Upload the Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: examples/passport-demo/playwright-report
+          retention-days: 7
+
+      # ---------------------------------------------------------------------
+      # Build and ship. Same two commands the manual script ran.
+      # ---------------------------------------------------------------------
+      - name: Build the production bundle
+        run: npm run build --workspace passport-demo
+
+      - name: Assemble the Vercel Build Output
+        run: node scripts/build-vercel-output.mjs examples/passport-demo
+
+      - name: Refuse to upload an empty Build Output
+        run: |
+          set -euo pipefail
+          output=examples/passport-demo/.vercel/output
+          test -f "$output/config.json" || { echo "::error::${output}/config.json is missing."; exit 1; }
+          test -f "$output/static/index.html" || { echo "::error::${output}/static/index.html is missing."; exit 1; }
+          files="$(find "$output/static" -type f | wc -l)"
+          echo "Build Output holds ${files} files, $(du -sh "$output/static" | cut -f1)."
+          if [ "$files" -lt 50 ]; then
+            echo "::error::Only ${files} files in the Build Output. A real Passport build is thousands. Refusing to upload."
+            exit 1
+          fi
+
+      - name: Install the Vercel CLI
+        run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
+
+      # `.vercel/project.json` is gitignored, so the CLI is told which project
+      # this is through the environment instead. Both ids are non-secret
+      # identifiers; they are repository secrets so that all three deploy inputs
+      # are managed in one place.
+      - name: Deploy to Vercel production
+        id: vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository secret ${name} is not set. See docs/demo/deployment.md."
+              exit 1
+            fi
+          done
+          url="$(vercel deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN")"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+          echo "Deployed ${url}"
+        working-directory: examples/passport-demo
+
+      - name: Summarise
+        run: |
+          {
+            echo "### Passport demo deployed"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Trigger | ${{ github.event_name }} ${{ github.event.release.tag_name }} |"
+            echo "| Deployment | ${{ steps.vercel.outputs.url }} |"
+            echo "| Live | https://midnightpassport.com |"
+          } >> "$GITHUB_STEP_SUMMARY"
