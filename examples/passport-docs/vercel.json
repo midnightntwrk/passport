@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/((?!assets/|llms\\.txt).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/llms.txt",
+      "headers": [{ "key": "content-type", "value": "text/plain; charset=utf-8" }]
+    }
+  ]
+}

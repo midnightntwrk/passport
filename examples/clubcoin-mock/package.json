@@ -1,0 +1,32 @@
+{
+  "name": "midnight-clubcoin-mock",
+  "version": "0.1.0",
+  "description": "A minimal ClubCoin-shaped app that exercises Midnight Passport's URL-callback profile flow: full-page redirect out, signed reply back in the URL fragment, verified in the browser with no Midnight dependency.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview --host localhost",
+    "test": "node scripts/roundtrip-drill.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.4",
+    "@noble/hashes": "^2.2.0",
+    "@scure/base": "^1.2.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@midnight-ntwrk/ledger-v8": "8.0.3",
+    "@midnight-ntwrk/wallet-sdk-address-format": "3.1.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "^0.25.12",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.0"
+  }
+}
