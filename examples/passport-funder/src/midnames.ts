@@ -60,23 +60,23 @@
 
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { nativeToken } from '@midnight-ntwrk/ledger-v8';
-import {
-  ZKConfigProvider,
-  createProverKey,
-  createVerifierKey,
-  createZKIR,
-  type ProverKey,
-  type VerifierKey,
-  type ZKIR,
-} from '@midnight-ntwrk/midnight-js-types';
 
 import type { FunderConfig } from './config.js';
-import type { ContractWalletProvider, FunderWallet } from './wallet.js';
+import {
+  CONFIRM_INTERVAL_MS,
+  DirectoryZkConfigProvider,
+  bytesToHex,
+  contractAddressBytes,
+  contractProviders,
+  hexToBytes,
+  managedBuildPath,
+  nativeColourBytes,
+  rawContractAddress,
+  resolveTransactionHash,
+  transactionIdentifier,
+  wait,
+} from './contractRuntime.js';
+import type { FunderWallet } from './wallet.js';
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
@@ -104,34 +104,12 @@ export const RESERVED_ALIASES: readonly string[] = [
   'www',
 ];
 
-/** Attempts, two seconds apart, to watch the binding appear in the registry. */
+/** Attempts, {@link CONFIRM_INTERVAL_MS} apart, to watch the binding appear. */
 const CONFIRM_ATTEMPTS = 45;
-const CONFIRM_INTERVAL_MS = 2_000;
-/** Attempts, two seconds apart, to resolve a transaction identifier to a hash. */
-const TX_HASH_ATTEMPTS = 8;
 
 /* -------------------------------------------------------------------------- */
 /* Pure helpers — copies of the demo's, and they must stay copies             */
 /* -------------------------------------------------------------------------- */
-
-function bytesToHex(value: Uint8Array): string {
-  let hex = '';
-  for (const byte of value) hex += byte.toString(16).padStart(2, '0');
-  return hex;
-}
-
-function hexToBytes(value: string): Uint8Array {
-  const normalized = value.replace(/^0x/, '');
-  if (normalized.length % 2 !== 0) throw new Error(`Odd-length hex string: ${value}`);
-  const bytes = new Uint8Array(normalized.length / 2);
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = Number.parseInt(normalized.slice(index * 2, index * 2 + 2), 16);
-  }
-  return bytes;
-}
-
-const wait = (milliseconds: number) =>
-  new Promise<void>((resolvePromise) => setTimeout(resolvePromise, milliseconds));
 
 /** `alice` -> `alice.night`. */
 export function aliasDomain(alias: string): string {
@@ -170,19 +148,6 @@ export function aliasCostAtomicNight(alias: string): bigint {
   if (length <= 3) return 600n;
   if (length === 4) return 140n;
   return 10n;
-}
-
-/** Normalises a Midnight contract address to the raw 64-hex form. */
-export function rawContractAddress(value: string): string {
-  const normalized = value.trim().toLowerCase().replace(/^0x/, '').replace(/^0200/, '');
-  if (!/^[0-9a-f]{64}$/.test(normalized)) {
-    throw new Error(`Invalid Midnight contract address: ${value}`);
-  }
-  return normalized;
-}
-
-function contractAddressBytes(value: string): Uint8Array {
-  return hexToBytes(rawContractAddress(value));
 }
 
 /**
@@ -229,38 +194,18 @@ export function ownerKeyBytes(value: string): Uint8Array {
 /* Contract artefacts                                                         */
 /* -------------------------------------------------------------------------- */
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-
 /**
- * Where the pinned Midnames build's ZK ARTEFACTS live — the prover keys,
- * verifier keys, and ZKIR that {@link DirectoryZkConfigProvider} reads. The
- * compiled contract itself is bundled, not read from here; see the note at its
- * import.
- *
- * The repository stages exactly one copy of the build —
- * `experiments/account-custody-prototype/contracts/managed/midnames`, produced
- * by that prototype's `midnames:prepare` — and every consumer reaches it rather
- * than keeping a copy that can drift.
- *
- * The candidates cover running from `dist/` (what `npm start` does) and from
- * `src/`, plus the current working directory for a harness started elsewhere.
- * `FUNDER_MIDNAMES_ASSETS` overrides all of it. `contract/index.js` is the
- * liveness probe because a directory without it is not a build at all.
+ * Where the pinned Midnames build's ZK ARTEFACTS live. `midnames:prepare` in
+ * `experiments/account-custody-prototype` produces the one copy the repository
+ * stages; `FUNDER_MIDNAMES_ASSETS` overrides the search. See
+ * {@link managedBuildPath} for the candidates and the liveness probe.
  */
 function midnamesManagedPath(configured?: string): string {
-  const candidates = configured
-    ? [configured]
-    : [
-        resolve(HERE, '..', '..', '..', 'experiments', 'account-custody-prototype', 'contracts', 'managed', 'midnames'),
-        resolve(HERE, '..', '..', '..', '..', 'experiments', 'account-custody-prototype', 'contracts', 'managed', 'midnames'),
-        resolve(process.cwd(), 'experiments', 'account-custody-prototype', 'contracts', 'managed', 'midnames'),
-      ];
-  for (const candidate of candidates) {
-    if (existsSync(resolve(candidate, 'contract', 'index.js'))) return candidate;
-  }
-  throw new Error(
-    `The pinned Midnames build was not found (looked in: ${candidates.join(', ')}). Run \`npm run midnames:prepare\` in experiments/account-custody-prototype, or set FUNDER_MIDNAMES_ASSETS.`,
-  );
+  return managedBuildPath('midnames', {
+    configured,
+    remedy:
+      'Run `npm run midnames:prepare` in experiments/account-custody-prototype, or set FUNDER_MIDNAMES_ASSETS.',
+  });
 }
 
 interface MidnamesModule {
@@ -305,75 +250,6 @@ export function decodeDomainTarget(target: MidnamesLedger['DOMAIN_TARGET']): Res
   return { kind: 'wallet', hex: bytesToHex(target.right.right.bytes) };
 }
 
-/**
- * Reads the compiled artefacts straight off disk.
- *
- * The repository has no `@midnight-ntwrk/midnight-js-node-zk-config-provider`
- * installed and the browser's `FetchZkConfigProvider` refuses anything but
- * http(s), so the twenty lines it would have supplied live here. The layout is
- * the compiler's own and the same one `FetchZkConfigProvider` assumes:
- * `keys/<circuit>.prover`, `keys/<circuit>.verifier`, `zkir/<circuit>.bzkir`.
- */
-class DirectoryZkConfigProvider extends ZKConfigProvider<string> {
-  constructor(private readonly base: string) {
-    super();
-  }
-
-  private async read(directory: string, circuitId: string, extension: string): Promise<Uint8Array> {
-    const { readFile } = await import('node:fs/promises');
-    const path = resolve(this.base, directory, `${circuitId}${extension}`);
-    return new Uint8Array(await readFile(path));
-  }
-
-  async getProverKey(circuitId: string): Promise<ProverKey> {
-    return createProverKey(await this.read('keys', circuitId, '.prover'));
-  }
-
-  async getVerifierKey(circuitId: string): Promise<VerifierKey> {
-    return createVerifierKey(await this.read('keys', circuitId, '.verifier'));
-  }
-
-  async getZKIR(circuitId: string): Promise<ZKIR> {
-    return createZKIR(await this.read('zkir', circuitId, '.bzkir'));
-  }
-}
-
-/** Session-lifetime private-state store, mirroring the demo's. */
-function inMemoryPrivateStateProvider(initial: Record<string, unknown>) {
-  const states = new Map<string, unknown>(Object.entries(initial));
-  const signingKeys = new Map<string, unknown>();
-  return {
-    setContractAddress() {},
-    async set(id: string, state: unknown) {
-      states.set(id, state);
-    },
-    async get(id: string) {
-      return states.has(id) ? states.get(id) : null;
-    },
-    async remove(id: string) {
-      states.delete(id);
-    },
-    async clear() {
-      states.clear();
-    },
-    async setSigningKey(address: string, key: unknown) {
-      signingKeys.set(address, key);
-    },
-    async getSigningKey(address: string) {
-      return signingKeys.get(address) ?? null;
-    },
-    async removeSigningKey(address: string) {
-      signingKeys.delete(address);
-    },
-    async clearSigningKeys() {
-      signingKeys.clear();
-    },
-    async exportPrivateStates(): Promise<never> {
-      throw new Error('Private-state export is not supported by the funder.');
-    },
-  };
-}
-
 /* Constructor-argument shapes the generated contract expects. */
 function maybeBytes(value?: Uint8Array): { is_some: boolean; value: Uint8Array } {
   return value ? { is_some: true, value } : { is_some: false, value: new Uint8Array(32) };
@@ -385,17 +261,6 @@ function maybeString(value?: string): { is_some: boolean; value: string } {
 
 function emptyKvs() {
   return Array.from({ length: 10 }, () => ({ is_some: false, value: ['', ''] as [string, string] }));
-}
-
-function nativeColourBytes(): Uint8Array {
-  return hexToBytes(String(nativeToken().raw));
-}
-
-function transactionIdentifier(result: unknown): string {
-  const view = result as { public?: { txId?: unknown; transactionHash?: unknown } };
-  const value = view?.public?.txId ?? view?.public?.transactionHash;
-  if (!value) throw new Error('The Midnames call returned without a transaction id.');
-  return String(value);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -514,9 +379,6 @@ export async function createMidnamesSponsor(
   const { indexerPublicDataProvider } = await import(
     '@midnight-ntwrk/midnight-js-indexer-public-data-provider'
   );
-  const { httpClientProofProvider } = await import(
-    '@midnight-ntwrk/midnight-js-http-client-proof-provider'
-  );
   const { deployContract, findDeployedContract } = await import(
     '@midnight-ntwrk/midnight-js-contracts'
   );
@@ -561,55 +423,6 @@ export async function createMidnamesSponsor(
     CompiledContract.withCompiledFileAssets(managedPath),
   );
 
-  /**
-   * Providers for one registration. Rebuilt per call because the wallet
-   * provider snapshots the wallet's shielded keys at construction, and a
-   * long-lived funder outlives any one snapshot.
-   */
-  const providersFor = async (
-    privateStateId: string,
-    walletProvider: ContractWalletProvider,
-  ) => ({
-    privateStateProvider: inMemoryPrivateStateProvider({
-      [privateStateId]: { secretKey: funderWitnessSecretHex },
-    }),
-    publicDataProvider: indexerPublicDataProvider(config.indexerHttpUrl, config.indexerWsUrl),
-    zkConfigProvider,
-    proofProvider: httpClientProofProvider(config.provingServerUrl, zkConfigProvider),
-    walletProvider,
-    midnightProvider: walletProvider,
-  });
-
-  /**
-   * midnight-js reports transaction *identifiers* (33 bytes, 66 hex chars), not
-   * the 32-byte ledger hashes explorers resolve — a link built from an
-   * identifier dies with "not found". The indexer maps one to the other. The
-   * transaction has already landed by the time this runs, so the retries only
-   * cover indexer lag; an identifier that never resolves is returned unchanged
-   * rather than replaced by a plausible-looking lie.
-   */
-  const resolveTransactionHash = async (identifier: string): Promise<string> => {
-    const query = `{ transactions(offset: { identifier: "${identifier}" }) { hash } }`;
-    for (let attempt = 0; attempt < TX_HASH_ATTEMPTS; attempt += 1) {
-      try {
-        const response = await fetch(config.indexerHttpUrl, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ query }),
-        });
-        const body = (await response.json()) as {
-          data?: { transactions?: Array<{ hash?: string }> };
-        };
-        const hash = body.data?.transactions?.[0]?.hash;
-        if (hash) return hash;
-      } catch {
-        // Transient network or parse failure — retried below.
-      }
-      await wait(CONFIRM_INTERVAL_MS);
-    }
-    return identifier;
-  };
-
   const isAvailable = async (label: string): Promise<boolean> => {
     const registry = await readLedger(tldAddress);
     if (!registry) {
@@ -652,8 +465,12 @@ export async function createMidnamesSponsor(
       const contractAddress = rawContractAddress(request.contractAddress);
       const { key: labelKey, len } = domainToKey(label);
       const privateStateId = `passport-funder-midnames-${label}`;
-      const walletProvider = await wallet.contractWalletProvider();
-      const providers = await providersFor(privateStateId, walletProvider);
+      const providers = await contractProviders(config, {
+        privateStateId,
+        initialPrivateState: { secretKey: funderWitnessSecretHex },
+        zkConfigProvider,
+        walletProvider: await wallet.contractWalletProvider(),
+      });
 
       /* The leaf's TARGET is the user's account-custody contract:
          `AddressType.ContractAddr` puts those 32 bytes in the LEFT branch of
@@ -754,8 +571,8 @@ export async function createMidnamesSponsor(
       }
 
       const [deployHash, registerHash] = await Promise.all([
-        resolveTransactionHash(resolverDeployTx),
-        resolveTransactionHash(registerTx),
+        resolveTransactionHash(config.indexerHttpUrl, resolverDeployTx),
+        resolveTransactionHash(config.indexerHttpUrl, registerTx),
       ]);
 
       return {
