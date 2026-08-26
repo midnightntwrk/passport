@@ -1,0 +1,166 @@
+/* ClubCoin — deliberately its own look, not Passport's and not Midnight's.
+   A receiving app is a stranger, and a demo that dresses the stranger in the
+   wallet's clothes teaches the wrong lesson about who is asking whom. */
+
+:root {
+  --ink: #10131a;
+  --paper: #f4f4f1;
+  --panel: #ffffff;
+  --line: #d8d8d2;
+  --muted: #61646d;
+  --accent: #1d4ed8;
+  --ok: #12693f;
+  --warn: #8a4b00;
+  --bad: #a4171a;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #eef0f4;
+    --paper: #0b0d12;
+    --panel: #14171f;
+    --line: #2a2f3a;
+    --muted: #99a0ad;
+    --accent: #7aa2ff;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.club {
+  display: grid;
+  gap: 18px;
+  width: min(660px, 100%);
+  margin: 0 auto;
+  padding: 28px 20px 64px;
+}
+
+.club-bar { display: flex; align-items: center; gap: 14px; }
+.club-bar h1 { margin: 0; font-size: 21px; letter-spacing: -.01em; }
+.club-bar p { margin: 0; color: var(--muted); font-size: 13px; }
+
+.club-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(140deg, #1d4ed8, #7c3aed);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.card {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.card h2 { margin: 6px 0 0; font-size: 24px; line-height: 1.25; letter-spacing: -.015em; }
+
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.lede { margin: 14px 0 0; color: var(--muted); }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+
+.verdict { margin: 14px 0 0; padding: 11px 13px; border-left: 3px solid; border-radius: 0 8px 8px 0; font-size: 13px; }
+.verdict.ok { border-color: var(--ok); color: var(--ok); }
+.verdict.warn { border-color: var(--warn); color: var(--warn); }
+
+.fields {
+  display: grid;
+  grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 18px 0 0;
+  font-size: 13px;
+}
+.fields dt { color: var(--muted); }
+.fields dd { margin: 0; overflow-wrap: anywhere; }
+
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+pre {
+  margin: 8px 0 0;
+  padding: 11px 12px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.actions { display: flex; gap: 10px; margin-top: 22px; }
+
+button {
+  min-height: 42px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+button.primary { color: #fff; background: var(--accent); }
+button.ghost { color: var(--ink); background: transparent; border-color: var(--line); }
+button.link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  color: var(--accent);
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.checks { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.checks ul { display: grid; gap: 7px; margin: 12px 0 0; padding: 0; list-style: none; }
+.checks li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 4px 9px;
+  font-size: 13px;
+}
+.checks li code { grid-column: 2; color: var(--muted); overflow-wrap: anywhere; }
+.checks li.ok > span:first-child { color: var(--ok); }
+.checks li.bad { color: var(--bad); }
+
+.config label { display: block; margin: 16px 0 6px; color: var(--muted); font-size: 12px; }
+.config input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: inherit;
+  background: var(--paper);
+  font: inherit;
+  font-size: 13px;
+}

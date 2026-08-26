@@ -1,0 +1,911 @@
+@import './tokens.css';
+
+/* Apps screen and in-Passport app browser — prefix "mnapps-".
+   Base-inspired Midnight direction: one electric-blue accent, soft
+   rounded cards on airy surfaces, diffuse vertical shadows, hairline
+   borders, mobile-first at ~390px. Every colour, radius, and shadow
+   comes from tokens.css.
+
+   Apps shares the Home screen's surface system exactly — same page value,
+   same card and raised values, same hairlines — so moving between the two
+   tabs is a change of content, not a change of theme. */
+
+/* ---------------------------------------------------------------- list view */
+
+.mnapps-screen {
+  min-height: 100svh;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
+  padding:
+    env(safe-area-inset-top) max(20px, env(safe-area-inset-right))
+    calc(var(--mn-nav-height) + max(18px, env(safe-area-inset-bottom))) max(20px, env(safe-area-inset-left));
+  animation: mnapps-in .35s ease-out both;
+}
+
+/* Top bar — the same anatomy as Home's, so the two tabs share one page
+   skeleton and the theme control is reachable from either. */
+.mnapps-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+  background: var(--mn-surface-page);
+}
+.mnapps-wordmark {
+  width: 96px;
+  height: auto;
+  filter: var(--mn-wordmark-filter);
+}
+.mnapps-bar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.mnapps-head { padding: 16px 0 24px; }
+.mnapps-kicker {
+  margin: 0 0 14px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.mnapps-title {
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  font-size: clamp(44px, 13vw, 62px);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: .95;
+}
+.mnapps-lede {
+  max-width: 420px;
+  margin: 16px 0 0;
+  color: var(--mn-text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Search — a rounded grey-wash field on the white page. */
+.mnapps-search {
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 0 15px;
+  border: var(--mn-hairline) solid transparent;
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-muted);
+  background: var(--mn-surface-card);
+  transition: border-color .15s ease, background .15s ease;
+}
+.mnapps-search:focus-within {
+  border-color: var(--mn-accent);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+}
+.mnapps-search input {
+  min-width: 0;
+  height: 44px;
+  border: 0;
+  color: var(--mn-text-primary);
+  background: transparent;
+  font-family: inherit;
+  /* 16px is the floor below which iOS Safari zooms the viewport on focus —
+     and never zooms it back out on blur. Do not shrink this. */
+  font-size: 16px;
+}
+.mnapps-search input:focus { outline: none; }
+.mnapps-search input::placeholder { color: var(--mn-text-muted); }
+.mnapps-search input::-webkit-search-cancel-button { display: none; }
+.mnapps-search-clear {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+}
+.mnapps-search-clear:hover { background: var(--mn-surface-hover); }
+/* Touch slop: the drawn circle stays 28px, but taps land on a 44px
+   effective target. The ::after belongs to the button, so it activates it. */
+.mnapps-search-clear::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+/* Status rows */
+.mnapps-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 16px 0 0;
+  padding: 12px 15px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-card);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mnapps-status-stale {
+  flex-wrap: wrap;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-md);
+}
+.mnapps-status-stale span { flex: 1 1 190px; }
+.mnapps-retry {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+}
+.mnapps-retry:hover { background: var(--mn-surface-hover); }
+
+/* Sections and cards */
+.mnapps-section { margin-top: 30px; }
+/* The compact grid the Home screen embeds: the Home column already spaces its
+   children, so the section brings no margin of its own there. */
+.mnapps-section.mnapps-embedded { margin-top: 0; }
+.mnapps-section-label {
+  margin: 0 0 12px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.mnapps-list { display: grid; gap: 10px; }
+
+/* Featured takes a soft accent wash so the shelf reads as curated without
+   shouting — the cards inside stay on their normal raised surface. */
+.mnapps-section[aria-labelledby='mnapps-featured'] {
+  padding: 14px;
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-accent-soft);
+}
+.mnapps-section[aria-labelledby='mnapps-featured'] .mnapps-section-label {
+  color: var(--mn-accent-ink);
+}
+
+.mnapps-card {
+  width: 100%;
+  min-height: 84px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  text-align: left;
+  box-shadow: var(--mn-shadow-sm);
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+
+/* --- The illustrated raffle card ---------------------------------------- */
+/* One extra grid row, bleeding to the card's edges, holding the inline
+   drawing. Tokens only, so it reads in both themes. */
+.mnapps-card-illustrated {
+  grid-template-columns: minmax(0, 1fr) 16px;
+  row-gap: 12px;
+}
+.mnapps-card-art {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  height: 96px;
+  margin: -14px -14px 0;
+  border-radius: var(--mn-radius) var(--mn-radius) 0 0;
+  background: var(--mn-accent-soft);
+  overflow: hidden;
+}
+.mnapps-card-art .mnraffle-art { width: 152px; height: auto; }
+
+/* --- Raffle illustration ------------------------------------------------- */
+.mnraffle-plate { fill: var(--mn-surface-raised); }
+.mnraffle-edge {
+  fill: none;
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-opacity: .75;
+}
+.mnraffle-tear {
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-opacity: .5;
+}
+.mnraffle-rules {
+  stroke: var(--mn-text-muted);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-opacity: .55;
+}
+.mnraffle-spark {
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.mnraffle-halo {
+  fill: none;
+  stroke: var(--mn-accent-ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+  stroke-opacity: .55;
+}
+
+/* Hover polish only where a hover state truly exists — a touch screen must
+   never be left with a stuck lifted card after a tap. */
+@media (hover: hover) {
+  .mnapps-card:hover { box-shadow: var(--mn-shadow-md); transform: translateY(-2px); }
+}
+/* Press acknowledgement must land inside the tap itself, so it runs faster
+   than the .15s hover transition. */
+.mnapps-card:active {
+  box-shadow: var(--mn-shadow-sm);
+  transform: scale(.98);
+  transition-duration: .1s;
+}
+.mnapps-card-copy { min-width: 0; display: grid; gap: 5px; }
+.mnapps-card-copy strong { font-size: 14px; font-weight: 600; }
+.mnapps-card-copy small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--mn-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+/* One line, always: the card renders at most two network pills plus a "+N"
+   overflow pill, so nothing wraps and neighbouring cards stay the same height. */
+/* 1px right padding keeps the '+N' overflow pill's own border from being
+   clipped by the overflow:hidden crop. */
+.mnapps-card-meta { display: flex; flex-wrap: nowrap; gap: 6px; margin-top: 2px; overflow: hidden; padding-right: 1px; }
+.mnapps-card-arrow { justify-self: end; color: var(--mn-text-muted); }
+@media (hover: hover) {
+  .mnapps-card:hover .mnapps-card-arrow { color: var(--mn-accent-ink); }
+}
+
+.mnapps-pill,
+.mnapps-tag {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+/* Network pills are metadata, not status: dimmer than the NEW tag so the
+   taxonomy reads at a glance. */
+.mnapps-pill { color: var(--mn-text-muted); }
+.mnapps-tag {
+  border-color: var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  font-weight: 700;
+}
+
+/* App icon — third-party marks arrive with their own shapes and backgrounds
+   (rounded squircles, black tiles, wide wordmarks), so every one is
+   CONTAINED, padded, and framed on the same neutral LIGHT plate in both
+   themes: brand colours show, and the shared white tile is what makes the
+   list read as one set. */
+.mnapps-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  overflow: hidden;
+  flex: 0 0 auto;
+  place-items: center;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-sm);
+  /* Literal white on purpose: the plate stays light in dark mode too,
+     because the icons were drawn for light grounds. */
+  background: #ffffff;
+}
+.mnapps-icon img {
+  width: 100%;
+  height: 100%;
+  padding: 5px;
+  object-fit: contain;
+  filter: var(--mn-app-icon-filter);
+}
+.mnapps-icon-letter {
+  /* Near-black to match the always-light plate, in both themes. */
+  color: #0a0b0d;
+  font-family: var(--mn-font-display);
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.mnapps-empty {
+  margin: 26px 0 0;
+  padding: 22px 16px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-card);
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.mnapps-note {
+  max-width: 460px;
+  margin: 34px 0 0;
+  padding: 14px 16px;
+  border-left: 3px solid var(--mn-accent);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-card);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* ------------------------------------------------------------ app browser */
+
+/* The browser chrome is Passport's own frame around third-party content, so
+   it stays on the theme's surfaces rather than a fixed dark bar — the user
+   should never lose track of which app they are in. */
+.mnapps-browser {
+  position: fixed;
+  z-index: 130;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
+  /* Backwards fill, never forwards: a persisting transform would make this
+     element the containing block for the fixed sheet backdrop inside it —
+     the same trap the portal in AppBrowser.tsx exists to escape. */
+  animation: mnapps-browser-in .26s cubic-bezier(.22, 1, .36, 1) backwards;
+}
+/* Exit mirrors the open, shorter; AppBrowser defers onClose by the same
+   200ms, so the two durations must move together. */
+.mnapps-browser-closing {
+  animation: mnapps-browser-out .2s cubic-bezier(.3, 0, .8, .15) both;
+  pointer-events: none;
+}
+
+/* A rounded floating bar, lifted off the page by the soft shadow scale. */
+.mnapps-chrome {
+  display: grid;
+  grid-template-columns: 40px 30px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 11px;
+  margin:
+    calc(8px + env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 8px
+    max(10px, env(safe-area-inset-left));
+  padding: 7px 9px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-md);
+}
+.mnapps-chrome-button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-primary);
+  background: transparent;
+}
+.mnapps-chrome-button:hover:not(:disabled) { background: var(--mn-surface-hover); }
+.mnapps-icon-chrome { width: 30px; height: 30px; }
+.mnapps-icon-chrome img { padding: 3px; }
+.mnapps-icon-chrome.mnapps-icon-letter { font-size: 13px; }
+.mnapps-chrome-copy { min-width: 0; display: grid; gap: 2px; }
+.mnapps-chrome-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mnapps-chrome-copy code {
+  overflow: hidden;
+  color: var(--mn-text-muted);
+  font-family: var(--mn-font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mnapps-frame-wrap { position: relative; flex: 1; min-height: 0; background: var(--mn-surface-sunken); }
+.mnapps-frame { width: 100%; height: 100%; border: 0; display: block; }
+
+.mnapps-frame-invalid {
+  height: 100%;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 12px;
+  padding: 28px 24px;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+}
+.mnapps-frame-invalid p { max-width: 340px; margin: 0; font-size: 13px; line-height: 1.55; }
+
+.mnapps-frame-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-page);
+  font-size: 12px;
+  font-weight: 600;
+}
+.mnapps-spinner { animation: mnapps-spin 1s linear infinite; }
+
+.mnapps-hint {
+  position: absolute;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  left: max(14px, env(safe-area-inset-left));
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-md);
+}
+.mnapps-hint p { grid-column: 2 / -1; margin: 0; font-size: 12px; line-height: 1.45; }
+.mnapps-hint-open {
+  position: relative;
+  grid-column: 3;
+  min-height: 32px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.mnapps-hint-open:hover { background: var(--mn-accent-hover); }
+/* Same 44px effective touch target as the dismiss beside it. */
+.mnapps-hint-open::after {
+  content: '';
+  position: absolute;
+  inset: -6px -4px;
+}
+.mnapps-hint-dismiss {
+  position: relative;
+  grid-column: 4;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+}
+.mnapps-hint-dismiss:hover:not(:disabled) { background: var(--mn-surface-hover); }
+/* Touch slop to a 44px effective target. Vertical is generous; horizontal is
+   half the hint grid's gap, so it never overlaps the Open button beside it. */
+.mnapps-hint-dismiss::after {
+  content: '';
+  position: absolute;
+  inset: -6px -4px;
+}
+
+/* ----------------------------------------------------------- consent sheet */
+
+.mnapps-sheet-backdrop {
+  position: fixed;
+  z-index: 140;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  padding: 0;
+  background: var(--mn-scrim);
+  animation: mnapps-in .2s ease-out both;
+}
+.mnapps-sheet {
+  width: 100%;
+  max-height: 92svh;
+  overflow-y: auto;
+  padding:
+    14px max(20px, env(safe-area-inset-right))
+    calc(22px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  border-radius: var(--mn-radius-lg) var(--mn-radius-lg) 0 0;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-lg);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
+  animation: mnapps-sheet-in .28s cubic-bezier(.16, 1, .3, 1) both;
+}
+/* Bottom-sheet grab handle — decorative only; the sheet is dismissed by
+   its buttons and Escape, exactly as before. */
+.mnapps-sheet::before {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 16px;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-border-medium);
+}
+
+.mnapps-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding-bottom: 18px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnapps-sheet-head p {
+  margin: 0;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.mnapps-sheet-head h2 {
+  margin: 5px 0 0;
+  font-family: var(--mn-font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.05;
+}
+.mnapps-sheet-mark {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+}
+
+.mnapps-sheet-origin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  color: var(--mn-text-secondary);
+}
+.mnapps-sheet-origin code {
+  overflow-wrap: anywhere;
+  font-family: var(--mn-font-mono);
+  font-size: 12px;
+}
+.mnapps-sheet-origin small {
+  padding: 3px 9px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-secondary);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mnapps-sheet-copy { margin: 16px 0 0; font-size: 13px; line-height: 1.55; }
+
+.mnapps-sheet-fields {
+  display: grid;
+  margin: 14px 0 0;
+  padding: 0;
+  border-top: var(--mn-hairline) solid var(--mn-border-hairline);
+  list-style: none;
+}
+.mnapps-sheet-fields li { border-bottom: var(--mn-hairline) solid var(--mn-border-hairline); }
+.mnapps-field {
+  width: 100%;
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 8px;
+  border: 0;
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-primary);
+  background: transparent;
+  text-align: left;
+}
+.mnapps-field:hover:not(:disabled) { background: var(--mn-accent-soft); }
+.mnapps-field-box {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-sm);
+  color: transparent;
+  background: transparent;
+}
+.mnapps-field-box-on {
+  border-color: var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+}
+.mnapps-field-copy { min-width: 0; display: grid; gap: 4px; }
+.mnapps-field-copy strong { font-size: 13px; font-weight: 600; }
+.mnapps-field-copy small { color: var(--mn-text-secondary); font-size: 12px; line-height: 1.45; }
+/* The value itself, quoted so consent shows what will actually be shared. */
+.mnapps-field-value {
+  color: var(--mn-text-primary);
+  font-size: 12.5px;
+  font-style: normal;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.mnapps-sheet-boundary {
+  margin: 18px 0 0;
+  padding: 13px 15px;
+  border-left: 3px solid var(--mn-accent);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-card);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.mnapps-sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+.mnapps-button-ghost,
+.mnapps-button-solid,
+.mnapps-sheet-done {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: var(--mn-hairline) solid transparent;
+  border-radius: var(--mn-radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background .12s ease, box-shadow .12s ease, transform .06s ease;
+}
+.mnapps-button-ghost {
+  border-color: var(--mn-border-medium);
+  color: var(--mn-text-primary);
+  background: transparent;
+}
+.mnapps-button-ghost:hover:not(:disabled) { background: var(--mn-surface-hover); }
+.mnapps-button-solid,
+.mnapps-sheet-done {
+  border-color: var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  box-shadow: var(--mn-shadow-accent);
+}
+.mnapps-button-solid:hover:not(:disabled),
+.mnapps-sheet-done:hover {
+  border-color: var(--mn-accent-hover);
+  background: var(--mn-accent-hover);
+}
+.mnapps-button-solid:active:not(:disabled),
+.mnapps-sheet-done:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+/* Deliberate opt-in: every box starts unticked, so this button mounts
+   disabled. Style that state explicitly — a hollow, muted control that
+   plainly reads "not yet available" — rather than letting the legacy
+   global `button:disabled { opacity: .42 }` dim the solid pill. */
+.mnapps-button-solid:disabled {
+  border-color: var(--mn-border-medium);
+  color: var(--mn-text-muted);
+  background: transparent;
+  box-shadow: none;
+  opacity: 1;
+}
+
+/* ------------------------------------------------- transaction approval rows */
+
+/* One row per fact the user is agreeing to. Deliberately a definition list:
+   the amount, the purpose, the recipient, and the balance are data about the
+   transaction, not a form. */
+.mnapps-tx-rows {
+  display: grid;
+  margin: 16px 0 0;
+  padding: 0;
+  border-top: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnapps-tx-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  padding: 13px 2px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnapps-tx-row dt {
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mnapps-tx-row dd {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.mnapps-tx-row dd small { color: var(--mn-text-secondary); font-size: 11px; }
+/* The amount is the one number that decides the answer, so it is the only
+   display-type on the sheet. */
+.mnapps-tx-row-amount dd strong {
+  font-family: var(--mn-font-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.05;
+}
+.mnapps-tx-row-amount dd small { font-family: var(--mn-font-mono); }
+
+.mnapps-tx-recipient {
+  display: grid;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+.mnapps-tx-recipient code {
+  font-family: var(--mn-font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.mnapps-tx-recipient small { color: var(--mn-accent); font-size: 11px; font-weight: 600; }
+
+.mnapps-tx-hash {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--mn-font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.mnapps-tx-explorer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--mn-accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.mnapps-tx-explorer:hover { text-decoration: underline; }
+
+.mnapps-sheet-outcome {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  padding-top: 20px;
+}
+.mnapps-sheet-outcome p {
+  margin: 2px 0 0;
+  color: var(--mn-text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.mnapps-sheet-done { grid-column: 1 / -1; margin-top: 6px; }
+
+/* ---------------------------------------------------------------- motion */
+
+@keyframes mnapps-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mnapps-fade-out { to { opacity: 0; } }
+@keyframes mnapps-spin { to { transform: rotate(360deg); } }
+/* No overshoot anywhere in these curves: this is a wallet, and the browser
+   frames a payment surface — the motion must read as precise, not playful. */
+@keyframes mnapps-browser-in {
+  from { opacity: 0; transform: scale(.97); }
+}
+@keyframes mnapps-browser-out {
+  to { opacity: 0; transform: scale(.97); }
+}
+@keyframes mnapps-sheet-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mnapps-screen,
+  .mnapps-sheet-backdrop,
+  .mnapps-sheet { animation: none; }
+  /* Fades only — no transform. The close fade must still exist, because
+     AppBrowser unmounts on a timer that assumes an exit is playing. */
+  .mnapps-browser { animation: mnapps-in .15s ease-out backwards; }
+  .mnapps-browser-closing { animation: mnapps-fade-out .15s ease-in both; }
+  .mnapps-card,
+  .mnapps-card:hover,
+  .mnapps-card:active { transition: none; transform: none; }
+  .mnapps-spinner { animation-duration: 2.4s; }
+}
+
+@media (min-width: 700px) {
+  .mnapps-screen { padding-right: max(32px, env(safe-area-inset-right)); padding-left: max(32px, env(safe-area-inset-left)); }
+  .mnapps-head,
+  .mnapps-search,
+  .mnapps-section,
+  .mnapps-status,
+  .mnapps-empty,
+  .mnapps-note { max-width: 620px; }
+  .mnapps-sheet-backdrop { place-items: center; padding: 24px; }
+  .mnapps-sheet {
+    width: min(520px, 100%);
+    padding: 26px;
+    border: var(--mn-hairline) solid var(--mn-border-hairline);
+    border-radius: var(--mn-radius-lg);
+    box-shadow: var(--mn-shadow-lg);
+  }
+  /* Centred dialog, not a bottom sheet — no grab handle. */
+  .mnapps-sheet::before { display: none; }
+}
+
+/* Centred content column: the screen previously let every section stretch the
+   full viewport width, which read as unfinished on anything wider than a
+   phone. Each direct child is constrained and centred; at tablet widths the
+   app lists become two columns. */
+.mnapps-screen > * {
+  width: 100%;
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 700px) {
+  .mnapps-screen > * { max-width: 720px; }
+  .mnapps-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .mnapps-head { text-align: left; }
+}

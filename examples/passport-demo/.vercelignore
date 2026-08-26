@@ -1,0 +1,15 @@
+# Vercel CLI upload rules for the Passport demo.
+#
+# Deployments are PREBUILT (`vercel deploy --prebuilt`), so the only tree the
+# CLI ever uploads is `.vercel/output`. This file still has to exist: with no
+# .vercelignore the CLI falls back to .gitignore, and .gitignore excludes
+# precisely the trees the deployed demo must serve — `public/zk/**` (Compact
+# proving keys) and `dist/` — because they are built locally and cannot be
+# reproduced on a Vercel builder. Its presence takes .gitignore out of the
+# decision entirely.
+#
+# The entries below only bite if someone runs a non-prebuilt `vercel deploy`.
+
+node_modules
+.env
+.env.local

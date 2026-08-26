@@ -1,0 +1,12 @@
+# dist-relative paths that scripts/build-vercel-output.mjs leaves out of the
+# uploaded Build Output. This is our own file — Vercel's vercel.json schema
+# rejects unknown keys, so the list cannot live there.
+#
+# `zk/account` used to be listed here on the grounds that a public deployment
+# never deploys an account-custody contract. It has, since names bind to the
+# ACC: every onboarding deploys one, and without these keys the live site
+# failed at "Failed to read verifier key for passport-account#deposit_night"
+# (caught by the browser walk, 2026/08/24). Both circuit trees ship now.
+
+# Self-ignoring marker written into public/zk-params by fetch-zk-params.mjs.
+zk-params/.gitignore

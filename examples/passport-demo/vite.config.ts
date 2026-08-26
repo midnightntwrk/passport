@@ -163,5 +163,27 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    rollupOptions: {
+      /* TWO entry points, and the second one is not part of the product.
+         `verify/index.html` is the step verifier — a read-only operator page
+         that walks one Passport account's onboarding against the stagenet
+         indexer, for review calls. Stagenet publishes no block explorer, so it
+         is the only way to check a step against the chain.
+
+         It is a Vite input rather than a file under `public/` for one reason:
+         reading a `.night` name back to an account contract means decoding the
+         registry's ledger, which needs the compiled Midnames contract and
+         `@midnight-ntwrk/compact-runtime`, and nothing served straight out of
+         `public/` can import from `node_modules`. Naming it `verify/index.html`
+         rather than `verify.html` keeps the built path at
+         `dist/verify/index.html`, so the URL stays `/verify/`.
+
+         Nothing in the app links to it, and `public/sw.js` deliberately does
+         not cache it. */
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        verify: path.resolve(__dirname, 'verify', 'index.html'),
+      },
+    },
   },
 });

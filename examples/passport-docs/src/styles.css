@@ -1,0 +1,815 @@
+/* Midnight Passport Docs — standalone stylesheet.
+ *
+ * DESIGN LANGUAGE — the Passport app's own, not merely the Hub's.
+ * The token values below are copied from the wallet's single source of truth,
+ * examples/passport-demo/src/screens/tokens.css ("Midnight, Base-inspired"):
+ * one electric blue accent (#0052FF) doing all the accent work, a white page
+ * with grey-wash cards in light, near-black surfaces in dark, the 8/12/16/20/
+ * pill radius scale, soft always-vertical shadows, the Inter system stack,
+ * and 11px caps micro-labels. Where the Hub and the Passport app diverge
+ * (dark accent-hover, sunken surfaces, shadow depth), the Passport app wins.
+ *
+ * Theme mechanism mirrors the app's lib/theme.ts: light and dark are applied
+ * via [data-theme] on <html>; when NO attribute is present the operating
+ * system's preference wins through the media block below. The docs' own
+ * default is the system theme (src/theme.ts).
+ *
+ * The entrance animation follows the Hub's approach (examples/passport-app-
+ * hub/src/styles.css): CSS-only, compositor-friendly (transform + opacity
+ * only), `from`-only keyframes so finished animations release their values,
+ * `backwards` fill to hide elements through their delay, a critically damped
+ * linear() spring with no overshoot, and a full reset under
+ * prefers-reduced-motion. */
+
+:root {
+  /* Type — one neo-grotesque stack, from tokens.css. */
+  --mn-font-body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --mn-font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --mn-numeric: tabular-nums lining-nums;
+
+  /* Accent — the one hue. */
+  --mn-accent: #0052ff;
+  --mn-accent-text: #ffffff;
+
+  /* Geometry — the wallet's radius scale. */
+  --mn-radius-sm: 8px;
+  --mn-radius-md: 12px;
+  --mn-radius: 16px;
+  --mn-radius-lg: 20px;
+  --mn-radius-pill: 999px;
+
+  --docs-topbar-height: 60px;
+
+  /* Spring-flavoured ease for entrance rises: critically damped, no
+     overshoot — same curve family as the Hub's --hub-spring. */
+  --docs-spring: linear(
+    0,
+    0.062,
+    0.222,
+    0.424,
+    0.606,
+    0.746,
+    0.847,
+    0.916,
+    0.96,
+    0.985,
+    0.996,
+    0.999,
+    1
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* Light — the default (tokens.css light block)                      */
+/* ---------------------------------------------------------------- */
+
+:root,
+:root[data-theme='light'] {
+  --mn-surface-sunken: #eceef2;
+  --mn-surface-page: #ffffff;
+  --mn-surface-card: #f5f6f8;
+  --mn-surface-raised: #ffffff;
+  --mn-surface-hover: rgba(10, 11, 13, 0.05);
+  --mn-surface-active: rgba(10, 11, 13, 0.09);
+
+  --mn-text-primary: #0a0b0d;
+  --mn-text-secondary: #464b55;
+  --mn-text-muted: #5b616e;
+
+  --mn-accent-hover: #0043d6;
+  --mn-accent-soft: rgba(0, 82, 255, 0.08);
+  --mn-accent-ink: #0040cc;
+
+  --mn-border-hairline: #e2e6eb;
+  --mn-border-medium: #c7cdd6;
+
+  --mn-shadow-sm: 0 1px 2px rgba(10, 11, 13, 0.04), 0 2px 8px rgba(10, 11, 13, 0.07);
+  --mn-shadow-md: 0 2px 4px rgba(10, 11, 13, 0.05), 0 8px 24px rgba(10, 11, 13, 0.07);
+  --mn-shadow-accent: 0 6px 20px rgba(0, 82, 255, 0.3);
+
+  --mn-focus-ring: var(--mn-accent);
+}
+
+/* ---------------------------------------------------------------- */
+/* Dark — explicit (tokens.css dark block)                           */
+/* ---------------------------------------------------------------- */
+
+:root[data-theme='dark'] {
+  --mn-surface-sunken: #050608;
+  --mn-surface-page: #0a0b0d;
+  --mn-surface-card: #16181d;
+  --mn-surface-raised: #1e2127;
+  --mn-surface-hover: rgba(247, 249, 252, 0.06);
+  --mn-surface-active: rgba(247, 249, 252, 0.11);
+
+  --mn-text-primary: #f7f9fc;
+  --mn-text-secondary: #b4bac6;
+  --mn-text-muted: #8a919e;
+
+  --mn-accent-hover: #2f66f0;
+  --mn-accent-soft: rgba(61, 119, 255, 0.16);
+  --mn-accent-ink: #7da2ff;
+
+  --mn-border-hairline: #23262c;
+  --mn-border-medium: #3a3f48;
+
+  --mn-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.55);
+  --mn-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45), 0 10px 28px rgba(0, 0, 0, 0.55);
+  --mn-shadow-accent: 0 6px 22px rgba(0, 82, 255, 0.42);
+
+  --mn-focus-ring: var(--mn-accent-hover);
+}
+
+/* ---------------------------------------------------------------- */
+/* Dark — inherited from the operating system                        */
+/* Wins only when src/theme.ts has recorded no explicit choice and   */
+/* therefore left the data-theme attribute off (mirrors tokens.css). */
+/* ---------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='dark']) {
+    --mn-surface-sunken: #050608;
+    --mn-surface-page: #0a0b0d;
+    --mn-surface-card: #16181d;
+    --mn-surface-raised: #1e2127;
+    --mn-surface-hover: rgba(247, 249, 252, 0.06);
+    --mn-surface-active: rgba(247, 249, 252, 0.11);
+
+    --mn-text-primary: #f7f9fc;
+    --mn-text-secondary: #b4bac6;
+    --mn-text-muted: #8a919e;
+
+    --mn-accent-hover: #2f66f0;
+    --mn-accent-soft: rgba(61, 119, 255, 0.16);
+    --mn-accent-ink: #7da2ff;
+
+    --mn-border-hairline: #23262c;
+    --mn-border-medium: #3a3f48;
+
+    --mn-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.55);
+    --mn-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45), 0 10px 28px rgba(0, 0, 0, 0.55);
+    --mn-shadow-accent: 0 6px 22px rgba(0, 82, 255, 0.42);
+
+    --mn-focus-ring: var(--mn-accent-hover);
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Base                                                              */
+/* ---------------------------------------------------------------- */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* Anchored headings land clear of the sticky bar. */
+  scroll-padding-top: calc(var(--docs-topbar-height) + 16px);
+}
+
+body {
+  background: var(--mn-surface-page);
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 3px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Entrance animation                                                */
+/* ---------------------------------------------------------------- */
+
+@keyframes docs-rise {
+  from {
+    transform: translateY(12px) scale(0.985);
+  }
+}
+
+@keyframes docs-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.docs-article-head {
+  animation:
+    docs-rise 450ms var(--docs-spring) backwards,
+    docs-fade 350ms ease-out backwards;
+}
+
+.docs-nav-item {
+  animation:
+    docs-rise 400ms var(--docs-spring) backwards,
+    docs-fade 300ms ease-out backwards;
+  animation-delay: calc(120ms + min(calc(var(--i, 0) * 40ms), 400ms));
+}
+
+/* Prose children stagger in — a short fixed ladder rather than a per-item
+   delay, so long pages never feel slow: everything from the sixth child on
+   shares one delay, the equivalent of the Hub's 600 ms stagger cap. */
+.docs-prose > * {
+  animation:
+    docs-rise 420ms var(--docs-spring) backwards,
+    docs-fade 320ms ease-out backwards;
+  animation-delay: 380ms;
+}
+
+.docs-prose > *:nth-child(1) { animation-delay: 180ms; }
+.docs-prose > *:nth-child(2) { animation-delay: 220ms; }
+.docs-prose > *:nth-child(3) { animation-delay: 260ms; }
+.docs-prose > *:nth-child(4) { animation-delay: 300ms; }
+.docs-prose > *:nth-child(5) { animation-delay: 340ms; }
+.docs-prose > *:nth-child(n + 6) { animation-delay: 380ms; }
+
+.docs-pager,
+.docs-footer {
+  animation: docs-fade 320ms ease-out 420ms backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-article-head,
+  .docs-nav-item,
+  .docs-prose > *,
+  .docs-pager,
+  .docs-footer {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Top bar                                                           */
+/* ---------------------------------------------------------------- */
+
+.docs-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--mn-surface-page) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--mn-border-hairline);
+}
+
+.docs-topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 20px;
+  height: var(--docs-topbar-height);
+}
+
+.docs-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--mn-text-primary);
+  min-width: 0;
+}
+
+/* A quiet product mark: the accent dot — no borrowed logo geometry. */
+.docs-brand-mark {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--mn-accent);
+  box-shadow: 0 0 0 4px var(--mn-accent-soft);
+}
+
+.docs-brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.docs-brand-name span {
+  color: var(--mn-text-muted);
+  font-weight: 600;
+}
+
+.docs-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Icon buttons — the wallet's 34px control height, md radius. */
+.docs-iconbutton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: var(--mn-radius-md);
+  border: 1px solid var(--mn-border-hairline);
+  background: var(--mn-surface-raised);
+  color: var(--mn-text-secondary);
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
+}
+
+.docs-iconbutton:hover {
+  background: var(--mn-surface-hover);
+  color: var(--mn-text-primary);
+}
+
+/* Copy for AI — the primary pill, accent blue with the reserved glow. */
+.docs-copyai {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: var(--mn-radius-pill);
+  border: 1px solid var(--mn-accent);
+  background: var(--mn-accent);
+  color: var(--mn-accent-text);
+  font-family: var(--mn-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  cursor: pointer;
+  box-shadow: var(--mn-shadow-accent);
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.docs-copyai:hover {
+  background: var(--mn-accent-hover);
+  border-color: var(--mn-accent-hover);
+  transform: translateY(-1px);
+}
+
+.docs-copyai-done,
+.docs-copyai-done:hover {
+  background: var(--mn-accent-ink);
+  border-color: var(--mn-accent-ink);
+  transform: none;
+}
+
+.docs-navtoggle {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- */
+/* Frame: sticky nav + main                                          */
+/* ---------------------------------------------------------------- */
+
+.docs-frame {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  gap: 40px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px 20px 64px;
+}
+
+.docs-nav {
+  position: sticky;
+  top: calc(var(--docs-topbar-height) + 24px);
+  align-self: start;
+  max-height: calc(100vh - var(--docs-topbar-height) - 48px);
+  overflow-y: auto;
+}
+
+.docs-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.docs-nav-link {
+  display: block;
+  padding: 8px 12px;
+  border-radius: var(--mn-radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mn-text-secondary);
+  text-decoration: none;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
+}
+
+.docs-nav-link:hover {
+  background: var(--mn-surface-hover);
+  color: var(--mn-text-primary);
+}
+
+/* The active tab takes the wallet's emphasis surface: accent + white. */
+.docs-nav-link-active,
+.docs-nav-link-active:hover {
+  background: var(--mn-accent);
+  color: var(--mn-accent-text);
+}
+
+.docs-nav-sublist {
+  list-style: none;
+  margin: 4px 0 10px;
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--mn-border-hairline);
+  margin-left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.docs-nav-sublink {
+  display: block;
+  padding: 5px 10px;
+  border-radius: var(--mn-radius-sm);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--mn-text-muted);
+  text-decoration: none;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
+}
+
+.docs-nav-sublink:hover {
+  background: var(--mn-surface-hover);
+  color: var(--mn-text-primary);
+}
+
+/* ---------------------------------------------------------------- */
+/* Article                                                           */
+/* ---------------------------------------------------------------- */
+
+.docs-main {
+  min-width: 0;
+}
+
+.docs-article-head {
+  margin-bottom: 28px;
+}
+
+/* 11px caps micro-label — the wallet's kicker style. */
+.docs-kicker {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--mn-accent-ink);
+}
+
+.docs-article-head h1 {
+  margin: 0 0 10px;
+  font-size: clamp(30px, 5vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.docs-lede {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 16px;
+  color: var(--mn-text-secondary);
+}
+
+.docs-prose {
+  max-width: 72ch;
+}
+
+.docs-prose h2 {
+  margin: 40px 0 12px;
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.docs-prose h3 {
+  margin: 28px 0 8px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.docs-prose p {
+  margin: 0 0 14px;
+  color: var(--mn-text-secondary);
+}
+
+.docs-prose strong {
+  color: var(--mn-text-primary);
+  font-weight: 650;
+}
+
+.docs-prose a {
+  color: var(--mn-accent-ink);
+  font-weight: 550;
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+.docs-prose a:hover {
+  color: var(--mn-accent-hover);
+  text-decoration: underline;
+}
+
+.docs-prose ul,
+.docs-prose ol {
+  margin: 0 0 14px;
+  padding-left: 22px;
+  color: var(--mn-text-secondary);
+}
+
+.docs-prose li {
+  margin-bottom: 6px;
+}
+
+.docs-prose li::marker {
+  color: var(--mn-text-muted);
+}
+
+.docs-prose blockquote {
+  margin: 0 0 14px;
+  padding: 10px 16px;
+  border-left: 3px solid var(--mn-accent);
+  border-radius: 0 var(--mn-radius-sm) var(--mn-radius-sm) 0;
+  background: var(--mn-accent-soft);
+}
+
+.docs-prose blockquote p {
+  margin: 0;
+  color: var(--mn-text-primary);
+}
+
+/* Inline code — the wallet's chip treatment. */
+.docs-prose code {
+  font-family: var(--mn-font-mono);
+  font-size: 0.86em;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--mn-surface-card);
+  border: 1px solid var(--mn-border-hairline);
+  color: var(--mn-text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* Code blocks — a sunken rounded card that scrolls, never the page. */
+.docs-codeblock {
+  margin: 0 0 16px;
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-card);
+  border: 1px solid var(--mn-border-hairline);
+  overflow-x: auto;
+}
+
+.docs-codeblock pre {
+  margin: 0;
+  padding: 14px 18px;
+}
+
+.docs-codeblock code {
+  font-family: var(--mn-font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--mn-text-primary);
+  white-space: pre;
+}
+
+/* Tables scroll inside their own container — the page never scrolls
+   horizontally. Rounded card chrome matches the wallet's list rows. */
+.docs-tablewrap {
+  margin: 0 0 16px;
+  border-radius: var(--mn-radius);
+  border: 1px solid var(--mn-border-hairline);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
+  overflow-x: auto;
+}
+
+.docs-tablewrap table {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.docs-tablewrap th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-text-muted);
+  background: var(--mn-surface-card);
+  border-bottom: 1px solid var(--mn-border-hairline);
+  white-space: nowrap;
+}
+
+.docs-tablewrap td {
+  vertical-align: top;
+  padding: 10px 14px;
+  color: var(--mn-text-secondary);
+  border-bottom: 1px solid var(--mn-border-hairline);
+}
+
+.docs-tablewrap tr:last-child td {
+  border-bottom: none;
+}
+
+.docs-tablewrap td:first-child {
+  color: var(--mn-text-primary);
+  font-variant-numeric: var(--mn-numeric);
+}
+
+/* ---------------------------------------------------------------- */
+/* Pager and footer                                                  */
+/* ---------------------------------------------------------------- */
+
+.docs-pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 44px;
+}
+
+.docs-pager-link {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 18px;
+  border-radius: var(--mn-radius);
+  border: 1px solid var(--mn-border-hairline);
+  background: var(--mn-surface-card);
+  text-decoration: none;
+  transition:
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.docs-pager-link:hover {
+  box-shadow: var(--mn-shadow-md);
+  transform: translateY(-2px);
+}
+
+.docs-pager-next {
+  text-align: right;
+  margin-left: auto;
+}
+
+.docs-pager-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-text-muted);
+}
+
+.docs-pager-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mn-accent-ink);
+}
+
+.docs-footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--mn-border-hairline);
+}
+
+.docs-footer-links {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mn-text-muted);
+}
+
+.docs-footer-links a {
+  color: var(--mn-accent-ink);
+  text-decoration: none;
+}
+
+.docs-footer-links a:hover {
+  color: var(--mn-accent-hover);
+  text-decoration: underline;
+}
+
+.docs-footer-fineprint {
+  margin: 0;
+  max-width: 70ch;
+  font-size: 12px;
+  color: var(--mn-text-muted);
+}
+
+.docs-footer-fineprint a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------- */
+/* Small screens — collapsible nav                                   */
+/* ---------------------------------------------------------------- */
+
+@media (max-width: 840px) {
+  .docs-frame {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 20px 16px 48px;
+  }
+
+  .docs-navtoggle {
+    display: inline-flex;
+  }
+
+  .docs-nav {
+    display: none;
+  }
+
+  /* The open nav becomes a floating sheet under the bar — lg radius,
+     raised surface, the wallet's sheet shadow. */
+  .docs-nav-open {
+    display: block;
+    position: fixed;
+    top: calc(var(--docs-topbar-height) + 10px);
+    left: 12px;
+    right: 12px;
+    z-index: 30;
+    max-height: calc(100vh - var(--docs-topbar-height) - 24px);
+    padding: 10px;
+    border-radius: var(--mn-radius-lg);
+    background: var(--mn-surface-raised);
+    border: 1px solid var(--mn-border-hairline);
+    box-shadow: var(--mn-shadow-md);
+  }
+
+  .docs-pager {
+    flex-direction: column;
+  }
+
+  .docs-pager-next {
+    margin-left: 0;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-copyai,
+  .docs-copyai:hover,
+  .docs-iconbutton,
+  .docs-pager-link,
+  .docs-pager-link:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* The family-wide beta mark — micro-caps on the accent wash, as in Passport. */
+.beta-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--mn-radius-pill, 999px);
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  align-self: center;
+}

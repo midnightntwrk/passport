@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0b0d" media="(prefers-color-scheme: dark)" />
+    <meta
+      name="description"
+      content="The hackathon showcase for applications built on the Midnight Passport bridge. Listing is a pull request against the app registry's JSON."
+    />
+    <title>Passport App Hub</title>
+    <script>
+      /* Zero-flash theme init — the same attribute src/theme.ts would write,
+         applied before any stylesheet paints. Default is the system theme;
+         an explicit choice persisted under 'passport-hub-theme' wins. */
+      (function () {
+        try {
+          var preference = localStorage.getItem('passport-hub-theme');
+          var root = document.documentElement;
+          var dark = matchMedia('(prefers-color-scheme: dark)').matches;
+          if (preference === 'light' || preference === 'dark') {
+            root.setAttribute('data-theme', preference);
+            root.style.colorScheme = preference;
+          } else {
+            root.removeAttribute('data-theme');
+            root.style.colorScheme = dark ? 'dark' : 'light';
+          }
+        } catch (error) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

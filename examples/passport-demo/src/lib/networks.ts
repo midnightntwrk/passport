@@ -198,19 +198,18 @@ export const FAUCET_URLS: Partial<Record<PassportNetworkId, string>> = {
  * ledger transaction HASH, never the 33-byte identifier `submitTransaction`
  * answers with.
  *
- * Stagenet is absent, and its absence is deliberate. The explorer's origin
- * answers `200` for `?network=stagenet`, but that is its single-page shell
- * answering for every path — it is not evidence that a stagenet transaction
- * resolves there. Adding an entry on the strength of a `200` is exactly how
- * this table produced dead links before. It goes in when a real stagenet
- * transaction hash has been seen to render, and not before; until then
- * stagenet transaction ids are shown as text, which is what
- * {@link explorerTxUrl} returning `null` makes every caller do. Mainnet is
- * omitted on the same rule.
+ * Stagenet went in on 2026/08/25, on the same rule it was kept out by: the
+ * explorer gained stagenet as a first-class network that day, and a real
+ * stagenet transaction was seen to render —
+ * `/tx/5941d2a7…86b2?network=stagenet`, a `withdraw_night` call in block
+ * 172961 — along with `/contract/{address}` and `/block/{height}` on the
+ * same query parameter. Mainnet is still omitted: no mainnet transaction of
+ * ours has been seen to render, and a `200` from the shell is not evidence.
  */
 export const EXPLORER_URLS: Partial<Record<PassportNetworkId, string>> = {
   preview: 'https://explorer.1am.xyz',
   preprod: 'https://explorer.1am.xyz',
+  stagenet: 'https://explorer.1am.xyz',
 };
 
 /** The faucet for a network, or `null` where there is none. */
@@ -258,4 +257,62 @@ export function explorerTxUrl(
   const origin = explorerUrlFor(networkId);
   if (!network || !origin || !isLedgerTxHash(txHash)) return null;
   return `${origin}/tx/${encodeURIComponent(txHash as string)}?network=${network}`;
+}
+
+/**
+ * The step verifier — this demo's own read-only page, which reads a Passport's
+ * whole history back off the indexer and renders it step by step.
+ *
+ * It is the SECOND place a transaction can be shown, and the only one that
+ * works before the indexer has mapped a submitted identifier to a ledger hash:
+ * it is asked for a NAME, not a hash, and it goes and finds every action on the
+ * account that name resolves to.
+ */
+export const VERIFIER_URL = 'https://midnightpassport.com/verify/';
+
+/**
+ * A verifier link for one Passport, keyed by its `.night` name.
+ *
+ * `q` is the parameter `src/verify/main.ts` reads on load, and it takes exactly
+ * what the search box takes. `null` for an absent or empty name, because a
+ * verifier opened on nothing is a page that says "Ready." and nothing else.
+ */
+export function verifierNameUrl(name: string | null | undefined): string | null {
+  if (typeof name !== 'string') return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  return `${VERIFIER_URL}?q=${encodeURIComponent(trimmed)}`;
+}
+
+/** Where a submitted transaction can be looked at, and what to call the link. */
+export interface TxReceiptLink {
+  label: string;
+  href: string;
+}
+
+/**
+ * The link a "submitted" toast carries — the explorer where there is one, and
+ * the verifier where there is not.
+ *
+ * Two things stop the explorer from being an option, and neither is a failure:
+ * a network with no public explorer in {@link EXPLORER_URLS}, and a transaction
+ * whose 33-byte IDENTIFIER the indexer has not yet mapped to a ledger hash
+ * ({@link isLedgerTxHash}). The account-contract deploy hits the second one
+ * routinely — it is the first thing a Passport ever submits, and the toast
+ * fires the moment it lands rather than minutes later — so a deploy passes its
+ * `.night` name as a fallback and the toast points at the verifier, which finds
+ * the deploy by resolving the name once the indexer has it.
+ *
+ * `null` means there is genuinely nowhere to send the user, and the caller
+ * shows a toast with no link rather than one that resolves to nothing.
+ */
+export function txReceiptLink(
+  networkId: string | null | undefined,
+  txHash: string | null | undefined,
+  fallbackName?: string | null,
+): TxReceiptLink | null {
+  const explorer = explorerTxUrl(networkId, txHash);
+  if (explorer) return { label: 'View on explorer', href: explorer };
+  const verifier = verifierNameUrl(fallbackName);
+  return verifier ? { label: 'View on the verifier', href: verifier } : null;
 }
