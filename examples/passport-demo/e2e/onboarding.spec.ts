@@ -53,16 +53,20 @@
 
 import { expect, test, type Page } from '@playwright/test';
 
-import { installNetworkBoundary, type RequestLog } from './mocks.js';
+import { installNetworkBoundary, type NetworkBoundary } from './mocks.js';
 import { installVirtualAuthenticator } from './passkey.js';
 
 test.describe.configure({ mode: 'serial' });
 
 let page: Page;
-let network: RequestLog;
+let network: NetworkBoundary;
 
 /** A label that is free in the recorded registry snapshot. */
 const NAME = 'passportwalk';
+
+/** A real stagenet unshielded address, so the recipient field genuinely passes. */
+const RECIPIENT =
+  'mn_addr_stagenet127xnp9uuxwhh7a8an77mxv02ypt6u09xkk63c9zvdkjsrj4mj68qg7c5ad';
 
 test.beforeAll(async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 420, height: 900 } });
@@ -303,4 +307,67 @@ test('the Send sheet is a withdrawal from the account, and never mentions DUST',
   await expect(page.getByText(/An unshielded \(mn_addr…\) or shielded/)).toBeVisible();
   expect(sheet).not.toMatch(/mn_addr_stagenet1[a-z0-9]{10,}/);
   expect(sheet).not.toMatch(/mn_shield-addr_stagenet1[a-z0-9]{10,}/);
+});
+
+test('a busy fee sponsor disables the Send control rather than removing it', async () => {
+  /* THE DEAD MODAL, and the fix for it.
+     `available: 0` is not an error — it is the state the deployed sponsor is in
+     for a minute or two after every activation grant, because it reserves its
+     DUST against the transaction it is balancing. The sheet used to answer that
+     by REMOVING its primary control, leaving a modal with a grey paragraph, an
+     X, and no action of any kind, in a state that clears itself. Three things
+     are held to here: the control stays, it says what it is waiting for, and
+     the sheet finds out on its own when the wait is over. */
+
+  // The sheet is still open from the test above; give it something to send.
+  await page.getByPlaceholder(/^mn_addr_stagenet1/).fill(RECIPIENT);
+  // The amount field: its label carries the "Max" button too, so the
+  // placeholder is what names it unambiguously.
+  await page.getByPlaceholder('0.0').fill('0.1');
+
+  /* The control, in the state a working sponsor leaves it: present, and asking
+     to move on. It is disabled here for a reason that is not the sponsor — this
+     tier has no indexer answer for the account's balance, so there is no ceiling
+     to check an amount against and the sheet says so — and what this test is
+     about is the LABEL, which is the sheet's account of what it is waiting for.
+     A genuinely enabled Send is `stagenet.live.spec.ts`'s, against a real
+     account with a real balance. */
+  const primary = page.locator('.mnhome-send-primary');
+  await expect(primary).toHaveCount(1);
+  await expect(primary).toHaveText(/Review/);
+
+  // The sponsor's DUST goes out of circulation, mid-sheet.
+  network.setSponsorAvailable(0);
+
+  /* Noticed by the sheet's own watcher — nothing was closed, reopened, or
+     retyped. The control is still there, and it says what it waits for. */
+  await expect(primary).toHaveText(/Waiting for the fee sponsor/, { timeout: 20_000 });
+  await expect(primary).toBeDisabled();
+  await expect(
+    page.getByText('The fee sponsor is busy — this usually clears within a minute.'),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: /Check again/ })).toBeVisible();
+
+  /* And NOT ONE FIGURE of the sponsor's own diagnostic reached the screen. It
+     names a wallet index and a DUST balance belonging to a wallet the user does
+     not own, about a token they are never asked to hold; it belongs in
+     `console.info`, which is where it now goes. */
+  const text = await visibleText();
+  expect(text).not.toContain('4993664979775282371');
+  expect(text).not.toMatch(/wallets available/i);
+  expect(text).not.toMatch(/\bdust\b/i);
+  expect(text).not.toMatch(/#\d/);
+
+  // The sponsor's DUST comes back, as it does.
+  network.setSponsorAvailable(1);
+
+  /* The sheet lifts the block itself, in place: the same sheet, the same
+     recipient, the same amount, and no user action in between. The control is
+     back to asking to move on, which is the state where nothing about the fee
+     stands in the user's way. */
+  await expect(primary).toHaveText(/Review/, { timeout: 20_000 });
+  await expect(page.getByText(/The fee sponsor is busy/)).toHaveCount(0);
+  await expect(
+    page.getByText(/Network fee expected to be covered by the fee sponsor/i),
+  ).toBeVisible();
 });

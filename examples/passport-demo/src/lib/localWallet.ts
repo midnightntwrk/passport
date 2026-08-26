@@ -103,7 +103,8 @@ import {
 import * as Rx from 'rxjs';
 
 import type { PassportStateScope, PassportWalletSeedProvider } from '../backend.js';
-import { sponsorFeeRefusal, sponsorReadiness } from './sponsor.js';
+import { sponsorReadiness, sponsorRefusal } from './sponsor.js';
+import type { SponsorUnavailableCause } from './sponsor.js';
 import { wasmWalletProvingService } from './wasmProver.js';
 import {
   clearWalletSnapshots,
@@ -693,7 +694,22 @@ export interface ShieldedHolding {
  */
 export type FeeReadiness =
   | { mode: 'sponsored' }
-  | { mode: 'unsponsored'; reason: string };
+  | {
+      mode: 'unsponsored';
+      /** The sentence a surface may show, verbatim. Carries no figures. */
+      reason: string;
+      /**
+       * Why, as a value. `busy` is the transient one — the sponsor's DUST is
+       * reserved against transactions in flight and frees up within a minute or
+       * two — and a surface that can wait should wait on it rather than refuse.
+       */
+      cause: 'disabled' | SponsorUnavailableCause;
+      /**
+       * The sponsor's own diagnostic. It names wallet indices and DUST
+       * balances, so it belongs in `console.info` and never on a screen.
+       */
+      detail: string | null;
+    };
 
 export interface LocalMidnightWallet {
   readonly network: LocalWalletNetworkConfig;
@@ -778,7 +794,7 @@ export interface LocalMidnightWallet {
    * Throws if this wallet's state cannot be read at all, because "we could not
    * tell" must not be reported as `unsponsored`.
    */
-  feeReadiness(): Promise<FeeReadiness>;
+  feeReadiness(options?: { force?: boolean }): Promise<FeeReadiness>;
   /** Addresses plus a balance refresh, in the shape the Home screen consumes. */
   surfaces(): Promise<LocalWalletSurfaces>;
   /** Resolves once the facade reports a fully synced state. */
@@ -1220,18 +1236,24 @@ export async function createLocalMidnightWallet(
     };
   };
 
-  const feeReadiness = async (): Promise<FeeReadiness> => {
+  const feeReadiness = async (options: { force?: boolean } = {}): Promise<FeeReadiness> => {
     if (closed) throw new Error('This Passport wallet has been closed.');
     // Exactly the gate the deploy path uses, and for the same reason: readiness
     // means the service said it holds a wallet that can pay, not that
     // sponsorship is configured.
-    const sponsorship = await sponsorReadiness();
+    const sponsorship = await sponsorReadiness(options.force ? { force: true } : {});
     if (sponsorship.state === 'ready') return { mode: 'sponsored' };
     /* No balance is consulted on the way out. `unavailable` means a sponsor URL
        is configured but the service cannot pay right now and `disabled` means
        there is no sponsor at all; either way nothing this wallet holds would
        change the answer, so nothing this wallet holds is read. */
-    return { mode: 'unsponsored', reason: sponsorFeeRefusal(sponsorship) };
+    const refusal = sponsorRefusal(sponsorship);
+    return {
+      mode: 'unsponsored',
+      reason: refusal.message,
+      cause: refusal.cause,
+      detail: refusal.detail,
+    };
   };
 
   // -------------------------------------------------------------------------

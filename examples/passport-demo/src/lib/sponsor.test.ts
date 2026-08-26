@@ -25,6 +25,7 @@ import {
   sponsorCanPay,
   sponsorConfig,
   sponsorFeeRefusal,
+  sponsorRefusal,
   sponsorHexToBytes,
   sponsorReadiness,
   sponsorRetryDelayMs,
@@ -253,6 +254,37 @@ describe('sponsorReadiness', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('probes again when forced, so a watcher is never told a cached answer', async () => {
+    /* The Send sheet WATCHES this while it is open. A cached verdict is exactly
+       what a watcher must not have: the commonest refusal — the sponsor's DUST
+       reserved against a transaction in flight — clears in about a minute, and
+       a 30-second cache would keep the control disabled for half the time the
+       sponsor was already free. */
+    resetSponsorReadinessCache();
+    let available = 0;
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ total: 1, available, wallets: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+    );
+    const options = { config: { url: 'https://api-preview.1am.xyz' }, fetch: fetchSpy as never };
+    expect((await sponsorReadiness(options)).state).toBe('unavailable');
+    // The sponsor comes back, well inside the cache's TTL.
+    available = 1;
+    // Unforced: still the cached refusal, and no second call.
+    expect((await sponsorReadiness(options)).state).toBe('unavailable');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    // Forced: asked again, and the answer has changed.
+    expect((await sponsorReadiness({ ...options, force: true })).state).toBe('ready');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    // And the forced answer replaces the cache, so the next reader agrees.
+    expect((await sponsorReadiness(options)).state).toBe('ready');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    resetSponsorReadinessCache();
+  });
+
   it('retries a transport failure once, then names the error it hit', async () => {
     resetSponsorReadinessCache();
     const slept: number[] = [];
@@ -271,6 +303,9 @@ describe('sponsorReadiness', () => {
       state: 'unavailable',
       url: 'https://api-preview.1am.xyz',
       reason: 'wallet-status could not be fetched, twice: fetch failed',
+      // Nothing came back at all, so nothing was learned about the sponsor's
+      // DUST: this is not the transient `busy` a surface should wait out.
+      cause: 'unreachable',
     });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     // The injectable seam is what the retry waits on — the test never really
@@ -295,6 +330,7 @@ describe('sponsorReadiness', () => {
       state: 'unavailable',
       url: 'https://api-preview.1am.xyz',
       reason: 'wallet-status returned an unrecognised body, twice',
+      cause: 'unreachable',
     });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(slept).toEqual([SPONSOR_PROBE_RETRY_DELAY_MS]);
@@ -314,6 +350,9 @@ describe('sponsorReadiness', () => {
       },
     });
     expect(readiness.state).toBe('unavailable');
+    /* And it is the TRANSIENT cause: the service answered, its DUST is simply
+       spoken for. That is what lets a surface wait rather than refuse. */
+    expect(readiness).toMatchObject({ cause: 'busy' });
     // A verdict is a verdict: only a FAILURE to reach one is worth retrying.
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(slept).toEqual([]);
@@ -331,6 +370,7 @@ describe('sponsorReadiness', () => {
       state: 'unavailable',
       url: 'https://api-preview.1am.xyz',
       reason: 'wallet-status returned HTTP 502',
+      cause: 'unreachable',
     });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
@@ -752,6 +792,11 @@ describe('sponsorFeeRefusal', () => {
     const sentences = [
       sponsorFeeRefusal({ state: 'disabled' }),
       sponsorFeeRefusal({ state: 'unavailable', reason: 'the wallet is still syncing' }),
+      sponsorFeeRefusal({
+        state: 'unavailable',
+        reason: 'wallet-status could not be fetched, twice: fetch failed',
+        cause: 'unreachable',
+      }),
     ];
     for (const sentence of sentences) {
       expect(sentence).toContain('fee sponsor');
@@ -762,12 +807,50 @@ describe('sponsorFeeRefusal', () => {
     }
   });
 
-  it('carries the sponsor’s own reason when there is one', () => {
-    expect(sponsorFeeRefusal({ state: 'unavailable', reason: 'the wallet is still syncing' }))
-      .toBe(
-        'Network fees on this Passport are covered by the fee sponsor, and the sponsor cannot ' +
-          'cover this one right now: the wallet is still syncing',
-      );
+  it('keeps the sponsor’s own reason OUT of the sentence, and says so plainly', () => {
+    /* The join this replaced is what put "sponsor reports 0/1 wallets available
+       (#0 dust 4993664979775282371)" on a user's screen — a wallet index and a
+       DUST balance, from a wallet that is not theirs. The sentence is now the
+       sentence; the diagnostic is a field beside it. */
+    expect(
+      sponsorFeeRefusal({
+        state: 'unavailable',
+        reason: 'sponsor reports 0/1 wallets available (#0 dust 4993664979775282371)',
+        cause: 'busy',
+      }),
+    ).toBe(
+      'Network fees on this Passport are covered by the fee sponsor, and the sponsor cannot ' +
+        'cover this one right now.',
+    );
+  });
+
+  it('says a sponsor that could not be reached was not reached', () => {
+    /* Two different facts, and a user can act on the difference: one clears
+       itself in a minute, the other may not. */
+    expect(
+      sponsorFeeRefusal({
+        state: 'unavailable',
+        reason: 'wallet-status returned HTTP 502',
+        cause: 'unreachable',
+      }),
+    ).toBe(
+      'Network fees on this Passport are covered by the fee sponsor, and the fee sponsor ' +
+        'cannot be reached right now.',
+    );
+  });
+
+  it('carries no figure at all, whatever the sponsor said', () => {
+    /* The property that matters, asserted as a property: no digit from the
+       sponsor's diagnostic survives into the sentence. */
+    for (const reason of [
+      'sponsor reports 0/1 wallets available (#0 dust 4993664979775282371)',
+      'sponsor reports 0/2 wallets available (#0 dust 0, #1 dust 12)',
+      'wallet-status returned HTTP 502',
+    ]) {
+      for (const cause of ['busy', 'unreachable'] as const) {
+        expect(sponsorFeeRefusal({ state: 'unavailable', reason, cause })).not.toMatch(/\d/);
+      }
+    }
   });
 
   it('says the build has no sponsor when none is configured, rather than inventing a reason', () => {
@@ -792,7 +875,54 @@ describe('sponsorFeeRefusal', () => {
   it('takes a real non-ready readiness straight from `sponsorReadiness`', () => {
     /* The gates pass the readiness value through untouched, so the shape the
        probe returns has to be the shape this accepts — url and all. */
-    const readiness = { state: 'unavailable', url: 'https://example.test', reason: 'no funds' } as const;
-    expect(sponsorFeeRefusal(readiness)).toContain('no funds');
+    const readiness = {
+      state: 'unavailable',
+      url: 'https://example.test',
+      reason: 'no funds',
+      cause: 'busy',
+    } as const;
+    expect(sponsorFeeRefusal(readiness)).toContain('fee sponsor');
+    expect(sponsorFeeRefusal(readiness)).not.toContain('no funds');
+  });
+});
+
+describe('sponsorRefusal', () => {
+  /* The structured half. A surface reads `message` and branches on `cause`; the
+     only thing that may ever read `detail` is a log. */
+
+  it('separates the sentence from the diagnostic', () => {
+    expect(
+      sponsorRefusal({
+        state: 'unavailable',
+        reason: 'sponsor reports 0/1 wallets available (#0 dust 4993664979775282371)',
+        cause: 'busy',
+      }),
+    ).toEqual({
+      message:
+        'Network fees on this Passport are covered by the fee sponsor, and the sponsor cannot ' +
+          'cover this one right now.',
+      cause: 'busy',
+      detail: 'sponsor reports 0/1 wallets available (#0 dust 4993664979775282371)',
+    });
+  });
+
+  it('has nothing to detail when there is no sponsor configured', () => {
+    expect(sponsorRefusal({ state: 'disabled' })).toEqual({
+      message:
+        'Network fees on this Passport are covered by the fee sponsor, and this build has no ' +
+          'sponsor configured, so nothing can be submitted.',
+      cause: 'disabled',
+      detail: null,
+    });
+  });
+
+  it('treats a refusal that names no cause as busy, never as unreachable', () => {
+    /* A caller that learned the sponsor had stood down some other way — a
+       `/balance-only` that failed mid-flight — REACHED the service, so "cannot
+       be reached" would be the wrong claim to put on the screen. */
+    const refusal = sponsorRefusal({ state: 'unavailable', reason: 'balancing threw' });
+    expect(refusal.cause).toBe('busy');
+    expect(refusal.message).toContain('cannot cover this one right now');
+    expect(refusal.detail).toBe('balancing threw');
   });
 });

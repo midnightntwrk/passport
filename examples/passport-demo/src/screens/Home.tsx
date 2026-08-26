@@ -149,7 +149,7 @@ export interface HomeScreenProps {
     networkId: string
     /** Where this wallet proves — the send sheet's progress line names it. */
     provingMode: LocalWalletProvingMode
-    readFeeReadiness: () => Promise<FeeReadiness>
+    readFeeReadiness: (options?: { force?: boolean }) => Promise<FeeReadiness>
     onSend: (params: { recipientAddress: string; amount: bigint }) => Promise<void>
     /**
      * The shielded half of the send seam — see the Send sheet's own header

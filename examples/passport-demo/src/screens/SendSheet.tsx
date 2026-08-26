@@ -25,6 +25,12 @@ import {
    pulled into this chunk. */
 import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js'
 
+/* The sponsor watcher. A real (tiny) import rather than a type-only one: it is
+   what turns a refusal that has already stopped being true into a control that
+   enables itself. It pulls in no wallet SDK — only a type from `localWallet`,
+   which is erased. */
+import { startFeeReadinessPoll, type FeeReadinessPoll } from '../lib/feeReadinessPoll.js'
+
 import './home.css'
 
 /**
@@ -69,6 +75,17 @@ import './home.css'
  * The host mounts this ONLY while there is genuinely an account to withdraw
  * from. Without one there is no Send button at all — a control that cannot work
  * is absent, not disabled and lying about why.
+ *
+ * THE PRIMARY CONTROL IS ALWAYS RENDERED (2026/08/25)
+ * ---------------------------------------------------
+ * That rule is about the SHEET, not about a state inside it. Once this sheet is
+ * open its primary button exists in every state it can reach — disabled and
+ * labelled with what is being waited for, never removed. Removing it produced
+ * exactly one thing, seen live: a modal with a grey paragraph, an X, and no
+ * action of any kind, in a state (`available: 0` on the sponsor) that clears
+ * itself inside a minute or two. The sheet now waits with the user — see
+ * {@link startFeeReadinessPoll} — and enables the control the moment the
+ * sponsor comes back, without the sheet being closed and reopened.
  */
 
 const NIGHT_DECIMALS = 6
@@ -110,10 +127,14 @@ export interface SendSheetProps {
   provingMode: LocalWalletProvingMode
   /**
    * Reads the wallet's own fee readiness — the advisory `feeReadiness()` probe.
-   * Called when the sheet opens; its answer is quoted, never paraphrased into a
-   * stronger claim.
+   * Called when the sheet opens and every few seconds after that; its answer is
+   * quoted, never paraphrased into a stronger claim.
+   *
+   * `force` skips the readiness cache. The sheet passes it always: a cached
+   * verdict is exactly what a watcher must not have — a sponsor that came back
+   * would go unnoticed for as long as the cache says nothing has changed.
    */
-  readFeeReadiness: () => Promise<FeeReadiness>
+  readFeeReadiness: (options?: { force?: boolean }) => Promise<FeeReadiness>
   /**
    * Runs the withdrawal, resolving only once the node has taken it. Refusals
    * arrive as the account module's `AccountCustodyError` — `{ code, message,
@@ -338,6 +359,7 @@ export default function SendSheet(props: SendSheetProps) {
   const [showFullRecipient, setShowFullRecipient] = useState(false)
   const [fee, setFee] = useState<FeeReadiness | null>(null)
   const [feeUnknown, setFeeUnknown] = useState<string | null>(null)
+  const [feeProbing, setFeeProbing] = useState(false)
   const [feeChanged, setFeeChanged] = useState(false)
   /* `null` while nothing has been read yet — never a stand-in for an account
      that holds nothing, which is `[]` and gets its own sentence. */
@@ -346,30 +368,35 @@ export default function SendSheet(props: SendSheetProps) {
   const [tokenType, setTokenType] = useState<string | null>(null)
 
   const recipientRef = useRef<HTMLTextAreaElement | null>(null)
+  const feePollRef = useRef<FeeReadinessPoll | null>(null)
 
   const shieldedSupported = Boolean(readShieldedHoldings && onSendShielded)
 
   /* The fee sentence describes what will really happen, so the sponsor is
-     probed when the sheet opens rather than assumed ready. Until it answers,
-     nothing is said about the fee. */
+     probed when the sheet opens rather than assumed ready — and then KEPT
+     probed, because the commonest reason it cannot pay is that its DUST is
+     reserved against a transaction that is about to settle. Until the first
+     answer, nothing is said about the fee.
+
+     Paused while a transfer is in flight: the sponsor is busy balancing OUR
+     transaction then, so a tick would report `available: 0` and rewrite the fee
+     line into a refusal for the very send that is succeeding. */
   useEffect(() => {
-    let live = true
-    void (async () => {
-      try {
-        const readiness = await readFeeReadiness()
-        if (!live) return
-        setFee(readiness)
-        setFeeUnknown(null)
-      } catch (cause) {
-        if (!live) return
-        setFee(null)
-        setFeeUnknown(messageOf(cause))
-      }
-    })()
+    if (busy) return
+    const poll = startFeeReadinessPoll({
+      probe: () => readFeeReadiness({ force: true }),
+      onChange: (snapshot) => {
+        setFee(snapshot.fee)
+        setFeeUnknown(snapshot.error)
+        setFeeProbing(snapshot.probing)
+      },
+    })
+    feePollRef.current = poll
     return () => {
-      live = false
+      poll.stop()
+      feePollRef.current = null
     }
-  }, [readFeeReadiness])
+  }, [busy, readFeeReadiness])
 
   // Escape closes, unless a transaction is in flight — abandoning the sheet
   // mid-submission would hide an outcome that is still coming. While the
@@ -491,9 +518,35 @@ export default function SendSheet(props: SendSheetProps) {
         : 'Checking with the fee sponsor…'
       : fee.mode === 'sponsored'
         ? 'Network fee expected to be covered by the fee sponsor.'
-        : /* The sponsor's own refusal sentence, verbatim. */ fee.reason
+        : /* The sponsor's own refusal SENTENCE, verbatim — which since
+             2026/08/25 is the sentence only. The diagnostic that used to be
+             joined onto it ("0/1 wallets available (#0 dust …)") is a fact
+             about a wallet the user does not own, and it now goes to
+             `console.info` from the watcher instead. */ fee.reason
 
   const feeBlocksSend = fee?.mode === 'unsponsored'
+  const feeCause = fee?.mode === 'unsponsored' ? fee.cause : null
+
+  /* What the primary control says while it waits. A blocked control still says
+     what it is waiting FOR — "disabled" on its own is the thing that reads as
+     broken. `disabled` is the one cause nothing is coming for, so it does not
+     promise a wait. */
+  const blockedPrimaryLabel =
+    feeCause === 'disabled' ? 'No fee sponsor on this build' : 'Waiting for the fee sponsor…'
+
+  /* The line under the control, and the one place that says how long. `busy` is
+     the transient state and says so; `unreachable` makes no promise it cannot
+     keep. Both keep polling underneath. */
+  const feeWaitLine =
+    feeCause === 'busy'
+      ? 'The fee sponsor is busy — this usually clears within a minute.'
+      : feeCause === 'unreachable'
+        ? 'The fee sponsor cannot be reached right now.'
+        : feeCause === 'disabled'
+          ? 'This build has no fee sponsor, so nothing can be submitted from it.'
+          : null
+
+  const checkAgain = () => feePollRef.current?.checkAgain()
 
   /**
    * What the sheet says while the transfer is in flight.
@@ -543,7 +596,7 @@ export default function SendSheet(props: SendSheetProps) {
     const quotedMode = fee?.mode ?? null
     let recheckedMode: FeeReadiness['mode'] | null
     try {
-      const readiness = await readFeeReadiness()
+      const readiness = await readFeeReadiness({ force: true })
       recheckedMode = readiness.mode
       setFee(readiness)
       setFeeUnknown(null)
@@ -600,6 +653,27 @@ export default function SendSheet(props: SendSheetProps) {
     recipientReady,
     tokenType,
   ])
+
+  /* One row, rendered under whichever primary control is on screen. */
+  const feeWaitRow = feeWaitLine ? (
+    <p className="mnhome-send-wait" role="status">
+      <span>{feeWaitLine}</span>
+      {feeCause === 'disabled' ? null : (
+        <button
+          type="button"
+          className="mnhome-send-recheck"
+          onClick={checkAgain}
+          /* No dead controls on this surface — which is the whole point of the
+             defect this row exists for. There is nothing to ask while a probe
+             is already running, and nothing watching at all while a transfer is
+             in flight, so in both states the control says so. */
+          disabled={feeProbing || busy}
+        >
+          {feeProbing ? 'Checking…' : 'Check again'}
+        </button>
+      )}
+    </p>
+  ) : null
 
   return createPortal(
     <>
@@ -774,26 +848,32 @@ export default function SendSheet(props: SendSheetProps) {
               {feeNote}
             </p>
 
-            {/* Nothing stands in for the Send control when the fee cannot be
-                paid, or when there is nothing shielded to pay with: the
-                sentences above already say why, and there is no user-side
-                registration left to point at. */}
-            {feeBlocksSend || noShieldedTokens ? null : (
-              <button
-                type="button"
-                className="mnhome-send-primary"
-                onClick={() => {
-                  setShowFullRecipient(false)
-                  setFailure(null)
-                  setFeeChanged(false)
-                  setStep('review')
-                }}
-                disabled={!canReview}
-              >
-                <span>Review</span>
-                <ArrowRight size={15} aria-hidden="true" />
-              </button>
-            )}
+            {/* ALWAYS RENDERED. When the fee cannot be paid — or there is
+                nothing shielded to pay with — this is disabled and says what it
+                is waiting for, and the row beneath it says how long and offers a
+                re-check. It used to be removed outright, which left a sheet with
+                no action in it at all for a state that clears itself. */}
+            <button
+              type="button"
+              className="mnhome-send-primary"
+              onClick={() => {
+                setShowFullRecipient(false)
+                setFailure(null)
+                setFeeChanged(false)
+                setStep('review')
+              }}
+              disabled={!canReview || feeBlocksSend || noShieldedTokens}
+            >
+              {feeBlocksSend ? (
+                <span>{blockedPrimaryLabel}</span>
+              ) : (
+                <>
+                  <span>Review</span>
+                  <ArrowRight size={15} aria-hidden="true" />
+                </>
+              )}
+            </button>
+            {feeWaitRow}
           </div>
         ) : (
           <div className="mnhome-send-form">
@@ -889,6 +969,8 @@ export default function SendSheet(props: SendSheetProps) {
               </p>
             ) : null}
 
+            {feeWaitRow}
+
             <div className="mnhome-send-actions">
               <button
                 type="button"
@@ -902,13 +984,17 @@ export default function SendSheet(props: SendSheetProps) {
                 type="button"
                 className="mnhome-send-primary"
                 onClick={() => void handleSend()}
-                disabled={busy || !canReview}
+                disabled={busy || !canReview || feeBlocksSend}
               >
                 {busy ? (
                   <>
                     <Loader2 className="mnhome-send-spinner" size={15} aria-hidden="true" />
                     <span>Sending…</span>
                   </>
+                ) : feeBlocksSend ? (
+                  /* The sponsor stood down between Review and here. The control
+                     stays, disabled, and the row above says what it waits for. */
+                  <span>{blockedPrimaryLabel}</span>
                 ) : (
                   <>
                     <SendHorizontal size={15} aria-hidden="true" />

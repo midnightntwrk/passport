@@ -711,6 +711,35 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
 }
 .mnhome-send-fee-blocked { color: var(--mn-text-primary); font-weight: 600; }
 
+/* The row under a blocked primary control: what is being waited for, and a way
+   to ask again without closing the sheet. It sits with the button rather than
+   with the fee panel because it is about the CONTROL, not about the fee. */
+.mnhome-send-wait {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: -2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--mn-text-muted);
+}
+.mnhome-send-recheck {
+  flex: none;
+  /* A comfortable target on a phone, where this is most often read. */
+  min-height: 32px;
+  padding: 0 12px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.mnhome-send-recheck:hover:not(:disabled) { background: var(--mn-surface-hover); }
+.mnhome-send-recheck:disabled { opacity: .45; cursor: default; }
+
 .mnhome-send-primary,
 .mnhome-send-secondary {
   min-height: 46px;

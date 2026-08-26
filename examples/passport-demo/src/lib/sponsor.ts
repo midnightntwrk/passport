@@ -428,6 +428,17 @@ export interface SponsorClientOptions {
   sleep?: (milliseconds: number) => Promise<void>;
   /** Total 429 retry budget. Defaults to 20 s; 0 disables retrying. */
   pendingRetryWindowMs?: number;
+  /**
+   * Ignores the cached readiness verdict and probes again.
+   *
+   * The cache exists so that a burst of fee gates on one send costs one HTTP
+   * call. A surface that is WATCHING for the sponsor to come back needs the
+   * opposite — a `busy` answer clears in about a minute, and a poll that read
+   * a 30-second cache would tell the user to keep waiting for half the time it
+   * was actually free. An in-flight probe is still joined rather than
+   * duplicated.
+   */
+  force?: boolean;
 }
 
 function defaultSleep(milliseconds: number): Promise<void> {
@@ -455,7 +466,24 @@ function resolveConfig(options: SponsorClientOptions): SponsorConfig | null {
 export type SponsorReadiness =
   | { state: 'disabled' }
   | { state: 'ready'; url: string; available: number }
-  | { state: 'unavailable'; url: string; reason: string };
+  | { state: 'unavailable'; url: string; reason: string; cause: SponsorUnavailableCause };
+
+/**
+ * WHY the sponsor is unusable, as a value rather than a sentence to sniff.
+ *
+ *   `busy`        — the service answered, and has no wallet with DUST free
+ *                   right now. It reserves DUST per in-flight transaction, so
+ *                   this is the TRANSIENT one: it clears on its own, usually
+ *                   inside a minute, and a surface should wait rather than
+ *                   refuse.
+ *   `unreachable` — nothing usable came back: a transport failure, an HTTP
+ *                   error, or a body that was not a wallet status. Waiting may
+ *                   still help, but nothing has been learned about DUST.
+ *
+ * A surface branches on this; only a log ever reads the reason string beside
+ * it. That separation is the whole point — see {@link sponsorRefusal}.
+ */
+export type SponsorUnavailableCause = 'busy' | 'unreachable';
 
 /**
  * The one refusal sentence every fee gate gives when the sponsor cannot cover
@@ -473,12 +501,57 @@ export type SponsorReadiness =
  * it in the same words, while a `ready` readiness still cannot be passed at
  * all.
  */
-export function sponsorFeeRefusal(
-  readiness: { state: 'disabled' } | { state: 'unavailable'; reason: string },
-): string {
-  return readiness.state === 'disabled'
-    ? 'Network fees on this Passport are covered by the fee sponsor, and this build has no sponsor configured, so nothing can be submitted.'
-    : `Network fees on this Passport are covered by the fee sponsor, and the sponsor cannot cover this one right now: ${readiness.reason}`;
+export function sponsorFeeRefusal(readiness: SponsorRefusalInput): string {
+  return sponsorRefusal(readiness).message;
+}
+
+/** The shape {@link sponsorRefusal} accepts: any readiness that is not `ready`. */
+export type SponsorRefusalInput =
+  | { state: 'disabled' }
+  | { state: 'unavailable'; reason: string; cause?: SponsorUnavailableCause };
+
+/**
+ * A refusal, split into the half a user reads and the half an operator does.
+ *
+ * The two were one string until 2026/08/25, and the join is what put
+ * "sponsor reports 0/1 wallets available (#0 dust 4993664979775282371)" on a
+ * user's screen — a wallet index and a DUST balance, from a wallet that is not
+ * theirs, about a token they are never asked to hold. The sentence now says
+ * only what is true for the person reading it, and the diagnostic travels in
+ * `detail`, which belongs in a log and nowhere else.
+ */
+export interface SponsorRefusal {
+  /** The user's sentence. Carries no figures and names nothing to top up. */
+  message: string;
+  /** What went wrong, for a surface to branch on. */
+  cause: 'disabled' | SponsorUnavailableCause;
+  /** The sponsor's own diagnostic — `console.info`, never the screen. */
+  detail: string | null;
+}
+
+export function sponsorRefusal(readiness: SponsorRefusalInput): SponsorRefusal {
+  if (readiness.state === 'disabled') {
+    return {
+      message:
+        'Network fees on this Passport are covered by the fee sponsor, and this build has no sponsor configured, so nothing can be submitted.',
+      cause: 'disabled',
+      detail: null,
+    };
+  }
+  /* An absent cause is treated as `busy` rather than `unreachable`: a caller
+     that reports a refusal it learned some other way — a `/balance-only` that
+     failed mid-flight, say — reached the service, so "cannot be reached" would
+     be the wrong claim, while "cannot cover this one right now" is true of
+     every one of them. */
+  const cause = readiness.cause ?? 'busy';
+  return {
+    message:
+      cause === 'unreachable'
+        ? 'Network fees on this Passport are covered by the fee sponsor, and the fee sponsor cannot be reached right now.'
+        : 'Network fees on this Passport are covered by the fee sponsor, and the sponsor cannot cover this one right now.',
+    cause,
+    detail: readiness.reason,
+  };
 }
 
 /**
@@ -522,7 +595,12 @@ export async function sponsorReadiness(
 
   const now = options.now ?? Date.now;
   const cached = readinessCache;
-  if (cached && cached.url === config.url && now() - cached.at < SPONSOR_READINESS_TTL_MS) {
+  if (
+    !options.force &&
+    cached &&
+    cached.url === config.url &&
+    now() - cached.at < SPONSOR_READINESS_TTL_MS
+  ) {
     return cached.value;
   }
   if (readinessInFlight) return readinessInFlight;
@@ -550,6 +628,9 @@ export async function sponsorReadiness(
           state: 'unavailable',
           url: config.url,
           reason: `wallet-status returned HTTP ${response.status}`,
+          /* The service answered, but not with a wallet status — nothing has
+             been learned about DUST, so this is not the transient `busy`. */
+          cause: 'unreachable',
         };
       }
       const status = parseSponsorWalletStatus(body);
@@ -563,6 +644,9 @@ export async function sponsorReadiness(
         state: 'unavailable',
         url: config.url,
         reason: describeSponsorWalletStatus(status),
+        /* The one transient state: the service is up and its DUST is spoken
+           for. It frees up as its in-flight transactions settle. */
+        cause: 'busy',
       };
     } catch (cause) {
       return {
@@ -599,6 +683,7 @@ export async function sponsorReadiness(
           value.kind === 'schema'
             ? 'wallet-status returned an unrecognised body, twice'
             : `wallet-status could not be fetched, twice: ${value.message}`,
+        cause: 'unreachable',
       };
     }
     readinessCache = { url: config.url, at: now(), value };

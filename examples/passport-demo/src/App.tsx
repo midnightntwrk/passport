@@ -37,6 +37,7 @@ import BackupScreen from './screens/Backup.js';
 import EcosystemScreen from './screens/Ecosystem.js';
 import AliasReclaimModal from './screens/AliasReclaimModal.js';
 import {
+  loadAliasRecord,
   loadAliasRecords,
   saveAliasRecord,
   subscribeAliasRecords,
@@ -89,8 +90,8 @@ import {
   aliasRegistrationSupported,
   configuredNetworkId,
   defaultSelectedNetwork,
-  explorerTxUrl,
   isLedgerTxHash,
+  txReceiptLink,
   walletNetwork,
 } from './lib/networks.js';
 // The local wallet drags the whole Midnight wallet SDK in with it, so it is
@@ -561,19 +562,26 @@ function storeNameStep(credentialId: string, resolution: NameStepResolution): vo
 }
 
 /**
- * The explorer link a success toast carries — or `undefined`.
+ * The link a success toast carries — or `undefined`.
  *
- * Preview and pre-production each have a public explorer; mainnet is not in
- * the table. The link takes the 32-byte ledger transaction hash — never the
- * identifier `submitTransaction` answers with. No hash, or a network with no
- * explorer, means no link rather than one that goes nowhere.
+ * A submitted transaction is a thing the user should be able to GO AND LOOK AT,
+ * and the toast is the moment they can: it is on screen, it is tappable, and it
+ * lasts twelve seconds rather than the five an unlinked one gets. The activity
+ * feed keeps the same link afterwards.
+ *
+ * Preview, pre-production, and stagenet each have a public explorer; mainnet is
+ * not in the table. The explorer takes the 32-byte ledger transaction hash —
+ * never the identifier `submitTransaction` answers with — so where that mapping
+ * has not happened yet, `fallbackName` (a `.night` name) sends the user to the
+ * step verifier instead, which finds the transaction by resolving the name.
+ * Without either there is no link at all, rather than one that goes nowhere.
  */
 function explorerTxLink(
   txHash: string | null | undefined,
   network: string | null | undefined,
+  fallbackName?: string | null,
 ): { label: string; href: string } | undefined {
-  const href = explorerTxUrl(network, txHash);
-  return href ? { label: 'View on explorer', href } : undefined;
+  return txReceiptLink(network, txHash, fallbackName) ?? undefined;
 }
 
 /**
@@ -2680,10 +2688,26 @@ export default function PassportDemo() {
                 source: 'chain',
                 txHash: deployment.deployTxId,
               });
-              /* The deploy is the long half of onboarding and has no toast of
-                 its own — the claim's own toast comes later, once the name has
-                 landed. This is the only thing that says the first step is
-                 done while the second is still running. */
+              /* The deploy is the long half of onboarding, and since
+                 2026/08/25 it says so on screen the moment it lands rather than
+                 waiting for the name. It is the FIRST transaction this Passport
+                 ever submits and the only one the passkey wallet itself
+                 originates, so it is the one most worth being able to go and
+                 look at — and the indexer has usually not mapped its identifier
+                 to a ledger hash yet, which is what the verifier fallback is
+                 for. */
+              pushToast({
+                tone: 'success',
+                title: 'Account deployed',
+                body: `${compactAddress(deployment.address)} is ${
+                  deployment.ledgerConfirmed ? 'live' : 'submitted'
+                } on ${deployment.network}. Registering ${alias}.night against it now.`,
+                link: explorerTxLink(
+                  deployment.deployTxId,
+                  deployment.network,
+                  aliasDomainOf(alias),
+                ),
+              });
               void notify(
                 'Your Passport contract is deployed',
                 `${deployment.ledgerConfirmed ? 'It is live' : 'It is submitted'} on ${
@@ -3168,7 +3192,18 @@ export default function PassportDemo() {
         void refreshLocalBalances();
         return;
       }
-      const txIdResolved = isLedgerTxHash(deployment.deployTxId);
+      /* The name this Passport already holds on this network, if any — read
+         from the store rather than from render state, because this callback
+         must not be rebuilt every time a record changes. It is only a fallback
+         link target. */
+      const deployedDomain = loadAliasRecord(deployment.network)?.domain ?? null;
+      const deployLink = explorerTxLink(
+        deployment.deployTxId,
+        deployment.network,
+        /* Same fallback as the onboarding deploy: an unmapped identifier is the
+           norm this early, and the verifier resolves the name instead. */
+        deployedDomain,
+      );
       addActivity({
         label: 'Passport contract deployed',
         detail: `${compactAddress(deployment.address)} is ${
@@ -3186,13 +3221,13 @@ export default function PassportDemo() {
             ? 'The indexer is serving its state.'
             : 'Submitted — the indexer has not reported it yet.'
         }${
-          txIdResolved
+          deployLink
             ? ''
-            : /* No link, and the reason said out loud rather than a link that
-                 resolves to nothing on the explorer. */
+            : /* Nowhere to send them, and the reason said out loud rather than
+                 a link that resolves to nothing on the explorer. */
               ' The indexer has not yet mapped the transaction identifier to a ledger hash, so there is no explorer link yet.'
         }`,
-        link: explorerTxLink(deployment.deployTxId, deployment.network),
+        link: deployLink,
       });
       /* The retry path. Same tag as the claim's deploy: one contract, one
          story, whichever route reached it. */
@@ -3674,11 +3709,17 @@ export default function PassportDemo() {
    * into `unsponsored`: "we could not check" and "the sponsor is not covering
    * this" are different sentences, and the sheet says whichever is true.
    */
-  const readLocalFeeReadiness = useCallback(async (): Promise<FeeReadiness> => {
-    const handle = localWalletRef.current;
-    if (!handle) throw new Error('The Passport signing session is not open.');
-    return handle.feeReadiness();
-  }, []);
+  const readLocalFeeReadiness = useCallback(
+    async (options?: { force?: boolean }): Promise<FeeReadiness> => {
+      const handle = localWalletRef.current;
+      if (!handle) throw new Error('The Passport signing session is not open.');
+      /* `force` is passed straight through: the Send sheet WATCHES this, and a
+         watcher reading a 30-second cache would keep saying "waiting" for half
+         the time the sponsor was already free. */
+      return handle.feeReadiness(options);
+    },
+    [],
+  );
 
   /**
    * The user's own NIGHT transfer, as a withdrawal from their account.

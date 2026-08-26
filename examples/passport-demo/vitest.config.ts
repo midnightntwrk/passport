@@ -19,6 +19,14 @@
  *
  * WHAT IS OUT, AND WHY — `src/lib`
  * --------------------------------
+ * `src/lib/feeReadinessPoll.ts` went IN on 2026/08/25 rather than out with the
+ * screens it serves: it is the sponsor watcher, it holds no DOM and no React,
+ * and its whole contract — probe now, probe again every five seconds, publish
+ * every change, and send the sponsor's diagnostic to a log rather than towards
+ * a screen — is drivable on a fake clock. The React that consumes it is three
+ * lines of `useEffect` in `SendSheet.tsx`, which stays out with the rest of the
+ * `.tsx`.
+ *
  *   assert-shim.ts      A three-line stand-in for Node's `assert`, aliased in
  *                       by `vite.config.ts` for @subsquid/scale-codec. It has
  *                       no behaviour of ours in it.
@@ -108,6 +116,7 @@ export default mergeConfig(
           'src/lib/activation.ts',
           'src/lib/address.ts',
           'src/lib/colour.ts',
+          'src/lib/feeReadinessPoll.ts',
           'src/lib/networks.ts',
           'src/lib/notifications.ts',
           'src/lib/qrScan.ts',

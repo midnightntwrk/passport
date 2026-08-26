@@ -13,7 +13,12 @@
  *                          service answers.
  *   `GET  /wallet-status`  the fee sponsor's readiness. Answered with
  *                          `available: 1`, the only shape `sponsor.ts` accepts
- *                          as able to pay.
+ *                          as able to pay — and flippable mid-run through
+ *                          {@link NetworkBoundary.setSponsorAvailable}, because
+ *                          `available: 0` is a state the deployed service is
+ *                          genuinely in for a minute or two after every
+ *                          activation grant, and it is what a surface must
+ *                          neither hide behind nor give up on.
  *   `POST /register-alias` the sponsored registration. Its two-transaction
  *                          proving run is minutes long and is drilled for real
  *                          by `stagenet.live.spec.ts`; here it is refused with
@@ -64,17 +69,30 @@ const MOCK_CHAIN_HEIGHT = 120;
 /** The sponsor and balancer origin this build is compiled against. */
 export const BALANCER_ORIGIN = 'https://funder.midnightpassport.com/balancer';
 
-/** Every request the mocked tier answered, in order, for assertions. */
-export interface RequestLog {
+/** Every request the mocked tier answered, plus the dials a spec can turn. */
+export interface NetworkBoundary {
   readonly calls: string[];
+  /**
+   * What `/wallet-status` answers from now on.
+   *
+   * `0` is the real service's busy state: its DUST is reserved against a
+   * transaction it is balancing, and it frees up on its own. The body carries
+   * the diagnostic the live service carries — a wallet index and a DUST balance
+   * — precisely so a spec can assert that none of it reaches the screen.
+   */
+  setSponsorAvailable(available: number): void;
 }
+
+/** @deprecated The old name for {@link NetworkBoundary}. */
+export type RequestLog = NetworkBoundary;
 
 /**
  * Installs the boundary. Returns the log of what the app asked for, so a spec
  * can assert on what was NOT called as well as what was.
  */
-export async function installNetworkBoundary(page: Page): Promise<RequestLog> {
+export async function installNetworkBoundary(page: Page): Promise<NetworkBoundary> {
   const calls: string[] = [];
+  let sponsorAvailable = 1;
 
   await page.route('**/funder.midnightpassport.com/**', async (route) => {
     const url = route.request().url();
@@ -94,9 +112,21 @@ export async function installNetworkBoundary(page: Page): Promise<RequestLog> {
       return route.fulfill({
         json: {
           total: 1,
-          available: 1,
+          available: sponsorAvailable,
           wallets: [
-            { index: 0, ready: true, dust: { balance: '288384879317778538', utxoCount: 3, isSynced: true } },
+            {
+              index: 0,
+              ready: true,
+              dust: {
+                /* The busy body is the one recorded from the live service on
+                   2026/08/25, DUST balance and all: `available: 0` with a wallet
+                   that is ready and synced and whose DUST is simply spoken for. */
+                balance:
+                  sponsorAvailable > 0 ? '288384879317778538' : '4993664979775282371',
+                utxoCount: 3,
+                isSynced: true,
+              },
+            },
           ],
         },
       });
@@ -144,5 +174,10 @@ export async function installNetworkBoundary(page: Page): Promise<RequestLog> {
      depend on stagenet being reachable. */
   await page.routeWebSocket(/.*/, () => {});
 
-  return { calls };
+  return {
+    calls,
+    setSponsorAvailable(available: number) {
+      sponsorAvailable = available;
+    },
+  };
 }
