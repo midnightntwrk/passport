@@ -1,0 +1,100 @@
+@import './tokens.css';
+
+/* Bottom navigation — prefix "mnnav-".
+   Base-inspired Midnight direction: a floating pill bar lifted off the
+   page by the soft raised shadow, with the active tab carried by a solid
+   accent-blue inner pill. Inactive tabs sit back at muted weight, so the
+   blue pill is unambiguously the loudest thing in the bar. */
+
+/* Opaque page-coloured zone behind the floating bar. The bar is a pill with
+   an 8px clearance beneath it and gutters beside it; without this strip,
+   scrolled content slices through those gaps and reads as a rendering
+   glitch. The strip spans the full viewport width from the bar's top edge
+   to the viewport bottom, so content disappears cleanly under its top
+   hairline. It sits one layer below the bar (99 vs 100), which keeps the
+   bar's soft shadow falling onto it — the pill still reads as lifted, now
+   off a surface of its own. */
+.mnnav-backdrop {
+  position: fixed;
+  z-index: 99;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: calc(
+    var(--mn-nav-height) + 2 * var(--mn-hairline) +
+      max(8px, env(safe-area-inset-bottom))
+  );
+  border-top: var(--mn-hairline) solid var(--mn-border-hairline);
+  background: var(--mn-surface-page);
+}
+
+.mnnav {
+  position: fixed;
+  z-index: 100;
+  right: 0;
+  /* Clearance beneath the bar, so it reads as a pill floating off the page
+     rather than a slab welded to the viewport edge. */
+  bottom: max(8px, env(safe-area-inset-bottom));
+  left: 0;
+  width: min(100% - 40px, 520px);
+  height: var(--mn-nav-height);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
+  /* Soft, diffuse lift — the shadow does the separating, not a heavy
+     outline. */
+  box-shadow: var(--mn-shadow-md);
+}
+
+.mnnav-tab {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  /* Inactive: quiet. Muted text on the bar's own surface. */
+  color: var(--mn-text-muted);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transition: background .15s ease, color .15s ease;
+}
+.mnnav-tab:hover:not(.mnnav-tab-active) {
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-hover);
+}
+
+/* Active: the solid accent-blue inner pill. */
+.mnnav-tab-active {
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mnnav-tab { transition: none; }
+}
+
+@media (max-width: 400px) {
+  .mnnav { width: calc(100% - 24px); }
+  .mnnav-tab { letter-spacing: .04em; }
+}
+
+/* Track the Home body column, which widens at the same breakpoint
+   (home.css), so the bar's edges stay flush with the content above it. */
+@media (min-width: 560px) {
+  .mnnav { width: min(100% - 64px, 560px); }
+}

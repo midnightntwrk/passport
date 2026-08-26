@@ -1,0 +1,575 @@
+/* Passport App Hub — standalone stylesheet.
+ *
+ * Follows the Passport demo's "Midnight, Base-inspired" design language
+ * (examples/passport-demo/src/screens/tokens.css): one electric blue accent
+ * (#0052FF), roomy rounded cards, soft vertical shadows, Inter/system type,
+ * light by default with dark honoured from the operating system via
+ * prefers-color-scheme. Kept self-contained so the hub builds alone.
+ */
+
+:root {
+  --hub-accent: #0052ff;
+  --hub-accent-hover: #0043d6;
+  --hub-accent-soft: rgba(0, 82, 255, 0.08);
+  --hub-accent-ink: #0040cc;
+  --hub-accent-text: #ffffff;
+  --hub-sunken: #eceef2;
+  --hub-page: #ffffff;
+  --hub-card: #f5f6f8;
+  --hub-raised: #ffffff;
+  --hub-text: #0a0b0d;
+  --hub-text-secondary: #464b55;
+  --hub-text-muted: #5b616e;
+  --hub-border: #e2e6eb;
+  --hub-border-medium: #c7cdd6;
+  /* Radius scale — chips/tags 8, inputs/rows 12, cards 16, panels 20, pills 999. */
+  --hub-radius-sm: 8px;
+  --hub-radius-md: 12px;
+  --hub-radius: 16px;
+  --hub-radius-lg: 20px;
+  --hub-radius-pill: 999px;
+  /* Shadows — soft, diffuse, always vertical; never hard offsets. */
+  --hub-shadow-sm: 0 1px 2px rgba(10, 11, 13, 0.04), 0 2px 8px rgba(10, 11, 13, 0.07);
+  --hub-shadow-md: 0 2px 4px rgba(10, 11, 13, 0.05), 0 8px 24px rgba(10, 11, 13, 0.07);
+  /* Blue glow, reserved for primary CTAs. */
+  --hub-shadow-accent: 0 6px 20px rgba(0, 82, 255, 0.3);
+  --hub-focus-ring: var(--hub-accent);
+  --hub-font:
+    Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  /* Spring-flavoured ease for entrance rises: critically damped, no overshoot. */
+  --hub-spring: linear(
+    0,
+    0.062,
+    0.222,
+    0.424,
+    0.606,
+    0.746,
+    0.847,
+    0.916,
+    0.96,
+    0.985,
+    0.996,
+    0.999,
+    1
+  );
+}
+
+/* An explicit choice from the header toggle wins; with no data-theme the
+   operating system decides. Same pattern as the docs and the wallet. */
+:root[data-theme='dark'] {
+    --hub-accent-hover: #2f66f0;
+    --hub-accent-soft: rgba(61, 119, 255, 0.16);
+    --hub-accent-ink: #7da2ff;
+    --hub-sunken: #050608;
+    --hub-page: #0a0b0d;
+    --hub-card: #16181d;
+    --hub-raised: #1e2127;
+    --hub-text: #f7f9fc;
+    --hub-text-secondary: #b4bac6;
+    --hub-text-muted: #8a919e;
+    --hub-border: #23262c;
+    --hub-border-medium: #3a3f48;
+    /* Dark shadows deepen rather than lighten; elevation is mostly surface value. */
+    --hub-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.55);
+    --hub-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45), 0 10px 28px rgba(0, 0, 0, 0.55);
+    --hub-shadow-accent: 0 6px 22px rgba(0, 82, 255, 0.42);
+    --hub-focus-ring: var(--hub-accent-hover);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='dark']) {
+    --hub-accent-hover: #2f66f0;
+    --hub-accent-soft: rgba(61, 119, 255, 0.16);
+    --hub-accent-ink: #7da2ff;
+    --hub-sunken: #050608;
+    --hub-page: #0a0b0d;
+    --hub-card: #16181d;
+    --hub-raised: #1e2127;
+    --hub-text: #f7f9fc;
+    --hub-text-secondary: #b4bac6;
+    --hub-text-muted: #8a919e;
+    --hub-border: #23262c;
+    --hub-border-medium: #3a3f48;
+    /* Dark shadows deepen rather than lighten; elevation is mostly surface value. */
+    --hub-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.55);
+    --hub-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45), 0 10px 28px rgba(0, 0, 0, 0.55);
+    --hub-shadow-accent: 0 6px 22px rgba(0, 82, 255, 0.42);
+    --hub-focus-ring: var(--hub-accent-hover);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--hub-page);
+  color: var(--hub-text);
+  font-family: var(--hub-font);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 48px 20px 64px;
+}
+
+/* --- Entrance animation ---------------------------------------------------
+ *
+ * CSS-only, compositor-friendly: only `transform` and `opacity` animate.
+ * Order: hero first, then section headers, then cards staggered by `--i`
+ * (set inline per card), with the stagger capped at 600ms however many cards
+ * the registry holds. Keyframes declare only `from` so finished animations
+ * stop applying values and hover transitions keep working; fill-mode
+ * `backwards` hides elements during their delay.
+ */
+
+@keyframes hub-rise {
+  from {
+    transform: translateY(12px) scale(0.985);
+  }
+}
+
+@keyframes hub-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.hero {
+  animation:
+    hub-rise 450ms var(--hub-spring) backwards,
+    hub-fade 350ms ease-out backwards;
+}
+
+.list-notice,
+.section-title {
+  animation:
+    hub-rise 400ms var(--hub-spring) 180ms backwards,
+    hub-fade 300ms ease-out 180ms backwards;
+}
+
+.card,
+.hackathon-panel {
+  animation:
+    hub-rise 420ms var(--hub-spring) backwards,
+    hub-fade 320ms ease-out backwards;
+  animation-delay: calc(280ms + min(calc(var(--i, 0) * 50ms), 600ms));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero,
+  .list-notice,
+  .section-title,
+  .card,
+  .hackathon-panel {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --- Hero ---------------------------------------------------------------- */
+
+.hero-kicker {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  /* Passport micro-caps are always muted; blue is reserved for actions. */
+  color: var(--hub-text-muted);
+}
+
+.hero h1 {
+  margin: 0 0 16px;
+  font-size: clamp(38px, 7vw, 64px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.hero-lede {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 16px;
+  color: var(--hub-text-secondary);
+}
+
+.hero-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* --- List ---------------------------------------------------------------- */
+
+.list-notice {
+  margin: 32px 0 0;
+  padding: 12px 16px;
+  border-radius: var(--hub-radius-md);
+  background: var(--hub-card);
+  border: 1px solid var(--hub-border);
+  color: var(--hub-text-muted);
+  font-size: 13px;
+}
+
+.section-title {
+  margin: 40px 0 16px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+/* --- Cards --------------------------------------------------------------- */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border-radius: var(--hub-radius);
+  /* Passport card recipe: raised surface + hairline + soft resting lift. */
+  background: var(--hub-raised);
+  border: 1px solid var(--hub-border);
+  box-shadow: var(--hub-shadow-sm);
+  transition:
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.card:hover {
+  box-shadow: var(--hub-shadow-md);
+  transform: translateY(-2px);
+}
+
+.card-stale {
+  opacity: 0.75;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: var(--hub-radius-md);
+  object-fit: cover;
+  background: var(--hub-card);
+  border: 1px solid var(--hub-border);
+}
+
+.card-icon-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--hub-accent-ink);
+  background: var(--hub-accent-soft);
+}
+
+.card-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.card-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-category {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hub-text-muted);
+}
+
+.card-description {
+  margin: 0;
+  font-size: 14px;
+  color: var(--hub-text-secondary);
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.card-link {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--hub-accent-ink);
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+.card-link:hover {
+  color: var(--hub-accent-hover);
+  text-decoration: underline;
+}
+
+.card-footnote {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--hub-border);
+  font-size: 11px;
+  color: var(--hub-text-muted);
+}
+
+/* --- Badges -------------------------------------------------------------- */
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--hub-radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.badge-network {
+  background: var(--hub-accent-soft);
+  color: var(--hub-accent-ink);
+}
+
+.badge-new {
+  background: var(--hub-accent);
+  color: var(--hub-accent-text);
+}
+
+.badge-stale {
+  background: var(--hub-raised);
+  border: 1px solid var(--hub-border);
+  color: var(--hub-text-muted);
+}
+
+/* --- Hackathon invitation ------------------------------------------------- */
+
+.hackathon-panel {
+  padding: 36px 28px;
+  border-radius: var(--hub-radius-lg);
+  text-align: center;
+  background: var(--hub-accent-soft);
+  border: 1.5px dashed var(--hub-accent-ink);
+}
+
+.hackathon-panel h3 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--hub-accent-ink);
+}
+
+.hackathon-lede {
+  margin: 0 auto;
+  max-width: 46ch;
+  font-size: 15px;
+  color: var(--hub-text-secondary);
+}
+
+.hackathon-how {
+  margin: 10px auto 18px;
+  max-width: 56ch;
+  font-size: 13px;
+  color: var(--hub-text-muted);
+}
+
+.hackathon-how code {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: var(--hub-radius-sm);
+  background: var(--hub-card);
+  border: 1px solid var(--hub-border);
+}
+
+.hackathon-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--hub-text-muted);
+}
+
+/* --- Buttons -------------------------------------------------------------- */
+
+/* Passport pill recipes: the outlined pill hovers to a soft blue wash with
+ * accent border and blue-as-text ink; the solid CTA is the accent fill with
+ * white text, weight 700, and the blue glow reserved for primary actions.
+ * Press states sink 1px — pills never lift on hover. */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 22px;
+  border-radius: var(--hub-radius-pill);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--hub-font);
+  text-decoration: none;
+  cursor: pointer;
+  color: var(--hub-text);
+  background: transparent;
+  border: 1px solid var(--hub-border-medium);
+  transition:
+    background 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 100ms ease;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--hub-accent);
+  color: var(--hub-accent-ink);
+  background: var(--hub-accent-soft);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.button-primary {
+  font-weight: 700;
+  color: var(--hub-accent-text);
+  background: var(--hub-accent);
+  border-color: var(--hub-accent);
+  box-shadow: var(--hub-shadow-accent);
+}
+
+.button-primary:hover:not(:disabled) {
+  color: var(--hub-accent-text);
+  background: var(--hub-accent-hover);
+  border-color: var(--hub-accent-hover);
+}
+
+.button-primary:active:not(:disabled) {
+  box-shadow: var(--hub-shadow-sm);
+}
+
+:focus-visible {
+  outline: 2px solid var(--hub-focus-ring);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card:hover,
+  .button,
+  .button:hover:not(:disabled) {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* --- Footer -------------------------------------------------------------- */
+
+.footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--hub-border);
+  text-align: center;
+}
+
+.footer-fineprint {
+  margin: 0 auto;
+  max-width: 62ch;
+  font-size: 12px;
+  color: var(--hub-text-muted);
+}
+
+@media (max-width: 480px) {
+  .page {
+    padding: 32px 16px 48px;
+  }
+
+  .hackathon-panel {
+    padding: 26px 18px;
+  }
+}
+
+/* The family-wide beta mark — micro-caps on the accent wash, as in Passport. */
+.beta-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--hub-radius-pill, 999px);
+  background: var(--hub-accent-soft);
+  color: var(--hub-accent-ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  vertical-align: 2px;
+}
+
+
+/* --- Theme toggle --------------------------------------------------------- */
+
+.page-topbar {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--hub-border-medium);
+  border-radius: var(--hub-radius-pill, 999px);
+  background: transparent;
+  color: var(--hub-text);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.theme-toggle:hover {
+  border-color: var(--hub-accent);
+  color: var(--hub-accent-ink);
+  background: var(--hub-accent-soft);
+}
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--hub-focus-ring);
+  outline-offset: 2px;
+}

@@ -1,0 +1,258 @@
+{
+  "manifest-version": "1",
+  "compiler-version": "0.33.0",
+  "language-version": "0.25.0",
+  "runtime-version": "0.18.0-rc.1",
+  "compiler": {
+    "type": "directory",
+    "contract-info.json": {
+      "type": "file",
+      "size": 12818,
+      "hash": "1af0adfb4e1a748b591fd59c4b90c202f8b6dbde763d4b3f9abe5fdeb0718f88"
+    }
+  },
+  "contract": {
+    "type": "directory",
+    "index.d.ts": {
+      "type": "file",
+      "size": 10820,
+      "hash": "bf840e21b58ae1a7ff6213aae79fa13fec896196243e35ee7b7010b0cc626ef9"
+    },
+    "index.js": {
+      "type": "file",
+      "size": 294567,
+      "hash": "92b707710558b8765a93b6eb04ab4eb84b89463f8e019511e5e50a435533032d"
+    },
+    "index.js.map": {
+      "type": "file",
+      "size": 11087,
+      "hash": "6d2a15e096fa652f624d00d019bbe8bdf75c4ff46761942399c288b46ff481a4"
+    }
+  },
+  "zkir": {
+    "type": "directory",
+    "add_device.bzkir": {
+      "type": "file",
+      "size": 706,
+      "hash": "5ba530159a9245d15c31ce08427015f721c760d6bf2b16180b9daef80086d8d1"
+    },
+    "add_device.zkir": {
+      "type": "file",
+      "size": 11306,
+      "hash": "defd825e73bfda4d7cc7e818e39ea295d0e4d447c99387dda4b30ae68da6cd90"
+    },
+    "add_grant.bzkir": {
+      "type": "file",
+      "size": 751,
+      "hash": "eb30c94ecdd84da028cf9a1c4c85990f024eee69cf581eae747c3082a9d37805"
+    },
+    "add_grant.zkir": {
+      "type": "file",
+      "size": 11898,
+      "hash": "5bd86e4bd8eaebd209162fd70dbe94d7d0c8ec4bf08f5704e19d13a81a1eda4e"
+    },
+    "deposit_night.bzkir": {
+      "type": "file",
+      "size": 650,
+      "hash": "f48192d9124edf21a3d7ec11d936a8e64a2ebdc1f5bf83a1205d291324699607"
+    },
+    "deposit_night.zkir": {
+      "type": "file",
+      "size": 9871,
+      "hash": "1315d644c1144010c48aa5ebeb18fdaf6a81dbdf8bb94aad25813835ad7833a0"
+    },
+    "deposit_shielded.bzkir": {
+      "type": "file",
+      "size": 2030,
+      "hash": "c5fcf9b9e1cacbffad7676f965be2e3f971214aaf2e626673c035dcda968fc18"
+    },
+    "deposit_shielded.zkir": {
+      "type": "file",
+      "size": 28438,
+      "hash": "7e0b8275abb29f73190886cc64a47355f04471b8489a533ed2c04f89a3f9b70f"
+    },
+    "grant_withdraw_night.bzkir": {
+      "type": "file",
+      "size": 1016,
+      "hash": "55e887052746296fd7a88bb8399e9aaf88fe5fc136fe563533ebe88ba1417fbc"
+    },
+    "grant_withdraw_night.zkir": {
+      "type": "file",
+      "size": 16563,
+      "hash": "6664677c2fbe952bbffe4a0731911488885f5d2115d2b35df8f477bbc67ac093"
+    },
+    "grant_withdraw_shielded.bzkir": {
+      "type": "file",
+      "size": 2666,
+      "hash": "65676cfaed89c8b27eb91cc7dab734e495dcc3fab3ecfa0be20b03ffd0c17b69"
+    },
+    "grant_withdraw_shielded.zkir": {
+      "type": "file",
+      "size": 34252,
+      "hash": "c63c4e79af5eb0c29144799aa2e615c395d964b1f9222ff92b44d2795609ed11"
+    },
+    "recover.bzkir": {
+      "type": "file",
+      "size": 662,
+      "hash": "a520efdc72c07a1851c8cd7333410f189f014d9dedcd10c48bf43ad7fee0bffe"
+    },
+    "recover.zkir": {
+      "type": "file",
+      "size": 10760,
+      "hash": "f3e5dd2d43b557f2e6bdf19b9cd56c5ab74266fa25a32893ddd0097831c15da5"
+    },
+    "remove_device.bzkir": {
+      "type": "file",
+      "size": 645,
+      "hash": "d1acce11721d63e2611fb4a9f3b4017829c2705b8c5bb838b7b31c4197ed6b9f"
+    },
+    "remove_device.zkir": {
+      "type": "file",
+      "size": 10396,
+      "hash": "0c2fb0bff92c2fa9fe2a14c32fcee28ef80698be163b96a0150d332717705d18"
+    },
+    "revoke_grant.bzkir": {
+      "type": "file",
+      "size": 551,
+      "hash": "9ca03a384496067c72e39c1f11a4a039ece899df15f65256e1ca347dcff645ff"
+    },
+    "revoke_grant.zkir": {
+      "type": "file",
+      "size": 8937,
+      "hash": "6869464ab07ad1dc0d6c21e5c4f97606ea196db13e3831ead3e6c26052cc47eb"
+    },
+    "withdraw_night.bzkir": {
+      "type": "file",
+      "size": 887,
+      "hash": "a355b9c692e68294b633034d81365607b3d4e42bcb1191a987799ff7bcf34699"
+    },
+    "withdraw_night.zkir": {
+      "type": "file",
+      "size": 14079,
+      "hash": "8ad76414f5faf7c0f71c1c9ae4fc3b52ee138550caed33d75db7d81ff83c112b"
+    },
+    "withdraw_shielded.bzkir": {
+      "type": "file",
+      "size": 2323,
+      "hash": "979a9f1c48eb90a5a36b46e3452cbee94502a19ca4bfd1c3fe65b85fcc62de23"
+    },
+    "withdraw_shielded.zkir": {
+      "type": "file",
+      "size": 31656,
+      "hash": "3851da0ee8b0a99a843e67841845eb5dfd875b4d25e673b53ab4e77c86468464"
+    }
+  },
+  "keys": {
+    "type": "directory",
+    "add_device.prover": {
+      "type": "file",
+      "size": 147883,
+      "hash": "b9e7219cfe963a0f2e08f4cc59ffc3cf87b9ae8b80da1b8793bb674b87f537aa"
+    },
+    "add_device.verifier": {
+      "type": "file",
+      "size": 1351,
+      "hash": "eade5b2a4cbc0914f302a7ca6db09089f538054adf22347d236a222d331721f1"
+    },
+    "add_grant.prover": {
+      "type": "file",
+      "size": 280580,
+      "hash": "2e39c79f5deba8532a15d4cb446f78a3142022e44d0fa16a5110515eac268f85"
+    },
+    "add_grant.verifier": {
+      "type": "file",
+      "size": 1351,
+      "hash": "32750846251c151e0dd242ec1d6ec223b2f54d84dbd30bb89177da7d8ef3a5b3"
+    },
+    "deposit_night.prover": {
+      "type": "file",
+      "size": 287968,
+      "hash": "8ac4a2cbb303e85c5a2bb6ee391f8f02490749c5baf1a451eb628c5f6e72c151"
+    },
+    "deposit_night.verifier": {
+      "type": "file",
+      "size": 1351,
+      "hash": "8cc92b18da591328e07c77a1ddcc6fa03838fe257454a229f287ae90828843fa"
+    },
+    "deposit_shielded.prover": {
+      "type": "file",
+      "size": 19482922,
+      "hash": "576335358f2685caf0f96801c5bf95430b50630bb55ce288bbc32aaffa5999cf"
+    },
+    "deposit_shielded.verifier": {
+      "type": "file",
+      "size": 2119,
+      "hash": "43bbb0791c0aadf11d74cd5a825f6e443f433108509cc876aa49d3a513bff1be"
+    },
+    "grant_withdraw_night.prover": {
+      "type": "file",
+      "size": 552595,
+      "hash": "d8e2bbced73fe6946aeab5b3d6a5369e177c2ebd6e70cf205b2c16f487d96be3"
+    },
+    "grant_withdraw_night.verifier": {
+      "type": "file",
+      "size": 1351,
+      "hash": "dc798ec5786c98ebff7a829f7633bebe8b64b39390768429ab358f500aabc3de"
+    },
+    "grant_withdraw_shielded.prover": {
+      "type": "file",
+      "size": 19532895,
+      "hash": "355ab14e683e751551a84b78137f57a7fd63511d106ca449b9c712d575d35016"
+    },
+    "grant_withdraw_shielded.verifier": {
+      "type": "file",
+      "size": 2119,
+      "hash": "da772eb7ba97becbe739e235441c7355bdefbf47ab3946ba5246f94c014b47f6"
+    },
+    "recover.prover": {
+      "type": "file",
+      "size": 544315,
+      "hash": "51f70f8a0f00463391e72c53b80a3875f71b87860d4793fd1e7b2c0b3cc2e5f0"
+    },
+    "recover.verifier": {
+      "type": "file",
+      "size": 1351,
+      "hash": "bd36caf62ac4e19de3c9d6f2751e24a51a2e08f7f5c8ee95f159b45f77811887"
+    },
+    "remove_device.prover": {
+      "type": "file",
+      "size": 155218,
+      "hash": "6058303dea700f1bfcf5da140e2d6f31df0d445a436e4bb15137fd6d11fcea9d"
+    },
+    "remove_device.verifier": {
+      "type": "file",
+      "size": 1351,
+      "hash": "b1a0e9393732f6cb09d36b754a2aab737977bab6f168378994370147da081d36"
+    },
+    "revoke_grant.prover": {
+      "type": "file",
+      "size": 147671,
+      "hash": "909d7e541544d6467a222ede8225929e94f7b48f13ea4be44bbe982f161ab34f"
+    },
+    "revoke_grant.verifier": {
+      "type": "file",
+      "size": 1351,
+      "hash": "5fa48353e0bda7015c2f4ff1a5c159481960b7e1bdab52ba8d1d036e8187f7a5"
+    },
+    "withdraw_night.prover": {
+      "type": "file",
+      "size": 552345,
+      "hash": "f1210219e973d698f11f41e85dc7efc13fe83e7e487ffe393376da715d672c70"
+    },
+    "withdraw_night.verifier": {
+      "type": "file",
+      "size": 1351,
+      "hash": "5e1344360bcd4a93a76a8df9b9481f04ceb2102f61f20da23adbf750f3544080"
+    },
+    "withdraw_shielded.prover": {
+      "type": "file",
+      "size": 19532231,
+      "hash": "c390bce546be52e3cda8919a9e7e421cb6f8699bdfc493944b95bea9a50a1953"
+    },
+    "withdraw_shielded.verifier": {
+      "type": "file",
+      "size": 2119,
+      "hash": "a62a8bbfdd424d41ae946728ae7efbf4f5d2b5a4042554fef5524bb931fff008"
+    }
+  }
+}

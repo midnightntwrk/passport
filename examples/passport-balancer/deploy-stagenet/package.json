@@ -1,0 +1,28 @@
+{
+  "name": "passport-deploy-stagenet",
+  "version": "0.1.0",
+  "description": "One-shot deployment harness: puts the Midnight Passport contracts (midnames .night TLD, mUSD faucet/mint, account custody) onto stagenet with the ledger-9 release-candidate stack.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "smoke": "node src/smoke-artifacts.mjs",
+    "deploy": "node src/deploy.mjs"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-js": "2.5.5-rc.7",
+    "@midnight-ntwrk/compact-runtime": "0.18.0-rc.1",
+    "@midnight-ntwrk/midnight-js-contracts": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-types": "5.0.0-beta.6",
+    "@midnight-ntwrk/wallet-sdk": "2.0.0-beta.2",
+    "@midnight-ntwrk/zkir-v2": "2.1.0",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.3",
+    "rxjs": "^7.8.2",
+    "ws": "^8.19.0"
+  },
+  "overrides": {
+    "@midnight-ntwrk/wallet-sdk-utilities": "1.2.1"
+  }
+}
