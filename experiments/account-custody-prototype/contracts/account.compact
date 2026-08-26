@@ -117,10 +117,14 @@ export ledger device_count: Uint<8>;
 export ledger recovery: Field;
 // Commitment to the recovery secret (derive_recovery_commitment).
 
-export ledger recovery_phi: Map<Uint<8>, Bytes<32>>;
-// BUSS public vector φ, keyed 1..recovery_phi_len. Each entry is the
-// canonical 32-byte encoding of a BLS12-381 scalar field element. Opaque to
-// the contract; interpreted only by the client (buss-wasm).
+export ledger recovery_phi: Map<Uint<8>, Field>;
+// BUSS public vector φ, keyed 1..recovery_phi_len. Each entry is a BLS12-381
+// scalar field element, canonical by construction: the Field type makes a
+// non-canonical encoding unrepresentable on-chain, so a malformed backup is
+// rejected when the publishing transaction is built instead of blocking
+// every guardian's decode at recovery time. Interpreted only by the client
+// (buss-wasm); the client boundary encoding is the canonical little-endian
+// 32-byte repr (buss-core phiFieldFromBytes / phiBytesFromField).
 
 export ledger recovery_phi_len: Uint<8>;
 // Number of live φ entries. 0 = no backup published (recovery possible only
@@ -408,10 +412,10 @@ export circuit revoke_grant(grant: Field): [] {
 export circuit publish_recovery_backup(
   new_recovery_commitment: Field,
   session_nonce: Bytes<32>,
-  phi_1: Bytes<32>,
-  phi_2: Bytes<32>,
-  phi_3: Bytes<32>,
-  phi_4: Bytes<32>,
+  phi_1: Field,
+  phi_2: Field,
+  phi_3: Field,
+  phi_4: Field,
   phi_len: Uint<8>,
 ): [] {
   require_device();

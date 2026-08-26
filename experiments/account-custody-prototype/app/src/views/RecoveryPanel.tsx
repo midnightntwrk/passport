@@ -8,6 +8,7 @@ import {
   buss,
   newSessionNonce,
   paramsFromPhi,
+  phiBytesFromField,
   encodeGuardianRequest,
   decodeGuardianRequest,
   encodeGuardianReply,
@@ -576,7 +577,7 @@ function RecoverPanel(props: {
 
               log(`TOTAL LOSS — reconstructing from ${quorum.length} shares + ${phiLen} public points…`);
               const phi = Array.from({ length: phiLen }, (_, i) =>
-                ledger.recovery_phi.lookup(BigInt(i + 1)),
+                phiBytesFromField(ledger.recovery_phi.lookup(BigInt(i + 1))),
               );
               const secret = buss.reconstructRecoverySecret(
                 phi,

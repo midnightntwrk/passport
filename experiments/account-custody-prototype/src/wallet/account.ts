@@ -8,9 +8,9 @@ import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-j
 import { deviceCommitment, grantCommitment, recoveryCommitment, ledger, type Ledger } from './contract.js';
 import { privateStateFromSecrets, type AccountPrivateState } from './witnesses.js';
 import { bytesToHex } from './hex.js';
+import { phiFieldFromBytes } from './buss-core.js';
 
 const MAX_PHI = 4;
-const ZERO_32 = new Uint8Array(32);
 
 export interface AccountSecrets {
   deviceSecret?: Uint8Array;
@@ -159,7 +159,9 @@ export class PassportAccount {
    * Publish a BUSS recovery backup: rotates the recovery commitment to a
    * FRESH secret and stores φ under a FRESH session nonce (both rules are
    * load-bearing — see contracts/account.compact header). Device-authorised.
-   * `phi` holds 1..4 entries of 32 bytes each, straight from buildPhi().
+   * `phi` holds 1..4 entries of 32 bytes each, straight from buildPhi();
+   * each is converted to the on-chain Field value here, so a non-canonical
+   * entry is rejected before it can land on-chain.
    */
   publishRecoveryBackup(
     newRecoverySecret: Uint8Array,
@@ -169,7 +171,9 @@ export class PassportAccount {
     if (phi.length < 1 || phi.length > MAX_PHI) {
       throw new Error(`phi must have 1..${MAX_PHI} entries, got ${phi.length}`);
     }
-    const slots = Array.from({ length: MAX_PHI }, (_, i) => phi[i] ?? ZERO_32);
+    const slots = Array.from({ length: MAX_PHI }, (_, i) =>
+      phi[i] ? phiFieldFromBytes(phi[i]) : 0n,
+    );
     return this.call(
       'publish_recovery_backup',
       recoveryCommitment(newRecoverySecret),
