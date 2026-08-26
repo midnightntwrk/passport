@@ -33,6 +33,22 @@ export interface FunderConfig extends FunderNetworkEndpoints {
    */
   aliasMaxPerHour: number;
   /**
+   * Atomic NIGHT deposited INTO an account-custody contract per activation.
+   *
+   * Larger than {@link dripAtomic} because it is not spending money on a
+   * wallet's behalf — it is the account's opening balance, and it should cover
+   * a name registration plus a few real transfers without a second visit.
+   */
+  accountGrantAtomic: bigint;
+  /**
+   * Global ceiling on ACCOUNT FUNDINGS per rolling hour, counted separately
+   * from drips and from alias registrations for the same reason those two are
+   * counted apart: they spend the same coins but answer different questions.
+   */
+  accountMaxPerHour: number;
+  /** Explicit path to the compiled account build, when auto-discovery is wrong. */
+  accountAssetsPath?: string;
+  /**
    * The `.night` TLD this funder registers against. Defaults to the deployed
    * registry for {@link networkId}; override for a locally deployed one.
    */
@@ -112,6 +128,19 @@ export const DEFAULT_MAX_PER_HOUR = 60;
  * queueing registrations behind each other for longer than a few minutes.
  */
 export const DEFAULT_ALIAS_MAX_PER_HOUR = 20;
+/**
+ * 0.002 NIGHT into the account itself. Twice the wallet drip because it is the
+ * account's opening balance rather than a one-transaction allowance: it covers
+ * a `.night` registration at any label length (600 atomic at worst) and still
+ * leaves the user something to move.
+ */
+export const DEFAULT_ACCOUNT_GRANT_ATOMIC = 2_000n;
+/**
+ * Higher than the alias ceiling and lower than the drip one. An account funding
+ * is one proof and one transaction — cheaper than a sponsored registration,
+ * dearer than a transfer — so throughput sits between the two.
+ */
+export const DEFAULT_ACCOUNT_MAX_PER_HOUR = 30;
 export const DEFAULT_ALLOWED_ORIGINS = ['https://midnightpassport.com'];
 export const DEFAULT_PORT = 8799;
 
@@ -199,6 +228,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FunderConfig {
     throw new Error('FUNDER_ALIAS_MAX_PER_HOUR must be a positive integer.');
   }
 
+  const grantRaw = trimmed(env.FUNDER_ACCOUNT_GRANT_ATOMIC);
+  let accountGrantAtomic = DEFAULT_ACCOUNT_GRANT_ATOMIC;
+  if (grantRaw) {
+    accountGrantAtomic = BigInt(grantRaw);
+    if (accountGrantAtomic <= 0n) {
+      throw new Error('FUNDER_ACCOUNT_GRANT_ATOMIC must be a positive integer.');
+    }
+  }
+
+  const accountMaxPerHour = Number(
+    trimmed(env.FUNDER_ACCOUNT_MAX_PER_HOUR) ?? DEFAULT_ACCOUNT_MAX_PER_HOUR,
+  );
+  if (!Number.isInteger(accountMaxPerHour) || accountMaxPerHour <= 0) {
+    throw new Error('FUNDER_ACCOUNT_MAX_PER_HOUR must be a positive integer.');
+  }
+
   /* An empty string here is not a misconfiguration — it is a network with no
      shared registry. `/register-alias` refuses on it with a named reason
      instead of the service failing to start. */
@@ -218,6 +263,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): FunderConfig {
     dripAtomic,
     maxPerHour,
     aliasMaxPerHour,
+    accountGrantAtomic,
+    accountMaxPerHour,
+    accountAssetsPath: trimmed(env.FUNDER_ACCOUNT_ASSETS),
     midnamesTldAddress,
     midnamesAssetsPath: trimmed(env.FUNDER_MIDNAMES_ASSETS),
     allowedOrigins: allowedOrigins.length > 0 ? allowedOrigins : [...DEFAULT_ALLOWED_ORIGINS],
