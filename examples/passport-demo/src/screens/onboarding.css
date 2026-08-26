@@ -1,0 +1,249 @@
+@import './tokens.css';
+
+/* Onboarding screen — prefix "mnob-".
+   Base-inspired Midnight direction: white/near-black page surfaces, one
+   electric blue accent, generously rounded cards, and soft vertical
+   shadows (see tokens.css for the full language).
+
+   This screen follows the user's theme like every other surface: light by
+   default, ink under [data-theme="dark"]. The hero is carried by huge,
+   tight display type on the clean page surface; the primary actions are
+   accent-blue with white text. */
+
+.mnob-screen {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  animation: mnob-in .45s ease-out both;
+}
+
+.mnob-bar {
+  position: relative;
+  z-index: 1;
+  width: min(100% - 48px, 520px);
+  min-height: 64px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnob-wordmark {
+  width: 104px;
+  height: auto;
+  filter: var(--mn-wordmark-filter);
+}
+.mnob-bar-label {
+  margin-left: auto;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.mnob-theme { margin-left: 14px; }
+
+.mnob-body {
+  position: relative;
+  z-index: 1;
+  width: min(100% - 48px, 520px);
+  margin: 0 auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-top: clamp(44px, 9svh, 96px);
+  padding-bottom: 28px;
+}
+
+.mnob-kicker {
+  margin: 0 0 16px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.mnob-title {
+  margin: 0;
+  display: grid;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  font-size: clamp(46px, 13.5vw, 82px);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: .95;
+}
+.mnob-title span { display: block; }
+.mnob-lede {
+  max-width: 400px;
+  margin: 22px 0 0;
+  color: var(--mn-text-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* Inline error banner */
+.mnob-error {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 26px;
+  padding: 10px 12px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-card);
+  box-shadow: var(--mn-shadow-sm);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.mnob-error-copy { flex: 1; overflow-wrap: anywhere; }
+.mnob-error-dismiss {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-primary);
+  background: transparent;
+}
+.mnob-error-dismiss:hover:not(:disabled) {
+  background: var(--mn-surface-hover);
+}
+
+/* Stages */
+.mnob-stage { margin-top: auto; padding-top: 40px; animation: mnob-stage-in .35s ease-out both; }
+
+/* Welcome — the ONE action: an accent-blue pill with the blue glow.
+   Sign-in and enrolment share it; the integrator resolves which runs. */
+.mnob-primary {
+  width: 100%;
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 13px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  box-shadow: var(--mn-shadow-accent);
+  font-size: 15px;
+  font-weight: 700;
+  transition: background .15s ease, transform .1s ease, box-shadow .15s ease;
+}
+.mnob-primary:hover:not(:disabled) {
+  background: var(--mn-accent-hover);
+}
+.mnob-primary:active:not(:disabled) {
+  transform: translateY(1px) scale(.99);
+  box-shadow: var(--mn-shadow-sm);
+}
+.mnob-primary-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.mnob-primary-copy svg { flex: 0 0 auto; }
+
+/* One sentence beneath the button saying which journey it will run. */
+.mnob-hint {
+  margin: 12px 0 0;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Quiet secondary path beneath the hint: sign in with a passkey the
+   platform picker offers, rather than the one this browser remembers. */
+.mnob-alt {
+  margin-top: 14px;
+  padding: 8px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--mn-text-muted);
+  font-family: var(--mn-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color .15s ease;
+}
+.mnob-alt:hover { color: var(--mn-text-primary); }
+
+/* Working — busy state */
+.mnob-working {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-card);
+  box-shadow: var(--mn-shadow-sm);
+  font-size: 13px;
+  font-weight: 600;
+}
+.mnob-working-spinner { flex: 0 0 auto; animation: mnob-spin 1s linear infinite; }
+.mnob-working-copy { overflow-wrap: anywhere; }
+.mnob-working-hint { margin: 12px 0 0; color: var(--mn-text-muted); font-size: 12px; line-height: 1.5; }
+
+.mnob-foot {
+  position: relative;
+  z-index: 1;
+  width: min(100% - 48px, 520px);
+  min-height: 46px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  border-top: var(--mn-hairline) solid var(--mn-border-hairline);
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+/* `.mnob-foot-link` was removed on 2026/08/19 with the "Full dashboard"
+   escape hatch it styled — there is no second route to link to, so the footer
+   carries only its honesty note. */
+
+@keyframes mnob-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mnob-stage-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes mnob-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnob-screen,
+  .mnob-stage { animation: none; }
+  .mnob-working-spinner { animation-duration: 2.4s; }
+  .mnob-primary { transition: none; }
+  .mnob-primary:active:not(:disabled) { transform: none; }
+}
+
+/* Tablet and up. On a phone the stage rides the viewport floor
+   (margin-top: auto), which keeps the actions under the thumb. On a tall
+   viewport that same rule strands them: a 1133px-tall screen opens a void
+   of bare page between the lede and the choices. So here the push is capped
+   to a measured interval and the actions stay within reach of the copy. */
+@media (min-width: 700px) {
+  .mnob-bar, .mnob-body, .mnob-foot { width: min(100% - 64px, 560px); }
+  .mnob-stage { margin-top: clamp(48px, 12svh, 160px); }
+  .mnob-primary { width: auto; min-width: 280px; }
+}
