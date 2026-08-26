@@ -1,13 +1,16 @@
 # passport-funder
 
 A small self-hosted onboarding service for Midnight Passport. It holds a wallet
-of faucet NIGHT and pays, on a new Passport's behalf, for the two things that
-would otherwise require the user to hold NIGHT before they hold anything:
+of faucet NIGHT and pays, on a new Passport's behalf, for the things that would
+otherwise require the user to hold NIGHT before they hold anything:
 
-- **`POST /activate`** drips an **activation-sized grant** — by default 1 000
-  atomic NIGHT (0.001 NIGHT) — so a user who wants to pay for their own name
-  can, in seconds, instead of queueing until they visit a captcha faucet.
-- **`POST /register-alias`** removes the payment entirely: the funder registers
+- **`POST /fund-account`** deposits an **activation grant** — by default 2 000
+  atomic NIGHT (0.002 NIGHT) — **inside** the user's account-custody contract,
+  by calling that contract's own permissionless `deposit_night` circuit.
+- **`POST /activate`** drips an activation-sized grant — by default 1 000 atomic
+  NIGHT (0.001 NIGHT) — to a wallet **address**, for the paths that still need a
+  wallet to hold NIGHT.
+- **`POST /register-alias`** removes a payment entirely: the funder registers
   the `.night` name **for** the user, paying the registry price from its own
   NIGHT and the transaction fees from its own DUST. The user's wallet signs
   nothing, spends nothing, and needs to hold nothing.
@@ -16,6 +19,43 @@ The Midnames registration price is contract-mandatory but tiny: 10 atomic
 NIGHT for names of five bytes or more, 140 for four, 600 for three or fewer.
 The bottleneck was never the price — it was that a fresh passkey wallet holds
 zero NIGHT and the public faucets are captcha-gated.
+
+## The activation grant, and why it lands inside the contract
+
+A Passport's value is supposed to live in its **account-custody contract** (the
+ACC), not in the passkey wallet that happened to deploy it. `/activate` pays a
+wallet address, which puts the user back in the position the whole design exists
+to avoid — holding, watching, and spending from a wallet — and then needs a
+second, user-paid transaction to move the grant where it was always meant to go.
+
+`/fund-account` skips both steps. The ACC's entrypoint is
+
+```
+deposit_night(color, amount)
+```
+
+and it is **permissionless**: no `require_device()`, no witness, no caller check.
+It calls `receiveUnshielded(color, amount)`, which makes the transaction owe the
+contract that many coins, and then mirrors the credit into the contract's
+`night_balances` map. Anyone may fund an account; the funder is simply the first
+anyone. It calls the circuit itself, paying the coins from its own NIGHT and the
+fee from its own DUST.
+
+**So the grant is inside the contract from the moment it exists, and the user's
+wallet never holds it.** Nothing has to be moved afterwards, and there is no
+window in which a Passport's balance sits somewhere a dApp cannot reach and a
+lost device could drain.
+
+The funder cannot take it back out. Every ACC circuit that moves value —
+`withdraw_night`, `grant_withdraw_night`, `recover` — demands a `device_secret`,
+`grant_secret`, or `recovery_secret` witness, and this service's witness set is
+three refusals that throw. `deposit_night` asks for none of them. That is a
+property of the code, not a promise about it.
+
+The grant is deliberately larger than the wallet drip: it is an opening balance
+rather than a one-transaction allowance, so 2 000 atomic covers a `.night`
+registration at any label length (600 atomic at worst) and leaves the user
+something to move.
 
 ## Sponsored registration, and why it works
 
@@ -81,6 +121,84 @@ Refusals are clear JSON, `{"error": code, "message": sentence}`:
 | 503    | `funder-empty`      | The funder's own NIGHT is below one drip — top it up.          |
 | 503    | `funder-no-dust`    | The funder's DUST is still accruing; try again in a minute.    |
 | 500    | `drip-failed`       | The transfer itself failed; the address may retry.             |
+
+### `POST /fund-account`
+
+Body:
+
+```json
+{
+  "contractAddress": "<64 hex — the user's account-custody contract>",
+  "network": "preview"
+}
+```
+
+`network` is optional; when present it must name this funder's own network.
+
+Success is `200`:
+
+```json
+{
+  "contractAddress": "f03f728517c039fd253bde299b9dd9de4042e27e7904e05848421081186a4970",
+  "txHash": "<64 hex ledger hash>",
+  "amountAtomic": "2000",
+  "balanceAfterAtomic": "2000",
+  "fundedAt": "2026-08-24T09:12:41.108Z"
+}
+```
+
+`txHash` is a 64-hex **ledger hash**, resolved from the identifier midnight-js
+returns so an explorer link actually works. `balanceAfterAtomic` is the
+contract's own `night_balances` mirror for the native colour, read back from the
+indexer. A `200` is only returned once that mirror really shows the credit — a
+deposit that never lands is a failure, not a slow success.
+
+Policy, in the order it is enforced. Nothing is spent until every gate passes:
+
+1. **Shape** — `contractAddress` is a 64-hex Midnight contract address, and any
+   `network` names this funder's network.
+2. **In flight** — no other funding for the same contract is running. Claimed
+   before any chain read, because those reads cannot see a deposit still in the
+   air. One key, not two: an account funding is about exactly one thing.
+3. **It really is an account** — one indexer read that must both find contract
+   state and **decode it as an account-custody contract**. The fingerprint is
+   structural rather than "the decoder did not throw": Compact decodes
+   positionally, so a foreign contract can occasionally produce a
+   plausible-looking object. Every real account has at least one device (the
+   constructor inserts one and `remove_device` asserts it cannot remove the
+   last) and exactly three recovery shares. A contract that fails either test is
+   refused as `not-an-account` rather than fed coins — it has no `deposit_night`,
+   and the grant would be spent into something the user cannot reach.
+4. **Once per Passport, ever** — keyed on the contract address in a persisted
+   ledger (`accounts-<network>.json`), which is what survives a restart.
+5. **Not already funded** — from the `night_balances` mirror read at gate 3. An
+   account already holding a grant's worth does not need an opening balance,
+   whoever put it there.
+6. **Hourly ceiling** — `FUNDER_ACCOUNT_MAX_PER_HOUR`, counted separately from
+   drips and from alias registrations. A slot is consumed only when a deposit is
+   actually attempted.
+7. **The funder can pay** — the grant plus a fee, waiting out any change still
+   in flight rather than refusing during a settle window.
+
+The deposit then runs under the wallet's spend lock, so it cannot contend with a
+drip or an alias registration for the same UTxO.
+
+Refusals are clear JSON, `{"error": code, "message": sentence}`:
+
+| Status | `error`                   | Meaning                                                                 |
+| ------ | ------------------------- | ----------------------------------------------------------------------- |
+| 400    | `invalid-contract-address`| Not a 64-hex Midnight contract address.                                 |
+| 400    | `wrong-network`           | The request names a different network.                                  |
+| 400    | `not-an-account`          | No state at that address, or state that does not decode as an ACC.      |
+| 409    | `funding-in-flight`       | A funding for this Passport is already running.                         |
+| 409    | `already-activated`       | This Passport was already funded (once per contract, ever).             |
+| 409    | `already-funded`          | The account already holds at least one grant's worth of NIGHT.          |
+| 429    | `rate-limited`            | The `FUNDER_ACCOUNT_MAX_PER_HOUR` ceiling was reached.                  |
+| 502    | `deposit-failed`          | The deposit was refused or failed; nothing was credited. (`500` when the failure was not one the deposit path recognises.) |
+| 502    | `confirmation-failed`     | The deposit landed but the mirrored balance never showed the credit.    |
+| 503    | `funding-unsupported`     | The compiled account build could not be loaded.                         |
+| 503    | `indexer-unreachable`     | The indexer could not be read, so nothing may be asserted.              |
+| 503    | `funder-empty` / `funder-no-dust` | The funder cannot pay right now.                                |
 
 ### `POST /register-alias`
 
@@ -175,12 +293,13 @@ Refusals are clear JSON, `{"error": code, "message": sentence}`:
 ### `GET /status`
 
 `{"network": "preview", "address": "mn_addr…", "balanceAtomic": "…",
-"dripsServed": 3, "aliasesSponsored": 1, "aliasesSponsoredTotal": 1,
+"dripsServed": 3, "accountsFunded": 2, "accountsFundedTotal": 2,
+"accountFunding": "available", "aliasesSponsored": 1, "aliasesSponsoredTotal": 1,
 "aliasSponsorship": "available", "ready": true, "settling": false}` — never the
 seed, and never any key material. `ready` means synced, holding at least one
-drip's worth of NIGHT, and able to pay its own fee. `aliasesSponsored` counts
-this process's registrations; `aliasesSponsoredTotal` is the persisted
-once-only ledger, which survives restarts.
+drip's worth of NIGHT, and able to pay its own fee. `accountsFunded` and
+`aliasesSponsored` count this process's work; the two `…Total` figures are the
+persisted once-only ledgers, which survive restarts.
 
 `settling` tells the two indistinguishable-on-chain reasons for `ready: false`
 apart. A spend consumes its whole UTxO and the change returns in a new one, so
@@ -224,10 +343,13 @@ Point the Passport demo at it with `VITE_FUNDER_URL` (see
 | `FUNDER_SEED`           | — (required)                                     | 64-hex wallet seed. Never logged.           |
 | `FUNDER_ENV_FILE`       | —                                                | Path to a dotenv-style file merged into the environment (the real environment wins). Keep the seed in a mode-600 file this way. |
 | `FUNDER_NETWORK`        | `preview`                                        | `preview`, `preprod`, or `undeployed`.      |
-| `FUNDER_STATE_DIR`      | `./state`                                        | Sync snapshot + once-only drip ledger.      |
+| `FUNDER_STATE_DIR`      | `./state`                                        | Sync snapshot + the three once-only ledgers (`drips-`, `accounts-`, `aliases-`). |
 | `FUNDER_DRIP_ATOMIC`    | `1000`                                           | Atomic NIGHT per activation.                |
 | `FUNDER_MAX_PER_HOUR`   | `60`                                             | Global drip ceiling per rolling hour.       |
 | `FUNDER_ALIAS_MAX_PER_HOUR` | `20`                                         | Global ceiling on sponsored registrations per rolling hour. Modest by design: each one costs two proofs and two transactions, so the limit that matters is throughput, not spend. |
+| `FUNDER_ACCOUNT_GRANT_ATOMIC` | `2000`                                     | Atomic NIGHT deposited into each account-custody contract. An opening balance, not a one-transaction allowance. |
+| `FUNDER_ACCOUNT_MAX_PER_HOUR` | `30`                                       | Global ceiling on funded accounts per rolling hour, counted separately from drips and registrations. One proof and one transaction each, so throughput sits between the two. |
+| `FUNDER_ACCOUNT_ASSETS` | auto-discovered                                  | Path to the compiled account build (`experiments/account-custody-prototype/contracts/managed/account`, produced by `npm run compile` there). |
 | `FUNDER_MIDNAMES_TLD_ADDRESS` | the deployed `.night` TLD for the network  | Override to sponsor against a locally deployed registry. Unset on `undeployed`, where `/register-alias` is disabled. |
 | `FUNDER_MIDNAMES_ASSETS`| auto-discovered                                  | Path to the pinned Midnames build (`experiments/account-custody-prototype/contracts/managed/midnames`). |
 | `FUNDER_ALLOWED_ORIGINS`| `https://midnightpassport.com`                   | Comma list of browser origins for CORS.     |
@@ -263,16 +385,24 @@ docker run -d -p 8799:8799 -v funder-state:/data \
 
 - Drips are **activation-sized**: the default grant is 0.001 NIGHT of test
   tokens. The worst an abuser can extract per address is that.
+- Account grants are **activation-sized too** — 0.002 NIGHT — and every one of
+  them costs the abuser a deployed account-custody contract first, which is a
+  real transaction the chain rate-limits for us.
 - Sponsored registrations are **cheaper still** — 10 atomic NIGHT for a normal
-  name — and every one of them costs the abuser a deployed contract first.
+  name — and every one of them likewise costs the abuser a deployed contract.
 - The seed only ever holds faucet NIGHT. Do not reuse it for anything, and do
   not send it anything you would mind losing.
-- One drip per address ever, one sponsored name per account-custody contract
-  ever, both in persisted ledgers; separate hourly ceilings; a refusal for
-  addresses that already hold a grant's worth; a refusal for names bound to a
-  contract that does not exist; and CORS pinned to the Passport origin. None of
-  this makes the service unabusable — it makes abuse slower than it is worth
-  for tokens with no market value.
+- One drip per address ever, one grant per account-custody contract ever, one
+  sponsored name per account-custody contract ever, all in persisted ledgers;
+  three separate hourly ceilings; a refusal for addresses and accounts that
+  already hold a grant's worth; a refusal for names bound to a contract that
+  does not exist; a refusal to deposit into anything that does not decode as an
+  account-custody contract; and CORS pinned to the Passport origin. None of this
+  makes the service unabusable — it makes abuse slower than it is worth for
+  tokens with no market value.
+- The funder can put value **into** an account and has no way to take it out.
+  Its witness set for the account contract is three refusals, so every
+  withdrawal circuit is unreachable from this process by construction.
 - The funder pays its own fees from its own DUST. It does **not** use the
   ProofStation fee sponsor: a service that pays for other people has no business
   asking a third party to pay for it, and the extra dependency would only add a

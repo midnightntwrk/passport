@@ -1,82 +1,80 @@
 /**
- * Sponsored `.night` registration — the funder registers a name FOR a user and
- * pays for all of it.
+ * Sponsored `.night` registration on stagenet — the balancer registers a name
+ * FOR a user and pays for all of it.
  *
  * WHY THIS EXISTS
  * ---------------
- * Until now a Passport user paid for their own alias: the funder dripped them
- * activation-sized NIGHT and their wallet then spent 10 atomic NIGHT on the
- * registration. That still means the user's wallet has to hold NIGHT, and a
- * wallet that has to hold NIGHT has to be funded, watched, and settled first.
+ * The migrated PWA can deploy its account-custody contract on stagenet with
+ * sponsored fees, and then it stops. `register_domain_for` makes the CALLER pay
+ * the registry price — 10 atomic NIGHT for a name of five bytes or more — in
+ * unshielded NIGHT through `receiveUnshielded`, and a brand-new passkey wallet
+ * holds none. Stagenet's faucet is captcha-gated, so "just faucet it" is not a
+ * flow a user can be walked through.
  *
- * The deployed `.night` TLD does not require any of that. Its registration
- * entrypoint is
+ * The deployed TLD does not require any of that. Its registration entrypoint is
  *
  *     register_domain_for(owner, domain, len, resolver)
  *
- * and `owner` is an ARGUMENT, not the caller. The compiled circuit (see
- * `_register_domain_for_0` in the pinned build) derives the CALLER's public key
- * from the `secretKey` witness, compares it with the TLD's own `DOMAIN_OWNER`,
- * and — when they differ, which for us they always do — asserts `BUY_ENABLED`
- * and takes `COST` in unshielded NIGHT from the caller. It then writes
+ * and `owner` is an ARGUMENT, not the caller. The compiled circuit derives the
+ * CALLER's public key from the `secretKey` witness, compares it with the TLD's
+ * own `DOMAIN_OWNER`, and — when they differ, which for us they always do —
+ * asserts `BUY_ENABLED` and takes COST from the caller. It then writes
  * `domains[domain] = { owner, resolver }` and adds the name to
- * `domains_owned[owner]`. So a third party can pay for a name that the registry
- * records as belonging to somebody else, which is exactly the shape of
- * sponsorship the Midnames team would run themselves.
+ * `domains_owned[owner]`. So a third party can pay for a name the registry
+ * records as belonging to somebody else.
  *
- * This module makes the funder that third party:
+ * This module makes the balancer that third party:
  *
  *   1. it deploys the resolver leaf with `DOMAIN_TARGET = [contractAddress,
  *      AddressType.ContractAddr]` (the user's account-custody contract) and
  *      `DOMAIN_OWNER` = the owner key the caller supplied; then
  *   2. it calls `register_domain_for` on the network's TLD with that same owner
- *      key, paying COST from the funder's own NIGHT and the fee from the
- *      funder's own DUST.
+ *      key, paying COST from the balancer's own NIGHT and the fee from the
+ *      balancer's own DUST.
  *
  * The user's wallet signs nothing, spends nothing, and needs to hold nothing.
  * Ownership on the registry is the user's key: only a holder of the secret
  * behind it can later call `set_resolver` or `transfer_domain`.
  *
- * NO SPONSOR SERVICE HERE
- * -----------------------
- * The demo's browser path hands its fee leg to the ProofStation gateway,
- * because a passkey wallet holds no DUST. The funder is the opposite case: it
- * registers its NIGHT for DUST generation at start-up and owns its fees. Asking
- * a sponsor to pay for the service that pays for everyone else would add a
- * dependency and a failure mode for nothing.
- *
  * PROVENANCE
  * ----------
- * The contract handling is a server-side port of
- * `experiments/account-custody-prototype/src/integrations/midnames/preview.ts`
- * (Midnames rev 83f8422b, compact 0.31.1) — the original Node integration. The
- * pure helpers (label normalisation, the reserved list, the cost table, the
- * owner-key hash, the padded-key encoding) are COPIED from
- * `examples/passport-demo/src/identity/midnames.ts` rather than imported, so
- * the service has no build-time dependency on the PWA. They must stay
- * byte-identical: a label the browser normalises one way and the service
- * another would register a name the user never typed.
+ * The policy, the vocabulary, and the confirmation rule are a port of
+ * `examples/passport-funder/src/midnames.ts`, which does this on preview. The
+ * CONTRACT HANDLING is `deploy-stagenet/src/deploy.mjs`'s, because that is the
+ * code with a landed stagenet registration behind it (tx
+ * `6fd842da3319c0b445f7527ecfc37e59684a2db5bf68b7f3d4525723870494d0`, block
+ * 157865): the thirteen constructor arguments in their order, the four-argument
+ * `register_domain_for` call, and the read-back through the registry. Where the
+ * funder's v4 API and the beta diverge, this file follows the beta.
+ *
+ * The pure helpers — label normalisation, the reserved list, the cost table,
+ * the owner-key hash, the padded-key encoding — are COPIED from the funder and
+ * the PWA rather than imported, and they must stay byte-identical: a label the
+ * browser normalises one way and the service another would register a name the
+ * user never typed.
  */
 
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 
-import type { FunderConfig } from './config.js';
+import type { BalancerConfig } from './config.js';
 import {
   CONFIRM_INTERVAL_MS,
-  DirectoryZkConfigProvider,
   bytesToHex,
   contractAddressBytes,
   contractProviders,
+  createContractProofProvider,
   hexToBytes,
   managedBuildPath,
   nativeColourBytes,
+  publicDataProviderFor,
   rawContractAddress,
   resolveTransactionHash,
   transactionIdentifier,
   wait,
+  type ContractProvingMode,
 } from './contractRuntime.js';
-import type { FunderWallet } from './wallet.js';
+import type { BalancerWallet } from './wallet.js';
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
@@ -86,11 +84,12 @@ import type { FunderWallet } from './wallet.js';
 export const MIDNAMES_TLD = 'night';
 
 /**
- * Names the funder will not sponsor, whatever the registry says. Copied from
- * the demo's `RESERVED_ALIASES`: these are infrastructure and impersonation
- * risks, and `midnight.night` reading as an official account is exactly the
- * confusion this list prevents. A sponsored registration makes the risk worse,
- * not better — it removes the only cost an impersonator would have paid.
+ * Names this service will not sponsor, whatever the registry says. Copied from
+ * the funder's list, which is copied from the demo's `RESERVED_ALIASES`: these
+ * are infrastructure and impersonation risks, and `midnight.night` reading as
+ * an official account is exactly the confusion this list prevents. A sponsored
+ * registration makes the risk worse, not better — it removes the only cost an
+ * impersonator would have paid.
  */
 export const RESERVED_ALIASES: readonly string[] = [
   'admin',
@@ -108,7 +107,7 @@ export const RESERVED_ALIASES: readonly string[] = [
 const CONFIRM_ATTEMPTS = 45;
 
 /* -------------------------------------------------------------------------- */
-/* Pure helpers — copies of the demo's, and they must stay copies             */
+/* Pure helpers — copies of the funder's, and they must stay copies           */
 /* -------------------------------------------------------------------------- */
 
 /** `alice` -> `alice.night`. */
@@ -120,7 +119,7 @@ export function aliasDomain(alias: string): string {
  * Normalises a requested alias to its registry label, throwing a sentence the
  * caller can show verbatim.
  *
- * The accepted shape is exactly the demo's and the Node integration's:
+ * The accepted shape is exactly the demo's and the funder's:
  * `/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/` — 1-32 characters, lowercase
  * letters and digits, hyphens only in the interior — plus the reserved list.
  */
@@ -139,9 +138,10 @@ export function normalisePassportAlias(value: string): string {
 }
 
 /**
- * The registration cost in atomic NIGHT, read from the deployed TLD's own
- * COST_SHORT / COST_MED / COST_LONG on 2026/08/05: identical on all three
- * networks. Measured in UTF-8 bytes, as the contract measures it.
+ * The registration cost in atomic NIGHT. Our stagenet TLD was deployed with the
+ * preview registry's own COST_SHORT / COST_MED / COST_LONG — 600 / 140 / 10 —
+ * so this table is the same one the funder uses. Measured in UTF-8 bytes, as
+ * the contract measures it.
  */
 export function aliasCostAtomicNight(alias: string): bigint {
   const length = new TextEncoder().encode(alias).length;
@@ -152,8 +152,8 @@ export function aliasCostAtomicNight(alias: string): bigint {
 
 /**
  * The Midnames key encoding: the UTF-8 label left-aligned in 32 bytes padded
- * with 0xff. Identical to the browser port and the Node integration, byte for
- * byte — `register_domain_for` asserts the padding itself.
+ * with 0xff. Identical to the funder, the browser port, and the deployment
+ * harness, byte for byte — `register_domain_for` asserts the padding itself.
  */
 function domainToKey(name: string): { key: Uint8Array; len: bigint } {
   const bytes = new TextEncoder().encode(name);
@@ -168,8 +168,8 @@ function domainToKey(name: string): { key: Uint8Array; len: bigint } {
 /**
  * `sha256('midnight.domains' padded to 32 bytes || secret)` — the Midnames
  * owner-key derivation. The service never sees a user's secret; this exists so
- * a caller and this module can be checked against each other, and so the
- * drill can derive the key it posts.
+ * a caller and this module can be checked against each other, and so a drill
+ * can derive the key it posts.
  */
 export function deriveMidnamesOwnerKey(secret: Uint8Array): Uint8Array {
   if (secret.length !== 32) {
@@ -195,16 +195,15 @@ export function ownerKeyBytes(value: string): Uint8Array {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Where the pinned Midnames build's ZK ARTEFACTS live. `midnames:prepare` in
- * `experiments/account-custody-prototype` produces the one copy the repository
- * stages; `FUNDER_MIDNAMES_ASSETS` overrides the search. See
- * {@link managedBuildPath} for the candidates and the liveness probe.
+ * Where the compiled Midnames build's ZK ARTEFACTS live.
+ * `BALANCER_MIDNAMES_ASSETS` overrides the search. See {@link managedBuildPath}
+ * for the candidates and the liveness probe.
  */
 function midnamesManagedPath(configured?: string): string {
   return managedBuildPath('midnames', {
     configured,
     remedy:
-      'Run `npm run midnames:prepare` in experiments/account-custody-prototype, or set FUNDER_MIDNAMES_ASSETS.',
+      'The build ships in examples/passport-balancer/contracts-stagenet/managed/midnames; set BALANCER_MIDNAMES_ASSETS to point elsewhere.',
   });
 }
 
@@ -308,8 +307,8 @@ export interface AliasRegistrationRequest {
    * where a payment made TO the leaf would be sent. It is not the registry's
    * authority — `owner_pubkey` is, and that is always {@link ownerKey}. A
    * caller that does not send one gets 32 zero bytes, which is honest: the
-   * funder does not know the user's wallet address and must not substitute its
-   * own, or a payment meant for the user would land on the funder.
+   * balancer does not know the user's wallet address and must not substitute
+   * its own, or a payment meant for the user would land on the balancer.
    */
   ownerAddressBytes?: Uint8Array;
 }
@@ -323,6 +322,9 @@ export interface AliasRegistration {
   /** 64-hex ledger hash where the indexer resolved it, the identifier if not. */
   resolverDeployTx: string;
   registerTx: string;
+  /** The blocks those two landed in, when the indexer knew them. */
+  resolverDeployBlock: number | null;
+  registerBlock: number | null;
   target: { kind: 'contract'; address: string };
   ownerKey: string;
   costAtomic: bigint;
@@ -330,8 +332,12 @@ export interface AliasRegistration {
 }
 
 export interface MidnamesSponsor {
-  /** The TLD this funder registers against. */
+  /** The TLD this service registers against. */
   readonly tldAddress: string;
+  /** Where the compiled build was found, for the start-up log. */
+  readonly assetsPath: string;
+  /** How contract circuits are proved — `'wasm'` needs no proof server. */
+  readonly provingMode: ContractProvingMode;
   /** Is the label free right now? Reads the deployed registry, never a cache. */
   isAvailable(label: string): Promise<boolean>;
   /** Does the indexer serve contract state at this address? */
@@ -342,8 +348,8 @@ export interface MidnamesSponsor {
    * Deploys the leaf, registers the name, and reads the binding back. Resolves
    * only when the registry really reports the requested contract address.
    *
-   * MUST be called inside `wallet.exclusive(...)`: it spends the funder's coins
-   * twice and would otherwise contend with a drip.
+   * MUST be called inside `wallet.exclusive(...)`: it spends the balancer's
+   * coins twice and would otherwise contend with a fee-sponsorship request.
    */
   register(request: AliasRegistrationRequest): Promise<AliasRegistration>;
 }
@@ -354,30 +360,32 @@ export interface MidnamesSponsor {
  * operator sees it, instead of on a user's first alias.
  */
 export async function createMidnamesSponsor(
-  config: FunderConfig,
-  wallet: FunderWallet,
+  config: BalancerConfig,
+  wallet: BalancerWallet,
 ): Promise<MidnamesSponsor> {
+  if (!config.midnamesTldAddress) {
+    throw new Error('No .night registry is configured, so names cannot be sponsored.');
+  }
   const managedPath = midnamesManagedPath(config.midnamesAssetsPath);
   /**
    * A LITERAL relative specifier, not a path computed from `managedPath`.
    *
    * That is not a style preference, it is the difference between working and
-   * not. `experiments/account-custody-prototype` carries its own
-   * `node_modules`, so a runtime `import()` of an absolute path inside that
-   * tree makes Node resolve `@midnight-ntwrk/compact-runtime` from THERE, while
-   * the indexer provider next to it resolves the copy at the repository root.
-   * Two copies means two `ChargedState` classes, and decoding a contract state
-   * dies on `expected instance of ChargedState` (measured on preview,
-   * 2026/08/20, first drill run). A literal specifier is bundled by esbuild
-   * into this service, so there is exactly one runtime in play — the same thing
-   * Vite does for the browser port.
+   * not. `contracts-stagenet` carries its own `node_modules`, so a runtime
+   * `import()` of an absolute path inside that tree makes Node resolve
+   * `@midnight-ntwrk/compact-runtime` from THERE, while the indexer provider
+   * next to it resolves the copy this service declares. Two copies means two
+   * `ChargedState` classes, and decoding a contract state dies on
+   * `expected instance of ChargedState`. A literal specifier is bundled by
+   * esbuild into this service, so there is exactly one runtime in play — the
+   * same reasoning the funder records on its own import.
    */
   const midnames = (await import(
-    '../../../experiments/account-custody-prototype/contracts/managed/midnames/contract/index.js'
+    '../contracts-stagenet/managed/midnames/contract/index.js'
   )) as unknown as MidnamesModule;
   const { CompiledContract } = await import('@midnight-ntwrk/compact-js');
-  const { indexerPublicDataProvider } = await import(
-    '@midnight-ntwrk/midnight-js-indexer-public-data-provider'
+  const { NodeZkConfigProvider } = await import(
+    '@midnight-ntwrk/midnight-js-node-zk-config-provider'
   );
   const { deployContract, findDeployedContract } = await import(
     '@midnight-ntwrk/midnight-js-contracts'
@@ -386,26 +394,32 @@ export async function createMidnamesSponsor(
   const tldAddress = rawContractAddress(config.midnamesTldAddress);
 
   /**
-   * The funder's caller identity inside the circuits.
+   * The balancer's caller identity inside the circuits.
    *
    * `register_domain_for` derives the caller's public key from this witness and
    * compares it with the TLD's own owner: matching would register the name for
-   * free, differing takes COST. The funder is not the TLD owner, so it pays —
-   * which is the whole point. Deriving it from the funder seed rather than
-   * randomising keeps one stable caller identity across restarts; the bytes
-   * never leave this process and are not the user's anything.
+   * free, differing takes COST. This secret is deliberately NOT the one
+   * `deploy-stagenet` used for the TLD's `DOMAIN_OWNER`, so a registration
+   * through our own instance pays exactly as it would through the Midnames
+   * team's. Deriving it from the balancer seed rather than randomising keeps one
+   * stable caller identity across restarts; the bytes never leave this process
+   * and are not the user's anything.
    */
-  const funderWitnessSecret = new Uint8Array(
+  const callerSecret = new Uint8Array(
     createHash('sha256')
-      .update(Buffer.from('midnight.passport.funder.midnames'))
+      .update('midnight.passport.stagenet.midnames.caller')
       .update(Buffer.from(config.seedHex, 'hex'))
       .digest(),
   );
-  const funderWitnessSecretHex = bytesToHex(funderWitnessSecret);
+  const callerSecretHex = bytesToHex(callerSecret);
 
-  const zkConfigProvider = new DirectoryZkConfigProvider(managedPath);
+  const zkConfigProvider = new NodeZkConfigProvider(managedPath);
+  const { mode: provingMode, proofProvider } = await createContractProofProvider(
+    config,
+    zkConfigProvider as never,
+  );
 
-  const reader = indexerPublicDataProvider(config.indexerHttpUrl, config.indexerWsUrl);
+  const reader = await publicDataProviderFor(config);
 
   const readLedger = async (address: string): Promise<MidnamesLedger | null> => {
     const state = await reader.queryContractState(address);
@@ -413,11 +427,14 @@ export async function createMidnamesSponsor(
     return midnames.ledger((state as { data: unknown }).data);
   };
 
-  const compiledContract = CompiledContract.make('passport-midnames-leaf', midnames.Contract as never).pipe(
+  const compiledContract = CompiledContract.make(
+    'passport-midnames-leaf',
+    midnames.Contract as never,
+  ).pipe(
     CompiledContract.withWitnesses({
       secretKey: ({ privateState }: { privateState: { secretKey: string } }) => [
         privateState,
-        hexToBytes(privateState.secretKey ?? funderWitnessSecretHex),
+        hexToBytes(privateState.secretKey ?? callerSecretHex),
       ],
     } as never),
     CompiledContract.withCompiledFileAssets(managedPath),
@@ -451,6 +468,8 @@ export async function createMidnamesSponsor(
 
   return {
     tldAddress,
+    assetsPath: managedPath,
+    provingMode,
 
     isAvailable,
 
@@ -464,12 +483,13 @@ export async function createMidnamesSponsor(
       const label = request.label;
       const contractAddress = rawContractAddress(request.contractAddress);
       const { key: labelKey, len } = domainToKey(label);
-      const privateStateId = `passport-funder-midnames-${label}`;
+      const privateStateId = `passport-balancer-midnames-${label}`;
       const providers = await contractProviders(config, {
         privateStateId,
-        initialPrivateState: { secretKey: funderWitnessSecretHex },
-        zkConfigProvider,
-        walletProvider: await wallet.contractWalletProvider(),
+        initialPrivateState: { secretKey: callerSecretHex },
+        zkConfigProvider: zkConfigProvider as never,
+        proofProvider,
+        walletProvider: wallet.contractWalletProvider(),
       });
 
       /* The leaf's TARGET is the user's account-custody contract:
@@ -483,10 +503,14 @@ export async function createMidnamesSponsor(
       let resolverAddress: string;
       let resolverDeployTx: string;
       try {
+        /* Thirteen arguments, in `deploy.mjs`'s order — the order the leaf that
+           backs `passport-771a3f.night` was deployed with. `cost_*` are zero and
+           `buy_enabled` is false because a LEAF sells nothing; only the TLD
+           does. */
         const deployed = await deployContract(providers as never, {
           compiledContract,
           privateStateId,
-          initialPrivateState: { secretKey: funderWitnessSecretHex },
+          initialPrivateState: { secretKey: callerSecretHex },
           args: [
             maybeBytes(domainToKey(MIDNAMES_TLD).key),
             { bytes: contractAddressBytes(tldAddress) },
@@ -522,13 +546,13 @@ export async function createMidnamesSponsor(
           compiledContract,
           contractAddress: tldAddress,
           privateStateId,
-          initialPrivateState: { secretKey: funderWitnessSecretHex },
+          initialPrivateState: { secretKey: callerSecretHex },
         } as never);
         const callTx = (tld as { callTx: Record<string, (...args: unknown[]) => Promise<unknown>> })
           .callTx;
         /* The paid call. `request.ownerKey` — the USER's key — is argument one,
-           so the registry records the user as owner while the funder's own
-           NIGHT covers COST and the funder's own DUST covers the fee. */
+           so the registry records the user as owner while the balancer's own
+           NIGHT covers COST and the balancer's own DUST covers the fee. */
         const registration = await callTx.register_domain_for(request.ownerKey, labelKey, len, {
           bytes: contractAddressBytes(resolverAddress),
         });
@@ -570,7 +594,7 @@ export async function createMidnamesSponsor(
         );
       }
 
-      const [deployHash, registerHash] = await Promise.all([
+      const [deploy, register] = await Promise.all([
         resolveTransactionHash(config.indexerHttpUrl, resolverDeployTx),
         resolveTransactionHash(config.indexerHttpUrl, registerTx),
       ]);
@@ -581,8 +605,10 @@ export async function createMidnamesSponsor(
         network: config.networkId,
         tldAddress,
         resolverAddress,
-        resolverDeployTx: deployHash,
-        registerTx: registerHash,
+        resolverDeployTx: deploy.hash,
+        registerTx: register.hash,
+        resolverDeployBlock: deploy.block,
+        registerBlock: register.block,
         target: { kind: 'contract', address: contractAddress },
         ownerKey: bytesToHex(request.ownerKey),
         costAtomic: aliasCostAtomicNight(label),
