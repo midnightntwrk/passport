@@ -5,7 +5,8 @@
   "type": "module",
   "workspaces": [
     "demo-backend",
-    "examples/passport-demo"
+    "examples/passport-demo",
+    "examples/passport-funder"
   ],
   "scripts": {
     "test:backend": "npm run test --workspace demo-backend"
