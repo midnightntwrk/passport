@@ -1,0 +1,36 @@
+[
+  {
+    "direct": {
+      "k": 16,
+      "proof_bytes": 4736,
+      "prove_ms": [
+        849,
+        853,
+        863
+      ],
+      "setup_pk_ms": 379,
+      "setup_vk_ms": 710,
+      "srs_load_ms": 61,
+      "verify_ms": 4
+    },
+    "environment": {
+      "arch": "aarch64",
+      "cpu": "Apple M4 Max",
+      "memory_bytes": "68719476736",
+      "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
+      "os": "macos",
+      "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)"
+    },
+    "inner_transcript": "poseidon",
+    "runs": 3,
+    "scheme": "ed25519",
+    "timestamp_utc": "2026-08-07T07:48:50Z",
+    "wrapped_unsupported": {
+      "inner_rotations_beyond_support": [
+        2,
+        3
+      ],
+      "reason": "the in-circuit VerifierGadget evaluates openings only at rotations -1, 0, and 1 (midnight-zk circuits/src/verifier/verifier_gadget.rs panics with 'We do not support other rotations'); the inner circuit's constraint system queries rotations outside that set. At the pinned rev the only ZkStdLib source of such queries is the SHA-512 chip, and RFC 8032 fixes the Ed25519 challenge hash to SHA-512, so an Ed25519 inner circuit cannot be wrapped."
+    }
+  }
+]

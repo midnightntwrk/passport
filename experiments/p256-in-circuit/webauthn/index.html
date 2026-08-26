@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>p256-gate WebAuthn capture harness</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      background: #0d0f12;
+      color: #d8dde4;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 960px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    h1 { font-size: 1.2rem; color: #ffffff; }
+    h2 { font-size: 1rem; color: #9fb4c7; margin-top: 2rem; }
+    button {
+      background: #1c2430;
+      color: #d8dde4;
+      border: 1px solid #33465c;
+      border-radius: 4px;
+      padding: 0.5rem 1rem;
+      font: inherit;
+      cursor: pointer;
+      margin-right: 0.5rem;
+    }
+    button:hover { background: #263243; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    pre {
+      background: #12161c;
+      border: 1px solid #232b36;
+      border-radius: 4px;
+      padding: 0.75rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .ok    { color: #7ee29a; }
+    .err   { color: #f2827f; }
+    .muted { color: #6b7684; }
+    .field { color: #9fb4c7; }
+  </style>
+</head>
+<body>
+  <h1>p256-gate — WebAuthn P-256 vector capture</h1>
+  <p class="muted">
+    Internal harness. Creates a platform passkey (ES256 only), signs a fixed
+    challenge, and exports the raw assertion as <code>vector.json</code> for
+    the in-circuit Rust verifier. Serve via <code>python3 serve.py</code> and
+    open <code>http://localhost:8973</code> (localhost is a secure context).
+  </p>
+
+  <h2>1 — Create passkey</h2>
+  <button id="btn-create">Create passkey</button>
+  <pre id="out-create" class="muted">no passkey yet</pre>
+
+  <h2>2 — Sign challenge</h2>
+  <p class="muted">
+    Challenge = SHA-256("<span id="challenge-src"></span>") computed at runtime
+    with WebCrypto:
+  </p>
+  <pre id="out-challenge" class="muted">computing…</pre>
+  <button id="btn-sign" disabled>Sign challenge</button>
+  <pre id="out-sign" class="muted">no assertion yet</pre>
+
+  <h2>3 — vector.json</h2>
+  <pre id="out-vector" class="muted">nothing captured yet</pre>
+
+  <h2>Self-test (parsers, no authenticator needed)</h2>
+  <button id="btn-selftest">Run self-test</button>
+  <pre id="out-selftest" class="muted">not run</pre>
+
+  <script src="app.js"></script>
+</body>
+</html>
