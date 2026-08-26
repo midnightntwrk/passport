@@ -817,6 +817,80 @@ describe('enrolment overwrite guard', () => {
     expect(creations).toBe(1);
   });
 
+  it('retries an unexplained failure once before it creates anything', async () => {
+    /* A transient error must not be the reason a credential is created: the
+       create uses a deterministic user handle, and on a browser whose local
+       storage was cleared the exclusion list is empty. So an unexplained
+       failure is asked a second time, and a credential that answers on the
+       retry is signed into rather than replaced. */
+    let gets = 0;
+    let creations = 0;
+    replaceNavigator({
+      credentials: {
+        get: async () => {
+          gets += 1;
+          if (gets === 1) {
+            const error = new Error('The operation is insecure.');
+            error.name = 'SecurityError';
+            throw error;
+          }
+          return {
+            rawId: new Uint8Array([5, 5]).buffer,
+            getClientExtensionResults: () => ({
+              prf: { results: { first: new Uint8Array(32).fill(4).buffer } },
+            }),
+          };
+        },
+        create: async () => {
+          creations += 1;
+          throw new Error('a retry that answers must not lead to a create');
+        },
+      },
+    });
+
+    const outcome = await WebAuthnPrfKeyProvider.discoverOrEnroll({
+      label: 'Midnight Passport',
+      userId: 'local-transient',
+      rpId: 'localhost',
+    });
+    expect(gets).toBe(2);
+    expect(creations).toBe(0);
+    expect(outcome.outcome).toBe('existing');
+    outcome.discovered?.dispose();
+  });
+
+  it('does not retry a cancellation, because that is the user\'s answer', async () => {
+    let gets = 0;
+    let creations = 0;
+    replaceNavigator({
+      credentials: {
+        get: async () => {
+          gets += 1;
+          const error = new Error('The user cancelled.');
+          error.name = 'NotAllowedError';
+          throw error;
+        },
+        create: async () => {
+          creations += 1;
+          return {
+            rawId: new Uint8Array([6, 6]).buffer,
+            getClientExtensionResults: () => ({ prf: { enabled: true } }),
+          };
+        },
+      },
+    });
+
+    const outcome = await WebAuthnPrfKeyProvider.discoverOrEnroll({
+      label: 'Midnight Passport',
+      userId: 'local-cancelled-once',
+      rpId: 'localhost',
+    });
+    expect(gets).toBe(1);
+    expect(creations).toBe(1);
+    expect(outcome.outcome).toBe('enrolled');
+    outcome.enrolled?.prf?.dispose();
+  });
+
   it('reports a dismissed picker as cancelled, with the reason preserved', async () => {
     replaceNavigator({
       credentials: {

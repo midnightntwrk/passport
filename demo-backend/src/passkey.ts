@@ -619,25 +619,54 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
    * handle without creating anything. Only an empty discovery proceeds to
    * enrolment — which still carries `knownCredentialIds` as a second line.
    *
-   * Only a discovery that ended with NO credential answering proceeds to
-   * enrolment: the user dismissing the picker, or a picker with nothing in it
-   * (both surface as `NotAllowedError`, reported here as
-   * {@link PassportPasskeyDiscoveryError} with reason `cancelled`). A
-   * credential that answered without a PRF result is a passkey that EXISTS,
-   * so this refuses to create over it and rethrows with reason `prf-missing`;
-   * any other failure leaves the device's state unknown and is rethrown too,
-   * because "unknown" is not "empty". The create that does run is still
-   * guarded by exclusion and reports {@link PassportEnrolmentConflictError}
-   * if discovery was wrong. Callers MUST dispose whichever handle comes back.
+   * NOTHING HERE THROWS ON A DISCOVERY OUTCOME, and that is deliberate. An
+   * earlier version rethrew both `prf-missing` and `failed`; no caller caught
+   * either, so every browser that errored for a reason of its own could not
+   * onboard at all, and several people were locked out at once. A discovery
+   * that produced no usable credential is an answer, not an exception.
+   *
+   * The user dismissing the picker, and a picker with nothing in it, both
+   * surface as `NotAllowedError` (reason `cancelled`) and proceed to
+   * enrolment, as they always did. Any other failure has told us nothing
+   * about what the device holds, so it is RETRIED once — a transient error
+   * should not lead to a create — and then proceeds to enrolment as well.
+   * Every create carries `knownCredentialIds` in `excludeCredentials`, which
+   * is what makes the authenticator itself refuse to replace a credential
+   * this browser knows about and report
+   * {@link PassportEnrolmentConflictError} instead.
+   *
+   * A credential that answered WITHOUT a PRF result is the one outcome worth
+   * stopping for: it cannot open a Passport, and creating under the same
+   * deterministic handle may replace it. That comes back as
+   * `outcome: 'unusable-credential'` so the caller can put the choice to the
+   * user, rather than failing or overwriting on its own.
+   *
+   * Callers MUST dispose whichever handle comes back.
    */
   static async discoverOrEnroll(
     options: EnrollPassportPasskeyOptions,
   ): Promise<PassportPasskeyOnboarding> {
     let discovered: DiscoveredPassportPasskey | null = null;
+    const ask = async (): Promise<DiscoveredPassportPasskey> =>
+      WebAuthnPrfKeyProvider.discover(options.rpId ? { rpId: options.rpId } : {});
     try {
-      discovered = await WebAuthnPrfKeyProvider.discover(
-        options.rpId ? { rpId: options.rpId } : {},
-      );
+      try {
+        discovered = await ask();
+      } catch (first) {
+        /* One retry, and only for a failure we cannot explain. A cancellation
+           is the user's answer and is not second-guessed; a missing PRF is a
+           property of the credential and will not change. Anything else may
+           be transient, and a transient error must not be the reason a
+           credential gets created. */
+        if (
+          first instanceof PassportPasskeyDiscoveryError &&
+          first.reason === 'failed'
+        ) {
+          discovered = await ask();
+        } else {
+          throw first;
+        }
+      }
     } catch (error) {
       /* A discovery that produced no usable credential must not become a dead
          end. Enrolment still carries `knownCredentialIds` in
