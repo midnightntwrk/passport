@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,6 +48,58 @@ function serveLocalCustodyAssets(): Plugin {
   };
 }
 
+/** The literal `public/sw.js` ships with, and the build replaces. */
+const BUILD_ID_PLACEHOLDER = '__BUILD_ID__';
+
+/**
+ * Gives the service worker an identity that changes with the client build.
+ *
+ * A browser decides a service worker has been updated by comparing the script
+ * BYTE FOR BYTE against the copy it holds. `public/sw.js` used to carry a
+ * hand-bumped `CACHE_VERSION` literal, so every deploy between two bumps
+ * shipped an identical worker and no update was detected at all — the incident
+ * this plugin exists to prevent is written up in `public/sw.js`'s own header.
+ *
+ * The id is a digest of the emitted asset FILENAMES (which are themselves
+ * content hashes) plus both built HTML shells. That makes it change when, and
+ * only when, the client the worker has to serve changes — so a rebuild with no
+ * source change stamps the same id and installs no needless worker.
+ *
+ * It runs in `closeBundle`: Vite copies `public/` into `dist/` while preparing
+ * the output directory, well before the bundle is written, so `dist/sw.js` is
+ * already there and this is a rewrite of it rather than a race with the copy.
+ */
+function stampServiceWorkerBuildId(): Plugin {
+  return {
+    name: 'stamp-service-worker-build-id',
+    apply: 'build',
+    closeBundle: {
+      order: 'post',
+      handler() {
+        const outDir = path.resolve(__dirname, 'dist');
+        const workerPath = path.join(outDir, 'sw.js');
+        const source = fs.readFileSync(workerPath, 'utf8');
+        if (!source.includes(BUILD_ID_PLACEHOLDER)) {
+          throw new Error(
+            `stamp-service-worker-build-id: ${BUILD_ID_PLACEHOLDER} is not in public/sw.js. ` +
+              'Without it the worker is byte-identical across deploys and installed ' +
+              'clients never see an update. See the header of public/sw.js.',
+          );
+        }
+        const digest = createHash('sha256');
+        for (const name of fs.readdirSync(path.join(outDir, 'assets')).sort()) {
+          digest.update(`${name}\n`);
+        }
+        digest.update(fs.readFileSync(path.join(outDir, 'index.html')));
+        digest.update(fs.readFileSync(path.join(outDir, 'verify', 'index.html')));
+        const buildId = digest.digest('hex').slice(0, 16);
+        fs.writeFileSync(workerPath, source.replaceAll(BUILD_ID_PLACEHOLDER, buildId));
+        this.info(`service worker stamped with build id ${buildId}`);
+      },
+    },
+  };
+}
+
 export default defineConfig({
   // `topLevelAwait()` is deliberately absent from the MAIN graph — see
   // 2026/08/05, found while deploying to Vercel. Its build transform hoists
@@ -75,7 +128,7 @@ export default defineConfig({
   // demo's WASM has had TLA for years, so dropping it costs nothing. It is
   // kept for `worker.plugins`, a separate and much smaller module graph that
   // does not contain the affected package.
-  plugins: [react(), wasm(), serveLocalCustodyAssets()],
+  plugins: [react(), wasm(), serveLocalCustodyAssets(), stampServiceWorkerBuildId()],
   resolve: {
     alias: [
       { find: /^node:buffer$/, replacement: workspaceBuffer },

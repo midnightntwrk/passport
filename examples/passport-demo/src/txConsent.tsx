@@ -18,6 +18,7 @@ import {
   type PassportTransferContext,
   type PassportTxResponseBody,
 } from './lib/txApproval.js';
+import { holdCriticalWork } from './lib/appBusy.js';
 
 /**
  * The popup transaction-approval surface — deliberate sibling of
@@ -137,6 +138,12 @@ export function PassportTxConsent({
   const [showFullRecipient, setShowFullRecipient] = useState(false);
   /** The grace period has elapsed with no wallet — the ladder may now refuse. */
   const [graceElapsed, setGraceElapsed] = useState(false);
+
+  /* An app is waiting on this window for an answer it can only get once. While
+     the wallet is signing, `src/pwa.tsx` must not reload the document out from
+     under it for a new deployment — the app would be left with no reply at
+     all, and the user with a signature they cannot see the result of. */
+  useEffect(() => (signing ? holdCriticalWork() : undefined), [signing]);
 
   /* Exactly one reply per exchange, whatever React does around it: the ladder
      effect below can be invoked twice on mount under StrictMode, and posting a

@@ -19,9 +19,17 @@
       "headers": [{ "key": "content-type", "value": "application/json" }]
     },
     {
+      "source": "/assets/(.*)",
+      "headers": [{ "key": "cache-control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/((?!zk/|zk-params/|assets/).*)",
+      "headers": [{ "key": "cache-control", "value": "no-cache" }]
+    },
+    {
       "source": "/sw.js",
       "headers": [
-        { "key": "cache-control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "cache-control", "value": "no-cache" },
         { "key": "service-worker-allowed", "value": "/" }
       ]
     }

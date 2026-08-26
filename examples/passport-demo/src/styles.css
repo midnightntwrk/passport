@@ -54,6 +54,42 @@ button:focus-visible, input:focus-visible { outline: 2px solid #fff; outline-off
   text-align: center;
   transform: translateX(-50%);
 }
+/* The deferred-update bar. Same shelf as the offline bar — it is the same
+   kind of statement about the client itself rather than about the account —
+   but it sits one layer above it, because an offline Passport that also has a
+   new build waiting still wants the reload offered. */
+.pwa-update-bar {
+  position: fixed;
+  z-index: 111;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  width: min(calc(100% - 32px), 720px);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border: 1px solid #0a0a0a;
+  color: #0a0a0a;
+  background: #f5f5f3;
+  box-shadow: 5px 5px 0 rgba(10, 10, 10, .28);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1.35;
+  text-align: center;
+  transform: translateX(-50%);
+}
+.pwa-update-bar button {
+  min-height: 28px;
+  padding: 0 11px;
+  border: 1px solid #0a0a0a;
+  color: #f5f5f3;
+  background: #0a0a0a;
+  font-size: 11px;
+  font-weight: 780;
+}
+.pwa-update-bar button:disabled { opacity: .6; }
 .pwa-actions {
   position: fixed;
   z-index: 105;

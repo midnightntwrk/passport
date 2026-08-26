@@ -19,6 +19,15 @@
  *
  * WHAT IS OUT, AND WHY — `src/lib`
  * --------------------------------
+ * `src/lib/appBusy.ts` went IN on 2026/08/26, the day it was written. It is the
+ * counter that answers "is Passport in the middle of something?" for the
+ * service-worker update path in `src/pwa.tsx`, and getting that answer wrong in
+ * either direction is a user-visible failure: too eager and a reload lands
+ * inside a proving run, too cautious and an installed client never picks up a
+ * deployment. It holds no DOM, no React, and no timers — it is a counter, a
+ * listener set, and the rule that a release only counts once — so every one of
+ * those branches is drilled directly in `src/lib/appBusy.test.ts`.
+ *
  * `src/lib/feeReadinessPoll.ts` went IN on 2026/08/25 rather than out with the
  * screens it serves: it is the sponsor watcher, it holds no DOM and no React,
  * and its whole contract — probe now, probe again every five seconds, publish
@@ -120,6 +129,7 @@ export default mergeConfig(
         include: [
           'src/lib/activation.ts',
           'src/lib/address.ts',
+          'src/lib/appBusy.ts',
           'src/lib/colour.ts',
           'src/lib/feeReadinessPoll.ts',
           'src/lib/networks.ts',

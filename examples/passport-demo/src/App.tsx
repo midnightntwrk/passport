@@ -9,6 +9,7 @@ import {
 import type { DiscoveredPassportPasskey, PassportAccountBlob } from './backend.js';
 
 import { compactAddress } from './lib/address.js';
+import { holdCriticalWork } from './lib/appBusy.js';
 import { normalisedColourHex, shortColour } from './lib/colour.js';
 import { classifyFundAccountAnswer } from './lib/activation.js';
 import type { FundAccountAnswer } from './lib/activation.js';
@@ -968,6 +969,30 @@ export default function PassportDemo() {
   const [reclaim, setReclaim] = useState<{ target: PassportNetwork; alias: string } | null>(null);
   const [reclaimBusy, setReclaimBusy] = useState(false);
   const [reclaimError, setReclaimError] = useState<string | null>(null);
+  /**
+   * "Passport is in the middle of something", declared once for the whole
+   * screen from the busy states the flows already keep.
+   *
+   * Its only consumer is `src/pwa.tsx`, which reloads this document the moment
+   * a newly deployed service worker takes over. That reload is what keeps an
+   * installed Passport on the deployed build (see `public/sw.js`), and it must
+   * never land inside a passkey ceremony, a proving run, or a registration —
+   * each of those has already cost the user an assertion, and a reload
+   * abandons it. Nothing here decides anything; it reads the same flags the
+   * screens render from, so a flow can never be busy on screen and idle here.
+   */
+  const passportBusy =
+    onboardingIntent !== null ||
+    localWalletStatus === 'opening' ||
+    claimPhase !== null ||
+    contractPhase !== null ||
+    contractBusy ||
+    accountPhase !== null ||
+    depositBusy ||
+    registerNowBusy ||
+    reclaimBusy;
+  useEffect(() => (passportBusy ? holdCriticalWork() : undefined), [passportBusy]);
+
   /** Guards the one-shot decision to enter the identity steps for a session. */
   const identityStepResolved = useRef(false);
   /**
