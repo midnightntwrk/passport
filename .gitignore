@@ -7,6 +7,8 @@
 /target/
 **/target/
 *.rlib
+_build
+result
 
 # Node
 node_modules/
@@ -36,3 +38,9 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Agda
+.pagda
+
+# Julia
+formal-spec/render/flake.lock
