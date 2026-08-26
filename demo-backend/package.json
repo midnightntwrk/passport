@@ -1,0 +1,24 @@
+{
+  "name": "passport-demo-backend",
+  "version": "0.1.0",
+  "description": "Demo backend with connectors: private-state storage, passkey, and profile-protocol primitives for the Midnight Passport demo.",
+  "type": "module",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepare": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  }
+}

@@ -36,3 +36,28 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Demo workspace (demo-backend/ and examples/)
+# Generated exports
+output/
+# Local demo sandboxes and generated chain state
+experiments/dynamic-midnight-sdk-validation/
+/midnight-level-db/
+examples/passport-demo/.generated/
+examples/passport-demo/public/zk/
+# Both are staged by examples/passport-demo/scripts/prepare-zk-assets.mjs from
+# the stagenet contract build. The compiled contract modules live inside the
+# workspace so they resolve the ledger-9 compact-runtime; they are generated
+# output either way and are never committed.
+examples/passport-demo/contracts/stagenet/
+# The stagenet contract build itself: ~103 MB of prover and verifier keys,
+# produced by the deployment harness and shared with the demo through the
+# staging script above.
+examples/passport-balancer/contracts-stagenet/
+# Vercel CLI link state and the locally assembled Build Output (see
+# scripts/build-vercel-output.mjs). Never committed — the deployed artefacts
+# are produced locally and uploaded with `vercel deploy --prebuilt`.
+.vercel/
+dist/
+playwright-report/
+test-results/
