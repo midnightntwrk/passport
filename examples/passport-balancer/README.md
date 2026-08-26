@@ -164,9 +164,25 @@ parser against this service's live response.
 `ready` is the weak upstream notion — merely synced. **`available` is the one
 that matters**, and the client gates on `available > 0` alone. It is `1` only
 when this wallet can pay a fee *this instant*: synced, holding DUST, able to
-prove, and not already holding the spend queue. A synced wallet with no DUST
+prove, and not already **claiming** its own coins. A synced wallet with no DUST
 reports `ready: true, available: 0`, which is exactly right and exactly why the
 client does not trust `ready`.
+
+"Claiming its own coins" is narrower than "busy", and the distinction is
+load-bearing. A spend has three phases — balancing, proving, submitting — and
+only the first and last touch the wallet. The SDK commits its coin selection
+atomically before it returns (`SubscriptionRef.modifyEffect` on each of the
+shielded, unshielded, and DUST state refs), so by the time a recipe reaches the
+prover its inputs are already booked as spent and a second balancing in the same
+window picks different ones. Proving therefore claims nothing.
+
+Treating a whole job as one long claim is what took fee sponsorship down on
+2026/08/26: an mUSD activation leg proves for roughly two minutes, `available`
+read `0` for all of it, and the client — which will not attempt a
+`/balance-only` while `available` is `0` — stalled every Send and every
+concurrent onboarding behind a grant that was not using the wallet at all.
+`available` now reads the claim (`isReserved()`), and `/status` reports the
+queue separately as `busy`. See `src/reservation.ts`.
 
 `unavailableCause` is not read by `sponsor.ts` (it ignores unknown fields); it
 is there so an operator reading a raw probe is not left guessing between
@@ -205,7 +221,7 @@ Refusals are typed, and carry the HTTP status `sponsor.ts` branches on:
 | Status | `error` | Meaning |
 | --- | --- | --- |
 | 400 | `INVALID_TRANSACTION` | The body is not a serialised finalized transaction. |
-| 429 | `PENDING_TRANSACTION` | A balancing is already in flight; carries `retryAfterMs`. The client retries this inside a bounded window. |
+| 429 | `PENDING_TRANSACTION` | Another caller is claiming this wallet's coins right now — balancing, signing, or submitting, which is seconds. Carries `retryAfterMs`; the client retries inside a bounded window. A job that is merely *proving* is not a reason to refuse. |
 | 503 | `WALLET_SYNCING` | Not synced yet. |
 | 503 | `INSUFFICIENT_DUST` | No spendable DUST. |
 | 503 | `PROVER_UNAVAILABLE` | Proving key material could not be loaded. |

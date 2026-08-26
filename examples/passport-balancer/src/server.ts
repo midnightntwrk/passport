@@ -48,7 +48,12 @@
  *      gates on `available > 0` precisely because the deployed preview gateway
  *      reports a synced wallet with zero DUST as "ready". A wallet that cannot
  *      pay a fee right now contributes nothing to `available` here, whatever
- *      else is true of it.
+ *      else is true of it. The converse binds just as hard, and cost a morning
+ *      of stalled Sends on 2026/08/26: a wallet that IS busy but is busy PROVING
+ *      can still pay a fee, because the coins its own transaction will spend are
+ *      already booked as spent and a second balancing picks different ones. So
+ *      `available` reads the CLAIM on the wallet's coins (`isReserved()`), never
+ *      the length of the job holding the queue. See `./reservation.ts`.
  *   2. **`/balance-only` never submits.** It hands the balanced transaction
  *      back and the caller's own wallet submits it. That is what keeps the
  *      user's approval moment — and the user's own custody of the send —
@@ -99,6 +104,7 @@ import {
   createAccountFunder,
   type AccountFunder,
 } from './account.js';
+import { walletAvailability } from './availability.js';
 import { ASSET_SYMBOL, applyEnvFile, loadConfig, type BalancerConfig } from './config.js';
 import { rawContractAddress } from './contractRuntime.js';
 import {
@@ -462,9 +468,11 @@ async function main(): Promise<void> {
       for (;;) {
         /* Registration rotates NIGHT UTxOs; balancing reserves DUST. They do
            not touch the same coins, but both move wallet state, and a
-           registration landing mid-balance is a needless risk for something
-           that can simply wait a minute. */
-        if (!wallet.isBalancing()) {
+           registration landing mid-spend is a needless risk for something that
+           can simply wait a minute. `isBusy()` and not `isReserved()`
+           deliberately: this is the one caller that should stand off for a whole
+           job, proving included, because nothing depends on it running now. */
+        if (!wallet.isBusy() && !wallet.isReserved()) {
           try {
             const outcome = await wallet.registerDustIfNeeded();
             registration = outcome;
@@ -536,26 +544,16 @@ async function main(): Promise<void> {
       syncState = 'unavailable';
     }
 
-    const pending = wallet.isBalancing();
-    /* Proving is part of "can pay a fee", not a separate concern: a wallet full
-       of DUST that cannot prove the leg it would add is no use to a caller, and
-       claiming otherwise would make the demo promise a free transaction and
-       then fail — the exact failure `sponsor.ts`'s `available > 0` gate exists
-       to prevent. */
-    const proving = wallet.provingReadiness();
-    const canProve = proving.state === 'ready' || proving.state === 'server';
-    const available = ready && dustBalance > 0n && !pending && canProve ? 1 : 0;
-    const unavailableCause = available
-      ? undefined
-      : !ready
-        ? 'WALLET_SYNCING'
-        : pending
-          ? 'PENDING_TRANSACTION'
-          : dustBalance <= 0n
-            ? 'INSUFFICIENT_DUST'
-            : proving.state === 'warming'
-              ? 'PROVER_WARMING'
-              : 'PROVER_UNAVAILABLE';
+    /* `isReserved()` and NOT `isBusy()`: a grant that is proving holds no claim
+       on this wallet's coins, and reporting it as pending is what took fee
+       sponsorship down for the two minutes an mUSD leg proves. See
+       `./reservation.ts` and `./availability.ts`. */
+    const { available, unavailableCause } = walletAvailability({
+      synced: ready,
+      dustSpecks: dustBalance,
+      reserved: wallet.isReserved(),
+      proving: wallet.provingReadiness().state,
+    });
 
     return {
       total: 1,
@@ -598,7 +596,7 @@ async function main(): Promise<void> {
     const ready =
       (progress?.isSynced ?? false) &&
       dust > 0n &&
-      !wallet.isBalancing() &&
+      !wallet.isReserved() &&
       ['ready', 'server'].includes(wallet.provingReadiness().state);
     return {
       network: config.networkId,
@@ -616,7 +614,12 @@ async function main(): Promise<void> {
       dustRegistrationDetail: registrationDetail,
       balancesServed,
       lastBalanceAt,
-      balancing: wallet.isBalancing(),
+      /* `balancing` is the CLAIM on this wallet's coins — seconds. `busy` is a
+         whole spend job, proving included — minutes, for an mUSD grant. They are
+         reported separately because only the first says anything about whether
+         this service can pay somebody's fee right now. */
+      balancing: wallet.isReserved(),
+      busy: wallet.isBusy(),
       /* Since this process started, and — for each `…Total` — the persisted
          once-only ledger, which survives restarts. None of these is key
          material and none of them names a user. */

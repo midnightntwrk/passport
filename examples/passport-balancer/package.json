@@ -9,6 +9,8 @@
     "generate-seed": "npm run build && node dist/generate-seed.mjs",
     "sync-check": "npm run build && node dist/sync-check.mjs",
     "start": "npm run build && node dist/server.mjs",
+    "build:test": "esbuild test/*.test.ts --bundle --format=esm --platform=node --packages=external --outdir=dist/test --out-extension:.js=.mjs",
+    "test": "npm run build:test && node --test dist/test/*.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

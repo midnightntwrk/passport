@@ -75,6 +75,7 @@ import {
 } from '@midnight-ntwrk/wallet-sdk/unshielded';
 
 import type { BalancerConfig } from './config.js';
+import { createWalletReservation } from './reservation.js';
 
 // The wallet SDK's indexer client needs a global WebSocket under plain Node.
 (globalThis as { WebSocket?: unknown }).WebSocket ??= WebSocket;
@@ -315,23 +316,31 @@ export interface BalancerWallet {
    */
   balanceOnly(transactionBytes: Uint8Array): Promise<BalanceOnlyResult>;
   /**
-   * True while anything holds the spend queue — a `balanceOnly` call, a
-   * sponsored registration, or an activation grant. All three move this
-   * wallet's coins, so from a caller's point of view they are one busy signal.
+   * True while a CLAIM on this wallet's coin state is outstanding — a balancing,
+   * a signature, a submission, or a revert. Deliberately NOT true while a job is
+   * merely proving: see `./reservation.ts` for why the two are different
+   * questions, and what conflating them cost.
+   *
+   * This is the signal `/wallet-status` publishes as `available`.
    */
-  isBalancing(): boolean;
+  isReserved(): boolean;
   /**
-   * Runs `task` with exclusive use of this wallet's coins.
+   * True while any spend job holds the queue, proving included. For background
+   * housekeeping that has no reason to run mid-grant — the DUST registration —
+   * rather than for a caller's "can you pay a fee?".
+   */
+  isBusy(): boolean;
+  /**
+   * Runs `task` as one spend job, queued behind every other spend job.
    *
    * `/balance-only` reserves DUST; a sponsored registration spends NIGHT and
-   * DUST twice over. Concurrently they would contend for the same UTxOs and
-   * produce transactions the node rejects, so everything that spends queues
-   * here — including, deliberately, against the live droplet service's own
-   * balancing, which is why this exists rather than a per-endpoint flag.
+   * DUST twice over. Serialising them keeps two grants arriving together from
+   * racing the proof server, and keeps the order of what this wallet submits
+   * predictable.
    *
-   * NOT re-entrant: {@link contractWalletProvider} deliberately does not
-   * re-acquire it, because a contract job holds it around the whole deploy and
-   * call, and a nested acquire would wait on a queue it is itself blocking.
+   * It does NOT by itself claim the wallet's coins — the phases inside do, for
+   * as long as they need them. That is why {@link contractWalletProvider} may
+   * take a claim inside a job that already holds the queue without deadlocking.
    */
   exclusive<T>(task: () => Promise<T>): Promise<T>;
   /**
@@ -538,41 +547,20 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
     error: () => undefined,
   });
 
-  /* One balancing at a time. The SDK reserves DUST while balancing, and two
-     concurrent calls would contend for the same UTxO and produce a transaction
-     the node rejects. A caller who arrives mid-balance is told to come back —
-     `sponsor.ts` retries a 429 PENDING_TRANSACTION inside a 20-second window,
-     which is exactly the right behaviour for this queue. */
-  let balancing = false;
-
-  /* The same rule, extended to the endpoints that SPEND rather than sponsor.
-     `/register-alias` deploys a resolver leaf and then calls the registry;
-     `/fund-account` deposits a grant. Each is a real transaction out of this
-     wallet, and two of them — or one of them and a `/balance-only` — running
-     together would select the same coins. `spending` is a counter rather than a
-     flag so that `isBalancing()` stays honest for the whole queue rather than
-     just the job at its head. */
-  let queue: Promise<unknown> = Promise.resolve();
-  let spending = 0;
-
-  const exclusive = <T>(task: () => Promise<T>): Promise<T> => {
-    const run = async (): Promise<T> => {
-      spending += 1;
-      try {
-        return await task();
-      } finally {
-        spending -= 1;
-      }
-    };
-    /* `then(run, run)` so a failed predecessor does not poison the queue: the
-       next job runs either way, and its own rejection is its caller's. */
-    const next = queue.then(run, run);
-    queue = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    return next;
-  };
+  /* Who holds this wallet, and for which PHASE — see `./reservation.ts`.
+     Balancing, signing, submitting, and reverting CLAIM the wallet's coin
+     state; proving claims nothing, because by the time a recipe reaches the
+     prover the SDK has already committed its inputs as spent. The claim is what
+     `/wallet-status` publishes as `available`; the queue is only a running
+     order. Holding the two apart is the difference between a fee sponsor that
+     is busy for a second and one that reads as absent for two minutes. */
+  const reservation = createWalletReservation({
+    onSlowClaim: (label, heldMs) =>
+      console.log(
+        `[claim] ${label} held this wallet for ${(heldMs / 1_000).toFixed(1)} s — /wallet-status answered available: 0 for that long`,
+      ),
+  });
+  const { exclusive, reserve } = reservation;
 
   const dustBalance = async (state?: FacadeState): Promise<bigint> =>
     (state ?? (await currentState())).dust.balance(new Date());
@@ -732,7 +720,8 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
       return 'registered';
     },
 
-    isBalancing: () => balancing || spending > 0,
+    isReserved: reservation.isReserved,
+    isBusy: reservation.isBusy,
 
     exclusive,
 
@@ -779,18 +768,32 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
                stagenet against a TLD that demonstrably existed, at block 157797.
                The check is sound for a self-contained transfer and structurally
                impossible for a contract call. */
-            recipe = await facade.balanceUnboundTransaction(
-              tx as never,
-              { shieldedSecretKeys, dustSecretKey },
-              { ttl: deadline },
+            const balanced = await reserve(() =>
+              facade.balanceUnboundTransaction(
+                tx as never,
+                { shieldedSecretKeys, dustSecretKey },
+                { ttl: deadline },
+              ),
+              'contract balancing',
             );
-            const signed = await facade.signRecipe(recipe, unshieldedKeystore.signDataAsync);
+            recipe = balanced;
+            const signed = await reserve(
+              () => facade.signRecipe(balanced, unshieldedKeystore.signDataAsync),
+              'contract signing',
+            );
             recipe = signed;
+            /* Proving, and NOT under a claim. This is the long half of an mUSD
+               grant — minutes, for a transaction carrying shielded legs — and it
+               reads no wallet state: the coins it will spend were committed as
+               spent by the balancing above, so a `/balance-only` arriving now
+               selects different ones. Holding the claim through it is what made
+               `/wallet-status` answer `available: 0` while a grant proved. */
             return await facade.finalizeRecipe(signed);
           } catch (cause) {
-            if (recipe) {
+            const toRevert = recipe;
+            if (toRevert) {
               try {
-                await facade.revert(recipe);
+                await reserve(() => facade.revert(toRevert));
               } catch {
                 // Reserved coins are released on restart anyway.
               }
@@ -800,7 +803,33 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
         },
 
         async submitTx(tx: unknown): Promise<string> {
-          return String(await facade.submitTransaction(tx as never));
+          /* `facade.submitTransaction` is two steps welded together: it books
+             the transaction as pending in this wallet's own state, and then it
+             calls the submission service with `waitForStatus: 'Finalized'` —
+             which does not return until the node has FINALISED the transaction.
+             On stagenet that is 15 to 25 seconds, measured 2026/08/26, and only
+             the first step touches the wallet.
+             So the two are taken apart here, with the facade's own error path
+             (revert the transaction if submission fails) preserved. Holding a
+             claim across the finalisation wait refused every fee request for its
+             duration, and refused it for a wallet that was doing nothing but
+             waiting on somebody else's block. */
+          const finalized = tx as ledger.FinalizedTransaction;
+          await reserve(
+            () => facade.pendingTransactionsService.addPendingTransaction(finalized),
+            'contract submission booking',
+          );
+          try {
+            await facade.submissionService.submitTransaction(finalized, 'Finalized');
+          } catch (cause) {
+            try {
+              await reserve(() => facade.revert(finalized));
+            } catch {
+              // Best effort — the original submission failure is the real news.
+            }
+            throw cause;
+          }
+          return String(finalized.identifiers().at(-1));
         },
       };
     },
@@ -809,7 +838,12 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
       if (closed) {
         throw new BalanceRefusal(503, 'WALLETS_UNAVAILABLE', 'The balancer wallet is closed.');
       }
-      if (balancing) {
+      /* A claim on the wallet's coin state is outstanding — somebody is
+         selecting, signing, or submitting coins this instant. That is seconds,
+         not minutes, and `sponsor.ts` retries a 429 PENDING_TRANSACTION inside a
+         20-second window, so coming back shortly is the right answer. A job that
+         is merely PROVING is not a reason to refuse: it holds nothing. */
+      if (reservation.isReserved()) {
         throw new BalanceRefusal(
           429,
           'PENDING_TRANSACTION',
@@ -867,7 +901,6 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
         );
       }
 
-      balancing = true;
       const ttl = new Date(Date.now() + config.balanceTtlMs);
       let recipe: BalancingRecipe | null = null;
       try {
@@ -885,22 +918,32 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
            unshielded legs before it asked (`BALANCE_WITHOUT_DUST` in
            `sponsor.ts`); adding to those here would spend the balancer's NIGHT
            on somebody else's transfer. */
-        recipe = await facade.balanceFinalizedTransaction(
-          incoming,
-          { shieldedSecretKeys, dustSecretKey },
-          { ttl, tokenKindsToBalance: ['dust'] },
+        const reserved = await reserve(
+          () =>
+            facade.balanceFinalizedTransaction(
+              incoming,
+              { shieldedSecretKeys, dustSecretKey },
+              { ttl, tokenKindsToBalance: ['dust'] },
+            ),
+          'fee-leg balancing',
         );
+        recipe = reserved;
 
         /* A DUST-only balancing leg has no signable segment, so this signs
            nothing today. It stays in the pipeline because it is the step that
            would sign one if a future balancing leg ever carried an unshielded
            input, and a silently missing signature is a node rejection with no
            useful error. */
-        const signed = await facade.signRecipe(recipe, unshieldedKeystore.signDataAsync);
+        const signed = await reserve(
+          () => facade.signRecipe(reserved, unshieldedKeystore.signDataAsync),
+          'fee-leg signing',
+        );
         recipe = signed;
 
-        /* Proving happens here — the WASM prover or the configured server. The
-           merged result is the transaction the caller submits. */
+        /* Proving happens here — the WASM prover or the configured server —
+           and outside the claim, for the reason `./reservation.ts` gives: the
+           DUST this leg spends is already booked as spent, so another caller's
+           balancing in this window picks a different coin. */
         const balanced = await facade.finalizeRecipe(signed);
 
         /* `finalizeRecipe` books the merged transaction as pending so the
@@ -914,9 +957,10 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
           expiresAt: ttl.toISOString(),
         };
       } catch (cause) {
-        if (recipe) {
+        const toRevert = recipe;
+        if (toRevert) {
           try {
-            await facade.revert(recipe);
+            await reserve(() => facade.revert(toRevert));
           } catch {
             // Best effort — reserved coins are released on restart anyway.
           }
@@ -929,8 +973,6 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
           'The balancer could not add a fee leg to this transaction.',
           { cause: message },
         );
-      } finally {
-        balancing = false;
       }
     },
 
