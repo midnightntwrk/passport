@@ -2,10 +2,11 @@
  * The funder's once-only ledgers and the rolling-hour rate limiter.
  *
  * A ledger is the hard once-only gate for whatever it keys on — one activation
- * per address, one sponsored alias per account-custody contract — persisted as
- * a small JSON file in the state directory so a restart cannot forget who has
- * already been served. The rate limiter is in-memory: a restart resets the
- * window, which for a global back-stop is fine.
+ * per address, one sponsored alias per account-custody contract, one activation
+ * grant per account-custody contract — persisted as a small JSON file in the
+ * state directory so a restart cannot forget who has already been served. The
+ * rate limiter is in-memory: a restart resets the window, which for a global
+ * back-stop is fine.
  */
 
 import { readFile, rename, writeFile } from 'node:fs/promises';
@@ -30,6 +31,20 @@ export interface AliasEntry {
   resolverDeployTx: string;
   registerTx: string;
   costAtomic: string;
+  at: string;
+}
+
+/**
+ * One activation grant paid into an account-custody contract, keyed by that
+ * contract's address. Keyed on the CONTRACT for the same reason
+ * {@link AliasEntry} is: the limit being enforced is "one opening balance per
+ * Passport", and the contract address is the thing a Passport has exactly one
+ * of. The address it was deployed FROM is not — a user can hold several.
+ */
+export interface AccountEntry {
+  txHash: string;
+  amountAtomic: string;
+  balanceAfterAtomic: string;
   at: string;
 }
 

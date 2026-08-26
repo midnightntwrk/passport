@@ -32,6 +32,9 @@ import {
   configuredNetworkId,
   defaultSelectedNetwork,
   explorerTxUrl,
+  txReceiptLink,
+  verifierNameUrl,
+  VERIFIER_URL,
   explorerUrlFor,
   faucetAvailable,
   faucetUrlFor,
@@ -178,9 +181,9 @@ describe('explorer links', () => {
   it('has an explorer only where a real transaction has been seen to render', () => {
     expect(explorerUrlFor('preview')).toBe('https://explorer.1am.xyz');
     expect(explorerUrlFor('preprod')).toBe(EXPLORER_URLS.preprod);
-    // Stagenet's absence is deliberate: the explorer origin answers 200 for
-    // every path, which is not evidence that a stagenet transaction resolves.
-    expect(explorerUrlFor('stagenet')).toBeNull();
+    // Stagenet went in on 2026/08/25, once a real stagenet transaction was
+    // seen to render there; mainnet still has not been.
+    expect(explorerUrlFor('stagenet')).toBe('https://explorer.1am.xyz');
     expect(explorerUrlFor('mainnet')).toBeNull();
     expect(explorerUrlFor('undeployed')).toBeNull();
     expect(explorerUrlFor(null)).toBeNull();
@@ -202,12 +205,66 @@ describe('explorer links', () => {
     expect(explorerTxUrl('preview', TX_HASH)).toBe(
       `https://explorer.1am.xyz/tx/${TX_HASH}?network=preview`,
     );
+    expect(explorerTxUrl('stagenet', TX_HASH)).toBe(
+      `https://explorer.1am.xyz/tx/${TX_HASH}?network=stagenet`,
+    );
     // Every way this can fail lands on null, and the caller renders text.
-    expect(explorerTxUrl('stagenet', TX_HASH)).toBeNull();
+    expect(explorerTxUrl('mainnet', TX_HASH)).toBeNull();
     expect(explorerTxUrl('undeployed', TX_HASH)).toBeNull();
     expect(explorerTxUrl(null, TX_HASH)).toBeNull();
     expect(explorerTxUrl('preview', TX_IDENTIFIER)).toBeNull();
     expect(explorerTxUrl('preview', null)).toBeNull();
     expect(explorerTxUrl('preview', undefined)).toBeNull();
+  });
+});
+
+describe('the link a submitted transaction gets', () => {
+  /* What a success toast is FOR: the moment the user can go and look at the
+     thing that just happened. The rule is that there is either a link that
+     resolves or no link at all — never one that lands on "does not exist". */
+
+  it('sends a real ledger hash to the explorer', () => {
+    expect(txReceiptLink('stagenet', TX_HASH)).toEqual({
+      label: 'View on explorer',
+      href: `https://explorer.1am.xyz/tx/${TX_HASH}?network=stagenet`,
+    });
+    // A fallback name is ignored while the explorer can answer.
+    expect(txReceiptLink('stagenet', TX_HASH, 'alice.night')?.href).toBe(
+      `https://explorer.1am.xyz/tx/${TX_HASH}?network=stagenet`,
+    );
+  });
+
+  it('sends an unmapped 66-hex identifier to the verifier instead', () => {
+    /* The account-contract deploy hits this every time: it is the first thing
+       a Passport submits, and the toast fires before the indexer has mapped the
+       identifier to a ledger hash. The verifier is asked for the NAME and finds
+       the deploy itself. */
+    expect(txReceiptLink('stagenet', TX_IDENTIFIER, 'alice.night')).toEqual({
+      label: 'View on the verifier',
+      href: 'https://midnightpassport.com/verify/?q=alice.night',
+    });
+    // The same fallback carries a network with no explorer at all.
+    expect(txReceiptLink('mainnet', TX_HASH, 'alice.night')?.href).toBe(
+      'https://midnightpassport.com/verify/?q=alice.night',
+    );
+  });
+
+  it('gives no link when there is genuinely nowhere to send anyone', () => {
+    expect(txReceiptLink('stagenet', TX_IDENTIFIER)).toBeNull();
+    expect(txReceiptLink('stagenet', TX_IDENTIFIER, null)).toBeNull();
+    expect(txReceiptLink('stagenet', TX_IDENTIFIER, '   ')).toBeNull();
+    expect(txReceiptLink('mainnet', TX_HASH)).toBeNull();
+    expect(txReceiptLink(null, null)).toBeNull();
+  });
+
+  it('escapes what it puts in the verifier query', () => {
+    expect(verifierNameUrl('a name/with?stuff')).toBe(
+      'https://midnightpassport.com/verify/?q=a%20name%2Fwith%3Fstuff',
+    );
+    // `q` is the parameter `src/verify/main.ts` reads on load.
+    expect(verifierNameUrl('alice.night')).toBe(`${VERIFIER_URL}?q=alice.night`);
+    expect(verifierNameUrl(null)).toBeNull();
+    expect(verifierNameUrl(undefined)).toBeNull();
+    expect(verifierNameUrl(7 as unknown as string)).toBeNull();
   });
 });
