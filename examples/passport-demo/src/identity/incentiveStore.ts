@@ -9,6 +9,8 @@
  * localStorage, under `passport-incentives:v1`.
  */
 
+import { readTimestamp } from './timestamps.js';
+
 export interface PassportIncentiveRecord {
   id: string;
   /** Which app granted it, e.g. `Midnight Raffle`. */
@@ -72,10 +74,21 @@ export interface IncentiveWriteOutcome {
   reason?: string;
 }
 
-/** Records with an unreadable date sort last, and are never silently reordered past a readable one. */
+/**
+ * Records with an unreadable date sort last, and are never silently reordered
+ * past a readable one.
+ *
+ * The reader is the SHARED one, and it is strict about ISO-8601 for the reason
+ * `./timestamps.ts` sets out. `Date.parse` was doing this job, and `Date.parse`
+ * is not a validator: a file whose rewards carried `redeemedAt: '99999'` read
+ * as the year 99999, sorted ahead of every genuine reward, took every place the
+ * cap had left, and pushed the user's real rewards out with the cap as their
+ * stated reason — while sitting permanently at the top of the merged list.
+ * Anything the reader cannot read is not a date, and a record with no readable
+ * date sorts last rather than first.
+ */
 function redeemedAtRank(value: string): number {
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+  return readTimestamp(value) ?? Number.NEGATIVE_INFINITY;
 }
 
 /** Newest first, with an unreadable date sorting last rather than first. */
@@ -110,15 +123,26 @@ function newestFirst(
  * keep their places unconditionally, the file's records fill whatever room is
  * left (newest first), and each one that finds no room is reported with the cap
  * as its reason.
+ *
+ * A SAME-ID RECORD IS A DUPLICATE, NOT A REPLACEMENT. A file record used to
+ * REPLACE the local record of the same id — the local copy was dropped from
+ * the merge before the cap, on the reasoning that one redemption deserves one
+ * place. It does, and the copy already here is the one that keeps it: the
+ * incoming record then had to win a place back through the cap like any other,
+ * and a batch of newer records could take the last of the room, so the reward
+ * the user already held was deleted from this browser altogether while the
+ * outcome text asserted that local rewards are never evicted. A record whose id
+ * is already here is now reported as the duplicate it is and changes nothing.
  */
 export function restoreIncentives(records: PassportIncentiveRecord[]): IncentiveWriteOutcome[] {
   if (records.length === 0) return [];
-  const incoming = new Set(records.map((record) => record.id));
-  /* A file record REPLACES the local record of the same id rather than
-     competing with it for room — same redemption, one place. */
-  const local = loadIncentives().filter((record) => !incoming.has(record.id));
+  const local = loadIncentives();
+  const held = new Set(local.map((record) => record.id));
   const room = Math.max(0, INCENTIVE_LIMIT - local.length);
-  const admitted = [...records].sort(newestFirst).slice(0, room);
+  const admitted = [...records]
+    .filter((record) => !held.has(record.id))
+    .sort(newestFirst)
+    .slice(0, room);
   const admittedIds = new Set(admitted.map((record) => record.id));
   const kept = [...local, ...admitted].sort(newestFirst);
 
@@ -135,6 +159,17 @@ export function restoreIncentives(records: PassportIncentiveRecord[]): Incentive
         id: record.id,
         written: false,
         reason: `this browser refused to store the record: ${failure}`,
+      };
+    }
+    /* Asked BEFORE the read-back, because the id is in storage either way —
+       the copy already here put it there — and calling that a write would
+       report the file's record stored when nothing of it was. */
+    if (held.has(record.id)) {
+      return {
+        id: record.id,
+        written: false,
+        reason:
+          'this browser already holds a reward with this id, and the copy already here is the one that keeps its place',
       };
     }
     if (stored.has(record.id)) return { id: record.id, written: true };

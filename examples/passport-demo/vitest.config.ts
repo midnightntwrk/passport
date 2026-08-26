@@ -66,6 +66,11 @@
  *                       `deriveMidnamesOwnerKey`, `suggestAliasAlternatives` —
  *                       are drilled in `src/identity/midnames.test.ts`. The
  *                       rest is registry reads against a network's own indexer.
+ * `src/identity/timestamps.ts` went IN on 2026/08/26 with the module itself: it
+ * is the ISO-8601 reader `backup.ts` and `incentiveStore.ts` now share, it is
+ * four lines of pure decision, and both of its answers are drilled by
+ * `backup.test.ts`.
+ *
  *   aliasStore.ts,      Thin `window.localStorage` records. They are exercised
  *   incentiveStore.ts,  for real (not mocked) by `backup.test.ts`, which
  *   passportContract-   restores through their own save functions so their
@@ -123,6 +128,7 @@ export default mergeConfig(
           'src/lib/sponsor.ts',
           'src/identity/backup.ts',
           'src/identity/sponsoredAlias.ts',
+          'src/identity/timestamps.ts',
         ],
         /* A file in the list with nothing exercising it must show as 0% rather
            than vanish from the report. */

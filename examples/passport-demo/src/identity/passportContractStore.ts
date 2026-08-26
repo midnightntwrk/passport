@@ -159,8 +159,20 @@ export function loadPassportContractRecord(
  * Split out of {@link savePassportContractRecord} so the bulk path below
  * enforces the SAME invariants instead of a second copy of them that could
  * drift.
+ *
+ * It enforces what {@link readAll} filters on, for the reason spelled out on
+ * `./aliasStore.ts`'s `refuseAliasRecord`: a predicate that admits a record the
+ * reader discards lets that record be staged over a valid one, persisted, and
+ * then vanish on the way back out — and the valid record it replaced vanishes
+ * with it, while the caller is told only that the write "did not read back".
  */
 function refusePassportContractRecord(record: PassportContractRecord): string | null {
+  if (typeof record.credentialId !== 'string' || typeof record.network !== 'string') {
+    return 'A Passport contract record must name the credential and the network it was deployed on, both as text.';
+  }
+  if (record.status !== 'deployed' && record.status !== 'failed') {
+    return 'A Passport contract record\'s status must be deployed or failed.';
+  }
   if (record.status === 'deployed' && record.recovered) {
     /* The recovered case, and the only one exempt from the transaction-id
        rule: this device did not witness the deployment, so it has no id to

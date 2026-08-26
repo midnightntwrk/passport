@@ -106,8 +106,32 @@ export function loadAliasRecord(network: string): AliasRecord | null {
  *
  * Split out of {@link saveAliasRecord} so the bulk path below enforces the SAME
  * invariants instead of a second copy of them that could drift.
+ *
+ * IT ENFORCES WHAT {@link readAll} FILTERS ON, AND THAT IS NOT PEDANTRY. The
+ * two used to disagree: this asked only about the transaction-id and
+ * `queuedReason` invariants, so a record with a non-string `alias` passed here,
+ * was staged over the valid record this store already held for that network,
+ * was persisted, and was then dropped by the reader on the way back out. The
+ * caller was told only that its record "did not read back" — while the record
+ * it had overwritten was gone from storage for good. A predicate that admits
+ * what the reader discards is a predicate that destroys data, so the type shape
+ * is checked here, before anything is staged.
  */
 function refuseAliasRecord(record: AliasRecord): string | null {
+  if (
+    typeof record.alias !== 'string' ||
+    typeof record.domain !== 'string' ||
+    typeof record.network !== 'string'
+  ) {
+    return 'An alias record must carry the name, the domain it was claimed under, and the network, all as text.';
+  }
+  if (
+    record.status !== 'registered' &&
+    record.status !== 'queued' &&
+    record.status !== 'failed'
+  ) {
+    return 'An alias record\'s status must be registered, queued, or failed.';
+  }
   if (record.status === 'registered' && (!record.resolverDeployTxId || !record.registerTxId)) {
     return 'A registered alias record must carry both the resolver deployment and registration transaction ids.';
   }

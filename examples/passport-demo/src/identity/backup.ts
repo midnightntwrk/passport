@@ -58,11 +58,31 @@
  *   Three of those fields are FREE TEXT that a service or the user wrote —
  *   `queuedReason`, `failureReason`, and `label` — and free text is the one
  *   place a secret could ride in under a name the allow-list has justified. So
- *   `looksLikeSecret` runs on those three as well, and there it DECIDES: a
- *   reason or a label that is 32 or 64 bytes of hex or base64 is refused rather
- *   than sealed. That is a cheap tripwire and not a proof — it catches a key
- *   pasted verbatim into a reason string and it cannot catch one encoded some
- *   other way, and it is written down here so nobody reads it as more.
+ *   `looksLikeSecret` runs on those three as well, in
+ *   {@link refuseFreeTextSecret}, and there it DECIDES: a reason or a label
+ *   that is 32 or 64 bytes of hex or base64 is not written into this browser.
+ *   That is a cheap tripwire and not a proof — it catches a key pasted
+ *   verbatim into a reason string and it cannot catch one encoded some other
+ *   way, and it is written down here so nobody reads it as more.
+ *
+ *   THE TRIPWIRE REFUSES ONE RECORD, ON THE WAY IN, AND ONLY ON THE WAY IN.
+ *   It used to throw for the whole payload, on the export path as well as the
+ *   import one. `label` is a reward's name in the granting app's own words,
+ *   and a perfectly ordinary slug of 43 or 44 characters
+ *   (`midnight-raffle-earlybird-tier2-badge-26q3x`) is 32 bytes of base64 by
+ *   the tripwire's arithmetic — so one of them in the store made
+ *   {@link collectPassportBackup} throw on EVERY export attempt, the Backup
+ *   screen's own holdings read included, and the user could never back
+ *   anything up again, told their reward label was a key. Refusing this
+ *   browser's own data cannot keep a secret that is already in this browser.
+ *   So the export path does not refuse at all: it PROJECTS each record onto
+ *   the fields its type declares (see {@link takeRecordFields}), which is a
+ *   stronger guarantee than a refusal — a field nobody justified cannot reach
+ *   the file — and it cannot be blocked by anything a store happens to hold.
+ *   The import path keeps the tripwire, per RECORD: throwing for the payload
+ *   there would have been the same trap one step later, a file that exported
+ *   cleanly and then refused to restore at all. The record is skipped with the
+ *   reason said out loud, beside every other record a store would not take.
  *
  *   Record CONTAINER KEYS are refused by name too: `__proto__`, `constructor`,
  *   and `prototype` are legal JSON keys that no store may be asked to hold,
@@ -173,6 +193,8 @@
  * `selectBackupBackend('google-drive')` therefore fails with that sentence
  * rather than silently falling back to a file download nobody asked for.
  */
+
+import { readTimestamp } from './timestamps.js';
 
 import type { AliasRecord } from './aliasStore.js';
 import type { PassportContractRecord } from './passportContractStore.js';
@@ -651,14 +673,6 @@ function assertRecordFields(value: unknown, allowed: string[], path: string): vo
         `A Passport backup carries state, never keys, and "${path}.${key}" holds a nested object where a plain value belongs. Refusing to continue.`,
       );
     }
-    /* The one place the allow-list's name check is not enough — see the
-       header. A justified name holding 32 or 64 bytes of hex is refused. */
-    if (FREE_TEXT_FIELDS.includes(key) && looksLikeSecret(nested)) {
-      throw new PassportBackupError(
-        'key-material-present',
-        `A Passport backup carries state, never keys, and "${path}.${key}" is free text whose value is the size of a key. Refusing to continue.`,
-      );
-    }
   }
 }
 
@@ -670,6 +684,65 @@ function assertRecordMap(value: unknown, allowed: string[], path: string): void 
 }
 
 /**
+ * One record with the fields its type declares, and nothing else.
+ *
+ * The export-path counterpart to {@link assertRecordFields}: the same list,
+ * applied rather than asserted. A field nobody justified is left behind, and a
+ * nested value under a justified name goes with it — a plain value is what
+ * every one of these fields is, and a record carrying an object where a string
+ * belongs is a record this browser cannot vouch for either.
+ */
+function takeRecordFields<T>(record: T, allowed: string[]): T {
+  const taken: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record as Record<string, unknown>)) {
+    if (!allowed.includes(key)) continue;
+    if (value !== null && typeof value === 'object') continue;
+    taken[key] = value;
+  }
+  return taken as T;
+}
+
+/**
+ * The same, for a map of records — onto a NULL-PROTOTYPE map, for the reason
+ * `./aliasStore.ts` spells out: the stores hand out maps that can own a
+ * `__proto__` key, and copying one into an ordinary object would assign a
+ * prototype and store nothing.
+ */
+function takeRecordMap<T>(records: Record<string, T>, allowed: string[]): Record<string, T> {
+  const taken = Object.create(null) as Record<string, T>;
+  for (const [key, record] of Object.entries(records)) {
+    taken[key] = takeRecordFields(record, allowed);
+  }
+  return taken;
+}
+
+/**
+ * The tripwire on ONE record's free-text field, as a refusal reason or null.
+ *
+ * The allow-list is structural on names, so `queuedReason`, `failureReason`,
+ * and `label` are the only places a secret could arrive under a name somebody
+ * has justified. A value in one of them that is 32 or 64 bytes of hex or
+ * base64 does not get written into this browser.
+ *
+ * IT REFUSES THE RECORD, NOT THE FILE, AND IT REFUSES ON THE WAY IN ONLY.
+ * Both halves of that are the same lesson. It used to throw for the whole
+ * payload, on export as well as import, and `label` is a reward's name in the
+ * granting app's own words: an ordinary 43-character slug
+ * (`midnight-raffle-earlybird-tier2-badge-26q3x`) is 32 bytes of base64 by
+ * this arithmetic. On export that threw on every attempt and took the Backup
+ * screen's holdings read down with it, so the user could never back anything
+ * up again. Throwing for the whole payload on import would have been the same
+ * trap one step later — a file that exported cleanly and then refused to
+ * restore at all. So the export path does not refuse (it PROJECTS — see
+ * {@link takeRecordFields}), and the import path refuses the one record and
+ * says so in the summary, next to every other record a store would not take.
+ */
+function refuseFreeTextSecret(field: string, value: unknown): string | null {
+  if (!looksLikeSecret(value)) return null;
+  return `a backup carries state, never keys, and the file's ${field} is free text whose value is the size of a key`;
+}
+
+/**
  * Checks a payload against the fixed shapes a backup is made of, and throws on
  * anything else.
  *
@@ -678,6 +751,9 @@ function assertRecordMap(value: unknown, allowed: string[], path: string): void 
  * validity of the CONTAINERS is a different question with a different answer —
  * see {@link assertBackupRecordContainers} — so a value this cannot walk is
  * left for that check rather than reported as key material.
+ *
+ * The free-text tripwire is NOT here. It is {@link refuseFreeTextSecret}, it
+ * refuses one record on the import path only, and the header says why.
  */
 export function assertNoKeyMaterial(value: unknown, path = 'backup'): void {
   if (!isPlainObject(value)) return;
@@ -770,10 +846,20 @@ export async function collectPassportBackup(): Promise<PassportBackupContents> {
   const contents: PassportBackupContents = {
     version: PASSPORT_BACKUP_VERSION,
     createdAt: new Date().toISOString(),
-    aliases: loadAliasRecords(),
-    passportContracts: loadPassportContractRecords(),
-    incentives: loadIncentives(),
+    /* PROJECTED, not merely checked. `localStorage` is a store this app writes
+       and anything on the origin can write; a stray field or a nested value in
+       it used to make this throw, and a throw here is not a warning but the
+       end of the feature — the export button reads its own holdings through
+       this function, so one unreadable record disabled backup for good. What
+       the file may carry is a fixed list per record type, so the list is
+       APPLIED rather than asserted: everything else is simply left behind, and
+       an export cannot be blocked by anything this browser happens to hold. */
+    aliases: takeRecordMap(loadAliasRecords(), ALIAS_FIELDS),
+    passportContracts: takeRecordMap(loadPassportContractRecords(), CONTRACT_FIELDS),
+    incentives: loadIncentives().map((record) => takeRecordFields(record, INCENTIVE_FIELDS)),
   };
+  /* The belt to that: on a projected payload it can no longer fire, and it
+     stays because a projection is only as good as the list it projects onto. */
   assertNoKeyMaterial(contents);
   return contents;
 }
@@ -899,9 +985,27 @@ export async function openPassportBackup(
 ): Promise<PassportBackupContents> {
   const parsed = typeof envelope === 'string' ? parseBackupEnvelope(envelope) : envelope;
   /* Re-checked here rather than trusted from the parse, because an envelope
-     handed in as an object never went through it. Both throw `not-a-backup`
-     with the field and the length, so a structurally impossible file is never
-     reported as a wrong password. */
+     handed in as an object never went through it. All three throw with the
+     fact about the file — the version, the descriptor, the field and its
+     length — so a structurally impossible file is never reported as a wrong
+     password.
+
+     The VERSION was the one the comment claimed and the code did not make: an
+     object arm carrying `v: 2` went straight to the KDF, built its AAD from
+     that 2, failed the GCM tag, and told the user their password was wrong
+     about a file no password in the world would open here. */
+  if (typeof parsed.v !== 'number') {
+    throw new PassportBackupError(
+      'not-a-backup',
+      'This envelope carries no format number, so it is not a Passport backup.',
+    );
+  }
+  if (parsed.v !== PASSPORT_BACKUP_VERSION) {
+    throw new PassportBackupError(
+      'unsupported-version',
+      `This backup was written by a newer Passport (format ${parsed.v}); this one reads format ${PASSPORT_BACKUP_VERSION}.`,
+    );
+  }
   const kdf = parseKdfDescriptor(parsed.kdf);
   const { salt, nonce, ciphertext } = decodeEnvelopeBytes(parsed);
   const key = await deriveBackupKey(password, salt, kdf);
@@ -989,28 +1093,15 @@ export async function openPassportBackup(
  */
 type UpdatedAtOrder = 'newer' | 'older' | 'same' | 'candidate-undated' | 'incomparable';
 
-/**
- * The shape every timestamp this app writes has, and the only shape this
- * comparison will read.
- *
- * `Date.parse` is not a validator. It is specified to fall back to any
- * implementation-defined format it likes, so `Date.parse('99999')` answers with
- * the first of January in the year 99999 — a number, and therefore a comparison
- * that silently decides a file is newer than everything in this browser. A
- * record's `updatedAt` is written by `toISOString()` or by nothing, so anything
- * that is not ISO-8601 is a timestamp this module cannot read, and saying so is
- * the whole of `'incomparable'`.
+/*
+ * The reader is {@link readTimestamp}, in `./timestamps.js`, and it is shared
+ * rather than local: `./incentiveStore.ts` orders a restore's rewards by
+ * `redeemedAt` and needs the SAME answer this comparison gives, or a file's
+ * `'99999'` sorts as the year 99999 in one module while the other calls it
+ * unreadable. `Date.parse` is not a validator; the module says why. Anything
+ * it cannot read is neither newer nor older, and that is the whole of
+ * `'incomparable'`.
  */
-const ISO_8601 = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
-
-/** The milliseconds an ISO-8601 timestamp names, or null when it names none. */
-function readTimestamp(value: string): number | null {
-  if (!ISO_8601.test(value)) return null;
-  const parsed = Date.parse(value);
-  /* The pattern admits a shape; it cannot admit a date. `2026-13-01` is the
-     right shape and is not a day. */
-  return Number.isNaN(parsed) ? null : parsed;
-}
 
 function compareUpdatedAt(
   candidate: string | undefined,
@@ -1046,6 +1137,105 @@ function keptLocalBecause(
 
 /** A record ready to write, or the reason it will not be. */
 type Prepared<T> = { ok: true; record: T } | { ok: false; reason: string };
+
+/**
+ * Why the NAME already in this browser keeps its place, or null when the
+ * file's record may take it.
+ *
+ * The alias half of the rule contracts have had all along, and it was missing:
+ * a restore may add a name this browser does not have and refresh one it does;
+ * it may not take a name away from it. Only the registry-confirmed case and
+ * the dates were consulted, and a local record is legitimately unconfirmed for
+ * as long as the registry read-back lags — the claim path writes exactly
+ * `{status: 'registered', both transaction ids, registryConfirmed: false}` and
+ * tells the user the name "was submitted". A file dated later carrying
+ * `{status: 'failed'}` for that network passed every check, and
+ * `restoreAliasRecords` replaces a record whole: the browser showed a failed
+ * claim for a name that is live on chain, and both transaction ids and the
+ * resolver address were gone with it.
+ */
+function refuseAgainstLocalAlias(
+  record: AliasRecord,
+  existing: AliasRecord | undefined,
+): string | null {
+  if (!existing) return null;
+  if (existing.registryConfirmed === true) {
+    return 'this browser holds a name for this network that the registry itself confirmed, and a file does not overwrite that';
+  }
+  /* A DOWNGRADE is refused whatever the dates say — the one rule here that
+     does not consult them, exactly as on the contract side. */
+  if (
+    existing.status === 'registered' &&
+    existing.resolverDeployTxId &&
+    existing.registerTxId &&
+    record.status !== 'registered'
+  ) {
+    return 'this browser holds a registered name for this network with both of its transaction ids, and the file\'s record for it is not a registered claim — a restore does not take a name away';
+  }
+  const order = compareUpdatedAt(record.updatedAt, existing.updatedAt);
+  if (order !== 'newer') return keptLocalBecause(order, record.updatedAt, existing.updatedAt);
+  return null;
+}
+
+/**
+ * Why the CONTRACT already in this browser keeps its place, or null when the
+ * file's record may take it.
+ *
+ * Split out of the restore loop so it runs for EVERY candidate. It used to be
+ * written inline in the branch that had no staged record yet, and a file
+ * carrying two entries that collapse onto one store key took the other branch:
+ * the second was compared against the first, found newer, and staged with none
+ * of these checks run at all. A file whose first entry was a plausible
+ * deployment and whose second was a later-dated `failed` record therefore did
+ * exactly what the downgrade rule below exists to prevent — it took a deployed
+ * contract away from this browser, address and all.
+ */
+function refuseAgainstLocalContract(
+  record: PassportContractRecord,
+  existing: PassportContractRecord | undefined,
+): string | null {
+  if (!existing) return null;
+  if (existing.ledgerConfirmed === true) {
+    return 'this browser holds a contract record for this credential that the indexer confirmed, and a file does not overwrite that';
+  }
+  /* A DOWNGRADE is refused whatever the dates say, and this is the one rule
+     here that does not consult them. `ledgerConfirmed` protected only the
+     records the chain had already answered for, so a file dated in the future
+     could replace a local `deployed` record — address, transaction id, and all
+     — with a `failed` one carrying nothing but a sentence, and the address
+     this browser deployed was gone. A restore may add what this browser does
+     not have and refresh what it does; it may not take a contract away. */
+  if (
+    existing.status === 'deployed' &&
+    existing.address &&
+    (record.status !== 'deployed' || !record.address)
+  ) {
+    return 'this browser holds a deployed contract with an address for this credential, and the file\'s record for it carries none — a restore does not take a contract away';
+  }
+  const order = compareUpdatedAt(record.updatedAt, existing.updatedAt);
+  if (order !== 'newer') return keptLocalBecause(order, record.updatedAt, existing.updatedAt);
+  return null;
+}
+
+/**
+ * Whether an alias record's `domain` names something under `.night`.
+ *
+ * IT IS THE WHOLE NAME, NOT THE TOP-LEVEL DOMAIN. Every writer in the app
+ * stores `domain` as `alice.night` — `aliasDomainOf` in `../App.tsx` for the
+ * queued path, and the funder's own `domain` field for both registered ones —
+ * and the Home screen prints the field verbatim as the user's `.night` name.
+ * The registry re-check compared it against the bare string `'night'`, which no
+ * real record has ever carried, so EVERY genuinely restored name failed the
+ * comparison and was left permanently awaiting the registry, with the nonsense
+ * reason that it claimed the name under `".alice.night"`. Only the fixtures,
+ * which carried `domain: 'night'`, ever matched — which is why the suite
+ * agreed. Both forms are read here: the bare top-level domain a record from an
+ * older build may hold, and the whole name every writer produces today.
+ */
+function isNightName(domain: string): boolean {
+  const lowered = domain.toLowerCase();
+  return lowered === 'night' || lowered.endsWith('.night');
+}
 
 /** Raw 64-hex, the shape every contract address and target in this app has. */
 const HEX_64 = /^[0-9a-f]{64}$/i;
@@ -1100,9 +1290,6 @@ function prepareAliasRecord(value: AliasRecord, network: string): Prepared<Alias
       return { ok: false, reason: `the file's ${field} is not a transaction id` };
     }
   }
-  if (value.resolverTargetHex !== undefined && !HEX_64.test(String(value.resolverTargetHex))) {
-    return { ok: false, reason: 'the file\'s resolverTargetHex is not a 32-byte address' };
-  }
   const record: AliasRecord = {
     alias: value.alias,
     domain: value.domain,
@@ -1120,12 +1307,25 @@ function prepareAliasRecord(value: AliasRecord, network: string): Prepared<Alias
   const registerTxId = normaliseHex(optionalString(value.registerTxId));
   if (registerTxId) record.registerTxId = registerTxId;
   const queuedReason = optionalString(value.queuedReason);
-  if (queuedReason) record.queuedReason = queuedReason;
-  if (value.resolverTarget === 'contract' || value.resolverTarget === 'wallet') {
-    record.resolverTarget = value.resolverTarget;
+  if (queuedReason) {
+    const secret = refuseFreeTextSecret('queuedReason', queuedReason);
+    if (secret) return { ok: false, reason: secret };
+    record.queuedReason = queuedReason;
   }
-  const resolverTargetHex = normaliseHex(optionalString(value.resolverTargetHex));
-  if (resolverTargetHex) record.resolverTargetHex = resolverTargetHex;
+  /* `resolverTarget` and `resolverTargetHex` are DROPPED, and this is the
+     field pair that made forcing `registryConfirmed: false` insufficient.
+     `resolverTargetHex` is an ADDRESS, and the Home screen's Receive sheet
+     falls back to it for "Your account" when this browser holds no deployed
+     contract of its own — without consulting `registryConfirmed`, because a
+     name this device claimed itself is legitimately unconfirmed for as long as
+     the registry read lags. So a crafted file carrying an attacker's 64-hex
+     address restored cleanly and the victim's own Receive sheet handed that
+     address out. Nothing downstream can tell the two apart, and a flag nothing
+     reads protects nobody: the value simply does not come out of a file.
+     `confirmRestoredAliases` writes BOTH fields back from the registry's own
+     answer the moment it can confirm the name, so a genuine restore loses the
+     pair only for as long as it is unproven — which is the whole rule this
+     module is built on. */
   return { ok: true, record };
 }
 
@@ -1186,7 +1386,11 @@ function prepareContractRecord(value: PassportContractRecord): Prepared<Passport
     record.feePaidBy = value.feePaidBy;
   }
   const failureReason = optionalString(value.failureReason);
-  if (failureReason) record.failureReason = failureReason;
+  if (failureReason) {
+    const secret = refuseFreeTextSecret('failureReason', failureReason);
+    if (secret) return { ok: false, reason: secret };
+    record.failureReason = failureReason;
+  }
   return { ok: true, record };
 }
 
@@ -1205,6 +1409,8 @@ function prepareIncentiveRecord(
   if (value.txId !== undefined && !TX_ID.test(String(value.txId))) {
     return { ok: false, reason: 'the file\'s txId is not a transaction id' };
   }
+  const labelSecret = refuseFreeTextSecret('label', value.label);
+  if (labelSecret) return { ok: false, reason: labelSecret };
   const record: PassportIncentiveRecord = {
     id: value.id,
     app: value.app,
@@ -1304,24 +1510,10 @@ export async function applyPassportBackup(
       aliases.skipped.push({ key: network, reason: prepared.reason });
       continue;
     }
-    const existing = localAliases[network];
-    if (existing) {
-      if (existing.registryConfirmed === true) {
-        aliases.skipped.push({
-          key: network,
-          reason:
-            'this browser holds a name for this network that the registry itself confirmed, and a file does not overwrite that',
-        });
-        continue;
-      }
-      const order = compareUpdatedAt(prepared.record.updatedAt, existing.updatedAt);
-      if (order !== 'newer') {
-        aliases.skipped.push({
-          key: network,
-          reason: keptLocalBecause(order, prepared.record.updatedAt, existing.updatedAt),
-        });
-        continue;
-      }
+    const refusal = refuseAgainstLocalAlias(prepared.record, localAliases[network]);
+    if (refusal) {
+      aliases.skipped.push({ key: network, reason: refusal });
+      continue;
     }
     aliasWrites.push(prepared.record);
   }
@@ -1354,6 +1546,15 @@ export async function applyPassportBackup(
     }
     const record = prepared.record;
     const key = passportContractRecordKey(record.credentialId, record.network);
+    /* The LOCAL guards first, and for every candidate — including one that
+       would replace a record already staged from this same file. Running them
+       only in the "nothing staged yet" branch is how a second entry collapsing
+       onto one key used to slip past every one of them. */
+    const refusal = refuseAgainstLocalContract(record, localContracts[key]);
+    if (refusal) {
+      passportContracts.skipped.push({ key, reason: refusal });
+      continue;
+    }
     const staged = contractWrites.get(key);
     if (staged) {
       const order = compareUpdatedAt(record.updatedAt, staged.updatedAt);
@@ -1373,47 +1574,6 @@ export async function applyPassportBackup(
         key,
         reason: `the file carries an older record for this credential and network, dated "${staged.updatedAt}", which was not restored`,
       });
-      contractWrites.set(key, record);
-      continue;
-    }
-    const existing = localContracts[key];
-    if (existing) {
-      if (existing.ledgerConfirmed === true) {
-        passportContracts.skipped.push({
-          key,
-          reason:
-            'this browser holds a contract record for this credential that the indexer confirmed, and a file does not overwrite that',
-        });
-        continue;
-      }
-      /* A DOWNGRADE is refused whatever the dates say, and this is the one
-         rule here that does not consult them. `ledgerConfirmed` protected only
-         the records the chain had already answered for, so a file dated in the
-         future could replace a local `deployed` record — address, transaction
-         id, and all — with a `failed` one carrying nothing but a sentence, and
-         the address this browser deployed was gone. A restore may add what this
-         browser does not have and refresh what it does; it may not take a
-         contract away from it. */
-      if (
-        existing.status === 'deployed' &&
-        existing.address &&
-        (record.status !== 'deployed' || !record.address)
-      ) {
-        passportContracts.skipped.push({
-          key,
-          reason:
-            'this browser holds a deployed contract with an address for this credential, and the file\'s record for it carries none — a restore does not take a contract away',
-        });
-        continue;
-      }
-      const order = compareUpdatedAt(record.updatedAt, existing.updatedAt);
-      if (order !== 'newer') {
-        passportContracts.skipped.push({
-          key,
-          reason: keptLocalBecause(order, record.updatedAt, existing.updatedAt),
-        });
-        continue;
-      }
     }
     contractWrites.set(key, record);
   }
@@ -1556,10 +1716,10 @@ export async function confirmRestoredAliases(
     }
     /* Passport claims names under one domain. A record carrying another one is
        not a name this check can speak for, whatever the registry answers. */
-    if (record.domain && record.domain !== 'night') {
+    if (record.domain && !isNightName(record.domain)) {
       leaveUnconfirmed(
         network,
-        `the record claims the name under ".${record.domain}", and Passport registers names under .night`,
+        `the record's name "${record.domain}" is not under .night, and Passport registers names under .night`,
       );
       continue;
     }
@@ -1844,6 +2004,23 @@ export async function importPassportBackup(
   const contents = await openPassportBackup(parseBackupEnvelope(raw), password);
   const summary = await applyPassportBackup(contents);
   return { ...summary, registryCheck: await confirmRestoredAliases(summary.aliases.restoredKeys) };
+}
+
+/**
+ * The date a backup says it was taken, in the reader's own locale — or null
+ * when the file does not carry a date this module can read.
+ *
+ * `createdAt` is the ONE timestamp in the payload that {@link openPassportBackup}
+ * checks only as "a string", because a backup that decrypts and restores
+ * cleanly must not be thrown away over the wording of its headline. So the
+ * shape is answered here instead, and the caller words the null case. It used
+ * to be handed straight to `new Date(...).toLocaleString()` in
+ * `../screens/Backup.tsx`, and a hand-edited or corrupted file put "Restored
+ * from the backup taken Invalid Date" at the top of a successful restore.
+ */
+export function describeBackupCreatedAt(createdAt: string): string | null {
+  const at = readTimestamp(createdAt);
+  return at === null ? null : new Date(at).toLocaleString();
 }
 
 /* --- password guidance ---------------------------------------------------- */

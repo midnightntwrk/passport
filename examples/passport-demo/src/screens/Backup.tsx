@@ -10,7 +10,11 @@ import {
   Upload,
 } from 'lucide-react'
 
-import { collectPassportBackup, describeBackupPassword } from '../identity/backup.js'
+import {
+  collectPassportBackup,
+  describeBackupCreatedAt,
+  describeBackupPassword,
+} from '../identity/backup.js'
 import type { PassportBackupExport, PassportBackupSummary } from '../identity/backup.js'
 import ThemeToggle from './ThemeToggle.js'
 import './identity.css'
@@ -424,7 +428,14 @@ export default function BackupScreen(props: BackupProps) {
             <div className="mnid-panel">
               <p className="mnid-panel-head">
                 <Info size={15} aria-hidden="true" />
-                Restored from the backup taken {new Date(restored.createdAt).toLocaleString()}
+                {/* The date is the file's, and only a file this app wrote is
+                    certain to carry one it can read. `describeBackupCreatedAt`
+                    answers null for anything else, and the headline drops the
+                    clause rather than printing "Invalid Date" over a restore
+                    that actually worked. */}
+                {describeBackupCreatedAt(restored.createdAt)
+                  ? `Restored from the backup taken ${describeBackupCreatedAt(restored.createdAt)}`
+                  : 'Restored from this backup file, which carries no readable date'}
               </p>
               <p>
                 Names: {restored.aliases.restored} of {restored.aliases.found}. Contracts:{' '}
@@ -435,8 +446,15 @@ export default function BackupScreen(props: BackupProps) {
                 ...restored.aliases.skipped,
                 ...restored.passportContracts.skipped,
                 ...restored.incentives.skipped,
-              ].map((skipped) => (
-                <p key={`${skipped.key}:${skipped.reason}`}>
+              ].map((skipped, index) => (
+                /* The INDEX, because the list is static for one summary and
+                   two skips can be identical: a file listing one reward three
+                   times produces two settled deferred skips with the same key
+                   and the same sentence, and `key:reason` collided on them.
+                   React then logged a duplicate key and was free to drop one
+                   of the rows on a re-render — a silent drop, in the list this
+                   module exists to make sure never happens silently. */
+                <p key={index}>
                   <code>{skipped.key}</code> was not written: {skipped.reason}.
                 </p>
               ))}
