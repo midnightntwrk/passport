@@ -1,0 +1,575 @@
+/* Grand Prix Raffle — the Passport demo dApp that replaced Atlas.
+   Every colour, radius, and shadow below comes from the Passport token
+   sheet (./tokens.css, vendored from the Passport app so this folder
+   builds standalone); this file declares no palette values of its own. Light is the default; dark
+   follows prefers-color-scheme via the token sheet's system block. */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  font-family: var(--mn-font-body);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+a {
+  font: inherit;
+}
+
+.raffle-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------------------------------------------------------------- */
+/* Top bar                                                           */
+/* ---------------------------------------------------------------- */
+
+.raffle-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(480px, 100%);
+  margin: 0 auto;
+  padding: 18px 22px 6px;
+}
+
+.raffle-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.raffle-brand strong {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.raffle-mark {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--mn-radius-sm);
+  background: var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  box-shadow: var(--mn-shadow-sm);
+}
+
+.raffle-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-surface-card);
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.raffle-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mn-border-medium);
+}
+
+.raffle-status.connected,
+.raffle-status.entered {
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+}
+
+.raffle-status.connected i,
+.raffle-status.entered i {
+  background: var(--mn-accent);
+}
+
+/* ---------------------------------------------------------------- */
+/* Main column                                                       */
+/* ---------------------------------------------------------------- */
+
+.raffle-main {
+  flex: 1;
+  width: min(480px, 100%);
+  margin: 0 auto;
+  padding: 26px 22px 30px;
+}
+
+.raffle-eyebrow {
+  display: inline-block;
+  padding: 7px 14px;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.raffle-hero h1 {
+  margin: 18px 0 14px;
+  font-family: var(--mn-font-display);
+  font-size: clamp(44px, 12vw, 62px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 0.95;
+  overflow-wrap: anywhere;
+}
+
+.raffle-sub {
+  margin: 0 0 22px;
+  max-width: 40ch;
+  color: var(--mn-text-secondary);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+/* Perk rows — soft cards with the +1 pill doing the accent work. */
+
+.raffle-perks,
+.ticket-incentives {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.raffle-perks li,
+.ticket-incentives li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px 14px;
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-card);
+}
+
+.perk-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-raised);
+  color: var(--mn-accent-ink);
+  box-shadow: var(--mn-shadow-sm);
+}
+
+.perk-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.perk-tag {
+  flex: none;
+  padding: 5px 12px;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: var(--mn-numeric);
+}
+
+/* Primary CTA — the one solid accent pill on the page. */
+
+.raffle-cta {
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-accent);
+  color: var(--mn-accent-text);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow: var(--mn-shadow-accent);
+  transition: background 120ms ease;
+}
+
+.raffle-cta:hover {
+  background: var(--mn-accent-hover);
+}
+
+.raffle-cta:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.raffle-cta:focus-visible,
+.raffle-telegram:focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 3px;
+}
+
+.raffle-assurances {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--mn-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.raffle-assurances li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.raffle-assurances svg {
+  color: var(--mn-accent-ink);
+}
+
+.raffle-notice {
+  margin: 18px 0 0;
+  padding: 12px 16px;
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-card);
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  color: var(--mn-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.raffle-detail {
+  margin: 16px 0 0;
+  color: var(--mn-text-muted);
+  font-size: 13px;
+}
+
+/* Connected — the compact address chip. */
+
+.raffle-address {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 22px;
+  padding: 14px 16px;
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-card);
+}
+
+.raffle-address span {
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.raffle-address code,
+.ticket-address {
+  font-family: var(--mn-font-mono);
+  font-size: 13px;
+  color: var(--mn-text-secondary);
+}
+
+/* Entered — the ticket card. */
+
+.raffle-ticket {
+  margin: 6px 0 18px;
+  padding: 22px 20px 16px;
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface-raised);
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  box-shadow: var(--mn-shadow-md);
+}
+
+.ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ticket-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--mn-accent-ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ticket-holder {
+  color: var(--mn-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ticket-number {
+  margin: 14px 0 4px;
+  font-family: var(--mn-font-display);
+  font-size: clamp(38px, 11vw, 52px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: var(--mn-numeric);
+}
+
+.ticket-address {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.ticket-divider {
+  margin: 16px -20px;
+  border-top: 2px dashed var(--mn-border-hairline);
+}
+
+/* The entry transaction. Present only when Passport really submitted one —
+   the alternative line below says plainly that no payment was made. */
+.ticket-tx {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: var(--mn-accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ticket-tx code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--mn-text-secondary);
+  font-family: var(--mn-font-mono);
+  font-weight: 500;
+}
+
+.ticket-tx:hover code {
+  color: var(--mn-text-primary);
+}
+
+.ticket-offchain {
+  margin: 0 0 14px;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+}
+
+.ticket-incentives {
+  margin-bottom: 4px;
+}
+
+.ticket-incentives li {
+  background: var(--mn-surface-card);
+}
+
+/* Telegram — the outlined pill. */
+
+.raffle-telegram {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: var(--mn-radius-pill);
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  background: transparent;
+  color: var(--mn-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 120ms ease;
+}
+
+.raffle-telegram:hover {
+  background: var(--mn-surface-hover);
+}
+
+/* ---------------------------------------------------------------- */
+/* Footer                                                            */
+/* ---------------------------------------------------------------- */
+
+.raffle-footer {
+  width: min(480px, 100%);
+  margin: 0 auto;
+  padding: 14px 22px 22px;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+/* ---------------------------------------------------------------- */
+/* Hero illustration                                                 */
+/*                                                                   */
+/* Inline SVG drawn entirely from the token palette — no image asset */
+/* to ship, no external request, and legible in both themes.         */
+/* ---------------------------------------------------------------- */
+
+.raffle-art-frame {
+  display: grid;
+  place-items: center;
+  height: 128px;
+  margin: 0 0 20px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-accent-soft);
+  overflow: hidden;
+}
+.raffle-art-frame .mnraffle-art { width: 208px; height: auto; }
+
+.mnraffle-plate { fill: var(--mn-surface-raised); }
+.mnraffle-edge {
+  fill: none;
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-opacity: 0.75;
+}
+.mnraffle-tear {
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-opacity: 0.5;
+}
+.mnraffle-rules {
+  stroke: var(--mn-text-muted);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-opacity: 0.55;
+}
+.mnraffle-spark {
+  stroke: var(--mn-accent-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.mnraffle-halo {
+  fill: none;
+  stroke: var(--mn-accent-ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+  stroke-opacity: 0.55;
+}
+
+/* ---------------------------------------------------------------- */
+/* Confirmation toast                                                */
+/* ---------------------------------------------------------------- */
+
+.raffle-toast {
+  position: fixed;
+  z-index: 60;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  left: 50%;
+  width: min(22rem, calc(100vw - 2rem));
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 15px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-lg);
+  transform: translateX(-50%);
+  animation: raffle-toast-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.raffle-toast-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+
+.raffle-toast-copy { flex: 1; min-width: 0; }
+.raffle-toast-title { margin: 0; font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.raffle-toast-body {
+  margin: 2px 0 0;
+  color: var(--mn-text-muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+/* 44px of tappable height: the link is the point of the card. */
+.raffle-toast-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: 2px -8px -10px;
+  padding: 0 8px;
+  border-radius: var(--mn-radius-sm);
+  color: var(--mn-accent-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.raffle-toast-link:hover { background: var(--mn-surface-hover); text-decoration: underline; }
+
+.raffle-toast-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.raffle-toast-close:hover { color: var(--mn-text-primary); background: var(--mn-surface-hover); }
+
+@keyframes raffle-toast-in {
+  from { opacity: 0; transform: translate(-50%, 40px) scale(0.94); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .raffle-toast { animation: none; }
+}

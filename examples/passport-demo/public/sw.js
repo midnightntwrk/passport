@@ -107,6 +107,16 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
+  // `/verify/**` is the step verifier — a read-only operator page that is not
+  // part of the app and is deliberately unreachable from its UI. It is skipped
+  // here for two reasons, and the first is a correctness one:
+  // `networkNavigation` below caches EVERY successful navigation response as
+  // `/index.html`, so a reviewer opening /verify/ in an installed Passport
+  // would poison the app shell with the verifier's HTML. The second is that a
+  // page whose whole job is to show what the chain says right now must never
+  // be served from a cache.
+  if (url.pathname === '/verify' || url.pathname.startsWith('/verify/')) return;
+
   if (request.mode === 'navigate') {
     event.respondWith(networkNavigation(request));
     return;

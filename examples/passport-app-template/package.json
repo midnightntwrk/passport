@@ -1,0 +1,33 @@
+{
+  "name": "midnight-passport-app-template",
+  "version": "0.1.0",
+  "description": "A minimal, open-source starter for a third-party app that connects to Midnight Passport: profile handshake, consent, and an optional transaction request, over the public postMessage bridge.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": false,
+  "keywords": [
+    "midnight",
+    "passport",
+    "template",
+    "starter",
+    "dapp"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview --host localhost"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.0"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "version": 3,
+  "file": "index.js",
+  "sourceRoot": "../../../",
+  "sources": ["src/faucet.compact", "compiler/standard-library.compact", "compiler/zkir-v3-library.compact"],
+  "names": [],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;EAAA;;;;;;;;;;MAcA,AAAA,aAYC;;;;;cAXC,OAAoB;cACpB,QAAmB;cACnB,OAAoB;cACpB,WAA6B;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;yCAH7B,OAAoB,+BACpB,QAAmB,+BACnB,OAAoB,+BACpB,WAA6B;;;;;;;;;qDAH7B,OAAoB;qDACpB,QAAmB;qDACnB,OAAoB;qDACpB,WAA6B;;;;OAQ9B;;;;GACA;EA3BD;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;GA2BC;ECUD,AAAA,QAA0B;kCACkB;;EAkF5C,AAAA,aAAyB,cAAuB;qCACC,cAAY;;;EAG7D,AAAA;;6BACE;6BACA;6BACA;6BACA;;UAEM,kBAAiC;;yCAAwB;iEAAY;;;;;;;;;;;;4BAAuB;IAClG;;;;;;;;;;;2HAAoB;;;;;;2HAAY;;;;;;;;;;;;;yDACd,QAAM;UAClB,8BAAoB,QAAM;IAChC;;;;;;;;;;;2HAA2B;;;;;;SAEtB;;sBAAqB;8CAAyB;;;;;;;;;;;;;MACjD;;;;;;;;;;;6HAA6B;;;;;;;WAExB;;EAgHT,AAAA,kBACE,QACA;;;0CAKU;8CACI;;sCACJ;sCAAoB;sCAAuB;;ECpQvD,AAAA,kBAAA;oEAAA;;;EAAA,AAAA,oBAAA,SAAA;;uDAAA;uDAAA;;;EAAA,AAAA,gDAAA,QAAA;;wDAAA;wDAAA;;;;;;;EFcA,AAAA,sBAYC;;yBAXC,OAAoB;yBACpB,QAAmB;yBACnB,OAAoB;yBACpB,WAA6B;;;;oCAGlB,OAAK;oCACL,QAAM;oCACN,OAAK;iDACqC,WAAS;;GAE/D;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;"
+}

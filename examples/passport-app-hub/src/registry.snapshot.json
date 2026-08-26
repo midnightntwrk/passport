@@ -1,0 +1,178 @@
+{
+  "version": 2,
+  "lastUpdated": "2026/08/07",
+  "apps": [
+    {
+      "id": "ascend-dex",
+      "name": "Ascend DEX",
+      "description": "Privacy-first decentralized exchange on Midnight",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/ascend.svg",
+      "url": "https://dex.ascend.market",
+      "category": "defi",
+      "section": "standard",
+      "networks": ["preview", "preprod", "mainnet"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "pulse",
+      "name": "Pulse",
+      "description": "AMM DEX with private swaps",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/pulse.png",
+      "url": "https://pulsefinance.org",
+      "category": "defi",
+      "section": "standard",
+      "networks": ["preprod"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "midnight-city",
+      "name": "Midnight City",
+      "description": "On-chain AI simulation on Midnight Network",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/midnight-city.png",
+      "url": "https://www.midnight.city/spaces/central",
+      "category": "gaming",
+      "section": "standard",
+      "networks": ["mainnet"],
+      "featured": true,
+      "new": true,
+      "immersive": true
+    },
+    {
+      "id": "ascend-market",
+      "name": "Ascend Market",
+      "description": "Trade prediction markets with up to 100x+ leverage",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/ascend.svg",
+      "url": "https://testnet.ascend.market",
+      "category": "defi",
+      "section": "standard",
+      "networks": ["preview"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "dominion",
+      "name": "Dominion",
+      "description": "On-chain poker with mental poker cryptography and ZK proofs",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/dominion.svg",
+      "url": "https://dominion.fun",
+      "category": "gaming",
+      "section": "standard",
+      "networks": ["preview", "preprod", "mainnet"]
+    },
+    {
+      "id": "1am-explorer",
+      "name": "1AM Explorer",
+      "description": "Block explorer for Midnight Network",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/1am-explorer.svg",
+      "url": "https://explorer.1am.xyz",
+      "category": "tools",
+      "section": "standard",
+      "networks": ["preview", "preprod", "mainnet"]
+    },
+    {
+      "id": "northstar-dex",
+      "name": "NorthStar DEX",
+      "description": "Privacy-first DEX on Midnight",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/northstar-dex.png",
+      "url": "https://preprod.northstardex.com",
+      "category": "defi",
+      "section": "standard",
+      "networks": ["preprod"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "galaxyswap",
+      "name": "GalaxySwap",
+      "description": "Major Privacy DEX on Midnight",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/galaxyswap.png",
+      "url": "https://preprod.galaxyswap.io",
+      "category": "defi",
+      "section": "standard",
+      "networks": ["preprod"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "zkmint",
+      "name": "ZKMint",
+      "description": "Night-ID name service and ZK-powered launchpad on Midnight Network",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/zkmint.svg",
+      "url": "https://zkmint.1am.xyz",
+      "category": "identity",
+      "section": "standard",
+      "networks": ["preview", "preprod", "mainnet"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "nyx-dex",
+      "name": "NyxDex",
+      "description": "Privacy DeFi on Midnight",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/nyxdex.png",
+      "url": "https://nyxdex.io",
+      "category": "defi",
+      "section": "standard",
+      "networks": ["preview"],
+      "featured": true,
+      "new": true
+    },
+    {
+      "id": "night-heron",
+      "name": "Night Heron",
+      "description": "Blockchain-native Florida community association management (Ch. 718/719/720)",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/night-heron.png",
+      "url": "https://nightheron.io",
+      "category": "other",
+      "section": "standard",
+      "networks": ["preprod"],
+      "new": true
+    },
+    {
+      "id": "1am-playground",
+      "name": "1AM Playground",
+      "description": "A collection of sample dApps demonstrating 1AM Wallet integrations",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/1am-playground.svg",
+      "url": "https://playground.1am.xyz/",
+      "category": "tools",
+      "section": "standard",
+      "networks": ["preview", "preprod"],
+      "new": true
+    },
+    {
+      "id": "pilotlog",
+      "name": "PilotLog",
+      "description": "A verifiable aviation logbook for pilots and aircraft history on Midnight.",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/pilotlog.svg",
+      "url": "https://pilotlog-production.up.railway.app",
+      "category": "identity",
+      "section": "standard",
+      "networks": ["preprod"],
+      "new": true
+    },
+    {
+      "id": "proof-of-age-gate",
+      "name": "Proof-of-Age Gate",
+      "description": "Prove you meet a minimum age without revealing your birth year - ZK selective disclosure on Midnight.",
+      "icon": "https://tomiin.github.io/midnight-proof-of-age/icon.svg",
+      "url": "https://tomiin.github.io/midnight-proof-of-age/",
+      "category": "identity",
+      "section": "standard",
+      "networks": ["preview"],
+      "new": true
+    },
+    {
+      "id": "midnight-private-auction",
+      "name": "Midnight Private Auction",
+      "description": "ZK sealed-bid auction on Midnight Mainnet. Bids are AES-256-GCM encrypted in private state.",
+      "icon": "https://raw.githubusercontent.com/webisoftSoftware/1AM-app-registery/main/icons/midnight-private-auction.png",
+      "url": "https://midnight-private-auction.vercel.app",
+      "category": "other",
+      "section": "standard",
+      "networks": ["mainnet"],
+      "new": true
+    }
+  ]
+}

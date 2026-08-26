@@ -108,6 +108,11 @@ includes(sourceWorker, "const CACHE_VERSION = '2026-08-04-1'", 'service worker c
 includes(sourceWorker, "'/midnight-wordmark.svg'", 'onboarding art is a precached shell asset');
 includes(sourceWorker, "url.origin !== self.location.origin", 'cross-origin requests bypass caches');
 includes(sourceWorker, "url.pathname.startsWith('/api/')", 'same-origin API requests bypass caches');
+includes(
+  sourceWorker,
+  "url.pathname.startsWith('/verify/')",
+  'the step verifier bypasses caches and cannot poison the app shell',
+);
 includes(sourceWorker, "request.mode === 'navigate'", 'navigation strategy is explicit');
 includes(sourceWorker, "caches.match('/offline.html')", 'offline navigation fallback is explicit');
 includes(sourceWorker, 'event.waitUntil(network.then(() => undefined))', 'runtime cache refresh extends worker lifetime');

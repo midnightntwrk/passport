@@ -1,0 +1,11 @@
+# This folder is meant to be copied out of the repository and used on its own,
+# so it carries its own ignore rules rather than relying on the monorepo's.
+node_modules/
+dist/
+.env
+.env.local
+.vercel/
+*.log
+.DS_Store
+.vercel
+.env*.local
