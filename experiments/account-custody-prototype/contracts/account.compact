@@ -42,9 +42,14 @@ import CompactStandardLibrary;
 // Two client-side rules are load-bearing (see
 // research/anarkey-buss-recovery-assessment.md):
 //   - Every publish_recovery_backup MUST use a fresh session nonce AND a
-//     fresh recovery secret. Correlated φ vectors across sessions degrade
-//     the threshold; stale φ of a superseded secret is harmless only
-//     because the commitment is rotated with it.
+//     fresh recovery secret (ANARKey Remark 6.1). Reusing a session nonce
+//     with the same guardian roster does not merely degrade the threshold:
+//     both ceremonies' polynomials agree at every guardian point, so their
+//     difference is solvable from the public φ vectors alone, and one
+//     (t+1) quorum on either ceremony opens both secrets. The circuit
+//     enforces an inequality backstop against accidental reuse; genuine
+//     freshness remains a client obligation. Stale φ of a superseded
+//     secret is harmless only because the commitment is rotated with it.
 //   - recover() clears φ: after recovery the account has a recovery secret
 //     but no published backup until the owner runs a new guardian ceremony.
 //
@@ -406,8 +411,9 @@ export circuit revoke_grant(grant: Field): [] {
 // (covers e.g. three guardians at threshold two, φ = 2, or five guardians
 // at threshold three, φ = 3); unused slots must be zero and are gated by
 // recovery_phi_len. The client MUST rotate the recovery secret and use a
-// fresh session nonce on every call — re-publishing φ for the same secret
-// with correlated guardian shares degrades the threshold (see header).
+// fresh session nonce on every call — nonce reuse under the same roster
+// collapses the independence of the two ceremonies (see header). The
+// circuit rejects the previous nonce and commitment as a backstop.
 
 export circuit publish_recovery_backup(
   new_recovery_commitment: Field,
@@ -421,6 +427,14 @@ export circuit publish_recovery_backup(
   require_device();
   assert(phi_len >= (1 as Uint<8>), "phi must not be empty");
   assert(phi_len <= (4 as Uint<8>), "phi length out of range");
+  // On-chain backstop for the freshness MUST above: reject reuse of the
+  // stored session nonce or recovery commitment. Equality with the stored
+  // value is the only reuse the contract can see — genuine freshness
+  // (independent randomness in the client) stays a client obligation.
+  // The constructor's all-zero recovery_session sentinel also makes an
+  // all-zero nonce (broken client RNG) unacceptable on the first backup.
+  assert(session_nonce != recovery_session, "session nonce reused");
+  assert(new_recovery_commitment != recovery, "recovery commitment reused");
   recovery         = disclose(new_recovery_commitment);
   recovery_session = disclose(session_nonce);
   recovery_phi.insert(1 as Uint<8>, disclose(phi_1));
