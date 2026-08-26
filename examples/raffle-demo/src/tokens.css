@@ -1,0 +1,371 @@
+/* ---------------------------------------------------------------------------
+ * VENDORED — do not edit here.
+ *
+ * Source: midnight-passport-dynamic-signing,
+ *         examples/passport-demo/src/screens/tokens.css
+ * Vendored: 2026/08/06
+ *
+ * The raffle is styled with Passport's own design tokens so the two feel like
+ * one product. It carries its own copy so the folder builds standalone; keep
+ * it in step with the source.
+ * ------------------------------------------------------------------------- */
+
+/* Passport mobile — design tokens.
+   =================================================================
+   The single source of truth for every surface, text, border, radius,
+   and shadow value used by the mobile Passport screens (Home, Apps,
+   Onboarding, the bottom navigation, and the theme toggle). Those
+   sheets consume these custom properties and declare no colour values
+   of their own.
+
+   DESIGN LANGUAGE — "Midnight, Base-inspired"
+   ===========================================
+   This system replaces the earlier strict-monochrome / zero-radius /
+   hard-offset-shadow direction. The new look is inspired by the
+   Base.org / base.app aesthetic: bright, roomy, confidently rounded,
+   with one electric blue doing all of the accent work. Midnight's own
+   wordmark and symbol remain the product marks; nothing here borrows
+   Base's trademarks, logo geometry, or typefaces.
+
+   Palette
+   -------
+   Accent (both themes)   #0052FF  electric blue — the ONE hue.
+     hover  light #0043D6 (darker)   dark #3D77FF (lighter)
+     soft   light rgba(0,82,255,.08) dark rgba(61,119,255,.16)
+     ink    light #0040CC (blue AS text, AA on white)
+            dark  #7DA2FF (blue AS text, AA on near-black)
+     text-on-accent: #FFFFFF in both themes.
+   Light (default): white page #FFFFFF, grey-wash cards #F5F6F8,
+     recessed strips #ECEEF2, near-black text #0A0B0D, secondary
+     #464B55, muted #5B616E, hairlines #E2E6EB.
+   Dark (deliberate): page #0A0B0D, cards #16181D, raised #1E2127,
+     white text #F7F9FC, secondary #B4BAC6, muted #8A919E, hairlines
+     #23262C. The SAME #0052FF stays vivid for fills; blue-as-text
+     lightens to #7DA2FF for contrast.
+   "Inverted" surfaces (solid CTAs, active nav tab, NEW tags, ticked
+   consent boxes) are now the ACCENT BLUE with white text in BOTH
+   themes — the Base primary-action colour — no longer black/white
+   inversion.
+
+   Type scale
+   ----------
+   One neo-grotesque family throughout: Inter (system stack). The
+   bundled Space Grotesk is deliberately retired from the stack.
+     Display   clamp(44–82px), weight 800, tracking -0.03em, line ~0.95
+     Heading   22–28px,        weight 700, tracking -0.02em
+     Body      13–15px,        weight 400–500, tracking 0
+     Emphasis  13–14px,        weight 600–700
+     Micro     11px caps,      weight 600, tracking +0.06–.08em
+   (The old 800-weight/.14em microcaps read brutalist; restyle passes
+   should relax them to the values above.)
+
+   Radius scale
+   ------------
+     --mn-radius-sm    8px    chips, tags, tiny square buttons
+     --mn-radius-md   12px    inputs, icon buttons, list rows
+     --mn-radius      16px    the DEFAULT — cards, panels (legacy
+                              consumers of --mn-radius round for free)
+     --mn-radius-lg   20px    sheets, hero cards, the app browser
+     --mn-radius-pill 999px   primary buttons, pills, nav bar, toggle
+
+   Shadow language
+   ---------------
+   Soft, diffuse, always vertical — never hard offsets.
+     sm   resting card lift          (barely-there)
+     md   raised card / floating bar
+     lg   sheets, popovers
+     ink  hover/emphasis elevation   (the loudest neutral shadow)
+     accent  blue glow reserved for primary CTAs
+   In dark mode shadows deepen (pure black at higher alpha) rather
+   than lighten; elevation is mostly carried by surface value there.
+
+   DUST battery ring
+   -----------------
+   Charge (a real DUST balance)  → stroke: var(--mn-accent)  — blue.
+   Sync gauge (walking the chain)→ stroke: var(--mn-text-muted) — grey.
+   Track stays --mn-border-hairline-ish grey. Caps rounded.
+
+   Themes
+   ------
+   Light is the default. Dark is applied when the document element
+   carries [data-theme="dark"], and is also honoured from the
+   operating system when no explicit choice has been recorded (that
+   is, when no data-theme attribute is present at all). See
+   ../lib/theme.ts, which writes the attribute and persists the
+   preference under the localStorage key 'passport-theme'.
+
+   Scope
+   -----
+   The legacy global sheet (../styles.css, the classic desktop view)
+   is deliberately NOT governed by these tokens and is left alone.
+   The only rules below that reach outside the token declarations are
+   the short "bridge" section at the end, which is scoped to the
+   mobile screen roots. */
+
+/* ---------------------------------------------------------------- */
+/* Theme-independent                                                 */
+/* ---------------------------------------------------------------- */
+
+:root {
+  /* Type — one neo-grotesque stack everywhere. Inter loads from the
+     system stack; the display slot simply carries heavier weight and
+     tighter tracking, set in the consuming sheets. */
+  --mn-font-display: Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mn-font-body: Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mn-font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* Every figure that can be compared column-to-column or that updates in
+     place — balances, percentages, block heights — sets this. */
+  --mn-numeric: tabular-nums lining-nums;
+
+  /* Accent — the one hue. Theme blocks below re-tune hover/soft/ink;
+     the fill itself stays the same vivid blue in both themes. */
+  --mn-accent: #0052ff;
+  --mn-accent-text: #ffffff;
+  --mn-accent-hover: #0043d6;
+  --mn-accent-soft: rgba(0, 82, 255, 0.08);
+  --mn-accent-ink: #0040cc;
+
+  /* Geometry */
+  --mn-radius-sm: 8px;
+  --mn-radius-md: 12px;
+  --mn-radius: 16px; /* default card radius — legacy consumers inherit it */
+  --mn-radius-lg: 20px;
+  --mn-radius-pill: 999px;
+  --mn-hairline: 1px;
+  --mn-nav-height: 76px;
+
+  /* Fixed "ink" scale ------------------------------------------------
+     Values that stay dark in BOTH themes, matching the dark theme's
+     surfaces. Historically the Onboarding hero consumed these so its
+     darkness was an explicit decision rather than an accident of the
+     theme; the bridge below still paints the onboarding overscroll
+     with the theme surface, and these remain for any consumer that
+     wants a deliberate always-dark plate. */
+  --mn-ink-page: #0a0b0d;
+  --mn-ink-card: #16181d;
+  --mn-ink-raised: #1e2127;
+  --mn-ink-text: #f7f9fc;
+  --mn-ink-text-secondary: #b4bac6;
+  --mn-ink-text-muted: #8a919e;
+  --mn-ink-border-hairline: #23262c;
+  --mn-ink-border-medium: #3a3f48;
+  --mn-ink-border-strong: #f7f9fc;
+  --mn-ink-surface-inverted: #0052ff;
+  --mn-ink-text-inverted: #ffffff;
+  --mn-ink-hover: rgba(247, 249, 252, 0.07);
+  --mn-ink-shadow-colour: rgba(0, 0, 0, 0.55);
+  --mn-ink-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px var(--mn-ink-shadow-colour);
+  --mn-ink-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45), 0 10px 28px var(--mn-ink-shadow-colour);
+  --mn-ink-scrim: rgba(4, 5, 7, 0.72);
+  /* Stops for the hero-art fade on Onboarding — the same ink at partial
+     opacity, kept here so the screen sheet holds no colour values. */
+  --mn-ink-fade-mid: rgba(10, 11, 13, 0.55);
+  --mn-ink-fade-end: rgba(10, 11, 13, 0.84);
+  /* The wordmark ships as #0a0a0a artwork; on ink it is always inverted. */
+  --mn-ink-wordmark-filter: invert(1);
+}
+
+/* ---------------------------------------------------------------- */
+/* Light — the default                                               */
+/* ---------------------------------------------------------------- */
+
+:root,
+:root[data-theme="light"] {
+  --mn-color-scheme: light;
+
+  /* Surfaces. The Base look is a white page with grey-wash panels and
+     white raised cards lifted by soft shadow — value moves DOWN into
+     the washes, not up out of the page. */
+  --mn-surface-sunken: #eceef2;
+  --mn-surface-page: #ffffff;
+  --mn-surface-card: #f5f6f8;
+  --mn-surface-raised: #ffffff;
+  /* "Inverted" = the emphasis surface: solid CTAs, the active nav tab,
+     NEW tags, ticked boxes. Now the accent blue, not black. */
+  --mn-surface-inverted: var(--mn-accent);
+  --mn-surface-skeleton: #e4e7ec;
+
+  /* Transient washes for pointer state. */
+  --mn-surface-hover: rgba(10, 11, 13, 0.05);
+  --mn-surface-active: rgba(10, 11, 13, 0.09);
+  --mn-scrim: rgba(10, 11, 13, 0.45);
+
+  /* Text */
+  --mn-text-primary: #0a0b0d;
+  --mn-text-secondary: #464b55;
+  /* 5.9:1 against #f5f6f8, so the 10–11px uppercase labels that use it
+     still clear AA at small sizes. */
+  --mn-text-muted: #5b616e;
+  /* Paired with --mn-surface-inverted (accent blue) everywhere. */
+  --mn-text-inverted: #ffffff;
+  --mn-text-inverted-muted: rgba(255, 255, 255, 0.9);
+
+  /* Accent tuning */
+  --mn-accent-hover: #0043d6;
+  --mn-accent-soft: rgba(0, 82, 255, 0.08);
+  --mn-accent-ink: #0040cc;
+
+  /* Borders */
+  --mn-border-hairline: #e2e6eb;
+  --mn-border-medium: #c7cdd6;
+  --mn-border-strong: #0a0b0d;
+
+  /* Shadows — soft, diffuse, vertical. Never hard offsets. */
+  --mn-shadow-colour: rgba(10, 11, 13, 0.07);
+  --mn-shadow-sm: 0 1px 2px rgba(10, 11, 13, 0.04), 0 2px 8px var(--mn-shadow-colour);
+  --mn-shadow-md: 0 2px 4px rgba(10, 11, 13, 0.05), 0 8px 24px var(--mn-shadow-colour);
+  --mn-shadow-lg: 0 4px 8px rgba(10, 11, 13, 0.05), 0 18px 44px rgba(10, 11, 13, 0.13);
+  /* Emphasis/hover elevation — the loudest neutral shadow. */
+  --mn-shadow-ink: 0 4px 10px rgba(10, 11, 13, 0.08), 0 12px 32px rgba(10, 11, 13, 0.14);
+  /* Blue glow, reserved for primary CTAs. */
+  --mn-shadow-accent: 0 6px 20px rgba(0, 82, 255, 0.3);
+
+  /* Focus. styles.css sets a global white focus ring for the classic
+     dark view; the bridge at the foot of this file re-points it at the
+     accent, which reads on every surface in this theme. */
+  --mn-focus-ring: var(--mn-accent);
+
+  /* Media. The wordmark artwork is #0a0a0a — on white it needs nothing. */
+  --mn-wordmark-filter: none;
+  /* App icons keep their own brand colour — the light plate frames them. */
+  --mn-app-icon-filter: none;
+}
+
+/* ---------------------------------------------------------------- */
+/* Dark — explicit                                                   */
+/* ---------------------------------------------------------------- */
+
+:root[data-theme="dark"] {
+  --mn-color-scheme: dark;
+
+  --mn-surface-sunken: #050608;
+  --mn-surface-page: #0a0b0d;
+  --mn-surface-card: #16181d;
+  --mn-surface-raised: #1e2127;
+  --mn-surface-inverted: var(--mn-accent);
+  --mn-surface-skeleton: #262a31;
+
+  --mn-surface-hover: rgba(247, 249, 252, 0.06);
+  --mn-surface-active: rgba(247, 249, 252, 0.11);
+  --mn-scrim: rgba(4, 5, 7, 0.66);
+
+  --mn-text-primary: #f7f9fc;
+  --mn-text-secondary: #b4bac6;
+  --mn-text-muted: #8a919e;
+  --mn-text-inverted: #ffffff;
+  --mn-text-inverted-muted: rgba(255, 255, 255, 0.9);
+
+  /* The SAME blue kept vivid for fills; hover lightens, and blue used
+     AS text lightens further for contrast on near-black. */
+  --mn-accent-hover: #2f66f0;
+  --mn-accent-soft: rgba(61, 119, 255, 0.16);
+  --mn-accent-ink: #7da2ff;
+
+  --mn-border-hairline: #23262c;
+  --mn-border-medium: #3a3f48;
+  --mn-border-strong: #f7f9fc;
+
+  --mn-shadow-colour: rgba(0, 0, 0, 0.55);
+  --mn-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px var(--mn-shadow-colour);
+  --mn-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45), 0 10px 28px var(--mn-shadow-colour);
+  --mn-shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.5), 0 20px 48px rgba(0, 0, 0, 0.6);
+  --mn-shadow-ink: 0 4px 10px rgba(0, 0, 0, 0.5), 0 14px 36px rgba(0, 0, 0, 0.62);
+  --mn-shadow-accent: 0 6px 22px rgba(0, 82, 255, 0.42);
+
+  --mn-focus-ring: var(--mn-accent-hover);
+
+  --mn-wordmark-filter: invert(1);
+  --mn-app-icon-filter: none;
+}
+
+/* ---------------------------------------------------------------- */
+/* Dark — inherited from the operating system                        */
+/* ---------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  /* Only when nothing explicit has been recorded. theme.ts removes the
+     attribute entirely for the 'system' preference, which is what lets
+     this block win. */
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --mn-color-scheme: dark;
+
+    --mn-surface-sunken: #050608;
+    --mn-surface-page: #0a0b0d;
+    --mn-surface-card: #16181d;
+    --mn-surface-raised: #1e2127;
+    --mn-surface-inverted: var(--mn-accent);
+    --mn-surface-skeleton: #262a31;
+
+    --mn-surface-hover: rgba(247, 249, 252, 0.06);
+    --mn-surface-active: rgba(247, 249, 252, 0.11);
+    --mn-scrim: rgba(4, 5, 7, 0.66);
+
+    --mn-text-primary: #f7f9fc;
+    --mn-text-secondary: #b4bac6;
+    --mn-text-muted: #8a919e;
+    --mn-text-inverted: #ffffff;
+    --mn-text-inverted-muted: rgba(255, 255, 255, 0.9);
+
+    --mn-accent-hover: #2f66f0;
+    --mn-accent-soft: rgba(61, 119, 255, 0.16);
+    --mn-accent-ink: #7da2ff;
+
+    --mn-border-hairline: #23262c;
+    --mn-border-medium: #3a3f48;
+    --mn-border-strong: #f7f9fc;
+
+    --mn-shadow-colour: rgba(0, 0, 0, 0.55);
+    --mn-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px var(--mn-shadow-colour);
+    --mn-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45), 0 10px 28px var(--mn-shadow-colour);
+    --mn-shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.5), 0 20px 48px rgba(0, 0, 0, 0.6);
+    --mn-shadow-ink: 0 4px 10px rgba(0, 0, 0, 0.5), 0 14px 36px rgba(0, 0, 0, 0.62);
+    --mn-shadow-accent: 0 6px 22px rgba(0, 82, 255, 0.42);
+
+    --mn-focus-ring: var(--mn-accent-hover);
+
+    --mn-wordmark-filter: invert(1);
+    --mn-app-icon-filter: none;
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Bridge                                                            */
+/* ---------------------------------------------------------------- */
+
+/* The mobile screens mount inside a document whose <body> is still
+   painted by the legacy sheet. These rules hand the page value back
+   to the token system wherever a mobile screen is on screen, so overscroll
+   and the area behind a short screen match the surface the screen uses.
+   :has() carries the whole selector, so nothing here touches the classic
+   view, which never renders these roots. Onboarding follows the theme
+   (see onboarding.css), so its overscroll now takes the theme surface
+   rather than the fixed ink plate. */
+body:has(.mnhome-screen),
+body:has(.mnapps-screen),
+body:has(.mnob-screen) {
+  background: var(--mn-surface-page);
+}
+
+/* The mobile screens mount inside `.passport-experience.is-mobile`, whose
+   legacy background is a fixed near-black. Hand that wrapper to the token
+   system as well, or a dark band shows through in light mode wherever a
+   screen is shorter than the wrapper. The classic wrapper is
+   `.passport-experience` WITHOUT `.is-mobile`, and is not matched here. */
+.passport-experience.is-mobile {
+  background: var(--mn-surface-page);
+}
+
+/* styles.css sets `outline: 2px solid #fff` globally, which disappears on
+   a light surface. Re-point it at the accent, scoped to the mobile roots. */
+.mnhome-screen :focus-visible,
+.mnapps-screen :focus-visible,
+.mnapps-browser :focus-visible,
+.mnapps-sheet-backdrop :focus-visible,
+.mnnav :focus-visible,
+.mnthemetoggle :focus-visible,
+.mnob-screen :focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 3px;
+}

@@ -1,0 +1,8 @@
+# Upload rules for `vercel deploy`. Kept deliberately small: this template has
+# no generated or gitignored build inputs, so a plain (non-prebuilt) deploy
+# works, and the only things worth keeping out of the upload are the ones
+# below.
+node_modules
+dist
+.env
+.env.local

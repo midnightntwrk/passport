@@ -5,11 +5,15 @@
   "type": "module",
   "workspaces": [
     "demo-backend",
+    "examples/passport-app-hub",
     "examples/passport-demo",
-    "examples/passport-funder"
+    "examples/passport-funder",
+    "examples/raffle-demo"
   ],
   "scripts": {
-    "test:backend": "npm run test --workspace demo-backend"
+    "test:backend": "npm run test --workspace demo-backend",
+    "demo:raffle": "npm run dev --workspace examples/raffle-demo",
+    "demo:hub": "npm run dev --workspace passport-app-hub"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
