@@ -1,0 +1,116 @@
+[    0.0s] ==============================================================================
+[    0.0s] SHIELDED-RECEIPT DRILL — stagenet
+[    0.0s] started 2026-08-24T16:50:48.141Z
+[    0.0s] ==============================================================================
+[    0.0s] network   stagenet
+[    0.0s] indexer   https://indexer.stagenet.shielded.tools/api/v4/graphql
+[    0.0s] node      wss://rpc.stagenet.shielded.tools
+[    0.0s] prover    http://127.0.0.1:6300 (contract circuits)
+[    0.0s] wallet    in-process WASM prover (fee legs)
+[    0.0s] stack     compiler 0.33.0-rc.2 / runtime 0.18.0-rc.1 / compact.js 2.5.5-rc.7 / midnight.js 5.0.0-beta.6 / wallet SDK 2.0.0-beta.2 / @midnightntwrk/ledger-v9 1.0.0-rc.3
+[    0.0s] faucet    4fc92e152e8d854ef9337275504244e18bd6e3d7d41fd81ed2dabf62be78e92f (already on chain, block 157,776)
+
+[    0.0s] --- 1. BALANCER wallet (payer + USER stand-in) ---
+[    0.1s] [wallet] resumed from the snapshot saved at 2026-08-24T16:50:30.211Z
+[    0.1s] balancer unshielded mn_addr_stagenet127xnp9uuxwhh7a8an77mxv02ypt6u09xkk63c9zvdkjsrj4mj68qg7c5ad
+[    0.1s] opened in 0.1 s
+[    5.1s]   [sync    5.0 s] shielded 3963/3963 dust 4020/4020
+[   10.1s]   [sync   10.0 s] shielded 3963/3963 dust 4020/4020
+[   15.1s]   [sync   15.0 s] shielded 3963/3963 dust 4020/4020
+[   20.1s]   [sync   20.0 s] shielded 3963/3963 dust 4020/4020
+[   25.1s]   [sync   25.0 s] shielded 3963/3963 dust 4020/4020
+[   26.7s] balancer synced in 26.6 s
+[   26.7s] balancer 4999 NIGHT (4999000000 atomic), 408976286211778538 Specks DUST
+[   26.7s] PASS  the balancer holds NIGHT  — 4999000000
+[   26.7s] PASS  the balancer holds DUST (fees can be paid)  — 408976286211778538
+[   26.7s] balancer shielded   mn_shield-addr_stagenet1vgzgswr3hh63g4kjgymcupyugl9jy75j9w73kr4dr6m0crkrxgrvmmq4969xqusmk8q3wrlsej3p7ev8r4jl9g4fnxg5dqewc9dw5ns5e03lu
+[   26.7s] [leg time] 1. balancer open + sync: 26.7 s
+
+[   26.7s] --- 2. MERCHANT wallet (fresh, random, never funded, never signs) ---
+[   26.7s] [wallet] cold start
+[   54.0s] merchant synced in 27.3 s (opened in 27.3 s total)
+[   54.0s] merchant unshielded mn_addr_stagenet1vhzj037j09fmpjgyafrmnpzwga08fn88ff8rew0p5avfxgm08mysmtzayt
+[   54.0s] merchant shielded   mn_shield-addr_stagenet19r083dvj99lv6dst292cl3q2twvfwfd3dldzm2d7ezzsreaamws05aw3ktftqdcaufc2yv855auw8mjhu4hdzhcmznu0apvtfe383yqcwwgg3
+[   54.0s] merchant coin pk        28de78b592297ecd360b51558fc40a5b989725b16fda2da9bec88501e7bddba0
+[   54.0s] merchant encryption pk  fa75d1b2d2b0371de270a230f4a778e3ee57e56ed15f1b14f8fe858b4e627890
+[   54.0s] PASS  the coin pk decoded from mn_shield-addr is the merchant wallet’s own  — 28de78b592297ecd360b51558fc40a5b989725b16fda2da9bec88501e7bddba0
+[   54.0s] PASS  the merchant and the balancer are different wallets  — 28de78b592297ecd… vs 6204883871bdf514…
+[   54.0s] [leg time] 2. merchant create + sync: 27.3 s
+
+[   54.0s] --- 3. DEPLOY a fresh account-custody contract (throwaway secrets, balancer pays) ---
+[   54.6s] [wallet] estimated fee 14318511190888010 Specks
+[   66.7s] [wallet] balanced and finalized (28539 bytes)
+[   85.3s] [wallet] submitted 0007ae8eeaf91aba068f…
+[   86.2s] ACC address 008ede8b58a658a518c901befd7c71389c46cb0d6391c70105e82a467e4b0da4
+[   86.2s] PASS  the ACC deployed  — 008ede8b58a658a518c901befd7c71389c46cb0d6391c70105e82a467e4b0da4
+[   86.3s] ACC deploy tx ded6b51ac8896dc18d7ec497c8a33618cf10c9b380d328b6aefc333369ebe7e2  (block 158637)
+[   86.3s] PASS  ACC deploy: the indexer resolves it to a 64-hex ledger hash in a block  — ded6b51ac8896dc18d7ec497c8a33618cf10c9b380d328b6aefc333369ebe7e2 block 158637
+[   86.3s] [leg time] 3. ACC deploy: 32.3 s
+
+[   86.3s] --- 4. MINT 500 mUSD (shielded) to the BALANCER ---
+[   87.4s] faucet found at 4fc92e152e8d854ef9337275504244e18bd6e3d7d41fd81ed2dabf62be78e92f
+[   87.4s] mUSD colour (raw token type) 1a2917fbed8b5ce44d12ebc7d337689045f6c96a6bbd39cf3d8691ab310ef6a6
+[   87.4s] balancer mUSD before the mint: 0
+[   89.7s] [wallet] estimated fee 530670393010790 Specks
+[  100.6s] [wallet] balanced and finalized (19822 bytes)
+[  121.4s] [wallet] submitted 00938d9d43cca9bc362b…
+[  122.0s] mint_shielded (500 mUSD to BALANCER) tx 96c426c645fde736d2305fe2edb7f2fb0670e396231591d050149964d0487dcf  (block 158643)
+[  122.0s] PASS  mint_shielded (500 mUSD to BALANCER): the indexer resolves it to a 64-hex ledger hash in a block  — 96c426c645fde736d2305fe2edb7f2fb0670e396231591d050149964d0487dcf block 158643
+[  122.0s] watching: BALANCER wallet reports the minted mUSD (up to 6 min, polling every 5 s)
+[  122.0s] PASS  the balancer’s OWN wallet holds 500 mUSD after the mint  — 500
+[  122.0s] PASS  the minted coin is spendable in the balancer’s own coin set  — value 500, nonce 718a59014d62677cf176454e67303cf38cf503f406876c4ac9d9ef478abbb4f9
+[  122.0s] PASS  the coin’s nonce is the nonce the mint was called with  — 718a59014d62677cf176454e67303cf38cf503f406876c4ac9d9ef478abbb4f9 vs 718a59014d62677cf176454e67303cf38cf503f406876c4ac9d9ef478abbb4f9
+[  122.0s] [leg time] 4. mint 500 mUSD: 35.7 s
+
+[  122.0s] --- 5. deposit_shielded(500 mUSD) into the ACC ---
+[  127.7s] [wallet] estimated fee 764426842214215 Specks
+[  181.6s] [wallet] balanced and finalized (24602 bytes)
+[  198.8s] [wallet] submitted 007943191b08c707346b…
+[  199.4s] deposit_shielded tx 2e60be74333759e910193ede9ad895a2a7d4c5b52b51e23abe8c05bd12434bc2  (block 158656)
+[  199.4s] PASS  deposit_shielded: the indexer resolves it to a 64-hex ledger hash in a block  — 2e60be74333759e910193ede9ad895a2a7d4c5b52b51e23abe8c05bd12434bc2 block 158656
+[  199.4s] waiting: ACC coins[mUSD].value == 500 (from the indexer)
+[  199.9s] PASS  the ACC ledger coins map shows 500 mUSD (read from the indexer)  — 500
+[  199.9s] PASS  the balancer’s own wallet no longer holds the deposited mUSD  — 0 (was 0 before the mint)
+[  199.9s] [leg time] 5. deposit_shielded: 77.9 s
+
+[  199.9s] --- 6. withdraw_shielded(MERCHANT coin pk, mUSD, 200) — THE QUESTION ---
+[  199.9s]     The merchant has no part in this transaction: it does not sign it,
+[  199.9s]     does not pay for it, and is named only by a coin public key inside
+[  199.9s]     the circuit. Whatever its wallet does next is the result.
+[  199.9s] PASS  the MERCHANT holds no mUSD beforehand  — 0
+[  199.9s] additionalCoinEncPublicKeyMappings: 28de78b592297ecd360b51558fc40a5b989725b16fda2da9bec88501e7bddba0 → fa75d1b2d2b0371de270a230f4a778e3ee57e56ed15f1b14f8fe858b4e627890
+[  209.4s] [wallet] estimated fee 837732596797118 Specks
+[  221.7s] [wallet] balanced and finalized (40722 bytes)
+[  241.5s] [wallet] submitted 00f0b8a5200b9b029a34…
+[  242.1s] withdraw_shielded constructed, proved, balanced, and submitted in 42.2 s
+[  242.2s] withdraw_shielded tx 94b08b9dbb7b5aac10053c8dc51127f139ccdffc0ba3af422adcc337c9f8f608  (block 158663)
+[  242.2s] PASS  withdraw_shielded: the indexer resolves it to a 64-hex ledger hash in a block  — 94b08b9dbb7b5aac10053c8dc51127f139ccdffc0ba3af422adcc337c9f8f608 block 158663
+[  242.2s] waiting: ACC coins[mUSD] change re-registered as 300
+[  242.6s] PASS  the ACC coins map shows the 300 change (read from the indexer)  — 300
+
+[  242.6s] THE WATCH — up to 5 minutes on the merchant's own live wallet:
+[  242.7s] watching: MERCHANT wallet reports 200 mUSD (up to 5 min, polling every 5 s)
+[  242.7s] merchant live-wallet mUSD after the window: 200
+[  242.7s] PASS  THE ANSWER: the MERCHANT’s own wallet reports the contract-sent shielded coin  — 200 mUSD after 0 s
+[  242.7s] [leg time] 6. withdraw_shielded to a third party (incl. the watch): 42.8 s
+
+[  242.7s] ==============================================================================
+[  242.7s] SUMMARY
+[  242.7s] ==============================================================================
+[  242.7s]   ACC deploy                             ded6b51ac8896dc18d7ec497c8a33618cf10c9b380d328b6aefc333369ebe7e2  block 158637
+[  242.7s]   mint_shielded (500 mUSD to BALANCER)   96c426c645fde736d2305fe2edb7f2fb0670e396231591d050149964d0487dcf  block 158643
+[  242.7s]   deposit_shielded                       2e60be74333759e910193ede9ad895a2a7d4c5b52b51e23abe8c05bd12434bc2  block 158656
+[  242.7s]   withdraw_shielded                      94b08b9dbb7b5aac10053c8dc51127f139ccdffc0ba3af422adcc337c9f8f608  block 158663
+
+[  242.7s]   1. balancer open + sync                                26.7 s
+[  242.7s]   2. merchant create + sync                              27.3 s
+[  242.7s]   3. ACC deploy                                          32.3 s
+[  242.7s]   4. mint 500 mUSD                                       35.7 s
+[  242.7s]   5. deposit_shielded                                    77.9 s
+[  242.7s]   6. withdraw_shielded to a third party (incl. the watch) 42.8 s
+
+[  242.7s] checks 17/17 passed
+
+[  242.7s] THE ANSWER
+[  242.7s]   DETECTED — the third-party MERCHANT wallet, which took no part in the transaction, reported 200 mUSD of the contract-sent shielded coin in its own state 0 s after withdraw_shielded landed (live, no restart needed).
+[  242.7s] ==============================================================================

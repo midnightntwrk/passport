@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
+    { "source": "/verify", "destination": "/verify/index.html" },
+    { "source": "/verify/", "destination": "/verify/index.html" },
     { "source": "/((?!zk/|zk-params/|assets/).*)", "destination": "/index.html" }
   ],
   "headers": [
