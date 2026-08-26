@@ -37,7 +37,34 @@ export interface AliasRecord {
   resolverTarget?: 'wallet' | 'contract';
   /** The raw 64-hex bytes {@link resolverTarget} resolves to, when recorded. */
   resolverTargetHex?: string;
-  updatedAt: string;
+  /**
+   * When this record last changed, ISO-8601 — and ABSENT where nothing has
+   * ever recorded one.
+   *
+   * Optional on purpose, and it is the whole of the fix of 2026/08/26. The
+   * bulk restore below wrote `record.updatedAt || now`, so a file entry with
+   * no timestamp — a hand-edited file, or one from a build before this field
+   * existed — was persisted carrying the moment of the RESTORE. The
+   * no-downgrade rule in `../identity/backup.ts` only runs against a record
+   * this browser already holds, so that first restore met no opposition; the
+   * user's own, correctly dated backup was then permanently older than a date
+   * the restore had invented, and could never be restored again. A record
+   * whose date nobody recorded now says so, and
+   * `compareUpdatedAt` reads an undated local record as older than any dated
+   * candidate — which is the truth, rather than a fabrication that outranks
+   * everything.
+   */
+  updatedAt?: string;
+  /**
+   * When a restore wrote this record into THIS browser, ISO-8601.
+   *
+   * A fact about this browser, never about the record, and NOTHING may read it
+   * as {@link updatedAt}: no comparison in `../identity/backup.ts` consults it,
+   * and it is not in that module's export allow-list, so it never reaches a
+   * backup file. It exists so a restored record that carries no date of its own
+   * is still traceable to the restore that wrote it.
+   */
+  restoredAt?: string;
 }
 
 const STORAGE_KEY = 'passport-alias:v1';
@@ -185,7 +212,13 @@ export function restoreAliasRecords(records: AliasRecord[]): AliasRecordWriteOut
   const outcomes = records.map<AliasRecordWriteOutcome>((record) => {
     const refusal = refuseAliasRecord(record);
     if (refusal) return { network: record.network, written: false, reason: refusal };
-    next[record.network] = { ...record, updatedAt: record.updatedAt || now };
+    /* The record's OWN date, or none — never the moment of the restore. See
+       {@link AliasRecord.updatedAt} for the restore this fabrication used to
+       block for good. `restoredAt` records when the restore ran, and nothing
+       reads it as the record's date. */
+    const stored: AliasRecord = { ...record, restoredAt: now };
+    if (!record.updatedAt) delete stored.updatedAt;
+    next[record.network] = stored;
     staged.push(record.network);
     return { network: record.network, written: true };
   });

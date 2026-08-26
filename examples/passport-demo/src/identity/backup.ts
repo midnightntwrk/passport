@@ -49,40 +49,41 @@
  *   BE PRECISE ABOUT WHAT THE ALLOW-LIST IS. It is STRUCTURAL, and it is
  *   structural ON NAMES: a field whose name is on the list is admitted whatever
  *   its value, and a field whose name is not is refused whatever its value.
- *   {@link looksLikeSecret} is NOT a second gate on admitted values — it runs
- *   on values that are already being REFUSED, purely to word the refusal
- *   ("...and its value is the size of one") rather than to decide it. So the
- *   guard's guarantee is exactly this and no more: nothing reaches the file
- *   except the fields the three record types declare.
+ *   THE ALLOW-LIST ON NAMES IS THE WHOLE CONTRACT. {@link looksLikeSecret} is
+ *   NOT a second gate on admitted values — it runs on values that are already
+ *   being REFUSED, purely to word the refusal ("...and its value is the size of
+ *   one") rather than to decide it. So the guard's guarantee is exactly this
+ *   and no more: nothing reaches the file except the fields the three record
+ *   types declare.
  *
- *   Three of those fields are FREE TEXT that a service or the user wrote —
- *   `queuedReason`, `failureReason`, and `label` — and free text is the one
- *   place a secret could ride in under a name the allow-list has justified. So
- *   `looksLikeSecret` runs on those three as well, in
- *   {@link refuseFreeTextSecret}, and there it DECIDES: a reason or a label
- *   that is 32 or 64 bytes of hex or base64 is not written into this browser.
- *   That is a cheap tripwire and not a proof — it catches a key pasted
- *   verbatim into a reason string and it cannot catch one encoded some other
- *   way, and it is written down here so nobody reads it as more.
+ *   THE VALUE TRIPWIRE ON FREE TEXT IS GONE, AND THAT IS DELIBERATE.
+ *   `queuedReason`, `failureReason`, and `label` are free text an app or the
+ *   user wrote, and `looksLikeSecret` used to DECIDE on them as well: a reason
+ *   or a label that is 32 or 64 bytes of hex or base64 was refused. It cost far
+ *   more than it bought, twice, and the second time is the one that settles it.
  *
- *   THE TRIPWIRE REFUSES ONE RECORD, ON THE WAY IN, AND ONLY ON THE WAY IN.
- *   It used to throw for the whole payload, on the export path as well as the
- *   import one. `label` is a reward's name in the granting app's own words,
- *   and a perfectly ordinary slug of 43 or 44 characters
- *   (`midnight-raffle-earlybird-tier2-badge-26q3x`) is 32 bytes of base64 by
- *   the tripwire's arithmetic — so one of them in the store made
- *   {@link collectPassportBackup} throw on EVERY export attempt, the Backup
- *   screen's own holdings read included, and the user could never back
- *   anything up again, told their reward label was a key. Refusing this
- *   browser's own data cannot keep a secret that is already in this browser.
- *   So the export path does not refuse at all: it PROJECTS each record onto
- *   the fields its type declares (see {@link takeRecordFields}), which is a
- *   stronger guarantee than a refusal — a field nobody justified cannot reach
- *   the file — and it cannot be blocked by anything a store happens to hold.
- *   The import path keeps the tripwire, per RECORD: throwing for the payload
- *   there would have been the same trap one step later, a file that exported
- *   cleanly and then refused to restore at all. The record is skipped with the
- *   reason said out loud, beside every other record a store would not take.
+ *   First it ran on EXPORT and threw for the whole payload, so an ordinary
+ *   reward slug of 43 characters (`midnight-raffle-earlybird-tier2-badge-26q3x`
+ *   — 32 bytes of base64 by the tripwire's arithmetic) made
+ *   {@link collectPassportBackup} throw on every attempt, the Backup screen's
+ *   own holdings read included: the user could never back anything up again,
+ *   told their reward label was a key. That was fixed by PROJECTING on export
+ *   (see {@link takeRecordFields}) and keeping the refusal on import.
+ *
+ *   Which left it ASYMMETRIC, and that is worse than either end of it. Export
+ *   projected the same label cleanly and every import then refused that one
+ *   record, for ever, on every device — a file this app wrote and could not
+ *   read back, losing exactly the reward it was taken to preserve, with nothing
+ *   the user could do about it. A backup this app exported must always restore
+ *   in full; that is the point of the file. And the tripwire never was a proof
+ *   — it catches a key pasted verbatim into a reason string and misses one
+ *   encoded any other way — so it was a guess that could destroy data and could
+ *   not keep a determined secret out. It is gone from all three fields.
+ *
+ *   What actually holds the invariant is the shape of
+ *   {@link collectPassportBackup}: it takes NO arguments and reads three fixed
+ *   stores, so there is no parameter through which key material could arrive,
+ *   and the allow-list on names decides everything else.
  *
  *   Record CONTAINER KEYS are refused by name too: `__proto__`, `constructor`,
  *   and `prototype` are legal JSON keys that no store may be asked to hold,
@@ -239,7 +240,7 @@ export type PassportBackupErrorCode =
    * does not exist yet, and the screen must not say it does.
    */
   | 'backup-not-written'
-  /** A real envelope, written by a newer Passport than this one. */
+  /** A real envelope whose format number is not the one this build reads. */
   | 'unsupported-version'
   /** A real envelope, sealed with a KDF this build does not implement. */
   | 'unsupported-kdf'
@@ -378,6 +379,24 @@ export type PassportBackupRegistryCheck =
       unconfirmed: number;
       /** Names claimed on a network `./midnames.ts` does not read. */
       otherNetworks: number;
+      /**
+       * Restored names there was no REGISTRATION to look up: a `queued` or
+       * `failed` claim, or a network whose record is no longer here.
+       *
+       * The fourth bucket, and it exists so the four ADD UP. The loop simply
+       * `continue`d past these — no counter, no reason — so a restore that
+       * wrote one registered name and one queued one reported "Names: 2 of 2"
+       * over a registry line summing to 1, with nothing accounting for the
+       * other. A name a restore wrote is a name this check must say something
+       * about, even when what it has to say is that there was nothing to ask
+       * the registry.
+       *
+       * `confirmed + unconfirmed + otherNetworks + notRegistered` equals the
+       * number of restored names, always.
+       */
+      notRegistered: number;
+      /** Why each one had no registration to look up, keyed by network. */
+      notRegisteredReasons?: { network: string; reason: string }[];
       /**
        * Why each unconfirmed name was not confirmed, keyed by network.
        *
@@ -603,15 +622,6 @@ const CONTRACT_FIELDS = [
 const INCENTIVE_FIELDS = ['id', 'app', 'label', 'txId', 'network', 'redeemedAt'];
 
 /**
- * The allow-listed fields that hold FREE TEXT rather than a shape.
- *
- * See the header: the allow-list is structural on NAMES, so these three are the
- * only places a secret could arrive under a justified name. `looksLikeSecret`
- * runs on them and refuses, which is a tripwire rather than a proof.
- */
-const FREE_TEXT_FIELDS = ['queuedReason', 'failureReason', 'label'];
-
-/**
  * Keys a record CONTAINER may not carry, whatever the file says.
  *
  * `__proto__` is the one that matters and the other two travel with it. See the
@@ -630,9 +640,12 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 /**
  * Whether a value is the SIZE of a key — 32 or 64 bytes of hex or base64.
  *
- * Names can be innocent; sizes are harder to disguise. This only ever runs on
- * a field that is already being refused, and only decides how the refusal is
- * worded, so a false positive costs nothing and a true one names the problem.
+ * DIAGNOSTIC ONLY, and since 2026/08/26 that is all it is anywhere in this
+ * module. It runs on a field that is ALREADY being refused — one whose name is
+ * not on the allow-list — and it only decides how that refusal is worded, so a
+ * false positive costs nothing and a true one names the problem. It decides
+ * nothing about a field a record type declares; see the header for the version
+ * of this that did, and what it cost.
  */
 function looksLikeSecret(value: unknown): boolean {
   if (typeof value !== 'string') return false;
@@ -717,32 +730,6 @@ function takeRecordMap<T>(records: Record<string, T>, allowed: string[]): Record
 }
 
 /**
- * The tripwire on ONE record's free-text field, as a refusal reason or null.
- *
- * The allow-list is structural on names, so `queuedReason`, `failureReason`,
- * and `label` are the only places a secret could arrive under a name somebody
- * has justified. A value in one of them that is 32 or 64 bytes of hex or
- * base64 does not get written into this browser.
- *
- * IT REFUSES THE RECORD, NOT THE FILE, AND IT REFUSES ON THE WAY IN ONLY.
- * Both halves of that are the same lesson. It used to throw for the whole
- * payload, on export as well as import, and `label` is a reward's name in the
- * granting app's own words: an ordinary 43-character slug
- * (`midnight-raffle-earlybird-tier2-badge-26q3x`) is 32 bytes of base64 by
- * this arithmetic. On export that threw on every attempt and took the Backup
- * screen's holdings read down with it, so the user could never back anything
- * up again. Throwing for the whole payload on import would have been the same
- * trap one step later — a file that exported cleanly and then refused to
- * restore at all. So the export path does not refuse (it PROJECTS — see
- * {@link takeRecordFields}), and the import path refuses the one record and
- * says so in the summary, next to every other record a store would not take.
- */
-function refuseFreeTextSecret(field: string, value: unknown): string | null {
-  if (!looksLikeSecret(value)) return null;
-  return `a backup carries state, never keys, and the file's ${field} is free text whose value is the size of a key`;
-}
-
-/**
  * Checks a payload against the fixed shapes a backup is made of, and throws on
  * anything else.
  *
@@ -752,8 +739,9 @@ function refuseFreeTextSecret(field: string, value: unknown): string | null {
  * see {@link assertBackupRecordContainers} — so a value this cannot walk is
  * left for that check rather than reported as key material.
  *
- * The free-text tripwire is NOT here. It is {@link refuseFreeTextSecret}, it
- * refuses one record on the import path only, and the header says why.
+ * There is NO second gate on the VALUES of admitted fields. The allow-list on
+ * names is the whole contract — see the header for the tripwire that used to
+ * sit on the three free-text fields, and why it had to go.
  */
 export function assertNoKeyMaterial(value: unknown, path = 'backup'): void {
   if (!isPlainObject(value)) return;
@@ -933,6 +921,28 @@ export async function sealPassportBackup(
   };
 }
 
+/**
+ * Why this build will not read that format number, in the direction it is
+ * actually wrong.
+ *
+ * The check was `!==` and the sentence was always "written by a newer
+ * Passport", so a legacy or corrupted `v: 0` sent the user looking for a
+ * Passport upgrade that does not exist over a file that is OLD. Three answers,
+ * because there are three cases: a format from the future, a format from the
+ * past, and a number that is not a format at all — `NaN`, an infinity, or
+ * `1.5` — about which the only honest thing to say is that this Passport
+ * cannot tell what wrote it.
+ */
+function versionMismatch(version: number): string {
+  if (!Number.isInteger(version)) {
+    return `This backup's format number is "${version}", which is not a whole number, so this Passport cannot tell what wrote it.`;
+  }
+  if (version > PASSPORT_BACKUP_VERSION) {
+    return `This backup was written by a newer Passport (format ${version}); this one reads format ${PASSPORT_BACKUP_VERSION}.`;
+  }
+  return `This backup was written by an older Passport (format ${version}); this one reads format ${PASSPORT_BACKUP_VERSION} and cannot read older files.`;
+}
+
 /** Parses whatever the file picker produced into a real envelope, or throws. */
 export function parseBackupEnvelope(raw: string): PassportBackupEnvelope {
   let parsed: unknown;
@@ -961,10 +971,7 @@ export function parseBackupEnvelope(raw: string): PassportBackupEnvelope {
     );
   }
   if (candidate.v !== PASSPORT_BACKUP_VERSION) {
-    throw new PassportBackupError(
-      'unsupported-version',
-      `This backup was written by a newer Passport (format ${candidate.v}); this one reads format ${PASSPORT_BACKUP_VERSION}.`,
-    );
+    throw new PassportBackupError('unsupported-version', versionMismatch(candidate.v));
   }
   const envelope = candidate as PassportBackupEnvelope;
   // Both throw with the reason. Neither derives a key or touches the payload:
@@ -1001,10 +1008,7 @@ export async function openPassportBackup(
     );
   }
   if (parsed.v !== PASSPORT_BACKUP_VERSION) {
-    throw new PassportBackupError(
-      'unsupported-version',
-      `This backup was written by a newer Passport (format ${parsed.v}); this one reads format ${PASSPORT_BACKUP_VERSION}.`,
-    );
+    throw new PassportBackupError('unsupported-version', versionMismatch(parsed.v));
   }
   const kdf = parseKdfDescriptor(parsed.kdf);
   const { salt, nonce, ciphertext } = decodeEnvelopeBytes(parsed);
@@ -1053,7 +1057,26 @@ export async function openPassportBackup(
   }
   const contents: PassportBackupContents = {
     version: typeof candidate.version === 'number' ? candidate.version : PASSPORT_BACKUP_VERSION,
-    createdAt: candidate.createdAt,
+    /* VALIDATED HERE, with the module's own reader, and NORMALISED rather than
+       refused — a decision, and this is the reasoning.
+
+       `createdAt` used to be checked as "a string" and nothing more, so a
+       crafted or hand-edited file could put any text at all into the headline
+       of a successful restore and into the app's permanent activity log, which
+       interpolated it raw. `../screens/Backup.tsx` guarded its own display
+       through {@link describeBackupCreatedAt} and the log one layer up did not
+       — exactly the defect the screen took care to avoid, left open beside it.
+       One reader at the boundary is the fix: every consumer now receives either
+       a timestamp this module could read or an empty one it can word.
+
+       It NORMALISES rather than refusing the file, because `createdAt` is a
+       headline and nothing else. It is not compared, not restored, and not
+       written into any store; refusing on it would throw away a backup that
+       decrypts and restores perfectly over the wording of one sentence, and on
+       a recovery device that is the whole of what the user has. A file that
+       cannot say when it was taken is a file that cannot say when it was
+       taken — the restore is unaffected, and the screen says so. */
+    createdAt: readTimestamp(candidate.createdAt) === null ? '' : candidate.createdAt,
     aliases: candidate.aliases,
     passportContracts: candidate.passportContracts,
     incentives: candidate.incentives,
@@ -1107,8 +1130,18 @@ function compareUpdatedAt(
   candidate: string | undefined,
   existing: string | undefined,
 ): UpdatedAtOrder {
-  if (!existing) return 'newer';
+  /* THE CANDIDATE IS ASKED FIRST, and the order is the rule rather than an
+     accident. This comparison protects a demonstrably NEWER local record: a
+     record in the FILE that carries no date cannot be shown to be newer than
+     anything and never overwrites, and a LOCAL record that carries none is
+     older than any dated candidate — it cannot be shown to be newer either.
+     Both halves matter since 2026/08/26, because an undated local record is
+     now a real one: the stores used to stamp a restored record that carried no
+     date with the moment of the restore (see `./aliasStore.ts`'s `updatedAt`),
+     and that invented date then outranked the user's own genuine backup for
+     good. */
   if (!candidate) return 'candidate-undated';
+  if (!existing) return 'newer';
   const left = readTimestamp(candidate);
   const right = readTimestamp(existing);
   if (left === null || right === null) return 'incomparable';
@@ -1212,6 +1245,22 @@ function refuseAgainstLocalContract(
   ) {
     return 'this browser holds a deployed contract with an address for this credential, and the file\'s record for it carries none — a restore does not take a contract away';
   }
+  /* Nor may a file CHANGE the address. The downgrade rule caught a record
+     that carried no address; a same-shaped `deployed` record carrying a
+     different one — a real contract, a valid-looking transaction id, a date
+     from the future — walked past it on the date comparison, and the Receive
+     sheet reads `record.address` whenever the status is `deployed`. The
+     address this browser deployed is the one thing about the record a file
+     has no standing to replace: the browser watched the chain answer with
+     it. A file may refresh the fields around it; the address stays. */
+  if (
+    existing.status === 'deployed' &&
+    existing.address &&
+    record.address &&
+    record.address.toLowerCase() !== existing.address.toLowerCase()
+  ) {
+    return 'this browser holds a deployed contract for this credential, and the file names a different address for it — a restore does not change the address of a contract this browser deployed';
+  }
   const order = compareUpdatedAt(record.updatedAt, existing.updatedAt);
   if (order !== 'newer') return keptLocalBecause(order, record.updatedAt, existing.updatedAt);
   return null;
@@ -1295,11 +1344,15 @@ function prepareAliasRecord(value: AliasRecord, network: string): Prepared<Alias
     domain: value.domain,
     network,
     status: value.status,
-    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : '',
     /* The one claim a file may not make about itself. `confirmRestoredAliases`
        re-resolves the name and is the only thing that may set this true. */
     registryConfirmed: false,
   };
+  /* ABSENT when the file carries none, and never invented. See
+     `./aliasStore.ts`'s `updatedAt`: the store used to stamp an undated record
+     with the moment of the restore, and that invented date then outranked the
+     user's own genuine backup for good. */
+  if (typeof value.updatedAt === 'string' && value.updatedAt) record.updatedAt = value.updatedAt;
   const resolverAddress = optionalString(value.resolverAddress);
   if (resolverAddress) record.resolverAddress = resolverAddress;
   const resolverDeployTxId = normaliseHex(optionalString(value.resolverDeployTxId));
@@ -1307,11 +1360,7 @@ function prepareAliasRecord(value: AliasRecord, network: string): Prepared<Alias
   const registerTxId = normaliseHex(optionalString(value.registerTxId));
   if (registerTxId) record.registerTxId = registerTxId;
   const queuedReason = optionalString(value.queuedReason);
-  if (queuedReason) {
-    const secret = refuseFreeTextSecret('queuedReason', queuedReason);
-    if (secret) return { ok: false, reason: secret };
-    record.queuedReason = queuedReason;
-  }
+  if (queuedReason) record.queuedReason = queuedReason;
   /* `resolverTarget` and `resolverTargetHex` are DROPPED, and this is the
      field pair that made forcing `registryConfirmed: false` insufficient.
      `resolverTargetHex` is an ADDRESS, and the Home screen's Receive sheet
@@ -1365,7 +1414,6 @@ function prepareContractRecord(value: PassportContractRecord): Prepared<Passport
     credentialId: value.credentialId,
     network: value.network,
     status: value.status,
-    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : '',
     /* The chain's word, not the file's. The caller's indexer re-check is the
        only thing that may set this true — see PassportBackupLedgerCheck. */
     ledgerConfirmed: false,
@@ -1375,6 +1423,8 @@ function prepareContractRecord(value: PassportContractRecord): Prepared<Passport
        device never submitted. See `../screens/PassportContract.tsx`. */
     restoredFromBackup: true,
   };
+  /* ABSENT when the file carries none — see `prepareAliasRecord`. */
+  if (typeof value.updatedAt === 'string' && value.updatedAt) record.updatedAt = value.updatedAt;
   const address = normaliseHex(optionalString(value.address));
   if (address) record.address = address;
   const deployTxId = normaliseHex(optionalString(value.deployTxId));
@@ -1386,11 +1436,7 @@ function prepareContractRecord(value: PassportContractRecord): Prepared<Passport
     record.feePaidBy = value.feePaidBy;
   }
   const failureReason = optionalString(value.failureReason);
-  if (failureReason) {
-    const secret = refuseFreeTextSecret('failureReason', failureReason);
-    if (secret) return { ok: false, reason: secret };
-    record.failureReason = failureReason;
-  }
+  if (failureReason) record.failureReason = failureReason;
   return { ok: true, record };
 }
 
@@ -1409,8 +1455,6 @@ function prepareIncentiveRecord(
   if (value.txId !== undefined && !TX_ID.test(String(value.txId))) {
     return { ok: false, reason: 'the file\'s txId is not a transaction id' };
   }
-  const labelSecret = refuseFreeTextSecret('label', value.label);
-  if (labelSecret) return { ok: false, reason: labelSecret };
   const record: PassportIncentiveRecord = {
     id: value.id,
     app: value.app,
@@ -1436,14 +1480,25 @@ function emptyStoreSummary(): PassportBackupStoreSummary {
  * on to refuse that other record it became a false one: the user was told a
  * newer record won a place that nothing ever took. The prediction is now
  * recorded with BOTH endings and settled once the write outcomes are in.
+ *
+ * BOTH ENDINGS ARE THUNKS, AND THAT IS THE SECOND HALF OF THE SAME FIX. They
+ * used to be strings built at the moment the sentence was pushed, quoting the
+ * date of whichever record was staged for that key just then — which is not
+ * necessarily the record that ends up written. Three entries colliding on one
+ * key made that plain: E1 (2025) is staged, E2 (2024) loses to it and quotes
+ * "2025", E3 (2026) then displaces E1 outright. The write is E3, and the
+ * summary carried two skips that both named 2025 — one saying it was restored
+ * and one saying it was not, and neither naming the record actually written.
+ * Each thunk closes over a MUTABLE box holding whatever currently wins the key,
+ * so the sentence is composed at settlement and can only name the winner.
  */
 interface DeferredReason {
   /** Where in that store's `skipped` list the sentence sits. */
   index: number;
   /** The store key whose fate decides which sentence is true. */
   key: string;
-  restored: string;
-  notRestored: string;
+  restored: () => string;
+  notRestored: () => string;
 }
 
 /** Rewrites each deferred sentence to the ending that actually happened. */
@@ -1456,8 +1511,13 @@ function settleDeferredReasons(
     /* The index was taken from `skipped.length` at the moment the sentence was
        pushed, and nothing removes from that list, so the entry is there. */
     const skip = summary.skipped[entry.index] as { key: string; reason: string };
-    skip.reason = written.has(entry.key) ? entry.restored : entry.notRestored;
+    skip.reason = written.has(entry.key) ? entry.restored() : entry.notRestored();
   }
+}
+
+/** "dated X", or the truth about a record nobody ever dated. */
+function dated(updatedAt: string | undefined): string {
+  return updatedAt ? `dated "${updatedAt}"` : 'carrying no date';
 }
 
 /**
@@ -1491,7 +1551,12 @@ export async function applyPassportBackup(
   assertNoKeyMaterial(contents);
   const [
     { loadAliasRecords, restoreAliasRecords },
-    { loadPassportContractRecords, restorePassportContractRecords, passportContractRecordKey },
+    {
+      loadPassportContractRecords,
+      restorePassportContractRecords,
+      passportContractRecordKey,
+      refusePassportContractRecord,
+    },
     { loadIncentives, restoreIncentives },
   ] = await Promise.all([
     import('./aliasStore.js'),
@@ -1532,6 +1597,9 @@ export async function applyPassportBackup(
   /* Keyed, not listed: the file's own map keys are ignored (the store's key is
      derived from the record), so two entries can collapse onto one key. */
   const contractWrites = new Map<string, PassportContractRecord>();
+  /* Whatever currently wins each key, as ONE mutable box per key that the
+     deferred sentences read at settlement. See {@link DeferredReason}. */
+  const contractWinners = new Map<string, { updatedAt?: string }>();
   const contractDeferred: DeferredReason[] = [];
   for (const value of Object.values(contents.passportContracts)) {
     passportContracts.found += 1;
@@ -1549,33 +1617,51 @@ export async function applyPassportBackup(
     /* The LOCAL guards first, and for every candidate — including one that
        would replace a record already staged from this same file. Running them
        only in the "nothing staged yet" branch is how a second entry collapsing
-       onto one key used to slip past every one of them. */
+       onto one key used to slip past every one of them. They come before the
+       store's predicate because a downgrade is a fact about what this browser
+       would LOSE, which is the more useful thing to tell the user about a
+       record that is both malformed and a downgrade. */
     const refusal = refuseAgainstLocalContract(record, localContracts[key]);
     if (refusal) {
       passportContracts.skipped.push({ key, reason: refusal });
       continue;
     }
+    /* THE STORE'S OWN PREDICATE, AND IT RUNS BEFORE THE DEDUP BELOW CHOOSES.
+       The dedup compared two colliding entries by DATE alone and then handed
+       the winner to a store that could refuse it outright — `deployTxId` is
+       only shape-checked when it is present, so a newer `deployed` entry
+       missing it displaced a fully restorable older one and was then refused,
+       and the file's two-entry claim restored NEITHER. A contract address a
+       recovery device could have had was lost to a comparison that never asked
+       whether either record was writable. The question is put to the store's
+       own predicate rather than to a copy of it, so there is still one rule. */
+    const storeRefusal = refusePassportContractRecord(record);
+    if (storeRefusal) {
+      passportContracts.skipped.push({ key, reason: storeRefusal });
+      continue;
+    }
     const staged = contractWrites.get(key);
     if (staged) {
-      const order = compareUpdatedAt(record.updatedAt, staged.updatedAt);
-      if (order !== 'newer') {
-        /* Which of the two endings is true depends on whether the store takes
-           the record we preferred, and that is not known yet. */
-        contractDeferred.push({
-          index: passportContracts.skipped.length,
-          key,
-          restored: `the file carries another record for this credential and network, dated "${staged.updatedAt}", which was restored instead`,
-          notRestored: `the file carries another record for this credential and network, dated "${staged.updatedAt}", which was preferred to this one and was not written either`,
-        });
-        passportContracts.skipped.push({ key, reason: '' });
-        continue;
-      }
-      passportContracts.skipped.push({
+      /* One pair of sentences for BOTH outcomes of a collision — the record
+         that loses the comparison and the record that is displaced by it are
+         the same case from the reader's side, and neither may name a winner
+         that is only provisional. The box below is what they read. */
+      const winner = contractWinners.get(key) as { updatedAt?: string };
+      contractDeferred.push({
+        index: passportContracts.skipped.length,
         key,
-        reason: `the file carries an older record for this credential and network, dated "${staged.updatedAt}", which was not restored`,
+        restored: () =>
+          `the file carries another record for this credential and network, ${dated(winner.updatedAt)}, which was restored instead`,
+        notRestored: () =>
+          `the file carries another record for this credential and network, ${dated(winner.updatedAt)}, which was preferred to this one and was not written either`,
       });
+      passportContracts.skipped.push({ key, reason: '' });
+      if (compareUpdatedAt(record.updatedAt, staged.updatedAt) !== 'newer') continue;
     }
     contractWrites.set(key, record);
+    const winner = contractWinners.get(key) ?? {};
+    winner.updatedAt = record.updatedAt;
+    contractWinners.set(key, winner);
   }
   for (const outcome of restorePassportContractRecords([...contractWrites.values()])) {
     if (outcome.written) {
@@ -1617,8 +1703,8 @@ export async function applyPassportBackup(
       incentiveDeferred.push({
         index: incentives.skipped.length,
         key: record.id,
-        restored: 'the file carries this reward twice, and the first copy was restored',
-        notRestored:
+        restored: () => 'the file carries this reward twice, and the first copy was restored',
+        notRestored: () =>
           'the file carries this reward twice; the first copy was preferred and was not written either',
       });
       incentives.skipped.push({ key: record.id, reason: '' });
@@ -1670,9 +1756,30 @@ export async function applyPassportBackup(
  *
  * Every failure is a non-confirmation, never a confirmation: an unreachable
  * indexer leaves the record exactly as the restore wrote it.
+ *
+ * AND EVERY RESTORED NAME LANDS IN EXACTLY ONE BUCKET. A `queued` or `failed`
+ * record has no registration for the registry to answer for, and it used to be
+ * `continue`d past in silence — so the counts did not add up to the number of
+ * names the same summary said had been restored. See `notRegistered` on
+ * {@link PassportBackupRegistryCheck}.
  */
+/**
+ * Answers whether the account-custody contract at `address` on `network`
+ * holds THIS Passport's device — the question only the chain can settle.
+ *
+ * Supplied by the caller because it needs the signed-in passkey: the device
+ * secret is derived from the PRF output under user verification, lives for
+ * the length of one call, and never comes near this module. Throwing means
+ * the question could not be put; `false` means it was, and the answer was no.
+ */
+export type PassportContractOwnershipProver = (
+  network: string,
+  address: string,
+) => Promise<boolean>;
+
 export async function confirmRestoredAliases(
   restoredNetworks: string[],
+  provesOwnership?: PassportContractOwnershipProver,
 ): Promise<PassportBackupRegistryCheck> {
   if (restoredNetworks.length === 0) {
     return { ran: false, reason: 'the backup wrote no name claims, so there was nothing to check.' };
@@ -1693,23 +1800,59 @@ export async function confirmRestoredAliases(
      because a browser holds one Passport contract per credential and network
      and the name was bound to one of them. */
   const contractAddresses = new Map<string, Set<string>>();
+  /* Addresses that arrived in the file rather than from a deployment this
+     browser watched. They are NOT evidence of anything by themselves: a
+     crafted backup can name any real contract, and if such an address were
+     allowed into the set below, the registry would agree that a name the
+     attacker registered to it resolves "to one of mine", the alias would be
+     written back confirmed with that address as its resolver target, and a
+     fresh recovery device would show it in Receive. So they are held apart
+     and admitted one at a time, each on the chain's own answer to "does that
+     contract hold this Passport's device". */
+  const restoredAddresses = new Map<string, Set<string>>();
   for (const contract of Object.values(loadPassportContractRecords())) {
     if (contract.status !== 'deployed' || !contract.address) continue;
-    const forNetwork = contractAddresses.get(contract.network) ?? new Set<string>();
+    const fromFile = contract.restoredFromBackup === true && contract.ledgerConfirmed !== true;
+    const bucket = fromFile ? restoredAddresses : contractAddresses;
+    const forNetwork = bucket.get(contract.network) ?? new Set<string>();
     forNetwork.add(contract.address.toLowerCase());
-    contractAddresses.set(contract.network, forNetwork);
+    bucket.set(contract.network, forNetwork);
   }
   let confirmed = 0;
   let unconfirmed = 0;
   let otherNetworks = 0;
+  let notRegistered = 0;
   const unconfirmedReasons: { network: string; reason: string }[] = [];
+  const notRegisteredReasons: { network: string; reason: string }[] = [];
   const leaveUnconfirmed = (network: string, reason: string): void => {
     unconfirmed += 1;
     unconfirmedReasons.push({ network, reason });
   };
+  const nothingToLookUp = (network: string, reason: string): void => {
+    notRegistered += 1;
+    notRegisteredReasons.push({ network, reason });
+  };
   for (const network of restoredNetworks) {
     const record = records[network];
-    if (!record || record.status !== 'registered') continue;
+    /* COUNTED, not skipped. Both of these used to `continue` in silence, and
+       the summary's three buckets then failed to account for a name the
+       restore had just reported writing. */
+    if (!record) {
+      nothingToLookUp(
+        network,
+        'this browser holds no name record for that network any more, so there was nothing to look up',
+      );
+      continue;
+    }
+    if (record.status !== 'registered') {
+      nothingToLookUp(
+        network,
+        record.status === 'queued'
+          ? 'the restored claim is queued, not registered — there is no registration yet for the registry to answer for'
+          : 'the restored claim failed, so there is no registration for the registry to answer for',
+      );
+      continue;
+    }
     if (!Object.hasOwn(MIDNAMES_INDEXER_URLS, network)) {
       otherNetworks += 1;
       continue;
@@ -1745,19 +1888,51 @@ export async function confirmRestoredAliases(
       continue;
     }
     const mine = contractAddresses.get(network);
-    if (!mine) {
+    const restored = restoredAddresses.get(network);
+    if (!mine && !restored) {
       leaveUnconfirmed(
         network,
         'this browser holds no Passport contract on that network, so there is nothing here for the name to be bound to',
       );
       continue;
     }
-    if (!mine.has(resolved.target.hex.toLowerCase())) {
-      leaveUnconfirmed(
-        network,
-        'the registry resolves this name to a different account-custody contract — it is registered to a different account',
-      );
-      continue;
+    const target = resolved.target.hex.toLowerCase();
+    if (!mine?.has(target)) {
+      if (!restored?.has(target)) {
+        leaveUnconfirmed(
+          network,
+          'the registry resolves this name to a different account-custody contract — it is registered to a different account',
+        );
+        continue;
+      }
+      /* The name resolves to an address this browser only knows because a
+         file said so. The contract decides: it holds a device commitment per
+         registered device, and this Passport's device secret derives one of
+         them or it does not. */
+      if (!provesOwnership) {
+        leaveUnconfirmed(
+          network,
+          'this name resolves to a contract restored from the backup, and ownership of it could not be checked in this context',
+        );
+        continue;
+      }
+      let holdsDevice = false;
+      try {
+        holdsDevice = await provesOwnership(network, target);
+      } catch {
+        leaveUnconfirmed(
+          network,
+          'this name resolves to a contract restored from the backup, and the chain could not be asked whether it holds this Passport',
+        );
+        continue;
+      }
+      if (!holdsDevice) {
+        leaveUnconfirmed(
+          network,
+          'this name resolves to a contract that does not hold this Passport as a device — a backup naming it does not make it yours',
+        );
+        continue;
+      }
     }
     /* Written through the bulk path for its read-back check: "confirmed" may
        only be counted where the confirmation is actually in storage. */
@@ -1779,6 +1954,8 @@ export async function confirmRestoredAliases(
     confirmed,
     unconfirmed,
     otherNetworks,
+    notRegistered,
+    ...(notRegisteredReasons.length > 0 ? { notRegisteredReasons } : {}),
     ...(unconfirmedReasons.length > 0 ? { unconfirmedReasons } : {}),
   };
 }
@@ -1795,14 +1972,39 @@ export async function confirmRestoredAliases(
  * token is in hand. Nothing else in this module or in the Backup screen would
  * change.
  */
+/**
+ * What a backend can HONESTLY say about the write it just performed.
+ *
+ * Discriminated, rather than a sentence, because the two cases differ in the
+ * one way a user acts on: whether a file is known to exist. `write` used to
+ * return prose, and the Backup screen printed "Saved as …" / "Written to …"
+ * over all of it — including the `<a download>` fallback, where the backend
+ * itself says in as many words that it cannot report back. A user who cancels
+ * the save dialog, or whose download is blocked by policy, was shown a flat
+ * assertion that their backup exists, and may delete local data on it. A type
+ * the screen must switch on is the fix; prose it could ignore was not.
+ */
+export type PassportBackupWriteOutcome =
+  /**
+   * `showSaveFilePicker` resolved and the handle closed, so the bytes ARE on
+   * disk. {@link location} is where, in the user's own terms.
+   */
+  | { kind: 'saved'; fileName: string; location: string }
+  /**
+   * An `<a download>` click. A blocked download, a cancelled save dialog, and
+   * a written file are the same non-event to a page: nothing here knows, and
+   * nothing built on it may claim to.
+   */
+  | { kind: 'handed-to-browser'; fileName: string };
+
 export interface PassportBackupBackend {
   readonly id: string;
   /** Shown to the user, e.g. "a file on this device". */
   readonly label: string;
   /** Whether this backend can run here, right now. */
   isAvailable(): boolean;
-  /** Writes one envelope; resolves with where it went, in words. */
-  write(fileName: string, envelope: string): Promise<string>;
+  /** Writes one envelope; resolves with what it can honestly say about it. */
+  write(fileName: string, envelope: string): Promise<PassportBackupWriteOutcome>;
   /**
    * Reads one envelope back. The file backend needs the `File` the user
    * already picked in the UI; a remote backend ignores the argument and
@@ -1819,7 +2021,10 @@ export interface PassportBackupBackend {
  * cancel, or refused the download by policy. The returned words say what
  * actually happened — the browser was asked — and send the user to check.
  */
-async function writeThroughDownload(fileName: string, envelope: string): Promise<string> {
+async function writeThroughDownload(
+  fileName: string,
+  envelope: string,
+): Promise<PassportBackupWriteOutcome> {
   if (typeof document === 'undefined' || typeof globalThis.URL?.createObjectURL !== 'function') {
     throw new PassportBackupError('backup-not-written', 'This browser cannot save files.');
   }
@@ -1835,7 +2040,7 @@ async function writeThroughDownload(fileName: string, envelope: string): Promise
   // The blob must outlive the click for the download to start; ten seconds
   // is far longer than any browser needs and costs one object URL.
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  return `${fileName} — your browser was asked to save it. A download cannot report back to this page, so check where your downloads go before relying on it`;
+  return { kind: 'handed-to-browser', fileName };
 }
 
 /** `passport-backup-YYYY-MM-DD.json` — hyphens because a filename cannot hold `/`. */
@@ -1871,9 +2076,10 @@ function saveFilePicker(): ShowSaveFilePicker | null {
  * when the user cancels, so on that path the backend KNOWS a file exists and
  * says where it went. An `<a download>` click gives no completion signal at
  * all: a blocked download, a cancelled save dialog, and a successful write are
- * the same non-event to the page. So the fallback path says the browser was
- * ASKED to save the file — which is the entire truth available to it — rather
- * than asserting a file in a downloads folder that may never have been written.
+ * the same non-event to the page. So the fallback path answers
+ * `handed-to-browser` — which is the entire truth available to it — rather than
+ * asserting a file in a downloads folder that may never have been written, and
+ * {@link describeExportOutcome} is where that distinction becomes words.
  */
 export const fileBackupBackend: PassportBackupBackend = {
   id: 'file',
@@ -1922,7 +2128,7 @@ export const fileBackupBackend: PassportBackupBackend = {
           }`,
         );
       }
-      return `${handle.name ?? fileName}, where you chose to save it`;
+      return { kind: 'saved', fileName, location: `${handle.name ?? fileName}, where you chose to save it` };
     }
     return writeThroughDownload(fileName, envelope);
   },
@@ -1959,10 +2165,40 @@ export function selectBackupBackend(id?: string): PassportBackupBackend {
 
 export interface PassportBackupExport {
   fileName: string;
-  /** Where the backend put it, in words for the user. */
-  location: string;
+  /** What the backend can honestly say about the write. */
+  outcome: PassportBackupWriteOutcome;
   /** What went in, so the screen can say so without re-reading the stores. */
   counts: { aliases: number; passportContracts: number; incentives: number };
+}
+
+/** The two sentences the export panel shows, in the order it shows them. */
+export interface PassportBackupExportCopy {
+  headline: string;
+  detail: string;
+}
+
+/**
+ * The export panel's words, derived from what the backend actually observed.
+ *
+ * A PURE function, and it lives here rather than in `../screens/Backup.tsx` for
+ * one reason: there is no jsdom in this workspace, so nothing can hold a `.tsx`
+ * to a test. Copy that asserts a fact the code cannot know is a bug like any
+ * other, and this one has to be drillable. The screen renders what this returns
+ * and decides nothing.
+ */
+export function describeExportOutcome(
+  outcome: PassportBackupWriteOutcome,
+): PassportBackupExportCopy {
+  if (outcome.kind === 'saved') {
+    return {
+      headline: `Saved as ${outcome.fileName}`,
+      detail: `Written to ${outcome.location}.`,
+    };
+  }
+  return {
+    headline: 'Download started — check your downloads folder',
+    detail: `Passport cannot confirm the save on this browser: a download gives this page no signal at all, so a blocked download and a written file look the same from here. Look for ${outcome.fileName} where your downloads go before relying on it.`,
+  };
 }
 
 /** Collects, seals, and hands the envelope to the configured backend. */
@@ -1973,10 +2209,10 @@ export async function exportPassportBackup(
   const contents = await collectPassportBackup();
   const envelope = await sealPassportBackup(contents, password);
   const fileName = backupFileName();
-  const location = await backend.write(fileName, `${JSON.stringify(envelope, null, 2)}\n`);
+  const outcome = await backend.write(fileName, `${JSON.stringify(envelope, null, 2)}\n`);
   return {
     fileName,
-    location,
+    outcome,
     counts: {
       aliases: Object.keys(contents.aliases).length,
       passportContracts: Object.keys(contents.passportContracts).length,
@@ -1999,11 +2235,15 @@ export async function importPassportBackup(
   picked: File | string,
   password: string,
   backend: PassportBackupBackend = selectBackupBackend(),
+  provesOwnership?: PassportContractOwnershipProver,
 ): Promise<PassportBackupSummary> {
   const raw = typeof picked === 'string' ? picked : await backend.read(picked);
   const contents = await openPassportBackup(parseBackupEnvelope(raw), password);
   const summary = await applyPassportBackup(contents);
-  return { ...summary, registryCheck: await confirmRestoredAliases(summary.aliases.restoredKeys) };
+  return {
+    ...summary,
+    registryCheck: await confirmRestoredAliases(summary.aliases.restoredKeys, provesOwnership),
+  };
 }
 
 /**

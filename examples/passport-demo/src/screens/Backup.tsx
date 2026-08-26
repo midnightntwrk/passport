@@ -14,6 +14,7 @@ import {
   collectPassportBackup,
   describeBackupCreatedAt,
   describeBackupPassword,
+  describeExportOutcome,
 } from '../identity/backup.js'
 import type { PassportBackupExport, PassportBackupSummary } from '../identity/backup.js'
 import ThemeToggle from './ThemeToggle.js'
@@ -335,12 +336,23 @@ export default function BackupScreen(props: BackupProps) {
 
           {exported ? (
             <div className="mnid-panel">
+              {/* The words come from `describeExportOutcome`, because the two
+                  write paths differ in the one thing a user acts on and this
+                  panel used to flatten them. `showSaveFilePicker` resolves only
+                  once the bytes are on disk; an `<a download>` click is the
+                  same non-event whether the file was written, the dialog
+                  cancelled, or the download blocked by policy. "Saved as" over
+                  the second is a claim this app cannot make, and a user may
+                  delete local data on the strength of it. The copy is a pure
+                  function in `../identity/backup.ts` so it can be drilled —
+                  there is no jsdom here to hold a `.tsx` to a test. */}
               <p className="mnid-panel-head">
                 <Info size={15} aria-hidden="true" />
-                Saved as {exported.fileName}
+                {describeExportOutcome(exported.outcome).headline}
               </p>
               <p>
-                Written to {exported.location}. It carries {exported.counts.aliases}{' '}
+                {describeExportOutcome(exported.outcome).detail} It carries{' '}
+                {exported.counts.aliases}{' '}
                 {exported.counts.aliases === 1 ? 'name claim' : 'name claims'},{' '}
                 {exported.counts.passportContracts}{' '}
                 {exported.counts.passportContracts === 1 ? 'contract record' : 'contract records'},
@@ -500,9 +512,24 @@ export default function BackupScreen(props: BackupProps) {
                   {restored.registryCheck.otherNetworks > 0
                     ? `, ${restored.registryCheck.otherNetworks} on a network Passport does not read names from`
                     : ''}
+                  {/* The fourth bucket, so the line accounts for every name the
+                      restore wrote. A queued or failed claim has no
+                      registration for the registry to answer for, and this used
+                      to be passed over in silence while "Names: 2 of 2" stood
+                      above it. */}
+                  {restored.registryCheck.notRegistered > 0
+                    ? `, ${restored.registryCheck.notRegistered} with no registration for the registry to answer for`
+                    : ''}
                   .
                 </p>
               )}
+              {restored.registryCheck?.ran
+                ? (restored.registryCheck.notRegisteredReasons ?? []).map((entry) => (
+                    <p key={`not-registered-${entry.network}`}>
+                      <code>{entry.network}</code> was not looked up: {entry.reason}.
+                    </p>
+                  ))
+                : null}
               {/* A count cannot tell "the indexer was down" from "that name
                   belongs to somebody else now", and the second is the one the
                   user has to act on. Each unconfirmed name says which. */}

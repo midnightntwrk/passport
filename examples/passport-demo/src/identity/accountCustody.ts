@@ -546,6 +546,13 @@ export interface AccountState {
   deviceEpoch: number;
   /** The replay counter every authorised circuit bumps. */
   round: bigint;
+  /**
+   * The device commitments registered in the CURRENT epoch — the devices that
+   * can authorise a circuit today. A commitment from an older epoch is still
+   * in the contract's map (Compact maps cannot be cleared in-circuit) but is
+   * dead, and is not in this set.
+   */
+  activeDeviceCommitments: Set<bigint>;
 }
 
 /**
@@ -644,6 +651,11 @@ export function decodeAccountState(decoded: AccountLedger): AccountState {
     });
   }
 
+  const activeDeviceCommitments = new Set<bigint>();
+  for (const [commitment, epoch] of decoded.devices) {
+    if (epoch === decoded.device_epoch) activeDeviceCommitments.add(commitment);
+  }
+
   return {
     nightBalances,
     shieldedCoins,
@@ -651,7 +663,36 @@ export function decodeAccountState(decoded: AccountLedger): AccountState {
     grants,
     deviceEpoch: Number(decoded.device_epoch),
     round: decoded.round,
+    activeDeviceCommitments,
   };
+}
+
+/**
+ * Whether the account contract at `address` holds THIS device — the one whose
+ * secret is given — as an active device.
+ *
+ * This is what ownership of an account means in the contract's own terms: a
+ * device that can authorise its circuits. It is the one proof a restored
+ * contract record can offer. A backup file can name any address; a real
+ * contract at that address exists whether or not it is ours; a transaction id
+ * proves a deployment happened, not who holds it. Only the device set inside
+ * the contract answers "can this Passport spend from it", and it answers on
+ * chain, for the current epoch, with nothing taken from the file.
+ *
+ * `false` for a contract that does not hold the device; throws for a read
+ * that could not be made, because "not ours" and "could not ask" must never
+ * look alike to the caller deciding whether to trust an address.
+ */
+export async function accountHoldsDevice(
+  network: AccountNetwork,
+  address: string,
+  deviceSecret: Uint8Array,
+): Promise<boolean> {
+  const [state, commitment] = await Promise.all([
+    readAccountState(network, address),
+    deriveDeviceCommitment(deviceSecret),
+  ]);
+  return state.activeDeviceCommitments.has(commitment);
 }
 
 /* -------------------------------------------------------------------------- */

@@ -72,7 +72,21 @@ export interface PassportContractRecord {
    * the first one's words.
    */
   restoredFromBackup?: boolean;
-  updatedAt: string;
+  /**
+   * When this record last changed, ISO-8601 — and ABSENT where nothing has
+   * ever recorded one. See `./aliasStore.ts`'s field of the same name: the
+   * bulk restore below stamped an undated file entry with the moment of the
+   * restore, and that invented date then outranked the user's own genuine
+   * backup for good.
+   */
+  updatedAt?: string;
+  /**
+   * When a restore wrote this record into THIS browser, ISO-8601. A fact about
+   * the browser, never about the record: no comparison in
+   * `../identity/backup.ts` consults it, and it is not in that module's export
+   * allow-list, so it never reaches a backup file.
+   */
+  restoredAt?: string;
 }
 
 const STORAGE_KEY = 'passport-contract:v1';
@@ -165,8 +179,16 @@ export function loadPassportContractRecord(
  * reader discards lets that record be staged over a valid one, persisted, and
  * then vanish on the way back out — and the valid record it replaced vanishes
  * with it, while the caller is told only that the write "did not read back".
+ *
+ * EXPORTED since 2026/08/26, for `../identity/backup.ts`. A restore that
+ * deduplicates two file entries onto one store key has to choose between them,
+ * and choosing by date alone discarded a fully restorable older entry in favour
+ * of a newer one this predicate then refused outright — the file's two-entry
+ * claim restored neither. The restore asks this question BEFORE it dedupes, so
+ * the choice is made among the entries that can actually be written. The
+ * predicate stays the store's, so there is still exactly one copy of it.
  */
-function refusePassportContractRecord(record: PassportContractRecord): string | null {
+export function refusePassportContractRecord(record: PassportContractRecord): string | null {
   if (typeof record.credentialId !== 'string' || typeof record.network !== 'string') {
     return 'A Passport contract record must name the credential and the network it was deployed on, both as text.';
   }
@@ -236,7 +258,11 @@ export function restorePassportContractRecords(
     const key = passportContractRecordKey(record.credentialId, record.network);
     const refusal = refusePassportContractRecord(record);
     if (refusal) return { key, written: false, reason: refusal };
-    next[key] = { ...record, updatedAt: record.updatedAt || now };
+    /* The record's OWN date, or none — never the moment of the restore. See
+       {@link PassportContractRecord.updatedAt}. */
+    const stored: PassportContractRecord = { ...record, restoredAt: now };
+    if (!record.updatedAt) delete stored.updatedAt;
+    next[key] = stored;
     stagedCount += 1;
     return { key, written: true };
   });

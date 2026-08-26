@@ -368,8 +368,18 @@ describe('decodeAccountState', () => {
     // `readAccountState` instead).
     expect(state.shieldedCoins.size).toBe(0);
 
-    // The constructor registers exactly one device, in epoch 0.
+    // The constructor registers exactly one device, in epoch 0 — and that is
+    // the device set a restored record is judged against: the one this
+    // secret derives is active, an unrelated commitment is not.
     expect(state.deviceCount).toBe(1);
+    const { contract: module_ } = fixtureModules();
+    expect(
+      state.activeDeviceCommitments.has(module_.pureCircuits.derive_device_commitment(DEVICE_SECRET)),
+    ).toBe(true);
+    expect(
+      state.activeDeviceCommitments.has(module_.pureCircuits.derive_device_commitment(GRANT_SECRET)),
+    ).toBe(false);
+    expect(state.activeDeviceCommitments.size).toBe(1);
     expect(state.deviceEpoch).toBe(0);
 
     // `add_grant` is device-authorised, so `require_device` bumped `round`

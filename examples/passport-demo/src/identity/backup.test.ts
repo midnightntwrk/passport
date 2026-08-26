@@ -17,6 +17,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { AliasRecord } from './aliasStore.js';
 import type { PassportContractRecord } from './passportContractStore.js';
 
 import {
@@ -30,6 +31,7 @@ import {
   collectPassportBackup,
   describeBackupCreatedAt,
   describeBackupPassword,
+  describeExportOutcome,
   exportPassportBackup,
   fileBackupBackend,
   importPassportBackup,
@@ -40,6 +42,14 @@ import {
   type PassportBackupBackend,
   type PassportBackupContents,
 } from './backup.js';
+
+
+/* Several suites restore this Passport's own contract from the file, so its
+   address arrives as a claim and the chain is what settles it. Where the
+   subject is the REGISTRY's answer rather than ownership, the test hands over
+   a prover that says the contract holds this device; the ownership suite is
+   the one that varies it. */
+const holdsThisDevice = async (): Promise<boolean> => true;
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -416,6 +426,7 @@ describe('a store that reports a record was not written', () => {
       loadPassportContractRecords: () => ({}),
       passportContractRecordKey: (credentialId: string, network: string) =>
         `${credentialId}::${network}`,
+      refusePassportContractRecord: () => null,
       restorePassportContractRecords: (records: { credentialId: string; network: string }[]) =>
         records.map((record) => ({
           key: `${record.credentialId}::${record.network}`,
@@ -455,6 +466,7 @@ describe('a store that reports a record was not written', () => {
       loadPassportContractRecords: () => ({}),
       passportContractRecordKey: (credentialId: string, network: string) =>
         `${credentialId}::${network}`,
+      refusePassportContractRecord: () => null,
       restorePassportContractRecords: (records: { credentialId: string; network: string }[]) =>
         records.map((record) => ({
           key: `${record.credentialId}::${record.network}`,
@@ -609,12 +621,15 @@ describe('the file backend', () => {
     const environment = installDownloadEnvironment();
     expect(fileBackupBackend.isAvailable()).toBe(true);
 
-    const location = await fileBackupBackend.write('passport-backup-2026-08-25.json', '{}');
+    const outcome = await fileBackupBackend.write('passport-backup-2026-08-25.json', '{}');
     /* An `<a download>` click reports nothing back — a blocked download, a
        cancelled dialog, and a written file are the same non-event here — so
-       the words stop at what is true and send the user to check. */
-    expect(location).toMatch(/^passport-backup-2026-08-25\.json — your browser was asked to save it/);
-    expect(location).not.toMatch(/in this device's downloads/);
+       the backend answers with the case rather than with a claim, and
+       `describeExportOutcome` is what turns it into words. */
+    expect(outcome).toEqual({
+      kind: 'handed-to-browser',
+      fileName: 'passport-backup-2026-08-25.json',
+    });
     expect(environment.anchors[0]).toMatchObject({
       href: 'blob:passport/1',
       download: 'passport-backup-2026-08-25.json',
@@ -655,9 +670,9 @@ describe('export and import, end to end through a backend', () => {
       id: 'memory',
       label: 'this test',
       isAvailable: () => true,
-      async write(_fileName, envelope) {
+      async write(fileName, envelope) {
         written.push(envelope);
-        return 'in memory';
+        return { kind: 'saved', fileName, location: 'in memory' };
       },
       async read() {
         return written[written.length - 1] ?? '';
@@ -672,7 +687,11 @@ describe('export and import, end to end through a backend', () => {
     const exported = await exportPassportBackup(PASSWORD, backend);
 
     expect(exported.fileName).toMatch(/^passport-backup-\d{4}-\d{2}-\d{2}\.json$/);
-    expect(exported.location).toBe('in memory');
+    expect(exported.outcome).toEqual({
+      kind: 'saved',
+      fileName: exported.fileName,
+      location: 'in memory',
+    });
     expect(exported.counts).toEqual({ aliases: 1, passportContracts: 1, incentives: 1 });
     // The file is pretty-printed JSON and carries nothing readable of its own.
     expect(backend.written[0]).toMatch(/^\{\n/);
@@ -1217,7 +1236,11 @@ describe('two entries in one file that land on one key', () => {
     };
     const summary = await applyPassportBackup(payload);
     expect(summary.passportContracts.restored).toBe(1);
-    expect(summary.passportContracts.skipped[0]?.reason).toMatch(/an older record/);
+    /* One pair of sentences for both sides of a collision, read against the
+       record that really wins the key — see `DeferredReason`. */
+    expect(summary.passportContracts.skipped[0]?.reason).toMatch(
+      /dated "2026-08-19T00:00:00\.000Z", which was restored instead/,
+    );
     expect((await collectPassportBackup()).passportContracts['AQIDBA==::preview']?.address).toBe(
       'ab'.repeat(32),
     );
@@ -1317,9 +1340,15 @@ describe('a restored name, against the registry that would know', () => {
       target: { kind: 'contract', hex: 'cc'.repeat(32) },
     });
     const envelope = JSON.stringify(await module.sealPassportBackup(contents(), PASSWORD));
-    const summary = await module.importPassportBackup(envelope, PASSWORD);
+    const summary = await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice);
 
-    expect(summary.registryCheck).toEqual({ ran: true, confirmed: 1, unconfirmed: 0, otherNetworks: 0 });
+    expect(summary.registryCheck).toEqual({
+      ran: true,
+      confirmed: 1,
+      unconfirmed: 0,
+      otherNetworks: 0,
+      notRegistered: 0,
+    });
     const stored = (await module.collectPassportBackup()).aliases.preview;
     expect(stored?.registryConfirmed).toBe(true);
     expect(stored?.resolverTargetHex).toBe('cc'.repeat(32));
@@ -1328,7 +1357,7 @@ describe('a restored name, against the registry that would know', () => {
   it('leaves a name the registry does not answer for awaiting the registry', async () => {
     const module = await withRegistry(null);
     const envelope = JSON.stringify(await module.sealPassportBackup(contents(), PASSWORD));
-    const summary = await module.importPassportBackup(envelope, PASSWORD);
+    const summary = await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice);
 
     expect(summary.registryCheck).toMatchObject({
       ran: true,
@@ -1345,7 +1374,7 @@ describe('a restored name, against the registry that would know', () => {
       target: { kind: 'wallet', hex: 'ff'.repeat(32) },
     });
     const envelope = JSON.stringify(await module.sealPassportBackup(contents(), PASSWORD));
-    expect((await module.importPassportBackup(envelope, PASSWORD)).registryCheck).toMatchObject({
+    expect((await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice)).registryCheck).toMatchObject({
       unconfirmed: 1,
       unconfirmedReasons: [
         { network: 'preview', reason: expect.stringContaining('to a wallet target') },
@@ -1356,7 +1385,7 @@ describe('a restored name, against the registry that would know', () => {
   it('reports an unreachable registry as a check that did not confirm', async () => {
     const module = await withRegistry('unreachable');
     const envelope = JSON.stringify(await module.sealPassportBackup(contents(), PASSWORD));
-    expect((await module.importPassportBackup(envelope, PASSWORD)).registryCheck).toMatchObject({
+    expect((await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice)).registryCheck).toMatchObject({
       ran: true,
       confirmed: 0,
       unconfirmed: 1,
@@ -1369,7 +1398,7 @@ describe('a restored name, against the registry that would know', () => {
     const payload = contents();
     payload.aliases = { localnet: { ...contents().aliases.preview!, network: 'localnet' } };
     const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
-    expect((await module.importPassportBackup(envelope, PASSWORD)).registryCheck).toMatchObject({
+    expect((await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice)).registryCheck).toMatchObject({
       ran: true,
       otherNetworks: 1,
     });
@@ -1403,7 +1432,7 @@ describe('a restored name, against the registry that would know', () => {
 
     const module = await import('./backup.js');
     const envelope = JSON.stringify(await module.sealPassportBackup(contents(), PASSWORD));
-    const summary = await module.importPassportBackup(envelope, PASSWORD);
+    const summary = await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice);
     expect(summary.aliases.restored).toBe(1);
     expect(summary.registryCheck).toMatchObject({
       ran: true,
@@ -1420,7 +1449,7 @@ describe('a restored name, against the registry that would know', () => {
     const payload = contents();
     payload.aliases = {};
     const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
-    expect((await module.importPassportBackup(envelope, PASSWORD)).registryCheck).toEqual({
+    expect((await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice)).registryCheck).toEqual({
       ran: false,
       reason: 'the backup wrote no name claims, so there was nothing to check.',
     });
@@ -1438,9 +1467,24 @@ describe('a restored name, against the registry that would know', () => {
       queuedReason: 'the registry was unreachable',
     };
     const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
-    const summary = await module.importPassportBackup(envelope, PASSWORD);
+    const summary = await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice);
     expect(summary.aliases.restored).toBe(1);
-    expect(summary.registryCheck).toEqual({ ran: true, confirmed: 0, unconfirmed: 0, otherNetworks: 0 });
+    /* It is not re-checked, and it is COUNTED — the four buckets add up to the
+       number of names the same summary says were restored. */
+    expect(summary.registryCheck).toEqual({
+      ran: true,
+      confirmed: 0,
+      unconfirmed: 0,
+      otherNetworks: 0,
+      notRegistered: 1,
+      notRegisteredReasons: [
+        {
+          network: 'preview',
+          reason:
+            'the restored claim is queued, not registered — there is no registration yet for the registry to answer for',
+        },
+      ],
+    });
   });
 
   /* ------------------------------------------------------------------------ */
@@ -1456,7 +1500,7 @@ describe('a restored name, against the registry that would know', () => {
       target: { kind: 'contract', hex: 'ff'.repeat(32) },
     });
     const envelope = JSON.stringify(await module.sealPassportBackup(contents(), PASSWORD));
-    const summary = await module.importPassportBackup(envelope, PASSWORD);
+    const summary = await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice);
 
     expect(summary.registryCheck).toMatchObject({
       ran: true,
@@ -1477,7 +1521,7 @@ describe('a restored name, against the registry that would know', () => {
     const payload = contents();
     payload.passportContracts = {};
     const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
-    expect((await module.importPassportBackup(envelope, PASSWORD)).registryCheck).toMatchObject({
+    expect((await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice)).registryCheck).toMatchObject({
       confirmed: 0,
       unconfirmedReasons: [
         { network: 'preview', reason: expect.stringContaining('holds no Passport contract') },
@@ -1493,7 +1537,7 @@ describe('a restored name, against the registry that would know', () => {
     const payload = contents();
     payload.aliases.preview = { ...contents().aliases.preview!, domain: 'day' };
     const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
-    expect((await module.importPassportBackup(envelope, PASSWORD)).registryCheck).toMatchObject({
+    expect((await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice)).registryCheck).toMatchObject({
       confirmed: 0,
       unconfirmedReasons: [
         { network: 'preview', reason: expect.stringContaining('.night') },
@@ -1522,11 +1566,12 @@ describe('a restored name, against the registry that would know', () => {
       },
     };
     const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
-    expect((await module.importPassportBackup(envelope, PASSWORD)).registryCheck).toEqual({
+    expect((await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice)).registryCheck).toEqual({
       ran: true,
       confirmed: 1,
       unconfirmed: 0,
       otherNetworks: 0,
+      notRegistered: 0,
     });
   });
 
@@ -1538,7 +1583,7 @@ describe('a restored name, against the registry that would know', () => {
     const payload = contents();
     payload.passportContracts['AQIDBA==::preview']!.address = 'CC'.repeat(32);
     const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
-    const summary = await module.importPassportBackup(envelope, PASSWORD);
+    const summary = await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice);
     expect(summary.registryCheck).toMatchObject({ confirmed: 1 });
     const stored = await module.collectPassportBackup();
     expect(stored.passportContracts['AQIDBA==::preview']?.address).toBe('cc'.repeat(32));
@@ -1581,8 +1626,12 @@ describe('the save path that can report back', () => {
 
   it('says where the file went, because the picker resolves only once it is written', async () => {
     const picker = installPicker('writes');
-    const location = await fileBackupBackend.write('passport-backup.json', '{"v":1}');
-    expect(location).toBe('my-passport.json, where you chose to save it');
+    const outcome = await fileBackupBackend.write('passport-backup.json', '{"v":1}');
+    expect(outcome).toEqual({
+      kind: 'saved',
+      fileName: 'passport-backup.json',
+      location: 'my-passport.json, where you chose to save it',
+    });
     expect(picker.written).toEqual(['{"v":1}']);
   });
 
@@ -1593,9 +1642,11 @@ describe('the save path that can report back', () => {
         createWritable: async () => ({ write: async () => {}, close: async () => {} }),
       }),
     });
-    expect(await fileBackupBackend.write('passport-backup.json', '{}')).toBe(
-      'passport-backup.json, where you chose to save it',
-    );
+    expect(await fileBackupBackend.write('passport-backup.json', '{}')).toEqual({
+      kind: 'saved',
+      fileName: 'passport-backup.json',
+      location: 'passport-backup.json, where you chose to save it',
+    });
   });
 
   it('reports a cancelled save as no backup at all', async () => {
@@ -1630,8 +1681,8 @@ describe('the save path that can report back', () => {
       }),
     });
     try {
-      const location = await fileBackupBackend.write('passport-backup.json', '{}');
-      expect(location).toMatch(/your browser was asked to save it/);
+      const outcome = await fileBackupBackend.write('passport-backup.json', '{}');
+      expect(outcome).toMatchObject({ kind: 'handed-to-browser' });
       expect(anchors).toHaveLength(1);
     } finally {
       Object.defineProperty(globalThis, 'URL', { value: realUrl, configurable: true, writable: true });
@@ -1789,9 +1840,11 @@ describe('the fields a record may leave out', () => {
     const summary = await applyPassportBackup(payload);
     expect(summary.passportContracts.restored).toBe(1);
     expect(summary.incentives.restored).toBe(1);
-    // The store stamps a record that arrives without a timestamp.
+    /* The store does NOT stamp a record that arrives without a timestamp: an
+       invented date outranks a genuine backup for ever. See the store's own
+       `updatedAt`. */
     const stored = (await collectPassportBackup()).passportContracts['AQIDBA==::preview'];
-    expect(stored?.updatedAt).toMatch(/^\d{4}-/);
+    expect(stored?.updatedAt).toBeUndefined();
     expect(stored?.deviceCommitment).toBe('12345678901234567890');
     expect((await collectPassportBackup()).incentives[0]?.network).toBe('');
   });
@@ -1823,33 +1876,38 @@ describe('the fields a record may leave out', () => {
 /* The tripwires on top of the structural allow-list                          */
 /* -------------------------------------------------------------------------- */
 
-describe('a secret arriving under a justified name', () => {
+describe('a value that is the size of a key, under a name the allow-list justified', () => {
   beforeEach(() => installStorage());
   afterEach(() => Reflect.deleteProperty(globalThis, 'window'));
 
-  it('refuses a free-text field whose VALUE is the size of a key', async () => {
-    /* The allow-list is structural on NAMES, so the three free-text fields are
-       the only places a secret could ride in under a name nobody would query.
-       Sizes are harder to disguise than names: 32 or 64 bytes of hex or
-       base64 in `queuedReason` is not written, whatever it claims to be. */
+  it('restores it, because the allow-list on NAMES is the whole contract', async () => {
+    /* The value tripwire on the three free-text fields is gone (2026/08/26).
+       It refused ordinary app-written text — a 43-character reward slug is 32
+       bytes of base64 by its arithmetic — and it refused it on import only,
+       so a file this app exported cleanly could never restore that record on
+       any device. It was a guess that destroyed data and could not keep a
+       determined secret out either way. */
     const payload = contents();
     payload.aliases.preview!.status = 'queued';
     payload.aliases.preview!.queuedReason = 'ab'.repeat(32);
-    const refused = await applyPassportBackup(payload);
-    expect(refused.aliases.restored).toBe(0);
-    expect(refused.aliases.skipped[0]?.reason).toMatch(/the size of a key/);
-
-    // …and a real sentence in the same field is waved through.
-    payload.aliases.preview!.queuedReason = 'The sponsor holds no NIGHT on stagenet right now.';
-    expect((await applyPassportBackup(payload)).aliases.restored).toBe(1);
-  });
-
-  it('refuses base64 of key length as readily as hex', async () => {
-    const payload = contents();
     payload.incentives[0]!.label = Buffer.alloc(32, 7).toString('base64');
     const summary = await applyPassportBackup(payload);
-    expect(summary.incentives.restored).toBe(0);
-    expect(summary.incentives.skipped[0]?.reason).toMatch(/the size of a key/);
+
+    expect(summary.aliases.restored).toBe(1);
+    expect(summary.incentives.restored).toBe(1);
+    expect(summary.aliases.skipped).toEqual([]);
+    expect(summary.incentives.skipped).toEqual([]);
+  });
+
+  it('still refuses the same value under a name nobody justified, and names it', () => {
+    /* What actually holds the invariant: a field whose NAME is not on the list
+       is refused whatever its value, and `looksLikeSecret` survives only to
+       word that refusal. */
+    const poisoned = contents() as unknown as Record<string, unknown>;
+    poisoned.aliases = {
+      preview: { ...contents().aliases.preview, note: 'ab'.repeat(32) },
+    };
+    expect(() => assertNoKeyMaterial(poisoned)).toThrow(/is the size of one/);
   });
 });
 
@@ -2030,6 +2088,34 @@ describe('what a restore may never take away', () => {
     );
   });
 
+  it('does not let a file change the address of a contract this browser deployed', async () => {
+    /* Same status, a real-looking transaction id, a date from the future: the
+       one thing different is the address. The local record is not yet
+       indexer-confirmed, so neither of the earlier rules fires; this one
+       must, because the Receive sheet shows `record.address` for any
+       deployed record and would hand out the file's address. */
+    holdDeployedContract();
+    const payload = contents();
+    payload.passportContracts = {
+      'AQIDBA==::preview': {
+        credentialId: 'AQIDBA==',
+        network: 'preview',
+        status: 'deployed',
+        address: 'dd'.repeat(32),
+        deployTxId: 'ee'.repeat(32),
+        updatedAt: '2030-01-01T00:00:00.000Z',
+      },
+    };
+    const summary = await applyPassportBackup(payload);
+
+    expect(summary.passportContracts.restored).toBe(0);
+    expect(summary.passportContracts.skipped[0]?.reason).toMatch(
+      /does not change the address of a contract this browser deployed/,
+    );
+    const held = (await collectPassportBackup()).passportContracts['AQIDBA==::preview'];
+    expect(held?.address).toBe('cc'.repeat(32));
+  });
+
   it('replaces a failed record this browser holds with a newer deployment from the file', async () => {
     /* The rule protects a DEPLOYED local record, and nothing else — a failed
        one carries no address to lose. */
@@ -2057,7 +2143,7 @@ describe('what a restore may never take away', () => {
        99999, so a file dated like that was newer than everything here. */
     holdDeployedContract();
     const payload = contents();
-    payload.passportContracts['AQIDBA==::preview']!.address = 'ab'.repeat(32);
+    payload.passportContracts['AQIDBA==::preview']!.address = 'cc'.repeat(32);
     payload.passportContracts['AQIDBA==::preview']!.updatedAt = '99999';
     const summary = await applyPassportBackup(payload);
 
@@ -2072,7 +2158,7 @@ describe('what a restore may never take away', () => {
   it('treats a well-shaped date that is not a day as unreadable', async () => {
     holdDeployedContract();
     const payload = contents();
-    payload.passportContracts['AQIDBA==::preview']!.address = 'ab'.repeat(32);
+    payload.passportContracts['AQIDBA==::preview']!.address = 'cc'.repeat(32);
     payload.passportContracts['AQIDBA==::preview']!.updatedAt = '2026-13-01';
     const summary = await applyPassportBackup(payload);
     expect(summary.passportContracts.restored).toBe(0);
@@ -2160,21 +2246,28 @@ describe('a dedupe reason that has to wait for the store', () => {
   afterEach(() => Reflect.deleteProperty(globalThis, 'window'));
 
   it('does not say the newer of two colliding records was restored when it was not', async () => {
-    /* The winner carries an address and no deployment transaction, which the
-       store refuses — so "which was restored instead" named a record that was
-       never written anywhere. */
+    /* This used to make the winner a record the STORE refuses — an address and
+       no deployment transaction. The dedup now asks the store's own predicate
+       before it chooses, so that collision cannot arise; what still can is a
+       browser that refuses the write. A full or partitioned `localStorage`
+       throws from `setItem`, the winner is not written, and "which was
+       restored instead" would name a record nothing holds. */
     const template = contents().passportContracts['AQIDBA==::preview']!;
     const payload = contents();
     payload.passportContracts = {
-      recent: { ...template, deployTxId: undefined, updatedAt: '2026-08-19T00:00:00.000Z' },
+      recent: { ...template, updatedAt: '2026-08-19T00:00:00.000Z' },
       stale: { ...template, updatedAt: '2020-01-01T00:00:00.000Z' },
     };
+    (globalThis as unknown as { window: { localStorage: Storage } }).window.localStorage.setItem =
+      () => {
+        throw new Error('the quota is exceeded');
+      };
     const summary = await applyPassportBackup(payload);
 
     expect(summary.passportContracts.restored).toBe(0);
-    expect(summary.passportContracts.skipped[0]?.reason).toMatch(
-      /which was preferred to this one and was not written either/,
-    );
+    const reasons = summary.passportContracts.skipped.map((entry) => entry.reason).join(' | ');
+    expect(reasons).toMatch(/which was preferred to this one and was not written either/);
+    expect(reasons).not.toMatch(/which was restored instead/);
   });
 
   it('does not say the first copy of a duplicated reward was restored when the cap refused it', async () => {
@@ -2206,38 +2299,33 @@ describe('a dedupe reason that has to wait for the store', () => {
 /* Free text is the one place a name check cannot help                         */
 /* -------------------------------------------------------------------------- */
 
-describe('the tripwire on the fields that hold free text', () => {
+describe('the three fields that hold free text', () => {
   beforeEach(() => installStorage());
   afterEach(() => Reflect.deleteProperty(globalThis, 'window'));
 
-  it('refuses a queued reason that is the size of a key', async () => {
+  it('restores every one of them, whatever the text happens to look like', async () => {
+    /* `queuedReason`, `failureReason`, and `label` are written by an app or by
+       a service, in its own words. A file this app exported must restore in
+       full, and no arithmetic on the length of a sentence is allowed to decide
+       otherwise — see the module header. */
     const payload = contents();
     payload.aliases.preview!.status = 'queued';
     payload.aliases.preview!.queuedReason = 'ab'.repeat(32);
-    const summary = await applyPassportBackup(payload);
-    expect(summary.aliases.skipped[0]?.reason).toMatch(
-      /is free text whose value is the size of a key/,
-    );
-  });
-
-  it('refuses a failure reason that is the size of a key', async () => {
-    const payload = contents();
     payload.passportContracts['AQIDBA==::preview']!.status = 'failed';
     payload.passportContracts['AQIDBA==::preview']!.failureReason = 'cd'.repeat(32);
-    const summary = await applyPassportBackup(payload);
-    expect(summary.passportContracts.restored).toBe(0);
-    expect(summary.passportContracts.skipped[0]?.reason).toMatch(/the size of a key/);
-  });
-
-  it('refuses a reward label that is the size of a key', async () => {
-    const payload = contents();
+    payload.passportContracts['AQIDBA==::preview']!.address = undefined;
+    payload.passportContracts['AQIDBA==::preview']!.deployTxId = undefined;
     payload.incentives[0]!.label = 'ef'.repeat(32);
+
     const summary = await applyPassportBackup(payload);
-    expect(summary.incentives.restored).toBe(0);
-    expect(summary.incentives.skipped[0]).toEqual({
-      key: 'raffle-1',
-      reason: expect.stringMatching(/the size of a key/),
-    });
+    expect(summary.aliases.restored).toBe(1);
+    expect(summary.passportContracts.restored).toBe(1);
+    expect(summary.incentives.restored).toBe(1);
+    expect([
+      ...summary.aliases.skipped,
+      ...summary.passportContracts.skipped,
+      ...summary.incentives.skipped,
+    ]).toEqual([]);
   });
 
   it('lets free text that reads as free text through', async () => {
@@ -2401,6 +2489,7 @@ describe('a sentence that was a prediction until the stores answered', () => {
       loadPassportContractRecords: () => ({}),
       passportContractRecordKey: (credentialId: string, network: string) =>
         `${credentialId}::${network}`,
+      refusePassportContractRecord: () => null,
       /* The store's own bulk writer, answering that it wrote nothing — which
          is what a full or partitioned localStorage really produces. */
       restorePassportContractRecords: (records: { credentialId: string; network: string }[]) =>
@@ -2430,6 +2519,147 @@ describe('a sentence that was a prediction until the stores answered', () => {
 /* -------------------------------------------------------------------------- */
 /* The review of 2026/08/26                                                    */
 /* -------------------------------------------------------------------------- */
+
+describe('a contract address a file merely claims', () => {
+  beforeEach(() => installStorage());
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'window');
+    vi.doUnmock('./midnames.js');
+    vi.resetModules();
+  });
+
+  async function withRegistry(target: unknown) {
+    vi.resetModules();
+    vi.doMock('./midnames.js', () => ({
+      MIDNAMES_INDEXER_URLS: { stagenet: '', preview: '', preprod: '', mainnet: '' },
+      resolveAliasTarget: async () => target,
+    }));
+    return import('./backup.js');
+  }
+
+  /* The attack this suite exists for: a crafted backup names a real contract
+     the attacker controls, and a name they registered to it. The registry
+     agrees the name resolves there — it does. Only the contract's own device
+     set can say the contract is not this Passport's. */
+  const craftedPayload = () => {
+    const payload = contents();
+    payload.passportContracts['AQIDBA==::preview']!.address = 'ab'.repeat(32);
+    return payload;
+  };
+  const attackerRegistry = {
+    resolverAddress: '0200beef',
+    target: { kind: 'contract', hex: 'ab'.repeat(32) },
+  };
+
+  it('refuses to confirm a name against a restored contract that does not hold this device', async () => {
+    const module = await withRegistry(attackerRegistry);
+    const envelope = JSON.stringify(await module.sealPassportBackup(craftedPayload(), PASSWORD));
+    const summary = await module.importPassportBackup(
+      envelope,
+      PASSWORD,
+      undefined,
+      async () => false,
+    );
+
+    expect(summary.registryCheck).toMatchObject({ confirmed: 0, unconfirmed: 1 });
+    expect(summary.registryCheck).toMatchObject({ ran: true });
+    expect(
+      (summary.registryCheck as { unconfirmedReasons?: { reason: string }[] })
+        .unconfirmedReasons?.[0]?.reason,
+    ).toMatch(
+      /does not hold this Passport as a device/,
+    );
+    const stored = (await module.collectPassportBackup()).aliases.preview;
+    expect(stored?.registryConfirmed).not.toBe(true);
+    // The resolver target is the field Home reads for the Receive sheet.
+    expect(stored?.resolverTargetHex).toBeUndefined();
+  });
+
+  it('puts the question to the chain with the address the registry answered', async () => {
+    const module = await withRegistry(attackerRegistry);
+    const asked: { network: string; address: string }[] = [];
+    const envelope = JSON.stringify(await module.sealPassportBackup(craftedPayload(), PASSWORD));
+    await module.importPassportBackup(envelope, PASSWORD, undefined, async (network, address) => {
+      asked.push({ network, address });
+      return true;
+    });
+
+    expect(asked).toEqual([{ network: 'preview', address: 'ab'.repeat(32) }]);
+  });
+
+  it('confirms the name once the contract answers that it holds this device', async () => {
+    const module = await withRegistry(attackerRegistry);
+    const envelope = JSON.stringify(await module.sealPassportBackup(craftedPayload(), PASSWORD));
+    const summary = await module.importPassportBackup(
+      envelope,
+      PASSWORD,
+      undefined,
+      async () => true,
+    );
+
+    expect(summary.registryCheck).toMatchObject({ confirmed: 1, unconfirmed: 0 });
+  });
+
+  it('leaves it unconfirmed when there is no way to put the question', async () => {
+    const module = await withRegistry(attackerRegistry);
+    const envelope = JSON.stringify(await module.sealPassportBackup(craftedPayload(), PASSWORD));
+    const summary = await module.importPassportBackup(envelope, PASSWORD);
+
+    expect(summary.registryCheck).toMatchObject({ confirmed: 0, unconfirmed: 1 });
+    expect(summary.registryCheck).toMatchObject({ ran: true });
+    expect(
+      (summary.registryCheck as { unconfirmedReasons?: { reason: string }[] })
+        .unconfirmedReasons?.[0]?.reason,
+    ).toMatch(
+      /ownership of it could not be checked/,
+    );
+  });
+
+  it('does not read a chain that could not be asked as a no', async () => {
+    const module = await withRegistry(attackerRegistry);
+    const envelope = JSON.stringify(await module.sealPassportBackup(craftedPayload(), PASSWORD));
+    const summary = await module.importPassportBackup(envelope, PASSWORD, undefined, async () => {
+      throw new Error('the indexer could not be reached');
+    });
+
+    expect(summary.registryCheck).toMatchObject({ ran: true });
+    expect(
+      (summary.registryCheck as { unconfirmedReasons?: { reason: string }[] })
+        .unconfirmedReasons?.[0]?.reason,
+    ).toMatch(
+      /could not be asked whether it holds this Passport/,
+    );
+  });
+
+  it('asks nothing of the chain for a contract this browser deployed itself', async () => {
+    /* The normal case, and the one that must not cost a user-verification
+       prompt: the address came from a deployment this browser watched. */
+    const module = await withRegistry({
+      resolverAddress: '0200beef',
+      target: { kind: 'contract', hex: 'cc'.repeat(32) },
+    });
+    const { savePassportContractRecord } = await import('./passportContractStore.js');
+    savePassportContractRecord({
+      credentialId: 'AQIDBA==',
+      network: 'preview',
+      status: 'deployed',
+      address: 'cc'.repeat(32),
+      deployTxId: 'dd'.repeat(32),
+      updatedAt: '2026-08-26T09:00:00.000Z',
+    });
+    const payload = contents();
+    delete payload.passportContracts['AQIDBA==::preview'];
+    const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
+    let asked = 0;
+    const summary = await module.importPassportBackup(envelope, PASSWORD, undefined, async () => {
+      asked += 1;
+      return false;
+    });
+
+    expect(asked).toBe(0);
+    expect(summary.registryCheck).toMatchObject({ confirmed: 1 });
+  });
+});
 
 describe('the name a record really carries', () => {
   beforeEach(() => installStorage());
@@ -2462,13 +2692,14 @@ describe('the name a record really carries', () => {
       target: { kind: 'contract', hex: 'cc'.repeat(32) },
     });
     const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
-    const summary = await module.importPassportBackup(envelope, PASSWORD);
+    const summary = await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice);
 
     expect(summary.registryCheck).toEqual({
       ran: true,
       confirmed: 1,
       unconfirmed: 0,
       otherNetworks: 0,
+      notRegistered: 0,
     });
     const stored = (await module.collectPassportBackup()).aliases.preview;
     expect(stored?.registryConfirmed).toBe(true);
@@ -2483,7 +2714,7 @@ describe('the name a record really carries', () => {
       target: { kind: 'contract', hex: 'cc'.repeat(32) },
     });
     const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
-    const summary = await module.importPassportBackup(envelope, PASSWORD);
+    const summary = await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice);
 
     expect(summary.registryCheck).toMatchObject({
       confirmed: 0,
@@ -2543,10 +2774,13 @@ describe('a second file entry landing on a key the first already took', () => {
 
     const stored = loadPassportContractRecord('AQIDBA==', 'preview');
     expect(stored?.status).toBe('deployed');
-    expect(stored?.address).toBe('aa'.repeat(32));
-    expect(summary.passportContracts.skipped.map((entry) => entry.reason).join(' | ')).toMatch(
-      /a restore does not take a contract away/,
-    );
+    /* Neither entry gets past the guards: the newer one names a different
+       address for a contract this browser deployed, the later `failed` one is
+       a downgrade. The browser keeps what it deployed. */
+    expect(stored?.address).toBe('cc'.repeat(32));
+    const reasons = summary.passportContracts.skipped.map((entry) => entry.reason).join(' | ');
+    expect(reasons).toMatch(/does not change the address of a contract this browser deployed/);
+    expect(reasons).toMatch(/a restore does not take a contract away/);
   });
 });
 
@@ -2670,16 +2904,16 @@ describe('an export this browser’s own data cannot block', () => {
     await expect(sealPassportBackup(collected, PASSWORD)).resolves.toBeTruthy();
   });
 
-  it('refuses the RECORD a file carries with a key-sized label, not the file', async () => {
-    /* The tripwire moved and narrowed; it did not go. Throwing for the whole
-       payload here would be the export lock-out one step later: a file that
-       sealed cleanly and then refused to restore anything at all. */
+  it('restores a record whose label is key-sized, because export never refused it', async () => {
+    /* The tripwire moved, then narrowed, then went (2026/08/26). Refusing here
+       was the export lock-out one step later: a file that sealed cleanly and
+       then refused, on every device, to restore the one record it was taken to
+       preserve. */
     const payload = contents();
     payload.incentives[0]!.label = 'ef'.repeat(32);
     const summary = await applyPassportBackup(payload);
-    expect(summary.incentives.restored).toBe(0);
-    expect(summary.incentives.skipped[0]?.reason).toMatch(/the size of a key/);
-    // The rest of the file restored around it.
+    expect(summary.incentives.restored).toBe(1);
+    expect(summary.incentives.skipped).toEqual([]);
     expect(summary.aliases.restored).toBe(1);
     expect(summary.passportContracts.restored).toBe(1);
   });
@@ -2905,5 +3139,256 @@ describe('rewards a restore may not lose or misorder', () => {
     expect(outcomes.find((outcome) => outcome.id === 'junk')).toMatchObject({ written: false });
     // A record with no readable date sorts LAST, so it never leads the list.
     expect(held[0]?.id).toBe('genuine');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The second review of 2026/08/26                                             */
+/* -------------------------------------------------------------------------- */
+
+describe('a restored record that carries no date of its own', () => {
+  beforeEach(() => installStorage());
+  afterEach(() => Reflect.deleteProperty(globalThis, 'window'));
+
+  it('is not stamped with the moment it was restored', async () => {
+    /* The stores wrote `record.updatedAt || now`, so a hand-edited or
+       old-format entry with no timestamp was persisted carrying TODAY. The
+       no-downgrade rule only runs against an existing local record, so the
+       first restore of such a file wrote it unopposed — and the user's own,
+       correctly dated backup was then permanently "older" than a date the
+       restore itself invented. */
+    const undated = contents();
+    delete (undated.aliases.preview as Partial<AliasRecord>).updatedAt;
+    delete (undated.passportContracts['AQIDBA==::preview'] as Partial<PassportContractRecord>)
+      .updatedAt;
+    expect((await applyPassportBackup(undated)).aliases.restored).toBe(1);
+
+    const { loadAliasRecord } = await import('./aliasStore.js');
+    const { loadPassportContractRecord } = await import('./passportContractStore.js');
+    expect(loadAliasRecord('preview')?.updatedAt).toBeUndefined();
+    expect(loadPassportContractRecord('AQIDBA==', 'preview')?.updatedAt).toBeUndefined();
+    /* A restore may record WHEN it ran — that is a fact about this browser —
+       and nothing may read it as the record's own date. */
+    expect(loadAliasRecord('preview')?.restoredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    // …and the genuine backup, dated years earlier, still restores over it.
+    const genuine = contents();
+    genuine.aliases.preview!.alias = 'bob';
+    genuine.aliases.preview!.updatedAt = '2020-01-01T00:00:00.000Z';
+    const summary = await applyPassportBackup(genuine);
+    expect(summary.aliases.restored).toBe(1);
+    expect(loadAliasRecord('preview')?.alias).toBe('bob');
+  });
+});
+
+describe('two file entries colliding on one contract key', () => {
+  beforeEach(() => installStorage());
+  afterEach(() => Reflect.deleteProperty(globalThis, 'window'));
+
+  it('prefers the entry the store will take over the newer one it would refuse', async () => {
+    /* `deployTxId` is only shape-checked when present, so a newer entry
+       missing it passed the date-only dedup, displaced a fully restorable
+       older entry, and was then refused outright by the store — the file's
+       two-entry claim restored neither. */
+    const payload = contents();
+    const base = payload.passportContracts['AQIDBA==::preview']!;
+    payload.passportContracts = {
+      restorable: { ...base, updatedAt: '2026-01-01T00:00:00.000Z' },
+      newerButRefused: { ...base, deployTxId: undefined, updatedAt: '2027-01-01T00:00:00.000Z' },
+    } as PassportBackupContents['passportContracts'];
+
+    const summary = await applyPassportBackup(payload);
+    const { loadPassportContractRecord } = await import('./passportContractStore.js');
+
+    expect(summary.passportContracts.restored).toBe(1);
+    expect(loadPassportContractRecord('AQIDBA==', 'preview')?.updatedAt).toBe(
+      '2026-01-01T00:00:00.000Z',
+    );
+    expect(summary.passportContracts.skipped.map((entry) => entry.reason).join(' | ')).toMatch(
+      /must carry both the contract address and the deployment transaction id/,
+    );
+  });
+
+  it('says a colliding record carries no date rather than quoting one it has not got', async () => {
+    const payload = contents();
+    const base = { ...payload.passportContracts['AQIDBA==::preview']! };
+    delete (base as Partial<PassportContractRecord>).updatedAt;
+    payload.passportContracts = {
+      first: { ...base },
+      second: { ...base },
+    } as PassportBackupContents['passportContracts'];
+
+    const summary = await applyPassportBackup(payload);
+    expect(summary.passportContracts.restored).toBe(1);
+    expect(summary.passportContracts.skipped[0]?.reason).toMatch(
+      /carrying no date, which was restored instead/,
+    );
+  });
+
+  it('names the record that really won the key in every skip a three-way collision leaves', async () => {
+    /* The deferred sentence baked in the date of whichever record happened to
+       be staged when it was written, so a third entry displacing that one left
+       two skips naming a record nothing ever wrote. */
+    const payload = contents();
+    const base = payload.passportContracts['AQIDBA==::preview']!;
+    payload.passportContracts = {
+      staged: { ...base, updatedAt: '2025-01-01T00:00:00.000Z' },
+      oldest: { ...base, updatedAt: '2024-01-01T00:00:00.000Z' },
+      newest: { ...base, updatedAt: '2026-01-01T00:00:00.000Z' },
+    } as PassportBackupContents['passportContracts'];
+
+    const summary = await applyPassportBackup(payload);
+    expect(summary.passportContracts.restored).toBe(1);
+    const reasons = summary.passportContracts.skipped.map((entry) => entry.reason);
+    expect(reasons).toHaveLength(2);
+    for (const reason of reasons) {
+      expect(reason).toContain('2026-01-01T00:00:00.000Z');
+      expect(reason).not.toContain('2025-01-01T00:00:00.000Z');
+    }
+  });
+});
+
+describe('a label a granting app really wrote', () => {
+  beforeEach(() => installStorage());
+  afterEach(() => Reflect.deleteProperty(globalThis, 'window'));
+
+  it('restores a 43-character reward label this app exported without complaint', async () => {
+    /* 43 characters of slug is 32 bytes by the tripwire's arithmetic. Export
+       projected it cleanly and every import then refused that one record for
+       ever, so a file this app wrote could not restore what it carried. */
+    const label = 'midnight-raffle-earlybird-tier2-badge-26q3x';
+    expect(label).toHaveLength(43);
+    const { saveIncentive } = await import('./incentiveStore.js');
+    saveIncentive({
+      id: 'raffle-slug',
+      app: 'Midnight Raffle',
+      label,
+      network: 'preview',
+      redeemedAt: '2026-08-19T08:57:00.000Z',
+    });
+
+    const envelope = JSON.stringify(
+      await sealPassportBackup(await collectPassportBackup(), PASSWORD),
+    );
+    installStorage(); // a browser that has never seen this Passport
+    const summary = await importPassportBackup(envelope, PASSWORD);
+
+    expect(summary.incentives.restored).toBe(1);
+    expect(summary.incentives.skipped).toEqual([]);
+    const { loadIncentives } = await import('./incentiveStore.js');
+    expect(loadIncentives()[0]?.label).toBe(label);
+  });
+});
+
+describe('a format number this build does not read', () => {
+  it('says which direction the mismatch goes, and refuses to guess when it goes neither', async () => {
+    const older = { v: 0, kdf: PASSPORT_BACKUP_KDF, salt: 'a', nonce: 'b', ciphertext: 'c' };
+    expect(() => parseBackupEnvelope(JSON.stringify(older))).toThrow(
+      /written by an older Passport \(format 0\); this one reads format 1 and cannot read older files/,
+    );
+    expect(() => parseBackupEnvelope(JSON.stringify({ ...older, v: 2 }))).toThrow(
+      /written by a newer Passport \(format 2\)/,
+    );
+    expect(() => parseBackupEnvelope(JSON.stringify({ ...older, v: 1.5 }))).toThrow(
+      /is not a whole number, so this Passport cannot tell what wrote it/,
+    );
+
+    // The object arm is the only way a number JSON cannot carry arrives.
+    const envelope = await sealPassportBackup(contents(), PASSWORD);
+    await expect(openPassportBackup({ ...envelope, v: 0 }, PASSWORD)).rejects.toThrow(
+      /an older Passport/,
+    );
+    await expect(openPassportBackup({ ...envelope, v: Number.NaN }, PASSWORD)).rejects.toThrow(
+      /is not a whole number/,
+    );
+  });
+});
+
+describe('what the screen may say about where a backup went', () => {
+  it('words the anchor-download fallback as a download started, not a file saved', () => {
+    /* The picker resolves only once the bytes are on disk; an `<a download>`
+       click is the same non-event whether the file was written, the dialog
+       cancelled, or the download blocked by policy. The panel asserted "Saved
+       as" over both, and a user may delete local data trusting it. */
+    const saved = describeExportOutcome({
+      kind: 'saved',
+      fileName: 'passport-backup-2026-08-26.json',
+      location: 'my-passport.json, where you chose to save it',
+    });
+    expect(saved.headline).toBe('Saved as passport-backup-2026-08-26.json');
+    expect(saved.detail).toContain('my-passport.json, where you chose to save it');
+
+    const handed = describeExportOutcome({
+      kind: 'handed-to-browser',
+      fileName: 'passport-backup-2026-08-26.json',
+    });
+    expect(handed.headline).toBe('Download started — check your downloads folder');
+    expect(handed.detail).toMatch(/cannot confirm the save on this browser/);
+    expect(handed.detail).toContain('passport-backup-2026-08-26.json');
+    expect(handed.headline).not.toMatch(/Saved as/);
+    expect(handed.detail).not.toMatch(/Written to/);
+  });
+});
+
+describe('every name a restore wrote, accounted for', () => {
+  beforeEach(() => installStorage());
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'window');
+    vi.doUnmock('./midnames.js');
+    vi.resetModules();
+  });
+
+  it('counts a queued name into a bucket of its own rather than skipping it', async () => {
+    /* `confirmRestoredAliases` walked past a `queued` or `failed` record with
+       no counter and no reason, so the summary said "Names: 1 of 1" over a
+       registry line whose three buckets summed to nothing. */
+    vi.resetModules();
+    vi.doMock('./midnames.js', () => ({
+      MIDNAMES_INDEXER_URLS: { stagenet: '', preview: '', preprod: '', mainnet: '' },
+      resolveAliasTarget: async () => null,
+    }));
+    const module = await import('./backup.js');
+
+    const payload = contents();
+    payload.aliases.preview!.status = 'queued';
+    payload.aliases.preview!.queuedReason = 'the sponsor holds no NIGHT on preview right now';
+    payload.aliases.preprod = {
+      ...contents().aliases.preview!,
+      network: 'preprod',
+      status: 'failed',
+      queuedReason: 'the registration transaction was rejected',
+    };
+    const summary = await module.applyPassportBackup(payload);
+    expect(summary.aliases.restored).toBe(2);
+
+    /* `ghost` is the third case: a key the restore reported writing whose
+       record is not here to look up. All three used to `continue` in silence. */
+    const check = await module.confirmRestoredAliases([...summary.aliases.restoredKeys, 'ghost']);
+    expect(check.ran).toBe(true);
+    if (!check.ran) return;
+    expect(check.notRegistered).toBe(3);
+    expect(check.confirmed + check.unconfirmed + check.otherNetworks + check.notRegistered).toBe(3);
+    expect(check.notRegisteredReasons).toEqual([
+      { network: 'preview', reason: expect.stringMatching(/queued, not registered/) },
+      { network: 'preprod', reason: expect.stringMatching(/claim failed/) },
+      { network: 'ghost', reason: expect.stringMatching(/no name record/) },
+    ]);
+  });
+});
+
+describe('the one date in the payload that used to be checked as "a string"', () => {
+  it('hands its consumers a createdAt this module could read, or none at all', async () => {
+    const payload = contents();
+    payload.createdAt = 'the day before yesterday';
+    const opened = await openPassportBackup(await sealPassportBackup(payload, PASSWORD), PASSWORD);
+    expect(opened.createdAt).toBe('');
+    expect(describeBackupCreatedAt(opened.createdAt)).toBeNull();
+
+    // A readable one survives verbatim, because it is the file's own word.
+    const kept = await openPassportBackup(
+      await sealPassportBackup(contents(), PASSWORD),
+      PASSWORD,
+    );
+    expect(kept.createdAt).toBe('2026-08-19T09:00:00.000Z');
   });
 });

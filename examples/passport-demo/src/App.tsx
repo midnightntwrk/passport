@@ -4214,8 +4214,31 @@ export default function PassportDemo() {
 
   const restorePassportState = useCallback(
     async (file: File, password: string) => {
-      const { importPassportBackup } = await import('./identity/backup.js');
-      const summary = await importPassportBackup(file, password);
+      const { importPassportBackup, describeBackupCreatedAt } = await import(
+        './identity/backup.js'
+      );
+      /* A contract address that arrived in the file proves nothing on its
+         own, so the registry re-check asks the chain: does that contract
+         hold this Passport as a device? The device secret is derived under
+         user verification for the length of the question and zeroed after,
+         exactly as every other gated account call derives it. */
+      const provesOwnership = async (network: string, address: string): Promise<boolean> => {
+        const [{ accountHoldsDevice }, { MIDNAMES_INDEXER_URLS }] = await Promise.all([
+          import('./identity/accountCustody.js'),
+          import('./identity/midnames.js'),
+        ]);
+        const indexerHttpUrl = (MIDNAMES_INDEXER_URLS as Record<string, string | undefined>)[
+          network
+        ];
+        /* No indexer for that network means the question cannot be put, which
+           is not the same as "no": throwing keeps the two apart, and the
+           re-check words it as a check that could not run. */
+        if (!indexerHttpUrl) throw new Error(`No indexer is configured for ${network}.`);
+        return withAccountDeviceSecret((deviceSecret) =>
+          accountHoldsDevice({ indexerHttpUrl }, address, deviceSecret),
+        );
+      };
+      const summary = await importPassportBackup(file, password, undefined, provesOwnership);
       /* Done HERE, as part of the restore, rather than promised for later: a
          restored contract record is a claim made by a file, and until the
          indexer answers for its address this browser has no evidence the
@@ -4223,9 +4246,15 @@ export default function PassportDemo() {
          Backup screen reports what actually happened rather than what was
          going to happen. */
       const ledgerCheck = await confirmRestoredContracts(summary.passportContracts.restoredKeys);
+      /* The ACTIVITY LOG IS PERMANENT, so it may not carry a date this app
+         never read. `openPassportBackup` now normalises an unreadable
+         `createdAt` to absent, and this reads it through the same guard the
+         Backup screen uses rather than interpolating the file's own text — the
+         "Invalid Date" defect the screen took care to avoid, one layer up. */
+      const takenAt = describeBackupCreatedAt(summary.createdAt);
       addActivity({
         label: 'Passport backup restored',
-        detail: `From a backup taken ${summary.createdAt}: ${summary.aliases.restored}/${summary.aliases.found} name claim(s), ${summary.passportContracts.restored}/${summary.passportContracts.found} contract record(s), ${summary.incentives.restored}/${summary.incentives.found} reward(s) written to this browser.${
+        detail: `From a backup ${takenAt === null ? 'that carries no readable date' : `taken ${takenAt}`}: ${summary.aliases.restored}/${summary.aliases.found} name claim(s), ${summary.passportContracts.restored}/${summary.passportContracts.found} contract record(s), ${summary.incentives.restored}/${summary.incentives.found} reward(s) written to this browser.${
           ledgerCheck.ran
             ? ` ${ledgerCheck.confirmed} contract(s) confirmed on ${ledgerCheck.network} by the indexer; ${ledgerCheck.unconfirmed} not yet.`
             : ` Contracts were not re-checked against the chain: ${ledgerCheck.reason}`
@@ -4235,7 +4264,7 @@ export default function PassportDemo() {
       });
       return { ...summary, ledgerCheck };
     },
-    [addActivity, confirmRestoredContracts],
+    [addActivity, confirmRestoredContracts, withAccountDeviceSecret],
   );
 
   /**
