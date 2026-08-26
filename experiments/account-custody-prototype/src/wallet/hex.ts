@@ -4,6 +4,9 @@
 export function hexToBytes(hex: string): Uint8Array {
   const clean = hex.replace(/^0x/, '');
   if (clean.length % 2 !== 0) throw new Error(`odd-length hex: ${hex}`);
+  // parseInt would coerce a non-hex pair to NaN, which a Uint8Array then
+  // silently stores as 0 — a typo in a pasted secret must throw instead.
+  if (!/^[0-9a-fA-F]*$/.test(clean)) throw new Error(`invalid hex character in: ${hex}`);
   const out = new Uint8Array(clean.length / 2);
   for (let i = 0; i < out.length; i++) {
     out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
