@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23E52321'/><text x='50' y='74' font-size='68' font-weight='700' font-family='Arial,Helvetica,sans-serif' fill='%23FFFFFF' text-anchor='middle'>P</text></svg>">
+<title>Midnight Passport — The Plan</title>
+<meta name="description" content="The Midnight Passport working surface: ten promises, twenty-six component canvases, the dependency graph, the open decisions, and the parallelisation map.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+
+  .container {
+    max-width: clamp(820px, 76vw, 1280px);
+    margin: 0 auto;
+    padding: 0 clamp(24px, 5vw, 80px);
+    width: 100%;
+  }
+  .container.wide { max-width: clamp(820px, 92vw, 1600px); }
+
+  /* ---------- Hero ---------- */
+
+  section.hero { padding: 56px 0 40px; }
+
+  .doc-logo, .doc-logo-dark { height: clamp(40px, 4vw, 64px); margin-bottom: 32px; }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.2rem, 4.6vw, 3.4rem);
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    margin-bottom: 18px;
+    color: var(--text);
+  }
+  .plan-jump {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 14px;
+    margin-top: 22px;
+  }
+  .plan-jump-label {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+  }
+  .plan-jump a {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-mute);
+    text-decoration: none;
+    border-bottom: 1px solid var(--line);
+    transition: color .12s ease, border-color .12s ease;
+  }
+  .plan-jump a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
+
+  p.subtitle {
+    font-size: 1.1rem;
+    color: var(--text-mute);
+    font-weight: 300;
+    line-height: 1.55;
+    max-width: 66ch;
+    margin-bottom: 0;
+  }
+
+  /* ---------- Section heads ---------- */
+
+  .section-head { margin-bottom: 32px; }
+  .section-head h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.7rem, 3vw, 2.4rem);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+  .section-head p {
+    color: var(--text-mute);
+    max-width: 70ch;
+  }
+
+  /* ---------- Promises ---------- */
+
+  section.promises {
+    padding: 48px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .promises-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+    gap: 18px;
+  }
+
+  .promise-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 22px 22px 16px;
+    background: var(--bg);
+    color: inherit;
+    text-align: left;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease, transform .15s ease;
+  }
+  .promise-card:hover {
+    border-color: var(--iog-infared);
+    background: var(--bg-soft);
+    transform: translateY(-1px);
+  }
+  .promise-card:focus-visible {
+    outline: 2px solid var(--iog-infared);
+    outline-offset: 2px;
+  }
+
+  .promise-card-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .promise-id {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--iog-infared);
+    letter-spacing: 0.06em;
+  }
+  .promise-name {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    margin: 0;
+  }
+  .promise-statement {
+    font-size: 0.94rem;
+    color: var(--text-mute);
+    line-height: 1.55;
+    flex: 1;
+    margin: 0;
+  }
+  .promise-card-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-top: 12px;
+    border-top: 1px dashed var(--line);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+  }
+  .promise-card:hover .promise-card-foot { color: var(--iog-infared); }
+  .promise-arrow { transition: transform .12s ease; }
+  .promise-card:hover .promise-arrow { transform: translateX(2px); }
+
+  /* ---------- Principle history (below promises, collapsed) ---------- */
+
+  details.history-details {
+    margin-top: 40px;
+    padding-top: 28px;
+    border-top: 1px dashed var(--line);
+  }
+  details.history-details > summary {
+    cursor: pointer;
+    list-style: none;
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-mute);
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    padding: 10px 16px;
+    transition: border-color .12s ease, color .12s ease;
+  }
+  details.history-details > summary::-webkit-details-marker { display: none; }
+  details.history-details > summary:hover { border-color: var(--iog-infared); color: var(--iog-infared); }
+  .principle-history {
+    margin-top: 24px;
+  }
+  .history-head { margin-bottom: 24px; }
+  .history-head p {
+    font-size: 0.96rem;
+    color: var(--text-mute);
+    line-height: 1.6;
+    max-width: 78ch;
+  }
+  .history-head em {
+    font-style: normal;
+    color: var(--text);
+    font-weight: 600;
+    background: var(--bg-soft);
+    padding: 0 5px;
+    border-radius: 3px;
+    font-size: 0.92em;
+  }
+
+  .mapping-table-wrap {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow-x: auto;
+    margin-bottom: 18px;
+  }
+  .mapping-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg);
+    min-width: 640px;
+  }
+  .mapping-table thead th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-faint);
+    padding: 12px 16px;
+    background: var(--bg-soft);
+    border-bottom: 1px solid var(--line);
+  }
+  .mapping-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.92rem;
+    color: var(--text);
+    vertical-align: top;
+    line-height: 1.55;
+  }
+  .mapping-table tbody tr:last-child td { border-bottom: 0; }
+  .mapping-table .op-id {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--iog-infared);
+    margin-right: 6px;
+  }
+  .disp {
+    font-family: var(--font-mono);
+    font-size: 0.84rem;
+    color: var(--text-mute);
+  }
+  .map-pill {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--iog-infared);
+    border: 1px solid var(--iog-infared);
+    border-radius: 4px;
+    padding: 1px 7px;
+    text-decoration: none;
+    margin-right: 4px;
+    transition: background .12s ease;
+    background: transparent;
+    cursor: pointer;
+  }
+  .map-pill:hover { background: var(--bad-soft); }
+  .map-note {
+    font-size: 0.86rem;
+    color: var(--text-mute);
+    margin-left: 6px;
+  }
+  .mapping-additions {
+    font-size: 0.95rem;
+    color: var(--text-mute);
+    line-height: 1.7;
+    padding: 16px 20px 8px;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom: 0;
+  }
+  .mapping-additions strong { color: var(--text); font-weight: 600; }
+
+  .mapping-implicit {
+    list-style: none;
+    margin: 0;
+    padding: 0 20px 16px;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    display: grid;
+    gap: 8px;
+  }
+  .mapping-implicit li {
+    display: grid;
+    grid-template-columns: 44px auto 1fr;
+    gap: 10px;
+    align-items: baseline;
+    font-size: 0.92rem;
+    color: var(--text-mute);
+    line-height: 1.55;
+    padding: 8px 0;
+    border-top: 1px dashed var(--line);
+  }
+  .mapping-implicit li:first-child { border-top: 0; padding-top: 4px; }
+  .mapping-implicit .map-pill { margin-right: 0; }
+  .imp-name {
+    font-family: var(--font-display);
+    font-weight: 600;
+    color: var(--text);
+    font-size: 0.96rem;
+  }
+  .imp-source { color: var(--text-mute); }
+  .imp-source code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+  }
+  @media (max-width: 640px) {
+    .mapping-implicit li { grid-template-columns: 44px 1fr; }
+    .mapping-implicit .imp-source { grid-column: 2 / -1; }
+  }
+
+  /* ---------- Components table ---------- */
+
+  section.components-table {
+    padding: 48px 0 56px;
+    border-top: 1px solid var(--line);
+  }
+
+  .table-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 24px 0 18px;
+  }
+  .table-controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 18px;
+    align-items: center;
+  }
+
+  .search-input {
+    flex: 1 1 320px;
+    min-width: 240px;
+    padding: 11px 14px;
+    font-family: inherit;
+    font-size: 0.94rem;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    transition: border-color .12s ease, box-shadow .12s ease;
+  }
+  .search-input::placeholder { color: var(--text-faint); }
+  .search-input:focus {
+    outline: none;
+    border-color: var(--iog-infared);
+  }
+
+  .filter-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .filter-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+  }
+
+  .promise-filters { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+
+  .filter-pill {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    font-weight: 600;
+    background: transparent;
+    color: var(--text-mute);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: border-color .12s ease, color .12s ease, background .12s ease;
+    letter-spacing: 0.04em;
+  }
+  .filter-pill:hover {
+    border-color: var(--iog-infared);
+    color: var(--iog-infared);
+  }
+  .filter-pill[aria-pressed="true"] {
+    background: var(--bad-soft);
+    border-color: var(--iog-infared);
+    color: var(--iog-infared);
+  }
+
+  .category-select {
+    padding: 7px 12px;
+    font-family: inherit;
+    font-size: 0.88rem;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .category-select:focus { outline: none; border-color: var(--iog-infared); }
+
+  .clear-filters {
+    background: transparent;
+    border: 0;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    cursor: pointer;
+    padding: 4px 4px;
+  }
+  .clear-filters:hover { color: var(--iog-infared); }
+
+  .result-count {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text-faint);
+    letter-spacing: 0.04em;
+  }
+
+  .comp-table-wrap {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+
+  .comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg);
+  }
+  .comp-table thead th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-faint);
+    padding: 12px 16px;
+    background: var(--bg-soft);
+    border-bottom: 1px solid var(--line);
+  }
+  .comp-table tbody td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .comp-table tbody tr:last-child td { border-bottom: 0; }
+  .comp-row {
+    cursor: pointer;
+    transition: background .12s ease;
+  }
+  .comp-row:hover { background: var(--bg-soft); }
+  .comp-row:focus-visible {
+    outline: 2px solid var(--iog-infared);
+    outline-offset: -2px;
+  }
+  .comp-row.is-empty td {
+    text-align: center;
+    color: var(--text-faint);
+    font-style: italic;
+    padding: 36px 16px;
+  }
+
+  .col-id { width: 64px; }
+  .col-cat { width: 22%; }
+  .col-serves { width: 22%; }
+  .col-flag { width: 110px; }
+  @media (max-width: 900px) {
+    .col-cat, .col-serves, .col-flag { display: none; }
+    .comp-table thead .col-cat,
+    .comp-table thead .col-serves,
+    .comp-table thead .col-flag { display: none; }
+  }
+
+  .comp-id {
+    font-family: var(--font-mono);
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: var(--iog-infared);
+    letter-spacing: 0.04em;
+  }
+  .comp-name {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .comp-outcome {
+    font-size: 0.86rem;
+    color: var(--text-mute);
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .comp-category {
+    font-size: 0.86rem;
+    color: var(--text-mute);
+  }
+  .comp-serves-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .serves-pill {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--iog-infared);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 7px;
+    letter-spacing: 0.04em;
+    background: transparent;
+  }
+  .ws-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--iog-infared);
+    background: var(--bad-soft);
+    border: 1px solid var(--iog-infared);
+    border-radius: 4px;
+    padding: 2px 8px;
+  }
+  .done-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--good);
+    background: var(--good-soft);
+    border: 1px solid var(--good);
+    border-radius: 4px;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
+  .decided-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--info);
+    background: var(--info-soft);
+    border: 1px solid var(--info);
+    border-radius: 4px;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
+
+  /* ---------- Dependency graph ---------- */
+
+  section.graph {
+    padding: 56px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .graph-shell {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg-soft);
+    overflow: hidden;
+    height: 720px;
+    box-shadow: 0 1px 0 var(--line);
+  }
+  @media (max-width: 900px) {
+    .graph-shell { height: 560px; }
+  }
+
+  .cy-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .graph-fallback {
+    margin: 24px;
+    padding: 14px 18px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 8px;
+    color: var(--text-mute);
+    font-size: 0.92rem;
+    max-width: 60ch;
+  }
+
+  .graph-controls {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 5;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .graph-toggle {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: var(--bg);
+    color: var(--text-mute);
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    padding: 7px 12px;
+    cursor: pointer;
+    transition: border-color .12s ease, color .12s ease, background .12s ease;
+  }
+  .graph-toggle:hover {
+    border-color: var(--iog-infared);
+    color: var(--iog-infared);
+  }
+  .graph-toggle[aria-pressed="true"] {
+    background: var(--bad-soft);
+    border-color: var(--iog-infared);
+    color: var(--iog-infared);
+  }
+
+  .graph-legend {
+    position: absolute;
+    left: 14px;
+    bottom: 14px;
+    z-index: 5;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-mute);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .legend-swatch {
+    width: 16px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1.5px solid var(--card-stroke-soft);
+    background: var(--card-fill);
+  }
+  .legend-swatch.core { background: var(--iog-volt-yellow); border-color: var(--card-stroke); }
+  .legend-swatch.workstream { background: var(--bad-soft); border-color: var(--iog-infared); }
+  .legend-swatch.specified { background: var(--good-soft); border-color: var(--good); }
+  .legend-swatch.decided { background: var(--info-soft); border-color: var(--info); }
+  .legend-swatch.component { background: var(--card-fill); border-color: var(--card-stroke-soft); }
+  .legend-swatch.edge-hard,
+  .legend-swatch.edge-assoc {
+    height: 0;
+    border-top: 1.5px solid var(--line-strong);
+    background: transparent;
+    border-radius: 0;
+    border-left: 0; border-right: 0; border-bottom: 0;
+  }
+  .legend-swatch.edge-assoc { border-top-style: dashed; }
+
+  /* ---------- Decision cards ---------- */
+
+  section.decisions {
+    padding: 48px 0 56px;
+    border-top: 1px solid var(--line);
+  }
+  .decision-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+    gap: 14px;
+  }
+  .decision-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 20px 22px;
+    background: var(--bg);
+    color: inherit;
+    text-align: left;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease, transform .15s ease;
+  }
+  .decision-card:hover {
+    border-color: var(--iog-infared);
+    background: var(--bg-soft);
+    transform: translateY(-1px);
+  }
+  .decision-card:focus-visible {
+    outline: 2px solid var(--iog-infared);
+    outline-offset: 2px;
+  }
+  .decision-card-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .decision-id {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--iog-infared);
+    letter-spacing: 0.04em;
+  }
+  .decision-ws {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-faint);
+  }
+  .decision-resolved, .decision-open, .decision-partial {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border-radius: 4px;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
+  .decision-resolved { color: var(--good); background: var(--good-soft); border: 1px solid var(--good); }
+  .decision-open { color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn); }
+  .decision-partial { color: var(--info); background: var(--info-soft); border: 1px solid var(--info); }
+  .decision-q {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: var(--text);
+    margin: 0;
+    flex: 1;
+  }
+  .decision-venue {
+    font-size: 0.84rem;
+    color: var(--text-faint);
+    line-height: 1.5;
+    margin: 0;
+  }
+  .decision-cascade {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: baseline;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+  }
+  .decision-cascade-label {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    margin-right: 4px;
+  }
+  .decision-couplings {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    line-height: 1.6;
+  }
+
+  /* ---------- What remains ---------- */
+
+  section.what-remains {
+    padding: 48px 0 56px;
+    border-top: 1px solid var(--line);
+  }
+  .waiting-on-block { margin-bottom: 32px; }
+  .waiting-on-head {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 12px;
+  }
+  .waiting-on {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .waiting-row {
+    display: grid;
+    grid-template-columns: 190px 1fr auto;
+    gap: 16px;
+    align-items: baseline;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .waiting-row:last-child { border-bottom: none; }
+  .waiting-party {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--iog-infared);
+  }
+  .waiting-item {
+    font-size: 0.92rem;
+    color: var(--text-mute);
+    line-height: 1.5;
+    margin: 0;
+  }
+  .waiting-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  @media (max-width: 720px) {
+    .waiting-row { grid-template-columns: 1fr; gap: 6px; }
+  }
+  .next-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+    gap: 14px;
+  }
+  .next-card {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px 18px;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .next-lane {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--iog-infared);
+  }
+  .next-title {
+    font-family: var(--font-display);
+    font-size: 1.02rem;
+    font-weight: 500;
+    color: var(--text);
+    margin: 0;
+  }
+  .next-detail {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--text-mute);
+    margin: 0;
+    flex: 1;
+  }
+  .next-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .next-chip {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--text-mute);
+    background: transparent;
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease;
+  }
+  .next-chip:hover {
+    border-color: var(--iog-infared);
+    color: var(--text);
+  }
+
+  /* ---------- Parallelisation (streams × sequence) ---------- */
+
+  section.chart-section {
+    padding: 48px 0 64px;
+    border-top: 1px solid var(--line);
+  }
+
+  .legend {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin: 14px 0 18px;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text-mute);
+  }
+  .legend .legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--card-stroke); }
+  .legend .legend-swatch.discovery { background: transparent; border: 1.5px dashed var(--iog-dawn); }
+  .legend .legend-swatch.s1 { background: var(--iog-acid-green); }
+  .legend .legend-swatch.s2 { background: var(--iog-electric-blue); }
+  .legend .legend-swatch.s3 { background: var(--iog-volt-yellow); }
+  .legend .legend-swatch.s4 { background: var(--iog-cobalt-pulse); }
+  .legend .legend-swatch.s5 { background: var(--iog-ultraviolet); }
+  .legend .legend-swatch.s6 { background: var(--iog-hyper-pink); }
+  .legend .legend-swatch.critical {
+    width: 22px; height: 4px;
+    background: var(--iog-infared);
+    border: none; border-radius: 2px;
+    align-self: center;
+  }
+  .legend .legend-swatch.pivot-marker {
+    background: var(--bg-soft);
+    border: 2px solid var(--iog-infared);
+  }
+  .legend .legend-swatch.demo-phase { background: #FFBA36; }
+  .legend .legend-swatch.dimmed { background: var(--card-fill); border-color: var(--card-stroke-soft); opacity: 0.45; }
+
+  .chart-wrap {
+    background: var(--card-soft-fill);
+    border: 1px solid var(--card-stroke-faint);
+    border-radius: 6px;
+    padding: 20px 16px;
+    overflow-x: auto;
+  }
+  .chart-wrap svg { display: block; min-width: 1100px; }
+
+  .lane-bg { fill: transparent; }
+  .lane-bg.alt { fill: var(--bg-alt); }
+  .lane-divider { stroke: var(--line-strong); stroke-width: 1; opacity: 0.5; }
+  .lane-label { font-family: var(--font-display); font-size: 13px; font-weight: 600; fill: var(--svg-text); }
+  .axis-label { font-family: var(--font-mono); font-size: 11px; fill: var(--svg-text-mute); text-transform: uppercase; letter-spacing: 0.06em; }
+  .axis-tick { stroke: var(--line); stroke-width: 1; }
+
+  .node { stroke: var(--card-stroke); stroke-width: 1; }
+  .node.discovery { fill: transparent; stroke: var(--iog-dawn); stroke-dasharray: 4 3; stroke-width: 1.4; }
+  .node.s1 { fill: var(--iog-acid-green); }
+  .node.s2 { fill: var(--iog-electric-blue); }
+  .node.s3 { fill: var(--iog-volt-yellow); }
+  .node.s4 { fill: var(--iog-cobalt-pulse); }
+  .node.s5 { fill: var(--iog-ultraviolet); }
+  .node.s6 { fill: var(--iog-hyper-pink); }
+
+  .node-text { font-family: var(--font-mono); font-size: 11.5px; pointer-events: none; }
+  .node-text.dark { fill: #0A0A0A; }
+  .node-text.light { fill: #FFFFFF; }
+  .node-text.discovery { fill: var(--svg-text); }
+  .node-id { font-weight: 600; }
+
+  .chart-wrap svg.streams { min-width: 1300px; }
+  svg.streams .stream-node { cursor: pointer; transition: opacity 0.15s ease; }
+  svg.streams .stream-edge,
+  svg.streams .critical-path-line { transition: opacity 0.15s ease, stroke-width 0.15s ease; }
+  svg.streams.has-selection .stream-node:not(.in-path):not(.selected) { opacity: 0.16; }
+  svg.streams.has-selection .stream-edge:not(.path-active) { opacity: 0.04; }
+  svg.streams.has-selection .stream-edge.path-active { opacity: 0.85; stroke-width: 1.5; }
+  svg.streams.has-selection .critical-path-line { opacity: 0.08; }
+  svg.streams .stream-node.selected .node { stroke: var(--iog-infared); stroke-width: 2.5; }
+  .stream-node .node { stroke: var(--card-stroke); stroke-width: 1; }
+  .stream-node.pivot .node { stroke: var(--iog-infared); stroke-width: 2.5; }
+  /* Specified / decided components are settled — dim them so the
+     un-started band reads as the staffable frontier. */
+  svg.streams:not(.has-selection) .stream-node.st-specified { opacity: 0.42; }
+  svg.streams:not(.has-selection) .stream-node.st-decided { opacity: 0.62; }
+  .stream-edge { fill: none; stroke: var(--text-mute); stroke-width: 1; opacity: 0.18; }
+  .critical-path-line {
+    fill: none;
+    stroke: var(--iog-infared);
+    stroke-width: 9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.22;
+  }
+  .pivot-badge {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    font-weight: 600;
+    fill: var(--iog-infared);
+    letter-spacing: 0.06em;
+    pointer-events: none;
+  }
+
+  svg.streams .demo-phase { cursor: pointer; transition: opacity 0.15s ease; }
+  svg.streams .demo-phase rect {
+    fill: #FFBA36;
+    stroke: var(--card-stroke);
+    stroke-width: 1;
+  }
+  svg.streams .demo-phase-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    fill: #0A0A0A;
+    pointer-events: none;
+  }
+  svg.streams.has-selection .demo-phase:not(.selected) { opacity: 0.16; }
+  svg.streams .demo-phase.selected rect { stroke: var(--iog-infared); stroke-width: 2.5; }
+
+  .footnote {
+    color: var(--text-mute);
+    font-size: 0.92rem;
+    margin-top: 18px;
+    max-width: 60rem;
+  }
+  .footnote code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--bg-code);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* ---------- Footer (wide container override) ---------- */
+
+  footer.landing-footer { max-width: clamp(820px, 92vw, 1600px); }
+</style>
+</head>
+<body>
+
+<nav class="navbar" aria-label="Primary">
+  <a class="navbar-brand" href="index.html">Midnight Passport <span class="brand-tag">· ARC</span></a>
+  <div class="navbar-links">
+    <a href="index.html">Overview</a>
+    <a href="demo.html">How it works</a>
+    <a href="standards.html">Standards</a>
+    <a href="architecture.html">Architecture</a>
+    <a href="plan.html" class="active">Plan</a>
+  </div>
+</nav>
+
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle colour scheme" title="Auto · Light · Dark">
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+  </svg>
+</button>
+
+<main>
+
+  <section class="hero">
+    <div class="container">
+      <img class="doc-logo" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red POS.png" alt="Input Output">
+      <img class="doc-logo-dark" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red NEG.png" alt="Input Output">
+
+      <div class="kind">ARC · Working surface</div>
+      <h1>The plan</h1>
+      <p class="subtitle">The working surface behind the site: the ten promises v1.0 must hold, the twenty-six component canvases that keep them, the dependency structure between them, the decision spaces still open, and how the work splits across teams. Newcomers should start at the <a href="index.html">overview</a>; this page is for working the plan.</p>
+
+      <nav class="plan-jump" aria-label="On this page">
+        <span class="plan-jump-label">On this page</span>
+        <a href="#promises">Promises</a>
+        <a href="#components">Components</a>
+        <a href="#dependencies-graph">Graph</a>
+        <a href="#decisions">Decisions</a>
+        <a href="#what-remains">What remains</a>
+        <a href="#parallelisation">Parallelisation</a>
+      </nav>
+    </div>
+  </section>
+
+  <section class="promises" id="promises">
+    <div class="container wide">
+      <header class="section-head">
+        <div class="section-kind">Section 1</div>
+        <h2>The promises</h2>
+        <p>Ten user-facing invariants that v1.0 must hold. Each is stated as something a user (or ecosystem partner) can rely on, with falsifiable invariants underneath. Click any card to see its full statement, the testable invariants, and the components that serve it.</p>
+      </header>
+      <div id="promisesGrid" class="promises-grid"></div>
+
+      <details class="history-details">
+        <summary>How we got here — from the secure-onboarding six to the working ten</summary>
+      <div class="principle-history">
+        <header class="history-head">
+          <p>
+            Pass 1 of the planning work started from the six principles in the secure-onboarding document — <em>Key-bound TEE; ZK witnesses</em>, <em>Single seed, three wallets</em>, <em>Chain abstraction via intent</em>, <em>One key per device</em>, <em>Privacy-by-design identity</em>, and <em>Seedless UX</em>. The ten promises above are not a different vision — they are the same six pressure-tested for falsifiability, with mechanism statements peeled off and previously-implicit assumptions made explicit so each can be individually tested. Every promise traces back to something the original document said or assumed; nothing here is invented.
+          </p>
+        </header>
+
+        <div class="mapping-table-wrap">
+          <table class="mapping-table">
+            <thead>
+              <tr>
+                <th style="width:34%;">Original principle</th>
+                <th style="width:18%;">Disposition</th>
+                <th>New mapping</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="op-id">#1</span> Key-bound TEE; ZK witnesses</td>
+                <td><span class="disp">Split, abstracted</span></td>
+                <td>
+                  <button class="map-pill" data-promise="P6" type="button">P6</button>
+                  <span class="map-note">TEE specificity removed; ZK witnesses move to mechanism layer.</span>
+                </td>
+              </tr>
+              <tr>
+                <td><span class="op-id">#2</span> Single seed, three wallets</td>
+                <td><span class="disp">Dropped</span></td>
+                <td><span class="map-note">Implementation specification, not a v1.0 invariant.</span></td>
+              </tr>
+              <tr>
+                <td><span class="op-id">#3</span> Chain abstraction via intent</td>
+                <td><span class="disp">Preserved, promoted</span></td>
+                <td>
+                  <button class="map-pill" data-promise="P10" type="button">P10</button>
+                  <span class="map-note">Same concept, now stated as a v1.0 promise instead of a later-milestone concern.</span>
+                </td>
+              </tr>
+              <tr>
+                <td><span class="op-id">#4</span> One key per device</td>
+                <td><span class="disp">Rewritten, split</span></td>
+                <td>
+                  <button class="map-pill" data-promise="P3" type="button">P3</button><button class="map-pill" data-promise="P6" type="button">P6</button><button class="map-pill" data-promise="P7" type="button">P7</button>
+                  <span class="map-note">Mechanism statement; surfaces multi-device peerage, no exfiltration, and scoped grants as separate principles.</span>
+                </td>
+              </tr>
+              <tr>
+                <td><span class="op-id">#5</span> Privacy-by-design identity</td>
+                <td><span class="disp">Kept, renamed</span></td>
+                <td>
+                  <button class="map-pill" data-promise="P9" type="button">P9</button>
+                  <span class="map-note">Renamed for sharper testability.</span>
+                </td>
+              </tr>
+              <tr>
+                <td><span class="op-id">#6</span> Seedless UX</td>
+                <td><span class="disp">Split</span></td>
+                <td>
+                  <button class="map-pill" data-promise="P1" type="button">P1</button><button class="map-pill" data-promise="P5" type="button">P5</button>
+                  <span class="map-note">No-mnemonic UX is P1; total-loss recovery without seed is P5.</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="mapping-additions">
+          <strong>Five made explicit</strong> — promises that were implicit in the original document and surfaced as their own principles by Pass 1's pressure-testing.
+        </p>
+        <ul class="mapping-implicit">
+          <li><button class="map-pill" data-promise="P2" type="button">P2</button><span class="imp-name">Named</span><span class="imp-source">— the original mentioned the named-account handle throughout, but never elevated naming to a principle.</span></li>
+          <li><button class="map-pill" data-promise="P3" type="button">P3</button><span class="imp-name">Peer-device</span><span class="imp-source">— implicit in #4; multi-device peerage was the premise of the device-add flow.</span></li>
+          <li><button class="map-pill" data-promise="P4" type="button">P4</button><span class="imp-name">Revoke-and-continue</span><span class="imp-source">— implicit in the multi-device story; the QR-code device-add flow shadowed a revoke-old-and-continue mode.</span></li>
+          <li><button class="map-pill" data-promise="P7" type="button">P7</button><span class="imp-name">Scoped grants</span><span class="imp-source">— function-call keys appeared as a sub-feature of #4 but were never named as their own primitive.</span></li>
+          <li><button class="map-pill" data-promise="P8" type="button">P8</button><span class="imp-name">Chain-only</span><span class="imp-source">— assumed throughout the document (no operator was required for any flow), but never stated as a constraint.</span></li>
+        </ul>
+      </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="components-table" id="components">
+    <div class="container wide">
+      <header class="section-head">
+        <div class="section-kind">Section 2</div>
+        <h2>The components</h2>
+        <p>Every functional surface Passport needs to deliver, in a single searchable list. Filter by promise, category, or open-decision status. Click any row to open the component's full canvas — outcome, dependencies, alternatives, open questions, failure modes.</p>
+      </header>
+
+      <div class="table-controls">
+        <div class="table-controls-row">
+          <input type="search" id="compSearch" class="search-input" placeholder="Search id, name, outcome, alternatives, questions, failure modes…" aria-label="Search components">
+        </div>
+        <div class="table-controls-row">
+          <div class="filter-group">
+            <span class="filter-label">Promise</span>
+            <div class="promise-filters" id="promiseFilters" role="group" aria-label="Filter by promise"></div>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">Category</span>
+            <select id="categoryFilter" class="category-select" aria-label="Filter by category">
+              <option value="">All categories</option>
+            </select>
+          </div>
+          <button class="filter-pill" id="workstreamOnly" type="button" aria-pressed="false">
+            Open decisions only
+          </button>
+          <button class="filter-pill" id="specifiedOnly" type="button" aria-pressed="false">
+            ✓ Decided / specified only
+          </button>
+          <button class="clear-filters" id="clearFilters" type="button">Clear</button>
+          <span class="result-count" id="resultCount" aria-live="polite"></span>
+        </div>
+      </div>
+
+      <div class="comp-table-wrap">
+        <table class="comp-table">
+          <thead>
+            <tr>
+              <th class="col-id">ID</th>
+              <th class="col-name">Component</th>
+              <th class="col-cat">Category</th>
+              <th class="col-serves">Serves</th>
+              <th class="col-flag"></th>
+            </tr>
+          </thead>
+          <tbody id="compTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="graph" id="dependencies-graph">
+    <div class="container wide">
+      <header class="section-head">
+        <div class="section-kind">Section 3</div>
+        <h2>The dependency graph</h2>
+        <p>Hard-precedence edges between components (B must be settled before A); the identity-and-account core is collapsed into one super-node — click it to see what it contains. Click any other node to open its design space. Toggle the associations to see softer "interacts-with" edges.</p>
+      </header>
+
+      <div class="graph-shell">
+        <div id="cy" class="cy-canvas">
+          <p class="graph-fallback">The interactive graph needs its CDN-loaded layout library, which did not load here. The component table above and the parallelisation chart below carry the same dependency data.</p>
+        </div>
+
+        <div class="graph-controls">
+          <button class="graph-toggle" id="toggleAssoc" type="button" aria-pressed="false"
+                  title="Show or hide 'associations' — soft co-design edges, not hard precedence">
+            Show associations
+          </button>
+        </div>
+
+        <div class="graph-legend" aria-hidden="true">
+          <span class="legend-item"><span class="legend-swatch core"></span> Core (SCC)</span>
+          <span class="legend-item"><span class="legend-swatch workstream"></span> Open decision</span>
+          <span class="legend-item"><span class="legend-swatch specified"></span> Specified</span>
+          <span class="legend-item"><span class="legend-swatch decided"></span> Decided</span>
+          <span class="legend-item"><span class="legend-swatch component"></span> Component</span>
+          <span class="legend-item"><span class="legend-swatch edge-hard"></span> Hard precedence</span>
+          <span class="legend-item"><span class="legend-swatch edge-assoc"></span> Association</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="decisions" id="decisions">
+    <div class="container wide">
+      <header class="section-head">
+        <div class="section-kind">Section 4</div>
+        <h2>The decision spaces</h2>
+        <p>Five decision spaces whose answers cascade into multiple component canvases — one resolved, one partially resolved (the fee mechanism is settled, the operator model is open), three open. Each open card names where the decision actually gets made. The bigger the fan-out, the more downstream design unlocks once the question is answered. Click a card for the full framing, its cascade, and its cross-couplings.</p>
+      </header>
+
+      <div class="decision-cards" id="decisionCards"></div>
+    </div>
+  </section>
+
+  <section class="what-remains" id="what-remains">
+    <div class="container wide">
+      <header class="section-head">
+        <div class="section-kind">Section 5</div>
+        <h2>What remains, by lane</h2>
+        <p>Everything still between here and a ratified, feature-complete v1.0 — standards to draft, reviews commissioned as acceptance criteria, evidence still to gather, client policies to pin down, and the workstreams that remain open decision spaces. Component chips open the canvas in place.</p>
+      </header>
+
+      <div class="waiting-on-block">
+        <h3 class="waiting-on-head">Waiting on — one row per external party</h3>
+        <div class="waiting-on" id="waitingOn"></div>
+      </div>
+
+      <div class="next-grid" id="nextSteps"></div>
+    </div>
+  </section>
+
+  <section class="chart-section" id="parallelisation">
+    <div class="container wide">
+      <header class="section-head">
+        <div class="section-kind">Section 6</div>
+        <h2>Parallelisation — streams &times; sequence</h2>
+        <p>How v1.0 work splits across teams: six streams plus a discovery lane, laid out left-to-right by global dep-depth (longest chain to each component, computed from <code>data.js</code>). Streams are not synchronised — gaps are real, indicating where a stream is idle waiting on something elsewhere. The thick red ribbon traces the longest dependency chain (the critical path); whatever sits on it sets the project's minimum duration. Two pivots are flagged: <strong>C1</strong> (the bidirectional core that everything identity-shaped flows through) and <strong>C8</strong> (the cross-cutting hash-discipline gate). Specified and decided components render dimmed, so the bright band is the staffable frontier. Below the streams sits the <strong>Demo phases</strong> lane; click a phase bar to spotlight its components.</p>
+      </header>
+
+      <div class="legend">
+        <span class="legend-item"><span class="legend-swatch discovery"></span>Discovery</span>
+        <span class="legend-item"><span class="legend-swatch s1"></span>1 · Cryptography</span>
+        <span class="legend-item"><span class="legend-swatch s2"></span>2 · Protocol &amp; on-chain</span>
+        <span class="legend-item"><span class="legend-swatch s3"></span>3 · Wallet runtime</span>
+        <span class="legend-item"><span class="legend-swatch s4"></span>4 · Recovery</span>
+        <span class="legend-item"><span class="legend-swatch s5"></span>5 · Credentials</span>
+        <span class="legend-item"><span class="legend-swatch s6"></span>6 · Ecosystem</span>
+        <span class="legend-item"><span class="legend-swatch critical"></span>Critical path</span>
+        <span class="legend-item"><span class="legend-swatch pivot-marker"></span>Pivot</span>
+        <span class="legend-item"><span class="legend-swatch demo-phase"></span>Demo phase</span>
+        <span class="legend-item"><span class="legend-swatch dimmed"></span>Specified / decided (dimmed)</span>
+      </div>
+
+      <div class="chart-wrap">
+        <svg id="streamsChart" class="streams" width="100%" preserveAspectRatio="xMinYMin meet" role="group" aria-label="Streams by sequence chart">
+          <!-- Populated at runtime from window.PASSPORT_DATA -->
+        </svg>
+      </div>
+      <p class="footnote">Components in the identity-and-account core (see <code>data.js</code> <code>core_scc</code>) all sit at the same depth — their internal ordering is a build-order choice, not a strict precedence. The critical path's representative through the core is <strong>C1</strong>. Node positions and depths recompute whenever <code>data.js</code> changes; the critical-path ribbon itself is a hand-maintained representative chain, revisited whenever the dependency data moves.</p>
+    </div>
+  </section>
+
+</main>
+
+<div class="panel-backdrop" id="panelBackdrop" aria-hidden="true"></div>
+<aside class="panel" id="panel" aria-hidden="true" aria-label="Detail panel">
+  <button class="panel-close" id="panelClose" aria-label="Close panel" title="Close">×</button>
+  <div class="panel-body" id="panelBody"></div>
+</aside>
+
+<footer class="landing-footer">
+  <span>ARC (Advanced Research and Creativity) · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="standards.html">standards</a></span>
+  <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/01<!--/DEPLOY--></span>
+</footer>
+
+<script src="https://unpkg.com/cytoscape@3.30.4/dist/cytoscape.min.js" integrity="sha384-H3uzGzTfGHUAumB8+s4GEdfFwzAceN9wCCndN8AXubWKFIPuBSWKKtWDx7RhSf/z" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/layout-base@2.0.1/layout-base.js" integrity="sha384-5E2lB9AIGE6LRCnOOSTnZRlYZFZ01iMeN2fw97Z1r4Z/kXALxKw2AC+ZzQqoeDsG" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cose-base@2.2.0/cose-base.js" integrity="sha384-RswRBkrMsPUYpJLbZ1CVA08zbNzAkykE2oGJTujBwfjWNdfxv2WVjLJNqv1LhAOp" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js" integrity="sha384-uk5Wbjq1+KqUdHO30w7N7GrEGdzBhaJeW9o/ANF6v9+yx3M/cBmoX51C000JNCUf" crossorigin="anonymous"></script>
+<script>
+  if (window.cytoscape && window.cytoscapeFcose) {
+    window.cytoscape.use(window.cytoscapeFcose);
+  }
+</script>
+<script src="data.js"></script>
+<script src="panel.js"></script>
+<script src="app.js"></script>
+<script>
+  // Streams × sequence — depths from data.js, critical path overlay,
+  // pivot markers. Rendered into <svg id="streamsChart">.
+  (function() {
+    const svg = document.getElementById('streamsChart');
+    if (!svg) return;
+    if (!window.PASSPORT_DATA || !Array.isArray(window.PASSPORT_DATA.components)) return;
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const data = window.PASSPORT_DATA;
+    const components = data.components;
+    const CORE = new Set(data.core_scc || []);
+
+    const depMap = {};
+    for (const c of components) depMap[c.id] = c.hard_deps || [];
+
+    // Compute longest-chain depth, condensing the SCC into one bundle.
+    const memo = {};
+    function depthOf(id) {
+      if (CORE.has(id)) {
+        if ('CORE' in memo) return memo.CORE;
+        memo.CORE = 0;  // recursion guard
+        let maxD = -1;
+        for (const m of CORE) {
+          for (const dep of (depMap[m] || [])) {
+            if (CORE.has(dep)) continue;
+            maxD = Math.max(maxD, depthOf(dep));
+          }
+        }
+        memo.CORE = maxD + 1;
+        return memo.CORE;
+      }
+      if (id in memo) return memo[id];
+      memo[id] = 0;  // recursion guard
+      let maxD = -1;
+      for (const dep of (depMap[id] || [])) {
+        maxD = Math.max(maxD, depthOf(dep));
+      }
+      memo[id] = maxD + 1;
+      return memo[id];
+    }
+
+    const depths = {};
+    for (const c of components) depths[c.id] = depthOf(c.id);
+    const maxDepth = Math.max(...Object.values(depths));
+
+    // Stream assignment.
+    const STREAM_OF = {
+      C3: 0, C4: 0, C22: 0, C24: 0, C25: 0,
+      C5: 1, C6: 1, C7: 1, C8: 1,
+      C1: 2, C2: 2, C10: 2, C11: 2, C12: 2,
+      C9: 3, C13: 3, C16: 3, C17: 3,
+      C14: 4, C15: 4,
+      C18: 5, C19: 5, C20: 5, C21: 5,
+      C23: 6, C26: 6,
+    };
+    const STREAMS = [
+      { name: 'Discovery',                cls: 'discovery', textCls: 'discovery' },
+      { name: '1 · Cryptography',         cls: 's1',        textCls: 'dark' },
+      { name: '2 · Protocol & on-chain',  cls: 's2',        textCls: 'dark' },
+      { name: '3 · Wallet runtime',       cls: 's3',        textCls: 'dark' },
+      { name: '4 · Recovery',             cls: 's4',        textCls: 'light' },
+      { name: '5 · Credentials',          cls: 's5',        textCls: 'light' },
+      { name: '6 · Ecosystem',            cls: 's6',        textCls: 'dark' },
+    ];
+
+    // Bin each component into (stream, depth).
+    const cells = STREAMS.map(() => ({}));
+    for (const id in depths) {
+      const s = STREAM_OF[id];
+      if (s === undefined) continue;
+      const d = depths[id];
+      cells[s][d] = cells[s][d] || [];
+      cells[s][d].push(id);
+    }
+
+    // Sub-rows per stream (max simultaneous occupancy at any depth).
+    const subRows = STREAMS.map((_, s) => {
+      let max = 1;
+      for (const d in cells[s]) max = Math.max(max, cells[s][d].length);
+      return max;
+    });
+
+    // Layout constants.
+    const LEFT_MARGIN = 220, RIGHT_MARGIN = 30, COL_WIDTH = 140;
+    const HEADER_HEIGHT = 50, LANE_HEADER_HEIGHT = 24, SUB_ROW_HEIGHT = 44, LANE_PAD = 4;
+    const NODE_WIDTH = 122, NODE_HEIGHT = 38;
+
+    const totalWidth = LEFT_MARGIN + (maxDepth + 1) * COL_WIDTH + RIGHT_MARGIN;
+    const laneTops = [];
+    let cy = HEADER_HEIGHT;
+    for (let s = 0; s < STREAMS.length; s++) {
+      laneTops.push(cy);
+      cy += LANE_HEADER_HEIGHT + subRows[s] * SUB_ROW_HEIGHT + LANE_PAD;
+    }
+    const streamsBottom = cy;
+
+    // Demo phase data — only phases that actually carry components in this map.
+    const phases = (data.demo_phases || []).filter(p => (p.components || []).length > 0);
+    phases.forEach(p => {
+      const ds = (p.components || []).map(id => depths[id]).filter(d => typeof d === 'number');
+      p.minDepth = ds.length ? Math.min(...ds) : 0;
+      p.maxDepth = ds.length ? Math.max(...ds) : maxDepth;
+    });
+    const demoLaneTop = streamsBottom;
+    const demoLaneHeight = phases.length > 0
+      ? LANE_HEADER_HEIGHT + phases.length * SUB_ROW_HEIGHT
+      : 0;
+    const totalHeight = demoLaneTop + demoLaneHeight + 16;
+    svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
+
+    // Compute final node positions.
+    const POS = {};
+    for (let s = 0; s < STREAMS.length; s++) {
+      const subStart = laneTops[s] + LANE_HEADER_HEIGHT;
+      for (const d in cells[s]) {
+        cells[s][d].forEach((id, i) => {
+          POS[id] = {
+            cx: LEFT_MARGIN + parseInt(d) * COL_WIDTH + COL_WIDTH / 2,
+            cy: subStart + i * SUB_ROW_HEIGHT + SUB_ROW_HEIGHT / 2,
+            stream: s,
+            depth: parseInt(d),
+          };
+        });
+      }
+    }
+
+    function el(tag, attrs) {
+      const e = document.createElementNS(SVG_NS, tag);
+      if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
+      return e;
+    }
+
+    // Lane backgrounds.
+    for (let s = 0; s < STREAMS.length; s++) {
+      svg.appendChild(el('rect', {
+        x: 0, y: laneTops[s],
+        width: totalWidth,
+        height: LANE_HEADER_HEIGHT + subRows[s] * SUB_ROW_HEIGHT,
+        class: s % 2 === 0 ? 'lane-bg alt' : 'lane-bg',
+      }));
+    }
+
+    // Lane dividers.
+    for (let s = 1; s < STREAMS.length; s++) {
+      svg.appendChild(el('line', {
+        x1: 0, y1: laneTops[s], x2: totalWidth, y2: laneTops[s],
+        class: 'lane-divider',
+      }));
+    }
+
+    // Top axis: depth column labels + dashed verticals.
+    for (let d = 0; d <= maxDepth; d++) {
+      const x = LEFT_MARGIN + d * COL_WIDTH + COL_WIDTH / 2;
+      const text = el('text', { x, y: 30, 'text-anchor': 'middle', class: 'axis-label' });
+      text.textContent = `Depth ${d}`;
+      svg.appendChild(text);
+    }
+    for (let d = 0; d <= maxDepth + 1; d++) {
+      svg.appendChild(el('line', {
+        x1: LEFT_MARGIN + d * COL_WIDTH, y1: 38,
+        x2: LEFT_MARGIN + d * COL_WIDTH, y2: totalHeight - 8,
+        class: 'axis-tick', 'stroke-dasharray': '3 4',
+      }));
+    }
+
+    // Lane labels.
+    for (let s = 0; s < STREAMS.length; s++) {
+      const t = el('text', { x: 14, y: laneTops[s] + 16, class: 'lane-label' });
+      t.textContent = STREAMS[s].name;
+      svg.appendChild(t);
+    }
+
+    // Cross-stream forward edges (dimmed). Skip cycles + same-depth.
+    for (const c of components) {
+      const tgt = POS[c.id];
+      if (!tgt) continue;
+      for (const depId of (c.hard_deps || [])) {
+        const src = POS[depId];
+        if (!src) continue;
+        if (src.depth >= tgt.depth) continue;
+        const sx = src.cx + NODE_WIDTH / 2;
+        const tx = tgt.cx - NODE_WIDTH / 2;
+        const sy = src.cy, ty = tgt.cy;
+        const dx = (tx - sx) * 0.5;
+        svg.appendChild(el('path', {
+          d: `M ${sx} ${sy} C ${sx + dx} ${sy} ${tx - dx} ${ty} ${tx} ${ty}`,
+          class: 'stream-edge',
+          'data-from': depId,
+          'data-to': c.id,
+        }));
+      }
+    }
+
+    // Critical path ribbon: C8 → C1 (CORE rep) → C5 → C7 → C6 → C20 → C22 → C23.
+    const CRITICAL_PATH = ['C8', 'C1', 'C5', 'C7', 'C6', 'C20', 'C22', 'C23'];
+    const ribbonNodes = CRITICAL_PATH.map(id => POS[id]).filter(Boolean);
+    if (ribbonNodes.length > 1) {
+      let pathD = `M ${ribbonNodes[0].cx} ${ribbonNodes[0].cy}`;
+      for (let i = 1; i < ribbonNodes.length; i++) {
+        const prev = ribbonNodes[i - 1], curr = ribbonNodes[i];
+        const midX = (prev.cx + curr.cx) / 2;
+        pathD += ` C ${midX} ${prev.cy} ${midX} ${curr.cy} ${curr.cx} ${curr.cy}`;
+      }
+      svg.appendChild(el('path', { d: pathD, class: 'critical-path-line' }));
+    }
+
+    // Component nodes.
+    const PIVOTS = new Set(['C1', 'C8']);
+    // Short names for the second line. Aim for ≤16 chars to stay clear of
+    // the 122 px box at the current monospace size.
+    const SHORT_NAME = {
+      'Account-custody contract':         'Account contract',
+      'Name service':                     'Name service',
+      'DID surface':                      'DID surface',
+      'Asset custody model':              'Asset custody',
+      'Signing primitive':                'Signing',
+      'Proof generation':                 'Proof generation',
+      'Witness handling':                 'Witness',
+      'Domain-separation registry':       'Domain sep.',
+      'Device-bound authentication':      'Device auth',
+      'Scoped grant primitive':           'Grant primitive',
+      'Grant lifecycle':                  'Grant lifecycle',
+      'Chain-side enforcement':           'Enforcement',
+      'Lost-device flow':                 'Lost device',
+      'Total-loss recovery flow':         'Total-loss',
+      'Helper protocol':                  'Helper protocol',
+      'Wallet local storage':             'Wallet storage',
+      'View-key + indexer (sync)':        'View-key sync',
+      'Attestation tree':                 'Attestation',
+      'Credential issuance':              'Issuance',
+      'Selective-disclosure proof':       'Sel. disclosure',
+      'Nullifier':                        'Nullifier',
+      'Intent surface':                   'Intent surface',
+      'dApp connection protocol':         'dApp protocol',
+      'Fee model':                        'Fee model',
+      'Cross-chain integration interface':'Cross-chain',
+      'AI Agent skills':                  'Agent skills',
+    };
+    function shortName(name) {
+      return SHORT_NAME[name] || name;
+    }
+
+    for (const id in POS) {
+      const pos = POS[id];
+      const stream = STREAMS[pos.stream];
+      const isPivot = PIVOTS.has(id);
+      const comp = components.find(c => c.id === id);
+      // Specified / decided components render dimmed so the un-started
+      // band reads directly as the staffable frontier.
+      const statusCls = comp && comp.status === 'specified' ? ' st-specified'
+        : comp && comp.status === 'decided' ? ' st-decided' : '';
+      const g = el('g', {
+        class: 'stream-node' + (isPivot ? ' pivot' : '') + statusCls,
+        'data-id': id,
+        'data-component': id,
+      });
+      g.appendChild(el('rect', {
+        x: pos.cx - NODE_WIDTH / 2,
+        y: pos.cy - NODE_HEIGHT / 2,
+        width: NODE_WIDTH, height: NODE_HEIGHT, rx: 3,
+        class: 'node ' + stream.cls,
+      }));
+      // Two-line label: ID on top, short name below.
+      const label = el('text', {
+        x: pos.cx, y: pos.cy - 3,
+        'text-anchor': 'middle',
+        class: 'node-text ' + stream.textCls,
+      });
+      const idSpan = el('tspan', { x: pos.cx, class: 'node-id' });
+      idSpan.textContent = id;
+      label.appendChild(idSpan);
+      const nameSpan = el('tspan', { x: pos.cx, dy: '14' });
+      nameSpan.textContent = shortName(comp ? comp.name : id);
+      label.appendChild(nameSpan);
+      g.appendChild(label);
+      if (isPivot) {
+        const badge = el('text', {
+          x: pos.cx + NODE_WIDTH / 2 + 3,
+          y: pos.cy - NODE_HEIGHT / 2 + 6,
+          class: 'pivot-badge',
+        });
+        badge.textContent = 'PIVOT';
+        g.appendChild(badge);
+      }
+      svg.appendChild(g);
+    }
+
+    // === Demo phases lane (below the streams).
+    if (phases.length > 0) {
+      svg.appendChild(el('rect', {
+        x: 0, y: demoLaneTop,
+        width: totalWidth, height: demoLaneHeight,
+        class: 'lane-bg',
+      }));
+      svg.appendChild(el('line', {
+        x1: 0, y1: demoLaneTop, x2: totalWidth, y2: demoLaneTop,
+        class: 'lane-divider',
+      }));
+      const demoLabel = el('text', {
+        x: 14, y: demoLaneTop + 16,
+        class: 'lane-label',
+      });
+      demoLabel.textContent = 'Demo phases';
+      svg.appendChild(demoLabel);
+
+      phases.forEach((p, i) => {
+        const barY = demoLaneTop + LANE_HEADER_HEIGHT + i * SUB_ROW_HEIGHT + 3;
+        const barX = LEFT_MARGIN + p.minDepth * COL_WIDTH + 6;
+        const barWidth = (p.maxDepth - p.minDepth + 1) * COL_WIDTH - 12;
+        const barHeight = SUB_ROW_HEIGHT - 6;
+        const g2 = el('g', { class: 'demo-phase', 'data-phase': p.id });
+        g2.appendChild(el('rect', {
+          x: barX, y: barY,
+          width: barWidth, height: barHeight, rx: 3,
+        }));
+        const lbl = el('text', {
+          x: barX + 10, y: barY + barHeight / 2 + 4,
+          class: 'demo-phase-label',
+        });
+        lbl.textContent = `${p.id} · ${p.name}`;
+        g2.appendChild(lbl);
+        svg.appendChild(g2);
+      });
+    }
+
+    // === Click highlight: dim everything outside the clicked component's
+    // dependency / dependent chain. Cooperates with panel.js (which auto-
+    // opens the side panel for any element carrying data-component).
+    const ancestors = {}, descendants = {};
+    for (const c of components) {
+      for (const depId of (c.hard_deps || [])) {
+        (ancestors[c.id] = ancestors[c.id] || []).push(depId);
+        (descendants[depId] = descendants[depId] || []).push(c.id);
+      }
+    }
+    function reach(start, map) {
+      const seen = new Set(), queue = [start];
+      while (queue.length) {
+        const n = queue.shift();
+        for (const m of (map[n] || [])) {
+          if (!seen.has(m)) { seen.add(m); queue.push(m); }
+        }
+      }
+      return seen;
+    }
+    function clearStreamsHighlight() {
+      svg.classList.remove('has-selection');
+      svg.querySelectorAll('.stream-node.selected, .stream-node.in-path')
+        .forEach(g => g.classList.remove('selected', 'in-path'));
+      svg.querySelectorAll('.demo-phase.selected')
+        .forEach(g => g.classList.remove('selected'));
+      svg.querySelectorAll('.stream-edge.path-active')
+        .forEach(e => e.classList.remove('path-active'));
+    }
+    function highlightStreams(id) {
+      const ups = reach(id, ancestors);
+      const downs = reach(id, descendants);
+      const inPath = new Set([id, ...ups, ...downs]);
+      svg.classList.add('has-selection');
+      svg.querySelectorAll('.stream-node').forEach(g => {
+        const nid = g.getAttribute('data-component');
+        g.classList.toggle('selected', nid === id);
+        g.classList.toggle('in-path', inPath.has(nid) && nid !== id);
+      });
+      svg.querySelectorAll('.demo-phase').forEach(g => g.classList.remove('selected'));
+      svg.querySelectorAll('.stream-edge[data-from][data-to]').forEach(e => {
+        const f = e.getAttribute('data-from');
+        const t = e.getAttribute('data-to');
+        e.classList.toggle('path-active', inPath.has(f) && inPath.has(t));
+      });
+    }
+    function highlightDemoPhase(phaseId) {
+      const phase = phases.find(p => p.id === phaseId);
+      if (!phase) return;
+      const inPath = new Set(phase.components || []);
+      svg.classList.add('has-selection');
+      svg.querySelectorAll('.stream-node').forEach(g => {
+        const nid = g.getAttribute('data-component');
+        g.classList.remove('selected');
+        g.classList.toggle('in-path', inPath.has(nid));
+      });
+      svg.querySelectorAll('.demo-phase').forEach(g => {
+        g.classList.toggle('selected', g.getAttribute('data-phase') === phaseId);
+      });
+      svg.querySelectorAll('.stream-edge[data-from][data-to]').forEach(e => {
+        const f = e.getAttribute('data-from');
+        const t = e.getAttribute('data-to');
+        e.classList.toggle('path-active', inPath.has(f) && inPath.has(t));
+      });
+    }
+    let currentStreamSel = null;
+    svg.addEventListener('click', (ev) => {
+      const phaseEl = ev.target.closest('.demo-phase');
+      if (phaseEl) {
+        const phaseId = phaseEl.getAttribute('data-phase');
+        if (currentStreamSel === phaseId) { clearStreamsHighlight(); currentStreamSel = null; return; }
+        currentStreamSel = phaseId;
+        highlightDemoPhase(phaseId);
+        return;
+      }
+      const node = ev.target.closest('.stream-node');
+      if (!node) return;  // panel.js / its close handlers will clear
+      const id = node.getAttribute('data-component');
+      if (currentStreamSel === id) { clearStreamsHighlight(); currentStreamSel = null; return; }
+      currentStreamSel = id;
+      highlightStreams(id);
+    });
+    function clearAll() { clearStreamsHighlight(); currentStreamSel = null; }
+    const closeBtn = document.getElementById('panelClose');
+    const backdrop = document.getElementById('panelBackdrop');
+    if (closeBtn) closeBtn.addEventListener('click', clearAll);
+    if (backdrop) backdrop.addEventListener('click', clearAll);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') clearAll(); });
+  })();
+</script>
+<script src="theme-toggle.js"></script>
+</body>
+</html>

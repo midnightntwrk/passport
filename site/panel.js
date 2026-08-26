@@ -1,17 +1,18 @@
 // Midnight Passport — shared panel rendering.
 //
-// Renders component and promise canvases in the sliding side panel that
-// index.html already exposes. Loaded by demo.html, standards.html,
-// architecture.html, parallelisation.html, onboarding-mockup.html, and
-// any future page that wants the same in-place view, so a click on a
-// component or promise reference opens the panel rather than navigating
-// away.
+// The single implementation of the sliding side panel: component,
+// promise, and decision canvases. Loaded by every page that shows the
+// panel (index, demo, standards, architecture, plan), so a click on a
+// component, promise, or decision reference opens the canvas in place
+// rather than navigating away.
 //
 // Requires: data.js loaded first; #panel, #panelBody, and #panelBackdrop
 // elements present in the DOM. Auto-binds clicks on any element carrying
-// data-component="<C-id>" or data-promise="<P-id>" — including the
-// dep-link buttons inside the rendered panel itself, so dependencies are
-// navigable in place.
+// data-component="<C-id>", data-promise="<P-id>", or
+// data-decision="<Q-id>" — including the dep-link buttons inside the
+// rendered panel itself, so dependencies are navigable in place.
+// Exposes window.PassportPanel for pages that need to open panels
+// programmatically (the plan page's graph) or render a custom panel.
 (function () {
   const data = window.PASSPORT_DATA;
   if (!data) {
@@ -22,6 +23,7 @@
   const componentById = Object.fromEntries((data.components || []).map(c => [c.id, c]));
   const promiseById = Object.fromEntries((data.promises || []).map(p => [p.id, p]));
   const categoryById = Object.fromEntries((data.categories || []).map(cat => [cat.id, cat]));
+  const decisionById = Object.fromEntries((data.decisions || []).map(d => [d.id, d]));
 
   const componentsByPromise = {};
   (data.promises || []).forEach(p => { componentsByPromise[p.id] = []; });
@@ -53,17 +55,40 @@
 
   function buildComponentHtml(c) {
     const cat = categoryById[c.category];
+    const evidence = (data.experiments || []).filter(e => (e.validates || []).includes(c.id));
     return `
       <div class="panel-head">
-        <div class="panel-kind">Component${c.status === 'specified' ? ' · specified' : c.status === 'decided' ? ' · decided' : c.workstream ? ' · open decision' : ''}${cat ? ' · ' + escapeHtml(cat.label) : ''}</div>
+        <div class="panel-kind">Component${c.status === 'specified' ? ' · specified' : c.status === 'decided' ? ' · decided' : ((data.workstreams || []).includes(c.id)) ? ' · open decision' : ''}${cat ? ' · ' + escapeHtml(cat.label) : ''}</div>
         <h3 class="panel-title"><span class="panel-id">${c.id}</span> ${escapeHtml(c.name)}</h3>
         ${c.status_note ? `<p class="panel-status-${c.status === 'specified' ? 'done' : 'decided'}">${c.status === 'specified' ? '✓' : '●'} ${escapeHtml(c.status_note)}</p>` : ''}
+        ${(c.serves && c.serves.length) ? `
+          <div class="panel-serves">
+            ${c.serves.map(p => {
+              const pr = promiseById[p];
+              return `<button class="panel-promise-pill" data-promise="${p}" type="button" title="${pr ? escapeHtml(pr.name) : p} — open promise">${p}</button>`;
+            }).join('')}
+          </div>
+        ` : ''}
       </div>
 
       <section class="panel-section">
         <h4>Outcome</h4>
         <p>${escapeHtml(c.outcome)}</p>
       </section>
+
+      ${evidence.length ? `
+        <section class="panel-section">
+          <h4>Evidence</h4>
+          <ul class="panel-evidence">
+            ${evidence.map(e => `
+              <li>
+                ${e.url ? `<a href="${escapeHtml(e.url)}" target="_blank" rel="noopener">${escapeHtml(e.name)} ↗</a>` : escapeHtml(e.name)}
+                <span class="panel-evidence-status">${escapeHtml(e.status || '')}</span>
+              </li>
+            `).join('')}
+          </ul>
+        </section>
+      ` : ''}
 
       ${(c.hard_deps && c.hard_deps.length) ? `
         <section class="panel-section">
@@ -161,6 +186,49 @@
     `;
   }
 
+  function buildDecisionHtml(d) {
+    const ws = componentById[d.workstream];
+    const state = d.resolution === 'resolved' ? ' · resolved'
+      : d.resolution === 'partial' ? ' · partially resolved'
+      : ' · open';
+    return `
+      <div class="panel-head">
+        <div class="panel-kind">Decision space · ${escapeHtml(d.workstream)}${state}</div>
+        <h3 class="panel-title">${escapeHtml(d.question)}</h3>
+      </div>
+
+      <section class="panel-section">
+        <h4>What is at stake</h4>
+        <p>${escapeHtml(d.detail)}</p>
+        ${d.leverage ? `<p class="panel-hint">${escapeHtml(d.leverage)}</p>` : ''}
+      </section>
+
+      ${d.venue ? `
+        <section class="panel-section">
+          <h4>Where this gets decided</h4>
+          <p>${escapeHtml(d.venue)}</p>
+        </section>
+      ` : ''}
+
+      ${(d.cascade_to && d.cascade_to.length) ? `
+        <section class="panel-section">
+          <h4>Cascades to (${d.cascade_to.length} components)</h4>
+          <p class="panel-hint">When this is answered, these canvases visibly shift.</p>
+          <ul class="panel-deps">
+            ${d.cascade_to.map(id => depLink(id)).join('')}
+          </ul>
+        </section>
+      ` : ''}
+
+      ${ws ? `
+        <section class="panel-section">
+          <h4>Component carrying this decision</h4>
+          <ul class="panel-deps">${depLink(ws.id)}</ul>
+        </section>
+      ` : ''}
+    `;
+  }
+
   function showPanel(html) {
     const panel = document.getElementById('panel');
     const body = document.getElementById('panelBody');
@@ -171,6 +239,9 @@
     panel.setAttribute('aria-hidden', 'false');
     if (backdrop) backdrop.classList.add('show');
     panel.scrollTop = 0;
+    // Move keyboard focus into the panel so ESC/tab work immediately.
+    panel.setAttribute('tabindex', '-1');
+    panel.focus({ preventScroll: true });
   }
 
   function closePanel() {
@@ -194,6 +265,12 @@
     showPanel(buildPromiseHtml(p));
   }
 
+  function openDecision(id) {
+    const d = decisionById[id];
+    if (!d) return;
+    showPanel(buildDecisionHtml(d));
+  }
+
   document.addEventListener('click', (e) => {
     if (e.target.closest('.panel-close') || e.target.closest('#panelBackdrop')) {
       closePanel();
@@ -203,6 +280,12 @@
     if (promiseTrigger) {
       e.preventDefault();
       openPromise(promiseTrigger.dataset.promise);
+      return;
+    }
+    const decisionTrigger = e.target.closest('[data-decision]');
+    if (decisionTrigger) {
+      e.preventDefault();
+      openDecision(decisionTrigger.dataset.decision);
       return;
     }
     const componentTrigger = e.target.closest('[data-component]');
@@ -216,5 +299,8 @@
     if (e.key === 'Escape') closePanel();
   });
 
-  window.PassportPanel = { openComponent, openPromise, close: closePanel };
+  window.PassportPanel = {
+    openComponent, openPromise, openDecision,
+    show: showPanel, close: closePanel, escapeHtml,
+  };
 })();

@@ -25,6 +25,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Check site integrity
+        run: |
+          set -euo pipefail
+          for f in site/*.js; do node --check "$f"; done
+          node site/check.js
+
       - name: Stage Pages artefact
         run: |
           set -euo pipefail
@@ -49,7 +55,7 @@ jobs:
           SHORT_SHA="${GITHUB_SHA:0:7}"
           COMMIT_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
           DEPLOY_META="Updated ${LAST_COMMIT_DATE}<br>commit <a href=\"${COMMIT_URL}\">${SHORT_SHA}</a>"
-          for f in _site/site/index.html _site/site/demo.html _site/site/standards.html; do
+          for f in _site/site/*.html; do
             sed -i "s|<!--DEPLOY-->.*<!--/DEPLOY-->|${DEPLOY_META}|" "$f"
           done
 

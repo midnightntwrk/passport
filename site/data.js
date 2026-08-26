@@ -6,8 +6,8 @@
 window.PASSPORT_DATA = {
   meta: {
     drafted: '2026/05/01',
-    updated: '2026/08/17',
-    version: 'draft-3',
+    updated: '2026/08/18',
+    version: 'draft-4',
   },
 
   // ---------------------------------------------------------------------------
@@ -174,13 +174,14 @@ window.PASSPORT_DATA = {
       status: 'specified',
       status_note: 'Specified by upstream MIP-0012 (contract custody) and MIP-0013 (account authorisation), realised by the reference implementation with passing conformance suites. Onboarding cost and deployment flow remain implementation questions.',
       serves: ['P1', 'P3', 'P4', 'P5', 'P8'],
-      outcome: 'The on-chain Compact contract representing a Passport account. Holds the device set, name binding, active scoped grants, and — per C4\'s resolved custody choice — the user\'s Midnight-native assets. Specified by two standards published upstream: MIP-0012 (the asset surface plus an abstract authorisation seam) and MIP-0013 (rolling single-use device entries, revocation epochs, the post-deploy bootstrap, in-circuit Schnorr seam instantiation). The reference implementation realises both in one deployment, with conformance suites passing and an independent bit-exact Rust signer; the errata implementation surfaced are folded back into the upstream texts. Per-account instances are chosen over a registry.',
+      outcome: 'The on-chain Compact contract representing a Passport account. Holds the device set, name binding, active scoped grants, and — per C4\'s resolved custody choice — the user\'s Midnight-native assets. Specified by two standards published upstream: MIP-0012 (the asset surface plus an abstract authorisation seam) and MIP-0013 (rolling single-use device entries, revocation epochs, the post-deploy bootstrap, in-circuit Schnorr seam instantiation). The reference implementation realises both in one deployment, with conformance suites passing and an independent bit-exact Rust signer; the errata the implementation surfaced are folded back into the upstream texts. Per-account instances are chosen over a registry.',
       hard_deps: ['C2', 'C4', 'C9', 'C10'],
       associations: ['C11', 'C12'],
       alternatives: [
         { label: 'A — One Compact contract per account', description: 'Chosen — normative in MIP-0012. Per-user schema evolution, isolated failure; the deploy-cost question moves to onboarding projections.' },
         { label: 'B — Single registry contract with accounts as entries', description: 'Rejected: ecosystem-wide schema freeze, concentrated upgrade risk, and a single censorship / correlation point. A witness-private shared-custody profile is left to a successor proposal for the anonymity-set benefit.' },
         { label: 'C — Hybrid', description: 'Superseded: discovery belongs to the name service (MIP-0007); custody to per-account instances.' },
+        { label: 'D — Native protocol account primitive', description: 'Not available: the current ledger ships no native account or multi-key verification primitive, so the contract standard is the adoptable path today. The authorisation seam keeps a native migration open; revisit if a ledger release ships native account primitives.' },
       ],
       open_questions: [
         'Deploy cost at user-base scale — onboarding-cost projections still to gather for the chosen per-account shape.',
@@ -224,7 +225,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'C3', name: 'DID surface', category: 'identity',
-      serves: ['P2'], workstream: true,
+      serves: ['P2'],
       outcome: 'A clear position on how Passport accounts interoperate with W3C DID standards: what the canonical public Passport DID is, how it relates to the name service, whether one account can maintain several DIDs for different profiles, how names are linked and proven, and whether DID-facing behaviour is embedded in Passport or delegated to Identity Wallet.',
       hard_deps: ['C2', 'C8', 'C9'],
       associations: ['C18', 'C19', 'C20', 'C21'],
@@ -260,8 +261,8 @@ window.PASSPORT_DATA = {
       id: 'C4', name: 'Asset custody model', category: 'crypto',
       status: 'specified',
       status_note: 'Resolved 2026/07 — stateless contract custody, validated on a production node and normative in the custody MIP, published upstream as MIP-0012 and realised by the reference implementation. Custody is exclusive: assets at rest live only in the account contract; user-held coins exist only transiently inside the one-hop payment flow. Dust is the fee-path exception (C24).',
-      serves: ['P3', 'P4', 'P5', 'P6'], workstream: true,
-      outcome: 'Resolved and standardised. Contract custody of shielded assets does not require publishing holdings: the stateless pattern (coin info wallet-local, supplied to the spend circuit as a witness, discovered via an encrypted on-contract inbox) is validated end-to-end on a production node and is normative in the custody MIP, published upstream as MIP-0012 and realised by the reference implementation. Custody is exclusive: the user holds assets no other way than through the account custody contract — assets at rest are always in the contract, and the user-held coins the one-hop payment rule creates are in-flight plumbing the client sweeps into the account, never a holding location. Dust is the one exception, forced by the ledger (the contract holds no Dust; fees are C24\'s subject). The change-handling defect the experiment surfaced is fixed upstream. Payments between custody accounts have two normative modes: one-hop counterparty-private routing, and linking-accepted direct transfer (validated by the contract-to-contract experiment: one client-composed transaction, both contract addresses exposed together, value, color, and nonce hidden). The residual metadata profile — contract-address activity and depositor first-hop traceability — is documented and accepted in the MIP\'s security considerations. A bonus finding: the encryption secret is a pure viewing capability, so read-only delegation (accountant, auditor) works without ceding custody.',
+      serves: ['P3', 'P4', 'P5', 'P6'],
+      outcome: 'Contract custody of shielded assets does not require publishing holdings: the stateless pattern (coin info wallet-local, supplied to the spend circuit as a witness, discovered via an encrypted on-contract inbox) is validated end-to-end on a production node and is normative in the custody MIP, published upstream as MIP-0012 and realised by the reference implementation. Custody is exclusive: the user holds assets no other way than through the account custody contract — assets at rest are always in the contract, and the user-held coins the one-hop payment rule creates are in-flight plumbing the client sweeps into the account, never a holding location. Dust is the one exception, forced by the ledger (the contract holds no Dust; fees are C24\'s subject). The change-handling defect the experiment surfaced is fixed upstream. Payments between custody accounts have two normative modes: one-hop counterparty-private routing, and linking-accepted direct transfer (validated by the contract-to-contract experiment: one client-composed transaction, both contract addresses exposed together, value, color, and nonce hidden). The residual metadata profile — contract-address activity and depositor first-hop traceability — is documented and accepted in the MIP\'s security considerations. A bonus finding: the encryption secret is a pure viewing capability, so read-only delegation (accountant, auditor) works without ceding custody.',
       hard_deps: ['C1'],
       associations: [],
       alternatives: [
@@ -300,6 +301,7 @@ window.PASSPORT_DATA = {
         { label: 'B — FROST committee under user control', description: 'Subsumed by A: the MIP\'s threshold profile registers any t-of-n FROST committee as a single device entry; the verifier is unchanged and the key is never reconstructed.' },
         { label: 'C — Per-device with periodic rotation', description: 'Available under A via the add / remove-device ceremonies; no protocol change needed.' },
         { label: 'D — FROST-Jubjub via partner-operated MPC committee with DKG', description: 'MVP model (managed signing). Same verification equation as A, so the contract cannot tell the difference; retired in favour of A for v1.0.' },
+        { label: 'E — Threshold ECDSA', description: 'Rejected. ECDSA nonce generation has no non-interactive threshold analogue, and interactive nonce protocols are the failure class behind the published MPC-wallet key-extraction attacks. FROST over JubJub avoids that class by construction.' },
       ],
       open_questions: [
         'Cryptographer review of the SHA-256 Fiat–Shamir substitution, challenge grinding, and subgroup semantics — an explicit acceptance criterion of the MIP.',
@@ -311,6 +313,7 @@ window.PASSPORT_DATA = {
         'Signing surface leaks beyond the trusted boundary.',
         'Nonce reuse or bias in a signer implementation reveals the device key.',
         'Toolchain hazard — JubjubPoint equality compiled to reference equality (compact#278); guarded by the MIP\'s rejection-matrix conformance tests.',
+        'Managed-path dependency — no MPC provider has yet demonstrated the FROST ciphersuite over JubJub with the persistentHash challenge. The committee demonstration tracked in the MIP\'s Path to Active gates the demo\'s managed signing pick.',
       ],
     },
     {
@@ -318,7 +321,7 @@ window.PASSPORT_DATA = {
       status: 'decided',
       status_note: 'Decided 2026/07 — browser WASM proving is the promoted path, validated end-to-end in the account-custody prototype (2026/06/10): every proof in the stack computed in the tab with the proof server stopped. The Midnight Foundation\'s third-party proving provider is the bounded-trust hosted fallback.',
       serves: ['P6', 'P8'],
-      outcome: 'Client-side ZK proof generation — decided: the user proves in the browser. The account-custody prototype runs the full stack in the tab via the upstream WASM prover (zkir-v2, version-paired with the ledger): with the proof-server container stopped, contract circuits, zswap balancing, dust fees, and signing all prove in a dedicated Web Worker. Measured envelope ~3.5 s at k=12 to ~44 s at k=16 single-threaded; ≈50 MB (Night path) to ≈109 MB (with shielded) of keys and SRS cached once per origin. For those who cannot prove locally, the Midnight Foundation has a third-party proving provider as a hosted fallback — bounded trust under the account-authorisation MIP (the delegate gets a one-call signature and spend witnesses, never a device key), but bounded is not blind, so the promoted path stays on-device.',
+      outcome: 'Client-side ZK proof generation — decided: the user proves in the browser. The account-custody prototype runs the full stack in the tab via the upstream WASM prover (zkir-v2, version-paired with the ledger): with the proof-server container stopped, contract circuits, zswap balancing, dust fees, and signing all prove in a dedicated Web Worker. Measured envelope ~3.5 s at k=12 to ~44 s at k=16 single-threaded; ≈50 MB (Night path) to ≈109 MB (with shielded) of keys and SRS cached once per origin (workspace measurements; a citable benchmark artefact is pending publication). For those who cannot prove locally, the Midnight Foundation has a third-party proving provider as a hosted fallback — bounded trust under the account-authorisation MIP (the delegate gets a one-call signature and spend witnesses, never a device key), but bounded is not blind, so the promoted path stays on-device.',
       hard_deps: ['C5', 'C7'],
       associations: ['C7', 'C16'],
       alternatives: [
@@ -402,7 +405,7 @@ window.PASSPORT_DATA = {
         { label: 'C — Platform-native', description: 'Secure Enclave on iOS, StrongBox on Android, no WebAuthn. Candidate fallback where PRF is unavailable in native apps; not the primary model.' },
       ],
       open_questions: [
-        'PRF support matrix (browser × OS × authenticator) and the fallback policy where PRF is unavailable on the decentralised path. The fallback space is widening upstream: the proof system\'s next ZKIR revision adds native secp256r1, which would make a passkey\'s ordinary ECDSA-P256 assertion verifiable in-circuit — a PRF-free candidate fallback.',
+        'PRF support matrix (browser × OS × authenticator) and the fallback policy where PRF is unavailable on the decentralised path. The fallback space has widened upstream: the proof system now ships native secp256r1, making a passkey\'s ordinary ECDSA-P256 assertion verifiable in-circuit (evidenced in this workspace at k=15, sub-second) — a PRF-free candidate fallback.',
         'Synced passkeys — a synced credential reproduces the PRF seed on several physical devices; one logical device, or per-device credentials required?',
         'The PRF → JubJub scalar derivation needs a specified, domain-separated construction (C8 tag), and possibly its own MIP.',
         'Native app vs browser — platform WebAuthn or platform secure enclave directly?',
@@ -559,7 +562,7 @@ window.PASSPORT_DATA = {
     {
       id: 'C16', name: 'Wallet local storage', category: 'wallet',
       serves: ['P1', 'P3', 'P6'],
-      outcome: 'Where the wallet persists private state on the user\'s device — wrapped seed (if applicable), per-device key material, sync state, name ownership cache, attestations, metadata. Includes the encryption envelope.',
+      outcome: 'Where the wallet persists private state on the user\'s device — per-device key material, the wallet-local coin store, sync state, name ownership cache, attestations, metadata. Includes the encryption envelope. No seed exists to store: device keys derive from the passkey (C9), and assets live in the account contract (C4).',
       hard_deps: ['C9'],
       associations: ['C5', 'C7', 'C17'],
       alternatives: [
@@ -570,7 +573,7 @@ window.PASSPORT_DATA = {
       open_questions: [
         'Storage substrate per platform.',
         'Sync across devices, or per-device independent storage?',
-        'What user-recoverable state lives here that\'s not on chain?',
+        'What user-recoverable state lives here that is not on chain?',
       ],
       failure_modes: [
         'Wrapping-key unavailable from platform secure storage.',
@@ -692,7 +695,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'C22', name: 'Intent surface', category: 'network',
-      serves: ['P7', 'P8', 'P10'], workstream: true,
+      serves: ['P7', 'P8', 'P10'],
       outcome: 'Passport\'s wallet-side intent surface: how the user-facing trade intent is translated into the ledger Intent struct that the user authorises by signing, what the wallet UI presents before signing, and what shape the dApp connection protocol passes between dApps and the wallet. The ledger Intent format and any trade-intent semantics are defined upstream in the Midnight ecosystem; Passport integrates with what exists, contributing only what is needed for the wallet- and dApp-side surfaces, and inventing a stop-gap shape only if no upstream format is available in time.',
       hard_deps: ['C5', 'C6', 'C7', 'C10', 'C20', 'C25'],
       associations: ['C11', 'C12', 'C23'],
@@ -726,7 +729,7 @@ window.PASSPORT_DATA = {
       id: 'C23', name: 'dApp connection protocol', category: 'dapp',
       status: 'decided',
       status_note: 'Direction decided 2026/05/13: Open Wallet Standard, with CAIP-25 / EIP-6963 / WalletConnect as underlying transport. Protocol specification pending upstream OWS progress.',
-      serves: ['P7', 'P8', 'P10'], workstream: true,
+      serves: ['P7', 'P8', 'P10'],
       outcome: 'The protocol surface that lets third-party dApps request scoped grants — including the Sign-In-with-Passport authentication half of the same surface. Open Wallet Standard (OWS) is the chosen direction for the Cardano + Midnight workflow (approved 2026/05/13, in progress upstream); CAIP-25, EIP-6963, and WalletConnect v2 sit beneath as underlying transport / discovery layers.',
       hard_deps: ['C10', 'C20', 'C22'],
       associations: [],
@@ -755,7 +758,7 @@ window.PASSPORT_DATA = {
       id: 'C24', name: 'Fee model', category: 'network',
       status: 'decided',
       status_note: 'Mechanism resolved — wallet-level fee splitting confirmed end-to-end (F1–F6 on node 1.0.0), including a sponsored contract deployment by a zero-token user: zero-token onboarding is confirmed outright. What remains open is the sponsor service contract and operator model.',
-      serves: ['P1', 'P3', 'P5', 'P8'], workstream: true,
+      serves: ['P1', 'P3', 'P5', 'P8'],
       outcome: 'A fee model that lets users transact from the moment they receive their account — including from a zero-NIGHT, zero-DUST starting state — without requiring a single named sponsor and without requiring the user to acquire or manage DUST themselves. The mechanism is confirmed: the dust-sponsorship-feasibility experiment (F1–F6) landed a two-balanced Night transfer, a sponsored circuit call from a zero-token user, and — decisively for onboarding — a sponsored contract deployment. No NIGHT prerequisite exists; the NIGHT airdrop is demoted to an optional follow-up for long-term self-sufficiency. The negative probes failed operably: capacity exhaustion fails locally before submission, and a TTL-expired round-trip is rejected at the node, making the user\'s TTL the sponsor\'s hard latency budget.',
       hard_deps: ['C16'],
       associations: [],
@@ -783,7 +786,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'C25', name: 'Cross-chain integration interface', category: 'network',
-      serves: ['P3', 'P5', 'P7', 'P8', 'P10'], workstream: true,
+      serves: ['P3', 'P5', 'P7', 'P8', 'P10'],
       // The interface contract is upstream-owned; canvas is held minimal
       // until the contract is defined.
       outcome: 'The boundary between Passport and the upstream cross-chain architecture (solver network, MPC vaults, escrow contract). Defines what Passport hands off (user-signed trade intents, account identity, selective-disclosure proofs for compliance) and what Passport consumes (settlement confirmations).',
@@ -852,6 +855,7 @@ window.PASSPORT_DATA = {
     {
       id: 'Q4',
       workstream: 'C4',
+      resolution: 'resolved',
       question: 'Shielded custody privacy — resolved into the custody MIP',
       detail: 'Resolved. The stateless pattern (A″) is adopted and now normative in the drafted custody MIP: no coin material in public ledger state, encrypted-inbox discovery, witness-supplied spends, and the surviving-coin change rule (its defect fixed upstream). The residual metadata profile — contract-address activity and depositor first-hop traceability — is documented and accepted in the MIP\'s security considerations, with a shared-custody successor profile deferred. The six cascade targets now consume specified constraints rather than an open question.',
       cascade_to: ['C1', 'C5', 'C12', 'C14', 'C16', 'C24'],
@@ -860,14 +864,18 @@ window.PASSPORT_DATA = {
     {
       id: 'Q3',
       workstream: 'C3',
+      resolution: 'open',
+      venue: 'Decided through engagement with the active upstream Midnight DID effort; Passport profiles what exists rather than defining a method.',
       question: 'What is the canonical Passport DID profile?',
-      detail: 'No longer a pure yes/no call. The core decision is how Passport profiles the active midnight-did effort: what the canonical public DID is, how alice.midnight is linked and proven, whether one account can maintain several DIDs, and whether DID-facing behaviour is embedded in Passport or delegated to Identity Wallet. "No DID layer" remains a fallback, but it is no longer the most informative framing of the workstream.',
+      detail: 'No longer a pure yes/no call. The core decision is how Passport profiles the active midnight-did effort: what the canonical public DID is, how alice.passport.night is linked and proven, whether one account can maintain several DIDs, and whether DID-facing behaviour is embedded in Passport or delegated to Identity Wallet. "No DID layer" remains a fallback, but it is no longer the most informative framing of the workstream.',
       cascade_to: ['C2', 'C9', 'C18', 'C19', 'C20', 'C21'],
       leverage: 'Six canvases shift on the answer; the delivery model and the public-identity model both propagate downstream.',
     },
     {
       id: 'Q25',
       workstream: 'C25',
+      resolution: 'open',
+      venue: 'Decided by the upstream cross-chain provider engagement; Passport consumes the interface contract once it is defined.',
       question: 'Cross-chain interface contract',
       detail: 'What Passport hands off to the upstream cross-chain layer (signed trade intents, account identity, compliance proofs) and what Passport consumes (settlement confirmations). Externally gated on provider engagement.',
       cascade_to: ['C2', 'C10', 'C12', 'C22'],
@@ -876,6 +884,8 @@ window.PASSPORT_DATA = {
     {
       id: 'Q22',
       workstream: 'C22',
+      resolution: 'open',
+      venue: 'Decided against the upstream trade-intent definition as it lands; the wallet-side wrapper shape is a Passport-side call.',
       question: 'Wallet integration with the upstream trade-intent format',
       detail: 'How tightly Passport\'s wallet surface tracks the upstream trade-intent format — verbatim, with a thin wallet-side wrapper, or with a stop-gap shape if no upstream format is available in time. Shapes downstream dApp interchange, UI presentation, and compliance binding. Externally gated where the upstream format is being defined elsewhere in the ecosystem.',
       cascade_to: ['C16', 'C20', 'C23'],
@@ -884,6 +894,8 @@ window.PASSPORT_DATA = {
     {
       id: 'Q24',
       workstream: 'C24',
+      resolution: 'partial',
+      venue: 'Decided by sponsor-operator engagement plus a Passport-side sponsor-service specification.',
       question: 'Fee model — sponsor operator model (mechanism resolved)',
       detail: 'The mechanism half is resolved: wallet-level fee splitting is confirmed end-to-end (F1–F6), including sponsored contract deployment from a zero-token start. What remains is the sponsor operator model (directory of substitutable sponsors, self-host, or single sponsor) and the sponsor service contract. Without a substitutable path, the no-required-operator promise is at risk.',
       cascade_to: ['C16', 'C22'],
@@ -914,12 +926,20 @@ window.PASSPORT_DATA = {
       title: 'Schnorr-on-JubJub verified in-circuit',
       detail: 'A Compact contract verifies a JubJub Schnorr signature and releases tokens on devnet, with replay protection bound into the challenge. TypeScript and pure-Rust signers produce interchangeable signatures against the same deployed verifier — the signing boundary is client-agnostic.',
       components: ['C5', 'C7'],
+      evidence: ['redjubjub-wallet', 'redjubjub-wallet-rs'],
     },
     {
       when: '2026/04', kind: 'validated',
       title: 'Contract-custody feasibility mapped (S1–S6)',
       detail: 'Six probes establish what the contract layer can custody today, and where the SDK gates sit.',
       components: ['C1', 'C4'],
+      evidence: ['contract-custody-feasibility'],
+    },
+    {
+      when: '2026/05', kind: 'validated',
+      title: 'Contract upgradability probed on devnet',
+      detail: 'Circuits are evolvable in place through the contract maintenance authority (remove, rewrite, add — same address, ledger preserved), while the ledger state schema is fixed at deploy and authority-key loss is terminal. Feeds the fleet-migration question every deployed account contract carries.',
+      components: ['C1'],
     },
     {
       when: '2026/06', kind: 'upstream',
@@ -932,30 +952,35 @@ window.PASSPORT_DATA = {
       title: 'Account-custody prototype end-to-end',
       detail: 'Passkey-authenticated wallet app driving a device-set account contract on devnet: add and remove devices, epoch revocation, Night custody, on-device proving.',
       components: ['C1', 'C9', 'C16'],
+      evidence: ['account-custody-prototype'],
     },
     {
       when: '2026/06', kind: 'validated',
       title: 'Every proof computed in the browser',
       detail: 'The prototype\'s end-to-end check passes with the proof-server container stopped: contract circuits, zswap balancing, dust fees, and signing all prove in-tab via the upstream WASM prover, in a dedicated Web Worker. "The user is the prover" demonstrated rather than asserted.',
       components: ['C6', 'C7'],
+      evidence: ['account-custody-prototype'],
     },
     {
       when: '2026/06', kind: 'validated',
       title: 'Zero-token onboarding confirmed (F1–F6)',
       detail: 'Wallet-level DUST sponsorship lands end-to-end on a production node: a two-balanced transfer, a sponsored circuit call from a zero-NIGHT, zero-DUST user, and — decisively for onboarding — a sponsored contract deployment. No NIGHT prerequisite exists; the negative probes fail in ways a sponsor service can detect and handle.',
       components: ['C24'],
+      evidence: ['dust-sponsorship-feasibility'],
     },
     {
       when: '2026/07', kind: 'validated',
       title: 'Stateless shielded custody validated (W1–W6)',
       detail: 'The headline privacy question resolved: contract-held shielded coins with zero coin artefacts on observer surfaces, validated on a production node with a byte-level leak audit. The change-handling defect it surfaced was reported and is fixed upstream. Bonus finding: the account encryption secret proved out as a pure viewing capability — read/spend separation by construction, so third-party deposit, owner discovery, and owner spend all worked from chain data alone.',
       components: ['C4', 'C1', 'C17'],
+      evidence: ['stateless-shielded-custody'],
     },
     {
       when: '2026/07', kind: 'validated',
       title: 'Recovery via BUSS / ANARKey assessed and prototyped',
       detail: 'Stateless-guardian recovery with paper keys (EPRINT 2025/551), assessed and then implemented in the account-custody prototype: recovery commitment plus provably-simulatable BUSS vector on-chain, guardians storing nothing, epoch-bump recovery through the account seam, one wire format across CLI and app.',
       components: ['C14', 'C15'],
+      evidence: ['account-custody-prototype'],
     },
     {
       when: '2026/07', kind: 'standard',
@@ -992,11 +1017,12 @@ window.PASSPORT_DATA = {
       title: 'Direct contract-to-contract transfer validated',
       detail: 'A custody contract pays another custody contract in one client-composed transaction, with no Compact cross-contract calls: the sender\'s witness-supplied spend and the recipient\'s claim compose into a single submission, and the received coin is first-class. The privacy cost is exactly as predicted — the two contract addresses appear together while value, color, and nonce stay hidden — so the one-hop rule is now motivated by privacy alone.',
       components: ['C4', 'C22'],
+      evidence: ['contract-to-contract-transfer'],
     },
     {
       when: '2026/07', kind: 'upstream',
       title: 'Custody and authorisation MIPs published upstream',
-      detail: 'The keystone pair carries upstream numbers — MIP-0012 (contract custody) and MIP-0013 (multi-key account authorisation), both Proposed — and the name service standard (MIP-0007) merged the forward-looking authorisation arms Passport\'s multi-key accounts need. The errata implementation surfaced (direct-transfer return signature, DST derivation, post-deploy bootstrap) are merged into the upstream texts.',
+      detail: 'The keystone pair carries upstream numbers — MIP-0012 (contract custody) and MIP-0013 (multi-key account authorisation), both Proposed — and the name service standard (MIP-0007) merged the forward-looking authorisation arms Passport\'s multi-key accounts need. The errata the implementation surfaced (direct-transfer return signature, DST derivation, post-deploy bootstrap) are merged into the upstream texts.',
       components: ['C4', 'C1', 'C5', 'C2'],
     },
     {
@@ -1004,12 +1030,13 @@ window.PASSPORT_DATA = {
       title: 'Reference implementation with conformance suites',
       detail: 'One deployment realises both MIPs — stateless custody, encrypted inbox, rolling device entries, in-circuit Schnorr — with every conformance suite the standards require passing on a live stack, an independent bit-exact Rust signer built on the published ledger crates, and a byte-level leak audit. The standard to build against going forward; the experiments remain the historical evidence base.',
       components: ['C1', 'C4', 'C5', 'C17'],
+      evidence: ['account-custody-reference'],
     },
   ],
 
   // ---------------------------------------------------------------------------
   // What remains — the open work, by lane. Rendered under the progress
-  // timeline as the "what's left" map. Lanes: Standards | Reviews |
+  // timeline as the "what remains" map. Lanes: Standards | Reviews |
   // Evidence | Client | Workstreams | Delivery.
   // ---------------------------------------------------------------------------
 
@@ -1031,6 +1058,12 @@ window.PASSPORT_DATA = {
       title: 'Domain-separation registry document',
       detail: 'MPS-0027 is upstream; the registry itself, seeded with the custody and account tags, is the pending deliverable.',
       components: ['C8'],
+    },
+    {
+      lane: 'Standards',
+      title: 'Inbound-transfer compliance posture',
+      detail: 'The receiver of a shielded deposit knows the amount but not the sender, so source-of-funds regimes cannot be satisfied receiver-side. The mitigation lives in a sender-side selective-disclosure credential (C20), a custody-side acceptance policy (C4), or both — a position to specify, not an implementation task.',
+      components: ['C4', 'C20'],
     },
     {
       lane: 'Reviews',
@@ -1109,10 +1142,13 @@ window.PASSPORT_DATA = {
     {
       id: 'STD-03', kind: 'prerequisite',
       title: 'Domain-separation registry',
-      detail: 'A registry of domain prefixes for every persistentHash use site. Cryptographic prerequisite to credentials, signing, and naming. The problem statement is merged upstream as MPS-0027; the custody and account-authorisation MIP drafts already name their tags against the future registry.',
+      detail: 'A registry of domain prefixes for every persistentHash use site. Cryptographic prerequisite to credentials, signing, and naming. The problem statement is merged upstream as MPS-0027 (Proposed); the custody and account-authorisation MIPs already name their tags against the future registry.',
+      upstream: 'https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mps/mps-0027-domain-separation.md',
+      upstream_label: 'MPS-0027 — merged upstream',
+      lifecycle: 'MPS Proposed',
       component: 'C8',
       co_author: 'Cryptographer review',
-      status: 'MPS-0027 merged upstream; registry spec next',
+      status: 'MPS-0027 merged upstream (Proposed); registry spec next',
       promises: ['P6', 'P9'],
     },
     {
@@ -1121,7 +1157,8 @@ window.PASSPORT_DATA = {
       detail: 'ARC-authored problem statement framing the gap: no ratified model for an on-chain account custodying Midnight-native assets under multi-key control with recovery and key non-exfiltration. Merged upstream — the custody and account-authorisation MIPs below are its recommended keystone, authored in this workspace.',
       upstream: 'https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mps/mps-0018-asset-custody-model.md',
       upstream_label: 'MPS-0018 — merged upstream',
-      status: 'Merged upstream',
+      lifecycle: 'MPS Proposed',
+      status: 'Merged upstream — Proposed',
       components: ['C4', 'C1'],
       promises: ['P3', 'P4', 'P5', 'P6'],
     },
@@ -1131,7 +1168,8 @@ window.PASSPORT_DATA = {
       detail: 'The HD derivation tree (m / 44\' / 2400\' / account\' / role / index, the role table, and coin type 2400) and the mn_ Bech32m address format are specified upstream — in Midnight\'s WalletEngine Specification, extended by MIP-0003 (ECDSA support), now Accepted upstream. Passport adopts these rather than drafting parallel standards; an independent Passport MIP would only duplicate or contradict the canonical spec. The ARC review that strengthened MIP-0003 concluded with its acceptance. The one derivation concern not covered upstream — deriving the device key from a WebAuthn passkey (PRF → JubJub scalar) — lives in C9 and can graduate to its own MIP if it needs to become a standard.',
       upstream: 'https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0003.md',
       upstream_label: 'MIP-0003 — Accepted upstream',
-      status: 'Adopted upstream (Accepted)',
+      lifecycle: 'MIP Accepted',
+      status: 'Adopted by Passport (upstream lifecycle: Accepted)',
       components: ['C5', 'C1'],
       promises: ['P2', 'P6', 'P8'],
     },
@@ -1141,7 +1179,8 @@ window.PASSPORT_DATA = {
       detail: 'Passport adopts the deployed upstream name service rather than drafting a parallel standard. The Midnight Foundation is to acquire the passport.night domain and offer its sub-domains free of charge, first come, first served; Passport account names live under it, and name → account resolution stays authoritative on-chain. The adoption condition is satisfied upstream: MIP-0007 now carries normative forward-looking authorisation arms — contract-owned names via cross-contract authorisation (the arm a multi-key account contract needs) and ECDSA owners, both availability-gated. The sub-domain layer (issuance mechanics, squat resistance, reserved-names policy) is the remaining Passport-side work.',
       upstream: 'https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0007-name-service-registry.md',
       upstream_label: 'MIP-0007 — name-service-registry',
-      status: 'Adopted upstream — authorisation arms merged; passport.night acquisition pending',
+      lifecycle: 'MIP Proposed',
+      status: 'Adopted by Passport (upstream lifecycle: Proposed) — authorisation arms merged; passport.night acquisition pending',
       components: ['C2'],
       promises: ['P2', 'P8', 'P10'],
     },
@@ -1151,6 +1190,8 @@ window.PASSPORT_DATA = {
       detail: 'Building block one of the multi-key account keystone (MPS-0018): how a contract holds and releases unshielded and shielded value. Stateless shielded custody — no coin material in public ledger state, encrypted-inbox discovery, witness-supplied spends, a normative surviving-coin change rule, two payment modes (one-hop counterparty-private routing and linking-accepted direct transfer) — with authorisation abstracted to a single seam. Validated end-to-end on a production node, including a byte-level observer leak audit, and realised by the reference implementation with its conformance suite.',
       upstream: 'https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0012.md',
       upstream_label: 'MIP-0012 — published upstream',
+      lifecycle: 'MIP Proposed',
+      evidence: ['stateless-shielded-custody', 'contract-to-contract-transfer', 'account-custody-reference'],
       components: ['C4', 'C1'],
       co_author: 'Partner wallet review invited; cryptographer review an acceptance criterion',
       status: 'Published upstream — Proposed; errata from implementation merged',
@@ -1162,17 +1203,32 @@ window.PASSPORT_DATA = {
       detail: 'Building block two: rolling single-use device entries, revocation epochs, a post-deploy bootstrap, and the seam instantiated with in-circuit Schnorr over JubJub. The challenge binds account, circuit, arguments, witness values, and an authorisation counter, so a signature approves exactly one call with exactly those inputs. FROST-compatible by construction (a threshold committee registers as one device, key never reconstructed); approval separated from proving (the signer needs no Midnight stack, the prover never sees a key). The reference implementation exercises the full conformance suite, including an independent bit-exact Rust signer.',
       upstream: 'https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0013.md',
       upstream_label: 'MIP-0013 — published upstream',
+      lifecycle: 'MIP Proposed',
+      evidence: ['redjubjub-wallet', 'redjubjub-wallet-rs', 'account-custody-reference'],
       components: ['C1', 'C5'],
       co_author: 'Cryptographer review (acceptance criterion); partner wallet review invited',
       status: 'Published upstream — Proposed; errata from implementation merged',
       promises: ['P1', 'P3', 'P4', 'P6', 'P8'],
     },
     {
+      id: 'MIP-0008', kind: 'upstream',
+      title: 'Chain identifiers (CAIP-2)',
+      detail: 'CAIP-2 network identifiers of the midnight:mainnet style. Passport surfaces that need a chain identifier (cross-chain naming, dApp connection, intent construction) follow it rather than inventing a parallel scheme.',
+      upstream: 'https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0008-caip-2-network-identifiers.md',
+      upstream_label: 'MIP-0008 — chain identifiers',
+      lifecycle: 'MIP Draft',
+      status: 'Adopted by Passport (upstream lifecycle: Draft)',
+      components: ['C25'],
+      promises: ['P10'],
+    },
+    {
       id: 'MIP-4', kind: 'mip',
       title: 'Recovery paths',
       detail: 'Building block three: total-loss recovery behind the account standard\'s recovery seam, whose interface MIP-0013 fixes (epoch bump, single fresh device). Mechanism decided: BUSS / ANARKey stateless guardians plus paper keys (EPRINT 2025/551) — assessed, and implemented in the account-custody prototype (buss-wasm, shared guardian wire formats). Drafting is the next step; DeRec and encrypted-blob backup remain substitutable profiles behind the same seam.',
       components: ['C14', 'C15', 'C13'],
+      evidence: ['account-custody-prototype'],
       co_author: 'ANARKey / Pleiades authors; cryptographer review of the integration',
+      lifecycle: 'Not yet filed',
       status: 'Mechanism decided 2026/07 — drafting next',
       promises: ['P5', 'P8'],
     },
@@ -1182,6 +1238,7 @@ window.PASSPORT_DATA = {
       detail: 'Open Wallet Standard is the chosen direction, with CAIP-25, EIP-6963, and WalletConnect v2 as underlying transport and discovery layers; carries scoped grants between dApps and wallet.',
       component: 'C23',
       co_author: 'Partner wallets + Midnight Foundation',
+      lifecycle: 'Not yet filed',
       status: 'Outline',
       promises: ['P7', 'P8'],
     },
@@ -1191,6 +1248,7 @@ window.PASSPORT_DATA = {
       detail: 'Selective-disclosure proofs over an attestation tree, with replay-prevention nullifiers.',
       component: 'C20',
       co_author: 'zkMe + alternatives',
+      lifecycle: 'Not yet filed',
       status: 'Outline',
       promises: ['P9'],
     },
@@ -1200,48 +1258,62 @@ window.PASSPORT_DATA = {
       detail: 'The Sign-In-with-Passport authentication half of the connection protocol.',
       component: 'C23',
       co_author: 'Partner wallets, Midnight Foundation',
+      lifecycle: 'Not yet filed',
       status: 'Outline',
       promises: ['P7', 'P8'],
     },
   ],
 
+  // Review states: 'Awaiting trigger' (precondition not yet met) |
+  // 'To schedule' (trigger met, not yet booked) | 'Scheduling' |
+  // 'In progress' | 'Complete'.
   reviews: [
-    { target: 'C8',  label: 'Domain-separation registry',         kind: 'Cryptographer', trigger: 'Spec stable' },
-    { target: 'C5',  label: 'Account-authorisation signature scheme', kind: 'Cryptographer', trigger: 'MIP-0013 published — review is an acceptance criterion', note: 'SHA-256 Fiat–Shamir substitution, challenge grinding, subgroup semantics, nonce guidance.' },
-    { target: 'C4',  label: 'Stateless custody (secretless coins, inbox construction, disclosure bounds)', kind: 'Cryptographer', trigger: 'MIP-0012 published — review is an acceptance criterion' },
-    { target: 'C5',  label: 'FROST ciphersuite for JubJub with the persistentHash challenge', kind: 'Cryptographer', trigger: 'Ciphersuite specified (MIP-0013 Path to Active)' },
-    { target: 'C20', label: 'Selective-disclosure proof primitive', kind: 'Cryptographer', trigger: 'Proof primitive stable' },
-    { target: 'C1',  label: 'Multi-key account contract',          kind: 'Formal methods', trigger: 'Trigger met — MIP-0012 / MIP-0013 numbered upstream; scheduling' },
-    { target: 'C12', label: 'Chain-side enforcement verifier',     kind: 'Formal methods', trigger: 'Verifier circuits stable' },
+    { target: 'C8',  label: 'Domain-separation registry',         kind: 'Cryptographer', trigger: 'Registry spec stable', state: 'Awaiting trigger' },
+    { target: 'C5',  label: 'Account-authorisation signature scheme', kind: 'Cryptographer', trigger: 'MIP-0013 published — review is an acceptance criterion', state: 'To schedule', note: 'SHA-256 Fiat–Shamir substitution, challenge grinding, subgroup semantics, nonce guidance.' },
+    { target: 'C4',  label: 'Stateless custody (secretless coins, inbox construction, disclosure bounds)', kind: 'Cryptographer', trigger: 'MIP-0012 published — review is an acceptance criterion', state: 'To schedule' },
+    { target: 'C5',  label: 'FROST ciphersuite for JubJub with the persistentHash challenge', kind: 'Cryptographer', trigger: 'Ciphersuite specified (MIP-0013 Path to Active)', state: 'Awaiting trigger' },
+    { target: 'C20', label: 'Selective-disclosure proof primitive', kind: 'Cryptographer', trigger: 'Proof primitive stable', state: 'Awaiting trigger' },
+    { target: 'C1',  label: 'Multi-key account contract',          kind: 'Formal methods', trigger: 'MIP-0012 / MIP-0013 numbered upstream', state: 'Scheduling' },
+    { target: 'C12', label: 'Chain-side enforcement verifier',     kind: 'Formal methods', trigger: 'Verifier circuits stable', state: 'Awaiting trigger' },
+  ],
+
+  // What ARC is waiting on from each external party — the blocked-on view,
+  // one row per party. Rendered on the plan page's "What remains" section.
+  waiting_on: [
+    { party: 'Midnight Foundation', item: 'Acquire passport.night and settle the sub-domain issuance policy.', components: ['C2'] },
+    { party: 'Partner wallets', item: 'A second independent implementation of MIP-0012 / MIP-0013 — the remaining path-to-Active evidence.', components: ['C1', 'C4', 'C5'] },
+    { party: 'Cryptographer', item: 'The stateless-custody and signature-scheme reviews, both acceptance criteria of the keystone pair.', components: ['C4', 'C5'] },
+    { party: 'MPC providers', item: 'A FROST-over-JubJub committee demonstration against an unmodified contract.', components: ['C5'] },
+    { party: 'Upstream ecosystem', item: 'The trade-intent format, the cross-chain interface contract, and the Open Wallet Standard draft.', components: ['C22', 'C25', 'C23'] },
   ],
 
   demo_phases: [
-    { id: 'A', name: 'Foundation', window: 'May 2026',
+    { id: 'A', name: 'Foundation', window: 'May 2026', status: 'done',
       focus: 'Devnet harness; domain-separation registry spec begins; account-custody contract spec begins; signing primitive ported from existing experiments; WebAuthn integration in browser.',
       components: ['C8', 'C1', 'C5', 'C9'],
       artefact: 'Passkey login lands a contract call.',
     },
-    { id: 'B', name: 'Core flows', window: 'June 2026',
-      focus: 'Wallet local storage; name service contract; proof-generation pipeline; view-key + indexer integration.',
+    { id: 'B', name: 'Core flows', window: 'June 2026', status: 'done',
+      focus: 'Wallet local storage; name registration against the upstream registry (MIP-0007) — the demo builds no name contract; proof-generation pipeline; view-key + indexer integration.',
       components: ['C16', 'C2', 'C6', 'C7', 'C17'],
-      artefact: 'Name registered; wallet shows role balances synced from a hosted indexer.',
+      artefact: 'Name registered; wallet shows role balances synced from a hosted indexer (the address-custody wallet view demonstrated then, since retired — the wallet view now reads the account contract).',
     },
-    { id: 'C', name: 'Authorisation surface', window: 'July 2026',
+    { id: 'C', name: 'Authorisation surface', window: 'July 2026', status: 'done',
       focus: 'Grant primitive, lifecycle, chain-side enforcement; lost-device flow; trade-intent layer.',
       components: ['C10', 'C11', 'C12', 'C13', 'C22'],
-      artefact: 'Authorisation key rotation lands; lost-device revocation works end-to-end.',
+      artefact: 'Authorisation key rotation lands; lost-device revocation demonstrated at the auth-provider layer (a demo shortcut — the account-level remove_device flow is the standards path, implemented in the prototype).',
     },
-    { id: 'D', name: 'Integration & recovery', window: 'August 2026',
+    { id: 'D', name: 'Integration & recovery', window: 'August 2026', status: 'current',
       focus: 'Pseudo third-party app; dApp connection protocol; total-loss recovery happy path.',
       components: ['C23', 'C14'],
       artefact: 'Sign-in-with-Passport works against a pseudo dApp.',
     },
-    { id: 'E', name: 'Hardening', window: 'September 2026',
+    { id: 'E', name: 'Hardening', window: 'September 2026', status: 'planned',
       focus: 'Polish; migration narrative document; dress rehearsal.',
       components: [],
       artefact: 'Full end-to-end demo runs in a clean checkout.',
     },
-    { id: 'F', name: 'Demo', window: 'October 2026',
+    { id: 'F', name: 'Demo', window: 'October 2026', status: 'planned',
       focus: 'Final integration; demonstration to stakeholders.',
       components: [],
       artefact: 'The demo.',
@@ -1252,30 +1324,30 @@ window.PASSPORT_DATA = {
   // Internal compromise framing is intentionally absent here; this surface
   // describes the demo's architectural choice without value-laden language.
   demo_selections: [
-    { component: 'C1',  alt: 'A',  note: 'One Compact contract per account; mirrors the existing custody-feasibility experiment.' },
+    { component: 'C1',  alt: 'A',  note: 'One Compact contract per account; mirrors the reference implementation the standards ship with.' },
     { component: 'C2',  alt: 'D',  note: 'Uses the deployed upstream name service (MIP-0007) under passport.night; the demo builds no name contract.' },
     { component: 'C3',  alt: 'F',  note: 'No DID surface in the demo; revisited when an external partner integration requires one.' },
-    { component: 'C4',  alt: 'B',  note: 'Address-custody. Seed wrapped in storage; never user-required (P1 holds).' },
-    { component: 'C5',  alt: 'D',  note: 'FROST-Jubjub via partner-operated MPC committee with DKG. Standards path retires this in favour of per-device Schnorr-on-Jubjub.' },
-    { component: 'C6',  alt: '—',  note: 'Multi-party collaborative proving via the MPC nodes — collaborative-proving variant under evaluation. Specifics depend on the upstream MPC provider and remain under discussion.' },
-    { component: 'C7',  alt: '—',  note: 'Witnesses flow through the MPC proving network rather than purely locally.' },
+    { component: 'C4',  alt: 'A″', note: 'Stateless contract custody per MIP-0012, mirroring the reference implementation. The earlier address-custody shortcut (wrapped seed in storage) is retired; the exclusive-custody policy holds in the demo.' },
+    { component: 'C5',  alt: 'D',  note: 'FROST-Jubjub via partner-operated MPC committee with DKG — same verification equation, so the contract cannot tell the difference. Migration plan: per-device Schnorr-on-Jubjub per MIP-0013.', diverges: true },
+    { component: 'C6',  alt: 'D',  note: 'Managed proving through the MPC provider for the demo. Migration plan: browser WASM proving, the decided and validated standards path.', diverges: true },
+    { component: 'C7',  alt: '—',  note: 'Witnesses flow through the MPC proving network rather than purely locally. Migration plan: in-tab witness handling under the browser-WASM prover.', diverges: true },
     { component: 'C8',  alt: 'A',  note: 'Central registry with cryptographer review pre-October.' },
-    { component: 'C9',  alt: '—',  note: 'OAuth2-shaped passkey to the MPC auth provider; one passkey per account in the demo.' },
+    { component: 'C9',  alt: '—',  note: 'OAuth2-shaped passkey to the MPC auth provider; one passkey per account in the demo. Migration plan: PRF-derived on-device keys per the decided model.', diverges: true },
     { component: 'C10', alt: 'A',  note: 'NEAR function-call key model; battle-tested.' },
     { component: 'C11', alt: 'A',  note: 'Instant revocation with automatic expiry-cleanup.' },
     { component: 'C12', alt: 'A',  note: 'Inline verifier inside the account contract.' },
     { component: 'C13', alt: '—',  note: 'Out of demo. Passkey revocation handled at the auth-provider layer.' },
-    { component: 'C14', alt: '—',  note: 'MPC provider\'s account-recovery flow (alt-passkey, backup credential). Standards path delivers full social / total-loss recovery.' },
+    { component: 'C14', alt: '—',  note: 'MPC provider\'s account-recovery flow (alt-passkey, backup credential). Migration plan: BUSS stateless-guardian recovery, already running in the prototype.', diverges: true },
     { component: 'C15', alt: '—',  note: 'Stubbed for the demo.' },
     { component: 'C16', alt: '—',  note: 'Holds session and auth state to the MPC provider; no signing-key material on device.' },
-    { component: 'C17', alt: 'A',  note: 'Hosted indexer (single provider). Standards path specs the multi-provider directory.' },
+    { component: 'C17', alt: 'A',  note: 'Hosted indexer (single provider). Migration plan: the multi-provider directory P8 requires.', diverges: true },
     { component: 'C18', alt: 'A',  note: 'One tree per issuer; demo does not exercise multi-issuer.' },
     { component: 'C19', alt: '—',  note: 'Deferred from demo.' },
     { component: 'C20', alt: '—',  note: 'Deferred from demo.' },
     { component: 'C21', alt: '—',  note: 'Deferred from demo.' },
     { component: 'C22', alt: 'C',  note: 'Hybrid by audience — wallet UI presents trade intents, dApp protocol passes the canonical upstream form. Adopts the upstream trade-intent format verbatim and integrates against the cross-chain layer when it materialises.' },
-    { component: 'C23', alt: 'A',  note: 'CAIP-25 + EIP-6963 + WalletConnect v2.' },
-    { component: 'C24', alt: 'B',  note: 'NIGHT airdrop. Operationally simplest for the demo; the confirmed wallet-level fee splitting (F1–F6) is the standards path.' },
+    { component: 'C23', alt: 'B',  note: 'CAIP-25 + EIP-6963 + WalletConnect v2 for the demo. Migration plan: Open Wallet Standard on top, per the decided direction.', diverges: true },
+    { component: 'C24', alt: 'B',  note: 'NIGHT airdrop — operationally simplest for the demo. Migration plan: the confirmed wallet-level fee splitting (F1–F6), the standards path.', diverges: true },
     { component: 'C25', alt: '—',  note: 'Out of demo. Cross-chain capability lands when the upstream interface is defined.' },
   ],
 
@@ -1283,9 +1355,9 @@ window.PASSPORT_DATA = {
     {
       id: 'X-shared',
       title: 'Shared primitives',
-      summary: 'Components where the MVP\'s implementation IS the v1.0 deliverable — same code, evolving in lockstep.',
+      summary: 'Components where the MVP\'s implementation IS the v1.0 deliverable — same code, evolving in lockstep. The demo\'s signing and storage picks diverge (see the picks table), so C5 and C16 are shared at the interface only.',
       kind: 'components',
-      items: ['C8', 'C16', 'C1', 'C5'],
+      items: ['C8', 'C1'],
     },
     {
       id: 'X-std-to-demo',
@@ -1313,6 +1385,7 @@ window.PASSPORT_DATA = {
   experiments: [
     {
       id: 'redjubjub-wallet',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/redjubjub-wallet',
       name: 'Schnorr-on-Jubjub end-to-end',
       summary: 'In-circuit Schnorr verification gating token release from a Compact contract on devnet — TypeScript client with a Rust CLI signer, replay counter bound into the challenge. The evidence base for the MIP-0013 signature scheme.',
       validates: ['C5', 'C7', 'C1'],
@@ -1320,6 +1393,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'redjubjub-wallet-rs',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/redjubjub-wallet-rs',
       name: 'Schnorr wallet — pure Rust',
       summary: 'The same signing and verification reproduced directly on the midnight-ledger crates, with no TypeScript, WASM, or npm dependency — signatures interchangeable with the TypeScript rig. Demonstrates the client-agnostic signing boundary MIP-0013 standardises, and pins the challenge hash as persistentHash: SHA-256 over the field-aligned encoding, stable across toolchain upgrades.',
       validates: ['C5', 'C7'],
@@ -1327,6 +1401,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'account-custody-prototype',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/account-custody-prototype',
       name: 'Account-custody prototype (passkey wallet)',
       summary: 'Passkey-authenticated wallet app driving a device-set account contract on devnet: add and remove devices, epoch revocation, Night custody, on-device proving, and BUSS / ANARKey recovery behind the recovery seam. Its hash-preimage authorisation placeholder has since been superseded by the reference implementation\'s in-circuit Schnorr per MIP-0013.',
       validates: ['C1', 'C9', 'C16'],
@@ -1334,6 +1409,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'contract-custody-feasibility',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/contract-custody-feasibility',
       name: 'Contract-vs-address custody (S1–S6)',
       summary: 'Six probes establishing what is feasible for shielded and unshielded asset custody at the contract layer, and what remains gated on SDK fixes.',
       validates: ['C1', 'C4'],
@@ -1341,6 +1417,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'stateless-shielded-custody',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/stateless-shielded-custody',
       name: 'Stateless shielded custody (W1–W6)',
       summary: 'Six probes validating contract custody of shielded coins without public coin state: witness-supplied coin info is accepted by the node, deposits are discovered via an encrypted on-contract inbox, and observer surfaces carry zero coin artefacts where the public-state control leaks nonce and color verbatim. Also surfaced the change-handling rule (persist the re-owned coin, not the pre-transient change) that the reference pattern in circulation gets wrong.',
       validates: ['C4', 'C1', 'C16', 'C17'],
@@ -1348,6 +1425,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'dust-sponsorship-feasibility',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/dust-sponsorship-feasibility',
       name: 'Wallet-level fee splitting (F1–F6)',
       summary: 'End-to-end confirmation on a production node that the wallet SDK\'s fee-splitting parameter lands sponsored transactions: a two-balanced transfer, a sponsored circuit call from a zero-token user, and a sponsored contract deployment. The negative probes (TTL expiry, sponsor exhaustion) fail in ways a sponsor service can detect; the tutorial\'s corruption warning is refuted.',
       validates: ['C24'],
@@ -1355,6 +1433,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'contract-to-contract-transfer',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/contract-to-contract-transfer',
       name: 'Direct contract-to-contract shielded transfer (P1–P3)',
       summary: 'One client-composed transaction pairs a custody contract\'s witness-supplied spend with another custody contract\'s claim — no Compact cross-contract calls. The received coin is first-class, and the measured privacy cost is exactly the predicted address linking, with value, color, and nonce hidden. The technical leg of the one-hop rule falls; the privacy leg stands, and both payment modes are now normative in MIP-0012.',
       validates: ['C4', 'C22'],
@@ -1362,6 +1441,7 @@ window.PASSPORT_DATA = {
     },
     {
       id: 'account-custody-reference',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/contract',
       name: 'Account custody reference implementation',
       summary: 'The standard to build against: MIP-0012 and MIP-0013 realised in one deployment at contract/, with every conformance suite the standards require passing on a live stack, an independent bit-exact Rust signer on the published ledger crates, a byte-level leak audit, and the discovery walk exercised end to end from the contract address alone.',
       validates: ['C1', 'C4', 'C5', 'C17'],
