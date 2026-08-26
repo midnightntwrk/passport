@@ -8,12 +8,14 @@
     "examples/passport-app-hub",
     "examples/passport-demo",
     "examples/passport-funder",
+    "examples/passport-profile-client",
     "examples/raffle-demo"
   ],
   "scripts": {
     "test:backend": "npm run test --workspace demo-backend",
     "demo:raffle": "npm run dev --workspace examples/raffle-demo",
-    "demo:hub": "npm run dev --workspace passport-app-hub"
+    "demo:hub": "npm run dev --workspace passport-app-hub",
+    "demo:profile-client": "npm run dev --workspace passport-profile-client"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
