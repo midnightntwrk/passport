@@ -7,15 +7,26 @@
     "demo-backend",
     "examples/passport-app-hub",
     "examples/passport-demo",
+    "examples/passport-docs",
     "examples/passport-funder",
     "examples/passport-profile-client",
     "examples/raffle-demo"
   ],
   "scripts": {
-    "test:backend": "npm run test --workspace demo-backend",
+    "build": "npm run build --workspace passport-demo-backend && npm run build --workspace passport-demo && npm run build --workspace passport-profile-client",
+    "test": "npm run test --workspace passport-demo-backend",
+    "test:demo-backend": "npm run test --workspace passport-demo-backend",
+    "test:pwa": "npm run test:pwa --workspace passport-demo",
+    "demo": "npm run dev --workspace passport-demo",
+    "demo:profile-client": "npm run dev --workspace passport-profile-client",
     "demo:raffle": "npm run dev --workspace examples/raffle-demo",
     "demo:hub": "npm run dev --workspace passport-app-hub",
-    "demo:profile-client": "npm run dev --workspace passport-profile-client"
+    "demo:docs": "npm run dev --workspace passport-docs",
+    "deploy:passport": "VITE_RAFFLE_URL=https://raffle.midnightpassport.com VITE_FUNDER_URL=https://funder.midnightpassport.com npm run build --workspace passport-demo && node scripts/build-vercel-output.mjs examples/passport-demo && cd examples/passport-demo && vercel deploy --prebuilt --prod --yes",
+    "deploy:raffle": "VITE_PASSPORT_ORIGIN=https://midnightpassport.com npm run build --workspace examples/raffle-demo && node scripts/build-vercel-output.mjs examples/raffle-demo && cd examples/raffle-demo && vercel deploy --prebuilt --prod --yes",
+    "deploy:template": "cd examples/passport-app-template && VITE_PASSPORT_ORIGIN=https://midnightpassport.com npm run build && cd ../.. && node scripts/build-vercel-output.mjs examples/passport-app-template && cd examples/passport-app-template && vercel deploy --prebuilt --prod --yes",
+    "deploy:hub": "npm run build --workspace passport-app-hub && node scripts/build-vercel-output.mjs examples/passport-app-hub && cd examples/passport-app-hub && vercel deploy --prebuilt --prod --yes",
+    "deploy:docs": "npm run build --workspace passport-docs && node scripts/build-vercel-output.mjs examples/passport-docs && cd examples/passport-docs && vercel deploy --prebuilt --prod --yes"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
