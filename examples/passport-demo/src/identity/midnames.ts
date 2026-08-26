@@ -473,8 +473,23 @@ export interface AliasClaimProgress {
    * wallet address before a claim, and the wallet neither receives nor spends
    * anything for a name; the service registers it and, once the account exists,
    * funds the ACCOUNT (ruled 2026/08/25).
+   *
+   * `checking`, `preparing`, and `confirm-passkey` were added on 2026/08/26,
+   * and they are the three that happen BEFORE the passkey prompt: re-reading
+   * the registry, waiting on the sponsor's answer, and the ceremony itself.
+   * They exist because a reviewer watched a claim sit on one unchanging label
+   * for the whole of that stretch and could not tell a slow network from a
+   * hung app. A phase vocabulary that starts at the account deploy describes
+   * the part of a claim the user was never confused by.
    */
-  phase: 'attaching-account' | 'deploying-resolver' | 'registering' | 'confirming';
+  phase:
+    | 'checking'
+    | 'preparing'
+    | 'confirm-passkey'
+    | 'attaching-account'
+    | 'deploying-resolver'
+    | 'registering'
+    | 'confirming';
 }
 
 /**

@@ -81,6 +81,16 @@ export interface NetworkBoundary {
    * — precisely so a spec can assert that none of it reaches the screen.
    */
   setSponsorAvailable(available: number): void;
+  /**
+   * Holds the `.night` registry's answer back by `ms` before fulfilling it.
+   *
+   * A slow registry is not a fault — the indexer decodes a real contract's
+   * state and can take seconds on a poor link — and it is the state in which a
+   * claim used to show one unchanging label with nothing behind it. A spec
+   * cannot assert that a wait is EXPLAINED unless it can make the wait happen,
+   * so this is the dial that makes it happen. Default 0.
+   */
+  setRegistryDelay(ms: number): void;
 }
 
 /** @deprecated The old name for {@link NetworkBoundary}. */
@@ -93,6 +103,7 @@ export type RequestLog = NetworkBoundary;
 export async function installNetworkBoundary(page: Page): Promise<NetworkBoundary> {
   const calls: string[] = [];
   let sponsorAvailable = 1;
+  let registryDelayMs = 0;
 
   await page.route('**/funder.midnightpassport.com/**', async (route) => {
     const url = route.request().url();
@@ -160,6 +171,9 @@ export async function installNetworkBoundary(page: Page): Promise<NetworkBoundar
     }
     if (body.includes('CONTRACT_STATE_QUERY')) {
       calls.push('POST indexer CONTRACT_STATE_QUERY');
+      if (registryDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, registryDelayMs));
+      }
       return route.fulfill({
         contentType: 'application/json',
         body: NIGHT_REGISTRY_STATE,
@@ -178,6 +192,9 @@ export async function installNetworkBoundary(page: Page): Promise<NetworkBoundar
     calls,
     setSponsorAvailable(available: number) {
       sponsorAvailable = available;
+    },
+    setRegistryDelay(ms: number) {
+      registryDelayMs = ms;
     },
   };
 }

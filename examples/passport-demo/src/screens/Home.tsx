@@ -61,6 +61,9 @@ export interface HomeScreenProps {
     registerNowBusy?: boolean
     registerNowPhase?:
       | 'activating'
+      | 'checking'
+      | 'preparing'
+      | 'confirm-passkey'
       | 'attaching-account'
       | 'deploying-resolver'
       | 'registering'

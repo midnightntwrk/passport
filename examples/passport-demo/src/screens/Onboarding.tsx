@@ -47,6 +47,28 @@ export interface OnboardingProps {
    * one created and bound to it if none exists here yet.
    */
   onUseDifferentPasskey?: () => void
+  /**
+   * The authenticator's own account of a credential that answered WITHOUT a
+   * PRF result, or null when that has not happened. It cannot open a Passport,
+   * and Passport will not create over it unasked.
+   *
+   * This is a state, not a message, because it needs a control of its own —
+   * see {@link OnboardingProps.onCreateNewPasskey}. Until 2026/08/26 it was
+   * only a message, and the message was WRONG: it told the user to choose "Use
+   * a different passkey", which runs a discoverable assertion and can never
+   * enrol, so the same PRF-less credential answered the picker again and the
+   * user looped with no way out but to dismiss the OS dialog.
+   */
+  unusableCredential?: string | null
+  /**
+   * Enrols a NEW passkey, deliberately. Offered only alongside
+   * {@link OnboardingProps.unusableCredential}, because that is the one state
+   * in which creating is both safe and what the user has asked for: the
+   * credential that answered demonstrably opens no Passport, and the
+   * integrator still passes every credential this browser has a Passport
+   * record for as an exclusion, so a real Passport cannot be replaced.
+   */
+  onCreateNewPasskey?: () => void
   onDismissError?: () => void
 }
 
@@ -58,6 +80,8 @@ export default function OnboardingScreen(props: OnboardingProps) {
     hasExistingPassport,
     onContinue,
     onUseDifferentPasskey,
+    unusableCredential,
+    onCreateNewPasskey,
     onDismissError,
   } = props
 
@@ -103,6 +127,39 @@ export default function OnboardingScreen(props: OnboardingProps) {
               >
                 <X size={14} strokeWidth={2.4} aria-hidden="true" />
               </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* THE ONE DEAD END, AND ITS WAY OUT.
+            A resident credential answered and returned no PRF output, so it
+            cannot open a Passport. The explanation stays — it is the only
+            thing that makes the next click comprehensible — but the advice is
+            now a BUTTON that does what it says. It used to be a sentence
+            pointing at "Use a different passkey", which asserts and never
+            enrols, so the same credential answered the picker again and the
+            user was stuck (found by adversarial verification, 2026/08/26). */}
+        {unusableCredential && stage === 'welcome' ? (
+          <div className="mnob-unusable" role="alert">
+            <p className="mnob-unusable-copy">
+              {unusableCredential} It cannot open a Passport — Passport needs the WebAuthn PRF
+              extension to derive your keys.
+            </p>
+            {onCreateNewPasskey ? (
+              <>
+                <button
+                  type="button"
+                  className="mnob-unusable-action"
+                  onClick={onCreateNewPasskey}
+                >
+                  <Fingerprint size={16} strokeWidth={2} aria-hidden="true" />
+                  Create a new passkey
+                </button>
+                <p className="mnob-hint">
+                  Makes a new passkey on this device and opens a Passport with it. Any passkey
+                  this browser already holds a Passport for is left untouched.
+                </p>
+              </>
             ) : null}
           </div>
         ) : null}

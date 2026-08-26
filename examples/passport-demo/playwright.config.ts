@@ -28,8 +28,9 @@ import { defineConfig, devices } from '@playwright/test';
 const live = process.env.RUN_LIVE === '1';
 
 /**
- * The build tier 1 serves. These are the same values `npm run deploy:passport`
- * builds with, minus the raffle origin, so the mocked walk exercises the same
+ * The build tier 1 serves. These are the same values the deployment builds
+ * with (.github/workflows/deploy-demo.yml, and `deploy:passport:manual` for the
+ * break-glass path), minus the raffle origin, so the mocked walk exercises the same
  * code paths the deployment does.
  */
 const previewEnv = {

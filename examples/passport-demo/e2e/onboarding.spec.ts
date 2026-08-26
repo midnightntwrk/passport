@@ -51,6 +51,8 @@
  * of what a user does.
  */
 
+import crypto from 'node:crypto';
+
 import { expect, test, type Page } from '@playwright/test';
 
 import { installNetworkBoundary, type NetworkBoundary } from './mocks.js';
@@ -151,13 +153,23 @@ test('with no sponsor, the screen promises a queue and never a payment', async (
      say so. What must not change is who pays: there is no self-paid claim
      behind this screen and has not been since 2026/08/25, so nothing here may
      offer the wallet as an alternative. */
-  await page.route('**/funder.midnightpassport.com/**/status', (route) =>
-    route.fulfill({ json: { network: 'stagenet', aliasSponsorship: 'paused' } }),
-  );
+  test.setTimeout(200_000);
+  /* A sponsor that takes its time, and stands down. Both halves matter: the
+     delay is what makes the second stage long enough to read, and the refusal
+     is what proves the gate still stops the claim before any ceremony. */
+  await page.route('**/funder.midnightpassport.com/**/status', async (route) => {
+    /* Slower than the registry below, deliberately. The two probes now run
+       CONCURRENTLY — removing that serialisation is half of the fix — so the
+       second stage is only long enough to observe when the sponsor is the
+       slower of the two. Comfortably inside `sponsoredAlias.ts`'s own 4 s
+       ceiling, so what is being watched is a slow answer and not a timeout. */
+    await new Promise((resolve) => setTimeout(resolve, 3_500));
+    return route.fulfill({ json: { network: 'stagenet', aliasSponsorship: 'paused' } });
+  });
   await page.reload();
   await expect(page.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 60_000 });
   await page.getByLabel('Your Midnight name').fill(NAME);
-  await expect(page.getByText(`${NAME}.night is available`)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(`${NAME}.night is available`)).toBeVisible({ timeout: 30_000 });
 
   // The "we will register this for you" promise is withdrawn…
   await expect(page.getByText(/Press claim and Passport registers/i)).toHaveCount(0);
@@ -184,6 +196,127 @@ test('with no sponsor, the screen promises a queue and never a payment', async (
 
   /* Put the sponsoring answer back, so the rest of the walk runs against the
      service as it really behaves. */
+  await page.route('**/funder.midnightpassport.com/**/status', (route) =>
+    route.fulfill({
+      json: { network: 'stagenet', aliasSponsorship: 'available', assetSymbol: 'mUSD' },
+    }),
+  );
+});
+
+test('a slow registry is narrated in stages, and never as an unexplained spinner', async () => {
+  /* THE DEFECT THIS IS ABOUT.
+     A reviewer clicked claim on the live site and reported the passkey prompt
+     arriving long afterwards with nothing on screen but a spinner. Measured on
+     2026/08/26 the gap was 2.19 s under a throttled link (0.56 s on a fast
+     one) — not the minutes it felt like, and the reason it felt like minutes
+     was that the button said "Deploying your name's resolver…" throughout: one
+     unchanging sentence, about a step that had not started, over a wait the
+     user could not distinguish from a hang.
+
+     Two things are held to here. The stages are NARRATED — each says what is
+     actually happening — and the REFUSAL still lands before the ceremony, which
+     is the constraint the whole ordering exists for. A slow registry is the
+     honest way to make the wait long enough to read: `setRegistryDelay` holds
+     the indexer's answer back exactly as a poor link does. */
+  test.setTimeout(200_000);
+  /* A sponsor that takes its time, and stands down. Both halves matter: the
+     delay is what makes the second stage long enough to read, and the refusal
+     is what proves the gate still stops the claim before any ceremony. */
+  await page.route('**/funder.midnightpassport.com/**/status', async (route) => {
+    /* Slower than the registry below, deliberately. The two probes now run
+       CONCURRENTLY — removing that serialisation is half of the fix — so the
+       second stage is only long enough to observe when the sponsor is the
+       slower of the two. Comfortably inside `sponsoredAlias.ts`'s own 4 s
+       ceiling, so what is being watched is a slow answer and not a timeout. */
+    await new Promise((resolve) => setTimeout(resolve, 3_500));
+    return route.fulfill({ json: { network: 'stagenet', aliasSponsorship: 'paused' } });
+  });
+  await page.reload();
+  await expect(page.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 60_000 });
+  await page.getByLabel('Your Midnight name').fill(NAME);
+  await expect(page.getByText(`${NAME}.night is available`)).toBeVisible({ timeout: 30_000 });
+
+  /* Nothing may reach the authenticator on this walk. Counting the calls is
+     the only assertion that proves it: a claim refused for want of a sponsor
+     must cost the user no ceremony at all, and "the button showed an error" is
+     not the same fact. */
+  await page.evaluate(() => {
+    const original = navigator.credentials.get.bind(navigator.credentials);
+    (window as unknown as { __prompts: number }).__prompts = 0;
+    navigator.credentials.get = (...args: Parameters<typeof original>) => {
+      (window as unknown as { __prompts: number }).__prompts += 1;
+      return original(...args);
+    };
+  });
+
+  /* EVERY label the button shows, recorded rather than raced.
+     A `toBeVisible` on each stage in turn can only ever assert that a stage
+     was on screen at the moment Playwright happened to look, which makes the
+     test's own scheduling part of what it measures — and the stages are short
+     precisely because the fix made them short. A MutationObserver installed
+     before the click sees all of them, in order, however briefly each lasts. */
+  await page.evaluate(() => {
+    const claim = document.querySelector('.mnid-primary');
+    if (!claim) throw new Error('The claim button was not on screen.');
+    const seen: string[] = [(claim.textContent ?? '').trim()];
+    (window as unknown as { __labels: string[] }).__labels = seen;
+    new MutationObserver(() => {
+      const text = (claim.textContent ?? '').trim();
+      if (text && text !== seen[seen.length - 1]) seen.push(text);
+    }).observe(claim, { childList: true, subtree: true, characterData: true });
+  });
+
+  /* Every warmed answer is deliberately allowed to age out, so the claim
+     re-probes BOTH for itself — which is the path this test is about, and the
+     one the ten-second TTL in `identity/claimWarmup.ts` guarantees. The wait
+     also has to clear `sponsoredAlias.ts`'s own 30 s probe cache, without which
+     the sponsor's answer comes from memory and there is no second stage to
+     watch — hence forty seconds rather than eleven. It is measured from the
+     mount-time probe, which settled a second or two before the name was typed,
+     so the margin is comfortable either way. */
+  network.setRegistryDelay(2_000);
+  await page.waitForTimeout(40_000);
+
+  await page.getByRole('button', { name: new RegExp(`Claim ${NAME}\\.night`) }).click();
+
+  /* STAGE ONE, on screen while the registry takes its two seconds — and beside
+     it the sentence a spinner cannot carry: what is happening, and that this
+     part is short. The reviewer asked for exactly this ("you have to let the
+     user know this will take time"). */
+  await expect(
+    page.getByRole('button', { name: new RegExp(`Checking ${NAME}\\.night is still free`) }),
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(
+    page.getByText(/checking the name is still free and that the service can register it/i),
+  ).toBeVisible();
+
+  /* Then the refusal, with the sponsor's own sentence — before any ceremony,
+     exactly as it was before the warming existed. */
+  await expect(page.getByText(/The claim did not complete/i)).toBeVisible({ timeout: 20_000 });
+  await expect(
+    page.getByText(/The Passport service that registers names is not available right now/i),
+  ).toBeVisible();
+
+  /* THE STAGES, in the order they happened. Two distinct sentences before the
+     refusal, each naming its own step: this is the whole of the defect, which
+     was ONE unchanging label — "Deploying your name's resolver…" — held over
+     the entire wait. Nothing here is ever an unexplained spinner. */
+  const labels = await page.evaluate(
+    () => (window as unknown as { __labels: string[] }).__labels,
+  );
+  expect(labels.some((label) => new RegExp(`Checking ${NAME}\\.night is still free`).test(label))).toBe(
+    true,
+  );
+  expect(labels.some((label) => /Preparing your Passport/.test(label))).toBe(true);
+  // And not one of them claims a step that had not started.
+  expect(labels.some((label) => /Deploying your name's resolver/.test(label))).toBe(false);
+
+  // NOT ONE passkey prompt for a claim that was always going to be refused.
+  expect(await page.evaluate(() => (window as unknown as { __prompts: number }).__prompts)).toBe(0);
+  // And nothing was asked of the registration endpoint either.
+  expect(network.calls.filter((call) => call.includes('register-alias'))).toHaveLength(0);
+
+  network.setRegistryDelay(0);
   await page.route('**/funder.midnightpassport.com/**/status', (route) =>
     route.fulfill({
       json: { network: 'stagenet', aliasSponsorship: 'available', assetSymbol: 'mUSD' },
@@ -370,4 +503,112 @@ test('a busy fee sponsor disables the Send control rather than removing it', asy
   await expect(
     page.getByText(/Network fee expected to be covered by the fee sponsor/i),
   ).toBeVisible();
+});
+
+test('a passkey that answers without PRF offers a way out, and the way out works', async ({
+  browser,
+}) => {
+  /* THE FALSE REMEDY, AND THE REAL ONE.
+     `discoverOrEnroll` reports `unusable-credential` when a resident credential
+     for this origin ANSWERS and returns no PRF output: it cannot open a
+     Passport, and creating under the same deterministic user handle might
+     replace it, so Passport stops. Until 2026/08/26 it stopped with a message
+     telling the user to choose "Use a different passkey" — which runs one
+     discoverable assertion and can NEVER enrol. The same PRF-less credential
+     answered the picker again, and again, with no escape but dismissing the OS
+     dialog until the `cancelled` path happened to fall through to enrolment.
+
+     Adversarial verification found that message rendering correctly and nobody
+     having ever followed its advice. So this test does not stop at the words:
+     it presses the control and requires a working Passport at the end of it.
+
+     THE FIXTURE, and why it is a fair model. `WebAuthn.addCredential` plants a
+     resident credential the virtual authenticator did not create, and such a
+     credential answers with `{ prf: {} }` — no `results.first` — on an
+     authenticator that is itself PRF-capable. That is exactly the real case
+     this state exists for: an older credential enrolled without the extension,
+     on a device that supports it. Enrolling a NEW credential on the same
+     authenticator then yields PRF, which is what makes the recovery reachable
+     rather than merely offered.
+
+     Its own context: this walk needs a browser whose only credential for the
+     origin is the planted one, and the shared page above has a real Passport. */
+  const context = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  const fresh = await context.newPage();
+  await installNetworkBoundary(fresh);
+
+  const client = await context.newCDPSession(fresh);
+  await client.send('WebAuthn.enable', { enableUI: false });
+  const { authenticatorId } = await client.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      ctap2Version: 'ctap2_1',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      /* PRF-capable, deliberately: the authenticator is not the problem, the
+         credential planted on it is. A `hasPrf: false` authenticator would
+         model a device that can never onboard at all, which is a different
+         (and genuinely unrecoverable) state. */
+      hasPrf: true,
+      hasLargeBlob: true,
+      automaticPresenceSimulation: true,
+    },
+  });
+
+  const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  await client.send('WebAuthn.addCredential', {
+    authenticatorId,
+    credential: {
+      credentialId: crypto.randomBytes(32).toString('base64'),
+      isResidentCredential: true,
+      rpId: 'localhost',
+      privateKey: Buffer.from(privateKey.export({ type: 'pkcs8', format: 'der' })).toString('base64'),
+      userHandle: Buffer.from('legacy-passkey').toString('base64'),
+      signCount: 0,
+    },
+  });
+
+  try {
+    await fresh.goto('/');
+    await fresh.getByRole('button', { name: /Continue with Passport/i }).click();
+
+    /* The state, said plainly — and NOT pointing at a control that cannot
+       help. The old sentence named "Use a different passkey"; that advice is
+       gone, because that flow only ever asserts. */
+    await expect(
+      fresh.getByText(/does not support the extension Passport needs/i).first(),
+    ).toBeVisible({ timeout: 60_000 });
+    const explained = await fresh.locator('body').innerText();
+    expect(explained).not.toMatch(/Choose "Use a different passkey" to create one/i);
+    /* The thrown explanation, which only the `unusable-credential` branch
+       produces — so this pins the test to that state rather than to any screen
+       that happens to mention the extension. It now names the control that is
+       actually beside it. */
+    await expect(
+      fresh.getByText(/Choose "Create a new passkey" to make one that can/i),
+    ).toBeVisible();
+
+    /* THE WAY OUT — a real control, and it says what it does. */
+    const createNew = fresh.getByRole('button', { name: /Create a new passkey/i });
+    await expect(createNew).toBeVisible();
+    await expect(
+      fresh.getByText(/Any passkey this browser already holds a Passport for is left untouched/i),
+    ).toBeVisible();
+
+    await createNew.click();
+
+    /* And it lands on a WORKING Passport: the name step, which is only reached
+       once a passkey was enrolled, its PRF derived the wallet seed, and the
+       wallet actually opened. Nothing short of that proves the escape. */
+    await expect(fresh.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 90_000 });
+    await expect(fresh.getByText(/^LAST STEP$/i)).toBeVisible();
+    // The dead end is gone rather than merely covered up.
+    await expect(
+      fresh.getByText(/does not support the extension Passport needs/i),
+    ).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
 });

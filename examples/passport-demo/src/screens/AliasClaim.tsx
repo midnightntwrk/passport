@@ -101,15 +101,40 @@ type FieldState =
   | { kind: 'checking'; alias: string }
   | { kind: 'answered'; alias: string; availability: AliasAvailability }
 
+/**
+ * What the button says at each stage, and why there are now seven of them.
+ *
+ * A reviewer clicked claim on the live site and watched one unchanging
+ * sentence — "Deploying your name's resolver…" — for the whole stretch before
+ * the passkey prompt appeared, which is a sentence about a step that had not
+ * started yet. Three stages happen before that prompt (the registry re-check,
+ * the sponsor's answer, and the ceremony), and each now says what it is.
+ *
+ * The account-contract stage says "Setting up your account". It used to name
+ * the contract being deployed; that is the machinery, and a person waiting on
+ * their Passport is owed the thing it is FOR.
+ */
 const PHASE_COPY: Record<AliasClaimProgress['phase'], (domain: string) => string> = {
-  /* The account contract is deployed as part of claiming, so the button names
-     it. A step the user is paying for and waiting on is a step they are told
-     about — silence here would be the "transparent" that means hidden. */
-  'attaching-account': () => 'Deploying your Passport account contract…',
+  checking: (domain) => `Checking ${domain} is still free…`,
+  preparing: () => 'Preparing your Passport…',
+  'confirm-passkey': () => 'Confirm with your passkey',
+  'attaching-account': () => 'Setting up your account…',
   'deploying-resolver': () => "Deploying your name's resolver…",
   registering: (domain) => `Registering ${domain}…`,
   confirming: () => 'Waiting for the registry to confirm…',
 }
+
+/**
+ * The stages that run before the passkey prompt, so the panel below can say
+ * "this takes a moment" while they do and "this takes minutes" afterwards.
+ * Two different waits, and telling the user they are the same wait is how a
+ * progress label becomes a spinner.
+ */
+const PRE_CEREMONY_PHASES = new Set<AliasClaimProgress['phase']>([
+  'checking',
+  'preparing',
+  'confirm-passkey',
+])
 
 export default function AliasClaimScreen(props: AliasClaimProps) {
   const {
@@ -281,6 +306,27 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
         </div>
 
         <AvailabilityLine field={field} networkId={networkId} />
+
+        {/* WHILE IT RUNS, SAY SO. A claim is three proved transactions and
+            genuinely takes minutes; a reviewer on 2026/08/26 asked for exactly
+            this — "your passport is on their way, please be patient… you have
+            to let the user know this will take time" — after watching a
+            spinner that promised nothing. Two sentences, because the wait
+            before the passkey prompt and the wait after it are not the same
+            wait and must not be described as one. */}
+        {busy && claimPhase ? (
+          <div className="mnid-panel" role="status" aria-live="polite">
+            <p className="mnid-panel-head">
+              <Loader2 className="mnid-spin" size={15} aria-hidden="true" />
+              {PHASE_COPY[claimPhase](aliasDomain(alias ?? 'your name'))}
+            </p>
+            <p>
+              {PRE_CEREMONY_PHASES.has(claimPhase)
+                ? 'Passport is checking the name is still free and that the service can register it, before it asks for your passkey. This takes a moment.'
+                : 'Your Passport is on its way. This part takes a few minutes — three transactions are proved and submitted for you. You can leave this screen open; Passport will say when it is done.'}
+            </p>
+          </div>
+        ) : null}
 
         {sponsorRegisters ? (
           <div className="mnid-panel" role="status">

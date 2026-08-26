@@ -28,6 +28,20 @@
  * listener set, and the rule that a release only counts once — so every one of
  * those branches is drilled directly in `src/lib/appBusy.test.ts`.
  *
+ * `src/identity/claimWarmup.ts` went IN on 2026/08/26, the day it was written,
+ * and it belongs in the denominator more than most: it is the module that
+ * decides whether a claim may REUSE an answer to "is this name still free" and
+ * "will the service register it" instead of asking again. Getting that wrong is
+ * not a slow screen, it is a claim that proceeds to a passkey prompt and an
+ * account deploy on a stale "available" — the exact refusal the pre-checks
+ * exist to make before the ceremony. Every rule that makes reuse safe is a
+ * branch in this file: the key is the name AND the network, the TTL expiry
+ * forces a re-probe, a non-answer is never cached, a rejection is never cached,
+ * and a refusal is handed back as the refusal it was. It holds no DOM, no
+ * React, no `fetch` and no clock of its own — the probes and the clock are
+ * injected — so all of it is drilled directly on a fake clock in
+ * `src/identity/claimWarmup.test.ts`.
+ *
  * `src/lib/feeReadinessPoll.ts` went IN on 2026/08/25 rather than out with the
  * screens it serves: it is the sponsor watcher, it holds no DOM and no React,
  * and its whole contract — probe now, probe again every five seconds, publish
@@ -137,6 +151,7 @@ export default mergeConfig(
           'src/lib/qrScan.ts',
           'src/lib/sponsor.ts',
           'src/identity/backup.ts',
+          'src/identity/claimWarmup.ts',
           'src/identity/sponsoredAlias.ts',
           'src/identity/timestamps.ts',
         ],

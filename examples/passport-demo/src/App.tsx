@@ -56,6 +56,7 @@ import type {
   AliasClaimResult,
   MidnamesNetwork,
 } from './identity/midnames.js';
+import { createClaimWarmup } from './identity/claimWarmup.js';
 import {
   loadPassportContractRecord,
   loadPassportContractRecords,
@@ -355,6 +356,60 @@ async function aliasSponsorshipLikely(network: string | null | undefined): Promi
   const { checkAliasSponsorship } = await import('./identity/sponsoredAlias.js');
   return checkAliasSponsorship(FUNDER_URL, network as MidnamesNetwork);
 }
+
+/**
+ * The claim path's four chunks, fetched and evaluated while the user is still
+ * choosing a name.
+ *
+ * `claimAliasBoundToAccount` opens with a `Promise.all` of these same four
+ * imports, and on the live site that resolution was the single largest thing
+ * standing between the claim click and the passkey prompt: ~0.9 s of the
+ * measured 2.19 s gap (stagenet, 1.6 Mbit, 4x CPU, 2026/08/26). ES module
+ * imports are idempotent and deduplicated by the loader, so a prefetch started
+ * here and the claim's own `Promise.all` are the SAME work — the claim simply
+ * finds it already done. Nothing downstream has to know this ran.
+ *
+ * Fire-and-forget, and deliberately swallowing: a prefetch that fails has cost
+ * nothing, because the claim's own import is what actually produces the
+ * bindings and will throw properly if the chunk is genuinely unreachable.
+ */
+let claimModulePrefetch: Promise<unknown> | null = null;
+function warmClaimModules(): void {
+  claimModulePrefetch ??= Promise.all([
+    import('./identity/midnames.js'),
+    import('./identity/passportContract.js'),
+    import('./lib/localWallet.js'),
+    import('./identity/sponsoredAlias.js'),
+  ]).catch(() => undefined);
+  void claimModulePrefetch;
+}
+
+/**
+ * The claim's two pre-checks, warmed as the user types and awaited by the
+ * claim — see `identity/claimWarmup.ts` for the rules that make reusing an
+ * answer safe, and for why the window is ten seconds.
+ *
+ * Module scope rather than component state on purpose: the claim screen's
+ * availability probe and `claimAliasBoundToAccount` are the two askers, they
+ * live in different call stacks, and sharing one in-flight promise between
+ * them is the whole mechanism. A re-render must not reset it.
+ */
+const claimWarmup = createClaimWarmup<AliasAvailability>({
+  /* The claim's OWN read — `fresh: true`, straight past `midnames.ts`'s
+     registry cache. That matters beyond speed: the answer the user is shown
+     under the field is now the identical answer the claim gates on, so the
+     screen can no longer say "available" from a cached ledger while the
+     claim's fresher read says taken. */
+  availability: async (network, alias) => {
+    const { checkAliasAvailability } = await import('./identity/midnames.js');
+    return checkAliasAvailability(network as MidnamesNetwork, alias, { fresh: true });
+  },
+  sponsorship: (network) => aliasSponsorshipLikely(network),
+  /* An unreachable registry is a non-answer, not a refusal to cache: one blip
+     while the user was typing must not refuse the claim they make afterwards.
+     `taken` IS an answer and is kept — it can only ever refuse. */
+  trustworthy: (availability) => availability.status !== 'unreachable',
+});
 
 /**
  * Parses a formatted (6-decimal) NIGHT figure back to atomic units, exactly.
@@ -855,6 +910,16 @@ export default function PassportDemo() {
   const [onboardingIntent, setOnboardingIntent] = useState<OnboardingIntent | null>(null);
   const [onboardingBusyLabel, setOnboardingBusyLabel] = useState<string | null>(null);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  /**
+   * Set when a resident credential answered WITHOUT a PRF result, which means
+   * it cannot open a Passport and Passport will not create over it unasked.
+   *
+   * It is state rather than just an error string because it is not merely a
+   * message: it is the one onboarding state that needs a control of its own
+   * (see `enrolNewLocalPassportProfile`, and the false remedy this replaced).
+   * Holds the authenticator's own account of what happened.
+   */
+  const [unusableCredential, setUnusableCredential] = useState<string | null>(null);
   const [localSurfaces, setLocalSurfaces] = useState<LocalWalletSurfaces | null>(null);
   const [localWalletStatus, setLocalWalletStatus] = useState<LocalWalletStatus>('idle');
   const [localSyncPercent, setLocalSyncPercent] = useState<number | null>(null);
@@ -1647,94 +1712,56 @@ export default function PassportDemo() {
   };
 
   /**
-   * First-time create — ONE enrolment, and at most ONE assertion.
+   * Every credential this browser still knows about, for `excludeCredentials`.
    *
-   * The enrolment asks the platform to evaluate the PRF there and then. Where
-   * it obliges, that single ceremony yields both the private-state key and the
-   * wallet seed and the user is prompted exactly once. Where it does not — the
-   * common case, and never surfaced as an error — one targeted assertion
-   * covers both. The old path cost three prompts: enrol, encrypt, derive.
-   *
-   * ASK THE AUTHENTICATOR BEFORE CREATING ANYTHING. "No local profile" is not
-   * the same fact as "no passkey". Site data cleared with the passkey still in
-   * the keychain looks identical to a first visit, and a `create` there would
-   * REPLACE the surviving credential — the user handle is deterministic — and
-   * take its PRF secret, and so every coin its wallet seed derives, with it.
-   * So this discovers first and only enrols when nothing answers. `created`
-   * says which of the two actually happened, so nothing downstream claims a
-   * Passport was made when one was merely reopened.
+   * It is what makes the authenticator ITSELF refuse to replace a Passport
+   * passkey rather than silently overwriting it, so no create path may skip
+   * it — see `enrollWithPrf`, which turns that refusal into
+   * {@link PassportEnrolmentConflictError}. Empty on a genuinely first visit,
+   * which is the case discovery covers instead.
    */
-  const createLocalPassportProfile = async (): Promise<{
+  const knownLocalCredentialIds = async (): Promise<string[]> =>
+    (await listLocalProfiles().catch(() => []))
+      .map((candidate) => candidate.passkey.credentialId)
+      .filter((credentialId): credentialId is string => Boolean(credentialId));
+
+  /**
+   * The authenticator refused to overwrite a passkey it still holds — the
+   * guard working, not a failure. The Passport is intact and the only honest
+   * move is to sign the user into it.
+   */
+  const signInAfterEnrolmentConflict = async (): Promise<{
     profile: DemoPassportProfile;
     created: boolean;
   }> => {
-    const existing = await resolveDefaultLocalProfile();
-    if (existing) {
-      setLocalPassportKnown(true);
-      throw new Error(
-        'This browser already holds a Passport passkey. Choose Sign in to reopen it.',
-      );
-    }
-    setOnboardingBusyLabel('Checking this device for a Passport passkey');
-    /* Every credential this browser still knows about goes into the exclusion
-       list. It is empty on a genuinely first visit, and that is precisely the
-       case discovery above covers instead. */
-    const knownCredentialIds = (await listLocalProfiles().catch(() => []))
-      .map((candidate) => candidate.passkey.credentialId)
-      .filter((credentialId): credentialId is string => Boolean(credentialId));
-    let onboarding: import('./backend.js').PassportPasskeyOnboarding;
+    setOnboardingIntent('local-signin');
+    setOnboardingBusyLabel('You already have a Passport on this device — signing you into it');
+    let recovered: DiscoveredPassportPasskey;
     try {
-      onboarding = await withPasskeyWatchdog(() =>
-        WebAuthnPrfKeyProvider.discoverOrEnroll({
-          label: 'Midnight Passport',
-          userId: LOCAL_ACCOUNT_ID,
-          knownCredentialIds,
-        }),
-      );
-    } catch (cause) {
-      if (!(cause instanceof PassportEnrolmentConflictError)) throw cause;
-      /* The authenticator refused to overwrite a passkey it still holds. That
-         is the guard working, not a failure: the Passport is intact and the
-         only honest move is to sign the user into it. */
-      setOnboardingIntent('local-signin');
-      setOnboardingBusyLabel('You already have a Passport on this device — signing you into it');
-      let recovered: DiscoveredPassportPasskey;
-      try {
-        recovered = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.discover());
-      } catch {
-        throw new Error(
-          'You already have a Passport on this device. Choose "Use a different passkey" to sign in to it.',
-        );
-      }
-      try {
-        return { profile: await adoptDiscoveredPasskey(recovered), created: false };
-      } finally {
-        recovered.dispose();
-      }
-    }
-    if (onboarding.outcome === 'unusable-credential') {
-      /* A passkey for this site answered and cannot open a Passport: it
-         returned no PRF output. Creating one under the same handle could
-         replace it, so this stops and says what to do. "Use a different
-         passkey" runs enrolment deliberately, which is the way out. */
+      recovered = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.discover());
+    } catch {
       throw new Error(
-        'A passkey on this device answered but does not support the extension Passport needs. Choose "Use a different passkey" to create one, or try another browser or security key.',
+        'You already have a Passport on this device. Choose "Use a different passkey" to sign in to it.',
       );
     }
-    if (onboarding.outcome === 'existing') {
-      /* A passkey answered, so this device already has a Passport whatever
-         local storage says. Sign in to it — one prompt, no enrolment, and the
-         wallet seed comes from the assertion just made. */
-      const recovered = onboarding.discovered;
-      setOnboardingIntent('local-signin');
-      try {
-        return { profile: await adoptDiscoveredPasskey(recovered), created: false };
-      } finally {
-        recovered.dispose();
-      }
+    try {
+      return { profile: await adoptDiscoveredPasskey(recovered), created: false };
+    } finally {
+      recovered.dispose();
     }
-    setOnboardingBusyLabel('Creating your Passport passkey');
-    const enrolled = onboarding.enrolled;
+  };
+
+  /**
+   * Turns a freshly enrolled credential into an open Passport: per-credential
+   * scope, encrypted state, wallet.
+   *
+   * Extracted on 2026/08/26 so the deliberate "create a new passkey" recovery
+   * below reaches the SAME Passport a first-time create reaches, rather than a
+   * second, subtly different transcription of these twenty lines.
+   */
+  const adoptEnrolledPasskey = async (
+    enrolled: import('./backend.js').EnrolledPassportPasskey,
+  ): Promise<DemoPassportProfile> => {
     const passkey = enrolled.reference;
     // New profiles bind to their credential: per-credential storage key and
     // per-credential scope, so a second passkey can never collide with this
@@ -1776,10 +1803,149 @@ export default function PassportDemo() {
       // Same handle, same ceremony: the wallet seed costs no further prompt.
       const seed = await handle.deriveWalletSeed(scope);
       await openLocalWalletWithSeed(seed, scope, passkey.credentialId);
-      return { profile: nextProfile, created: true };
+      return nextProfile;
     } finally {
       handle?.dispose();
     }
+  };
+
+  /**
+   * THE WAY OUT of `unusable-credential`, and why creating here is defensible.
+   *
+   * A resident credential for this origin answered and returned no PRF output,
+   * so it CANNOT open a Passport — there is no seed to derive from it and no
+   * state it could decrypt. Passport refuses to create over that on its own,
+   * because a create under the same deterministic user handle may replace the
+   * answering credential, and replacing a passkey that might have been someone
+   * else's Passport is not a decision an app may take silently.
+   *
+   * It is a decision the USER may take, and this is the only path on which
+   * they take it: they have been told, in as many words, that the passkey this
+   * device offered cannot open a Passport, and they have pressed a button that
+   * says it will make a new one. Two things still hold the line:
+   *
+   *   - `excludeCredentials` is still populated from `listLocalProfiles()`, so
+   *     any credential THIS BROWSER has a Passport record for is still
+   *     protected by the authenticator itself, and the refusal still arrives
+   *     as `PassportEnrolmentConflictError` and still routes into sign-in
+   *     rather than an error;
+   *   - the credential that could not answer with a PRF is, by construction,
+   *     not one of those records — it opens no Passport here.
+   *
+   * Before 2026/08/26 this state had no way out at all. It threw a message
+   * advising "Use a different passkey", which runs `runDiscoverableSignIn` —
+   * a discovery that can only ever assert, never enrol — so the same PRF-less
+   * credential answered the picker again and the user looped. The only escape
+   * was to dismiss the OS picker so the `cancelled` path fell through to
+   * enrolment, which nobody could be expected to guess.
+   */
+  const enrolNewLocalPassportProfile = async (): Promise<{
+    profile: DemoPassportProfile;
+    created: boolean;
+  }> => {
+    setOnboardingBusyLabel('Creating your Passport passkey');
+    const knownCredentialIds = await knownLocalCredentialIds();
+    let enrolled: import('./backend.js').EnrolledPassportPasskey;
+    try {
+      enrolled = await withPasskeyWatchdog(() =>
+        WebAuthnPrfKeyProvider.enrollWithPrf({
+          label: 'Midnight Passport',
+          userId: LOCAL_ACCOUNT_ID,
+          knownCredentialIds,
+        }),
+      );
+    } catch (cause) {
+      if (!(cause instanceof PassportEnrolmentConflictError)) throw cause;
+      return signInAfterEnrolmentConflict();
+    }
+    return { profile: await adoptEnrolledPasskey(enrolled), created: true };
+  };
+
+  /**
+   * First-time create — ONE enrolment, and at most ONE assertion.
+   *
+   * The enrolment asks the platform to evaluate the PRF there and then. Where
+   * it obliges, that single ceremony yields both the private-state key and the
+   * wallet seed and the user is prompted exactly once. Where it does not — the
+   * common case, and never surfaced as an error — one targeted assertion
+   * covers both. The old path cost three prompts: enrol, encrypt, derive.
+   *
+   * ASK THE AUTHENTICATOR BEFORE CREATING ANYTHING. "No local profile" is not
+   * the same fact as "no passkey". Site data cleared with the passkey still in
+   * the keychain looks identical to a first visit, and a `create` there would
+   * REPLACE the surviving credential — the user handle is deterministic — and
+   * take its PRF secret, and so every coin its wallet seed derives, with it.
+   * So this discovers first and only enrols when nothing answers. `created`
+   * says which of the two actually happened, so nothing downstream claims a
+   * Passport was made when one was merely reopened.
+   */
+  const createLocalPassportProfile = async (): Promise<{
+    profile: DemoPassportProfile;
+    created: boolean;
+  }> => {
+    const existing = await resolveDefaultLocalProfile();
+    if (existing) {
+      setLocalPassportKnown(true);
+      throw new Error(
+        'This browser already holds a Passport passkey. Choose Sign in to reopen it.',
+      );
+    }
+    setOnboardingBusyLabel('Checking this device for a Passport passkey');
+    const knownCredentialIds = await knownLocalCredentialIds();
+    let onboarding: import('./backend.js').PassportPasskeyOnboarding;
+    try {
+      onboarding = await withPasskeyWatchdog(() =>
+        WebAuthnPrfKeyProvider.discoverOrEnroll({
+          label: 'Midnight Passport',
+          userId: LOCAL_ACCOUNT_ID,
+          knownCredentialIds,
+        }),
+      );
+    } catch (cause) {
+      if (!(cause instanceof PassportEnrolmentConflictError)) throw cause;
+      return signInAfterEnrolmentConflict();
+    }
+    if (onboarding.outcome === 'unusable-credential') {
+      /* A passkey for this site answered and cannot open a Passport: it
+         returned no PRF output. Creating one under the same handle could
+         replace it, so Passport will not do it unasked — but this is a state
+         with a REAL way out, and since 2026/08/26 it offers one rather than
+         describing one.
+
+         What it used to say was false. It advised "Use a different passkey",
+         which runs `runDiscoverableSignIn` — one discoverable assertion, which
+         can never enrol — so a user whose only passkey for this origin has no
+         PRF picked the same credential again and got the same sentence, for
+         ever. The escape hatch was to dismiss the OS picker until the
+         `cancelled` path fell through to enrolment, which is not a thing a
+         person could be expected to work out.
+
+         So the state is raised on its own, with the control that actually
+         resolves it: `enrolNewLocalPassportProfile`, which enrols deliberately
+         with the exclusion guard still on. The thrown message stays as the
+         explanation and now describes the button beside it. */
+      setUnusableCredential(
+        onboarding.message ||
+          'A passkey on this device answered but does not support the extension Passport needs.',
+      );
+      throw new Error(
+        'A passkey on this device answered but does not support the extension Passport needs, so it cannot open a Passport. Choose "Create a new passkey" to make one that can — the passkeys this browser already has a Passport for are left untouched.',
+      );
+    }
+    if (onboarding.outcome === 'existing') {
+      /* A passkey answered, so this device already has a Passport whatever
+         local storage says. Sign in to it — one prompt, no enrolment, and the
+         wallet seed comes from the assertion just made. */
+      const recovered = onboarding.discovered;
+      setOnboardingIntent('local-signin');
+      try {
+        return { profile: await adoptDiscoveredPasskey(recovered), created: false };
+      } finally {
+        recovered.dispose();
+      }
+    }
+    setOnboardingBusyLabel('Creating your Passport passkey');
+    return { profile: await adoptEnrolledPasskey(onboarding.enrolled), created: true };
   };
 
   /**
@@ -1818,13 +1984,19 @@ export default function PassportDemo() {
     }
   };
 
-  const runLocalOnboarding = async (requested: 'create' | 'signin' | 'auto') => {
+  const runLocalOnboarding = async (
+    requested: 'create' | 'signin' | 'auto' | 'enrol-new',
+  ) => {
     if (onboardingRunning.current) return;
     onboardingRunning.current = true;
     // A user-initiated ceremony wins over the silent §2.2 restore: two flows
     // must never race to replace `localWalletRef`.
     cancelSessionRestore();
     setOnboardingError(null);
+    /* Whatever happens next supersedes the dead end. Cleared on the way IN as
+       well as on success, so a second attempt is never read against the first
+       attempt's explanation. */
+    setUnusableCredential(null);
     setError(null);
     // Provisional intent so the screen flips to its working stage at once;
     // the resolved journey below corrects the label.
@@ -1851,7 +2023,17 @@ export default function PassportDemo() {
       );
       // Both journeys now open the wallet from the SAME ceremony that unlocked
       // the profile — no second passkey prompt to derive the seed.
-      if (intent === 'create') {
+      if (requested === 'enrol-new') {
+        /* The `unusable-credential` recovery, and the ONE path that enrols
+           without discovering first. Everything the discover-before-create
+           guard protects has already been established here: a credential
+           answered, and it cannot open a Passport. See
+           `enrolNewLocalPassportProfile` for why creating is the user's call
+           to make and what still stops it replacing a real Passport. */
+        const outcome = await enrolNewLocalPassportProfile();
+        activeProfile = outcome.profile;
+        created = outcome.created;
+      } else if (intent === 'create') {
         const outcome = await createLocalPassportProfile();
         activeProfile = outcome.profile;
         created = outcome.created;
@@ -2107,6 +2289,11 @@ export default function PassportDemo() {
    */
   useEffect(() => {
     if (identityStep !== 'alias') return undefined;
+    /* The claim's four chunks, started the moment the screen mounts rather
+       than when the button is pressed. The user is about to spend at least a
+       few seconds choosing a name, and this is the work that used to happen
+       in the silence after their click (see `warmClaimModules`). */
+    warmClaimModules();
     let live = true;
     void (async () => {
       const sponsored = await aliasSponsorshipLikely(selectedNetwork).catch(() => false);
@@ -2324,9 +2511,30 @@ export default function PassportDemo() {
     [],
   );
 
+  /**
+   * The claim screen's own availability question — AND the moment the claim's
+   * work starts.
+   *
+   * The screen already debounces this by 500 ms per candidate name, which
+   * makes it exactly the hook the warming wants: the user has stopped typing,
+   * the name is a real candidate, and everything the claim will need is known.
+   * So this asks through {@link claimWarmup} rather than probing directly,
+   * which does three things in one call — answers the line under the field,
+   * starts the sponsorship probe alongside it rather than after it, and leaves
+   * both answers where `claimAliasBoundToAccount` will find them. The four
+   * chunks are prefetched beside it, for the same reason.
+   *
+   * The pre-checks have NOT moved relative to the ceremony. They still run,
+   * and still refuse, strictly before any passkey prompt — see
+   * `claimAliasBoundToAccount`. All that changed is that they usually started
+   * while the user was reading the availability line.
+   */
   const checkAliasOnActiveNetwork = useCallback(
-    (alias: string) => probeAlias(selectedNetwork, alias),
-    [probeAlias, selectedNetwork],
+    (alias: string) => {
+      warmClaimModules();
+      return claimWarmup.answers(selectedNetwork, alias).availability;
+    },
+    [selectedNetwork],
   );
 
   const checkAliasOnReclaimTarget = useCallback(
@@ -2612,11 +2820,19 @@ export default function PassportDemo() {
     ): Promise<AliasClaimResult> => {
       const credentialId = activeProfile.passkey.credentialId;
       const network = handle.network.networkId;
+      /* Usually already resolved. `warmClaimModules` starts these same four
+         imports when the name step mounts and again as the user types, and the
+         module loader hands both callers the one evaluation — so on the common
+         path this `await` is a microtask rather than the ~0.9 s it measured
+         cold on the live site. It is still written as the real import, because
+         it IS the real import: the prefetch is an optimisation the claim does
+         not depend on, and a chunk that genuinely cannot be fetched throws
+         here with its own message. */
       const [
-        { AliasClaimError, checkAliasAvailability, deriveMidnamesOwnerKey },
+        { AliasClaimError, deriveMidnamesOwnerKey },
         { deployPassportContract },
         { deriveWalletSeed },
-        { AliasSponsorRefusal, checkAliasSponsorship, sponsorAliasRegistration },
+        { AliasSponsorRefusal, sponsorAliasRegistration },
       ] = await Promise.all([
         import('./identity/midnames.js'),
         import('./identity/passportContract.js'),
@@ -2638,8 +2854,22 @@ export default function PassportDemo() {
 
       /* (1) Both gates before the prompt, so the ACCOUNT CONTRACT is never
          deployed for a claim that was going to be refused anyway. Neither gate
-         reads the wallet's balance: the wallet does not pay for names. */
-      const availability = await checkAliasAvailability(registryNetwork, alias, { fresh: true });
+         reads the wallet's balance: the wallet does not pay for names.
+
+         WARMED, NOT WEAKENED. Both answers come from `claimWarmup`, which
+         hands back the probe the claim screen started for THIS name on THIS
+         network if it is still in flight or younger than ten seconds, and
+         otherwise re-probes exactly as this line used to. The reads are the
+         same reads — `checkAliasAvailability(…, { fresh: true })` and the
+         funder's `/status` — the refusals below are the same refusals in the
+         same order, and every one of them still happens before the ceremony.
+         See `identity/claimWarmup.ts` for why a ten-second window cannot let a
+         stale "available" through. The two probes also now overlap instead of
+         running strictly one after the other, which is where the rest of the
+         measured gap went. */
+      onPhase('checking');
+      const warmed = claimWarmup.answers(registryNetwork, alias);
+      const availability = await warmed.availability;
       if (availability.status === 'taken') {
         throw new AliasClaimError(
           'taken',
@@ -2657,10 +2887,14 @@ export default function PassportDemo() {
       /* Sponsorship, and nothing else. The user's own NIGHT is not part of a
          claim at all — a wallet holding NOTHING gets its name — so there is no
          funds gate to run beside this one, and no balance whose emptiness could
-         refuse exactly the person this exists for. */
-      const sponsored = FUNDER_URL
-        ? await checkAliasSponsorship(FUNDER_URL, registryNetwork)
-        : false;
+         refuse exactly the person this exists for.
+
+         `aliasSponsorshipLikely` behind the warm probe answers `false` for a
+         missing `FUNDER_URL` and for a network Passport cannot register on,
+         which is the same answer the `FUNDER_URL ? … : false` here used to
+         give. */
+      onPhase('preparing');
+      const sponsored = await warmed.sponsored;
       if (!sponsored) {
         /* Refused HERE — before the passkey ceremony and before any deploy —
            rather than deploying an account and then refusing the name. The
@@ -2668,7 +2902,13 @@ export default function PassportDemo() {
         throw new AliasClaimError('network-unreachable', SPONSOR_UNAVAILABLE_SENTENCE);
       }
 
-      /* (2) The one ceremony. Both secrets, one assertion, handle disposed. */
+      /* (2) The one ceremony. Both secrets, one assertion, handle disposed.
+         The label flips to "Confirm with your passkey" on the line ABOVE the
+         call, so the sentence is on screen as the platform raises its prompt
+         rather than after it — and the gap between the user's click and this
+         line is now the warmed pre-checks alone, which is what keeps the call
+         inside the activation window platforms require. */
+      onPhase('confirm-passkey');
       const oneShot = await withPasskeyWatchdog(() =>
         WebAuthnPrfKeyProvider.assertOnce(activeProfile.passkey),
       );
@@ -2714,7 +2954,11 @@ export default function PassportDemo() {
               // The deployed record was written by the gate; this is the claim's
               // own account of it, which a joining claim must not duplicate.
               addActivity({
-                label: 'Passport contract deployed',
+                /* "Your account is set up", not "the contract deployed":
+                   ruled 2026/08/26. The contract is the machinery; the
+                   account is the thing the user was waiting for. The
+                   transaction is still linked, so nothing is hidden. */
+                label: 'Your account is set up',
                 detail: `${compactAddress(deployment.address)} is ${
                   deployment.ledgerConfirmed ? 'live' : 'submitted'
                 } on ${deployment.network}, ready for ${alias}.night to point at it.`,
@@ -2732,7 +2976,7 @@ export default function PassportDemo() {
                  for. */
               pushToast({
                 tone: 'success',
-                title: 'Account deployed',
+                title: 'Your account is set up',
                 body: `${compactAddress(deployment.address)} is ${
                   deployment.ledgerConfirmed ? 'live' : 'submitted'
                 } on ${deployment.network}. Registering ${alias}.night against it now.`,
@@ -2743,7 +2987,7 @@ export default function PassportDemo() {
                 ),
               });
               void notify(
-                'Your Passport contract is deployed',
+                'Your account is set up',
                 `${deployment.ledgerConfirmed ? 'It is live' : 'It is submitted'} on ${
                   deployment.network
                 }. Registering ${alias}.night against it now.`,
@@ -2884,9 +3128,11 @@ export default function PassportDemo() {
       }
       setAliasError(null);
       /* The first phase the button narrates is the first thing that really
-         happens — the availability and funds re-checks — so it stays on
-         'deploying-resolver' only until the ceremony reports otherwise. */
-      setClaimPhase('deploying-resolver');
+         happens — the availability re-check. It used to say "Deploying your
+         name's resolver…" here, which was a sentence about a step three stages
+         further on and left the user watching a spinner that never changed
+         until the account deploy. `claimAliasBoundToAccount` advances it. */
+      setClaimPhase('checking');
       try {
         const result = await claimAliasBoundToAccount(handle, activeProfile, alias, setClaimPhase);
         saveAliasRecord({
@@ -3052,7 +3298,7 @@ export default function PassportDemo() {
       // ceremony, the account contract deployed if this Passport has none on
       // this network, then the two Midnames transactions with the name bound
       // to that contract. See `claimAliasBoundToAccount`.
-      setClaimPhase('deploying-resolver');
+      setClaimPhase('checking');
       const result = await claimAliasBoundToAccount(
         handle,
         activeProfile,
@@ -3239,7 +3485,7 @@ export default function PassportDemo() {
         deployedDomain,
       );
       addActivity({
-        label: 'Passport contract deployed',
+        label: 'Your account is set up',
         detail: `${compactAddress(deployment.address)} is ${
           deployment.ledgerConfirmed ? 'live' : 'submitted'
         } on ${deployment.network}.`,
@@ -3249,7 +3495,7 @@ export default function PassportDemo() {
       });
       pushToast({
         tone: 'success',
-        title: 'Your Passport contract is deployed',
+        title: 'Your account is set up',
         body: `${
           deployment.ledgerConfirmed
             ? 'The indexer is serving its state.'
@@ -3266,7 +3512,7 @@ export default function PassportDemo() {
       /* The retry path. Same tag as the claim's deploy: one contract, one
          story, whichever route reached it. */
       void notify(
-        'Your Passport contract is deployed',
+        'Your account is set up',
         `${compactAddress(deployment.address)} is ${
           deployment.ledgerConfirmed ? 'live' : 'submitted'
         } on ${deployment.network}.`,
@@ -3413,6 +3659,7 @@ export default function PassportDemo() {
     setOnboardingIntent(null);
     setOnboardingBusyLabel(null);
     setOnboardingError(null);
+    setUnusableCredential(null);
     // The identity steps re-decide on the next sign-in. The alias records
     // themselves are NOT cleared: the same passkey re-derives the same wallet,
     // so the name it registered is still that wallet's name.
@@ -3452,8 +3699,8 @@ export default function PassportDemo() {
     onboardingIntent !== null || localWalletStatus === 'opening' ? 'working' : 'welcome';
   const onboardingLabel =
     onboardingBusyLabel ?? 'Follow the passkey prompt on this device';
-  /** The one onboarding route. */
-  const startPasskeyOnboarding = (intent: 'create' | 'signin' | 'auto') => {
+  /** The one onboarding route, plus the `unusable-credential` recovery. */
+  const startPasskeyOnboarding = (intent: 'create' | 'signin' | 'auto' | 'enrol-new') => {
     void runLocalOnboarding(intent);
   };
 
@@ -4561,6 +4808,11 @@ export default function PassportDemo() {
           onContinue={() => startPasskeyOnboarding('auto')}
           onUseDifferentPasskey={() => void runDiscoverableSignIn()}
           onDismissError={() => setOnboardingError(null)}
+          /* The dead end that now has a way out. `onCreateNewPasskey` enrols
+             DELIBERATELY — it is deliberately not `onUseDifferentPasskey`,
+             which only ever asserts and was the false remedy this replaces. */
+          unusableCredential={unusableCredential}
+          onCreateNewPasskey={() => startPasskeyOnboarding('enrol-new')}
         />
       ) : identityStep === 'alias' ? (
         /* The name step — the last thing between a new Passport and its

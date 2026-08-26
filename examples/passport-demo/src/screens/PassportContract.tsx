@@ -34,9 +34,14 @@ import './identity.css'
 
 export type PassportContractPhase = 'deriving' | 'deploying' | 'confirming'
 
+/* User-facing wording, ruled 2026/08/26: this card is on screen throughout a
+   claim, and what it narrates is the account being set up — not a contract
+   being deployed. The contract is how Passport does it; "setting up your
+   account" is what is happening to the person reading. The record's own
+   technical fields below are unchanged: an address is still an address. */
 const PHASE_LABELS: Record<PassportContractPhase, string> = {
   deriving: 'Preparing your device key…',
-  deploying: 'Deploying on-chain…',
+  deploying: 'Setting up your account on-chain…',
   confirming: 'Confirming…',
 }
 
@@ -207,7 +212,9 @@ export default function PassportContractCard(props: PassportContractCardProps) {
             disabled={Boolean(disabledReason || !onRetry)}
           >
             <ShieldCheck size={14} aria-hidden="true" />
-            Try deploying again
+            {/* Same wording rule as the phase labels above (2026/08/26): what
+                the user is retrying is their account being set up. */}
+            Try setting up again
           </button>
           {disabledReason ? (
             <p className="mnid-reason mnid-register-reason">{disabledReason}</p>
@@ -231,7 +238,7 @@ function StatusPill({
 }) {
   /* "via a claim" is the truthful attribution now: nothing else starts a
      deployment except a retry, which the failed record's own pill precedes. */
-  if (busy) return <span className="mnid-pill mnid-pill-queued">Deploying…</span>
+  if (busy) return <span className="mnid-pill mnid-pill-queued">Setting up…</span>
   if (record?.status === 'deployed') {
     return (
       <span className="mnid-pill mnid-pill-registered">

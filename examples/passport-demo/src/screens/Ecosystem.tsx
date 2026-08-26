@@ -44,21 +44,30 @@ export interface EcosystemProps {
   /** True while the re-run claim is in flight. */
   registerNowBusy?: boolean
   /** Live claim phase while the re-run is in flight. */
-  registerNowPhase?:
-    | 'activating'
-    | 'attaching-account'
-    | 'deploying-resolver'
-    | 'registering'
-    | 'confirming'
-    | null
+  registerNowPhase?: RegisterPhase | null
 }
 
-const REGISTER_PHASE_LABELS: Record<
-  'activating' | 'attaching-account' | 'deploying-resolver' | 'registering' | 'confirming',
-  string
-> = {
+/** Every stage a re-run claim can narrate. Mirrors `AliasClaimProgress`. */
+type RegisterPhase =
+  | 'activating'
+  | 'checking'
+  | 'preparing'
+  | 'confirm-passkey'
+  | 'attaching-account'
+  | 'deploying-resolver'
+  | 'registering'
+  | 'confirming'
+
+/* The three pre-ceremony stages were added on 2026/08/26 alongside the claim
+   screen's, for the same reason: the stretch before the passkey prompt used to
+   be narrated by a label about a later step. "Setting up your account" replaces
+   the contract's own name — the machinery is not what the user is waiting for. */
+const REGISTER_PHASE_LABELS: Record<RegisterPhase, string> = {
   activating: 'Activating this Passport…',
-  'attaching-account': 'Deploying your account contract…',
+  checking: 'Checking the name is still free…',
+  preparing: 'Preparing your Passport…',
+  'confirm-passkey': 'Confirm with your passkey',
+  'attaching-account': 'Setting up your account…',
   'deploying-resolver': 'Deploying resolver…',
   registering: 'Registering on-chain…',
   confirming: 'Confirming…',
@@ -171,7 +180,10 @@ export function EcosystemIdentity(props: EcosystemProps) {
                 <ArrowUpRight size={14} aria-hidden="true" />
               )}
               {registerNowBusy
-                ? REGISTER_PHASE_LABELS[registerNowPhase ?? 'deploying-resolver']
+                ? /* The fallback is the FIRST stage, not a middle one: a busy
+                     re-run with no phase reported yet has, by definition, only
+                     just started. */
+                  REGISTER_PHASE_LABELS[registerNowPhase ?? 'checking']
                 : 'Register now'}
             </button>
             {registerNowDisabledReason ? (
