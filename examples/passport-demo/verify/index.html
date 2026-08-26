@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <!--
+      Midnight Passport — step verifier.
+
+      A READ-ONLY operator tool. It holds no key, signs nothing, and submits
+      nothing: every statement on the page is a value read back from the
+      stagenet indexer at
+      `https://indexer.stagenet.shielded.tools/api/v4/graphql`, and every row
+      carries the exact GraphQL query it came from so a reviewer can rerun it
+      with curl.
+
+      It exists because stagenet has NO public block explorer. During a review
+      each onboarding step has to be checked against the chain, and this page
+      is where that check happens. It is deliberately NOT linked from the
+      Passport UI — it is an internal instrument, not a product surface.
+
+      Built as a second Vite input rather than a file under `public/`: reading a
+      `.night` name back to an account needs the compiled Midnames contract and
+      `@midnight-ntwrk/compact-runtime` to decode registry state, and a page
+      served straight out of `public/` cannot import from `node_modules`.
+      Output lands at `dist/verify/index.html`, so the URL stays `/verify/`.
+    -->
+    <meta
+      name="description"
+      content="Read-only verification of Midnight Passport onboarding steps against the stagenet indexer."
+    />
+    <link rel="icon" href="/midnight-symbol.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <title>Passport step verifier — stagenet</title>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead-row">
+        <h1>Passport step verifier</h1>
+        <span class="chip chip-network">stagenet</span>
+        <span class="chip">read-only</span>
+      </div>
+      <p class="masthead-note">
+        Every value below is read back from the stagenet indexer. Nothing here signs, submits, or
+        holds a key. Stagenet publishes no block explorer, so this page is the explorer.
+      </p>
+      <dl class="masthead-facts">
+        <div>
+          <dt>Indexer</dt>
+          <dd><code id="fact-indexer"></code></dd>
+        </div>
+        <div>
+          <dt>.night registry</dt>
+          <dd id="fact-registry"></dd>
+        </div>
+        <div>
+          <dt>mUSD faucet</dt>
+          <dd id="fact-faucet"></dd>
+        </div>
+        <div>
+          <dt>Fee sponsor</dt>
+          <dd><code id="fact-sponsor"></code></dd>
+        </div>
+      </dl>
+    </header>
+
+    <main>
+      <form id="lookup-form" class="lookup" autocomplete="off">
+        <label class="lookup-label" for="lookup-input">
+          A <code>.night</code> name, or a 64-hex account contract address
+        </label>
+        <div class="lookup-row">
+          <input
+            id="lookup-input"
+            name="target"
+            type="text"
+            spellcheck="false"
+            placeholder="walkmt8w58j941d5.night"
+            aria-describedby="lookup-examples"
+          />
+          <button type="submit" id="lookup-submit">Verify</button>
+        </div>
+        <p id="lookup-examples" class="lookup-examples">
+          Known accounts, 2026/08/25:
+          <button type="button" class="example" data-example="walkmt8w58j941d5.night">
+            walkmt8w58j941d5.night
+          </button>
+          <button type="button" class="example" data-example="walkmt8vf773zoy4.night">
+            walkmt8vf773zoy4.night
+          </button>
+          <button
+            type="button"
+            class="example"
+            data-example="e096edc3d73695b57f103999428212ffc12baaa8e515eb2e38fe53a95a5e15d7"
+          >
+            e096edc3…5a5e15d7
+          </button>
+        </p>
+      </form>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+      <div id="results"></div>
+    </main>
+
+    <footer class="colophon">
+      Input Output Group — Advanced Research and Creativity. Internal review instrument.
+    </footer>
+
+    <script type="module" src="../src/verify/main.ts"></script>
+  </body>
+</html>

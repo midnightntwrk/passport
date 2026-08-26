@@ -1,0 +1,41 @@
+{
+  "name": "passport-balancer",
+  "version": "0.1.0",
+  "description": "Self-hosted stagenet balancing service for Midnight Passport: holds NIGHT, registers it for DUST, and balances transaction fees for Passport wallets on stagenet — the stagenet counterpart of the fee sponsorship the demo already relies on.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/server.ts src/generate-seed.ts src/sync-check.ts --bundle --format=esm --platform=node --packages=external --outdir=dist --out-extension:.js=.mjs",
+    "generate-seed": "npm run build && node dist/generate-seed.mjs",
+    "sync-check": "npm run build && node dist/sync-check.mjs",
+    "start": "npm run build && node dist/server.mjs",
+    "build:test": "esbuild test/*.test.ts --bundle --format=esm --platform=node --packages=external --outdir=dist/test --out-extension:.js=.mjs",
+    "test": "npm run build:test && node --test dist/test/*.test.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-js": "2.5.5-rc.7",
+    "@midnight-ntwrk/compact-runtime": "0.18.0-rc.1",
+    "@midnight-ntwrk/midnight-js-contracts": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-network-id": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-types": "5.0.0-beta.6",
+    "@midnight-ntwrk/wallet-sdk": "2.0.0-beta.2",
+    "@midnight-ntwrk/wallet-sdk-address-format": "4.0.0-beta.2",
+    "@midnight-ntwrk/zkir-v2": "2.1.0",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.3",
+    "rxjs": "^7.8.2",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "@midnight-ntwrk/wallet-sdk-utilities": "1.2.1"
+  }
+}

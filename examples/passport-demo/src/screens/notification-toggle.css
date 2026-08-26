@@ -1,0 +1,49 @@
+@import './tokens.css';
+
+/* Notification control — prefix "mnnotify-".
+   It sits in the quiet footer row of Home and borrows `.mnhome-support` for
+   the pill itself, so it lines up with "Back up or restore" and "Support on
+   Telegram" without a second definition of that shape. Only the states
+   `.mnhome-support` has no opinion about live here. */
+
+/* Stretch, not centre: `.mnhome-body` is a plain flex column, so the pills
+   already in that footer run the full column width and this one must too. */
+.mnnotify {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.mnnotify-button { font-family: inherit; cursor: pointer; }
+
+/* On: the accent carried at hairline weight rather than as a filled pill. This
+   is a status line in a footer, not a call to action. */
+.mnnotify-button-on {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-ink);
+}
+.mnnotify-button-on:hover { background: var(--mn-accent-soft); }
+
+/* Blocked, and while the browser's own prompt is up. Flat, unhoverable, and
+   still legible — the sentence underneath is doing the explaining. */
+.mnnotify-button:disabled {
+  color: var(--mn-text-muted);
+  border-color: var(--mn-border-hairline);
+  cursor: default;
+}
+.mnnotify-button:disabled:hover {
+  color: var(--mn-text-muted);
+  border-color: var(--mn-border-hairline);
+  background: transparent;
+}
+
+.mnnotify-note {
+  max-width: 34ch;
+  margin: 0 auto;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  text-wrap: pretty;
+}

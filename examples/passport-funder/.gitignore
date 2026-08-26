@@ -1,0 +1,9 @@
+dist/
+node_modules/
+# Runtime state: sync snapshots and the once-only drip ledger. Every state
+# directory, whatever it is named, stays out of the repository.
+state/
+state-*/
+
+# Live verification harness. Disposable, never committed.
+.live-drill/

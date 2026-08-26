@@ -1,0 +1,12 @@
+# Vercel CLI upload rules for the raffle demo dApp.
+#
+# Deployments are PREBUILT (`vercel deploy --prebuilt`), so the only tree the
+# CLI ever uploads is `.vercel/output`. This file exists so the CLI does not
+# fall back to .gitignore, which excludes `dist/` — the build this deployment
+# is made of.
+#
+# The entries below only bite if someone runs a non-prebuilt `vercel deploy`.
+
+node_modules
+.env
+.env.local

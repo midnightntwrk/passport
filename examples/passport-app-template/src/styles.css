@@ -1,0 +1,615 @@
+/* Passport app template — layout and component styles.
+   =====================================================================
+   Every colour, radius, and shadow comes from ./tokens.css (vendored from
+   the Passport app). This sheet declares no palette values of its own, which
+   is what keeps a template app looking like it belongs beside Passport in
+   both light and dark. Swap the token sheet and the whole thing re-skins. */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  font-family: var(--mn-font-body);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+a {
+  font: inherit;
+}
+
+code {
+  font-family: var(--mn-font-mono);
+  font-size: 0.92em;
+}
+
+.pt-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ------------------------------------------------------------------ */
+/* Top bar                                                             */
+/* ------------------------------------------------------------------ */
+
+.pt-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: 20px 20px 8px;
+}
+
+.pt-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pt-brand strong {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.pt-mark {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--mn-radius-sm);
+  background: var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+  box-shadow: var(--mn-shadow-sm);
+}
+
+.pt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-surface-card);
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pt-chip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mn-text-muted);
+}
+
+.pt-chip.on {
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+
+.pt-chip.on i {
+  background: var(--mn-accent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Layout                                                              */
+/* ------------------------------------------------------------------ */
+
+.pt-main {
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: 12px 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+
+.pt-card {
+  background: var(--mn-surface-card);
+  /* Passport card recipe: default card radius, hairline, soft resting lift
+     (see .mnhome-card / .mnhome-addresses in the Passport demo). */
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  box-shadow: var(--mn-shadow-sm);
+  padding: 18px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pt-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pt-card-head h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.pt-act {
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--mn-accent);
+  color: var(--mn-accent-text);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pt-tag,
+.pt-count {
+  padding: 4px 9px;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-surface-sunken);
+  color: var(--mn-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pt-tag.live {
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+}
+
+.pt-muted {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--mn-text-secondary);
+}
+
+.pt-muted code {
+  color: var(--mn-text-primary);
+}
+
+.pt-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--mn-text-muted);
+}
+
+.pt-pending {
+  color: var(--mn-text-muted);
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Fact lists                                                          */
+/* ------------------------------------------------------------------ */
+
+.pt-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-radius: var(--mn-radius-md);
+  overflow: hidden;
+  /* The 1px gaps between rows read as hairlines; --mn-hairline is a width
+     token, so the COLOUR token paints them. */
+  background: var(--mn-border-hairline);
+}
+
+.pt-facts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 13px;
+  background: var(--mn-surface-page);
+}
+
+.pt-facts dt {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mn-text-muted);
+  white-space: nowrap;
+}
+
+.pt-facts dd {
+  margin: 0;
+  font-size: 13px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------ */
+/* Buttons                                                             */
+/* ------------------------------------------------------------------ */
+
+.pt-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 13px 18px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-accent);
+  color: var(--mn-accent-text);
+  font-size: 14px;
+  /* Passport primary pills carry weight 700. */
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow: var(--mn-shadow-accent);
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.pt-cta:hover:not(:disabled) {
+  background: var(--mn-accent-hover);
+}
+
+.pt-cta:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.pt-cta:disabled {
+  opacity: 0.6;
+  cursor: default;
+  box-shadow: none;
+}
+
+.pt-cta:focus-visible,
+.pt-log-summary:focus-visible,
+.pt-tx:focus-visible,
+.pt-toast-link:focus-visible,
+.pt-toast-close:focus-visible {
+  /* --mn-focus-ring is a colour; a bare `outline: <colour>` draws nothing. */
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 2px;
+}
+
+.spin {
+  animation: pt-spin 900ms linear infinite;
+}
+
+@keyframes pt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation-duration: 2.4s;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Act two — approved fields                                           */
+/* ------------------------------------------------------------------ */
+
+.pt-fields {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pt-fields li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 13px;
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-page);
+  border-left: 3px solid var(--mn-border-hairline);
+}
+
+.pt-fields li.shared {
+  border-left-color: var(--mn-accent);
+}
+
+.pt-field-name {
+  font-family: var(--mn-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  color: var(--mn-text-muted);
+}
+
+.pt-fields strong {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.pt-fields code {
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.pt-fields em {
+  font-size: 12.5px;
+  color: var(--mn-text-muted);
+}
+
+.pt-refused {
+  display: flex;
+  gap: 11px;
+  padding: 13px;
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-page);
+  color: var(--mn-text-primary);
+}
+
+.pt-refused > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--mn-text-muted);
+}
+
+.pt-refused strong {
+  font-size: 14px;
+}
+
+.pt-refused p {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--mn-text-secondary);
+}
+
+/* ------------------------------------------------------------------ */
+/* Act three — result                                                  */
+/* ------------------------------------------------------------------ */
+
+.pt-result {
+  padding: 11px 13px;
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-page);
+  border-left: 3px solid var(--mn-border-hairline);
+}
+
+.pt-result.ok {
+  border-left-color: var(--mn-accent);
+}
+
+.pt-result p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pt-tx {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--mn-accent-ink);
+  text-decoration: none;
+  font-size: 12.5px;
+}
+
+.pt-tx:hover {
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------------ */
+/* Bridge transcript                                                   */
+/* ------------------------------------------------------------------ */
+
+.pt-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pt-log-summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: var(--mn-radius-sm);
+  background: var(--mn-surface-page);
+  color: var(--mn-text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.pt-log-summary:hover {
+  background: var(--mn-surface-hover);
+}
+
+.pt-log-arrow {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--mn-surface-sunken);
+  color: var(--mn-text-muted);
+}
+
+.pt-log-row.out .pt-log-arrow {
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+}
+
+.pt-log-label {
+  flex: 1;
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.pt-log-time {
+  font-family: var(--mn-font-mono);
+  font-size: 10.5px;
+  color: var(--mn-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pt-log-payload {
+  margin: 4px 0 0;
+  padding: 11px 13px;
+  border-radius: var(--mn-radius-sm);
+  background: var(--mn-surface-sunken);
+  color: var(--mn-text-secondary);
+  font-family: var(--mn-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/* Toast                                                               */
+/* ------------------------------------------------------------------ */
+
+.pt-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 40;
+  width: min(420px, calc(100% - 32px));
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-lg);
+}
+
+.pt-toast-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--mn-accent);
+  color: var(--mn-accent-text);
+}
+
+.pt-toast.is-error .pt-toast-icon {
+  background: var(--mn-surface-inverted);
+  color: var(--mn-text-inverted);
+}
+
+.pt-toast-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.pt-toast-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.pt-toast-body {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--mn-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.pt-toast-link {
+  margin-top: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mn-accent-ink);
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pt-toast-link:hover {
+  text-decoration: underline;
+}
+
+.pt-toast-close {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--mn-text-muted);
+  cursor: pointer;
+}
+
+.pt-toast-close:hover {
+  background: var(--mn-surface-hover);
+}
+
+/* ------------------------------------------------------------------ */
+/* Footer                                                              */
+/* ------------------------------------------------------------------ */
+
+.pt-footer {
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: 4px 20px 26px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--mn-text-muted);
+  text-align: center;
+}
+
+/* The family-wide beta mark — micro-caps on the accent wash, as in Passport. */
+.beta-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--mn-radius-pill, 999px);
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  align-self: center;
+}
