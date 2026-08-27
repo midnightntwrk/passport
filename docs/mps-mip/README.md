@@ -67,10 +67,21 @@ together; the upstream copies are canonical.
   contract at `spec_version = 2` (`contract/GRANTS-E1.md` to
   `GRANTS-E3.md`) carries the roster on both grantee arms and the seam
   is exercised on node.
-- **Recovery paths (building block three; not yet drafted)**:
-  total-loss recovery behind the seam; the prototype realises this
-  with BUSS, and the standard stays scheme-agnostic at the contract
-  surface. The upstream recovery slot remains unclaimed.
+- `mips/mip-xxxx-account-recovery.md` — **Recovery Paths for Custody
+  Accounts (building block three)**: total-loss recovery behind the
+  MIP-0013 seam, anchored on bottom-up secret sharing (ANARKey/BUSS).
+  Guardians are authenticator credentials that persist no per-account
+  state; the account publishes one artefact set per session (public
+  shares, a recovery commitment, and a wrap of the viewing key), so
+  recovery restores both control and visibility. Covers the guardian
+  model, share derivation, the single session operation, the recovery
+  gate and its veto window, the off-ledger transport, and the REC
+  invariant family. Remaining tags: [CRYPTO-MEMO] the commissioned
+  multi-session review (the published scheme's model is single-session,
+  so the freshness rules are our own normative addition),
+  [EXP] the veto window and the viewing-key wrap, which the reference
+  implementation does not yet carry, and [RULING] the engagement and
+  co-authorship plan. The upstream recovery slot remains unclaimed.
 
 ## Process
 
