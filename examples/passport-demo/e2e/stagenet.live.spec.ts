@@ -148,7 +148,7 @@ test.describe('@live the account model on stagenet', () => {
          how fast the prover got through the one before it. */
       await expect(
         page.getByRole('button', {
-          name: /Deploying your Passport account contract|Deploying your name's resolver|Registering |Waiting for the registry/i,
+          name: /Checking .* is still free|Preparing your Passport|Confirm with your passkey|Setting up your account|Deploying your Passport account contract|Deploying your name's resolver|Registering |Waiting for the registry/i,
         }),
       ).toBeVisible({ timeout: 2 * 60_000 });
 

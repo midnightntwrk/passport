@@ -505,34 +505,26 @@ test('a busy fee sponsor disables the Send control rather than removing it', asy
   ).toBeVisible();
 });
 
-test('a passkey that answers without PRF offers a way out, and the way out works', async ({
+test('a passkey this browser does not know about never blocks the way in', async ({
   browser,
 }) => {
-  /* THE FALSE REMEDY, AND THE REAL ONE.
-     `discoverOrEnroll` reports `unusable-credential` when a resident credential
-     for this origin ANSWERS and returns no PRF output: it cannot open a
-     Passport, and creating under the same deterministic user handle might
-     replace it, so Passport stops. Until 2026/08/26 it stopped with a message
-     telling the user to choose "Use a different passkey" — which runs one
-     discoverable assertion and can NEVER enrol. The same PRF-less credential
-     answered the picker again, and again, with no escape but dismissing the OS
-     dialog until the `cancelled` path happened to fall through to enrolment.
+  /* WHAT THIS REPLACED, AND WHY.
+     Until 2026/08/27 pressing "Continue with Passport" raised a discoverable
+     assertion first — the platform's "Use a saved passkey for this site"
+     dialog. On a Chrome profile with nothing saved that dialog offers only
+     "Use a phone or tablet" and "USB security key": no Touch ID, no Windows
+     Hello, and no way at all to make a passkey. Two reviewers stopped dead
+     there; one got through only by signing with his phone, which was the sole
+     door left open. A newcomer is now taken straight to enrolment, where the
+     platform asks the question they actually came to answer.
 
-     Adversarial verification found that message rendering correctly and nobody
-     having ever followed its advice. So this test does not stop at the words:
-     it presses the control and requires a working Passport at the end of it.
+     THE FIXTURE. `WebAuthn.addCredential` plants a resident credential the
+     virtual authenticator did not create — a credential that answers with
+     `{ prf: {} }` and no `results.first`, modelling an older passkey enrolled
+     without the extension. This browser has no record of it, so it must not
+     be consulted, must not be replaced, and must not stand in anybody's way.
 
-     THE FIXTURE, and why it is a fair model. `WebAuthn.addCredential` plants a
-     resident credential the virtual authenticator did not create, and such a
-     credential answers with `{ prf: {} }` — no `results.first` — on an
-     authenticator that is itself PRF-capable. That is exactly the real case
-     this state exists for: an older credential enrolled without the extension,
-     on a device that supports it. Enrolling a NEW credential on the same
-     authenticator then yields PRF, which is what makes the recovery reachable
-     rather than merely offered.
-
-     Its own context: this walk needs a browser whose only credential for the
-     origin is the planted one, and the shared page above has a real Passport. */
+     Its own context: the shared page above already holds a real Passport. */
   const context = await browser.newContext({ viewport: { width: 420, height: 900 } });
   const fresh = await context.newPage();
   await installNetworkBoundary(fresh);
@@ -546,69 +538,56 @@ test('a passkey that answers without PRF offers a way out, and the way out works
       transport: 'internal',
       hasResidentKey: true,
       hasUserVerification: true,
-      isUserVerified: true,
-      /* PRF-capable, deliberately: the authenticator is not the problem, the
-         credential planted on it is. A `hasPrf: false` authenticator would
-         model a device that can never onboard at all, which is a different
-         (and genuinely unrecoverable) state. */
       hasPrf: true,
-      hasLargeBlob: true,
+      isUserVerified: true,
       automaticPresenceSimulation: true,
     },
   });
 
-  const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
-  await client.send('WebAuthn.addCredential', {
-    authenticatorId,
-    credential: {
-      credentialId: crypto.randomBytes(32).toString('base64'),
-      isResidentCredential: true,
-      rpId: 'localhost',
-      privateKey: Buffer.from(privateKey.export({ type: 'pkcs8', format: 'der' })).toString('base64'),
-      userHandle: Buffer.from('legacy-passkey').toString('base64'),
-      signCount: 0,
-    },
+  /* Every ceremony the page raises, so the test can prove which came first. */
+  const calls: { kind: string; excluded?: number }[] = [];
+  await fresh.exposeFunction('__recordCeremony', (entry: { kind: string; excluded?: number }) => {
+    calls.push(entry);
+  });
+  await fresh.addInitScript(() => {
+    const api = navigator.credentials;
+    const create = api.create.bind(api);
+    const get = api.get.bind(api);
+    api.create = (options?: CredentialCreationOptions) => {
+      const publicKey = options?.publicKey as { excludeCredentials?: unknown[] } | undefined;
+      void (window as unknown as Record<string, (entry: unknown) => void>).__recordCeremony({
+        kind: 'create',
+        excluded: publicKey?.excludeCredentials?.length ?? 0,
+      });
+      return create(options);
+    };
+    api.get = (options?: CredentialRequestOptions) => {
+      void (window as unknown as Record<string, (entry: unknown) => void>).__recordCeremony({
+        kind: 'get',
+      });
+      return get(options);
+    };
   });
 
   try {
     await fresh.goto('/');
     await fresh.getByRole('button', { name: /Continue with Passport/i }).click();
 
-    /* The state, said plainly — and NOT pointing at a control that cannot
-       help. The old sentence named "Use a different passkey"; that advice is
-       gone, because that flow only ever asserts. */
-    await expect(
-      fresh.getByText(/does not support the extension Passport needs/i).first(),
-    ).toBeVisible({ timeout: 60_000 });
-    const explained = await fresh.locator('body').innerText();
-    expect(explained).not.toMatch(/Choose "Use a different passkey" to create one/i);
-    /* The thrown explanation, which only the `unusable-credential` branch
-       produces — so this pins the test to that state rather than to any screen
-       that happens to mention the extension. It now names the control that is
-       actually beside it. */
-    await expect(
-      fresh.getByText(/Choose "Create a new passkey" to make one that can/i),
-    ).toBeVisible();
-
-    /* THE WAY OUT — a real control, and it says what it does. */
-    const createNew = fresh.getByRole('button', { name: /Create a new passkey/i });
-    await expect(createNew).toBeVisible();
-    await expect(
-      fresh.getByText(/Any passkey this browser already holds a Passport for is left untouched/i),
-    ).toBeVisible();
-
-    await createNew.click();
-
-    /* And it lands on a WORKING Passport: the name step, which is only reached
-       once a passkey was enrolled, its PRF derived the wallet seed, and the
-       wallet actually opened. Nothing short of that proves the escape. */
+    /* The name step is only reachable once PRF derived a seed and the wallet
+       opened, so arriving here is proof the enrolment genuinely worked rather
+       than merely that a dialog was dismissed. */
     await expect(fresh.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 90_000 });
-    await expect(fresh.getByText(/^LAST STEP$/i)).toBeVisible();
-    // The dead end is gone rather than merely covered up.
+
+    /* No sign-in dialog was raised on the way, which is the whole point: the
+       planted credential was never consulted. */
+    expect(calls.map((entry) => entry.kind)).toEqual(['create']);
+
+    /* And nothing told the user their own passkey was a problem. */
     await expect(
       fresh.getByText(/does not support the extension Passport needs/i),
     ).toHaveCount(0);
   } finally {
+    await client.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId }).catch(() => {});
     await context.close();
   }
 });

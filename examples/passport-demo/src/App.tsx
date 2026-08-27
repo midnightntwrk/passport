@@ -1870,14 +1870,20 @@ export default function PassportDemo() {
    * common case, and never surfaced as an error — one targeted assertion
    * covers both. The old path cost three prompts: enrol, encrypt, derive.
    *
-   * ASK THE AUTHENTICATOR BEFORE CREATING ANYTHING. "No local profile" is not
-   * the same fact as "no passkey". Site data cleared with the passkey still in
-   * the keychain looks identical to a first visit, and a `create` there would
-   * REPLACE the surviving credential — the user handle is deterministic — and
-   * take its PRF secret, and so every coin its wallet seed derives, with it.
-   * So this discovers first and only enrols when nothing answers. `created`
-   * says which of the two actually happened, so nothing downstream claims a
-   * Passport was made when one was merely reopened.
+   * ASK THE AUTHENTICATOR BEFORE CREATING ANYTHING — BUT ONLY WHEN THERE IS
+   * SOMETHING TO ASK ABOUT. "No local profile" is not the same fact as "no
+   * passkey": site data cleared with the passkey still in the keychain looks
+   * identical to a first visit, and a `create` there would REPLACE the
+   * surviving credential — the user handle is deterministic — taking its PRF
+   * secret, and every coin the wallet seed derives with it. So when this
+   * browser knows of any credential, discovery runs first and enrolment only
+   * follows if nothing answers.
+   *
+   * When it knows of none, discovery is skipped, because the dialog it raises
+   * asks the wrong question of a newcomer and can leave them with no way
+   * forward at all. See the note at the call below. `created` says which of
+   * the two actually happened, so nothing downstream claims a Passport was
+   * made when one was merely reopened.
    */
   const createLocalPassportProfile = async (): Promise<{
     profile: DemoPassportProfile;
@@ -1890,16 +1896,51 @@ export default function PassportDemo() {
         'This browser already holds a Passport passkey. Choose Sign in to reopen it.',
       );
     }
-    setOnboardingBusyLabel('Checking this device for a Passport passkey');
     const knownCredentialIds = await knownLocalCredentialIds();
+    /* BUT DO NOT LEAD A NEWCOMER WITH A SIGN-IN DIALOG. Discovering first is
+       right for a browser that has reason to think a passkey exists; it is
+       wrong for one that does not. The discoverable assertion renders as
+       "Use a saved passkey for this site", and a Chrome profile with nothing
+       saved and no platform credential offers only "Use a phone or tablet"
+       and "USB security key" — no way to make one. Reviewers stopped dead
+       there, and the one who got through did so by signing with his phone,
+       which was the only door left open. A browser that holds no credential
+       we know of goes straight to enrolment, where the platform offers Touch
+       ID, Windows Hello, or a phone, and the question asked is the one the
+       user came to answer.
+
+       The overwrite this replaces is still guarded where it can be: every
+       create carries `knownCredentialIds` in `excludeCredentials`, and the
+       authenticator reports {@link PassportEnrolmentConflictError} rather
+       than replacing a credential we named. What is genuinely given up is the
+       case where site data was cleared and the passkey survived, leaving
+       nothing to exclude — that user now creates a second credential instead
+       of finding the first. "Use a different passkey" on the landing screen
+       is the discovery path, and remains their way back to the original. */
+    const discoverFirst = knownCredentialIds.length > 0;
+    setOnboardingBusyLabel(
+      discoverFirst
+        ? 'Checking this device for a Passport passkey'
+        : 'Creating your Passport passkey',
+    );
     let onboarding: import('./backend.js').PassportPasskeyOnboarding;
     try {
       onboarding = await withPasskeyWatchdog(() =>
-        WebAuthnPrfKeyProvider.discoverOrEnroll({
-          label: 'Midnight Passport',
-          userId: LOCAL_ACCOUNT_ID,
-          knownCredentialIds,
-        }),
+        discoverFirst
+          ? WebAuthnPrfKeyProvider.discoverOrEnroll({
+              label: 'Midnight Passport',
+              userId: LOCAL_ACCOUNT_ID,
+              knownCredentialIds,
+            })
+          : WebAuthnPrfKeyProvider.enrollWithPrf({
+              label: 'Midnight Passport',
+              userId: LOCAL_ACCOUNT_ID,
+              knownCredentialIds,
+            }).then((enrolled) => ({
+              outcome: 'enrolled' as const,
+              discovered: null,
+              enrolled,
+            })),
       );
     } catch (cause) {
       if (!(cause instanceof PassportEnrolmentConflictError)) throw cause;
