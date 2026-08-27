@@ -6,8 +6,8 @@
 // reference contract. The Rust device never shares its private key with
 // the TypeScript side: TS registers the Rust device's PUBLIC key via
 // add_device, then submits a withdrawal carrying the Rust-produced
-// (pk, R, s, grind_nonce) — the AUTH-4 approval/proving separation, with
-// the approver in a different language and process.
+// (pk, sig) — the AUTH-4 approval/proving separation, with the approver in
+// a different language and process.
 
 import * as fs from 'node:fs';
 
@@ -16,7 +16,8 @@ import { writeEvidence } from './evidence.js';
 import { standardSetup } from './flow.js';
 import { userAddressBytes } from '../node/wallet.js';
 import { bytesToHex } from '../wallet/hex.js';
-import { SIGNER_BIN, rustKeygen, rustSignWithdrawUnshielded } from './crossimpl-offline.js';
+import { SIGNER_BIN, rustKeygenK256, rustSignWithdrawUnshieldedK256 } from './crossimpl-offline.js';
+import { pureCircuits } from '../wallet/contract.js';
 
 const NIGHT = new Uint8Array(32);
 const FUND = 2_000n;
@@ -39,9 +40,17 @@ await runScenario('auth-crossimpl', async () => {
   );
 
   step('Rust device: keygen out of process; TS registers only the public key');
-  const rust = rustKeygen();
+  const rust = rustKeygenK256();
   details.rustPk = { x: '0x' + rust.pk.x.toString(16), y: '0x' + rust.pk.y.toString(16) };
-  await s.account.addDevice(s.device, rust.pk);
+  // The Rust device exists only as a public key over the process
+  // boundary, so enrolment travels as its derived entry (current epoch,
+  // use counter 0) — the same path a cross-arm add takes.
+  const l0 = await s.account.ledgerState();
+  const rustEntry = pureCircuits.derive_device_entry_with_k256(
+    { bytes: s.account.addressBytes }, rust.pk, l0.device_epoch, 0n,
+  );
+  await s.account.addDeviceEntry(s.device, rustEntry);
+  s.account.registerDevice(rust.pk);
   await waitForLedger(
     () => s.account.ledgerState(),
     'Rust device active',
@@ -50,7 +59,7 @@ await runScenario('auth-crossimpl', async () => {
 
   step('Rust device signs a withdrawal; TS proves and submits it');
   const ctx = await s.account.callContext();
-  const sig = rustSignWithdrawUnshielded({
+  const sig = rustSignWithdrawUnshieldedK256({
     sk: rust.sk,
     contractAddress: ctx.contractAddress,
     color: NIGHT,
@@ -58,17 +67,15 @@ await runScenario('auth-crossimpl', async () => {
     recipient,
     authNonce: ctx.authNonce,
   });
-  details.grindAttempts = sig.attempts;
   details.challenge = sig.challenge;
   // The Rust device was registered by add_device, so its rolling entry
   // sits at use counter 0 (AUTH-9); the counter travels alongside the
   // signature as authorising material.
   const r = await s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, {
+    arm: 'k256',
     pk: sig.pk,
     use_counter: 0n,
-    sig_r: sig.sig_r,
-    sig_s: sig.sig_s,
-    grind_nonce: sig.grind_nonce,
+    sig: sig.sig,
   });
   details.withdrawTx = r.txId;
   await waitForLedger(
@@ -77,7 +84,7 @@ await runScenario('auth-crossimpl', async () => {
     (l) => l.unshielded_balances.lookup(NIGHT) === FUND - SPEND,
   );
   console.log(`  ✓ node accepted the Rust-signed withdrawal: ${r.txId}`);
-  console.log(`  (challenge ${sig.challenge.slice(0, 24)}… ground in ${sig.attempts} attempts, Rust side)`);
+  console.log(`  (challenge ${sig.challenge.slice(0, 24)}…, signed on the Rust side)`);
 
   writeEvidence({
     testId: 'AUTH-7',

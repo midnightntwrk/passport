@@ -6,14 +6,14 @@ import { fileURLToPath } from 'node:url';
 
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
-import { rawTokenType, encodeRawTokenType } from '@midnight-ntwrk/ledger-v8';
+import { rawTokenType, encodeRawTokenType } from '@midnightntwrk/ledger-v9';
 
 import * as FaucetModule from '../../contracts/managed/faucet/contract/index.js';
 import * as ControlModule from '../../contracts/managed/control/contract/index.js';
 import { Contract } from '../wallet/contract.js';
 import { makeWitnesses } from '../wallet/witnesses.js';
 import { CustodyAccount } from '../wallet/account.js';
-import type { Device } from '../wallet/signer.js';
+import type { AnyDevice } from '../wallet/signer.js';
 import type { EncKeyPair } from '../wallet/inbox.js';
 import {
   createWallet,
@@ -54,7 +54,7 @@ export async function setupWallet(seed?: string): Promise<TestContext> {
 
 export async function deployAccount(
   ctx: TestContext,
-  device: Device,
+  device: AnyDevice,
   encKeys: EncKeyPair,
 ): Promise<CustodyAccount> {
   const account = await CustodyAccount.deploy(

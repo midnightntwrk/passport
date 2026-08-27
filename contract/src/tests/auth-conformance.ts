@@ -4,9 +4,9 @@
 //   1. A gated call with a valid signature from an active device executes;
 //      auth_nonce and round advance (AUTH-1, AUTH-2).
 //   2. The same call aborts, with no state change, under each single
-//      fault: wrong sig_s; sig_r for a different challenge; unregistered
-//      pk; wrong use counter; tampered argument; stale auth_nonce; reused
-//      signature. The
+//      fault: wrong sig.s; a signature for a different challenge;
+//      unregistered pk; wrong use counter; tampered argument; stale
+//      auth_nonce; reused signature. The
 //      stale-epoch fault is N/A until the recovery seam lands (no circuit
 //      bumps device_epoch yet).
 //   3. A permissionless deposit lands between signing and submission; the
@@ -27,7 +27,7 @@ import { compiledAccountContract } from '../node/setup.js';
 import { userAddressBytes } from '../node/wallet.js';
 import { CustodyAccount } from '../wallet/account.js';
 import { generateEncKeyPair } from '../wallet/inbox.js';
-import { challenges, Device, type Authorisation } from '../wallet/signer.js';
+import { k256Challenges, K256Device, type K256Authorisation } from '../wallet/signer.js';
 
 const NIGHT = new Uint8Array(32); // the all-zero color
 const FUND = 10_000n;
@@ -81,19 +81,19 @@ await runScenario('auth-conformance', async () => {
   const ctxNow = async () => s.account.callContext();
   const counterNow = async () => s.account.resolveUseCounter(s.device);
 
-  // (a) wrong sig_s
+  // (a) wrong sig.s
   {
     const ctx = await ctxNow();
-    const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
-    const bad: Authorisation = { ...auth, sig_s: (auth.sig_s + 1n) };
-    matrix.wrongSigS = await expectAbort('wrong sig_s', () =>
+    const auth = s.device.sign(k256Challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
+    const bad: K256Authorisation = { ...auth, sig: { r: auth.sig.r, s: (auth.sig.s + 1n) } };
+    matrix.wrongSigS = await expectAbort('wrong sig.s', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, bad));
   }
 
-  // (b) sig_r from a different challenge (signed for a different amount)
+  // (b) signature from a different challenge (signed for a different amount)
   {
     const ctx = await ctxNow();
-    const other = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND + 1n, recipient), await counterNow());
+    const other = s.device.sign(k256Challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND + 1n, recipient), await counterNow());
     matrix.foreignSigR = await expectAbort('signature computed for a different call', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, other));
   }
@@ -101,8 +101,8 @@ await runScenario('auth-conformance', async () => {
   // (c) unregistered pk
   {
     const ctx = await ctxNow();
-    const stranger = Device.generate();
-    const auth = stranger.sign(challenges.withdrawUnshielded(ctx, stranger.pk, NIGHT, SPEND, recipient), 0n);
+    const stranger = K256Device.generate();
+    const auth = stranger.sign(k256Challenges.withdrawUnshielded(ctx, stranger.pk, NIGHT, SPEND, recipient), 0n);
     matrix.unregisteredPk = await expectAbort('unregistered device key', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, auth));
   }
@@ -112,7 +112,7 @@ await runScenario('auth-conformance', async () => {
   {
     const ctx = await ctxNow();
     const counter = await counterNow();
-    const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), counter + 1n);
+    const auth = s.device.sign(k256Challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), counter + 1n);
     matrix.wrongUseCounter = await expectAbort('wrong use counter (AUTH-9)', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, auth));
   }
@@ -120,7 +120,7 @@ await runScenario('auth-conformance', async () => {
   // (d) tampered argument with an otherwise-valid signature
   {
     const ctx = await ctxNow();
-    const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
+    const auth = s.device.sign(k256Challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
     matrix.tamperedArg = await expectAbort('tampered amount under a valid signature (AUTH-3)', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND * 2n, recipient, auth));
   }
@@ -129,7 +129,7 @@ await runScenario('auth-conformance', async () => {
   {
     const ctx = await ctxNow();
     const stale = { ...ctx, authNonce: ctx.authNonce - 1n };
-    const auth = s.device.sign(challenges.withdrawUnshielded(stale, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
+    const auth = s.device.sign(k256Challenges.withdrawUnshielded(stale, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
     matrix.staleNonce = await expectAbort('stale auth_nonce (AUTH-2)', () =>
       s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, auth));
   }
@@ -143,7 +143,7 @@ await runScenario('auth-conformance', async () => {
   // (f) reused signature after a successful call
   {
     const ctx = await ctxNow();
-    const auth = s.device.sign(challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
+    const auth = s.device.sign(k256Challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient), await counterNow());
     const ok = await s.account.withdrawUnshieldedWithAuth(NIGHT, SPEND, recipient, auth);
     console.log(`  first use accepted: ${ok.txId}`);
     await waitForLedger(
@@ -162,7 +162,7 @@ await runScenario('auth-conformance', async () => {
   step('test 5: a deposit lands between signing and submission; the authorisation survives');
   const ctx = await s.account.callContext();
   const pending = s.device.sign(
-    challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient),
+    k256Challenges.withdrawUnshielded(ctx, s.device.pk, NIGHT, SPEND, recipient),
     await s.account.resolveUseCounter(s.device),
   );
   // A third party funds the account while our signature is in flight.
@@ -194,9 +194,9 @@ await runScenario('auth-conformance', async () => {
   const bootstrap: Record<string, string> = {};
 
   bootstrap.secondActivation = await expectAbort('second activation on an active account', () =>
-    s.account.activateInitialDevice(s.device.pk, randomBytes(32)));
+    s.account.activateInitialDevice(s.device, randomBytes(32)));
 
-  const device2 = Device.generate();
+  const device2 = K256Device.generate();
   const dormant = await CustodyAccount.deployDormant(
     s.ctx.providers, compiledAccountContract(), device2, generateEncKeyPair(),
   );
@@ -204,11 +204,11 @@ await runScenario('auth-conformance', async () => {
 
   const wrongSalt = randomBytes(32);
   bootstrap.wrongSalt = await expectAbort('activation with a salt not matching the commitment', () =>
-    dormant.activate(device2.pk, wrongSalt));
+    dormant.activate(device2, wrongSalt));
   bootstrap.wrongKey = await expectAbort('activation with a substituted device key', () =>
-    dormant.activate(Device.generate().pk, dormant.salt));
+    dormant.activate(K256Device.generate(), dormant.salt));
 
-  await dormant.activate(device2.pk, dormant.salt);
+  await dormant.activate(device2, dormant.salt);
   const account2 = dormant.finish();
   const booted = await waitForLedger(
     () => account2.ledgerState(),

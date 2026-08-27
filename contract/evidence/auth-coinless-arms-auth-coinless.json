@@ -1,0 +1,21 @@
+{
+  "testId": "AUTH-COINLESS-ARMS",
+  "name": "auth-coinless",
+  "description": "Co-resident arms: k256 and jubjub seams both gate on-node; cross-arm enrolment in both directions; tampered signatures abort per arm",
+  "verdict": "PASS",
+  "note": "Both in-circuit verifications gate state changes on-node: a k256 device enrolled a jubjub device and vice versa (the arm-migration path), the jubjub device authorised its own gated call through its rolling entry, and a tampered signature of either arm failed its in-circuit assert with no state change.",
+  "details": {
+    "account": "ec1730274762879e18634fd8ec60b0af9099f56d07c1c551bb7f1c1a2251636f",
+    "crossArmAddTx": "00a9317c80cbe64eacd900a0b995fbee6c7ad023e429262d04d27ca6923df4142d",
+    "jubjubSeamTx": "00248f4544ab378c6703b921bffe0888c03c7b2c9578fbd87653fc44574cb08a95",
+    "tamperedJubjubAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
+    "tamperedK256Abort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
+    "reverseCrossArmAddTx": "0073de3499f96711c316a061204cd4bfff54e46dbaaccb94729e40f152a529b0ab"
+  },
+  "ranAt": "2026-08-27T12:36:08.149Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

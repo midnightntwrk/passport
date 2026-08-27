@@ -6,13 +6,78 @@ The standardised account custody contract: the reference implementation of
   surface: unshielded mirror, stateless shielded custody, encrypted inbox,
   the change rule, payment modes), and
 - **MIP-0013 — Multi-key Account Authorisation for Custody Contracts** (the
-  seam instantiation: in-circuit JubJub Schnorr, rolling single-use device
-  entries (AUTH-9), per-circuit challenge binding with witness-value
-  pinning (AUTH-10), device lifecycle, `auth_nonce` freshness),
+  seam instantiations: rolling single-use device entries (AUTH-9),
+  per-circuit challenge binding with witness-value pinning (AUTH-10),
+  device lifecycle, `auth_nonce` freshness),
 
 in one deployment, with the conformance suites both Testing sections
 require. This directory is the standard to build against going forward;
 the `experiments/` directories remain the historical evidence base.
+
+## Co-resident authorisation arms
+
+The MIP-0012 §4 seam is credential-scheme-agnostic, and this contract
+carries it as **co-resident arms**: every gated operation is exported
+once per registered scheme, as `<operation>_with_<arm>`. Each arm's
+entry circuit computes its own challenge, passes its own internal seam
+chip (device-entry roll + in-circuit verification), and calls the same
+internal custody chip — the MIP-0012 custody semantics exist exactly
+once, below every arm.
+
+- **Arm `jubjub`** — Schnorr over JubJub, the **normative MIP-0013
+  scheme**, unchanged in substance from the trunk: §5.1 challenge
+  preimage with signature announcement and grinding nonce, DST families
+  `midnight:account:{device,boot}:v1` and `midnight:account:auth:v1:*`.
+  Gated ABIs are `(…args, pk, use_counter, sig_r, sig_s, grind_nonce)`.
+- **Arm `k256`** — in-circuit **ECDSA over secp256k1**
+  (`secp256k1EcdsaVerify`, ZKIR v3), an **interim engineering arm**, not
+  a scheme proposal: MIP-0013 R2 rejects secp256k1 ECDSA for account
+  authorisation. It stands in for the intended **secp256r1 (P-256)
+  passkey arm** until that curve has a Compact language surface; the two
+  curves share the short-Weierstrass ECDSA shape, so the k1 → r1 swap is
+  a type and constant substitution (built-in names, `:k1:` → `:r1:` DST
+  markers). Its challenges carry no signature announcement (an ECDSA
+  message must not depend on its own signature) and no grinding nonce
+  (the verify reduces the digest mod n natively); keys bind as
+  little-endian affine coordinate bytes; both S forms are accepted (real
+  P-256 authenticators emit high-S; single-use entries make a malleated
+  twin non-replayable). Gated ABIs are `(…args, pk, use_counter, sig)`.
+  Its signer is software only (`@noble/curves` in TypeScript, `k256` in
+  Rust): WebAuthn passkeys are hardware-locked to P-256, which is
+  precisely what the r1 landing enables.
+
+Per-arm circuits instead of one circuit with an in-circuit scheme
+conditional: Compact compiles every exported circuit to its own proof, so
+a proof through a `_with_jubjub` circuit pays only the Schnorr
+constraints and a `_with_k256` proof only the ECDSA constraints (the
+withdraw prover keys measure 49 MB and 117 MB respectively — the split
+keeps the ECDSA premium off the normative arm). Later arms
+(`_with_p256`, possibly `_with_ed25519`) are added the same way: one
+seam chip, one challenge family, one thin export per operation; the
+custody chips do not change.
+
+The arms share one device set (arm-marked entry DSTs keep them
+disjoint), one `device_count`, and one last-device rule. **Cross-arm
+enrolment is first-class**: `add_device_with_<arm>` binds the NEW device
+as its derived ENTRY (computed client-side with the new device's arm's
+exported derivation circuit), so a JubJub device enrols a k256 device
+and vice versa — the migration path between arms. The contract cannot
+inspect an entry argument's preimage: clients MUST derive enrolment
+entries at the current `device_epoch` and use counter 0 (a stale entry
+is inert but still counts toward `device_count` until removed).
+
+Toolchain: the k256 arm requires the ZKIR v3 pre-release stack, so the
+whole contract compiles with it. The one coherent all-published set
+today — the set this package pins — is compactc 0.33.0-rc.2 (generates
+for compact-runtime 0.18.0-rc.1), compact-js 2.5.5-rc.6, and midnight-js
+5.0.0-beta.4, on the node 2.1.0 / ledger 9.1 localnet images with fresh
+volumes (see `infra/docker-compose.yml`). midnight-js 5.0.0-beta.6
+requires an unpublished compact-js interface (per-call Zswap local
+state), and the newer compactc 0.34.0-rc.0 / compact-runtime 0.19.0-rc.0
+line has no published midnight-js consumer; mixing the lines fails at
+deploy or call time on runtime-instance checks. The full experiment
+behind this verdict (`experiments/secp256k1-in-compact/`) is not yet on
+the main branch; until it lands, the summary above is the citable form.
 
 ## Layout
 
@@ -21,12 +86,18 @@ the `experiments/` directories remain the historical evidence base.
 | `contracts/account.compact` | The standard contract (both MIPs, one deployment). |
 | `contracts/control.compact` | Public-map control for the observer leak audit (test scaffolding, **not** part of the standard). |
 | `contracts/faucet.compact` | Token origins on localnet (test scaffolding). |
-| `src/wallet/` | Client library: signer, InboxEntry v1 codec, coin store witness, discovery walk, capture, account wrapper. |
+| `src/wallet/` | Client library: two-arm signers, InboxEntry v1 codec, coin store witness, discovery walk, capture, account wrapper, wave deployment. |
 | `src/tests/` | Conformance suites (see the map below). |
 | `signer-rs/` | Independent Rust signer (conformance test 7): ledger crates only, no TypeScript/WASM/npm. |
 | `infra/` | Localnet compose files (node, indexer, proof server). |
 
 ## Running
+
+The compile script pins the RC toolchain (`compact compile +0.33.0-rc.2
+--feature-zkir-v3`); install it once by unzipping the release asset from
+LFDT-Minokawa/compact into
+`~/.compact/versions/0.33.0-rc.2/aarch64-darwin/` (the `compact update`
+manager only sees the stable line).
 
 ```sh
 npm install
@@ -37,26 +108,83 @@ npm run compile                      # compact compile → contracts/managed/
 export WALLET_SEED=0000000000000000000000000000000000000000000000000000000000000001
 export WALLET_SEED_SECONDARY=0000000000000000000000000000000000000000000000000000000000000002
 
-npm run test:unit                    # offline: signer pipeline, codec, domain separation
-npx tsx src/tests/crossimpl-offline.ts  # offline: Rust challenge bit-exactness
-npm run test:auth                    # MIP-0013 tests 1, 2, 5
-npm run test:auth-lifecycle          # MIP-0013 tests 6, 9
-npm run test:auth-replay             # MIP-0013 tests 3, 4
-npx tsx src/tests/auth-crossimpl.ts  # MIP-0013 test 7 (on node)
+# Offline (no localnet needed; both suites run BOTH arms)
+npm run test:unit                    # signer pipelines, codec, domain separation
+npx tsx src/tests/crossimpl-offline.ts  # Rust challenge bit-exactness per arm
+
+# On-node, running on the v9 localnet (shielded flows and coinless calls)
+npm run test:auth-coinless           # BOTH seams on-node + cross-arm enrolment + tamper aborts
 npm run test:custody-shielded        # MIP-0012 tests 1, 2, 3
 npm run test:custody-discovery      # MIP-0012 test 4
-npm run test:custody-unshielded      # MIP-0012 test 6
 npm run test:custody-payments        # MIP-0012 tests 7, 8
 npm run test:leak-audit              # MIP-0012 test 5
+
+# On-node, currently BLOCKED by the localnet fee limit (see below):
+# every flow that carries an unshielded offer in a contract call.
+npm run test:auth                    # MIP-0013 tests 1, 2, 5 (funds via deposit_unshielded)
+npm run test:auth-lifecycle          # MIP-0013 tests 6, 9
+npm run test:auth-replay             # MIP-0013 tests 3, 4
+npx tsx src/tests/auth-crossimpl.ts  # MIP-0013 test 7 (signs withdraw_unshielded)
+npm run test:custody-unshielded      # MIP-0012 test 6
 ```
 
 Each node suite writes a JSON evidence file under `evidence/`.
+
+## Known ledger-9 limitation: the full deploy exceeds per-block limits
+
+A deploy carrying all 18 verifier keys prices at bytes_written 53,076
+against the ledger-9 rc parameters' per-block budget of 50,000, and at
+compute_time 2.011 s against 2.000 s — it can never fit a block, and the
+fee computation refuses it up front (`exceeded block limit in transaction
+fee computation`, thrown client-side by `feesWithMargin` before
+submission). This is a parameter-tuning finding to raise upstream, not a
+localnet artefact: the limits come from the chain's ledger parameters
+(readable via the indexer's `{ block { ledgerParameters } }`), so any
+network on these parameters refuses the same deploy, and any contract
+with roughly 17 or more typical entry points is undeployable in one
+transaction.
+
+The reference client therefore deploys in waves
+(`src/wallet/wave-deploy.ts`): wave 1 carries the deposits and the
+initial device's arm (10 operations, ~34 KB written — a functional
+single-arm account); wave 2 adds the other arm's 8 verifier keys through
+midnight-js's circuit maintenance interface, signed by the maintenance
+authority key the deploy stored locally. Wave 2 doubles as the migration
+demonstration: adding an arm's circuits to a LIVE account by maintenance
+update is exactly how the planned secp256r1 arm reaches accounts deployed
+before it exists.
+
+## Known localnet limitation: small coin-carrying calls are mempool-rejected
+
+The v9 node's genesis parameters cap a transaction's dismissal cost at
+`max(2 us x size_bytes, 15 ms)`. A contract call paired with an
+**unshielded** offer prices at 16.313 ms against a 16.26 ms budget for its
+~8.1 KB size, so the node rejects it
+(`Malformed(FeeCalculation(OutsideTimeToDismiss))`): a 0.3 % miss,
+invariant under TTL, identical on node 2.1.0 and 2.0.0-rc.4. Proof-only
+calls pass (the coinless suite), plain wallet transfers pass, and shielded
+flows pass (zswap proofs make the transaction large enough to buy budget);
+the failing class is exactly call + unshielded offer in one small
+transaction. Since `deposit_unshielded` is how the funded suites seed the
+account, they are blocked end-to-end. The limitation is independent of the
+signature scheme (the JubJub trunk's transactions have the same shape); it
+is a toolchain-tuning issue to raise upstream, not an arm defect. The
+wallet SDK cannot predict the rejection: it prices fees against hard-coded
+default parameters with enforcement off, while the chain's actual
+parameters arrive per block from the indexer (`{ block { ledgerParameters } }`).
+
+Two client-side consequences are already handled in `src/node/wallet.ts`:
+the balancing TTL defaults to 60 s (`TX_TTL_MS` to override) because
+longer windows push even deploy transactions over the limit, and an intent
+TTL within ~10 s of build time is rejected as
+`Malformed(TransactionApplication(IntentTtlExpired))`.
 
 ## Conformance map
 
 | Suite | MIP-0012 Testing | MIP-0013 Testing | Invariants exercised |
 |---|---|---|---|
-| `unit-offline` | — (client halves of §5.2–5.3, §6.4) | — | AUTH-3, AUTH-9, AUTH-10 at the hash level; S10 non-vacuity |
+| `unit-offline` | — (client halves of §5.2–5.3, §6.4) | — | AUTH-3, AUTH-9, AUTH-10 at the hash level; S10 non-vacuity — **both arms** |
+| `auth-coinless` | — | coinless halves of 1, 2(a), 6, 10 | AUTH-1, AUTH-2, AUTH-9 (entry roll under a second key), §3 bootstrap, wave deploy — **both seams on-node, cross-arm enrolment in both directions, per-arm tamper aborts** |
 | `auth-conformance` | — | 1, 2, 5, 10 | AUTH-1, AUTH-2, AUTH-3, AUTH-8, AUTH-9 (wrong-counter fault), INV-7, §3 bootstrap |
 | `auth-lifecycle` | — | 6, 9 | AUTH-4, AUTH-5, AUTH-7, AUTH-9 (entry roll observed) |
 | `auth-replay` | — | 3, 4 | AUTH-3 (address and circuit binding) |
@@ -66,6 +194,13 @@ Each node suite writes a JSON evidence file under `evidence/`.
 | `leak-audit` | 5 | — | INV-2 (with positive control) |
 | `custody-unshielded` | 6 | — | INV-8 |
 | `custody-payments` | 7, 8 | — | INV-6 (one-hop); direct-transfer mode |
+
+Arm coverage: `unit-offline`, `crossimpl-offline`, and `auth-coinless`
+exercise BOTH arms; the remaining on-node suites drive the k256 arm (the
+account they set up is k256-born), with the custody suites scheme-agnostic
+below the seam by construction. The jubjub arm's full funded conformance
+matrix predates the co-residency restructure on the trunk's history; its
+seam is re-proven on-node by `auth-coinless`.
 
 Not covered here, by design:
 
