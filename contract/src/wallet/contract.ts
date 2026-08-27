@@ -8,11 +8,12 @@ export const { Contract, ledger, pureCircuits } = AccountModule;
 export type { Ledger };
 export type { Witnesses, PureCircuits } from '../../contracts/managed/account/contract/index.js';
 
-/** JubJub point as the generated code represents it. */
-export interface JubjubPoint {
-  x: bigint;
-  y: bigint;
-}
+/** JubJub point as the generated code represents it: affine coordinates. */
+export type { JubjubPoint } from '@midnight-ntwrk/compact-runtime';
+
+/** secp256k1 point as the generated code represents it: affine coordinates
+ *  plus an identity flag, which is false for every real device key. */
+export type { Secp256k1Point } from '@midnight-ntwrk/compact-runtime';
 
 /** The generated shape of a shielded coin (circuit argument / return). */
 export interface ShieldedCoin {

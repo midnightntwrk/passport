@@ -10,12 +10,14 @@ dependencies = [
  "ff",
  "group",
  "hex",
+ "k256",
  "midnight-base-crypto",
  "midnight-curves",
  "midnight-transient-crypto",
  "rand 0.8.7",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

@@ -1,22 +1,27 @@
 // CustodyAccount — the high-level client over a deployed account custody
 // contract (MIP-0012 asset surface + MIP-0013 authorisation seam).
 //
-// Every authorised call follows the same shape: read the live auth_nonce,
-// resolve the device's current use counter (the rolling-entry position,
-// AUTH-9), collect the witness values the call will consume (AUTH-10),
-// build the per-circuit challenge (MIP-0013 §5.1), have the device sign it
-// (§5.3), and pass (pk, use_counter, R, s, grind_nonce) as the circuit's
-// authorising material. Low-level `*WithAuth` variants accept a pre-built
-// Authorisation so conformance tests can inject faults (wrong s, stale
-// nonce, wrong counter, replays).
+// The contract exports every gated operation once per authorisation arm
+// (`<operation>_with_jubjub`, `<operation>_with_k256`); this client is
+// arm-generic: a call takes any device, builds the challenge with that
+// device's arm's builders, and targets the arm's circuit. Every authorised
+// call follows the same shape: read the live auth_nonce, resolve the
+// device's current use counter (the rolling-entry position, AUTH-9),
+// collect the witness values the call will consume (AUTH-10), build the
+// per-circuit challenge, have the device sign it, and pass the arm's
+// authorising material as the circuit's trailing arguments. Low-level
+// `*WithAuth` variants accept a pre-built Authorisation so conformance
+// tests can inject faults (wrong s, stale nonce, wrong counter, replays).
 //
 // The client tracks a device roster (pk → use counter) per MIP-0013 S11:
 // counters advance on every successful gated call, and an unknown counter
 // is recovered by rescanning ledger membership of candidate entries.
 
-import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
+import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 
-import { ledger, pureCircuits, type Ledger, type ShieldedCoin, type QualifiedCoin, type JubjubPoint } from './contract.js';
+import { deployAccountInWaves } from './wave-deploy.js';
+
+import { ledger, type Ledger, type ShieldedCoin, type QualifiedCoin } from './contract.js';
 import {
   emptyCoinStore,
   withCoin,
@@ -24,7 +29,14 @@ import {
   type CoinStorePrivateState,
 } from './witnesses.js';
 import { bytesToHex, hexToBytes } from './hex.js';
-import { challenges, type Authorisation, type CallContext, type Device } from './signer.js';
+import {
+  jubjubChallenges,
+  k256Challenges,
+  authArgs,
+  type AnyDevice,
+  type Authorisation,
+  type CallContext,
+} from './signer.js';
 import type { EncKeyPair } from './inbox.js';
 
 export interface TxResult {
@@ -103,11 +115,11 @@ export class CustodyAccount {
   static async deploy(
     providers: any,
     compiledContract: any,
-    initialDevice: Device,
+    initialDevice: AnyDevice,
     encKeys: EncKeyPair,
   ): Promise<CustodyAccount> {
     const dormant = await CustodyAccount.deployDormant(providers, compiledContract, initialDevice, encKeys);
-    await dormant.activate(initialDevice.pk, dormant.salt);
+    await dormant.activate(initialDevice, dormant.salt);
     return dormant.finish();
   }
 
@@ -116,46 +128,55 @@ export class CustodyAccount {
    * dormant — empty device set, boot commitment stored — until
    * `activate` installs the initial entry; `finish` then wraps the
    * handle. Split out so the bootstrap conformance probes (test 10) can
-   * exercise the pre-activation faults.
+   * exercise the pre-activation faults. The initial device's arm selects
+   * the boot commitment's DST, and thereby which arm's activation circuit
+   * can match it.
    */
   static async deployDormant(
     providers: any,
     compiledContract: any,
-    initialDevice: Device,
+    initialDevice: AnyDevice,
     encKeys: EncKeyPair,
   ): Promise<{
     address: string;
     salt: Uint8Array;
-    activate: (pk: typeof initialDevice.pk, salt: Uint8Array) => Promise<unknown>;
+    activate: (device: AnyDevice, salt: Uint8Array) => Promise<unknown>;
     finish: () => CustodyAccount;
   }> {
     const privateStateId = freshPrivateStateId();
     const initialPrivateState = emptyCoinStore(encKeys.secretKey);
     // kernel.self() is not available in the constructor, so the initial
     // entry cannot be inserted at deploy time; the constructor stores a
-    // salted boot commitment and activate_initial_device inserts the real
-    // address-bound entry immediately after (see the contract's `boot`
-    // cell for the full rationale).
+    // salted boot commitment and the arm's activate_initial_device inserts
+    // the real address-bound entry immediately after (see the contract's
+    // `boot` cell for the full rationale).
     const salt = new Uint8Array(32);
     globalThis.crypto.getRandomValues(salt);
-    const boot = pureCircuits.derive_boot_commitment(salt, initialDevice.pk);
-    const deployed = await deployContract(providers, {
+    const boot = initialDevice.bootCommitment(salt);
+    // The 18-operation deploy exceeds per-block limits, so the account
+    // deploys in waves: the initial device's arm first, the other arm's
+    // verifier keys by maintenance update (see wave-deploy.ts).
+    const address = await deployAccountInWaves(providers, compiledContract, {
+      firstArm: initialDevice.arm,
+      args: [boot, encKeys.publicKey],
+      privateStateId,
+      initialPrivateState,
+    });
+    const found = await (findDeployedContract as any)(providers, {
+      contractAddress: address,
       compiledContract,
       privateStateId,
       initialPrivateState,
-      args: [boot, encKeys.publicKey],
-    } as any);
-    const address = deployed.deployTxData.public.contractAddress;
-    // deployContract does not persist initialPrivateState on every provider
-    // version; seed it explicitly so witnesses see it (c2c experiment note).
-    await providers.privateStateProvider.set(privateStateId, initialPrivateState);
+    });
     return {
       address,
       salt,
-      activate: (pk, s) =>
-        submitWithDustRetry('activate_initial_device', () => (deployed as any).callTx.activate_initial_device(pk, s)),
+      activate: (device, s) => {
+        const name = `activate_initial_device_with_${device.arm}`;
+        return submitWithDustRetry(name, () => (found as any).callTx[name](device.pk, s));
+      },
       finish: () => {
-        const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, deployed);
+        const account = new CustodyAccount(address, addressToBytes(address), providers, privateStateId, found);
         account.counters.set(pkKey(initialDevice.pk), 0n);
         return account;
       },
@@ -163,8 +184,9 @@ export class CustodyAccount {
   }
 
   /** Low-level activation call against a live account (bootstrap probes). */
-  activateInitialDevice(pk: JubjubPoint, salt: Uint8Array): Promise<unknown> {
-    return submitWithDustRetry('activate_initial_device', () => this.handle.callTx.activate_initial_device(pk, salt));
+  activateInitialDevice(device: AnyDevice, salt: Uint8Array): Promise<unknown> {
+    const name = `activate_initial_device_with_${device.arm}`;
+    return submitWithDustRetry(name, () => this.handle.callTx[name](device.pk, salt));
   }
 
   static async connect(
@@ -206,7 +228,7 @@ export class CustodyAccount {
    * verification step makes the roster self-healing after out-of-band
    * calls or desync.
    */
-  async resolveUseCounter(device: Device): Promise<bigint> {
+  async resolveUseCounter(device: AnyDevice): Promise<bigint> {
     const l = await this.ledgerState();
     const known = this.counters.get(pkKey(device.pk));
     if (known !== undefined) {
@@ -278,24 +300,23 @@ export class CustodyAccount {
   // ── Authorised surface (high level: sign with a device, then call) ───────
 
   async withdrawUnshielded(
-    device: Device,
+    device: AnyDevice,
     color: Uint8Array,
     amount: bigint,
     recipient: Uint8Array,
   ): Promise<TxResult> {
     const ctx = await this.callContext();
     const counter = await this.resolveUseCounter(device);
-    const auth = device.sign(
-      challenges.withdrawUnshielded(ctx, device.pk, color, amount, recipient),
-      counter,
-    );
+    const auth = device.arm === 'jubjub'
+      ? device.sign(jubjubChallenges.withdrawUnshielded(ctx, device.pk, color, amount, recipient), counter)
+      : device.sign(k256Challenges.withdrawUnshielded(ctx, device.pk, color, amount, recipient), counter);
     const r = await this.withdrawUnshieldedWithAuth(color, amount, recipient, auth);
     this.advanceCounter(device.pk, counter);
     return r;
   }
 
   async withdrawShielded(
-    device: Device,
+    device: AnyDevice,
     recipient: Uint8Array,
     color: Uint8Array,
     amount: bigint,
@@ -305,17 +326,16 @@ export class CustodyAccount {
     // AUTH-10: the approver signs over the exact qualified coin the spend
     // will consume, read from the same store the witness serves.
     const coin = await this.heldCoin(color);
-    const auth = device.sign(
-      challenges.withdrawShielded(ctx, device.pk, recipient, color, amount, coin),
-      counter,
-    );
+    const auth = device.arm === 'jubjub'
+      ? device.sign(jubjubChallenges.withdrawShielded(ctx, device.pk, recipient, color, amount, coin), counter)
+      : device.sign(k256Challenges.withdrawShielded(ctx, device.pk, recipient, color, amount, coin), counter);
     const r = await this.withdrawShieldedWithAuth(recipient, color, amount, auth);
     this.advanceCounter(device.pk, counter);
     return r;
   }
 
   async withdrawShieldedToContract(
-    device: Device,
+    device: AnyDevice,
     recipient: Uint8Array,
     color: Uint8Array,
     amount: bigint,
@@ -323,46 +343,67 @@ export class CustodyAccount {
     const ctx = await this.callContext();
     const counter = await this.resolveUseCounter(device);
     const coin = await this.heldCoin(color);
-    const auth = device.sign(
-      challenges.withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin),
-      counter,
-    );
+    const auth = device.arm === 'jubjub'
+      ? device.sign(jubjubChallenges.withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin), counter)
+      : device.sign(k256Challenges.withdrawShieldedToContract(ctx, device.pk, recipient, color, amount, coin), counter);
     const r = await this.withdrawShieldedToContractWithAuth(recipient, color, amount, auth);
     this.advanceCounter(device.pk, counter);
     return r;
   }
 
-  async appendInbox(device: Device, entry: Uint8Array): Promise<TxResult> {
+  async appendInbox(device: AnyDevice, entry: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
     const counter = await this.resolveUseCounter(device);
-    const auth = device.sign(challenges.appendInbox(ctx, device.pk, entry), counter);
+    const auth = device.arm === 'jubjub'
+      ? device.sign(jubjubChallenges.appendInbox(ctx, device.pk, entry), counter)
+      : device.sign(k256Challenges.appendInbox(ctx, device.pk, entry), counter);
     const r = await this.appendInboxWithAuth(entry, auth);
     this.advanceCounter(device.pk, counter);
     return r;
   }
 
-  async rotateEncKey(device: Device, newKey: Uint8Array): Promise<TxResult> {
+  async rotateEncKey(device: AnyDevice, newKey: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
     const counter = await this.resolveUseCounter(device);
-    const auth = device.sign(challenges.rotateEncKey(ctx, device.pk, newKey), counter);
+    const auth = device.arm === 'jubjub'
+      ? device.sign(jubjubChallenges.rotateEncKey(ctx, device.pk, newKey), counter)
+      : device.sign(k256Challenges.rotateEncKey(ctx, device.pk, newKey), counter);
     const r = await this.rotateEncKeyWithAuth(newKey, auth);
     this.advanceCounter(device.pk, counter);
     return r;
   }
 
-  async addDevice(device: Device, newPk: { x: bigint; y: bigint }): Promise<TxResult> {
+  /**
+   * Enrol a new device — of ANY arm; the authorising device's arm and the
+   * new device's arm are independent (this is the migration path between
+   * arms). The new device travels as its derived entry at the CURRENT
+   * epoch and use counter 0, computed with its own arm's derivation
+   * circuit; the challenge binds that entry.
+   */
+  async addDevice(device: AnyDevice, newDevice: AnyDevice): Promise<TxResult> {
+    const l = await this.ledgerState();
+    const newEntry = newDevice.entryAt(this.addressBytes, l.device_epoch, 0n);
+    const r = await this.addDeviceEntry(device, newEntry);
+    this.registerDevice(newDevice.pk);
+    return r;
+  }
+
+  /** Enrol a new device by its literal derived entry (the caller derived
+   *  it — for cross-client enrolment where only the entry travels). */
+  async addDeviceEntry(device: AnyDevice, newEntry: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
     const counter = await this.resolveUseCounter(device);
-    const auth = device.sign(challenges.addDevice(ctx, device.pk, newPk), counter);
-    const r = await this.addDeviceWithAuth(newPk, auth);
+    const auth = device.arm === 'jubjub'
+      ? device.sign(jubjubChallenges.addDevice(ctx, device.pk, newEntry), counter)
+      : device.sign(k256Challenges.addDevice(ctx, device.pk, newEntry), counter);
+    const r = await this.addDeviceWithAuth(newEntry, auth);
     this.advanceCounter(device.pk, counter);
-    this.registerDevice(newPk);
     return r;
   }
 
   /** Remove another device by its public key: its current entry is
    *  resolved from the roster or the S11 rescan (MIP-0013 §6). */
-  async removeDevice(device: Device, target: Device): Promise<TxResult> {
+  async removeDevice(device: AnyDevice, target: AnyDevice): Promise<TxResult> {
     const l = await this.ledgerState();
     const targetCounter = await this.resolveUseCounter(target);
     const entry = target.entryAt(this.addressBytes, l.device_epoch, targetCounter);
@@ -370,16 +411,21 @@ export class CustodyAccount {
   }
 
   /** Remove a device by its literal current set element. */
-  async removeDeviceEntry(device: Device, entry: Uint8Array): Promise<TxResult> {
+  async removeDeviceEntry(device: AnyDevice, entry: Uint8Array): Promise<TxResult> {
     const ctx = await this.callContext();
     const counter = await this.resolveUseCounter(device);
-    const auth = device.sign(challenges.removeDevice(ctx, device.pk, entry), counter);
+    const auth = device.arm === 'jubjub'
+      ? device.sign(jubjubChallenges.removeDevice(ctx, device.pk, entry), counter)
+      : device.sign(k256Challenges.removeDevice(ctx, device.pk, entry), counter);
     const r = await this.removeDeviceEntryWithAuth(entry, auth);
     this.advanceCounter(device.pk, counter);
     return r;
   }
 
   // ── Authorised surface (low level: caller supplies the Authorisation) ────
+  //
+  // The Authorisation's arm selects the `_with_<arm>` circuit; its fields
+  // expand to the arm's trailing arguments (authArgs).
 
   async withdrawUnshieldedWithAuth(
     color: Uint8Array,
@@ -387,8 +433,9 @@ export class CustodyAccount {
     recipient: Uint8Array,
     a: Authorisation,
   ): Promise<TxResult> {
-    const r = await submitWithDustRetry('withdraw_unshielded', () => this.handle.callTx.withdraw_unshielded(
-      color, amount, { bytes: recipient }, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce,
+    const name = `withdraw_unshielded_with_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
+      color, amount, { bytes: recipient }, ...authArgs(a),
     ));
     return { txId: txId(r) };
   }
@@ -399,8 +446,9 @@ export class CustodyAccount {
     amount: bigint,
     a: Authorisation,
   ): Promise<SpendOutcome> {
-    const r = await submitWithDustRetry('withdraw_shielded', () => this.handle.callTx.withdraw_shielded(
-      { bytes: recipient }, color, amount, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce,
+    const name = `withdraw_shielded_with_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
+      { bytes: recipient }, color, amount, ...authArgs(a),
     ));
     return { txId: txId(r), change: changeOf(r) };
   }
@@ -411,8 +459,9 @@ export class CustodyAccount {
     amount: bigint,
     a: Authorisation,
   ): Promise<DirectSpendOutcome> {
-    const r = await submitWithDustRetry('withdraw_shielded_to_contract', () => this.handle.callTx.withdraw_shielded_to_contract(
-      { bytes: recipient }, color, amount, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce,
+    const name = `withdraw_shielded_to_contract_with_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
+      { bytes: recipient }, color, amount, ...authArgs(a),
     ));
     const result = circuitResult(r);
     if (!Array.isArray(result) || !result[0]?.nonce) {
@@ -427,22 +476,26 @@ export class CustodyAccount {
   }
 
   async appendInboxWithAuth(entry: Uint8Array, a: Authorisation): Promise<TxResult> {
-    const r = await submitWithDustRetry('append_inbox', () => this.handle.callTx.append_inbox(entry, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
+    const name = `append_inbox_with_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](entry, ...authArgs(a)));
     return { txId: txId(r) };
   }
 
   async rotateEncKeyWithAuth(newKey: Uint8Array, a: Authorisation): Promise<TxResult> {
-    const r = await submitWithDustRetry('rotate_enc_key', () => this.handle.callTx.rotate_enc_key(newKey, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
+    const name = `rotate_enc_key_with_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](newKey, ...authArgs(a)));
     return { txId: txId(r) };
   }
 
-  async addDeviceWithAuth(newPk: { x: bigint; y: bigint }, a: Authorisation): Promise<TxResult> {
-    const r = await submitWithDustRetry('add_device', () => this.handle.callTx.add_device(newPk, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
+  async addDeviceWithAuth(newEntry: Uint8Array, a: Authorisation): Promise<TxResult> {
+    const name = `add_device_with_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](newEntry, ...authArgs(a)));
     return { txId: txId(r) };
   }
 
   async removeDeviceEntryWithAuth(entry: Uint8Array, a: Authorisation): Promise<TxResult> {
-    const r = await submitWithDustRetry('remove_device', () => this.handle.callTx.remove_device(entry, a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce));
+    const name = `remove_device_with_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](entry, ...authArgs(a)));
     return { txId: txId(r) };
   }
 
