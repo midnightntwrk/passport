@@ -1,0 +1,26 @@
+/**
+ * Length caps the Passport wire protocols share.
+ *
+ * They live here, in one module, because the two address caps DIVERGE and the
+ * divergence is deliberate. Left in their own files they read as an accident
+ * and drift apart on the next edit; side by side, the reason is visible and
+ * a change to one is a change made in sight of the other.
+ *
+ * WHY THEY DIFFER. A profile address may be a bech32m SHIELDED address (or a
+ * dust address), which runs long — hence 512. A transaction recipient is
+ * UNSHIELDED-only by protocol: `unshielded-transfer` is the single intent kind
+ * the tx protocol carries, so a recipient that needed more than 200 characters
+ * would not be a recipient this protocol can pay. The tighter bound is the
+ * honest one there, and loosening it to match the profile cap would widen the
+ * text a hostile app can push into an approval sheet for no gain.
+ *
+ * Neither value changes here. Raising the tx cap is only correct alongside a
+ * shielded intent kind; raising the profile cap needs a longer address format
+ * to point at.
+ */
+
+/** Profile addresses: unshielded, shielded, and dust. Shielded runs long. */
+export const MAX_PROFILE_ADDRESS_LENGTH = 512;
+
+/** Transaction recipients: unshielded only, and deliberately tighter. */
+export const MAX_TX_RECIPIENT_ADDRESS_LENGTH = 200;

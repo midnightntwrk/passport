@@ -1,0 +1,644 @@
+@import './tokens.css';
+
+/* Identity screens — prefix "mnid-".
+   Shared by AliasClaim (onboarding step 2), Backup (step 3), Ecosystem (the
+   entry view and the Home identity card), and AliasReclaimModal.
+
+   Same language as the rest of the mobile Passport (see tokens.css): white or
+   near-black page, one electric blue accent, generously rounded soft cards,
+   diffuse vertical shadows, 11px uppercase microcaps. No colour values are
+   declared here that are not tokens. */
+
+/* ---------------------------------------------------------------- */
+/* Screen shell — shared by AliasClaim, Backup, and Ecosystem        */
+/* ---------------------------------------------------------------- */
+
+.mnid-screen {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  animation: mnid-in .4s ease-out both;
+}
+
+@keyframes mnid-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.mnid-bar {
+  width: min(100% - 48px, 520px);
+  min-height: 64px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnid-wordmark {
+  width: 104px;
+  height: auto;
+  filter: var(--mn-wordmark-filter);
+}
+.mnid-step {
+  margin-left: auto;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.mnid-bar .mnid-theme { margin-left: 14px; }
+
+.mnid-body {
+  width: min(100% - 48px, 520px);
+  margin: 0 auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-top: clamp(28px, 5svh, 56px);
+  padding-bottom: 32px;
+}
+
+.mnid-kicker {
+  margin: 0 0 12px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.mnid-title {
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  font-size: clamp(30px, 8.4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: 1.03;
+}
+.mnid-lede {
+  max-width: 420px;
+  margin: 16px 0 0;
+  color: var(--mn-text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ---------------------------------------------------------------- */
+/* The name field                                                    */
+/* ---------------------------------------------------------------- */
+
+.mnid-field {
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 16px 0 4px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.mnid-field:focus-within {
+  border-color: var(--mn-accent);
+  box-shadow: var(--mn-shadow-accent);
+}
+.mnid-field-invalid { border-color: var(--mn-border-medium); }
+
+.mnid-field input {
+  flex: 1;
+  min-width: 0;
+  height: 56px;
+  padding: 0 6px 0 20px;
+  border: 0;
+  outline: 0;
+  color: var(--mn-text-primary);
+  background: transparent;
+  font-family: var(--mn-font-body);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+.mnid-field input::placeholder {
+  color: var(--mn-text-muted);
+  font-weight: 500;
+}
+.mnid-suffix {
+  flex: 0 0 auto;
+  color: var(--mn-text-muted);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+/* Availability line — one sentence, one dot, never a guess. */
+.mnid-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 22px;
+  margin: 14px 2px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.mnid-status-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--mn-text-muted);
+}
+.mnid-status-available .mnid-status-dot { background: var(--mn-accent); }
+.mnid-status-available { color: var(--mn-accent-ink); font-weight: 600; }
+.mnid-status-taken { color: var(--mn-text-secondary); }
+.mnid-status-taken .mnid-status-dot { background: var(--mn-border-medium); }
+.mnid-status-error { color: var(--mn-text-primary); }
+.mnid-status-checking { color: var(--mn-text-muted); }
+.mnid-spin { animation: mnid-spin 1s linear infinite; }
+@keyframes mnid-spin { to { transform: rotate(360deg); } }
+
+.mnid-cost {
+  font-variant-numeric: var(--mn-numeric);
+}
+
+/* ---------------------------------------------------------------- */
+/* Panels — the honest ones                                          */
+/* ---------------------------------------------------------------- */
+
+.mnid-panel {
+  margin-top: 22px;
+  padding: 16px 18px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-card);
+  box-shadow: var(--mn-shadow-sm);
+}
+.mnid-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 8px;
+  color: var(--mn-text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.mnid-panel p {
+  margin: 0;
+  color: var(--mn-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.mnid-panel p + p { margin-top: 8px; }
+.mnid-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.mnid-panel code {
+  display: block;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--mn-radius-sm);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-sunken);
+  font-family: var(--mn-font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------- */
+/* Buttons                                                           */
+/* ---------------------------------------------------------------- */
+
+.mnid-actions {
+  margin-top: auto;
+  padding-top: 32px;
+  display: grid;
+  gap: 10px;
+}
+
+.mnid-primary {
+  width: 100%;
+  min-height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  box-shadow: var(--mn-shadow-accent);
+  font-family: var(--mn-font-body);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  cursor: pointer;
+  transition: background .16s ease, transform .16s ease, opacity .16s ease;
+}
+.mnid-primary:hover:not(:disabled) { background: var(--mn-accent-hover); }
+.mnid-primary:active:not(:disabled) { transform: translateY(1px); }
+.mnid-primary:disabled { opacity: .45; box-shadow: none; cursor: not-allowed; }
+
+.mnid-secondary {
+  width: 100%;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 20px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+  font-family: var(--mn-font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .16s ease;
+}
+.mnid-secondary:hover:not(:disabled) { background: var(--mn-surface-hover); }
+.mnid-secondary:disabled { opacity: .5; cursor: not-allowed; }
+
+.mnid-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 15px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.mnid-link:hover { background: var(--mn-surface-hover); }
+
+.mnid-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 20px 0 0;
+  color: var(--mn-text-muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* ---------------------------------------------------------------- */
+/* Backup bullets                                                    */
+/* ---------------------------------------------------------------- */
+
+.mnid-bullets {
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+.mnid-bullet {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 14px;
+  align-items: start;
+  padding: 16px 18px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-card);
+  box-shadow: var(--mn-shadow-sm);
+}
+.mnid-bullet-mark {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.mnid-bullet strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--mn-text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.mnid-bullet small {
+  display: block;
+  color: var(--mn-text-secondary);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* ---------------------------------------------------------------- */
+/* Ecosystem — identity card + incentives                            */
+/* ---------------------------------------------------------------- */
+
+.mnid-card {
+  margin-top: 24px;
+  padding: 20px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface-card);
+  box-shadow: var(--mn-shadow-sm);
+}
+/* Embedded in Home, the card carries its own top margin from the grid. */
+.mnid-card-embedded { margin-top: 0; }
+
+.mnid-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.mnid-card-head .mnid-kicker { margin: 0; }
+
+.mnid-alias {
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  font-size: clamp(26px, 7vw, 34px);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.mnid-alias-muted { color: var(--mn-text-muted); font-size: 20px; font-weight: 700; }
+
+.mnid-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: var(--mn-radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.mnid-pill-registered {
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+}
+.mnid-pill-queued {
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-sunken);
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+}
+.mnid-pill-failed {
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-sunken);
+  border: var(--mn-hairline) solid var(--mn-border-strong);
+}
+
+.mnid-reason {
+  margin: 12px 0 0;
+  color: var(--mn-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* "Register now" on a queued name — the one accent action on the card. */
+.mnid-register-row { align-items: center; }
+.mnid-register {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-accent-text);
+  background: var(--mn-accent);
+  font-family: var(--mn-font-body);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .16s ease, opacity .16s ease;
+}
+.mnid-register:hover:not(:disabled) { background: var(--mn-accent-hover); }
+.mnid-register:disabled { opacity: .45; cursor: not-allowed; }
+.mnid-register-spinner { animation: mnid-spin 1s linear infinite; }
+@keyframes mnid-spin { to { transform: rotate(360deg); } }
+/* The reason a disabled action cannot run sits beneath it, full width. */
+.mnid-register-reason { flex-basis: 100%; margin: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .mnid-register-spinner { animation-duration: 2.4s; }
+  .mnid-register { transition: none; }
+}
+
+.mnid-txs {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+.mnid-tx {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-raised);
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnid-tx-label {
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mnid-tx a,
+.mnid-tx code {
+  color: var(--mn-accent-ink);
+  font-family: var(--mn-font-mono);
+  font-size: 12px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mnid-tx a:hover { text-decoration: underline; }
+
+.mnid-section {
+  margin-top: 24px;
+}
+.mnid-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.mnid-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+.mnid-item {
+  display: grid;
+  gap: 4px;
+  padding: 13px 15px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-card);
+}
+.mnid-item strong {
+  color: var(--mn-text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.mnid-item small {
+  color: var(--mn-text-muted);
+  font-size: 12px;
+}
+.mnid-item-app {
+  color: var(--mn-accent-ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mnid-empty {
+  margin: 0;
+  padding: 18px;
+  border: var(--mn-hairline) dashed var(--mn-border-medium);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- */
+/* Reclaim modal                                                     */
+/* ---------------------------------------------------------------- */
+
+.mnid-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: var(--mn-scrim);
+  backdrop-filter: blur(3px);
+  animation: mnid-fade .18s ease-out both;
+}
+@keyframes mnid-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.mnid-modal {
+  width: min(100%, 460px);
+  max-height: min(88svh, 720px);
+  overflow-y: auto;
+  padding: 22px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-lg);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  box-shadow: var(--mn-shadow-lg);
+  font-family: var(--mn-font-body);
+  animation: mnid-rise .22s ease-out both;
+}
+@keyframes mnid-rise {
+  from { opacity: 0; transform: translateY(12px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+.mnid-modal-title {
+  margin: 6px 0 0;
+  font-family: var(--mn-font-display);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -.025em;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+.mnid-modal .mnid-lede { margin-top: 12px; font-size: 13.5px; }
+.mnid-modal .mnid-field { margin-top: 20px; }
+.mnid-modal .mnid-actions { margin-top: 20px; padding-top: 0; }
+
+.mnid-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.mnid-chip {
+  min-height: 34px;
+  padding: 0 13px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+  font-family: var(--mn-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mnid-chip:hover:not(:disabled) { background: var(--mn-surface-hover); }
+.mnid-chip-active {
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+  border-color: transparent;
+}
+.mnid-chip:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------------------------------------------------------------- */
+/* Backup — password hint and file picker                            */
+/* ---------------------------------------------------------------- */
+
+/* The hint says what it measured (length, variety) and nothing more, so its
+   colours stay deliberately quiet: no green "secure" badge, because no
+   client-side check can know that. */
+.mnid-hint-too-short,
+.mnid-hint-weak { color: var(--mn-text-secondary); }
+.mnid-hint-too-short .mnid-status-dot,
+.mnid-hint-weak .mnid-status-dot { background: var(--mn-border-medium); }
+.mnid-hint-fair { color: var(--mn-text-secondary); }
+.mnid-hint-fair .mnid-status-dot { background: var(--mn-text-muted); }
+.mnid-hint-strong { color: var(--mn-accent-ink); font-weight: 600; }
+.mnid-hint-strong .mnid-status-dot { background: var(--mn-accent); }
+
+/* The real file input is driven by the button beside it; it stays in the
+   accessibility tree rather than being display:none, so a keyboard user can
+   still reach it directly. */
+.mnid-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

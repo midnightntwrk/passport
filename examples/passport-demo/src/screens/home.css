@@ -1,0 +1,890 @@
+@import './tokens.css';
+
+/* Home screen — prefix "mnhome-".
+   Base-inspired Midnight direction: one electric-blue accent doing all
+   of the emphasis work, soft diffuse shadows, generous rounding (cards
+   at --mn-radius, primary actions as pills), mobile-first at ~390px.
+
+   Every colour on this screen comes from tokens.css. The screen builds its
+   hierarchy out of four real surface values — page, card, raised, sunken —
+   rather than out of hairlines alone, so it reads the same way in light and
+   in dark. */
+
+.mnhome-screen {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  animation: mnhome-in .4s ease-out both;
+}
+
+/* --- Top bar ------------------------------------------------------------- */
+
+.mnhome-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  width: min(100% - 40px, 520px);
+  min-height: 60px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+  background: var(--mn-surface-page);
+}
+.mnhome-wordmark {
+  width: 96px;
+  height: auto;
+  filter: var(--mn-wordmark-filter);
+}
+.mnhome-bar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.mnhome-icon-button {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.mnhome-icon-button:hover:not(:disabled) {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.mnhome-icon-button:active:not(:disabled) { background: var(--mn-surface-active); }
+.mnhome-icon-button:disabled { opacity: .42; cursor: default; }
+/* Touch slop: the drawn square stays 34px, but the hit area is extended to a
+   44px effective target for touch. The ::after is part of the button, so taps
+   on it activate the control without changing the layout. */
+.mnhome-icon-button::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
+.mnhome-icon-button:disabled::after { display: none; }
+
+/* --- Body ---------------------------------------------------------------- */
+
+.mnhome-body {
+  width: min(100% - 40px, 520px);
+  margin: 0 auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 28px;
+  /* The bottom nav belongs to the integrator — leave room for it. */
+  padding-bottom: calc(var(--mn-nav-height) + 24px + env(safe-area-inset-bottom));
+}
+
+.mnhome-micro {
+  margin: 0;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.mnhome-kicker {
+  margin: 0 0 8px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.mnhome-identity { min-width: 0; }
+.mnhome-name {
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  font-size: clamp(36px, 10.5vw, 52px);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: .95;
+  overflow-wrap: anywhere;
+}
+/* The account's display name, set beneath the time-of-day greeting whenever
+   the session knows one. */
+.mnhome-person {
+  margin: 10px 0 0;
+  color: var(--mn-text-secondary);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  overflow-wrap: anywhere;
+}
+
+/* --- Asset row ----------------------------------------------------------- */
+
+.mnhome-assets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.mnhome-card {
+  /* Container so the balance can be sized against the card it has to fit
+     inside, not against the viewport. See .mnhome-card-value. */
+  container-type: inline-size;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
+}
+.mnhome-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--mn-text-muted);
+}
+.mnhome-card-value {
+  margin: 0;
+  min-width: 0;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  /* A balance is one number. It never breaks across lines: it shrinks to fit
+     the card, and only if it still cannot fit does it truncate with an
+     ellipsis. Tabular figures keep the digits on a fixed grid so the value
+     does not jitter as it refreshes. */
+  font-size: clamp(16px, 4.6vw, 24px);
+  font-size: clamp(15px, 14cqi, 26px);
+  font-variant-numeric: var(--mn-numeric);
+  font-weight: 700;
+  letter-spacing: -.015em;
+  /* Loose enough that `overflow: hidden` never clips a comma's tail. */
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mnhome-card-value-muted {
+  color: var(--mn-text-muted);
+  font-size: 17px;
+  font-size: clamp(14px, 9cqi, 18px);
+}
+.mnhome-card-unit {
+  margin: 0;
+  min-height: 15px;
+  color: var(--mn-text-secondary);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.mnhome-ghost {
+  position: relative;
+  align-self: start;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 4px;
+  padding: 0 14px;
+  border: var(--mn-hairline) solid var(--mn-accent);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-accent-ink);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.mnhome-ghost:hover:not(:disabled) {
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.mnhome-ghost:active:not(:disabled) {
+  color: var(--mn-accent-text);
+  background: var(--mn-accent);
+}
+.mnhome-ghost:disabled { opacity: .42; cursor: default; }
+/* Vertical touch slop to a 44px effective target; horizontal left alone so the
+   slop never overlaps a neighbouring control. */
+.mnhome-ghost::after {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+.mnhome-ghost:disabled::after { display: none; }
+
+/* --- Notices ------------------------------------------------------------- */
+
+.mnhome-notice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 12px 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.mnhome-notice svg { flex: 0 0 auto; }
+.mnhome-notice-dismiss { margin-left: auto; }
+
+/* --- Addresses ----------------------------------------------------------- */
+
+.mnhome-address-block { display: grid; gap: 10px; }
+
+/* Small disclosure: the address rows are a power-user surface, collapsed by
+   default. The control reads as a quiet outlined pill, never a primary CTA. */
+.mnhome-disclosure {
+  position: relative;
+  justify-self: start;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.mnhome-disclosure:hover {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.mnhome-disclosure:active { background: var(--mn-surface-active); }
+/* Touch slop to a 44px effective target. */
+.mnhome-disclosure::after {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+.mnhome-disclosure-chevron { transition: transform .15s ease; }
+.mnhome-disclosure-chevron-open { transform: rotate(180deg); }
+
+.mnhome-addresses {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  overflow: hidden;
+  background: var(--mn-surface-card);
+  list-style: none;
+}
+.mnhome-address {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnhome-address:last-child { border-bottom: 0; }
+.mnhome-address-label {
+  color: var(--mn-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.mnhome-address-value {
+  min-width: 0;
+  color: var(--mn-text-secondary);
+  font-family: var(--mn-font-mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Footer -------------------------------------------------------------- */
+
+.mnhome-classic {
+  width: 100%;
+  min-height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-accent-text);
+  background: var(--mn-accent);
+  box-shadow: var(--mn-shadow-accent);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background .15s ease, box-shadow .15s ease, transform .1s ease;
+}
+.mnhome-classic:hover:not(:disabled) {
+  background: var(--mn-accent-hover);
+  box-shadow: var(--mn-shadow-accent);
+}
+.mnhome-classic:active:not(:disabled) {
+  background: var(--mn-accent-hover);
+  box-shadow: var(--mn-shadow-sm);
+  transform: translateY(1px);
+}
+
+/* Outlined support pill — rendered only when a support channel is
+   configured (VITE_TELEGRAM_URL). Quieter than the solid dashboard CTA. */
+.mnhome-support {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 20px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.mnhome-support:hover {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.mnhome-support:active { background: var(--mn-surface-active); }
+.mnhome-support svg { flex: 0 0 auto; }
+/* The Backup entry point reuses the pill, but it is a button rather than a
+   link, so it needs the two things a button does not inherit. */
+button.mnhome-support { font-family: inherit; cursor: pointer; }
+
+/* The .mnhome-foot "passport location" line was removed on 2026/08/06. Its
+   `margin: auto 0 0` was also what sank the column's last row to the bottom of
+   a tall viewport; the always-present dashboard link inherits that job (the
+   support link below it is conditional and cannot). */
+.mnhome-classic { margin-block-start: auto; }
+
+/* --- Motion -------------------------------------------------------------- */
+
+@keyframes mnhome-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnhome-screen { animation: none; }
+  .mnhome-disclosure-chevron { transition: none; }
+}
+
+/* --- Wider viewports ----------------------------------------------------- */
+
+@media (min-width: 560px) {
+  .mnhome-bar, .mnhome-body { width: min(100% - 64px, 560px); }
+  /* The column caps at 560px, so a third asset column would squeeze the DUST
+     battery into ~200px and wrap its copy onto three lines. The battery keeps
+     its full-width row at every viewport; only the two balance cards pair up. */
+  .mnhome-classic { width: auto; min-width: 280px; }
+  /* Viewport-unit fallback only: the container-query rule already holds the
+     number inside its card, but browsers without container queries would
+     otherwise scale the figure off the viewport at this width. */
+  .mnhome-card-value:not(.mnhome-card-value-muted) {
+    font-size: clamp(16px, 3.4vw, 22px);
+    font-size: clamp(15px, 14cqi, 26px);
+  }
+}
+
+/* The Receive sheet. `.mnhome-address-pill` was removed on 2026/08/19 with
+   the top-bar pill it styled: a Passport user's visible identity is their
+   `.night` name, so no address appears in the chrome. The sheet below is the
+   only place an address is shown, and it is reached from Receive alone. */
+.mnhome-addr-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 119;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 20px;
+  background: var(--mn-scrim);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.mnhome-addr-modal {
+  width: min(100%, 420px);
+  margin-bottom: max(8px, env(safe-area-inset-bottom));
+  padding: 18px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-lg);
+}
+.mnhome-addr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.mnhome-addr-note {
+  margin: 12px 0 0;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+@media (min-width: 560px) {
+  .mnhome-addr-scrim { align-items: center; }
+}
+
+/* Address modal footer: one line of caveat under the addresses. The faucet
+   action that shared this row is gone (2026/08/25) — a faucet drips to a
+   wallet address, which is outside the account. */
+.mnhome-addr-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+.mnhome-addr-foot .mnhome-addr-note { margin: 0; flex: 1 1 200px; }
+
+/* The `.night` name at the head of Receive — the identity the user actually
+   hands out. It leads the sheet; the address below it is the fallback until
+   senders resolve names. */
+.mnhome-recv-name {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-card);
+}
+.mnhome-recv-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.mnhome-recv-name-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--mn-text-primary);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.mnhome-recv-name-note {
+  margin: 6px 0 0;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Shielded and DUST, behind one quiet native disclosure. Deliberately the
+   least prominent thing in the sheet — it is for an operator, not a user. */
+.mnhome-recv-more { margin-top: 12px; }
+.mnhome-recv-more-summary {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  color: var(--mn-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  list-style: none;
+}
+.mnhome-recv-more-summary::-webkit-details-marker { display: none; }
+.mnhome-recv-more-summary::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform .15s ease;
+}
+.mnhome-recv-more[open] > .mnhome-recv-more-summary::after {
+  transform: translateY(1px) rotate(225deg);
+}
+.mnhome-recv-more-summary:hover { color: var(--mn-text-secondary); }
+.mnhome-recv-more-summary:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+  border-radius: var(--mn-radius-pill);
+}
+.mnhome-recv-more > .mnhome-addresses { margin-top: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnhome-recv-more-summary::after { transition: none; }
+}
+
+/* Compact sync strip under the top bar — the sync percent's new home. */
+.mnhome-syncstrip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.mnhome-syncstrip-track {
+  flex: 1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-surface-sunken);
+}
+.mnhome-syncstrip-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--mn-radius-pill);
+  background: var(--mn-accent);
+  transition: width .6s ease;
+}
+.mnhome-syncstrip-label {
+  flex-shrink: 0;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: var(--mn-numeric);
+  letter-spacing: .02em;
+}
+
+/* --- Send / Receive ------------------------------------------------------ */
+
+/* The money row, between the greeting and the balance cards. Send renders only
+   while a local wallet session is genuinely open, so this row is sometimes a
+   single control — hence the auto-fit grid rather than a fixed pair. */
+.mnhome-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 12px;
+}
+.mnhome-action {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  transition: background .15s ease, border-color .15s ease;
+}
+.mnhome-action:hover { background: var(--mn-surface-hover); }
+.mnhome-action:active { background: var(--mn-surface-active); }
+.mnhome-action-primary {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-text);
+  background: var(--mn-accent);
+}
+.mnhome-action-primary:hover { background: var(--mn-accent-hover); }
+.mnhome-action-primary:active { background: var(--mn-accent-hover); }
+
+/* The sheet itself reuses .mnhome-addr-scrim / .mnhome-addr-modal so the two
+   money surfaces sit in the same place, at the same size, with the same scrim. */
+.mnhome-send { width: min(100%, 460px); }
+.mnhome-send-form { display: grid; gap: 16px; }
+
+.mnhome-send-field { display: grid; gap: 7px; }
+.mnhome-send-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.mnhome-send-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 13px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  font-family: var(--mn-font-body);
+  font-size: 15px;
+  font-variant-numeric: var(--mn-numeric);
+  line-height: 1.4;
+  resize: none;
+}
+.mnhome-send-input-mono {
+  font-family: var(--mn-font-mono);
+  font-size: 12.5px;
+  letter-spacing: -.01em;
+  overflow-wrap: anywhere;
+}
+/* The token is a colour; a bare colour in `outline` sets no style, so no
+   ring ever drew. */
+.mnhome-send-input:focus-visible { outline: 2px solid var(--mn-focus-ring); outline-offset: 2px; }
+.mnhome-send-input[aria-invalid='true'] { border-color: var(--mn-border-strong); }
+
+.mnhome-send-amount { position: relative; display: block; }
+.mnhome-send-amount .mnhome-send-input { padding-right: 68px; }
+.mnhome-send-unit {
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  transform: translateY(-50%);
+  color: var(--mn-text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  pointer-events: none;
+}
+.mnhome-send-max {
+  padding: 3px 9px;
+  border: var(--mn-hairline) solid var(--mn-accent);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-accent-ink);
+  background: transparent;
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mnhome-send-max:hover:not(:disabled) { background: var(--mn-accent-soft); }
+.mnhome-send-max:disabled { opacity: .42; cursor: default; }
+
+.mnhome-send-hint,
+.mnhome-send-error,
+.mnhome-send-fee {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.mnhome-send-hint { color: var(--mn-text-muted); }
+/* A refusal is set in the primary ink and weighted: it is the most important
+   sentence on the field, and the palette carries no danger colour to lean on. */
+.mnhome-send-error { color: var(--mn-text-primary); font-weight: 600; }
+.mnhome-send-fee {
+  padding: 11px 13px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-sunken);
+  font-size: 12px;
+}
+.mnhome-send-fee-blocked { color: var(--mn-text-primary); font-weight: 600; }
+
+/* The row under a blocked primary control: what is being waited for, and a way
+   to ask again without closing the sheet. It sits with the button rather than
+   with the fee panel because it is about the CONTROL, not about the fee. */
+.mnhome-send-wait {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: -2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--mn-text-muted);
+}
+.mnhome-send-recheck {
+  flex: none;
+  /* A comfortable target on a phone, where this is most often read. */
+  min-height: 32px;
+  padding: 0 12px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.mnhome-send-recheck:hover:not(:disabled) { background: var(--mn-surface-hover); }
+.mnhome-send-recheck:disabled { opacity: .45; cursor: default; }
+
+.mnhome-send-primary,
+.mnhome-send-secondary {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  border-radius: var(--mn-radius-pill);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.mnhome-send-primary {
+  border: var(--mn-hairline) solid var(--mn-accent);
+  color: var(--mn-accent-text);
+  background: var(--mn-accent);
+}
+.mnhome-send-primary:hover:not(:disabled) { background: var(--mn-accent-hover); }
+.mnhome-send-primary:disabled { opacity: .45; cursor: default; }
+.mnhome-send-secondary {
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  color: var(--mn-text-primary);
+  background: transparent;
+}
+.mnhome-send-secondary:hover:not(:disabled) { background: var(--mn-surface-hover); }
+.mnhome-send-secondary:disabled { opacity: .45; cursor: default; }
+
+.mnhome-send-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+
+.mnhome-send-rows {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
+}
+.mnhome-send-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  padding: 12px 13px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnhome-send-row:last-child { border-bottom: 0; }
+.mnhome-send-row dt {
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mnhome-send-row dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.mnhome-send-row dd strong { display: block; font-size: 15px; font-weight: 700; }
+.mnhome-send-row dd small {
+  display: block;
+  margin-top: 2px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-variant-numeric: var(--mn-numeric);
+}
+.mnhome-send-reveal {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.mnhome-send-reveal code {
+  display: block;
+  font-family: var(--mn-font-mono);
+  font-size: 11.5px;
+  letter-spacing: -.01em;
+  overflow-wrap: anywhere;
+}
+.mnhome-send-reveal small {
+  display: block;
+  margin-top: 3px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+}
+
+.mnhome-send-busy {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  color: var(--mn-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.mnhome-send-spinner { flex: 0 0 auto; animation: mnhome-send-spin 1s linear infinite; }
+@keyframes mnhome-send-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .mnhome-send-spinner { animation: none; }
+}
+
+/* The QR scanner sheet. The viewport is square-ish and letterboxes the video
+   rather than stretching it — a distorted feed makes codes harder to hold in
+   frame. The reticle is decoration for aim, not a crop: detection reads the
+   whole frame. */
+.mnhome-qrscan { max-width: 420px; }
+.mnhome-qrscan-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--mn-radius-md);
+  overflow: hidden;
+  background: #000;
+}
+.mnhome-qrscan-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.mnhome-qrscan-reticle {
+  position: absolute;
+  inset: 18%;
+  border: 2px solid rgba(255, 255, 255, 0.75);
+  border-radius: var(--mn-radius-md);
+  pointer-events: none;
+}
+
+/* Every surface in the family carries the same beta mark: micro-caps on the
+   accent wash, pill-shaped, sized to sit beside a wordmark without shouting. */
+.mn-beta-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--mn-radius-pill, 999px);
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  align-self: center;
+}

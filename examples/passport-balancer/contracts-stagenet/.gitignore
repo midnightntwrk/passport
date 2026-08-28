@@ -1,0 +1,4 @@
+# ZK proving artefacts: ~100 MB of prover/verifier keys and ZKIR, rebuilt by
+# the pinned compiler and shipped to servers by rsync — not carried in git.
+managed/*/keys/
+managed/*/zkir/

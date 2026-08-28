@@ -1,0 +1,235 @@
+/**
+ * The reservation semantics, tested without a chain.
+ *
+ * What these guard is one live failure: on 2026/08/26 an mUSD activation leg
+ * held the wallet for the whole ~110 s it spent proving, `/wallet-status`
+ * answered `available: 0` throughout, and the client — which gates fee
+ * sponsorship on `available > 0` — refused every Send and every concurrent
+ * onboarding for the duration. The fix is that proving claims nothing, and
+ * these tests are what say so in a way a future refactor has to keep true.
+ *
+ * The harness below mirrors the real phase structure of a spend rather than the
+ * SDK: `reserve` around the phases that select, sign, or submit coins, and a
+ * bare `await` around the proof.
+ */
+
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+
+import { walletAvailability } from '../src/availability.js';
+import { createWalletReservation, type WalletReservation } from '../src/reservation.js';
+
+const wait = (ms: number): Promise<void> => new Promise((settle) => setTimeout(settle, ms));
+
+/** How `/wallet-status` would answer, for a wallet that is otherwise healthy. */
+const availableNow = (reservation: WalletReservation): 0 | 1 =>
+  walletAvailability({
+    synced: true,
+    dustSpecks: 4_986_372_758_799_194_665n,
+    reserved: reservation.isReserved(),
+    proving: 'server',
+  }).available;
+
+/**
+ * One activation grant, shaped like `account.ts`'s asset leg: a short balancing
+ * phase that claims the wallet, a long proof that claims nothing, then a short
+ * submit that claims it again.
+ */
+async function grant(
+  reservation: WalletReservation,
+  options: { balanceMs: number; proveMs: number; submitMs: number; log?: string[]; name?: string },
+): Promise<string> {
+  return reservation.exclusive(async () => {
+    await reservation.reserve(() => wait(options.balanceMs));
+    await wait(options.proveMs);
+    await reservation.reserve(() => wait(options.submitMs));
+    options.log?.push(options.name ?? 'grant');
+    return options.name ?? 'grant';
+  });
+}
+
+describe('the wallet reservation', () => {
+  it('holds no claim while a job is merely proving', async () => {
+    const reservation = createWalletReservation();
+    const samples: Array<{ reserved: boolean; busy: boolean }> = [];
+
+    /* The proof outlasts the sampling window with room to spare: a sample that
+       landed on the submit phase would be measuring the wrong thing. */
+    const job = grant(reservation, { balanceMs: 10, proveMs: 600, submitMs: 10 });
+    /* Sampled across the proof window, the way an operator polls
+       `/wallet-status` every five seconds. */
+    for (let n = 0; n < 6; n += 1) {
+      await wait(20);
+      samples.push({ reserved: reservation.isReserved(), busy: reservation.isBusy() });
+    }
+    await job;
+
+    assert.equal(
+      samples.some((sample) => sample.busy),
+      true,
+      'the job should have been on the queue for at least one sample',
+    );
+    assert.deepEqual(
+      samples.filter((sample) => sample.reserved),
+      [],
+      'no sample taken during the proof may report a claim on the wallet',
+    );
+  });
+
+  it('reports available: 1 for every sample taken during a proof', async () => {
+    const reservation = createWalletReservation();
+    const samples: Array<0 | 1> = [];
+
+    const job = grant(reservation, { balanceMs: 5, proveMs: 600, submitMs: 5 });
+    for (let n = 0; n < 6; n += 1) {
+      await wait(25);
+      samples.push(availableNow(reservation));
+    }
+    await job;
+
+    assert.deepEqual(
+      samples,
+      [1, 1, 1, 1, 1, 1],
+      'a grant that is proving must never make this wallet read as unavailable',
+    );
+  });
+
+  it('serves a fee request while a grant is proving', async () => {
+    const reservation = createWalletReservation();
+    const order: string[] = [];
+
+    const job = grant(reservation, {
+      balanceMs: 10,
+      proveMs: 600,
+      submitMs: 10,
+      log: order,
+      name: 'grant',
+    });
+
+    // Mid-proof, a Send arrives. `/balance-only` does not queue: it checks the
+    // claim, takes one of its own, proves, and answers.
+    await wait(60);
+    assert.equal(availableNow(reservation), 1);
+    assert.equal(reservation.isReserved(), false, 'the proving grant holds nothing');
+
+    const fee = (async () => {
+      await reservation.reserve(() => wait(5));
+      await wait(20);
+      order.push('fee');
+      return 'fee';
+    })();
+
+    assert.equal(await fee, 'fee');
+    assert.equal(await job, 'grant');
+    assert.deepEqual(order, ['fee', 'grant'], 'the fee leg must not wait for the grant to finish');
+  });
+
+  it('queues two grants and completes both, in order', async () => {
+    const reservation = createWalletReservation();
+    const order: string[] = [];
+
+    const results = await Promise.all([
+      grant(reservation, { balanceMs: 5, proveMs: 60, submitMs: 5, log: order, name: 'first' }),
+      grant(reservation, { balanceMs: 5, proveMs: 60, submitMs: 5, log: order, name: 'second' }),
+    ]);
+
+    assert.deepEqual(results, ['first', 'second']);
+    assert.deepEqual(order, ['first', 'second'], 'spends must still run one at a time');
+    assert.deepEqual(reservation.counts(), { reserved: 0, jobs: 0 });
+  });
+
+  it('never lets two claims overlap on a single-threaded run', async () => {
+    const reservation = createWalletReservation();
+    let peak = 0;
+    const watch = setInterval(() => {
+      peak = Math.max(peak, reservation.counts().reserved);
+    }, 5);
+
+    await Promise.all([
+      grant(reservation, { balanceMs: 15, proveMs: 40, submitMs: 15 }),
+      grant(reservation, { balanceMs: 15, proveMs: 40, submitMs: 15 }),
+    ]);
+    clearInterval(watch);
+
+    assert.ok(peak <= 1, `two queued grants should never claim the wallet at once (peak ${peak})`);
+  });
+
+  it('releases the claim when a phase throws', async () => {
+    const reservation = createWalletReservation();
+    await assert.rejects(
+      reservation.reserve(async () => {
+        throw new Error('balancing failed');
+      }),
+      /balancing failed/,
+    );
+    assert.equal(reservation.isReserved(), false);
+    assert.equal(availableNow(reservation), 1);
+  });
+
+  it('runs the next job after a failed predecessor', async () => {
+    const reservation = createWalletReservation();
+    const failed = reservation.exclusive(async () => {
+      throw new Error('deposit failed');
+    });
+    const next = reservation.exclusive(async () => 'ran anyway');
+
+    await assert.rejects(failed, /deposit failed/);
+    assert.equal(await next, 'ran anyway');
+    assert.deepEqual(reservation.counts(), { reserved: 0, jobs: 0 });
+  });
+
+  it('is re-entrant, because a contract call claims the wallet twice inside one job', async () => {
+    const reservation = createWalletReservation();
+    const result = await reservation.exclusive(async () => {
+      const balanced = await reservation.reserve(async () => 'balanced');
+      const submitted = await reservation.reserve(async () => `${balanced}+submitted`);
+      return submitted;
+    });
+    assert.equal(result, 'balanced+submitted');
+    assert.deepEqual(reservation.counts(), { reserved: 0, jobs: 0 });
+  });
+});
+
+describe('the availability policy', () => {
+  const healthy = {
+    synced: true,
+    dustSpecks: 1_000n,
+    reserved: false,
+    proving: 'server',
+  } as const;
+
+  it('is available when synced, funded, unclaimed, and able to prove', () => {
+    assert.deepEqual(walletAvailability(healthy), { available: 1 });
+    assert.deepEqual(walletAvailability({ ...healthy, proving: 'ready' }), { available: 1 });
+  });
+
+  it('refuses with a cause a caller can act on', () => {
+    assert.deepEqual(walletAvailability({ ...healthy, synced: false }), {
+      available: 0,
+      unavailableCause: 'WALLET_SYNCING',
+    });
+    assert.deepEqual(walletAvailability({ ...healthy, reserved: true }), {
+      available: 0,
+      unavailableCause: 'PENDING_TRANSACTION',
+    });
+    assert.deepEqual(walletAvailability({ ...healthy, dustSpecks: 0n }), {
+      available: 0,
+      unavailableCause: 'INSUFFICIENT_DUST',
+    });
+    assert.deepEqual(walletAvailability({ ...healthy, proving: 'warming' }), {
+      available: 0,
+      unavailableCause: 'PROVER_WARMING',
+    });
+    assert.deepEqual(walletAvailability({ ...healthy, proving: 'failed' }), {
+      available: 0,
+      unavailableCause: 'PROVER_UNAVAILABLE',
+    });
+  });
+
+  it('reports syncing ahead of every other cause, because nothing else is knowable', () => {
+    assert.deepEqual(
+      walletAvailability({ synced: false, dustSpecks: 0n, reserved: true, proving: 'failed' }),
+      { available: 0, unavailableCause: 'WALLET_SYNCING' },
+    );
+  });
+});

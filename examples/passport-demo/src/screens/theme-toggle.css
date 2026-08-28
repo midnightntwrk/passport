@@ -1,0 +1,59 @@
+@import './tokens.css';
+
+/* Theme toggle — prefix "mnthemetoggle-".
+   A three-segment control sized to sit beside the 34px icon buttons in the
+   Home top bar. Base-inspired: a rounded segmented control — pill track,
+   pill segments — with the selected segment carried by the solid
+   accent-blue emphasis surface. */
+
+.mnthemetoggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: 2px;
+  height: 34px;
+  padding: 3px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-card);
+  font-family: var(--mn-font-body);
+}
+
+.mnthemetoggle-option {
+  position: relative;
+  width: 30px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.mnthemetoggle-option:hover:not(.mnthemetoggle-option-on) {
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-hover);
+}
+.mnthemetoggle-option-on {
+  color: var(--mn-text-inverted);
+  background: var(--mn-surface-inverted);
+}
+/* Vertical touch slop to a 44px effective target. Horizontal is left alone:
+   the segments abut, so sideways misses land on the neighbouring segment. */
+.mnthemetoggle-option::after {
+  content: '';
+  position: absolute;
+  inset: -9px -1px;
+}
+
+/* Compact variant. Kept at the 34px control height so a bar mixing this with
+   the standard icon buttons still reads as one row; only the segments narrow. */
+.mnthemetoggle-sm { height: 34px; }
+.mnthemetoggle-sm .mnthemetoggle-option { width: 28px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnthemetoggle-option { transition: none; }
+}
