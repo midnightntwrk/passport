@@ -259,7 +259,10 @@ export async function clearWalletSnapshots(networkId?: string): Promise<void> {
     try {
       await withStore('readwrite', (store) => store.delete(key));
     } catch (cause) {
-      console.debug(`[walletSnapshot] unable to delete ${String(key)}`, cause);
+      /* The key is passed as its own argument rather than interpolated: a
+         value that reached the log through a format specifier could forge a
+         line in it. */
+      console.debug('[walletSnapshot] unable to delete', String(key), cause);
     }
   }
 }

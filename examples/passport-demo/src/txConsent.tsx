@@ -175,6 +175,14 @@ export function PassportTxConsent({
        window does not learn the opener's origin until a message arrives from
        it, and the ready message carries nothing the opener did not send. Every
        reply below goes to the exact origin instead. */
+    /* The wildcard is deliberate, and it is the only origin this line can
+       name. A window opened by an app learns that app's origin only when a
+       message arrives from it, and this is the message that invites one.
+       What it carries is the request id and nonce the opener itself minted
+       and passed in through the launch URL, so it tells the opener nothing
+       it did not already know, and every later reply is sent to the origin
+       the first message revealed. */
+    // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
     opener.postMessage(createPassportProfileReady(launch.requestId, launch.nonce), '*');
 
     const onMessage = (event: MessageEvent) => {
