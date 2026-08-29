@@ -26,6 +26,7 @@ import {
 } from '@midnight-ntwrk/compact-runtime';
 
 import { runScenario, step } from './runner.js';
+import { pureCircuits } from '../wallet/contract.js';
 import {
   JubjubDevice,
   K256Device,
@@ -183,6 +184,34 @@ await runScenario('unit-offline', async () => {
   assert(kDevice.sk > 0n && kDevice.sk < SECP256K1_N, '[k256] sk in [1, n)');
   assert(kDevice.pk.identity === false, '[k256] pk is a real point, never the identity');
   entryChecks('k256', kDevice, kOther);
+
+  // The co-residency invariant: one device set, two arms, kept disjoint only
+  // by the arm marker in each derivation's DST. Distinct keys give distinct
+  // entries trivially, so the property has to be tested where it could
+  // actually collide — the SAME coordinates presented to both derivations.
+  // JubJub's field modulus is below secp256k1's p, so a JubJub point's
+  // coordinates are always numerically admissible as a k256 point's.
+  step('[both arms] the arm marker keeps the shared device set disjoint');
+  {
+    const addr = new Uint8Array(randomBytes(32));
+    const { x, y } = jDevice.pk;
+    const asJubjub = pureCircuits.derive_device_entry_with_jubjub(
+      { bytes: addr }, { x, y }, 0n, 0n,
+    );
+    const asK256 = pureCircuits.derive_device_entry_with_k256(
+      { bytes: addr }, { x, y, identity: false }, 0n, 0n,
+    );
+    assert(
+      !Buffer.from(asJubjub).equals(Buffer.from(asK256)),
+      '[both arms] identical coordinates derive different entries under each arm',
+    );
+    const bootJ = pureCircuits.derive_boot_commitment_with_jubjub(addr, { x, y });
+    const bootK = pureCircuits.derive_boot_commitment_with_k256(addr, { x, y, identity: false });
+    assert(
+      !Buffer.from(bootJ).equals(Buffer.from(bootK)),
+      '[both arms] the boot commitment is arm-marked, so only one arm can activate',
+    );
+  }
 
   step('[k256] signing pipeline: ECDSA over the challenge digest');
   const kH = k256Challenges.withdrawUnshielded(ctx, kDevice.pk, color, 100n, recipient);

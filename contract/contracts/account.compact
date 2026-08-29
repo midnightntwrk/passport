@@ -110,7 +110,9 @@ import CompactStandardLibrary;
 // device_epoch and use counter 0 (a wrong-address or stale-epoch entry is
 // dead weight, and one at the current epoch but a non-zero counter is live
 // at that counter — either way it counts toward device_count until removed,
-// and neither can strand the account. See the §6 note and S11).
+// and neither can strand the account. See the §6 note and S11). That rule
+// binds honest clients only: it is not enforceable here, and a device that
+// breaks it survives its own revocation (README erratum 8).
 //
 // DST construction (§5.1 as amended by midnight-improvement-proposals#249):
 //   every per-circuit DST is derived unconditionally as
@@ -168,11 +170,16 @@ export ledger devices: Set<Bytes<32>>;
 // Single-use device entries (MIP-0013 §3), of every arm: the arm marker in
 // each entry's DST keeps the arms disjoint. Every gated call consumes the
 // acting device's current entry and inserts its successor (AUTH-9).
+// The set carries no per-device identity, so "one device, one live entry"
+// is not an invariant this shape can enforce; that is what defeats
+// revocation (README erratum 8, and the note above add_device).
 
 export ledger device_epoch: Uint<32>;
 // Bumped only by the future recovery seam (MIP-0013 §8). Entries hashed
-// under an older epoch can never match an in-circuit recomputation, so
-// they are inert (AUTH-6).
+// under an OLDER epoch can never match an in-circuit recomputation, so they
+// are inert (AUTH-6). Entries hashed under a FUTURE one are not: nothing
+// binds the epoch at enrolment, so a bump alone does not revoke and the
+// seam that owns it must clear the set (README erratum 7).
 
 export ledger device_count: Uint<8>;
 // Devices active in the current epoch, across all arms. Guards the
@@ -1082,10 +1089,27 @@ export circuit rotate_enc_key_with_k256(
 //
 // None of these can strand the account, because a removal may not remove the
 // device that authorised it (AUTH-5, do_remove_device), and all of them count
-// toward device_count until removed. The contract also cannot detect
-// re-registration of an active key whose chain has advanced past counter
-// 0; clients MUST track the device roster and MUST NOT re-add an active
-// key (S11).
+// toward device_count until removed.
+//
+// LIVENESS IS NOT THE PROBLEM HERE; REVOCATION IS. Nothing constrains a
+// device to exactly one live entry, so an enrolled device can enrol a
+// SECOND entry for its OWN key. The seam consumes its current entry and
+// inserts the successor, then this circuit inserts the planted one, and the
+// device is live at two counters. remove_device retires one set ELEMENT, and
+// resolving which element belongs to a device returns the first live counter
+// found, so a revocation removes one and the device keeps authorising on the
+// other. Measured on-node in src/tests/probe-revocation.ts.
+//
+// Deriving the entry in-circuit from new_pk does NOT fix this: a device whose
+// chain has advanced past counter 0 has left that entry vacant, so enrolling
+// its own key plants exactly the element such a derivation emits. The probe
+// exercises both shapes and both bypass. The contract cannot decide "this key
+// is already enrolled" over the current ledger shape (it holds an opaque
+// entry, or a key whose other entries it cannot search for), and stating the
+// rule as a client obligation (S11) does not help, because the party it binds
+// is the adversary in this threat model. Closing it needs a per-device
+// identity the CONTRACT maintains, which is a ledger-schema change and so a
+// redeploy: see README erratum 8, which carries the shape.
 
 export circuit add_device_with_jubjub(
   new_entry:   Bytes<32>,

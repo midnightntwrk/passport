@@ -100,6 +100,14 @@ otherwise a device can pre-plant an entry that survives its own revocation
 (erratum 7). All of them count toward `device_count` until removed, and none
 can strand the account.
 
+Read that rule as an honest-client obligation only. It is **not** a security
+boundary, and the standard currently has no way to make it one: a device that
+enrols a second entry for its own key holds two live entries, and a removal
+retires one element, so the device survives its own revocation. This is
+measured, it is live on both arms, and deriving the entry in-circuit does not
+prevent it. See erratum 8, which is the substantive open defect in this
+implementation and in MIP-0013 §3 and §6.
+
 Toolchain: the k256 arm requires the ZKIR v3 pre-release stack, so the
 whole contract compiles with it. The one coherent all-published set
 today — the set this package pins — is compactc 0.33.0-rc.2 (generates
@@ -294,6 +302,15 @@ Not covered here, by design:
   6, AUTH-6): the only epoch-bump site is the §8 recovery seam, which
   awaits the recovery-paths MIP. The epoch state and per-entry epoch
   checks are implemented and exercised at epoch 0.
+- **Complete revocation** (MIP-0013 §6): removal retires one set element,
+  and a device that enrolled a second entry for its own key survives it.
+  That is a defect in the standard's device-set shape rather than a gap in
+  the suites, so there is no conformance test to pass;
+  `src/tests/probe-revocation.ts` (`npm run probe:revocation`) demonstrates
+  it on-node against both enrolment shapes. See erratum 8. The probe is
+  deliberately outside the suite list: it reports a verdict rather than
+  gating, and it will be inverted into a conformance test once §3 gains a
+  contract-maintained device identity.
 
 ## Spec errata found while implementing
 
@@ -382,6 +399,55 @@ To be folded back into the MIP texts:
    than one carried in a preimage it cannot inspect. Latent here (no circuit
    bumps the epoch yet) and recorded so the recovery-paths MIP inherits the
    constraint rather than rediscovering it.
+8. **MIP-0013 §6 removal removes an entry, not a device, so revocation does
+   not revoke.** The device set holds single-use entries and carries no
+   per-device identity, so nothing constrains a device to exactly one live
+   entry. An enrolled device can enrol a second entry for its *own* key: the
+   seam consumes its current entry and inserts the successor, and the
+   enrolment then inserts the planted one, leaving the device live at two
+   counters with `device_count` inflated by one. A §6 removal takes a single
+   set element, and resolving "which element is this device's" returns the
+   first live counter found, so a revocation removes one of the two and the
+   device keeps authorising on the other. Measured on-node
+   (`src/tests/probe-revocation.ts`, jubjub arm): after the owner revoked it,
+   the device signed a gated call that advanced `auth_nonce` and enrolled a
+   further device of its own choosing.
+
+   **This is not an artefact of entry-based enrolment.** The same bypass runs
+   against the shape §6 describes, where the contract derives the entry
+   in-circuit at the current epoch and use counter 0: once a device has acted,
+   its counter-0 entry is vacant again, so enrolling its own key plants
+   exactly that element. The probe exercises both shapes and both bypass, so
+   deriving the entry in-circuit is not a fix for this.
+
+   The contract cannot close the gap by inspection: it holds an opaque entry,
+   or a key whose other entries it cannot search for, so "this key is already
+   enrolled" is not decidable over the current ledger shape. Stating it as a
+   client obligation, as the §6 note and S11 do, does not hold either, because
+   the party such a rule binds is the adversary in this threat model. **§3
+   needs a per-device identity that the contract maintains**: a stable
+   arm-marked commitment to the address and key, kept in its own set, with the
+   rolling entry derived in-circuit from that commitment, the current epoch,
+   and the counter. Enrolment can then reject a key that is already live, and
+   removal retires the device rather than one of its entries, while cross-arm
+   enrolment survives because the commitment stays opaque to the contract.
+   That is a ledger-schema change, so a redeploy rather than a maintenance
+   update.
+
+   Two further consequences follow from the same root, and both sharpen the
+   case for fixing it in §3 rather than papering over it in §6. First, the
+   planted entries are **not enumerable by the owner**: an entry sits at a
+   use counter of the planter's choosing, and recovering it means guessing
+   that counter, so anything beyond the client's rescan window (4096 from the
+   last known counter) cannot be found and therefore cannot be removed.
+   Second, every plant increments `device_count`, which is a `Uint<8>`: the
+   generated increment carries a range check that aborts the call once the
+   value would exceed 255 (`cast from Field or Uint value to smaller Uint
+   value failed`). A device that plants repeatedly can therefore push the
+   account to a state where **no further device can ever be enrolled**, and
+   the removals that would relieve it target entries the owner cannot
+   enumerate. The range check is read from the generated code rather than
+   driven to 255 on-node.
 
 ## Ecosystem dependencies observed
 

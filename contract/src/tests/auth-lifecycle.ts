@@ -39,6 +39,17 @@ await runScenario('auth-lifecycle', async () => {
 
   // ── Test 6: lifecycle ─────────────────────────────────────────────────────
 
+  // Note on what 6a does and does not prove. Since enrolment became
+  // entry-typed (the client derives the entry and the contract stores it
+  // verbatim, which is what makes cross-arm enrolment possible), the
+  // assertion below checks insertion and the count, NOT that the contract
+  // and the client agree on the derivation: entryAt calls the contract's own
+  // exported pure circuit, so both sides of the comparison come from the same
+  // place. The agreement is proven where it is observable \u2014 on-node at 6c,
+  // where the seam recomputes the entry in-circuit from the device's key and
+  // has to find it in the set, and offline in unit-offline and
+  // crossimpl-offline against the independent Rust signer. What nothing here
+  // constrains is the entry's epoch and counter: see README erratum 8.
   step('test 6a: add_device inserts the new key\u2019s entry at use counter 0');
   const second = K256Device.generate();
   const addTx = await s.account.addDevice(s.device, second);
