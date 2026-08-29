@@ -91,10 +91,14 @@ rules follow from that (both exercised on-node by `auth-coinless`):
   rejection with it.** **S12.**
 
 Clients MUST still derive enrolment entries at the current `device_epoch`
-and use counter 0. A wrong-address or stale-epoch entry is dead weight; one
-at the current epoch but a non-zero counter is live at that counter. Either
-way it counts toward `device_count` until removed, and neither can strand
-the account.
+and use counter 0. A wrong-address or **past**-epoch entry is dead weight; one
+at the current epoch but a non-zero counter is live at that counter; and one
+at a **future** epoch is dormant rather than dead, going live when the epoch
+advances. That last case constrains the recovery seam that will own the only
+epoch bump: it MUST clear the device set as part of the bump, because
+otherwise a device can pre-plant an entry that survives its own revocation
+(erratum 7). All of them count toward `device_count` until removed, and none
+can strand the account.
 
 Toolchain: the k256 arm requires the ZKIR v3 pre-release stack, so the
 whole contract compiles with it. The one coherent all-published set
@@ -364,6 +368,20 @@ To be folded back into the MIP texts:
    prime-order curve such as secp256k1, `pk != O`). Note that this is a
    defect in the specification, not only in an implementation of it: the
    MIP as written admits a conforming implementation with this hole.
+7. **MIP-0013 AUTH-6 epoch revocation is defeatable by pre-planting.** AUTH-6
+   revokes a device set by advancing `device_epoch`, so that every entry bound
+   to the old epoch stops matching — revocation without enumerating the set.
+   That reasoning only covers entries derived at *past* epochs. Where devices
+   are enrolled as an already-derived entry (MIP-0013 §6, which the cross-arm
+   case forces), nothing binds the epoch at enrolment, so any authorised
+   device can enrol an entry derived at `device_epoch + 1`. It matches nothing
+   until the bump and authorises immediately after it, which means a
+   compromised device survives the very revocation intended to evict it. **§8
+   should require that an epoch bump clear the device set**, or that entries
+   be stored stamped with the epoch the contract observed at enrolment rather
+   than one carried in a preimage it cannot inspect. Latent here (no circuit
+   bumps the epoch yet) and recorded so the recovery-paths MIP inherits the
+   constraint rather than rediscovering it.
 
 ## Ecosystem dependencies observed
 

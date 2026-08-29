@@ -172,11 +172,32 @@ await runScenario('auth-coinless (both arms)', async () => {
     };
     details.identityForgeryAbort = await expectAbort('forged signature under pk = O', () =>
       s.account.addDeviceWithAuth(newEntry, forged));
+
+    // BOTH encodings must be refused. Secp256k1Point carries an identity flag,
+    // and a flag-based guard (`pk != default<Secp256k1Point>`) lets the
+    // unflagged twin {0,0,identity:false} through: the structural comparison
+    // returns "not equal" the moment the flags differ. That twin hashes to the
+    // SAME entry as the flagged form (the entry binds only x and y), so it
+    // reaches the very same planted entry — which is why the guard compares
+    // coordinates instead. Presenting only the flagged form would leave this
+    // untested, which is exactly how the gap survived its first fix.
+    const identityUnflagged: Secp256k1Point = { x: 0n, y: 0n, identity: false };
+    const unflaggedEntry = pureCircuits.derive_device_entry_with_k256(
+      { bytes: s.account.addressBytes }, identityUnflagged, lPlanted.device_epoch, 0n,
+    );
+    if (Buffer.compare(Buffer.from(unflaggedEntry), Buffer.from(identityEntry)) !== 0) {
+      throw new Error('the two identity encodings no longer share an entry; revisit this test');
+    }
+    const forgedUnflagged: K256Authorisation = { ...forged, pk: identityUnflagged };
+    details.identityUnflaggedForgeryAbort = await expectAbort(
+      'forged signature under the UNFLAGGED twin {0,0,identity:false}', () =>
+        s.account.addDeviceWithAuth(newEntry, forgedUnflagged));
+
     const untouched = await s.account.ledgerState();
     if (untouched.auth_nonce !== lPlanted.auth_nonce) {
       throw new Error('refused identity call changed auth_nonce');
     }
-    console.log('  ✓ the entry is on-ledger and the forgery is valid ECDSA; the seam refuses the key');
+    console.log('  ✓ the entry is on-ledger and the forgery is valid ECDSA; both encodings refused');
   }
 
   step('S12, normative arm: a small-order jubjub key is refused');

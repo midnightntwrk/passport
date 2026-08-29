@@ -248,7 +248,7 @@ export circuit activate_initial_device_with_jubjub(pk: JubjubPoint, salt: Bytes<
 
 export circuit activate_initial_device_with_k256(pk: Secp256k1Point, salt: Bytes<32>): [] {
   assert(!booted, "already activated");
-  assert(pk != default<Secp256k1Point>, "device key is the point at infinity");
+  require_live_k256_key(pk);
   assert(derive_boot_commitment_with_k256(salt, pk) == boot, "boot commitment mismatch");
   do_activate_initial_device(derive_device_entry_with_k256(
     kernel.self(), pk, device_epoch, 0 as Uint<64>
@@ -317,6 +317,30 @@ export pure circuit derive_device_entry_with_k256(
     [pad(32, "midnight:account:device:k1:v1"), self_addr,
      secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
      epoch, counter]
+  );
+}
+
+// Rejects the secp256k1 point at infinity as a device key, in EITHER of its
+// encodings. ECDSA is trivially forgeable against it: the stdlib verify
+// computes P = u1·G + u2·pk and checks x(P) == r, so with pk = O the
+// key-dependent term vanishes and anyone can pick s, set r = x((z·s⁻¹)·G),
+// and pass with no private key.
+//
+// The check is on the COORDINATES, not the identity flag, and that is
+// load-bearing. Secp256k1Point carries {x, y, identity}, and the compiler
+// lowers `pk != default<Secp256k1Point>` to a structural comparison against
+// {0, 0, identity: true}, whose equality returns false as soon as the two
+// flags differ. The unflagged twin {0, 0, identity: false} therefore passes
+// a flag-based guard, hashes to the SAME device entry (the entry binds only
+// x and y), and degenerates the verification equation exactly as the flagged
+// form does — measured against the runtime's own curve arithmetic. Comparing
+// coordinates catches both, and keeps the guard agnostic to how a caller
+// chose to encode the point.
+circuit require_live_k256_key(pk: Secp256k1Point): [] {
+  assert(
+    !((secp256k1PointX(pk) as Bytes<32>) == pad(32, "")
+      && (secp256k1PointY(pk) as Bytes<32>) == pad(32, "")),
+    "device key is the point at infinity"
   );
 }
 
@@ -657,13 +681,7 @@ circuit require_authorised_with_k256(
   sig:         Secp256k1EcdsaSignature,
   challenge:   Bytes<32>,
 ): [] {
-  // The point at infinity must never reach the verification. ECDSA is
-  // trivially forgeable against it: the stdlib verify computes
-  // P = u1·G + u2·pk and checks x(P) == r, so with pk = O the key-dependent
-  // term vanishes and anyone can pick s, set r = x((z·s⁻¹)·G), and pass with
-  // no private key. The stdlib guards the same case in
-  // secp256k1EthereumAddress; the seam is where it matters here.
-  assert(pk != default<Secp256k1Point>, "device key is the point at infinity");
+  require_live_k256_key(pk);
   const entry = disclose(derive_device_entry_with_k256(kernel.self(), pk, device_epoch, use_counter));
   assert(devices.member(entry), "unknown device entry");
   devices.remove(entry);
@@ -1039,15 +1057,32 @@ export circuit rotate_enc_key_with_k256(
 // device_epoch and use counter 0.
 //
 // Be precise about what a mis-derived entry does, because the guarantee is
-// weaker than "inert" along one dimension. An entry bound to a different
-// contract address, or to an epoch other than the current one, can never
-// match a seam recomputation and is genuinely dead weight. An entry bound to
-// the current epoch at use counter k > 0 is NOT dead: the seam recomputes
-// against the caller-supplied use_counter, so that entry authorises as soon
-// as its key signs with use_counter = k. Either way the entry counts toward
-// device_count until removed, and either way it cannot strand the account,
-// because a removal may not remove the device that authorised it (AUTH-5,
-// do_remove_device). The contract also cannot detect
+// weaker than "inert" along two of its three dimensions.
+//
+//   address  An entry bound to a different contract address can never match a
+//            seam recomputation. Genuinely dead weight.
+//   counter  An entry at the CURRENT epoch and use counter k > 0 is NOT dead:
+//            the seam recomputes against the caller-supplied use_counter, so
+//            it authorises as soon as its key signs with use_counter = k.
+//   epoch    An entry at a PAST epoch is dead. An entry at a FUTURE epoch is
+//            dormant, not dead, and this is the sharp edge: nothing here binds
+//            device_epoch, so any authorised device can enrol an entry derived
+//            at device_epoch + 1. It matches nothing today and goes live the
+//            moment the epoch advances.
+//
+// That last case is a live constraint on the MIP-0013 §8 recovery seam, which
+// is the only thing that will ever bump device_epoch. AUTH-6 exists so that a
+// bump revokes a compromised device set WITHOUT enumerating it, and a
+// pre-planted future-epoch entry defeats exactly that: the device being
+// evicted survives its own eviction. **A recovery seam added here MUST clear
+// the device set as part of the bump rather than rely on entries going
+// stale** (equivalently, entries must be stored stamped with the epoch the
+// CONTRACT observed at enrolment, rather than one carried in a preimage the
+// contract cannot inspect). See README erratum 7.
+//
+// None of these can strand the account, because a removal may not remove the
+// device that authorised it (AUTH-5, do_remove_device), and all of them count
+// toward device_count until removed. The contract also cannot detect
 // re-registration of an active key whose chain has advanced past counter
 // 0; clients MUST track the device roster and MUST NOT re-add an active
 // key (S11).
