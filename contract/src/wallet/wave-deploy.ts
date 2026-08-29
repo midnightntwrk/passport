@@ -13,23 +13,31 @@
 //           a functional single-arm account;
 //   wave 2  the other arm's 8 verifier keys, added in one batched
 //           contract maintenance update signed by the authority key
-//           wave 1 stored locally.
+//           wave 1 stored locally — and, in the same update, the
+//           retirement of that authority (see the note on
+//           deployAccountInWaves for why the default is to retire it).
 //
 // Wave 2 is not a workaround detail: adding an arm's circuits to a LIVE
 // account by maintenance update is exactly how the planned secp256r1 arm
-// reaches accounts deployed before it exists. The block-limit finding is
+// would reach accounts deployed before it exists. Note the tension that
+// creates, and which the retirement resolves in favour of custody: an
+// authority able to add an arm is equally able to replace an existing arm's
+// verifier key, which is a path around the seam. The block-limit finding is
 // upstream-report material (any contract with this many entry points is
 // undeployable in one transaction under the current parameters).
 
 import {
   ContractDeploy,
+  ContractMaintenanceAuthority,
   ContractOperationVersionedVerifierKey,
   ContractState,
   Intent,
   MaintenanceUpdate,
+  ReplaceAuthority,
   Transaction,
   VerifierKeyInsert,
   signData,
+  type SingleUpdate,
 } from '@midnightntwrk/ledger-v9';
 import {
   createUnprovenDeployTx,
@@ -78,14 +86,44 @@ export interface WaveDeployOptions {
   args: unknown[];
   privateStateId: string;
   initialPrivateState: unknown;
+  /**
+   * Retire the contract maintenance authority in the same update as wave 2
+   * (default true). See the authority note on `deployAccountInWaves`: while an
+   * authority is live it sits ABOVE the MIP-0013 seam, so the reference posture
+   * is to retire it. Pass false only for an account that must remain open to a
+   * future arm, and only having accepted that the authority key is then
+   * equivalent to full custody of the account.
+   */
+  retireAuthority?: boolean;
 }
 
 /**
  * Deploys the account contract in two waves and returns its address. On
- * return the contract carries all 18 operations, the constructor state,
- * and a maintenance authority whose signing key is stored in the private
- * state provider under the contract address (the same place midnight-js's
- * own deploy puts it).
+ * return the contract carries all 18 operations and the constructor state.
+ *
+ * The maintenance authority, and why this retires it by default.
+ * ---------------------------------------------------------------
+ * Deploying a contract mints a maintenance authority and stores its signing
+ * key locally; midnight-js's own `deployContract` does the same, so this is
+ * inherited rather than introduced here. What the authority can do is total:
+ * a `VerifierKeyInsert` REPLACES an operation's verifier key, and a
+ * `ContractOperation` carries nothing but that key, so whoever holds the
+ * signing key can substitute their own relation for `withdraw_shielded_with_*`
+ * and release the account's assets with no device signature and no auth_nonce
+ * advance. That is a path around the seam the contract header calls the gate
+ * on every asset-releasing circuit, and a single key holding it contradicts
+ * the 1-of-n device model MIP-0013 specifies.
+ *
+ * Wave 2 needs the authority (it is how the second arm's keys get in), so the
+ * update that uses it also retires it: the batch ends with a `ReplaceAuthority`
+ * installing an unsatisfiable authority (empty committee, threshold 1), after
+ * which no maintenance update can ever be signed for this contract.
+ *
+ * The cost is explicit: a retired account can never receive a future arm's
+ * circuits, so the secp256r1 arm will reach it only by migrating to a new
+ * account. Wave 2 still demonstrates the mechanism by which an arm reaches a
+ * LIVE account; `retireAuthority: false` keeps that door open for a deployer
+ * who has weighed the custody risk above.
  */
 export async function deployAccountInWaves(
   providers: any,
@@ -153,13 +191,27 @@ export async function deployAccountInWaves(
   // upstream-report candidate.
   const secondArm = otherArm(options.firstArm);
   const waveTwoIds = armCircuits(secondArm);
-  const updates: VerifierKeyInsert[] = [];
+  const updates: SingleUpdate[] = [];
   for (const id of waveTwoIds) {
     const vk = await providers.zkConfigProvider.getVerifierKey(id);
     if (!vk) throw new Error(`compiled contract has no verifier key for '${id}'`);
     updates.push(new VerifierKeyInsert(id, new ContractOperationVersionedVerifierKey('v4', vk)));
   }
-  console.log(`  wave 2: one maintenance update inserting ${updates.length} verifier keys (${secondArm} arm)`);
+
+  // Retire the authority in the same update that last needs it. An empty
+  // committee with threshold 1 can never be satisfied, so this contract
+  // accepts no further maintenance update — the seam becomes the only way
+  // to move the account's assets.
+  const retire = options.retireAuthority !== false;
+  if (retire) {
+    updates.push(new ReplaceAuthority(new ContractMaintenanceAuthority(
+      [], 1, ((full.maintenanceAuthority.counter as bigint) + 1n),
+    )));
+  }
+  console.log(
+    `  wave 2: one maintenance update inserting ${waveTwoIds.length} verifier keys (${secondArm} arm)` +
+    (retire ? ', then retiring the maintenance authority' : ', authority left LIVE (retireAuthority: false)'),
+  );
   // The authority counter is the one the deploy carried: the signing key
   // exists only locally, so no other maintenance update can have advanced
   // it between the waves.

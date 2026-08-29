@@ -33,11 +33,18 @@ import CompactStandardLibrary;
 //       permissionless deposits cannot invalidate a pending authorisation
 //       (AUTH-8);
 //     - device lifecycle: add_device inserts a new entry at use counter 0;
-//       remove_device consumes a literal set element, with the last-device
-//       rule (AUTH-5); the epoch mechanism (AUTH-6) is present in state,
-//       and its only bump site is the recovery seam of MIP-0013 §8, which
-//       awaits the recovery-paths MIP — no recovery circuit is exposed
-//       here yet.
+//       remove_device consumes a literal set element, and may not remove the
+//       entry the caller authorised with, which is what carries the
+//       last-device rule (AUTH-5, S13) now that entries arrive already
+//       derived; the epoch mechanism (AUTH-6) is present in state, and its
+//       only bump site is the recovery seam of MIP-0013 §8, which awaits the
+//       recovery-paths MIP — no recovery circuit is exposed here yet;
+//     - both seams reject device keys of small order (S12). MIP-0013 §4 does
+//       not require this, and both schemes degenerate at their curve
+//       identity (ECDSA loses its key-dependent term; Schnorr reduces to
+//       s·G == R), so an identity key would authorise with no secret. See
+//       the README erratum 6 — this is a gap in the spec, not only in an
+//       implementation of it.
 //
 // ── Authorisation arms ──────────────────────────────────────────────────────
 //
@@ -86,17 +93,24 @@ import CompactStandardLibrary;
 //
 // The arms share ONE device set: the arm marker inside each entry's
 // domain-separation tag keeps the arms' entries disjoint, and each seam
-// chip can only match entries of its own arm. `device_count` and the
-// last-device rule (AUTH-5) span the arms: the invariant is that the
-// account retains at least one usable device of ANY arm. Cross-arm
+// chip can only match entries of its own arm. The last-device rule (AUTH-5)
+// spans the arms: the invariant is that the account retains at least one
+// usable device of ANY arm, and it is carried by the rule that a removal may
+// not remove the device that authorised it — the authorising device has just
+// proved itself, so a usable device always survives. `device_count` is a
+// redundant floor rather than the guarantee, because entries arrive already
+// derived and the contract cannot tell a usable one from dead weight.
+// Cross-arm
 // enrolment is first-class: add_device binds the NEW device as its derived
 // ENTRY (a Bytes<32>, computed client-side with the new device's arm's
 // exported derivation circuit), so a JubJub device authorises the
 // enrolment of a k256 device and vice versa — this is the migration path
 // between arms. The contract cannot inspect an entry argument's epoch or
 // counter; clients MUST derive enrolment entries with the CURRENT
-// device_epoch and use counter 0 (a stale-epoch entry is inert but still
-// counts toward device_count until removed — see S11).
+// device_epoch and use counter 0 (a wrong-address or stale-epoch entry is
+// dead weight, and one at the current epoch but a non-zero counter is live
+// at that counter — either way it counts toward device_count until removed,
+// and neither can strand the account. See the §6 note and S11).
 //
 // DST construction (§5.1 as amended by midnight-improvement-proposals#249):
 //   every per-circuit DST is derived unconditionally as
@@ -224,6 +238,8 @@ circuit do_activate_initial_device(entry: Bytes<32>): [] {
 
 export circuit activate_initial_device_with_jubjub(pk: JubjubPoint, salt: Bytes<32>): [] {
   assert(!booted, "already activated");
+  assert(ecMul(pk, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),
+         "device key has small order");
   assert(derive_boot_commitment_with_jubjub(salt, pk) == boot, "boot commitment mismatch");
   do_activate_initial_device(derive_device_entry_with_jubjub(
     kernel.self(), pk, device_epoch, 0 as Uint<64>
@@ -232,6 +248,7 @@ export circuit activate_initial_device_with_jubjub(pk: JubjubPoint, salt: Bytes<
 
 export circuit activate_initial_device_with_k256(pk: Secp256k1Point, salt: Bytes<32>): [] {
   assert(!booted, "already activated");
+  assert(pk != default<Secp256k1Point>, "device key is the point at infinity");
   assert(derive_boot_commitment_with_k256(salt, pk) == boot, "boot commitment mismatch");
   do_activate_initial_device(derive_device_entry_with_k256(
     kernel.self(), pk, device_epoch, 0 as Uint<64>
@@ -284,6 +301,12 @@ export pure circuit derive_device_entry_with_jubjub(
 // 32 bytes. The key is bound as the little-endian 32-byte encodings of its
 // affine coordinates — an explicit byte encoding independent signers
 // reproduce without the compiler's field-aligned point layout.
+//
+// The identity flag of Secp256k1Point is deliberately NOT bound: both entry
+// points that admit a k256 key (the seam and the bootstrap) reject the point
+// at infinity, and every remaining point of the curve is uniquely determined
+// by its affine coordinates. Anyone lifting this derivation MUST carry that
+// rejection with it, or {0,0,identity} and {0,0,¬identity} collide here.
 export pure circuit derive_device_entry_with_k256(
   self_addr: ContractAddress,
   pk:        Secp256k1Point,
@@ -601,6 +624,15 @@ circuit require_authorised_with_jubjub(
   sig_s:       Field,
   challenge:   Bytes<32>,
 ): [] {
+  // The same weak-key break the k256 arm has, on the normative arm. The seam
+  // asserts s·G == R + c·pk, so a pk of small order lets the key-dependent
+  // term be predicted or erased: at the identity it vanishes outright and any
+  // s with R = s·G passes with no private key. JubJub's identity is the
+  // ordinary affine point (0, 1), not a flagged encoding, so nothing about the
+  // type rules it out. Cofactor-clearing rejects it and the rest of the
+  // 8-torsion in one check: [8]P == O exactly when P has small order.
+  assert(ecMul(pk, 8 as JubjubScalar) != ecMulGenerator(0 as JubjubScalar),
+         "device key has small order");
   const entry = disclose(derive_device_entry_with_jubjub(kernel.self(), pk, device_epoch, use_counter));
   assert(devices.member(entry), "unknown device entry");
   devices.remove(entry);
@@ -625,6 +657,13 @@ circuit require_authorised_with_k256(
   sig:         Secp256k1EcdsaSignature,
   challenge:   Bytes<32>,
 ): [] {
+  // The point at infinity must never reach the verification. ECDSA is
+  // trivially forgeable against it: the stdlib verify computes
+  // P = u1·G + u2·pk and checks x(P) == r, so with pk = O the key-dependent
+  // term vanishes and anyone can pick s, set r = x((z·s⁻¹)·G), and pass with
+  // no private key. The stdlib guards the same case in
+  // secp256k1EthereumAddress; the seam is where it matters here.
+  assert(pk != default<Secp256k1Point>, "device key is the point at infinity");
   const entry = disclose(derive_device_entry_with_k256(kernel.self(), pk, device_epoch, use_counter));
   assert(devices.member(entry), "unknown device entry");
   devices.remove(entry);
@@ -745,9 +784,25 @@ circuit do_add_device(new_entry: Bytes<32>): [] {
 }
 
 // MIP-0013 §6: remove a literal entry (any arm), last-device rule.
-circuit do_remove_device(entry: Bytes<32>): [] {
+//
+// AUTH-5 requires that a removal never leaves the account without a device
+// that can authorise. A count alone cannot carry that guarantee here: entries
+// arrive already derived (§6 cross-arm enrolment), so device_count counts
+// entries rather than demonstrably usable keys, and an account holding one
+// real device plus one mis-derived entry would satisfy device_count > 1 while
+// the removal stranded it permanently.
+//
+// The rule is therefore anchored on the caller instead: caller_entry is the
+// authorising device's post-roll entry, and it may not be the entry removed.
+// Every removal is thus authorised by a device that has just proved itself in
+// this same transaction and that survives the removal, so at least one usable
+// device always remains — a guarantee the count could only approximate. The
+// count check is retained as a cheap redundant floor. A mis-derived entry can
+// still inflate device_count until removed; it can no longer cause a lockout.
+circuit do_remove_device(entry: Bytes<32>, caller_entry: Bytes<32>): [] {
   const e = disclose(entry);
   assert(device_count > (1 as Uint<8>), "cannot remove last device");
+  assert(e != disclose(caller_entry), "cannot remove the authorising device");
   assert(devices.member(e), "unknown device entry");
   devices.remove(e);
   device_count = ((device_count - (1 as Uint<8>)) as Uint<8>);
@@ -981,9 +1036,18 @@ export circuit rotate_enc_key_with_k256(
 // collision-resistant commitment to the new key, its arm, the epoch, and
 // the use counter, so the approval covers all four. The contract cannot
 // inspect the entry's preimage: clients MUST derive it with the CURRENT
-// device_epoch and use counter 0 — an entry derived otherwise is inert
-// (it can never match a seam recomputation) but still counts toward
-// device_count until removed. The contract also cannot detect
+// device_epoch and use counter 0.
+//
+// Be precise about what a mis-derived entry does, because the guarantee is
+// weaker than "inert" along one dimension. An entry bound to a different
+// contract address, or to an epoch other than the current one, can never
+// match a seam recomputation and is genuinely dead weight. An entry bound to
+// the current epoch at use counter k > 0 is NOT dead: the seam recomputes
+// against the caller-supplied use_counter, so that entry authorises as soon
+// as its key signs with use_counter = k. Either way the entry counts toward
+// device_count until removed, and either way it cannot strand the account,
+// because a removal may not remove the device that authorised it (AUTH-5,
+// do_remove_device). The contract also cannot detect
 // re-registration of an active key whose chain has advanced past counter
 // 0; clients MUST track the device roster and MUST NOT re-add an active
 // key (S11).
@@ -1034,7 +1098,11 @@ export circuit remove_device_with_jubjub(
     kernel.self(), sig_r, pk, entry, auth_nonce, grind_nonce
   );
   require_authorised_with_jubjub(pk, use_counter, sig_r, sig_s, challenge);
-  do_remove_device(entry);
+  // The seam has rolled the caller to use_counter + 1; that entry is the one
+  // it must not remove (removing its pre-roll entry already fails membership).
+  do_remove_device(entry, derive_device_entry_with_jubjub(
+    kernel.self(), pk, device_epoch, ((use_counter + (1 as Uint<64>)) as Uint<64>)
+  ));
 }
 
 export circuit remove_device_with_k256(
@@ -1047,5 +1115,8 @@ export circuit remove_device_with_k256(
     kernel.self(), pk, entry, auth_nonce
   );
   require_authorised_with_k256(pk, use_counter, sig, challenge);
-  do_remove_device(entry);
+  // As above: the caller's post-roll entry is off limits.
+  do_remove_device(entry, derive_device_entry_with_k256(
+    kernel.self(), pk, device_epoch, ((use_counter + (1 as Uint<64>)) as Uint<64>)
+  ));
 }

@@ -117,8 +117,12 @@ export class CustodyAccount {
     compiledContract: any,
     initialDevice: AnyDevice,
     encKeys: EncKeyPair,
+    /** See wave-deploy's authority note; the default retires it. */
+    opts?: { retireAuthority?: boolean },
   ): Promise<CustodyAccount> {
-    const dormant = await CustodyAccount.deployDormant(providers, compiledContract, initialDevice, encKeys);
+    const dormant = await CustodyAccount.deployDormant(
+      providers, compiledContract, initialDevice, encKeys, opts,
+    );
     await dormant.activate(initialDevice, dormant.salt);
     return dormant.finish();
   }
@@ -137,6 +141,7 @@ export class CustodyAccount {
     compiledContract: any,
     initialDevice: AnyDevice,
     encKeys: EncKeyPair,
+    opts?: { retireAuthority?: boolean },
   ): Promise<{
     address: string;
     salt: Uint8Array;
@@ -161,6 +166,7 @@ export class CustodyAccount {
       args: [boot, encKeys.publicKey],
       privateStateId,
       initialPrivateState,
+      retireAuthority: opts?.retireAuthority,
     });
     const found = await (findDeployedContract as any)(providers, {
       contractAddress: address,

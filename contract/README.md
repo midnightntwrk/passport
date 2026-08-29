@@ -61,10 +61,40 @@ disjoint), one `device_count`, and one last-device rule. **Cross-arm
 enrolment is first-class**: `add_device_with_<arm>` binds the NEW device
 as its derived ENTRY (computed client-side with the new device's arm's
 exported derivation circuit), so a JubJub device enrols a k256 device
-and vice versa — the migration path between arms. The contract cannot
-inspect an entry argument's preimage: clients MUST derive enrolment
-entries at the current `device_epoch` and use counter 0 (a stale entry
-is inert but still counts toward `device_count` until removed).
+and vice versa — the migration path between arms.
+
+The contract cannot inspect an entry argument's preimage, and two seam
+rules follow from that (both exercised on-node by `auth-coinless`):
+
+- **AUTH-5 rests on the caller, not the count.** Since entries arrive
+  already derived, `device_count` counts entries rather than demonstrably
+  usable keys, so it cannot by itself guarantee that a removal leaves a
+  usable device behind. `do_remove_device` therefore refuses to remove the
+  entry the caller authorised with: every removal is authorised by a device
+  that has just proved itself and that survives, so a usable device always
+  remains. The count check is kept as a redundant floor. **S13.**
+- **Both seams refuse weak device keys.** Each arm's verification collapses
+  at the curve identity, so an identity "key" authorises with no secret at
+  all. On k256 the verify computes `P = u1·G + u2·pk` and tests `x(P) == r`,
+  so `pk = O` erases the key-dependent term and any `s` yields a passing
+  `r = x((z·s⁻¹)·G)`. On JubJub the seam asserts `s·G == R + c·pk`, so
+  `pk = O` reduces it to `s·G == R`, which anyone satisfies by choosing `s`
+  and setting `R = s·G` — the challenge never enters. Neither identity is
+  marked by its type: k256's carries an `identity` flag whose coordinates
+  are conventionally zero, and JubJub's is the ordinary affine point
+  `(0, 1)`. Both places that admit a key on each arm — the seam and the
+  bootstrap — reject them: k256 by `pk != default<Secp256k1Point>`, JubJub
+  by cofactor clearing (`[8]pk != O`, which also rules out the rest of the
+  8-torsion). The k256 rejection is also why that arm's entry derivation
+  binds only the affine coordinates: every admissible point is uniquely
+  determined by them. **Anyone lifting either derivation must carry the
+  rejection with it.** **S12.**
+
+Clients MUST still derive enrolment entries at the current `device_epoch`
+and use counter 0. A wrong-address or stale-epoch entry is dead weight; one
+at the current epoch but a non-zero counter is live at that counter. Either
+way it counts toward `device_count` until removed, and neither can strand
+the account.
 
 Toolchain: the k256 arm requires the ZKIR v3 pre-release stack, so the
 whole contract compiles with it. The one coherent all-published set
@@ -147,12 +177,61 @@ transaction.
 The reference client therefore deploys in waves
 (`src/wallet/wave-deploy.ts`): wave 1 carries the deposits and the
 initial device's arm (10 operations, ~34 KB written — a functional
-single-arm account); wave 2 adds the other arm's 8 verifier keys through
-midnight-js's circuit maintenance interface, signed by the maintenance
-authority key the deploy stored locally. Wave 2 doubles as the migration
-demonstration: adding an arm's circuits to a LIVE account by maintenance
-update is exactly how the planned secp256r1 arm reaches accounts deployed
-before it exists.
+single-arm account); wave 2 adds the other arm's 8 verifier keys in one
+batched `MaintenanceUpdate`, hand-built against the ledger API and signed
+with the maintenance authority key the deploy stored locally.
+
+Not through midnight-js's published circuit maintenance interface, for two
+reasons. It cannot produce a current key: compact-js 2.5.5-rc.6 hardcodes
+`ContractOperationVersion 'v3'`, whose raw keys carry the
+`midnight:verifier-key[v6]:` header, while compactc 0.33.0-rc.2 emits
+v7-headed keys (tag `'v4'`), so `insertVerifierKey` throws before a
+transaction exists. And it is per-circuit, so it would cost 8 transactions
+where the ledger API takes all 8 inserts in one. **This is the third
+upstream finding on this branch** (recorded under "Ecosystem dependencies
+observed"), alongside the block limit above and the fee-model rejection
+below.
+
+Wave 2 also demonstrates the arm-migration mechanism: adding an arm's
+circuits to a LIVE account by maintenance update is how a secp256r1 arm
+would reach accounts deployed before it exists. That mechanism carries a
+custody cost the reference refuses to pay silently, so wave 2 ends by
+retiring the authority — see below.
+
+### The maintenance authority sits above the seam, so wave 2 retires it
+
+Deploying a contract mints a contract maintenance authority and stores its
+signing key locally. This is inherited from the standard deploy path
+(midnight-js's `deployContract` does the same), not introduced here, but the
+co-resident design makes it load-bearing and therefore worth stating
+plainly: **a `VerifierKeyInsert` replaces an operation's verifier key, and a
+`ContractOperation` carries nothing else**, so whoever holds that key can
+substitute their own relation for `withdraw_shielded_with_k256` and release
+the account's assets with no device signature and no `auth_nonce` advance.
+That is a path around the seam this contract calls the gate on every
+asset-releasing circuit, and a single key holding it contradicts the 1-of-n
+device model MIP-0013 specifies.
+
+This is measured, not argued. `auth-coinless` (S14) builds the update that
+removes the verifier key of `withdraw_shielded_with_k256` and inserts the
+permissionless `deposit_unshielded` key in its place, at the authority
+counter read from chain. Against an account deployed with
+`retireAuthority: false` that update returns `SucceedEntirely`: the gate on
+a shielded withdrawal is replaced by a relation that verifies no signature
+at all, with no device key involved. Replacement needs the remove and the
+insert in one update; a bare insert over an existing key is refused.
+
+Wave 2 is the last operation that needs the authority, so the same update
+retires it: the batch ends with a `ReplaceAuthority` installing an empty
+committee at threshold 1, which no signature set can satisfy. The identical
+swap then fails against a default-deployed account, whose on-chain state
+shows `committee = 0, threshold = 1`. After deploy, the seam is the only way
+to move the account's assets.
+
+The cost is explicit and is the trade-off a deployer must make: a retired
+account can never receive a future arm's circuits, so the secp256r1 arm
+reaches it only by migrating to a new account. `retireAuthority: false`
+keeps that door open for a deployer who has weighed the custody risk.
 
 ## Known localnet limitation: small coin-carrying calls are mempool-rejected
 
@@ -184,7 +263,7 @@ TTL within ~10 s of build time is rejected as
 | Suite | MIP-0012 Testing | MIP-0013 Testing | Invariants exercised |
 |---|---|---|---|
 | `unit-offline` | — (client halves of §5.2–5.3, §6.4) | — | AUTH-3, AUTH-9, AUTH-10 at the hash level; S10 non-vacuity — **both arms** |
-| `auth-coinless` | — | coinless halves of 1, 2(a), 6, 10 | AUTH-1, AUTH-2, AUTH-9 (entry roll under a second key), §3 bootstrap, wave deploy — **both seams on-node, cross-arm enrolment in both directions, per-arm tamper aborts** |
+| `auth-coinless` | — | coinless halves of 1, 2(a), 6, 10 | AUTH-1, AUTH-2, AUTH-5 (via S13), AUTH-9 (entry roll under a second key), S12, S13, §3 bootstrap, wave deploy — **both seams on-node, cross-arm enrolment in both directions, per-arm tamper aborts, both seam guards through their real attacks** |
 | `auth-conformance` | — | 1, 2, 5, 10 | AUTH-1, AUTH-2, AUTH-3, AUTH-8, AUTH-9 (wrong-counter fault), INV-7, §3 bootstrap |
 | `auth-lifecycle` | — | 6, 9 | AUTH-4, AUTH-5, AUTH-7, AUTH-9 (entry roll observed) |
 | `auth-replay` | — | 3, 4 | AUTH-3 (address and circuit binding) |
@@ -267,6 +346,24 @@ To be folded back into the MIP texts:
    cannot arise by direct transfer at all, which is stronger than the
    lower-bound semantics §5 assumes; the clause remains correct for any
    future route the ledger may admit.
+6. **MIP-0013 §4 does not require the seam to reject weak device keys.**
+   The seam is specified as a signature verification against the device's
+   public key, with no admissibility condition on that key. Both schemes
+   degenerate at their curve identity: ECDSA's verification equation loses
+   its key-dependent term entirely, and Schnorr's reduces to `s·G == R`, so
+   an identity "key" authorises with no secret. Neither identity is
+   excluded by its type — secp256k1's is a flagged `Secp256k1Point` and
+   JubJub's is the ordinary affine point `(0, 1)` — and MIP-0013's entry
+   construction commits to the key without constraining it, so an entry for
+   an identity key is well-formed. Verified against the runtime's own curve
+   arithmetic on both curves, and exercised on-node by `auth-coinless`
+   (S12): with the entry planted, a forged signature is accepted by the
+   bare verification equation and refused only by the added guard. **§4
+   should require that an implementation reject keys of small order on
+   every arm** (for a cofactor-8 curve such as JubJub, `[8]pk != O`; for a
+   prime-order curve such as secp256k1, `pk != O`). Note that this is a
+   defect in the specification, not only in an implementation of it: the
+   MIP as written admits a conforming implementation with this hole.
 
 ## Ecosystem dependencies observed
 
@@ -304,6 +401,33 @@ To be folded back into the MIP texts:
   changes no public state has been observed to never resolve its
   finalisation watch. Avoid on-chain calls for pure derivations; compute
   them client-side (`rawTokenType` for token colors).
+- **The published circuit-maintenance interface cannot insert a current
+  verifier key**: compact-js 2.5.5-rc.6 hardcodes
+  `ContractOperationVersion 'v3'` (v6-headed keys) while compactc
+  0.33.0-rc.2 emits v7-headed keys (tag `'v4'`), so
+  `CircuitMaintenanceTxInterface.insertVerifierKey` throws a header-tag
+  mismatch before a transaction exists. A version-matrix gap between two
+  published packages, not a misuse: nothing in the interface takes a
+  version. Wave 2 hand-builds its `MaintenanceUpdate` against the ledger
+  API instead (`src/wallet/wave-deploy.ts`), which also lets all 8 inserts
+  ride one transaction rather than 8. **Upstream-report candidate.**
+- **`addOrReplaceContractOperation` cannot replace**: a bare
+  `VerifierKeyInsert` aimed at an operation that already holds a key is
+  refused by the ledger, measured as `FailFallible` at every authority
+  counter and for both a re-inserted identical key and a foreign one.
+  Replacing a key requires a `VerifierKeyRemove` and a `VerifierKeyInsert`
+  in **one** update (measured `SucceedEntirely`), and a lone
+  `VerifierKeyRemove` is refused as well. compact-js's
+  `addOrReplaceContractOperation` emits the bare insert, so despite its name
+  it can add an operation but never replace one. **Upstream-report
+  candidate**, and a second defect in the same helper as the version
+  hardcode above.
+- **`ContractOperation` does not expose its verifier key's version**: only
+  `verifierKey: Uint8Array`, with the ledger documenting that "only the
+  latest available version is exposed to this API". A caller building a
+  `VerifierKeyInsert` therefore has no way to read the version back from
+  the state it is amending and must pass a literal, which is why the
+  wave-2 tag is pinned in source beside the toolchain pin.
 
 ## Client-library notes
 
