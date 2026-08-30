@@ -114,7 +114,7 @@ describe('normalizePassportAlias', () => {
   it('refuses everything the registry would, with a sentence the UI can show', () => {
     for (const bad of ['', '-alice', 'alice-', 'a_b', 'a b', 'ålice', 'a'.repeat(33), '.night']) {
       expect(() => normalizePassportAlias(bad)).toThrow(
-        /1-32 lowercase letters, numbers, or interior hyphens/,
+        /Names are 1–32 characters: lowercase letters, numbers, and hyphens inside\./,
       );
     }
   });

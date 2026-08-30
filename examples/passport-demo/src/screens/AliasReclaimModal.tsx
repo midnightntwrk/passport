@@ -209,7 +209,7 @@ function ReclaimStatus({
     return (
       <p className="mnid-status mnid-status-checking">
         <span className="mnid-status-dot" aria-hidden="true" />
-        <span>Type a name to check it against the {NETWORK_LABELS[targetNetwork]} registry.</span>
+        <span>Type a name to check it on {NETWORK_LABELS[targetNetwork]}.</span>
       </p>
     )
   }

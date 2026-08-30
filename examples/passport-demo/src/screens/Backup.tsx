@@ -322,7 +322,7 @@ export default function BackupScreen(props: BackupProps) {
               <Info size={13} aria-hidden="true" />
               This browser holds {holdings.aliases}{' '}
               {holdings.aliases === 1 ? 'name claim' : 'name claims'}, {holdings.passportContracts}{' '}
-              {holdings.passportContracts === 1 ? 'contract record' : 'contract records'}, and{' '}
+              {holdings.passportContracts === 1 ? 'account record' : 'account records'}, and{' '}
               {holdings.incentives} {holdings.incentives === 1 ? 'reward' : 'rewards'}.
             </p>
           )}
@@ -355,7 +355,7 @@ export default function BackupScreen(props: BackupProps) {
                 {exported.counts.aliases}{' '}
                 {exported.counts.aliases === 1 ? 'name claim' : 'name claims'},{' '}
                 {exported.counts.passportContracts}{' '}
-                {exported.counts.passportContracts === 1 ? 'contract record' : 'contract records'},
+                {exported.counts.passportContracts === 1 ? 'account record' : 'account records'},
                 and {exported.counts.incentives}{' '}
                 {exported.counts.incentives === 1 ? 'reward' : 'rewards'}.
               </p>

@@ -114,13 +114,20 @@ type FieldState =
  * The account-contract stage says "Setting up your account". It used to name
  * the contract being deployed; that is the machinery, and a person waiting on
  * their Passport is owed the thing it is FOR.
+ *
+ * The stage after it now says "Setting your name up…" for the same reason, and
+ * in the same words `Ecosystem.tsx` already used for that phase. The sentence
+ * it replaces — "Deploying your name's resolver…" — survived the 2026/08/26
+ * pass because the pass renamed the phases around it, and it was still on the
+ * live site during a real claim: "resolver" is a thing inside the registry,
+ * not a thing that is happening to the reader.
  */
 const PHASE_COPY: Record<AliasClaimProgress['phase'], (domain: string) => string> = {
   checking: (domain) => `Checking ${domain} is still free…`,
   preparing: () => 'Preparing your Passport…',
   'confirm-passkey': () => 'Confirm with your passkey',
   'attaching-account': () => 'Setting up your account…',
-  'deploying-resolver': () => "Deploying your name's resolver…",
+  'deploying-resolver': () => 'Setting your name up…',
   registering: (domain) => `Registering ${domain}…`,
   confirming: () => 'Confirming your name…',
 }

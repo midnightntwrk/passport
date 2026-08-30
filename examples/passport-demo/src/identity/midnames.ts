@@ -214,7 +214,13 @@ export function normalizePassportAlias(value: string): string {
     ? normalized.slice(0, -(MIDNAMES_TLD.length + 1))
     : normalized;
   if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(alias)) {
-    throw new Error('Alias must be 1-32 lowercase letters, numbers, or interior hyphens.');
+    /* The wording is the name step's own footnote, verbatim. This sentence is
+       shown to the user, so it says "name" — the word the whole screen uses —
+       rather than "alias", which is only what this module happens to call the
+       label internally. */
+    throw new Error(
+      'Names are 1–32 characters: lowercase letters, numbers, and hyphens inside.',
+    );
   }
   if (RESERVED_ALIASES.includes(alias)) {
     throw new Error(`"${alias}" is reserved by the Midnight network and cannot be claimed.`);
