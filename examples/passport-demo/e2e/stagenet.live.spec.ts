@@ -118,10 +118,18 @@ test.describe('@live the account model on stagenet', () => {
     await expect(page.getByRole('button', { name: /Continue with Passport/i })).toBeVisible();
     await page.getByRole('button', { name: /Continue with Passport/i }).click();
 
+    /* A brand-new Passport is welcomed before it is asked for a name — the
+       screen added on 2026/08/30. One control; the reading is the price. */
+    await expect(page.getByRole('heading', { name: /Welcome to Passport/i })).toBeVisible({
+      timeout: 5 * 60_000,
+    });
+    await page.getByRole('button', { name: /Choose my name/i }).click();
+
     /* The wallet has to open against the real indexer before the step is
        armed, so this is the slowest thing before proving starts. */
     await expect(page.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 5 * 60_000 });
-    // The name step is the last step, and it has no way past it.
+    // The NAME step is the last step, and it has no way past it. (The welcome
+    // above has a Skip; the name step must not.)
     await expect(page.getByRole('button', { name: /skip|later|not now/i })).toHaveCount(0);
     console.log(`[live] claiming ${alias}.night`);
   });
@@ -188,32 +196,39 @@ test.describe('@live the account model on stagenet', () => {
   });
 
   test('the name resolves to the account contract, and Home says the same address', async () => {
-    /* The identity card names what the registry points at. This is assertion
-       (1) from the header: the name resolves to a CONTRACT, and the contract
-       is this Passport's account. */
-    const resolvesLine = page.getByText(/Resolves to your Passport account contract \(/);
-    await expect(resolvesLine).toBeVisible({ timeout: 2 * 60_000 });
-    const resolvesText = (await resolvesLine.innerText()).trim();
-    const resolvesTo = elidedAddress(resolvesText);
-    expect(resolvesTo, `could not read the contract out of: ${resolvesText}`).not.toBeNull();
+    /* Since the 2026/08/30 sweep the identity card deliberately shows no
+       address — it says where the name leads in words. So assertion (1) from
+       the header is made against the chain itself, through the verifier: the
+       registry's decoded answer for this name must be the account whose
+       address the Receive sheet offers. */
+    await expect(
+      page.getByText(/People sending to this name reach your account/i),
+    ).toBeVisible({ timeout: 2 * 60_000 });
 
-    /* And the receiving surface offers that same contract, and only it. Under
-       the account model nothing is ever sent to the wallet. */
+    /* The receiving surface offers the account, and only it. Under the
+       account model nothing is ever sent to the wallet. */
     await page.getByRole('button', { name: /^Receive$/ }).click();
     const addressRow = page.locator('.mnhome-address');
     await expect(addressRow).toHaveCount(1);
     await expect(addressRow).toContainText('Your account');
     const accountShown = elidedAddress((await addressRow.locator('code').innerText()).trim());
     expect(accountShown, 'the receive row showed no address').not.toBeNull();
+    await page.keyboard.press('Escape');
 
-    /* The two surfaces elide to different widths — the identity card keeps ten
-       characters and six, the receive row nine and seven — so they are
-       compared on the overlap rather than as strings. Different windows onto
-       the same hash agree on both ends; two different hashes do not. */
-    expect(sameElidedAddress(resolvesTo!, accountShown!)).toBe(true);
-    console.log(
-      `[live] ${alias}.night → account contract ${resolvesTo!.head}…${resolvesTo!.tail}`,
-    );
+    /* The chain's own answer, decoded by the verifier from the registry and
+       resolver state. The full account address appears there — an operator
+       surface — and must be the address Receive elides. */
+    const verifier = await page.context().newPage();
+    await verifier.goto(`https://midnightpassport.com/verify/?q=${alias}.night`);
+    await expect(verifier.getByText(/register_domain_for/)).toBeVisible({ timeout: 90_000 });
+    const verifierText = await verifier.locator('body').innerText();
+    const full = verifierText.match(/[0-9a-f]{64}/);
+    expect(full, 'the verifier reported no account address').not.toBeNull();
+    await verifier.close();
+    const resolved = { head: full![0].slice(0, 10), tail: full![0].slice(-6) };
+    expect(sameElidedAddress(resolved, accountShown!)).toBe(true);
+    console.log(`[live] ${alias}.night → account contract ${resolved.head}…${resolved.tail}`);
+    await page.getByRole('button', { name: /^Receive$/ }).click();
 
     // Nothing about DUST, and no wallet address anywhere on the surface.
     const text = await page.locator('body').innerText();
