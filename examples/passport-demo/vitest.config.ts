@@ -69,6 +69,21 @@
  * call between its parse and its writer is two lines in `App.tsx` and stays out
  * with the rest of the app shell.
  *
+ * `src/lib/recipientName.ts` went IN on 2026/08/30, the day it was written. It
+ * decides which of two completely different things happens to what somebody
+ * typed into the recipient field — a `.night` registry read, or a bech32m
+ * decode — and every way it can pick wrong is a way of showing a person the
+ * wrong refusal about the wrong thing: "that is not a Midnight address" about a
+ * name they typed correctly, or "no Passport has this name" about a mistyped
+ * address. Its cache decides how often the registry is asked, and getting that
+ * wrong is either a network read per keystroke or an answer that has gone stale
+ * inside one sheet. It is regular expressions, a Map, and a string tail — no
+ * DOM, no React, no network, and deliberately no import of
+ * `identity/midnames.ts`, whose every import pulls the ledger in behind it — so
+ * all of it is drilled directly in `src/lib/recipientName.test.ts`. The
+ * debounce, the resolving state, and the confirmation chip stay out with the
+ * rest of the `.tsx`.
+ *
  * `src/lib/feeReadinessPoll.ts` went IN on 2026/08/25 rather than out with the
  * screens it serves: it is the sponsor watcher, it holds no DOM and no React,
  * and its whole contract — probe now, probe again every five seconds, publish
@@ -178,6 +193,7 @@ export default mergeConfig(
           'src/lib/networks.ts',
           'src/lib/notifications.ts',
           'src/lib/qrScan.ts',
+          'src/lib/recipientName.ts',
           'src/lib/sponsor.ts',
           'src/identity/backup.ts',
           'src/identity/claimWarmup.ts',

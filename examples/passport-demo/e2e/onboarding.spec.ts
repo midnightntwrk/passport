@@ -55,7 +55,12 @@ import crypto from 'node:crypto';
 
 import { expect, test, type Page } from '@playwright/test';
 
-import { installNetworkBoundary, type NetworkBoundary } from './mocks.js';
+import {
+  installNetworkBoundary,
+  PASSPORT_ACCOUNT_ADDRESS,
+  RESOLVABLE_NAME,
+  type NetworkBoundary,
+} from './mocks.js';
 import { installVirtualAuthenticator } from './passkey.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -476,7 +481,11 @@ test('Home names the account contract, and never the wallet', async () => {
      returning-Passport path: the ceremony itself is proved on stagenet by
      `stagenet.live.spec.ts`, and what is proved HERE is what Home does with
      its result. */
-  const account = '7c2f4a19e6d0b83c5194fe2a77bb0c61d8a3e94f20cb5d7e8f16a0b3c4d5e6f7';
+  /* A REAL stagenet Passport account, and the one `iamtester.night` resolves
+     to. Seeding a real address rather than an invented one is what lets the
+     mocked tier show real balances: the boundary replays that account's own
+     recorded ledger for it. */
+  const account = PASSPORT_ACCOUNT_ADDRESS;
   const seeded = await page.evaluate(
     ({ alias, address }) => {
       const credentialId = localStorage.getItem('passport-last-passkey');
@@ -540,7 +549,7 @@ test('Home names the account contract, and never the wallet', async () => {
      a hash belongs. Asserted against the seeded values themselves, truncated
      exactly as the card used to truncate them. */
   const identityText = await visibleText();
-  for (const seededHex of ['aaaaaaaaaa', 'bbbbbbbbbb', 'cccccccccc', 'dddddddddd', '7c2f4a19e6']) {
+  for (const seededHex of ['aaaaaaaaaa', 'bbbbbbbbbb', 'cccccccccc', 'dddddddddd', '8054fcaccc']) {
     expect(identityText).not.toContain(seededHex);
   }
   expect(identityText).not.toMatch(/Resolver deploy|Registration|Deployment/);
@@ -555,7 +564,7 @@ test('Home names the account contract, and never the wallet', async () => {
   const accountRow = page.locator('.mnhome-address');
   await expect(accountRow).toHaveCount(1);
   await expect(accountRow).toContainText('Your account');
-  await expect(accountRow.locator('code')).toContainText('7c2f4a19');
+  await expect(accountRow.locator('code')).toContainText('8054fcac');
 
   const text = await visibleText();
   expect(text).not.toContain('mn_addr');
@@ -629,9 +638,97 @@ test('the Send sheet is a withdrawal from the account, and never mentions DUST',
      must not appear is a real address belonging to this Passport: the sheet
      spends from the account contract, and this Passport's own wallet address
      is not something any surface offers. */
-  await expect(page.getByText(/An unshielded \(mn_addr…\) or shielded/)).toBeVisible();
+  /* Since 2026/08/30 the field takes a NAME as well, and the hint leads with
+     it — the name is the thing Passport is for; the address formats are the
+     fallback. */
+  await expect(
+    page.getByText(/A Midnight name, or an unshielded \(mn_addr…\) or shielded/),
+  ).toBeVisible();
   expect(sheet).not.toMatch(/mn_addr_stagenet1[a-z0-9]{10,}/);
   expect(sheet).not.toMatch(/mn_shield-addr_stagenet1[a-z0-9]{10,}/);
+});
+
+test('a `.night` name is a recipient, and the review step shows the name', async () => {
+  /* THE HEADLINE MOMENT.
+     "A name, not an address" is the second promise on the welcome screen, and
+     until 2026/08/30 the Send sheet could not keep it: everything typed went to
+     the bech32m codec and anything that was not an address was refused.
+
+     Both reads in this test are REAL. `iamtester` is a name genuinely
+     registered on stagenet, the `.night` TLD's own recorded state says which
+     leaf holds it, and that leaf's own recorded state says which account it
+     points at — decoded by the real Midnames contract module from real ledger
+     bytes. Nothing about the resolution is stubbed; only the transport is. */
+  const field = page.getByRole('textbox').first();
+  await field.fill('');
+  await field.fill(`${RESOLVABLE_NAME}.night`);
+
+  const chip = page.locator('.mnhome-send-resolved');
+  await expect(chip).toBeVisible({ timeout: 30_000 });
+  await expect(chip).toContainText(`${RESOLVABLE_NAME}.night`);
+  /* FOUR CHARACTERS of the account, and no more. The chip's job is to let
+     somebody agree the lookup found something; an address is not a thing a
+     Passport user is shown. */
+  await expect(chip).toContainText(`…${PASSPORT_ACCOUNT_ADDRESS.slice(-4)}`);
+  expect(await chip.innerText()).not.toContain(PASSPORT_ACCOUNT_ADDRESS.slice(0, 10));
+
+  // A bare label is the same name. Answered from the sheet's own memory: the
+  // registry is not asked twice for one name.
+  const readsBefore = network.calls.filter((call) =>
+    call.includes('CONTRACT_STATE_QUERY'),
+  ).length;
+  await field.fill('');
+  await field.fill(RESOLVABLE_NAME);
+  await expect(chip).toContainText(`${RESOLVABLE_NAME}.night`);
+  expect(
+    network.calls.filter((call) => call.includes('CONTRACT_STATE_QUERY')).length,
+  ).toBe(readsBefore);
+
+  /* The review step. The account's balance is a REAL account's — 0.002 NIGHT,
+     recorded from stagenet — so the amount below is genuinely affordable. */
+  await page.getByRole('textbox').nth(1).fill('0.000001');
+  await page.getByRole('button', { name: /^Review$/ }).click();
+
+  await expect(page.getByText('Review this transfer')).toBeVisible();
+  const review = await page.locator('.mnhome-send-rows').innerText();
+  expect(review).toContain(`${RESOLVABLE_NAME}.night`);
+  /* NO HEX. Not the account, not any part of it beyond the four characters the
+     "ending" line carries — and no "Show full address" control, because there
+     is no address on this row to show. */
+  expect(review).not.toContain(PASSPORT_ACCOUNT_ADDRESS);
+  expect(review).not.toMatch(/\b[0-9a-f]{16,}\b/);
+  await expect(page.getByRole('button', { name: /Show full address/i })).toHaveCount(0);
+  // And the honest warning that a name costs two transactions rather than one.
+  expect(review).toMatch(/Two steps/);
+
+  await page.getByRole('button', { name: /^Back$/ }).click();
+});
+
+test('a name nobody holds is said plainly, and the field stays editable', async () => {
+  const field = page.getByRole('textbox').first();
+  await field.fill('');
+  await field.fill('nobodyhasthisnameatall.night');
+
+  const refusal = page.locator('#mnhome-send-recipient-error');
+  await expect(refusal).toBeVisible({ timeout: 30_000 });
+  await expect(refusal).toContainText('No Passport has the name');
+  // The refusal is about the NAME, not about a Midnight address it never was.
+  expect(await refusal.innerText()).not.toContain('not a Midnight address');
+  await expect(page.getByRole('button', { name: /^Review$/ })).toBeDisabled();
+
+  // Still editable — a refusal that clears the field would be its own defect.
+  await expect(field).toBeEditable();
+  await field.fill('');
+  await field.fill(`${RESOLVABLE_NAME}.night`);
+  await expect(page.locator('.mnhome-send-resolved')).toBeVisible({ timeout: 30_000 });
+
+  /* And a pasted address still works, unchanged. The name path is an addition,
+     not a replacement. */
+  await field.fill('');
+  await field.fill(RECIPIENT);
+  await expect(page.locator('.mnhome-send-resolved')).toHaveCount(0);
+  await expect(page.locator('#mnhome-send-recipient-error')).toHaveCount(0);
+  await field.fill('');
 });
 
 test('a busy fee sponsor disables the Send control rather than removing it', async () => {
@@ -645,7 +742,9 @@ test('a busy fee sponsor disables the Send control rather than removing it', asy
      the sheet finds out on its own when the wait is over. */
 
   // The sheet is still open from the test above; give it something to send.
-  await page.getByPlaceholder(/^mn_addr_stagenet1/).fill(RECIPIENT);
+  /* The placeholder is a NAME since 2026/08/30 — that is what the field is
+     for — and an address is still what it takes. */
+  await page.getByPlaceholder('alice.night').fill(RECIPIENT);
   // The amount field: its label carries the "Max" button too, so the
   // placeholder is what names it unambiguously.
   await page.getByPlaceholder('0.0').fill('0.1');

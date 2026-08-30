@@ -28,7 +28,11 @@ import { EcosystemIdentity } from './Ecosystem.js'
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
 import NotificationToggle from './NotificationToggle.js'
 import PassportContractCard, { type PassportContractCardProps } from './PassportContract.js'
-import SendSheet, { shortToken, type SendSheetHolding } from './SendSheet.js'
+import SendSheet, {
+  shortToken,
+  type SendSheetHolding,
+  type SendSheetProps,
+} from './SendSheet.js'
 import ThemeToggle from './ThemeToggle.js'
 import './home.css'
 
@@ -168,8 +172,18 @@ export interface HomeScreenProps {
       tokenType: string
       amount: bigint
     }) => Promise<void>
+    /**
+     * The name half of the send seam — resolving a `.night` name, and paying
+     * the account it points at. Supplied together or not at all: a sheet that
+     * could look a name up but not pay it would offer a promise nothing behind
+     * it could keep, so the field stays address-only without both.
+     */
+    resolveName?: SendSheetProps['resolveName']
+    onSendToName?: SendSheetProps['onSendToName']
     /** The live phase of the account call, narrated by the sheet. */
     phase?: 'checking' | 'connecting' | 'submitting' | 'confirming' | null
+    /** Which of a name transfer's two legs is running. See the Send sheet. */
+    nameLeg?: SendSheetProps['nameLeg']
   } | null
   /**
    * The activity trail, newest first — every row Passport has written for this
@@ -565,7 +579,10 @@ export default function HomeScreen(props: HomeScreenProps) {
               ? { readShieldedHoldings: send.readShieldedHoldings }
               : {})}
             {...(send.onSendShielded ? { onSendShielded: send.onSendShielded } : {})}
+            {...(send.resolveName ? { resolveName: send.resolveName } : {})}
+            {...(send.onSendToName ? { onSendToName: send.onSendToName } : {})}
             phase={send.phase ?? null}
+            nameLeg={send.nameLeg ?? null}
             onClose={() => setSendOpen(false)}
           />
         ) : null}

@@ -1038,3 +1038,42 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .mnhome-activity-dot[data-tone='pending'] { animation: none; }
 }
+
+/* ── Sending to a name (2026/08/30) ──────────────────────────────────────────
+   Two states under the recipient field: the registry being asked, and the
+   answer. The answer is a chip rather than a sentence because it is a thing to
+   GLANCE at and agree with — and it carries four characters of the account it
+   found, which is enough to tell two resolutions apart and far too few to
+   mistake for an address. */
+.mnhome-send-resolving {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mnhome-send-resolved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* The field is a grid, so `align-self` alone leaves the pill stretched
+     across it and reading as a status band rather than a chip. */
+  align-self: flex-start;
+  justify-self: start;
+  width: fit-content;
+  max-width: 100%;
+  padding: 5px 10px;
+  border-radius: var(--mn-radius-pill, 999px);
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.mnhome-send-resolved svg { flex: 0 0 auto; }
+.mnhome-send-resolved code {
+  font-family: var(--mn-font-mono);
+  font-size: 11px;
+}
+/* The four characters of an account, held on one line. An ellipsis is a break
+   opportunity in CSS, so "…5263" splits without this and reads as two things. */
+.mnhome-send-tail { white-space: nowrap; }

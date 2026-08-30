@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   ArrowRight,
+  Check,
   Loader2,
   ScanLine,
   SendHorizontal,
@@ -31,6 +32,17 @@ import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js
    which is erased. */
 import { startFeeReadinessPoll, type FeeReadinessPoll } from '../lib/feeReadinessPoll.js'
 
+/* Reading the recipient field's two vocabularies, and remembering what each
+   name resolved to. Pure, drilled, and free of the wallet SDK — which is why
+   the label rule is spelled out there rather than imported from
+   `identity/midnames.ts`, whose every import pulls in the ledger. */
+import {
+  accountTail,
+  classifyRecipientInput,
+  createNameResolutionCache,
+  type NameLookup,
+} from '../lib/recipientName.js'
+
 import './home.css'
 
 /**
@@ -49,6 +61,34 @@ import './home.css'
  * prediction it is, and re-read immediately before submitting so a stale quote
  * is never silently acted on; and the sheet only reports success once the node
  * has returned a transaction id.
+ *
+ * A NAME IS A RECIPIENT (2026/08/30)
+ * ----------------------------------
+ * "A name, not an address" is the second promise on Passport's welcome screen,
+ * and until this date the Send sheet could not keep it: whatever was typed went
+ * straight to the wallet SDK's bech32m codec, and anything that was not an
+ * address was refused. `alice.night` — or bare `alice` — is now resolved
+ * through the `.night` registry, and what it resolves to is that Passport's
+ * ACCOUNT.
+ *
+ * That is why a name is a different send from an address, rather than the same
+ * send with the address filled in for you. `withdraw_night` takes a
+ * `UserAddress`; unshielded value sent to a contract by any route other than
+ * its own `deposit_night` is invisible to the balance mirror the recipient's
+ * Passport reads (`account.compact`, `night_balances`). So paying a name is a
+ * withdrawal followed by a DEPOSIT into the recipient's account — two
+ * transactions, narrated as two — and it has its own seam,
+ * {@link SendSheetProps.onSendToName}, precisely so the difference cannot be
+ * lost by accident.
+ *
+ * The name is what the review step shows. The account it resolved to appears
+ * only as its last four characters, in the chip that confirms the lookup found
+ * something: an address is not a thing a Passport user is shown, and four
+ * characters are enough to tell two resolutions apart and far too few to
+ * mistake for one.
+ *
+ * Pasting a raw address still works, unchanged, and everything below is about
+ * that path.
  *
  * TWO KINDS OF RECIPIENT, DECIDED BY THE ADDRESS
  * ----------------------------------------------
@@ -163,17 +203,79 @@ export interface SendSheetProps {
     amount: bigint
   }) => Promise<void>
   /**
+   * Asks the `.night` registry what one name points at.
+   *
+   * Resolves with a real ANSWER either way: `{ found: true }` with the account
+   * the name leads to, or `{ found: false }` with the sentence to show. It
+   * THROWS only when the registry could not be read at all, because "nobody
+   * holds this name" and "we could not find out" are different things to tell
+   * somebody about to send money.
+   *
+   * Optional together with {@link SendSheetProps.onSendToName}: a host that
+   * supplies neither leaves the field address-only, exactly as it was before
+   * 2026/08/30.
+   */
+  resolveName?: (domain: string) => Promise<NameLookup>
+  /**
+   * Pays the account a name resolves to.
+   *
+   * NOT a plain transfer to `accountAddress`, and the distinction is the whole
+   * reason this is a separate seam from {@link SendSheetProps.onSend}: a
+   * `withdraw_night` takes a `UserAddress`, and unshielded value sent to a
+   * contract by any route other than its own `deposit_night` is invisible to
+   * the balance mirror the recipient's Passport reads. The host's
+   * implementation deposits INTO the recipient's account; see `App.tsx`.
+   */
+  onSendToName?: (params: {
+    domain: string
+    accountAddress: string
+    amount: bigint
+  }) => Promise<void>
+  /**
    * The live phase of the account call, when the host reports one. It narrates
    * the wait rather than measuring it: the prover reports no figure, so no
    * percentage is invented.
    */
   phase?: 'checking' | 'connecting' | 'submitting' | 'confirming' | null
+  /**
+   * Which leg of a send-to-name is running, when the host reports one. A
+   * name's transfer is two transactions — out of the sender's account, then
+   * into the recipient's — and a progress line that hid the second would leave
+   * somebody watching an apparently finished send carry on for another minute.
+   */
+  nameLeg?: 'withdrawing' | 'settling' | 'depositing' | null
   onClose: () => void
 }
 
 type Step = 'compose' | 'review'
 /** Which ledger the pasted recipient belongs to — see the header comment. */
 type Mode = 'unshielded' | 'shielded'
+
+/**
+ * How long the field is left alone before the registry is asked.
+ *
+ * Long enough that typing `alice.night` puts ONE question rather than eleven,
+ * short enough that somebody who has stopped is not left wondering whether
+ * anything is happening. The resolving state is shown from the first keystroke
+ * either way, so the wait is never silent.
+ */
+const NAME_DEBOUNCE_MS = 400
+
+/** Where the name in the field has got to. */
+type NameState =
+  | { status: 'idle' }
+  | { status: 'resolving'; domain: string }
+  | { status: 'found'; domain: string; accountAddress: string }
+  /** The registry answered, and nobody holds it. A real answer, not a failure. */
+  | { status: 'missing'; domain: string; reason: string }
+  /** The registry could not be read. Different from nobody holding the name. */
+  | { status: 'error'; domain: string; message: string }
+
+function lookupToState(domain: string, lookup: NameLookup): NameState {
+  return lookup.found
+    ? { status: 'found', domain, accountAddress: lookup.accountAddress }
+    : { status: 'missing', domain, reason: lookup.reason }
+}
 
 /** Atomic NIGHT → display NIGHT. Exact: string arithmetic, never a float. */
 function formatNight(atomic: bigint): string {
@@ -346,7 +448,10 @@ export default function SendSheet(props: SendSheetProps) {
     onSend,
     readShieldedHoldings,
     onSendShielded,
+    resolveName,
+    onSendToName,
     phase,
+    nameLeg,
     onClose,
   } = props
 
@@ -367,10 +472,18 @@ export default function SendSheet(props: SendSheetProps) {
   const [holdingsError, setHoldingsError] = useState<string | null>(null)
   const [tokenType, setTokenType] = useState<string | null>(null)
 
+  /* What the registry said about the name in the field, if there is one. */
+  const [nameState, setNameState] = useState<NameState>({ status: 'idle' })
+
   const recipientRef = useRef<HTMLTextAreaElement | null>(null)
   const feePollRef = useRef<FeeReadinessPoll | null>(null)
+  /* One question per name, for the LIFETIME OF THIS SHEET. A sheet closed and
+     reopened asks again, which is what somebody who has just been told "no
+     Passport has this name" would expect after going away to fix it. */
+  const nameCache = useRef(createNameResolutionCache())
 
   const shieldedSupported = Boolean(readShieldedHoldings && onSendShielded)
+  const nameSupported = Boolean(resolveName && onSendToName)
 
   /* The fee sentence describes what will really happen, so the sponsor is
      probed when the sheet opens rather than assumed ready — and then KEPT
@@ -413,12 +526,88 @@ export default function SendSheet(props: SendSheetProps) {
     recipientRef.current?.focus()
   }, [])
 
-  const verdict = useMemo(
-    () => classifyRecipient(recipient, networkId, shieldedSupported),
-    [networkId, recipient, shieldedSupported],
+  /* Which of the two vocabularies is in the field. A host with no name seam
+     gets `address` for everything, so the sheet behaves exactly as it did
+     before names existed. */
+  const typed = useMemo(
+    () => (nameSupported ? classifyRecipientInput(recipient) : null),
+    [nameSupported, recipient],
   )
-  const recipientError = verdict && 'error' in verdict ? verdict.error : null
-  const mode: Mode = verdict && 'mode' in verdict ? verdict.mode : 'unshielded'
+  const nameMode = typed?.kind === 'name' || typed?.kind === 'name-invalid'
+  const typedDomain = typed?.kind === 'name' ? typed.domain : null
+
+  /**
+   * The registry read, debounced.
+   *
+   * Nothing is asked on a keystroke: the timer is cleared and restarted by
+   * every change, so the question is only put once somebody has stopped typing.
+   * A name already answered in this sheet is answered from memory with no
+   * network read at all — including a "nobody holds this", which is a real
+   * answer the registry gave and not a failure to re-try.
+   *
+   * A read that FAILS is never cached. Remembering "the network was down"
+   * would keep saying so after it came back.
+   */
+  useEffect(() => {
+    if (!resolveName || !typedDomain) {
+      setNameState({ status: 'idle' })
+      return undefined
+    }
+    const remembered = nameCache.current.get(typedDomain)
+    if (remembered) {
+      setNameState(lookupToState(typedDomain, remembered))
+      return undefined
+    }
+    let live = true
+    setNameState({ status: 'resolving', domain: typedDomain })
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const lookup = await resolveName(typedDomain)
+          if (!live) return
+          nameCache.current.set(typedDomain, lookup)
+          setNameState(lookupToState(typedDomain, lookup))
+        } catch (cause) {
+          if (!live) return
+          setNameState({ status: 'error', domain: typedDomain, message: messageOf(cause) })
+        }
+      })()
+    }, NAME_DEBOUNCE_MS)
+    return () => {
+      live = false
+      window.clearTimeout(timer)
+    }
+  }, [resolveName, typedDomain])
+
+  const verdict = useMemo(
+    () => (nameMode ? null : classifyRecipient(recipient, networkId, shieldedSupported)),
+    [nameMode, networkId, recipient, shieldedSupported],
+  )
+  /* A name earns the NAME's refusals; an address earns the codec's. Mixing the
+     two is how somebody gets told "that is not a Midnight address" about a
+     name they typed correctly. */
+  const nameError =
+    typed?.kind === 'name-invalid'
+      ? typed.reason
+      : nameState.status === 'missing'
+        ? nameState.reason
+        : nameState.status === 'error'
+          ? nameState.message
+          : null
+  const recipientError = nameMode
+    ? nameError
+    : verdict && 'error' in verdict
+      ? verdict.error
+      : null
+  /* A name is always paid in NIGHT: what it resolves to is an account, and the
+     route into one is `deposit_night`. A shielded note cannot take that route —
+     `deposit_shielded` consumes one specific coin — so nothing here offers it. */
+  const mode: Mode = nameMode
+    ? 'unshielded'
+    : verdict && 'mode' in verdict
+      ? verdict.mode
+      : 'unshielded'
+  const resolvedName = nameState.status === 'found' ? nameState : null
 
   /* The shielded colours are read once, and only once a shielded recipient has
      actually turned up: a user sending NIGHT should not pay for a balance
@@ -480,7 +669,13 @@ export default function SendSheet(props: SendSheetProps) {
   }, [availableAtomic, availableBalance, mode, parsedAmount])
 
   const amount = parsedAmount && !('error' in parsedAmount) ? parsedAmount.amount : null
-  const recipientReady = recipient.trim().length > 0 && recipientError === null
+  /* A name is not "ready" merely because it is well formed: it is ready when
+     the registry has said what it points at. Anything less would let somebody
+     press Review against a name nobody holds. */
+  const recipientReady =
+    recipient.trim().length > 0 &&
+    recipientError === null &&
+    (!nameMode || resolvedName !== null)
   /* A balance Passport tried and failed to read off the account. Distinct from
      one still in flight: with no ceiling to compare against, sending stays
      disabled rather than proceeding uncapped. The shielded read has the same
@@ -569,6 +764,25 @@ export default function SendSheet(props: SendSheetProps) {
             ? 'Proving and submitting. The proof is computed on the proof server and can take tens of seconds — leave this open.'
             : 'Proving and submitting. The proof is computed on this device and can take tens of seconds — leave this open.'
 
+  /**
+   * The second line, for a name, and the reason there is one.
+   *
+   * Paying a name is two transactions, and the person watching has to be told
+   * that before the first one finishes — otherwise the sheet looks done and
+   * then carries on for another minute. It says which of the two is running
+   * and never claims the money has arrived until the second has.
+   */
+  const nameLegLine =
+    resolvedName === null
+      ? null
+      : nameLeg === 'withdrawing'
+        ? `Step 1 of 2 — taking the amount out of your account.`
+        : nameLeg === 'settling'
+          ? 'Step 1 of 2 done. Waiting for the amount to clear before it goes on.'
+          : nameLeg === 'depositing'
+            ? `Step 2 of 2 — paying it into ${resolvedName.domain}’s account.`
+            : null
+
   const handleMax = useCallback(() => {
     if (mode === 'shielded') {
       if (selectedHolding === null) return
@@ -611,7 +825,18 @@ export default function SendSheet(props: SendSheetProps) {
       return
     }
     try {
-      if (mode === 'shielded') {
+      if (resolvedName !== null) {
+        /* `canReview` already required a resolved name and a name seam; both
+           are re-read so this branch cannot be entered on a `null`. */
+        if (!onSendToName) {
+          throw new Error('This Passport cannot send to a name right now.')
+        }
+        await onSendToName({
+          domain: resolvedName.domain,
+          accountAddress: resolvedName.accountAddress,
+          amount,
+        })
+      } else if (mode === 'shielded') {
         // `canReview` already required a chosen colour and a shielded seam;
         // both are re-read here so this branch cannot be entered on a `null`.
         if (!onSendShielded || tokenType === null) {
@@ -648,9 +873,11 @@ export default function SendSheet(props: SendSheetProps) {
     onClose,
     onSend,
     onSendShielded,
+    onSendToName,
     readFeeReadiness,
     recipient,
     recipientReady,
+    resolvedName,
     tokenType,
   ])
 
@@ -733,7 +960,7 @@ export default function SendSheet(props: SendSheetProps) {
                 className="mnhome-send-input mnhome-send-input-mono"
                 value={recipient}
                 onChange={(event) => setRecipient(event.target.value)}
-                placeholder={`mn_addr_${networkId}1…`}
+                placeholder={nameSupported ? 'alice.night' : `mn_addr_${networkId}1…`}
                 rows={2}
                 spellCheck={false}
                 autoCapitalize="none"
@@ -745,6 +972,29 @@ export default function SendSheet(props: SendSheetProps) {
                 <span className="mnhome-send-error" id="mnhome-send-recipient-error" role="alert">
                   {recipientError}
                 </span>
+              ) : nameState.status === 'resolving' ? (
+                <span className="mnhome-send-hint mnhome-send-resolving" role="status">
+                  <Loader2 className="mnhome-send-spinner" size={12} aria-hidden="true" />
+                  <span>Looking up {nameState.domain}…</span>
+                </span>
+              ) : resolvedName !== null ? (
+                /* The confirmation chip. The NAME is the identity; the account
+                   it found appears only as its last four characters — enough to
+                   tell two resolutions apart, far too few to mistake for an
+                   address, and the full one never renders anywhere on this
+                   sheet. */
+                <span className="mnhome-send-resolved" role="status">
+                  <Check size={12} aria-hidden="true" />
+                  <span>
+                    {resolvedName.domain} → account{' '}
+                    <code>{accountTail(resolvedName.accountAddress)}</code>
+                  </span>
+                </span>
+              ) : nameMode ? (
+                <span className="mnhome-send-hint">
+                  A Midnight name, with or without the <code>.night</code>. Passport finds the
+                  account behind it — you never need their address.
+                </span>
               ) : mode === 'shielded' ? (
                 <span className="mnhome-send-hint">
                   A shielded {networkId} address. This pays one of the shielded tokens this
@@ -753,9 +1003,10 @@ export default function SendSheet(props: SendSheetProps) {
                 </span>
               ) : (
                 <span className="mnhome-send-hint">
+                  {nameSupported ? 'A Midnight name, or ' : ''}
                   {shieldedSupported
-                    ? `An unshielded (mn_addr…) or shielded (mn_shield-addr…) ${networkId} address. Paste it — nothing is guessed from a partial one.`
-                    : `An unshielded ${networkId} address. Paste it — nothing is guessed from a partial one.`}
+                    ? `${nameSupported ? 'an' : 'An'} unshielded (mn_addr…) or shielded (mn_shield-addr…) ${networkId} address. Paste it — nothing is guessed from a partial one.`
+                    : `${nameSupported ? 'an' : 'An'} unshielded ${networkId} address. Paste it — nothing is guessed from a partial one.`}
                 </span>
               )}
             </label>
@@ -895,7 +1146,7 @@ export default function SendSheet(props: SendSheetProps) {
                         ? /* There is no second scale to convert to: the figure
                              above already IS the ledger's own count. */
                           'A shielded token has no decimal scale on the ledger.'
-                        : `${amount.toString()} atomic units`}
+                        : `${amount.toString()} atomic ${amount === 1n ? 'unit' : 'units'}`}
                   </small>
                 </dd>
               </div>
@@ -911,19 +1162,55 @@ export default function SendSheet(props: SendSheetProps) {
               <div className="mnhome-send-row">
                 <dt>Recipient</dt>
                 <dd>
-                  <button
-                    type="button"
-                    className="mnhome-send-reveal"
-                    onClick={() => setShowFullRecipient((shown) => !shown)}
-                    aria-expanded={showFullRecipient}
-                  >
-                    <code>
-                      {showFullRecipient ? recipient.trim() : shortAddress(recipient.trim())}
-                    </code>
-                    <small>{showFullRecipient ? 'Hide' : 'Show full address'}</small>
-                  </button>
+                  {resolvedName !== null ? (
+                    /* THE NAME, AND NOTHING ELSE. There is no reveal here and
+                       no address to reveal: the name is what was typed, it is
+                       what the registry answered for, and printing the account
+                       behind it would put back the one thing the account model
+                       exists to take away. */
+                    <>
+                      <strong>{resolvedName.domain}</strong>
+                      <small>
+                        {/* The tail is held together on one line. An ellipsis
+                            is a break opportunity in CSS, so "ending …" and
+                            "5263" would otherwise land on separate lines and
+                            read as two different things. */}
+                        Their Passport account, ending{' '}
+                        <span className="mnhome-send-tail">
+                          {accountTail(resolvedName.accountAddress)}
+                        </span>
+                      </small>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="mnhome-send-reveal"
+                      onClick={() => setShowFullRecipient((shown) => !shown)}
+                      aria-expanded={showFullRecipient}
+                    >
+                      <code>
+                        {showFullRecipient ? recipient.trim() : shortAddress(recipient.trim())}
+                      </code>
+                      <small>{showFullRecipient ? 'Hide' : 'Show full address'}</small>
+                    </button>
+                  )}
                 </dd>
               </div>
+              {resolvedName !== null ? (
+                /* Said before the confirm, not after it: paying a name is two
+                   transactions, and somebody who is about to wait through both
+                   should know that is what they are waiting for. */
+                <div className="mnhome-send-row">
+                  <dt>How it goes</dt>
+                  <dd>
+                    <strong>Two steps</strong>
+                    <small>
+                      The amount leaves your account, then it is paid into theirs. Both are
+                      network transactions, so this takes longer than sending to an address.
+                    </small>
+                  </dd>
+                </div>
+              ) : null}
               <div className="mnhome-send-row">
                 <dt>Network</dt>
                 <dd>{networkId}</dd>
@@ -965,7 +1252,15 @@ export default function SendSheet(props: SendSheetProps) {
                  happens, and that it genuinely takes time. */
               <p className="mnhome-send-busy" role="status">
                 <Loader2 className="mnhome-send-spinner" size={14} aria-hidden="true" />
-                <span>{busyLine}</span>
+                <span>
+                  {nameLegLine ? (
+                    <>
+                      <strong>{nameLegLine}</strong>
+                      <br />
+                    </>
+                  ) : null}
+                  {busyLine}
+                </span>
               </p>
             ) : null}
 

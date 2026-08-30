@@ -20,6 +20,7 @@ import {
   serialiseActivity,
 } from './lib/activityFeed.js';
 import type { ActivityFeedItem } from './screens/ActivityFeed.js';
+import type { NameLookup } from './lib/recipientName.js';
 import { requestPassportStoragePersistence } from './pwa.js';
 import {
   listLocalProfiles,
@@ -3991,6 +3992,69 @@ export default function PassportDemo() {
     return account;
   }, [accountContractOf]);
 
+  /* ---------------------------------------------------------------------- */
+  /* Sending to a `.night` name                                             */
+  /*                                                                        */
+  /* "A name, not an address" is the second promise the welcome screen makes */
+  /* and the first thing Passport is FOR. Until 2026/08/30 the Send sheet    */
+  /* could not keep it: `resolveAliasTarget` existed and was called from two */
+  /* places, both of them checking one's own claim.                          */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Asks the `.night` registry what one name points at.
+   *
+   * Answers, rather than throws, for every state the registry can genuinely be
+   * in about a name: nobody holds it, or somebody holds it and it points
+   * somewhere Passport cannot pay. It THROWS only when the registry could not
+   * be read, because "nobody has this name" and "we could not find out" are
+   * different things to tell somebody who is about to send money — and the
+   * sheet caches the first and never the second.
+   *
+   * A target that is not a CONTRACT is refused rather than paid. A Passport
+   * name resolves to that Passport's account, which is a contract; a leaf
+   * pointing at a bare key or a shielded address is somebody else's name shape,
+   * and paying it would be Passport guessing at what its owner meant.
+   */
+  const resolveRecipientName = useCallback(
+    async (domain: string): Promise<NameLookup> => {
+      const network = selectedNetwork as MidnamesNetwork;
+      const { normalizePassportAlias, resolveAliasTarget } = await import(
+        './identity/midnames.js'
+      );
+      let label: string;
+      try {
+        label = normalizePassportAlias(domain);
+      } catch {
+        return { found: false, reason: 'That is not a Midnight name.' };
+      }
+      const resolved = await resolveAliasTarget(network, label);
+      if (!resolved) {
+        return { found: false, reason: `No Passport has the name ${label}.night on ${network}.` };
+      }
+      if (resolved.target.kind !== 'contract') {
+        return {
+          found: false,
+          reason: `${label}.night is registered, but it does not point at a Passport account, so Passport cannot pay it.`,
+        };
+      }
+      /* An all-zero target is a leaf that was never pointed at anything.
+         Treating it as an account would send money to nobody. */
+      if (/^0*$/.test(resolved.target.hex)) {
+        return {
+          found: false,
+          reason: `${label}.night is registered, but no account has been attached to it yet.`,
+        };
+      }
+      return {
+        found: true,
+        domain: `${label}.night`,
+        accountAddress: resolved.target.hex,
+      };
+    },
+    [selectedNetwork],
+  );
+
   /**
    * Signs and submits a real unshielded NIGHT transfer for a framed app.
    *
@@ -4232,6 +4296,209 @@ export default function PassportDemo() {
   );
 
   /**
+   * Which leg of a send-to-name is running, for the sheet's progress line.
+   *
+   * It exists because a name's transfer is genuinely two transactions and the
+   * person watching has to be told so — a progress line that hid the second
+   * would leave an apparently finished send running for another minute.
+   */
+  const [nameSendLeg, setNameSendLeg] = useState<
+    'withdrawing' | 'settling' | 'depositing' | null
+  >(null);
+
+  /**
+   * Paying a `.night` name — and why it is two transactions rather than one.
+   *
+   * A name resolves to that Passport's ACCOUNT, which is a contract. Two facts
+   * about `contracts-stagenet/src/account.compact` decide everything here:
+   *
+   *   - `withdraw_night(color, amount, recipient: UserAddress)` sends through
+   *     `right<ContractAddress, UserAddress>(recipient)`. The recipient is a
+   *     USER address by type. There is no way to name a contract with it.
+   *   - `night_balances` is an explicit mirror, and its own comment says so:
+   *     "Deposits that bypass deposit_night are invisible to the mirror". A
+   *     contract's unshielded holdings are not part of contract ledger state,
+   *     so value pushed at a contract's 32 bytes by any other route is not
+   *     value that account can see or spend. It is lost.
+   *
+   * So there is no honest one-transaction send to a name, and the tempting one
+   * — hand the account's address to `withdraw_night` as if it were a user
+   * address — is precisely the silent footgun: it would build, submit, and
+   * succeed, and the money would be gone.
+   *
+   * What genuinely works is the pair. `deposit_night` is PERMISSIONLESS — the
+   * contract's own comment: "anyone may fund an account" — and
+   * {@link depositNight} takes the contract address as a parameter, so it can
+   * target a stranger's account as easily as one's own. It needs no device
+   * secret, because it is not spending from anything the recipient controls;
+   * what it spends is the caller's own unshielded balance, which the SDK covers
+   * when it balances the transaction. Hence:
+   *
+   *   1. `withdraw_night` out of the sender's account, to the SENDER's own
+   *      receiving address. One passkey ceremony, because this is the only leg
+   *      that spends from an account.
+   *   2. wait for the wallet to actually see the money — `deposit_night` is
+   *      balanced from real holdings, and a deposit built before the wallet has
+   *      synced the arrival fails at balancing rather than at a check we wrote;
+   *   3. `deposit_night` into the RECIPIENT's account. No ceremony, and the
+   *      recipient's mirror is credited, which is the whole point.
+   *
+   * IF THE SECOND LEG FAILS the money is not lost and the row says exactly
+   * where it is: at the sender's own receiving address, which is the state
+   * Home's "Money outside your account" card exists for and offers to undo in
+   * one transaction. That is the honest failure, and it is why the first leg
+   * pays the sender rather than anywhere cleverer.
+   */
+  const executeSendToName = useCallback(
+    async (params: {
+      domain: string;
+      accountAddress: string;
+      amount: bigint;
+    }): Promise<void> => {
+      const account = requireAccount();
+      const ownReceivingAddress = localSurfaces?.unshieldedAddress ?? null;
+      if (!ownReceivingAddress) {
+        throw Object.assign(
+          new Error(
+            'Passport cannot see its own receiving address yet, so it cannot route a payment to a name. Try again in a moment.',
+          ),
+          { code: 'wallet-closed' as const },
+        );
+      }
+      const amountText = formatNightUnits(params.amount);
+      try {
+        const { depositNight, nightColourHex, withdrawNight } = await import(
+          './identity/accountCustody.js'
+        );
+        const colourHex = nightColourHex();
+        await withAccountDeviceSecret(async (deviceSecret) => {
+          /* Raised only now the ceremony has answered: a cancelled approval
+             signed nothing, so it writes no activity row either. */
+          const entry = addActivity({
+            label: `Sending to ${params.domain}`,
+            detail: `${amountText} NIGHT, in two steps.`,
+            status: 'pending',
+            source: 'wallet',
+          });
+          let withdrawn = false;
+          try {
+            setNameSendLeg('withdrawing');
+            const out = await withdrawNight(
+              account.handle,
+              deviceSecret,
+              {
+                contractAddress: account.address,
+                colourHex,
+                amount: params.amount,
+                recipientAddress: ownReceivingAddress,
+              },
+              (progress) => setAccountPhase(progress.phase),
+            );
+            withdrawn = true;
+            updateActivity(entry.id, {
+              detail: `${amountText} NIGHT left your account. Paying it into ${params.domain}’s account next.`,
+              source: 'chain',
+              txHash: out.txId,
+            });
+
+            /* The wait between the legs. `deposit_night` is balanced from what
+               the wallet really holds, so a deposit built before the arrival
+               has synced fails inside the SDK rather than against a check we
+               wrote — and that failure is unreadable. Two minutes is generous
+               against a transaction the indexer has already reported. */
+            setNameSendLeg('settling');
+            const settleBy = Date.now() + 120_000;
+            for (;;) {
+              const balances = await account.handle.getBalances();
+              const held = atomicNightFromFormatted(balances.unshieldedBalance);
+              if (held !== null && held >= params.amount) break;
+              if (Date.now() > settleBy) {
+                throw Object.assign(
+                  new Error(
+                    'The amount left your account but has not arrived at your receiving address yet, so the second step did not run.',
+                  ),
+                  { code: 'settling-timeout' as const },
+                );
+              }
+              await pause(4_000);
+            }
+
+            setNameSendLeg('depositing');
+            const paid = await depositNight(
+              account.handle,
+              {
+                contractAddress: params.accountAddress,
+                colourHex,
+                amount: params.amount,
+              },
+              (progress) => setAccountPhase(progress.phase),
+            );
+            updateActivity(entry.id, {
+              status: 'complete',
+              label: `Sent to ${params.domain}`,
+              detail: `${amountText} NIGHT is now in ${params.domain}’s account.`,
+              source: 'chain',
+              txHash: paid.txId,
+            });
+            pushToast({
+              tone: 'success',
+              /* Accepted, not yet included — the same claim every other
+                 transfer on this surface makes. */
+              title: `${params.domain} paid — confirming`,
+              body: 'The fee sponsor covered both network fees.',
+              link: explorerTxLink(paid.txId, paid.network),
+            });
+            void refreshLocalBalances();
+          } catch (cause) {
+            const message = cause instanceof Error ? cause.message : String(cause);
+            updateActivity(entry.id, {
+              status: 'error',
+              label: withdrawn ? `${params.domain} was not paid` : `Nothing was sent`,
+              /* WHERE THE MONEY IS. A half-finished transfer is the one state
+                 where saying only "it failed" would be a lie by omission. */
+              detail: withdrawn
+                ? `${message} The ${amountText} NIGHT left your account and is sitting at your receiving address — Home offers to move it back in.`
+                : message,
+              source: 'local',
+            });
+            if (withdrawn) {
+              pushToast({
+                tone: 'error',
+                title: `${params.domain} was not paid`,
+                body: `Your ${amountText} NIGHT is safe at your receiving address. Move it back into your account from Home.`,
+              });
+              void refreshLocalBalances();
+            }
+            throw cause;
+          }
+        });
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        const code =
+          typeof cause === 'object' && cause !== null &&
+          typeof (cause as { code?: unknown }).code === 'string'
+            ? (cause as { code: string }).code
+            : null;
+        if (code === 'wallet-closed') {
+          pushToast({ tone: 'error', title: 'Nothing was sent', body: message });
+        }
+        throw cause;
+      } finally {
+        setNameSendLeg(null);
+        setAccountPhase(null);
+      }
+    },
+    [
+      addActivity,
+      localSurfaces,
+      refreshLocalBalances,
+      requireAccount,
+      updateActivity,
+      withAccountDeviceSecret,
+    ],
+  );
+
+  /**
    * The shielded colours the ACCOUNT holds, from its own `coins` map.
    *
    * Not the wallet's: the wallet may hold shielded notes of its own and none of
@@ -4436,7 +4703,13 @@ export default function PassportDemo() {
           onSend: executeOwnSend,
           readShieldedHoldings: readAccountShieldedHoldings,
           onSendShielded: executeOwnShieldedSend,
+          /* The two halves of sending to a name. Supplied together or not at
+             all: a sheet that could resolve a name but not pay it would offer
+             a promise nothing behind it could keep. */
+          resolveName: resolveRecipientName,
+          onSendToName: executeSendToName,
           phase: accountPhase,
+          nameLeg: nameSendLeg,
         }
       : null;
 

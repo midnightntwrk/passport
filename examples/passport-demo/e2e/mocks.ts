@@ -28,12 +28,22 @@
  *   indexer GraphQL        two queries. `BlockHeight` decides whether the
  *                          wallet may cold-start (`localWallet.ts`'s depth
  *                          guard); a shallow answer lets it. `CONTRACT_STATE_
- *                          QUERY` for the `.night` TLD is REPLAYED FROM A REAL
- *                          RECORDING — `fixtures/stagenet-night-registry.json`
- *                          is the stagenet registry's own answer, captured on
- *                          2026/08/25 — so availability is decoded by the real
- *                          Midnames contract module from real ledger bytes
- *                          rather than asserted against a hand-written stub.
+ *                          QUERY` is ANSWERED BY ADDRESS, from REAL RECORDINGS:
+ *                          `fixtures/stagenet-night-registry.json` is the
+ *                          stagenet `.night` TLD's own answer (2026/08/25), and
+ *                          `fixtures/stagenet-night-resolver.json` is the
+ *                          resolver leaf `iamtester.night` points at
+ *                          (2026/08/30). So availability AND resolution are
+ *                          decoded by the real Midnames contract module from
+ *                          real ledger bytes rather than asserted against a
+ *                          hand-written stub.
+ *
+ *                          Every OTHER address answers `contract: null`, which
+ *                          is what the indexer really says about a contract it
+ *                          has never seen. It used to answer with the registry's
+ *                          state whatever was asked for, which made an account
+ *                          balance read decode a `.night` TLD as an account and
+ *                          fail with a `TypeError` no user should ever meet.
  *
  * WebSockets are answered by accepting and saying nothing, so the run makes no
  * outbound connection at all: the wallet facade subscribes to the indexer and
@@ -54,6 +64,48 @@ const NIGHT_REGISTRY_STATE = fs.readFileSync(
   path.join(here, 'fixtures', 'stagenet-night-registry.json'),
   'utf8',
 );
+
+/**
+ * The resolver leaf `iamtester.night` points at, recorded from stagenet on
+ * 2026/08/30 — the second half of a real resolution.
+ *
+ * A name lookup is TWO reads: the TLD says which leaf holds the name, and the
+ * leaf says what it points at. Only the first was ever recorded, so the second
+ * was answered with the TLD's own state — which decodes, wrongly, and made
+ * every resolution in this tier report a name pointing at nothing.
+ */
+const NIGHT_RESOLVER_STATE = fs.readFileSync(
+  path.join(here, 'fixtures', 'stagenet-night-resolver.json'),
+  'utf8',
+);
+
+/**
+ * The Passport account `iamtester.night` points at, recorded from stagenet on
+ * 2026/08/30. It really holds 2000 atomic NIGHT and 100 units of the sponsor's
+ * mUSD colour, so a mocked Home renders a real account's real ledger rather
+ * than "Unavailable" — which is what it showed before this recording, because
+ * every contract-state query was answered with the `.night` TLD's state and
+ * decoding a registry as an account throws.
+ */
+const PASSPORT_ACCOUNT_STATE = fs.readFileSync(
+  path.join(here, 'fixtures', 'stagenet-passport-account.json'),
+  'utf8',
+);
+
+/** The stagenet `.night` TLD, and the leaf above. Both are real addresses. */
+const TLD_ADDRESS = '29be1e64846cff4600c5297fa54b27d4c9296b3ccc2cdba190eaba1d64c5f116';
+const RESOLVER_ADDRESS = '0291d8f9e4f851f24cd1a8d89c5b9d4152343b32d0329de442ff6567739baa66';
+
+/** The name that leaf resolves — the one a spec can drive a real lookup with. */
+export const RESOLVABLE_NAME = 'iamtester';
+
+/**
+ * The account that name resolves to, whole. A spec seeds it as the Passport's
+ * own account so the balances on screen are a real account's, and so a lookup
+ * of {@link RESOLVABLE_NAME} lands somewhere that genuinely exists.
+ */
+export const PASSPORT_ACCOUNT_ADDRESS =
+  '8054fcaccc83b5e1ad8e4f8c5d555010b61dbecd838d412a85635dc2b5bf5263';
 
 /**
  * A chain shallow enough for `localWallet.ts` to allow a cold start.
@@ -174,10 +226,20 @@ export async function installNetworkBoundary(page: Page): Promise<NetworkBoundar
       if (registryDelayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, registryDelayMs));
       }
-      return route.fulfill({
-        contentType: 'application/json',
-        body: NIGHT_REGISTRY_STATE,
-      });
+      /* Answered BY ADDRESS. Two real recordings, and honest silence for
+         everything else — see the header. The address is read out of the
+         GraphQL variables rather than the URL, because this is a POST. */
+      const address = (/"address":"([0-9a-fA-F]+)"/.exec(body)?.[1] ?? '').toLowerCase();
+      if (address === TLD_ADDRESS) {
+        return route.fulfill({ contentType: 'application/json', body: NIGHT_REGISTRY_STATE });
+      }
+      if (address === RESOLVER_ADDRESS) {
+        return route.fulfill({ contentType: 'application/json', body: NIGHT_RESOLVER_STATE });
+      }
+      if (address === PASSPORT_ACCOUNT_ADDRESS) {
+        return route.fulfill({ contentType: 'application/json', body: PASSPORT_ACCOUNT_STATE });
+      }
+      return route.fulfill({ json: { data: { contract: null } } });
     }
     calls.push(`POST indexer ${body.slice(0, 60)}`);
     return route.fulfill({ json: { data: {} } });
