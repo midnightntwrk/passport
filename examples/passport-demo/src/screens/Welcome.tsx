@@ -17,10 +17,24 @@ import './identity.css'
  *
  * WHAT IT IS NOT
  * --------------
- * Not a tour, not a carousel, and not a wall. There is one screen, one primary
- * action, and a quiet way past it — a person who already knows can be through
- * it in one tap, and nobody is asked to read it twice: the dismissal is stored
- * per credential and survives a reload and a sign-out.
+ * Not a tour, not a carousel, and not a wall. There is one screen and one
+ * action, and nobody is asked to read it twice: the dismissal is stored per
+ * credential and survives a reload and a sign-out.
+ *
+ * WHY THERE IS NO SKIP
+ * --------------------
+ * There was one until 2026/08/30, sitting under the primary action and leading
+ * to the same place, because the name step is not something a Passport may
+ * walk past — the custody account is set up THROUGH the claim. A reviewer
+ * pressed it on the deployed site and arrived at a mandatory screen, which is
+ * what a skip promises not to do. A control whose label describes an escape
+ * that does not exist is worse than no control: it costs a tap and it teaches
+ * the reader that this app's words are approximate.
+ *
+ * Skipping the READING is not worth a button either — the four lines below are
+ * shorter than the sentence explaining what pressing it would have done.
+ *
+ * If a name ever becomes optional, the control comes back and means it.
  *
  * It is shown ONLY to a Passport this session created. Signing in on a second
  * device is not a first impression, and being welcomed to something you have
@@ -32,14 +46,8 @@ import './identity.css'
  */
 
 export interface WelcomeProps {
-  /** Continue to the name step. The reason this screen exists. */
+  /** Continue to the name step. The only thing this screen does. */
   onChooseName: () => void
-  /**
-   * Past it, for someone who does not want the introduction. It leads to the
-   * same place — the name step is not something a Passport may skip (ruled
-   * 2026/08/24) — so this skips the READING, and says so.
-   */
-  onSkip: () => void
 }
 
 /** The four promises, each one a thing this build does today. */
@@ -66,7 +74,7 @@ const POINTS = [
   },
 ] as const
 
-export default function WelcomeScreen({ onChooseName, onSkip }: WelcomeProps) {
+export default function WelcomeScreen({ onChooseName }: WelcomeProps) {
   return (
     <section className="mnid-screen">
       <header className="mnid-bar">
@@ -96,14 +104,12 @@ export default function WelcomeScreen({ onChooseName, onSkip }: WelcomeProps) {
         </ul>
 
         <div className="mnid-actions">
+          {/* One control, and it says where it goes. See "WHY THERE IS NO
+              SKIP" above: the button that used to sit under this one led to
+              the same mandatory screen. */}
           <button type="button" className="mnid-primary" onClick={onChooseName}>
             <ArrowRight size={17} aria-hidden="true" />
             Choose my name
-          </button>
-          {/* Deliberately quiet, and deliberately honest about what it skips:
-              the introduction, not the step after it. */}
-          <button type="button" className="mnid-skip" onClick={onSkip}>
-            Skip
           </button>
         </div>
       </div>

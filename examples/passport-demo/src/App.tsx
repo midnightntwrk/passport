@@ -5267,15 +5267,12 @@ export default function PassportDemo() {
         />
       ) : identityStep === 'welcome' ? (
         /* What Passport IS, said once to a Passport that has just been made
-           (2026/08/26). Both controls lead to the name step — the name is not
-           something a Passport may walk past — so what "Skip" skips is the
-           reading, and both mark the introduction as read. */
+           (2026/08/26). ONE control, since 2026/08/30: it used to carry a
+           "Skip" beside it that landed on the very same mandatory name step,
+           which is a promise of an escape route that does not exist. See
+           `WelcomeScreen` for the whole reasoning. */
         <WelcomeScreen
           onChooseName={() => {
-            if (profile) storeWelcomeSeen(profile.passkey.credentialId);
-            setIdentityStep('alias');
-          }}
-          onSkip={() => {
             if (profile) storeWelcomeSeen(profile.passkey.credentialId);
             setIdentityStep('alias');
           }}

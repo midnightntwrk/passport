@@ -127,13 +127,15 @@ test('a passkey is welcomed, and the welcome leads to the name step', async () =
   await expect(page.getByText('Fees are covered for you')).toBeVisible();
   await expect(page.getByText('Prove things privately')).toBeVisible();
 
-  /* Two controls and no more: the one that gets on with it, and the quiet way
-     past the reading. An introduction with a third choice on it is a wizard. */
+  /* ONE control and no more, and it says where it goes.
+     A "Skip" sat under it until 2026/08/30 and led to the same place — the
+     name step, which nothing on it can walk past. A control labelled for an
+     escape the app does not offer costs a tap and teaches the reader that this
+     app's words are approximate, so it is asserted GONE, and as an absence of
+     anything that would read as a way out rather than of one word. */
   const welcomeButtons = await page.getByRole('button').allInnerTexts();
-  expect(welcomeButtons.filter((label) => label.trim().length > 0)).toEqual([
-    'Choose my name',
-    'Skip',
-  ]);
+  expect(welcomeButtons.filter((label) => label.trim().length > 0)).toEqual(['Choose my name']);
+  await expect(page.getByRole('button', { name: /skip|later|not now|maybe/i })).toHaveCount(0);
 
   /* And nothing on it claims anything the build does not do — no wallet, no
      token, no fee the reader has to find. */
@@ -923,12 +925,12 @@ test('a passkey this browser does not know about never blocks the way in', async
     await fresh.goto('/');
     await fresh.getByRole('button', { name: /Continue with Passport/i }).click();
 
-    /* A brand-new Passport, so it is welcomed — and the quiet control is a
-       real way past the reading, not a decoration. */
+    /* A brand-new Passport, so it is welcomed — and the one control on that
+       screen is a real way onward, not a decoration. */
     await expect(fresh.getByRole('heading', { name: /Welcome to Passport/i })).toBeVisible({
       timeout: 90_000,
     });
-    await fresh.getByRole('button', { name: 'Skip' }).click();
+    await fresh.getByRole('button', { name: 'Choose my name' }).click();
 
     /* The name step is only reachable once PRF derived a seed and the wallet
        opened, so arriving here is proof the enrolment genuinely worked rather

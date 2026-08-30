@@ -270,22 +270,12 @@
   line-height: 1.55;
 }
 
-/* The quiet way past the introduction. Text only: it is not a second
-   choice about the Passport, it is a choice about reading. */
-.mnid-skip {
-  justify-self: center;
-  min-height: 40px;
-  padding: 0 18px;
-  border: 0;
-  border-radius: var(--mn-radius-pill);
-  color: var(--mn-text-muted);
-  background: transparent;
-  font-family: var(--mn-font-body);
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.mnid-skip:hover { color: var(--mn-text-primary); background: var(--mn-surface-hover); }
+/* `.mnid-skip` — the quiet control under the welcome screen's primary action —
+   was removed on 2026/08/30 along with the button it styled. It led to the
+   same mandatory name step the primary action did, so its label described an
+   escape the app does not offer. The rule goes with it rather than waiting
+   here for a caller: a stylesheet full of classes nothing uses is how the next
+   reader concludes a control still exists. */
 
 /* ---------------------------------------------------------------- */
 /* The claim stepper — circle, line, circle (2026/08/26)              */
