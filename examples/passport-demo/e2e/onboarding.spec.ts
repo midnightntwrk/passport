@@ -286,9 +286,10 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
   await expect(
     page.getByRole('button', { name: new RegExp(`Checking ${NAME}\\.night is still free`) }),
   ).toBeVisible({ timeout: 10_000 });
-  await expect(
-    page.getByText(/checking the name is still free and that the service can register it/i),
-  ).toBeVisible();
+  /* And beside the button, the thing a spinner cannot be: a view of where in
+     the claim this is. Drilled properly in the test below; here it is enough
+     that the panel is a stepper at all. */
+  await expect(page.locator('.mnid-stepper-item')).toHaveCount(3);
 
   /* Then the refusal, with the sponsor's own sentence — before any ceremony,
      exactly as it was before the warming existed. */
@@ -315,6 +316,83 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
   expect(await page.evaluate(() => (window as unknown as { __prompts: number }).__prompts)).toBe(0);
   // And nothing was asked of the registration endpoint either.
   expect(network.calls.filter((call) => call.includes('register-alias'))).toHaveLength(0);
+
+  network.setRegistryDelay(0);
+  await page.route('**/funder.midnightpassport.com/**/status', (route) =>
+    route.fulfill({
+      json: { network: 'stagenet', aliasSponsorship: 'available', assetSymbol: 'mUSD' },
+    }),
+  );
+});
+
+test('the claim shows three steps, and the long wait is one of them — not three more', async () => {
+  /* WHAT WAS PROMISED, AND TO WHOM.
+     Hector, 2026/08/26 11:35: no infinite spinner, and tell the user this will
+     take time. The answer given the same afternoon was a three-step view —
+     circle, line, circle — and this holds the shipped bundle to it.
+
+     THE RULE BEING TESTED is `src/lib/claimSteps.ts`: seven claim phases fold
+     into three steps a person can act on, and the ones inside the long wait
+     ("Registering…", "Confirming…") are SUB-STATES of the third step rather
+     than four more circles. Every phase of that fold is drilled directly, on
+     the pure rule, in `src/lib/claimSteps.test.ts`; what is held to HERE is
+     that the shipped screen draws the three steps, in order, with the live
+     phase beneath the one that is running — the part a unit test cannot see.
+
+     A slow registry is what makes the first step long enough to read;
+     `setRegistryDelay` holds the indexer's answer back exactly as a poor link
+     does. The sponsor is stood down, so the walk still costs no ceremony. */
+  test.setTimeout(200_000);
+  await page.route('**/funder.midnightpassport.com/**/status', (route) =>
+    route.fulfill({ json: { network: 'stagenet', aliasSponsorship: 'paused' } }),
+  );
+  await page.reload();
+  await expect(page.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 60_000 });
+
+  /* A name this walk has not asked about, so the warm answer from the test
+     above cannot be reused: `identity/claimWarmup.ts` keys on the name and the
+     network. */
+  const stepperName = 'passportstepper';
+  await page.getByLabel('Your Midnight name').fill(stepperName);
+  await expect(page.getByText(`${stepperName}.night is available`)).toBeVisible({ timeout: 30_000 });
+
+  /* Past `identity/claimWarmup.ts`'s ten-second window, so the claim re-asks
+     the registry for itself and the first step has a real wait behind it
+     rather than an answer already in hand. */
+  await page.waitForTimeout(11_000);
+  network.setRegistryDelay(6_000);
+  await page.getByRole('button', { name: new RegExp(`Claim ${stepperName}\\.night`) }).click();
+
+  const steps = page.locator('.mnid-stepper-item');
+  await expect(steps).toHaveCount(3);
+
+  // THREE STEPS, IN ORDER, in the words the user was promised.
+  await expect(steps.nth(0)).toContainText('Checking your name');
+  await expect(steps.nth(1)).toContainText('Confirm with your passkey');
+  await expect(steps.nth(2)).toContainText('Setting up your account');
+
+  // The first is running; the two ahead of it are not claimed as anything.
+  await expect(steps.nth(0)).toHaveAttribute('data-state', 'active');
+  await expect(steps.nth(1)).toHaveAttribute('data-state', 'todo');
+  await expect(steps.nth(2)).toHaveAttribute('data-state', 'todo');
+
+  /* The warning about the minutes, on the step that costs them, and on screen
+     before the wait rather than once the user is already inside it. */
+  await expect(
+    page.getByText(/Your Passport is on its way\. This part takes a few minutes\./),
+  ).toBeVisible();
+
+  /* The live phase, beneath the step it belongs to and nowhere else. This is
+     the sub-state rule made visible: "Checking passportstepper.night is still
+     free…" is what the first step is DOING, not a fourth circle. */
+  await expect(steps.nth(0).locator('.mnid-stepper-detail')).toHaveText(
+    new RegExp(`Checking ${stepperName}\\.night is still free`),
+  );
+  await expect(steps.nth(1).locator('.mnid-stepper-detail')).toHaveCount(0);
+  await expect(steps.nth(2).locator('.mnid-stepper-detail')).toHaveCount(0);
+
+  // The claim is refused for want of a sponsor, before any ceremony.
+  await expect(page.getByText(/The claim did not complete/i)).toBeVisible({ timeout: 30_000 });
 
   network.setRegistryDelay(0);
   await page.route('**/funder.midnightpassport.com/**/status', (route) =>

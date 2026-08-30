@@ -222,6 +222,122 @@
 }
 
 /* ---------------------------------------------------------------- */
+/* The claim stepper — circle, line, circle (2026/08/26)              */
+/*                                                                    */
+/* Three rows, and the state of each lives in `data-state` so the     */
+/* mark never changes SHAPE as it completes — it fills in. Both the   */
+/* dot and the tick are always in the DOM; the state chooses which is */
+/* painted, which is also what lets a screenshot pass pose the later  */
+/* states faithfully. Sized for a 360 px phone: a 22 px mark column,  */
+/* a 12 px gutter, and text that wraps rather than truncates.         */
+/* ---------------------------------------------------------------- */
+
+.mnid-stepper {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mnid-stepper-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  column-gap: 12px;
+  padding-bottom: 18px;
+}
+.mnid-stepper-item:last-child { padding-bottom: 0; }
+
+/* The line, drawn from the mark's centre down to the next one. */
+.mnid-stepper-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 25px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--mn-border-hairline);
+  transition: background .3s ease;
+}
+.mnid-stepper-item[data-state='done']::before { background: var(--mn-accent); }
+
+.mnid-stepper-mark {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--mn-border-medium);
+  border-radius: 50%;
+  background: var(--mn-surface-card);
+  transition: border-color .3s ease, background .3s ease;
+}
+.mnid-stepper-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+}
+.mnid-stepper-check {
+  position: absolute;
+  opacity: 0;
+  color: var(--mn-accent-text);
+}
+
+.mnid-stepper-item[data-state='active'] .mnid-stepper-mark { border-color: var(--mn-accent); }
+/* Alive, not urgent: a slow breath, so the step reads as running rather
+   than as something demanding a tap. */
+.mnid-stepper-item[data-state='active'] .mnid-stepper-dot {
+  background: var(--mn-accent);
+  animation: mnid-step-pulse 1.8s ease-in-out infinite;
+}
+.mnid-stepper-item[data-state='done'] .mnid-stepper-mark {
+  border-color: var(--mn-accent);
+  background: var(--mn-accent);
+}
+.mnid-stepper-item[data-state='done'] .mnid-stepper-dot { background: transparent; }
+.mnid-stepper-item[data-state='done'] .mnid-stepper-check { opacity: 1; }
+
+.mnid-stepper-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.mnid-stepper-label {
+  color: var(--mn-text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  line-height: 1.4;
+}
+.mnid-stepper-item[data-state='done'] .mnid-stepper-label {
+  color: var(--mn-text-secondary);
+  font-weight: 600;
+}
+.mnid-stepper-item[data-state='todo'] .mnid-stepper-label {
+  color: var(--mn-text-muted);
+  font-weight: 600;
+}
+.mnid-stepper-detail,
+.mnid-stepper-note {
+  color: var(--mn-text-secondary);
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.mnid-stepper-note { color: var(--mn-text-muted); }
+
+@keyframes mnid-step-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .4; transform: scale(.62); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mnid-stepper-item[data-state='active'] .mnid-stepper-dot { animation: none; }
+  .mnid-stepper-item::before,
+  .mnid-stepper-mark { transition: none; }
+}
+
+/* ---------------------------------------------------------------- */
 /* Buttons                                                           */
 /* ---------------------------------------------------------------- */
 

@@ -42,6 +42,18 @@
  * injected — so all of it is drilled directly on a fake clock in
  * `src/identity/claimWarmup.test.ts`.
  *
+ * `src/lib/claimSteps.ts` went IN on 2026/08/30, the day it was written, and it
+ * is in the denominator for the same reason `claimWarmup.ts` is: it is a RULE,
+ * not a rendering. It decides which of the three steps a person is told they
+ * are on for each of the claim's seven phases, and the ways it can be wrong are
+ * all ways of lying to somebody who is waiting — ticking a step that has not
+ * happened, leaving one un-ticked behind the running one, or skipping the
+ * passkey prompt's own step so the one moment that needs the user's hand goes
+ * unannounced. It holds no DOM, no React, no clock, and no I/O: a phase in,
+ * three labelled states out, so every phase and every ordering invariant is
+ * drilled directly in `src/lib/claimSteps.test.ts`. The JSX that paints circles
+ * and lines from its answer stays out with the rest of the `.tsx`.
+ *
  * `src/lib/feeReadinessPoll.ts` went IN on 2026/08/25 rather than out with the
  * screens it serves: it is the sponsor watcher, it holds no DOM and no React,
  * and its whole contract — probe now, probe again every five seconds, publish
@@ -144,6 +156,7 @@ export default mergeConfig(
           'src/lib/activation.ts',
           'src/lib/address.ts',
           'src/lib/appBusy.ts',
+          'src/lib/claimSteps.ts',
           'src/lib/colour.ts',
           'src/lib/feeReadinessPoll.ts',
           'src/lib/networks.ts',

@@ -1,9 +1,9 @@
 import {
   ArrowRight,
-  Sparkles,
   Check,
   CircleSlash,
   Loader2,
+  Sparkles,
   Wifi,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -14,6 +14,7 @@ import {
   type AliasAvailability,
   type AliasClaimProgress,
 } from '../identity/midnames.js'
+import { claimSteps } from '../lib/claimSteps.js'
 import { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
 import ThemeToggle from './ThemeToggle.js'
 import './identity.css'
@@ -125,16 +126,16 @@ const PHASE_COPY: Record<AliasClaimProgress['phase'], (domain: string) => string
 }
 
 /**
- * The stages that run before the passkey prompt, so the panel below can say
- * "this takes a moment" while they do and "this takes minutes" afterwards.
- * Two different waits, and telling the user they are the same wait is how a
- * progress label becomes a spinner.
+ * What the third step says underneath itself, from the moment the claim
+ * starts rather than when the wait begins.
+ *
+ * The reviewer's ask on 2026/08/26 was "your passport is on its way, please be
+ * patient… you have to let the user know this will take time" — and a warning
+ * about a wait is worth most before it starts. It names no transaction count:
+ * how many proofs are involved is machinery, and "a few minutes" is the whole
+ * of what a person can act on.
  */
-const PRE_CEREMONY_PHASES = new Set<AliasClaimProgress['phase']>([
-  'checking',
-  'preparing',
-  'confirm-passkey',
-])
+const LONG_WAIT_NOTE = 'Your Passport is on its way. This part takes a few minutes.'
 
 export default function AliasClaimScreen(props: AliasClaimProps) {
   const {
@@ -307,28 +308,50 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
 
         <AvailabilityLine field={field} networkId={networkId} />
 
-        {/* WHILE IT RUNS, SAY SO. A claim is three proved transactions and
-            genuinely takes minutes; a reviewer on 2026/08/26 asked for exactly
-            this — "your passport is on their way, please be patient… you have
-            to let the user know this will take time" — after watching a
-            spinner that promised nothing. Two sentences, because the wait
-            before the passkey prompt and the wait after it are not the same
-            wait and must not be described as one. */}
+        {/* WHILE IT RUNS, SHOW WHERE IT IS. What stood here was a spinner and
+            one sentence, and a reviewer on 2026/08/26 could not tell a slow
+            network from a hung app: "no infinite spinner". What was promised
+            in reply, the same afternoon, was this — three steps, circle and
+            line, the finished ones ticked and the one running now alive.
+
+            The seven phases the claim reports are folded into the three by
+            `../lib/claimSteps.ts`, which is where that rule lives and is
+            drilled. The phase's own words are still said, as the running
+            step's detail line: "Registering alice.night…" is a sub-state of
+            setting the account up, not a fourth circle. */}
         {busy && claimPhase ? (
           <div className="mnid-panel" role="status" aria-live="polite">
-            <p className="mnid-panel-head">
-              <Loader2 className="mnid-spin" size={15} aria-hidden="true" />
-              {PHASE_COPY[claimPhase](aliasDomain(alias ?? 'your name'))}
-            </p>
-            <p>
-              {PRE_CEREMONY_PHASES.has(claimPhase)
-                ? 'Passport is checking the name is still free and that the service can register it, before it asks for your passkey. This takes a moment.'
-                : 'Your Passport is on its way. This part takes a few minutes — three transactions are proved and submitted for you. You can leave this screen open; Passport will say when it is done.'}
-            </p>
+            <ol className="mnid-stepper">
+              {claimSteps(claimPhase).map((step) => (
+                <li key={step.id} className="mnid-stepper-item" data-state={step.state}>
+                  {/* Both marks are always in the DOM and the state chooses
+                      which is painted, so a step never changes shape as it
+                      completes — it only fills in. */}
+                  <span className="mnid-stepper-mark" aria-hidden="true">
+                    <span className="mnid-stepper-dot" />
+                    <Check className="mnid-stepper-check" size={13} strokeWidth={3} />
+                  </span>
+                  <span className="mnid-stepper-text">
+                    <span className="mnid-stepper-label">{step.label}</span>
+                    {step.state === 'active' ? (
+                      <span className="mnid-stepper-detail">
+                        {PHASE_COPY[claimPhase](aliasDomain(alias ?? 'your name'))}
+                      </span>
+                    ) : null}
+                    {step.id === 'account' ? (
+                      <span className="mnid-stepper-note">{LONG_WAIT_NOTE}</span>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ol>
           </div>
         ) : null}
 
-        {sponsorRegisters ? (
+        {/* The promise, until it is being kept. "Press claim" is advice about a
+            button the user has already pressed, so it stands down the moment a
+            claim is running and the stepper above says where it has got to. */}
+        {sponsorRegisters && !busy ? (
           <div className="mnid-panel" role="status">
             <p className="mnid-panel-head">
               <Sparkles size={15} aria-hidden="true" />
