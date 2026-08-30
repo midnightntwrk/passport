@@ -104,10 +104,41 @@ test('the landing screen offers one way in, and says what network this is', asyn
   expect(text).not.toMatch(/seed phrase|recovery phrase|DUST/i);
 });
 
-test('a passkey lands on the name step — the last step, with no way past it', async () => {
+test('a passkey is welcomed, and the welcome leads to the name step', async () => {
+  /* THE FIRST IMPRESSION, and what it replaced.
+     A passkey ceremony used to end by dropping the user straight onto "Choose
+     your .night name" — a screen that assumes the reader already knows what a
+     Passport is and who is paying. Two reviewers asked for the missing half on
+     2026/08/26 ("an intro page… what is this, what am I getting"). One screen,
+     four promises the build actually keeps, one primary action. */
   await page.getByRole('button', { name: /Continue with Passport/i }).click();
 
   // The ceremony, then the wallet opening. Both are the real code paths.
+  await expect(page.getByRole('heading', { name: /Welcome to Passport/i })).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(page.getByText('An identity you hold')).toBeVisible();
+  await expect(page.getByText('A name, not an address')).toBeVisible();
+  await expect(page.getByText('Fees are covered for you')).toBeVisible();
+  await expect(page.getByText('Prove things privately')).toBeVisible();
+
+  /* Two controls and no more: the one that gets on with it, and the quiet way
+     past the reading. An introduction with a third choice on it is a wizard. */
+  const welcomeButtons = await page.getByRole('button').allInnerTexts();
+  expect(welcomeButtons.filter((label) => label.trim().length > 0)).toEqual([
+    'Choose my name',
+    'Skip',
+  ]);
+
+  /* And nothing on it claims anything the build does not do — no wallet, no
+     token, no fee the reader has to find. */
+  const welcomeText = await visibleText();
+  expect(welcomeText).not.toMatch(/\bwallet\b/i);
+  expect(welcomeText).not.toMatch(/\bDUST\b/);
+  expect(welcomeText).not.toMatch(/\bNIGHT\b/);
+
+  await page.getByRole('button', { name: 'Choose my name' }).click();
+
   await expect(page.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(/^LAST STEP$/i)).toBeVisible();
 
@@ -122,6 +153,33 @@ test('a passkey lands on the name step — the last step, with no way past it', 
 
   // And the wallet has not been asked for a transaction: only reads so far.
   expect(network.calls.filter((call) => call.includes('register-alias'))).toHaveLength(0);
+});
+
+test('the welcome is read once — not on a reload, and never on a session it did not create', async () => {
+  /* Being welcomed to something you already hold reads as an app that has
+     forgotten you, so the introduction is shown to a Passport this session
+     CREATED and to no other — and once. */
+  await page.reload();
+  await expect(page.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole('heading', { name: /Welcome to Passport/i })).toHaveCount(0);
+
+  /* And the gate is the creation, not merely the stored dismissal. With the
+     dismissal deleted, a restored session STILL goes straight to the name
+     step: a sign-in on a second device is not a first impression, and a flag
+     that had gone missing would otherwise re-introduce Passport to somebody
+     who has been using it for a week. */
+  const cleared = await page.evaluate(() => {
+    const keys = Object.keys(localStorage).filter((key) =>
+      key.startsWith('mn-passport:welcome:'),
+    );
+    keys.forEach((key) => localStorage.removeItem(key));
+    return keys.length;
+  });
+  expect(cleared).toBe(1);
+
+  await page.reload();
+  await expect(page.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole('heading', { name: /Welcome to Passport/i })).toHaveCount(0);
 });
 
 test('the availability line quotes no price, no balance, and no faucet', async () => {
@@ -663,6 +721,13 @@ test('a passkey this browser does not know about never blocks the way in', async
   try {
     await fresh.goto('/');
     await fresh.getByRole('button', { name: /Continue with Passport/i }).click();
+
+    /* A brand-new Passport, so it is welcomed — and the quiet control is a
+       real way past the reading, not a decoration. */
+    await expect(fresh.getByRole('heading', { name: /Welcome to Passport/i })).toBeVisible({
+      timeout: 90_000,
+    });
+    await fresh.getByRole('button', { name: 'Skip' }).click();
 
     /* The name step is only reachable once PRF derived a seed and the wallet
        opened, so arriving here is proof the enrolment genuinely worked rather

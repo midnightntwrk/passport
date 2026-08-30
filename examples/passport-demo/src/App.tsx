@@ -32,6 +32,7 @@ import { passportCallbackLaunch } from './identity/callbackLaunch.js';
 import { PassportCallbackConsent } from './screens/callbackConsent.js';
 import { PassportTxConsent } from './txConsent.js';
 import OnboardingScreen from './screens/Onboarding.js';
+import WelcomeScreen from './screens/Welcome.js';
 import HomeScreen from './screens/Home.js';
 import AliasClaimScreen from './screens/AliasClaim.js';
 import BackupScreen from './screens/Backup.js';
@@ -520,8 +521,12 @@ const PASSPORT_CONTRACT_SCOPE = { appId: APP_ID, accountId: 'passport-contract-v
  * chain — a new Passport now goes name → dashboard — but both screens stay in
  * the union because Home and the Ecosystem card still route to them on
  * demand. (Backup and recovery proper is flagged for later, not built.)
+ *
+ * 2026/08/30: 'welcome' joins it in front of 'alias', and ONLY for a Passport
+ * this session created. See `WelcomeScreen` for what it says and why it is
+ * shown once.
  */
-type IdentityStep = 'alias' | 'backup' | 'ecosystem' | null;
+type IdentityStep = 'welcome' | 'alias' | 'backup' | 'ecosystem' | null;
 
 /**
  * How long a WebAuthn ceremony may sit unanswered before Passport stops
@@ -614,6 +619,39 @@ function storeNameStep(credentialId: string, resolution: NameStepResolution): vo
     window.localStorage.setItem(`${NAME_STEP_STORAGE_PREFIX}${credentialId}`, resolution);
   } catch {
     // Best-effort: without it the name step may be offered once more.
+  }
+}
+
+/**
+ * Whether this browser has already shown the welcome screen for a credential.
+ *
+ * Its own key rather than a widened `NameStepResolution`, because the two
+ * answer different questions and are written at different moments: the name
+ * step is resolved when a name is claimed, and the welcome is dismissed the
+ * moment it has been read. Sharing a key would mean a Passport that reloaded
+ * between the two got welcomed a second time.
+ *
+ * It deliberately SURVIVES sign-out, on the same reasoning as the name step:
+ * the same passkey re-derives the same Passport, so it is the same person, and
+ * being introduced to something you already hold reads as an app that has
+ * forgotten you.
+ */
+const WELCOME_STORAGE_PREFIX = 'mn-passport:welcome:';
+
+function welcomeSeen(credentialId: string): boolean {
+  try {
+    return window.localStorage.getItem(`${WELCOME_STORAGE_PREFIX}${credentialId}`) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function storeWelcomeSeen(credentialId: string): void {
+  try {
+    window.localStorage.setItem(`${WELCOME_STORAGE_PREFIX}${credentialId}`, 'seen');
+  } catch {
+    // Best-effort. Without it the introduction may be offered once more, which
+    // is the harmless direction to fail in.
   }
 }
 
@@ -1696,11 +1734,14 @@ export default function PassportDemo() {
       status: 'complete',
       source: 'local',
     });
-    pushToast({
-      tone: 'success',
-      title: 'Passport created',
-      body: 'This passkey now holds its own Passport on this device.',
-    });
+    // Same rule as the create journey above: the welcome screen says this.
+    if (welcomeSeen(discovered.credentialId)) {
+      pushToast({
+        tone: 'success',
+        title: 'Passport created',
+        body: 'This passkey now holds its own Passport on this device.',
+      });
+    }
     storeLastPasskey(discovered.credentialId);
     return nextProfile;
   };
@@ -2083,7 +2124,12 @@ export default function PassportDemo() {
         status: 'complete',
         source: 'local',
       });
-      if (created) {
+      /* The toast says exactly what the welcome screen's own headline says, and
+         it is pinned to the bottom of the viewport — which is where that
+         screen's primary action is. So it is offered only to a creation that
+         will NOT be welcomed: on a first Passport the screen is the
+         confirmation, and a toast over its one button is not a celebration. */
+      if (created && welcomeSeen(activeProfile.passkey.credentialId)) {
         pushToast({
           tone: 'success',
           title: 'Passport created',
@@ -3611,6 +3657,12 @@ export default function PassportDemo() {
     if (localWalletStatus !== 'ready' || !localSurfaces || !profile) return;
     if (identityStepResolved.current) return;
     identityStepResolved.current = true;
+    /* Read before it is cleared: this is the one signal that says the Passport
+       in hand was CREATED by this session rather than signed into, and it is
+       what the welcome screen is gated on. Both enrolment paths set it
+       synchronously, immediately after the profile is stored and well before
+       the wallet this effect waits on has opened. */
+    const passportJustCreated = identityStepArmed.current;
     identityStepArmed.current = false;
     if (loadAliasRecords()[selectedNetwork]) return;
     /* Only a DONE resolution suppresses the step. 'skipped' deliberately does
@@ -3619,7 +3671,13 @@ export default function PassportDemo() {
        every subsequent sign-in — seen live 2026/08/24. A stored skip now means
        "ask again", and the screen itself no longer offers one. */
     if (storedNameStep(profile.passkey.credentialId) === 'done') return;
-    setIdentityStep('alias');
+    /* The introduction, in front of the name step and only for a Passport that
+       did not exist a moment ago. A sign-in is not a first impression, and a
+       second reading is not one either — the dismissal is stored per
+       credential and outlives both a reload and a sign-out. */
+    setIdentityStep(
+      passportJustCreated && !welcomeSeen(profile.passkey.credentialId) ? 'welcome' : 'alias',
+    );
   }, [localSurfaces, localWalletStatus, profile, selectedNetwork]);
 
   const signOutPassport = async () => {
@@ -4796,6 +4854,21 @@ export default function PassportDemo() {
              which only ever asserts and was the false remedy this replaces. */
           unusableCredential={unusableCredential}
           onCreateNewPasskey={() => startPasskeyOnboarding('enrol-new')}
+        />
+      ) : identityStep === 'welcome' ? (
+        /* What Passport IS, said once to a Passport that has just been made
+           (2026/08/26). Both controls lead to the name step — the name is not
+           something a Passport may walk past — so what "Skip" skips is the
+           reading, and both mark the introduction as read. */
+        <WelcomeScreen
+          onChooseName={() => {
+            if (profile) storeWelcomeSeen(profile.passkey.credentialId);
+            setIdentityStep('alias');
+          }}
+          onSkip={() => {
+            if (profile) storeWelcomeSeen(profile.passkey.credentialId);
+            setIdentityStep('alias');
+          }}
         />
       ) : identityStep === 'alias' ? (
         /* The name step — the last thing between a new Passport and its

@@ -222,6 +222,72 @@
 }
 
 /* ---------------------------------------------------------------- */
+/* The welcome screen's four promises                                 */
+/*                                                                    */
+/* Deliberately the stepper's proportions — a small marked column and */
+/* a wrapping text column — so the two screens a new Passport meets    */
+/* back to back read as one thing rather than two designs.            */
+/* ---------------------------------------------------------------- */
+
+.mnid-points {
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 18px;
+}
+.mnid-point {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  column-gap: 14px;
+  align-items: start;
+}
+.mnid-point-mark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.mnid-point-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding-top: 2px;
+}
+.mnid-point-title {
+  color: var(--mn-text-primary);
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  line-height: 1.35;
+}
+.mnid-point-body {
+  color: var(--mn-text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* The quiet way past the introduction. Text only: it is not a second
+   choice about the Passport, it is a choice about reading. */
+.mnid-skip {
+  justify-self: center;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-muted);
+  background: transparent;
+  font-family: var(--mn-font-body);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mnid-skip:hover { color: var(--mn-text-primary); background: var(--mn-surface-hover); }
+
+/* ---------------------------------------------------------------- */
 /* The claim stepper — circle, line, circle (2026/08/26)              */
 /*                                                                    */
 /* Three rows, and the state of each lives in `data-state` so the     */
