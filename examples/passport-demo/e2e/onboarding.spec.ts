@@ -619,6 +619,46 @@ test('the activity trail shows what really happened, and survives a reload', asy
   ).toBeVisible();
 });
 
+test('every token on the balance list is named, and none of them is 64 characters', async () => {
+  /* TOKENS THAT COULD NOT BE TOLD APART.
+     The balance list labelled every unnamed colour "Shielded" and put the raw
+     64-character colour underneath as its unit — so an account holding several
+     showed several identical-looking rows, which is "unusable, and it will
+     cause wrong sends" (2026/08/26). Colours Passport can name are now named,
+     and one it cannot reads `Token · a1b2…` with the shortened colour beneath.
+
+     Asserted against the REAL account this tier seeds: it holds 2000 atomic
+     NIGHT and 100 units of the sponsor's mUSD colour, recorded from stagenet. */
+  /* Home from a cold start, rather than from whatever the test above left on
+     screen. The balances are read when the account opens, and this is the one
+     assertion in the file that depends on that read having happened. */
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: /^Send$/ }).first()).toBeVisible({
+    timeout: 60_000,
+  });
+  const assets = page.locator('.mnhome-assets');
+  await expect(assets).toBeVisible({ timeout: 60_000 });
+  const cards = await assets.innerText();
+
+  /* Matched case-insensitively: the card's own label is upper-cased in CSS, so
+     `innerText` reports "MUSD" for a symbol the code spells "mUSD". */
+  expect(cards).toMatch(/NIGHT/i);
+  expect(cards).toMatch(/mUSD/i);
+  // The one thing that must never be on a card again.
+  expect(cards).not.toMatch(/\b[0-9a-f]{32,}\b/);
+  // And the balances are the account's own, not zeros against a real account.
+  expect(cards).toContain('0.002');
+  expect(cards).toContain('100');
+
+  /* THE CAP does not fire below its threshold. Two tokens is not a list that
+     needs hiding, and a disclosure over two cards would be furniture. The rule
+     itself — five, then the rest on request, NIGHT first and the unnamed by
+     balance — is drilled in `src/lib/colour.test.ts`, where it lives: a browser
+     cannot be given a seven-colour account without a contract state minted for
+     it, and this workspace's Node graph cannot mint one (see the report). */
+  await expect(page.getByRole('button', { name: /^Show all \(\d+\)$/ })).toHaveCount(0);
+});
+
 test('the Send sheet is a withdrawal from the account, and never mentions DUST', async () => {
   const send = page.getByRole('button', { name: /^Send$/ }).first();
   await expect(send).toBeVisible({ timeout: 30_000 });

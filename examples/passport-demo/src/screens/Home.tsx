@@ -14,12 +14,20 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 import type { AliasRecord } from '../identity/aliasStore.js'
 import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
 import ActivityFeed, { type ActivityFeedItem } from './ActivityFeed.js'
+/* Naming a colour, and the order a balance list puts colours in. Pure, drilled,
+   and free of the wallet SDK — see `lib/colour.ts`. */
+import {
+  describeColours,
+  NIGHT_COLOUR_HEX,
+  sortTokenHoldings,
+  TOKENS_VISIBLE,
+} from '../lib/colour.js'
 /* The names this screen shares with the wallet (Contract W). Type-only, and
    only the two that describe the FEE — a fee is still the wallet's to pay. */
 import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js'
@@ -28,11 +36,7 @@ import { EcosystemIdentity } from './Ecosystem.js'
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
 import NotificationToggle from './NotificationToggle.js'
 import PassportContractCard, { type PassportContractCardProps } from './PassportContract.js'
-import SendSheet, {
-  shortToken,
-  type SendSheetHolding,
-  type SendSheetProps,
-} from './SendSheet.js'
+import SendSheet, { type SendSheetHolding, type SendSheetProps } from './SendSheet.js'
 import ThemeToggle from './ThemeToggle.js'
 import './home.css'
 
@@ -104,9 +108,17 @@ export interface HomeScreenProps {
      * The stablecoin row, when the fee sponsor has named its colour. `amount`
      * is that colour's own atomic units — a shielded colour carries no decimal
      * scale on the ledger, so nothing here invents one.
+     *
+     * `colourHex` is carried as well as the symbol because the sponsor's answer
+     * is the AUTHORITY on what that colour is called, and the Send sheet's
+     * picker has to be able to apply the same name to the same colour.
      */
-    stablecoin: { symbol: string; amount: bigint } | null
-    /** Every other shielded colour the account holds, shown by short colour. */
+    stablecoin: { symbol: string; colourHex: string; amount: bigint } | null
+    /**
+     * Every other shielded colour the account holds. Named where Passport can
+     * name it and shown as `Token · a1b2…` where it cannot — never as the raw
+     * 64 characters, which identify nothing and made every row look alike.
+     */
     otherShielded: { colourHex: string; amount: bigint }[]
     /** `idle` means there is nothing to read; `unavailable` means a read failed. */
     status: 'idle' | 'loading' | 'ready' | 'unavailable'
@@ -272,6 +284,79 @@ export default function HomeScreen(props: HomeScreenProps) {
      2026/08/24 — they describe the wallet, and the wallet is machinery. */
   const [receiveOpen, setReceiveOpen] = useState(false)
   const [sendOpen, setSendOpen] = useState(false)
+  /* Whether the balance list is showing everything. Collapsed by default and
+     never remembered: the list is short for almost every Passport, and a
+     preference that outlived the session would be one more thing to explain. */
+  const [showAllTokens, setShowAllTokens] = useState(false)
+
+  /**
+   * The colour the fee sponsor named for itself, when it named one.
+   *
+   * The sponsor mints that asset, so its `/status` answer OUTRANKS the table in
+   * `lib/colour.ts` — a build pointed at a different sponsor must not show that
+   * sponsor's asset under this one's ticker.
+   */
+  const sponsoredToken = account?.stablecoin
+    ? { colourHex: account.stablecoin.colourHex, symbol: account.stablecoin.symbol }
+    : null
+
+  /**
+   * Every token row, in the order a reader can predict: NIGHT, then what has a
+   * name, then what has not, largest holding first. See `sortTokenHoldings`.
+   *
+   * A colour nobody can name reads `Token · a1b2…` with the shortened colour
+   * beneath it. It used to read "Shielded" with 64 characters of hex for a
+   * unit, which made every unnamed row look exactly like every other one —
+   * "unusable, and it will cause wrong sends" (2026/08/26).
+   */
+  const tokenRows = useMemo(() => {
+    if (!account) return []
+    const sponsored = account.stablecoin
+      ? { colourHex: account.stablecoin.colourHex, symbol: account.stablecoin.symbol }
+      : null
+    /* NIGHT, then the sponsor's own colour, then everything else in the order
+       `sortTokenHoldings` puts it. Named as ONE SCREENFUL rather than one row
+       at a time: a colour named in isolation cannot know that another colour
+       beside it has been given the same ticker, and two rows both reading
+       "mUSD" over different money is worse than no name at all. */
+    const held: { colourHex: string; amount: bigint; icon: ReactNode; value: string | null }[] = [
+      {
+        colourHex: NIGHT_COLOUR_HEX,
+        amount: 0n,
+        icon: <Moon size={14} aria-hidden="true" />,
+        value: account.nightBalance,
+      },
+    ]
+    if (account.stablecoin) {
+      held.push({
+        colourHex: account.stablecoin.colourHex,
+        amount: account.stablecoin.amount,
+        icon: <Coins size={14} aria-hidden="true" />,
+        value: account.stablecoin.amount.toString(),
+      })
+    }
+    for (const other of sortTokenHoldings(account.otherShielded, sponsored)) {
+      held.push({
+        colourHex: other.colourHex,
+        amount: other.amount,
+        icon: <Layers size={14} aria-hidden="true" />,
+        value: other.amount.toString(),
+      })
+    }
+    const identities = describeColours(
+      held.map((row) => row.colourHex),
+      sponsored,
+    )
+    return held.map((row, index) => ({
+      key: row.colourHex,
+      icon: row.icon,
+      label: identities[index].symbol,
+      value: row.value,
+      unit: identities[index].name,
+    }))
+  }, [account])
+
+  const visibleTokens = showAllTokens ? tokenRows : tokenRows.slice(0, TOKENS_VISIBLE)
 
   // Escape closes the Receive sheet, mirroring the scrim click.
   useEffect(() => {
@@ -459,37 +544,35 @@ export default function HomeScreen(props: HomeScreenProps) {
             2026/08/24: it described the wallet's fee charge, the wallet is
             machinery, and fees are the sponsor's. */}
         {account ? (
-          <div className="mnhome-assets">
-            <BalanceCard
-              icon={<Moon size={14} aria-hidden="true" />}
-              label="NIGHT"
-              value={account.nightBalance}
-              unit="native token"
-              loading={balancesLoading}
-            />
-            {account.stablecoin ? (
-              <BalanceCard
-                icon={<Coins size={14} aria-hidden="true" />}
-                label={account.stablecoin.symbol}
-                value={account.stablecoin.amount.toString()}
-                unit="stablecoin"
-                loading={balancesLoading}
-              />
+          <>
+            <div className="mnhome-assets">
+              {visibleTokens.map((row) => (
+                <BalanceCard
+                  key={row.key}
+                  icon={row.icon}
+                  label={row.label}
+                  value={row.value}
+                  unit={row.unit}
+                  loading={balancesLoading}
+                />
+              ))}
+            </div>
+            {/* THE CAP. An account with a dozen colours in it used to render a
+                dozen cards, pushing the name, the account, and the apps off the
+                bottom of a phone — "that's not a scalable way to display them",
+                2026/08/26. Five, then the rest ON REQUEST and in place: a
+                separate screen for the remainder would be a place nobody goes. */}
+            {tokenRows.length > TOKENS_VISIBLE ? (
+              <button
+                type="button"
+                className="mnhome-assets-more"
+                onClick={() => setShowAllTokens((shown) => !shown)}
+                aria-expanded={showAllTokens}
+              >
+                {showAllTokens ? 'Show fewer' : `Show all (${tokenRows.length})`}
+              </button>
             ) : null}
-            {/* Any other shielded colour the account holds. With no symbol to
-                put on it the colour itself is the honest label — naming it
-                would be Passport inventing a ticker the ledger does not carry. */}
-            {account.otherShielded.map((held) => (
-              <BalanceCard
-                key={held.colourHex}
-                icon={<Layers size={14} aria-hidden="true" />}
-                label="Shielded"
-                value={held.amount.toString()}
-                unit={shortToken(held.colourHex)}
-                loading={balancesLoading}
-              />
-            ))}
-          </div>
+          </>
         ) : null}
 
         {account?.status === 'unavailable' ? (
@@ -581,6 +664,9 @@ export default function HomeScreen(props: HomeScreenProps) {
             {...(send.onSendShielded ? { onSendShielded: send.onSendShielded } : {})}
             {...(send.resolveName ? { resolveName: send.resolveName } : {})}
             {...(send.onSendToName ? { onSendToName: send.onSendToName } : {})}
+            /* The sponsor's own name for its colour, so the picker and the
+               balance list call the same colour the same thing. */
+            sponsoredToken={sponsoredToken}
             phase={send.phase ?? null}
             nameLeg={send.nameLeg ?? null}
             onClose={() => setSendOpen(false)}

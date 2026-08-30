@@ -4728,6 +4728,10 @@ export default function PassportDemo() {
         stablecoin: stablecoin
           ? {
               symbol: stablecoin.symbol,
+              /* Carried alongside the symbol because the sponsor's answer is
+                 the AUTHORITY on what that colour is called, and the Send
+                 sheet's picker has to name the same colour the same way. */
+              colourHex: stablecoin.colourHex,
               /* A colour the account does not hold is a real zero — the sponsor
                  named the colour, so the row belongs on screen either way. */
               amount:

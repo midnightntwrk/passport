@@ -43,6 +43,10 @@ import {
   type NameLookup,
 } from '../lib/recipientName.js'
 
+/* Naming a colour. Pure and drilled, and — like `recipientName.ts` — free of
+   the wallet SDK, which `identity/accountCustody.ts` would drag in. */
+import { describeColour } from '../lib/colour.js'
+
 import './home.css'
 
 /**
@@ -232,6 +236,14 @@ export interface SendSheetProps {
     amount: bigint
   }) => Promise<void>
   /**
+   * The colour the fee sponsor named for itself, when it named one.
+   *
+   * Passed so the picker calls a colour exactly what the balance list on Home
+   * calls it. Two spellings of one colour read as two tokens, and the picker is
+   * the surface where that becomes a wrong send rather than a puzzle.
+   */
+  sponsoredToken?: { colourHex: string; symbol: string } | null
+  /**
    * The live phase of the account call, when the host reports one. It narrates
    * the wait rather than measuring it: the prover reports no figure, so no
    * percentage is invented.
@@ -332,14 +344,11 @@ function parseShieldedUnits(input: string): { amount: bigint } | { error: string
   return { amount }
 }
 
-/**
- * A shielded colour is 64 hex characters and identifies nothing to a reader.
- * Exported because Home labels the account's unnamed colours the same way, and
- * two spellings of the same shortening would read as two different tokens.
- */
-export function shortToken(tokenType: string): string {
-  return tokenType.length <= 18 ? tokenType : `${tokenType.slice(0, 10)}…${tokenType.slice(-6)}`
-}
+/* `shortToken` lived here until 2026/08/30, exported so Home could shorten a
+   colour the same way. Both screens now go through `describeColour` in
+   `lib/colour.ts`, which NAMES the colour where it can and falls back to
+   `shortColour` where it cannot — one function, one spelling, and the
+   shortening is a subtitle rather than the label. */
 
 /**
  * `formatUnits` in the wallet produces exact decimal strings, so reading one
@@ -450,6 +459,7 @@ export default function SendSheet(props: SendSheetProps) {
     onSendShielded,
     resolveName,
     onSendToName,
+    sponsoredToken,
     phase,
     nameLeg,
     onClose,
@@ -1020,8 +1030,11 @@ export default function SendSheet(props: SendSheetProps) {
               <div className="mnhome-send-field">
                 <span className="mnhome-send-label">Token</span>
                 <span className="mnhome-send-hint">
-                  <code>{shortToken(holdings[0].tokenType)}</code> — the only shielded token this
-                  Passport&rsquo;s account holds.
+                  <strong>{describeColour(holdings[0].tokenType, sponsoredToken).symbol}</strong> —
+                  the only shielded token this Passport&rsquo;s account holds
+                  {describeColour(holdings[0].tokenType, sponsoredToken).known
+                    ? '.'
+                    : `, colour ${describeColour(holdings[0].tokenType, sponsoredToken).name}.`}
                 </span>
               </div>
             ) : null}
@@ -1035,7 +1048,8 @@ export default function SendSheet(props: SendSheetProps) {
                 >
                   {holdings.map((held) => (
                     <option key={held.tokenType} value={held.tokenType}>
-                      {shortToken(held.tokenType)} — {held.amount.toString()} units
+                      {describeColour(held.tokenType, sponsoredToken).symbol} —{' '}
+                      {held.amount.toString()} units
                     </option>
                   ))}
                 </select>
@@ -1154,8 +1168,18 @@ export default function SendSheet(props: SendSheetProps) {
                 <div className="mnhome-send-row">
                   <dt>Token</dt>
                   <dd>
-                    <strong>{tokenType === null ? '—' : shortToken(tokenType)}</strong>
-                    <small>{tokenType ?? ''}</small>
+                    {/* NEVER the raw colour. This row used to print all 64
+                        characters underneath the shortened form, which is the
+                        one place on the review step a reader could mistake a
+                        colour for something they should check. */}
+                    <strong>
+                      {tokenType === null
+                        ? '—'
+                        : describeColour(tokenType, sponsoredToken).symbol}
+                    </strong>
+                    <small>
+                      {tokenType === null ? '' : describeColour(tokenType, sponsoredToken).name}
+                    </small>
                   </dd>
                 </div>
               ) : null}
