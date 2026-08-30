@@ -3138,8 +3138,15 @@ export default function PassportDemo() {
             }
             throw new AliasClaimError(
               'account-contract-failed',
-              `${alias}.night was not registered: your Passport's account contract could not be deployed, and the name would have had nothing to point at.`,
-              detail ? `${message} (${detail})` : message,
+              /* No machinery in a sentence a person reads. What failed is
+                 the ACCOUNT — the thing they were waiting for — and the reason
+                 the name did not follow is that there was nothing for it to
+                 point at. The parts' own names go in the detail, for a log. */
+              `${alias}.night was not registered: your Passport account could not be set up, so there was nothing for the name to point at.`,
+              /* The inner REASON only. Its message now says the same thing as
+                 the sentence above, and carrying both put one fact on screen
+                 twice with a dash between the copies. */
+              detail ?? message,
             );
           } finally {
             setContractPhase(null);
@@ -3308,7 +3315,9 @@ export default function PassportDemo() {
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         const detail = (cause as { detail?: string })?.detail;
-        setAliasError(detail ? `${message} (${detail})` : message);
+        /* An em dash, not parentheses. The detail routinely carries its own
+           parenthetical, and nesting them produced "A. (B. (C))" on screen. */
+        setAliasError(detail ? `${message} — ${detail}` : message);
         addActivity({
           label: 'Your name could not be registered',
           detail: detail ? `${message} — ${detail}` : message,
@@ -3471,7 +3480,7 @@ export default function PassportDemo() {
       // failure toast — the card says everything.
       const message = cause instanceof Error ? cause.message : String(cause);
       const detail = (cause as { detail?: string })?.detail;
-      requeue(detail ? `${message} (${detail})` : message);
+      requeue(detail ? `${message} — ${detail}` : message);
       addActivity({
         label: 'Your name could not be registered',
         detail: detail ? `${message} — ${detail}` : message,
@@ -3642,7 +3651,7 @@ export default function PassportDemo() {
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       const detail = (cause as { detail?: string })?.detail;
-      const reason = detail ? `${message} (${detail})` : message;
+      const reason = detail ? `${message} — ${detail}` : message;
       /* A deploy this call merely joined has already been recorded — and
          narrated — by whoever started it. Writing again would put two failures
          on the record for one attempt. */
@@ -4669,7 +4678,7 @@ export default function PassportDemo() {
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       const detail = (cause as { detail?: string })?.detail;
-      const reason = detail ? `${message} (${detail})` : message;
+      const reason = detail ? `${message} — ${detail}` : message;
       if (entryId) {
         updateActivity(entryId, { status: 'error', detail: reason, source: 'local' });
       }

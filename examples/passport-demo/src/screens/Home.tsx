@@ -122,7 +122,17 @@ export interface HomeScreenProps {
     otherShielded: { colourHex: string; amount: bigint }[]
     /** `idle` means there is nothing to read; `unavailable` means a read failed. */
     status: 'idle' | 'loading' | 'ready' | 'unavailable'
-    /** Present only on `unavailable`, in the reader's own words. */
+    /**
+     * Why the read failed, in the reader's own words — FOR A LOG, never for
+     * the screen.
+     *
+     * It used to be interpolated into the notice below, and on 2026/08/30 that
+     * put "Cannot read properties of undefined (reading 'keys')" in front of a
+     * user, between two sentences of plain English. A JavaScript exception is
+     * not something a person can act on, and printing one is a way of saying
+     * that whatever went wrong was not anticipated. It goes to `console.warn`
+     * and the notice says the same true thing every time.
+     */
     error: string | null
   } | null
   /**
@@ -406,6 +416,15 @@ export default function HomeScreen(props: HomeScreenProps) {
      and neither is ever a zero. */
   const balancesLoading = account?.status === 'loading' || account?.status === 'idle'
 
+  /* The failed read's own words, to the console and nowhere else. Logged once
+     per distinct message rather than on every render, so a screen that
+     re-renders while the network is down does not fill the log with one
+     sentence. */
+  const balanceError = account?.status === 'unavailable' ? account.error : null
+  useEffect(() => {
+    if (balanceError) console.warn('[passport] account balances unavailable:', balanceError)
+  }, [balanceError])
+
   /* Sending needs a seam. The host withholds it unless a wallet session is
      open AND there is an account contract to withdraw from, so this is one
      test rather than two. */
@@ -576,11 +595,13 @@ export default function HomeScreen(props: HomeScreenProps) {
         ) : null}
 
         {account?.status === 'unavailable' ? (
+          /* FIXED PROSE. The reader's own words go to the console — see
+             `HomeScreenProps.account.error`. */
           <p className="mnhome-notice">
             <AlertTriangle size={14} aria-hidden="true" />
             <span>
-              Your account&rsquo;s balances could not be read, so none is shown.
-              {account.error ? ` ${account.error}` : ''} Refresh once the network is reachable.
+              Your balances could not be read just now. They will refresh once the network
+              answers.
             </span>
           </p>
         ) : null}

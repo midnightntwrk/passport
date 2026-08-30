@@ -607,17 +607,22 @@ export async function readAccountState(
     );
   }
 
-  let decoded: AccountLedger;
+  /* The decode and the PROJECTION are one try block, not two. `ledger()`
+     builds an accessor lazily, so a state that is not an account contract does
+     not fail here — it fails on the first field {@link decodeAccountState}
+     reads, as a raw `TypeError: Cannot read properties of undefined (reading
+     'keys')`. That escaped `readAccountState`'s taxonomy entirely and reached
+     a user, on Home's balances card, in those words (2026/08/30). */
   try {
-    decoded = ledger((state as { data: unknown }).data as never);
+    return decodeAccountState(ledger((state as { data: unknown }).data as never));
   } catch (cause) {
+    if (cause instanceof AccountCustodyError) throw cause;
     throw new AccountCustodyError(
       'contract-not-found',
       'The state at that address is not a Passport account-custody contract.',
       cause instanceof Error ? cause.message : String(cause),
     );
   }
-  return decodeAccountState(decoded);
 }
 
 /**
@@ -630,6 +635,22 @@ export async function readAccountState(
  * by executing the real contract's constructor and circuits.
  */
 export function decodeAccountState(decoded: AccountLedger): AccountState {
+  try {
+    return projectAccountState(decoded);
+  } catch (cause) {
+    /* A ledger accessor built over state that is not an account contract does
+       not fail when it is built — it fails when a field is read, and it fails
+       as a `TypeError` about a property nobody has heard of. Reported as what
+       it means instead: the address does not hold one of our accounts. */
+    throw new AccountCustodyError(
+      'contract-not-found',
+      'The state at that address is not a Passport account-custody contract.',
+      cause instanceof Error ? cause.message : String(cause),
+    );
+  }
+}
+
+function projectAccountState(decoded: AccountLedger): AccountState {
   const nightBalances = new Map<string, bigint>();
   for (const [colour, amount] of decoded.night_balances) {
     nightBalances.set(bytesToHex(colour), amount);

@@ -240,8 +240,22 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     registrationSupported,
   ])
 
+  /**
+   * What the button says while a claim runs, and why it is no longer the
+   * phase's own sentence.
+   *
+   * It used to repeat, with a spinner beside it, exactly the sentence already
+   * printed under the running step: two spinners' worth of movement and one
+   * fact, said twice. The STEPPER is the progress indicator now — it shows
+   * which of the three is running, what that step is doing, and what is still
+   * ahead — so the button says only which step is running, and says it once.
+   *
+   * `busy` is `claimPhase !== null`, so wherever this branch is taken the
+   * stepper above is on screen and there is always an active step to name.
+   */
+  const runningStep = busy ? claimSteps(claimPhase).find((step) => step.state === 'active') : null
   const primaryLabel = busy
-    ? PHASE_COPY[claimPhase](aliasDomain(alias ?? 'your name'))
+    ? (runningStep?.label ?? PHASE_COPY[claimPhase](aliasDomain(alias ?? 'your name')))
     : isUnreachable || !registrationSupported
       ? 'Queue name'
       : alias
@@ -401,11 +415,12 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
             onClick={handleSubmit}
             disabled={primaryDisabled}
           >
-            {busy ? (
-              <Loader2 className="mnid-spin" size={17} aria-hidden="true" />
-            ) : (
-              <ArrowRight size={17} aria-hidden="true" />
-            )}
+            {/* NO SPINNER while the stepper is up. A second spinner over a
+                view whose whole job is to show where the claim has got to adds
+                movement and no information — and it was what made the button
+                read as the progress indicator rather than as the control that
+                had already been pressed. */}
+            {busy ? null : <ArrowRight size={17} aria-hidden="true" />}
             {primaryLabel}
           </button>
           {/* No skip. The name step IS the account ceremony — the custody

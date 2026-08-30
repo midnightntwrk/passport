@@ -460,3 +460,41 @@ describe('unshieldedAddressBytes, on the address kinds a recipient field sees', 
     expect(refusal?.message).toMatch(/not a Midnight address|not an unshielded/);
   });
 });
+
+describe('decodeAccountState, on state that is not an account contract', () => {
+  it('reports what it means instead of a TypeError about a missing property', () => {
+    /* THE EXCEPTION A USER WAS SHOWN.
+       A ledger accessor is built LAZILY: `ledger(state.data)` over a state that
+       is not an account contract returns happily, and fails on the first field
+       read — as `TypeError: Cannot read properties of undefined (reading
+       'keys')`. That escaped `readAccountState`'s taxonomy and reached Home's
+       balances card in those words, on 2026/08/30. It is a `contract-not-found`
+       and it says so now. */
+    const notAnAccount = {
+      get night_balances(): never {
+        throw new TypeError("Cannot read properties of undefined (reading 'keys')");
+      },
+    } as unknown as AccountLedger;
+
+    expect(() => decodeAccountState(notAnAccount)).toThrowError(AccountCustodyError);
+    try {
+      decodeAccountState(notAnAccount);
+      expect.unreachable('the decode must refuse');
+    } catch (cause) {
+      const error = cause as AccountCustodyError;
+      expect(error.code).toBe('contract-not-found');
+      expect(error.message).toBe(
+        'The state at that address is not a Passport account-custody contract.',
+      );
+      /* The reader's own words are kept — as a DETAIL, for a log. Nothing on a
+         screen quotes it: see `HomeScreenProps.account.error`. */
+      expect(error.detail).toContain("reading 'keys'");
+    }
+  });
+
+  it('still refuses a ledger that is simply absent', () => {
+    expect(() => decodeAccountState(undefined as unknown as AccountLedger)).toThrowError(
+      AccountCustodyError,
+    );
+  });
+});

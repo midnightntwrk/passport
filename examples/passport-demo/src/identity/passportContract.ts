@@ -424,7 +424,9 @@ export async function deployPassportContract(
     } catch (cause) {
       throw new PassportContractError(
         'deploy-failed',
-        'The Passport contract could not be deployed.',
+        /* Reaches a screen, so it says what the reader was waiting for
+           rather than which part of the machinery did not start. */
+        'Your Passport account could not be set up.',
         cause instanceof Error ? cause.message : String(cause),
       );
     }

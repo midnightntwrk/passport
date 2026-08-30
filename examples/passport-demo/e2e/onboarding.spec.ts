@@ -312,21 +312,32 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
     };
   });
 
-  /* EVERY label the button shows, recorded rather than raced.
+  /* EVERY sentence the running step shows, recorded rather than raced.
      A `toBeVisible` on each stage in turn can only ever assert that a stage
      was on screen at the moment Playwright happened to look, which makes the
      test's own scheduling part of what it measures — and the stages are short
      precisely because the fix made them short. A MutationObserver installed
-     before the click sees all of them, in order, however briefly each lasts. */
+     before the click sees all of them, in order, however briefly each lasts.
+
+     It watches the STEP'S OWN detail line rather than the button. Until
+     2026/08/30 the button repeated that sentence with a spinner beside it —
+     one fact said twice, over a view whose whole job is to show where the
+     claim has got to — and the button now names only the running step. */
   await page.evaluate(() => {
-    const claim = document.querySelector('.mnid-primary');
-    if (!claim) throw new Error('The claim button was not on screen.');
-    const seen: string[] = [(claim.textContent ?? '').trim()];
+    const screen = document.querySelector('.mnid-screen');
+    if (!screen) throw new Error('The claim screen was not on screen.');
+    const seen: string[] = [];
     (window as unknown as { __labels: string[] }).__labels = seen;
-    new MutationObserver(() => {
-      const text = (claim.textContent ?? '').trim();
+    const record = () => {
+      const text = (document.querySelector('.mnid-stepper-detail')?.textContent ?? '').trim();
       if (text && text !== seen[seen.length - 1]) seen.push(text);
-    }).observe(claim, { childList: true, subtree: true, characterData: true });
+    };
+    record();
+    new MutationObserver(record).observe(screen, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
   });
 
   /* Every warmed answer is deliberately allowed to age out, so the claim
@@ -342,16 +353,23 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
 
   await page.getByRole('button', { name: new RegExp(`Claim ${NAME}\\.night`) }).click();
 
-  /* STAGE ONE, on screen while the registry takes its two seconds — and beside
+  /* STAGE ONE, on screen while the registry takes its two seconds — and with
      it the sentence a spinner cannot carry: what is happening, and that this
      part is short. The reviewer asked for exactly this ("you have to let the
-     user know this will take time"). */
-  await expect(
-    page.getByRole('button', { name: new RegExp(`Checking ${NAME}\\.night is still free`) }),
-  ).toBeVisible({ timeout: 10_000 });
-  /* And beside the button, the thing a spinner cannot be: a view of where in
-     the claim this is. Drilled properly in the test below; here it is enough
-     that the panel is a stepper at all. */
+     user know this will take time").
+
+     It is the running STEP that says it. Until 2026/08/30 the button said it
+     too, with a spinner beside it, which was one fact said twice over a view
+     built to show exactly that fact — so the button now names the step it is
+     waiting on, and the sentence has one home. */
+  await expect(page.locator('.mnid-stepper-detail')).toHaveText(
+    new RegExp(`Checking ${NAME}\\.night is still free`),
+    { timeout: 10_000 },
+  );
+  await expect(page.getByRole('button', { name: 'Checking your name' })).toBeVisible();
+  /* And around it, the thing a spinner cannot be: a view of where in the claim
+     this is. Drilled properly in the test below; here it is enough that the
+     panel is a stepper at all. */
   await expect(page.locator('.mnid-stepper-item')).toHaveCount(3);
 
   /* Then the refusal, with the sponsor's own sentence — before any ceremony,
@@ -362,9 +380,10 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
   ).toBeVisible();
 
   /* THE STAGES, in the order they happened. Two distinct sentences before the
-     refusal, each naming its own step: this is the whole of the defect, which
-     was ONE unchanging label — "Deploying your name's resolver…" — held over
-     the entire wait. Nothing here is ever an unexplained spinner. */
+     refusal, each naming what the running step is doing: this is the whole of
+     the defect, which was ONE unchanging label — "Deploying your name's
+     resolver…" — held over the entire wait. Nothing here is ever an
+     unexplained spinner. */
   const labels = await page.evaluate(
     () => (window as unknown as { __labels: string[] }).__labels,
   );
