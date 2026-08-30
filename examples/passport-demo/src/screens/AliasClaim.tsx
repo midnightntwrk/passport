@@ -415,7 +415,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
           </div>
         ) : null}
 
-        <div className="mnid-actions">
+        <div className="mnid-actions" data-toast-clear>
           <button
             type="button"
             className="mnid-primary"

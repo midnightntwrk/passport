@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { AlertTriangle, Check, ExternalLink, Info, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import './toast-stack.css'
 
@@ -39,10 +39,28 @@ export interface PassportToast {
 
 type Listener = (toasts: PassportToast[]) => void
 
-const MAX_VISIBLE = 4
+/**
+ * How many cards are painted at once, and why it is two rather than four.
+ *
+ * The stack is pinned to the bottom of a phone, which is where a screen's
+ * primary action is. Every card it paints is screen the action has to share,
+ * and the ones behind the front are already down at 0.8 and 0.6 opacity —
+ * they carry "there is another" and not much else. Two says that and costs
+ * ten pixels; four cost the height of a button.
+ */
+const MAX_VISIBLE = 2
 const AUTO_DISMISS_MS = 5000
 /** A toast carrying a link has to survive long enough to be aimed at. */
 const LINKED_DISMISS_MS = 12000
+
+/** Clear air between the top of the stack and whatever it is keeping clear. */
+const CLEARANCE_PX = 12
+/**
+ * How far up the screen the stack may be pushed before the cure is worse than
+ * the complaint. A notification pinned to the bottom edge is a notification; one
+ * floating in the middle of the page is a dialog nobody asked for.
+ */
+const HIGHEST_STACK_TOP = 0.45
 
 let nextId = 0
 let queue: PassportToast[] = []
@@ -184,6 +202,7 @@ function Toast({
 
 export default function PassportToasts() {
   const [toasts, setToasts] = useState<PassportToast[]>([])
+  const viewport = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const listener: Listener = (next) => setToasts([...next])
@@ -194,8 +213,89 @@ export default function PassportToasts() {
     }
   }, [])
 
+  /**
+   * THE STACK GETS OUT OF THE WAY OF THE THING IT IS ABOUT.
+   *
+   * Pinned to the bottom of a 390×844 phone the stack sat exactly on top of
+   * the name step's "Claim your name" button and the rules footnote under it,
+   * and on Home it covered "Your account is ready" — the line a person is
+   * waiting to read when the toast that covers it arrives. The workaround so
+   * far was to withhold toasts on the screens where the collision was known
+   * (see the `welcomeSeen` guard on the "Passport created" toast in App.tsx),
+   * which fixes one toast at a time and loses the notification.
+   *
+   * So the stack measures instead. Anything marked `data-toast-clear` — a
+   * screen's primary action block, the account line on Home — is asked where
+   * it is, and if the stack's own band would cross it the stack is lifted by
+   * a CSS custom property until it does not, with clear air in between.
+   *
+   * Measured rather than thresholded on viewport height: "under 700 px tall"
+   * is a proxy for "the action is where the toast is", and the actual position
+   * of the actual action is available for the asking. Nothing is lifted when
+   * nothing would be covered, so the ordinary case — a toast over scrollable
+   * page body — is untouched.
+   *
+   * Two clamps keep the remedy proportionate: only elements the stack would
+   * REALLY cross count (an action scrolled up to the top of Home is not being
+   * covered by anything), and the lift stops at
+   * {@link HIGHEST_STACK_TOP} of the viewport.
+   */
+  useLayoutEffect(() => {
+    const node = viewport.current
+    if (!node) return
+    const measure = () => {
+      /* From a known zero every time: the lift is recomputed, not accumulated,
+         so a screen that no longer needs one gets none. Reading a box below
+         flushes the style change, which is what makes this honest. */
+      node.style.setProperty('--mn-toast-lift', '0px')
+      if (toasts.length === 0) return
+
+      const anchor = node.getBoundingClientRect().bottom
+      const front = node.querySelector<HTMLElement>('.mntoast')
+      /* `offsetHeight`, not the client rect: the card may be mid-spring, and a
+         scaled card would have the stack measure itself smaller than it is
+         about to be. */
+      const stackHeight = (front ? front.offsetHeight : 0) + (MAX_VISIBLE - 1) * 10
+      const stackTop = anchor - stackHeight
+
+      let lift = 0
+      for (const element of document.querySelectorAll('[data-toast-clear]')) {
+        const box = element.getBoundingClientRect()
+        if (box.height === 0) continue
+        // Not in the stack's band, so not being covered by it.
+        if (box.top >= anchor || box.bottom <= stackTop) continue
+        lift = Math.max(lift, anchor - box.top + CLEARANCE_PX)
+      }
+      if (lift === 0) return
+
+      const ceiling = Math.max(0, stackTop - window.innerHeight * HIGHEST_STACK_TOP)
+      node.style.setProperty('--mn-toast-lift', `${Math.min(lift, ceiling)}px`)
+    }
+
+    measure()
+    if (toasts.length === 0) return
+
+    /* A rotation moves the action; so does scrolling Home. Both are cheap to
+       answer and only listened for while there is something on screen. */
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, true)
+    /* AND THE SCREEN ITSELF CAN ARRIVE AFTER THE TOAST. "Welcome back" is
+       pushed while the wallet is still opening, so the first measurement runs
+       against a screen with no action on it at all and the name step mounts a
+       moment later — measured here, that was the whole reason the first cut of
+       this lifted nothing on the very screen it was written for. A short poll
+       for as long as a toast is up costs four rect reads a second and needs no
+       opinion about which of another screen's re-renders matters. */
+    const poll = window.setInterval(measure, 250)
+    return () => {
+      window.clearInterval(poll)
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure, true)
+    }
+  }, [toasts])
+
   return (
-    <div className="mntoast-viewport" role="status" aria-live="polite">
+    <div className="mntoast-viewport" ref={viewport} role="status" aria-live="polite">
       <AnimatePresence initial={false}>
         {toasts.slice(0, MAX_VISIBLE + 2).map((toast, index) => (
           <Toast

@@ -289,7 +289,7 @@ export default function BackupScreen(props: BackupProps) {
             </p>
           </div>
 
-          <div className="mnid-actions">
+          <div className="mnid-actions" data-toast-clear>
             <button
               type="button"
               className="mnid-primary"
@@ -386,7 +386,7 @@ export default function BackupScreen(props: BackupProps) {
             }}
             aria-label="Backup file to restore"
           />
-          <div className="mnid-actions">
+          <div className="mnid-actions" data-toast-clear>
             <button
               type="button"
               className="mnid-secondary"
@@ -413,7 +413,7 @@ export default function BackupScreen(props: BackupProps) {
             />
           </div>
 
-          <div className="mnid-actions">
+          <div className="mnid-actions" data-toast-clear>
             <button
               type="button"
               className="mnid-primary"
@@ -544,7 +544,7 @@ export default function BackupScreen(props: BackupProps) {
           ) : null}
         </div>
 
-        <div className="mnid-actions">
+        <div className="mnid-actions" data-toast-clear>
           <button type="button" className="mnid-secondary" onClick={onDone}>
             <ArrowRight size={17} aria-hidden="true" />
             Done

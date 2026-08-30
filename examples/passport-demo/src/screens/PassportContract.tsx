@@ -90,7 +90,14 @@ export default function PassportContractCard(props: PassportContractCardProps) {
   if (!record && !busy) return null
 
   return (
-    <article className="mnid-card mnid-card-embedded mnid-account">
+    <article
+      className="mnid-card mnid-card-embedded mnid-account"
+      /* This card is what a claim's own toast is ABOUT, and on Home the
+         bottom-pinned stack landed straight on top of "Your account is ready".
+         The stack measures anything marked this way and lifts clear of it —
+         see the layout effect in `ToastStack.tsx`. */
+      data-toast-clear
+    >
       <p className={`mnid-account-line${working ? ' mnid-account-line-busy' : ''}`} role="status">
         {working ? (
           <Loader2 className="mnid-spin" size={16} aria-hidden="true" />

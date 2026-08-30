@@ -103,7 +103,7 @@ export default function WelcomeScreen({ onChooseName }: WelcomeProps) {
           ))}
         </ul>
 
-        <div className="mnid-actions">
+        <div className="mnid-actions" data-toast-clear>
           {/* One control, and it says where it goes. See "WHY THERE IS NO
               SKIP" above: the button that used to sit under this one led to
               the same mandatory screen. */}

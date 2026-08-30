@@ -286,7 +286,7 @@ export default function EcosystemScreen(props: EcosystemProps) {
 
         <EcosystemIdentity {...props} variant="screen" />
 
-        <div className="mnid-actions">
+        <div className="mnid-actions" data-toast-clear>
           <button type="button" className="mnid-primary" onClick={onContinue}>
             <ArrowRight size={17} aria-hidden="true" />
             Enter Passport

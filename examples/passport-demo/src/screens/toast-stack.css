@@ -6,7 +6,17 @@
 
 .mntoast-viewport {
   position: fixed;
-  bottom: calc(var(--mn-nav-height) + max(16px, env(safe-area-inset-bottom)) + 12px);
+  /* `--mn-toast-lift` is written by `ToastStack.tsx` and is 0 unless the stack
+     would sit on top of something marked `data-toast-clear` — a screen's
+     primary action, or the account line on Home. See the layout effect there
+     for how far it lifts and what stops it. */
+  bottom: calc(
+    var(--mn-nav-height) + max(16px, env(safe-area-inset-bottom)) + 12px +
+      var(--mn-toast-lift, 0px)
+  );
+  /* No transition on `bottom`. The lift is computed by resetting to zero and
+     re-measuring in the same frame, and a transition would animate that reset
+     — a card that dips and recovers every time the stack changes. */
   left: 50%;
   transform: translateX(-50%);
   width: min(22rem, calc(100vw - 2rem));

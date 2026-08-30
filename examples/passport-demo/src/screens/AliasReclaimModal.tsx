@@ -175,7 +175,7 @@ export default function AliasReclaimModal(props: AliasReclaimModalProps) {
           </div>
         ) : null}
 
-        <div className="mnid-actions">
+        <div className="mnid-actions" data-toast-clear>
           <button type="button" className="mnid-primary" onClick={submit} disabled={!canSubmit}>
             {busy ? (
               <Loader2 className="mnid-spin" size={17} aria-hidden="true" />
