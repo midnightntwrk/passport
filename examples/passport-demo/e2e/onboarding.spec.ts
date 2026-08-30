@@ -567,6 +567,49 @@ test('Home names the account contract, and never the wallet', async () => {
   await page.keyboard.press('Escape');
 });
 
+test('the activity trail shows what really happened, and survives a reload', async () => {
+  /* THE TRAIL NOBODY COULD SEE.
+     `addActivity` has written a row on every transfer, registration, and
+     failure since Passport had anything to record. Until 2026/08/30 nothing
+     rendered them: seven write paths feeding React state that no component
+     read. What is asserted here is that the rows on screen are rows THIS RUN
+     really wrote — the refused claims above, which are the only outcome a
+     sponsorless mocked tier can genuinely produce — rather than anything
+     seeded for the test. */
+  const trail = page.locator('.mnhome-activity');
+  await expect(trail).toBeVisible({ timeout: 60_000 });
+  const failedClaim = trail.getByText('Your name could not be registered').first();
+  await expect(failedClaim).toBeVisible();
+
+  /* Every row carries how long ago, in words. The claims above happened within
+     this run, so the only honest answers are seconds or single minutes. */
+  await expect(trail.locator('.mnhome-activity-when').first()).toHaveText(
+    /just now|\d+ min ago/,
+  );
+  // And a day heading, because a trail with no dates is a list of orphans.
+  await expect(trail.locator('.mnhome-activity-heading').first()).toHaveText('Today');
+
+  /* NO MACHINERY on the surface. The rows that used to say "resolves to this
+     Passport's account contract (7c2f4a19…)" were swept with the identity card
+     on 2026/08/26; a transaction is still reachable, as a LINK rather than as a
+     hash to read. */
+  const trailText = await trail.innerText();
+  expect(trailText).not.toMatch(/\b[0-9a-f]{32,}\b/);
+  expect(trailText).not.toMatch(/contract|registry|indexer|resolver/i);
+
+  /* PERSISTED. The rows lived in React state and went with the tab; they are
+     now stored per credential, which is what makes the trail an answer to
+     "what happened yesterday" rather than only to "what happened just now". */
+  const before = await trail.locator('.mnhome-activity-row').count();
+  expect(before).toBeGreaterThan(0);
+  await page.reload();
+  await expect(page.locator('.mnhome-activity')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('.mnhome-activity-row')).toHaveCount(before);
+  await expect(
+    page.locator('.mnhome-activity').getByText('Your name could not be registered').first(),
+  ).toBeVisible();
+});
+
 test('the Send sheet is a withdrawal from the account, and never mentions DUST', async () => {
   const send = page.getByRole('button', { name: /^Send$/ }).first();
   await expect(send).toBeVisible({ timeout: 30_000 });

@@ -19,6 +19,7 @@ import { createPortal } from 'react-dom'
 
 import type { AliasRecord } from '../identity/aliasStore.js'
 import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
+import ActivityFeed, { type ActivityFeedItem } from './ActivityFeed.js'
 /* The names this screen shares with the wallet (Contract W). Type-only, and
    only the two that describe the FEE — a fee is still the wallet's to pay. */
 import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js'
@@ -170,6 +171,17 @@ export interface HomeScreenProps {
     /** The live phase of the account call, narrated by the sheet. */
     phase?: 'checking' | 'connecting' | 'submitting' | 'confirming' | null
   } | null
+  /**
+   * The activity trail, newest first — every row Passport has written for this
+   * credential, with the explorer link the host resolved where a row has a
+   * transaction behind it. The list itself takes the last ten and groups them
+   * by day; the host hands over everything it holds.
+   *
+   * Omitted only by a caller that has no trail to offer. An EMPTY array is a
+   * real answer — a Passport that has not done anything yet — and gets the one
+   * quiet line the section is designed around.
+   */
+  activity?: readonly ActivityFeedItem[]
   /** Fed to the embedded apps grid and its in-Passport browser. */
   appsProfile: AppsScreenProps['profile']
   /** Notified after the user approves a profile request, for the activity feed. */
@@ -222,6 +234,7 @@ export default function HomeScreen(props: HomeScreenProps) {
     onDismissError,
     onRefresh,
     send,
+    activity,
     appsProfile,
     onProfileShared,
     executeTransfer,
@@ -532,6 +545,11 @@ export default function HomeScreen(props: HomeScreenProps) {
           transferContext={transferContext}
           onIncentiveRedeemed={onIncentiveRedeemed}
         />
+
+        {/* What has happened to this Passport, under the apps rather than over
+            them: the grid is what a person came to Home to USE, and the trail
+            is what they come back to check. */}
+        {activity ? <ActivityFeed entries={activity} /> : null}
 
         {sendOpen && send ? (
           <SendSheet

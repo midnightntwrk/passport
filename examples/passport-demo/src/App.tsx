@@ -13,6 +13,13 @@ import { holdCriticalWork } from './lib/appBusy.js';
 import { normalisedColourHex, shortColour } from './lib/colour.js';
 import { classifyFundAccountAnswer } from './lib/activation.js';
 import type { FundAccountAnswer } from './lib/activation.js';
+import {
+  ACTIVITY_KEEP,
+  activityStorageKey,
+  readStoredActivity,
+  serialiseActivity,
+} from './lib/activityFeed.js';
+import type { ActivityFeedItem } from './screens/ActivityFeed.js';
 import { requestPassportStoragePersistence } from './pwa.js';
 import {
   listLocalProfiles,
@@ -121,6 +128,13 @@ interface ActivityEntry {
   status: ActivityStatus;
   source?: ActivitySource;
   txHash?: string;
+  /**
+   * The network the row was written on, stamped by `addActivity`. It is what
+   * builds the row's explorer link later, and it is stored WITH the row for a
+   * reason: reading it off the network switcher at render time would hand a
+   * transfer made on preview a stagenet link after a switch.
+   */
+  network?: string;
   createdAt: string;
 }
 
@@ -1143,15 +1157,91 @@ export default function PassportDemo() {
     profileRef.current = profile;
   }, [profile]);
 
-  const addActivity = useCallback((entry: Omit<ActivityEntry, 'id' | 'createdAt'>) => {
-    const value = { ...entry, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
-    setActivity((current) => [value, ...current].slice(0, 10));
-    return value;
-  }, []);
+  /**
+   * Records something that happened, for the trail Home renders.
+   *
+   * Two things are stamped rather than passed: the clock, and the network. The
+   * network is the one a row's explorer link is built from later, and it is
+   * fixed at the moment the row is written because that is when it was true —
+   * see {@link ActivityEntry.network}.
+   *
+   * {@link ACTIVITY_KEEP} rows are held rather than the ten Home shows. The
+   * feed is now persisted, and a trail that forgot everything past the visible
+   * ten would have nothing to restore after a reload but what was already on
+   * screen.
+   */
+  const addActivity = useCallback(
+    (entry: Omit<ActivityEntry, 'id' | 'createdAt' | 'network'>) => {
+      const value = {
+        ...entry,
+        network: selectedNetwork,
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+      };
+      setActivity((current) => [value, ...current].slice(0, ACTIVITY_KEEP));
+      return value;
+    },
+    [selectedNetwork],
+  );
 
   const updateActivity = useCallback((id: string, patch: Partial<Omit<ActivityEntry, 'id' | 'createdAt'>>) => {
     setActivity((current) => current.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
   }, []);
+
+  /* ---------------------------------------------------------------------- */
+  /* The trail, across reloads                                              */
+  /*                                                                        */
+  /* Keyed by credential: a browser can hold several Passports and one       */
+  /* Passport's transfers are not another's to show. The two `localStorage`  */
+  /* calls are here rather than in `lib/activityFeed.ts` because that module */
+  /* is in the 100% denominator and storage cannot be drilled without a fake */
+  /* DOM — the parse that refuses junk and the writer that caps what is kept */
+  /* are the halves that CAN be, and both are.                              */
+  /* ---------------------------------------------------------------------- */
+  const activityCredentialId = profile?.passkey?.credentialId ?? null;
+  /* Nothing is written back until the stored trail has been read for THIS
+     credential. Without the gate the save effect's first pass would write the
+     empty initial state over a real trail. */
+  const activityLoadedFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!activityCredentialId) {
+      activityLoadedFor.current = null;
+      return;
+    }
+    let stored: ActivityEntry[] = [];
+    try {
+      stored = readStoredActivity(
+        window.localStorage.getItem(activityStorageKey(activityCredentialId)),
+      );
+    } catch {
+      // Storage blocked or unreadable. A trail is a convenience; a Passport
+      // that cannot remember one still works.
+      stored = [];
+    }
+    activityLoadedFor.current = activityCredentialId;
+    /* MERGED, not replaced. Rows are written during onboarding — before the
+       profile that names the credential exists — and replacing here would
+       throw away the account deploy the user just watched happen. */
+    setActivity((current) => {
+      const known = new Set(current.map((entry) => entry.id));
+      const merged = [...current, ...stored.filter((entry) => !known.has(entry.id))];
+      merged.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+      return merged.slice(0, ACTIVITY_KEEP);
+    });
+  }, [activityCredentialId]);
+
+  useEffect(() => {
+    if (!activityCredentialId || activityLoadedFor.current !== activityCredentialId) return;
+    try {
+      window.localStorage.setItem(
+        activityStorageKey(activityCredentialId),
+        serialiseActivity(activity),
+      );
+    } catch {
+      // Full, or blocked. Nothing on screen depends on the write succeeding.
+    }
+  }, [activity, activityCredentialId]);
 
   // Does this browser already hold a passkey Passport? Answered once, before
   // any sign-in, so onboarding can order and enable its options honestly.
@@ -1552,8 +1642,9 @@ export default function PassportDemo() {
       });
       if (result.written) {
         addActivity({
-          label: 'Passport attached to your passkey',
-          detail: `Your account contract ${compactAddress(account.address)} on ${account.network} is now stored on the passkey itself, so a new device can find it. No key material is in it — the address is public.`,
+          label: 'Passport saved to your passkey',
+          detail:
+            'A new device signing in with this passkey can now find your Passport on its own. No keys were stored — only where to look.',
           status: 'complete',
           source: 'local',
         });
@@ -1563,8 +1654,8 @@ export default function PassportDemo() {
         return;
       }
       addActivity({
-        label: 'Passport not attached to your passkey',
-        detail: `${result.reason ?? 'The write did not happen.'} Nothing else is affected: your name and contract are on chain either way.`,
+        label: 'Passport not saved to your passkey',
+        detail: `${result.reason ?? 'The write did not happen.'} Nothing else is affected — your name and your account are unchanged.`,
         status: 'blocked',
         source: 'local',
       });
@@ -1612,8 +1703,8 @@ export default function PassportDemo() {
       );
       if (!confirmed) {
         addActivity({
-          label: 'Passport contract not recovered',
-          detail: `Your passkey names a contract on ${blob.acc.network}, but the indexer does not answer for ${compactAddress(blob.acc.address)}, so nothing was restored.`,
+          label: 'Passport not restored',
+          detail: `Your passkey names an account on ${blob.acc.network}, but ${blob.acc.network} does not answer for it, so nothing was restored.`,
           status: 'blocked',
           source: 'chain',
         });
@@ -1629,8 +1720,8 @@ export default function PassportDemo() {
         updatedAt: new Date().toISOString(),
       });
       addActivity({
-        label: 'Passport contract recovered',
-        detail: `${compactAddress(blob.acc.address)} was read from your passkey and confirmed on ${blob.acc.network} by the indexer. This device never saw its deployment, so no transaction is shown for it.`,
+        label: 'Passport restored',
+        detail: `Your account was read from your passkey and confirmed on ${blob.acc.network}. This device never saw it being set up, so there is no transaction to show for it.`,
         status: 'complete',
         source: 'chain',
       });
@@ -1682,8 +1773,8 @@ export default function PassportDemo() {
       await openLocalWalletWithSeed(seed, scope, known.passkey.credentialId);
       await recoverAccountFromPasskey(known.passkey.credentialId, discovered.accountBlob);
       addActivity({
-        label: 'Passport passkey unlocked',
-        detail: 'Signed in with a passkey chosen from the device picker.',
+        label: 'Signed in',
+        detail: 'Opened with a passkey chosen from this device.',
         status: 'complete',
         source: 'local',
       });
@@ -1728,9 +1819,8 @@ export default function PassportDemo() {
        blob naming the contract to look for. */
     await recoverAccountFromPasskey(discovered.credentialId, discovered.accountBlob);
     addActivity({
-      label: 'Passport bound to passkey',
-      detail:
-        'A chosen passkey with no Passport here now holds its own profile and on-device Passport.',
+      label: 'Passport created',
+      detail: 'This passkey now holds its own Passport on this device.',
       status: 'complete',
       source: 'local',
     });
@@ -2119,8 +2209,10 @@ export default function PassportDemo() {
       storeLastPasskey(activeProfile.passkey.credentialId);
       setOnboardingError(null);
       addActivity({
-        label: created ? 'Passport passkey enrolled' : 'Passport passkey unlocked',
-        detail: 'On-device Passport derived from this passkey.',
+        label: created ? 'Passport created' : 'Signed in',
+        detail: created
+          ? 'This passkey now holds its own Passport on this device.'
+          : 'Opened with your passkey.',
         status: 'complete',
         source: 'local',
       });
@@ -2141,7 +2233,10 @@ export default function PassportDemo() {
       setLocalWalletStatus('error');
       setOnboardingError(message);
       addActivity({
-        label: intent === 'create' && !created ? 'Passport passkey' : 'Passport unlock',
+        label:
+          intent === 'create' && !created
+            ? 'Passport could not be created'
+            : 'Passport could not be opened',
         detail: message,
         status: 'error',
         source: 'local',
@@ -2189,7 +2284,7 @@ export default function PassportDemo() {
       const message = cause instanceof Error ? cause.message : String(cause);
       setLocalWalletStatus('error');
       setOnboardingError(message);
-      addActivity({ label: 'Passkey sign-in', detail: message, status: 'error', source: 'local' });
+      addActivity({ label: 'Could not sign in', detail: message, status: 'error', source: 'local' });
     } finally {
       discovered?.dispose();
       if (activeProfile) {
@@ -2306,7 +2401,7 @@ export default function PassportDemo() {
            see it until a `deposit_night` moves it. Home offers exactly that;
            saying so here is the difference between a balance a user can find
            and one they cannot. */
-        detail: `${amount} NIGHT arrived at this Passport's receiving address. Move it into your account to spend it.`,
+        detail: `${amount} NIGHT arrived at your receiving address. Move it into your account to spend it.`,
         status: 'complete',
         source: 'chain',
       });
@@ -2764,10 +2859,8 @@ export default function PassportDemo() {
             /* The schedule is spent. The account is empty and the screen already
                says so honestly; this row is why, in the sponsor's own words. */
             addActivity({
-              label: 'Opening balance not deposited',
-              detail: `The sponsor could not fund your account contract ${compactAddress(
-                contractAddress,
-              )} within ten minutes of trying: ${outcome.reason}`,
+              label: 'Opening balance not added',
+              detail: `The sponsor could not add your opening balance within ten minutes of trying: ${outcome.reason}`,
               status: 'blocked',
               source: 'chain',
             });
@@ -2989,7 +3082,7 @@ export default function PassportDemo() {
                    account is the thing the user was waiting for. The
                    transaction is still linked, so nothing is hidden. */
                 label: 'Your account is set up',
-                detail: `${compactAddress(deployment.address)} is ${
+                detail: `It is ${
                   deployment.ledgerConfirmed ? 'live' : 'submitted'
                 } on ${deployment.network}, ready for ${alias}.night to point at it.`,
                 status: 'complete',
@@ -3179,10 +3272,8 @@ export default function PassportDemo() {
           updatedAt: result.claimedAt,
         });
         addActivity({
-          label: 'Midnight name registered',
-          detail: `${result.domain} now resolves to this Passport's account contract (${compactAddress(
-            result.resolverTargetHex,
-          )}) on ${result.network}.`,
+          label: 'Your name is registered',
+          detail: `${result.domain} now points at your Passport account on ${result.network}. Anyone can send to the name.`,
           status: 'complete',
           source: 'chain',
           txHash: result.registerTxId,
@@ -3218,7 +3309,7 @@ export default function PassportDemo() {
         const detail = (cause as { detail?: string })?.detail;
         setAliasError(detail ? `${message} (${detail})` : message);
         addActivity({
-          label: 'Midnight name',
+          label: 'Your name could not be registered',
           detail: detail ? `${message} — ${detail}` : message,
           status: 'error',
           source: 'chain',
@@ -3349,10 +3440,8 @@ export default function PassportDemo() {
         updatedAt: result.claimedAt,
       });
       addActivity({
-        label: 'Midnight name registered',
-        detail: `${result.domain} now resolves to this Passport's account contract (${compactAddress(
-          result.resolverTargetHex,
-        )}) on ${result.network}.`,
+        label: 'Your name is registered',
+        detail: `${result.domain} now points at your Passport account on ${result.network}. Anyone can send to the name.`,
         status: 'complete',
         source: 'chain',
         txHash: result.registerTxId,
@@ -3383,7 +3472,7 @@ export default function PassportDemo() {
       const detail = (cause as { detail?: string })?.detail;
       requeue(detail ? `${message} (${detail})` : message);
       addActivity({
-        label: 'Midnight name',
+        label: 'Your name could not be registered',
         detail: detail ? `${message} — ${detail}` : message,
         status: 'error',
         source: 'chain',
@@ -3516,7 +3605,7 @@ export default function PassportDemo() {
       );
       addActivity({
         label: 'Your account is set up',
-        detail: `${compactAddress(deployment.address)} is ${
+        detail: `It is ${
           deployment.ledgerConfirmed ? 'live' : 'submitted'
         } on ${deployment.network}.`,
         status: 'complete',
@@ -3565,7 +3654,7 @@ export default function PassportDemo() {
         updatedAt: new Date().toISOString(),
       });
       addActivity({
-        label: 'Passport contract',
+        label: 'Your account could not be set up',
         detail: reason,
         status: 'error',
         source: 'chain',
@@ -3952,7 +4041,7 @@ export default function PassportDemo() {
             );
             updateActivity(entry.id, {
               status: 'complete',
-              detail: `Paid from your account contract for ${intent.origin}.`,
+              detail: `Paid from your account for ${intent.origin}.`,
               source: 'chain',
               txHash: result.txId,
             });
@@ -4065,8 +4154,10 @@ export default function PassportDemo() {
           /* Raised only now the ceremony has answered: a cancelled approval
              signed nothing, so it writes no activity row either. */
           const entry = addActivity({
-            label: 'Sent NIGHT',
-            detail: `To ${params.recipientAddress}.`,
+            label: 'Sending NIGHT',
+            detail: `${formatNightUnits(params.amount)} NIGHT to ${compactAddress(
+              params.recipientAddress,
+            )}.`,
             status: 'pending',
             source: 'wallet',
           });
@@ -4084,7 +4175,10 @@ export default function PassportDemo() {
             );
             updateActivity(entry.id, {
               status: 'complete',
-              detail: `Withdrawn from your account contract to ${params.recipientAddress}.`,
+              label: 'Sent NIGHT',
+              detail: `${formatNightUnits(params.amount)} NIGHT left your account for ${compactAddress(
+                params.recipientAddress,
+              )}.`,
               source: 'chain',
               txHash: result.txId,
             });
@@ -4187,8 +4281,8 @@ export default function PassportDemo() {
         const { withdrawShielded } = await import('./identity/accountCustody.js');
         await withAccountDeviceSecret(async (deviceSecret) => {
           const entry = addActivity({
-            label: 'Sent a shielded token',
-            detail: `To ${params.recipientAddress}.`,
+            label: 'Sending a shielded token',
+            detail: `${params.amount} units to ${compactAddress(params.recipientAddress)}.`,
             status: 'pending',
             source: 'wallet',
           });
@@ -4206,7 +4300,10 @@ export default function PassportDemo() {
             );
             updateActivity(entry.id, {
               status: 'complete',
-              detail: `Withdrawn from your account contract to ${params.recipientAddress}.`,
+              label: 'Sent a shielded token',
+              detail: `${params.amount} units left your account for ${compactAddress(
+                params.recipientAddress,
+              )}.`,
               source: 'chain',
               txHash: result.txId,
             });
@@ -4279,9 +4376,7 @@ export default function PassportDemo() {
       await confirmLocalApproval('Move your funds into your account');
       entryId = addActivity({
         label: 'Moving funds into your account',
-        detail: `${formatNightUnits(held)} NIGHT from your receiving address into ${compactAddress(
-          account.address,
-        )}.`,
+        detail: `${formatNightUnits(held)} NIGHT from your receiving address into your account.`,
         status: 'pending',
         source: 'wallet',
       }).id;
@@ -4293,7 +4388,7 @@ export default function PassportDemo() {
       );
       updateActivity(entryId, {
         status: 'complete',
-        detail: `${formatNightUnits(held)} NIGHT now sits in your account contract.`,
+        detail: `${formatNightUnits(held)} NIGHT now sits in your account.`,
         source: 'chain',
         txHash: result.txId,
       });
@@ -4403,6 +4498,33 @@ export default function PassportDemo() {
    * {@link refreshLocalBalances}.
    */
   const walletHeldNight = atomicNightFromFormatted(localSurfaces?.unshieldedBalance ?? null);
+  /**
+   * The trail, as Home renders it: the rows plus the explorer link each one
+   * earns.
+   *
+   * The link is built from the row's OWN network, not the selected one, and
+   * only where the row carries a ledger transaction hash. Where it does not,
+   * there is no link at all rather than one that goes nowhere — the same rule
+   * the success toasts follow, and for the same reason.
+   */
+  const homeActivity = useMemo<ActivityFeedItem[]>(
+    () =>
+      activity.map((entry) => {
+        const link = explorerTxLink(entry.txHash, entry.network ?? selectedNetwork);
+        return {
+          id: entry.id,
+          label: entry.label,
+          detail: entry.detail,
+          status: entry.status,
+          createdAt: entry.createdAt,
+          ...(entry.txHash ? { txHash: entry.txHash } : {}),
+          ...(entry.network ? { network: entry.network } : {}),
+          ...(link ? { link } : {}),
+        };
+      }),
+    [activity, selectedNetwork],
+  );
+
   const homeLegacyFunds =
     accountContractAddress && walletHeldNight !== null && walletHeldNight > 0n
       ? {
@@ -4456,7 +4578,7 @@ export default function PassportDemo() {
     const result = await exportPassportBackup(password);
     addActivity({
       label: 'Passport backup exported',
-      detail: `${result.fileName} holds ${result.counts.aliases} name claim(s), ${result.counts.passportContracts} contract record(s), and ${result.counts.incentives} reward(s), encrypted under a password Passport never stores. No key material is in the file.`,
+      detail: `Saved as ${result.fileName}, encrypted under a password Passport never stores. No keys are in it.`,
       status: 'complete',
       source: 'local',
     });
@@ -4577,10 +4699,12 @@ export default function PassportDemo() {
       const takenAt = describeBackupCreatedAt(summary.createdAt);
       addActivity({
         label: 'Passport backup restored',
-        detail: `From a backup ${takenAt === null ? 'that carries no readable date' : `taken ${takenAt}`}: ${summary.aliases.restored}/${summary.aliases.found} name claim(s), ${summary.passportContracts.restored}/${summary.passportContracts.found} contract record(s), ${summary.incentives.restored}/${summary.incentives.found} reward(s) written to this browser.${
+        detail: `${summary.aliases.restored} name(s) and ${summary.passportContracts.restored} account(s) came back from a backup ${
+          takenAt === null ? 'with no readable date' : `taken ${takenAt}`
+        }.${
           ledgerCheck.ran
-            ? ` ${ledgerCheck.confirmed} contract(s) confirmed on ${ledgerCheck.network} by the indexer; ${ledgerCheck.unconfirmed} not yet.`
-            : ` Contracts were not re-checked against the chain: ${ledgerCheck.reason}`
+            ? ` ${ledgerCheck.confirmed} confirmed on ${ledgerCheck.network}, ${ledgerCheck.unconfirmed} not yet.`
+            : ''
         }`,
         status: 'complete',
         source: 'local',
@@ -4945,6 +5069,10 @@ export default function PassportDemo() {
                  Passport has no account contract, which is what makes Home
                  render no Send control at all. */
               send={homeSend}
+              /* Everything Passport has recorded for this credential, under
+                 the apps grid. An empty array is a real answer and gets the
+                 section's one quiet line. */
+              activity={homeActivity}
               appsProfile={appsProfile}
               onProfileShared={handleProfileShared}
               executeTransfer={appTransferSeam}

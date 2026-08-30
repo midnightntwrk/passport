@@ -54,6 +54,21 @@
  * drilled directly in `src/lib/claimSteps.test.ts`. The JSX that paints circles
  * and lines from its answer stays out with the rest of the `.tsx`.
  *
+ * `src/lib/activityFeed.ts` went IN on 2026/08/30, the day it was written, and
+ * it is in the denominator because it is the only place a person can go back and
+ * check what happened to their own money. Every function in it is a way of
+ * misleading them if it is wrong: a relative time that rounds up claims more
+ * elapsed time than has elapsed; a day heading taken off the elapsed
+ * milliseconds rather than the reader's own calendar files this morning's
+ * transfer under "Yesterday"; a dot that flattened `blocked` into `complete`
+ * would say something happened that did not; and a stored-row reader that
+ * accepted a row with no label would paint an empty line with a dot beside it.
+ * It holds no DOM, no React, no storage, and no clock of its own — the clock is
+ * injected everywhere but the two cases that exercise the default — so all of it
+ * is drilled directly in `src/lib/activityFeed.test.ts`. The `window.localStorage`
+ * call between its parse and its writer is two lines in `App.tsx` and stays out
+ * with the rest of the app shell.
+ *
  * `src/lib/feeReadinessPoll.ts` went IN on 2026/08/25 rather than out with the
  * screens it serves: it is the sponsor watcher, it holds no DOM and no React,
  * and its whole contract — probe now, probe again every five seconds, publish
@@ -154,6 +169,7 @@ export default mergeConfig(
            in it and the reason it is not. */
         include: [
           'src/lib/activation.ts',
+          'src/lib/activityFeed.ts',
           'src/lib/address.ts',
           'src/lib/appBusy.ts',
           'src/lib/claimSteps.ts',

@@ -914,3 +914,127 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
   line-height: 1.5;
   align-self: center;
 }
+
+/* ── The activity trail (2026/08/30) ─────────────────────────────────────────
+   A calm list under the apps grid: what happened, how long ago, and — where
+   there is a transaction behind it — one link out. Nothing on it moves except
+   the dot on a row that is genuinely still in flight, and no hash is printed:
+   the link IS the hash, as a destination rather than as a string to read. */
+.mnhome-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mnhome-activity-empty {
+  margin: 0;
+  color: var(--mn-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mnhome-activity-day {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mnhome-activity-heading {
+  margin: 6px 0 2px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+}
+.mnhome-activity-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.mnhome-activity-row {
+  display: grid;
+  /* Dot, then the words, then the time and its link. The middle column is the
+     only one that may grow, so a long detail wraps instead of pushing the
+     timestamp off a 390 px screen. */
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+}
+.mnhome-activity-row:last-child { border-bottom: 0; }
+.mnhome-activity-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--mn-text-muted);
+}
+.mnhome-activity-dot[data-tone='complete'] { background: var(--mn-accent); }
+/* Filled, but muted rather than accent: a still frame has to distinguish "in
+   flight" from "done" on its own, and the pulse only helps a reader who is
+   watching. */
+.mnhome-activity-dot[data-tone='pending'] {
+  background: var(--mn-text-muted);
+  animation: mnhome-activity-pulse 1.8s ease-in-out infinite;
+}
+/* Attention is a hollow ring rather than another fill: the palette carries no
+   red, and a ring reads as "unfinished" at a glance without inventing one. */
+.mnhome-activity-dot[data-tone='attention'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--mn-text-secondary);
+}
+.mnhome-activity-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.mnhome-activity-label {
+  color: var(--mn-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.mnhome-activity-detail {
+  color: var(--mn-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.mnhome-activity-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  padding-top: 1px;
+}
+.mnhome-activity-when {
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-variant-numeric: var(--mn-numeric);
+  white-space: nowrap;
+}
+.mnhome-activity-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mn-accent-ink);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mnhome-activity-view:hover { text-decoration: underline; }
+.mnhome-activity-view:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+  border-radius: var(--mn-radius-sm);
+}
+
+@keyframes mnhome-activity-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mnhome-activity-dot[data-tone='pending'] { animation: none; }
+}
