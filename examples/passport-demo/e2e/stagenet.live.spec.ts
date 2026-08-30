@@ -297,7 +297,7 @@ test.describe('@live the account model on stagenet', () => {
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       await page.getByRole('button', { name: /^Send$/ }).first().click();
       // The recipient is a textarea carrying the network's own address prefix.
-      await page.getByPlaceholder(/^mn_addr_stagenet1/).fill(RECIPIENT);
+      await page.getByPlaceholder(/alice\.night|^mn_addr_stagenet1/).fill(RECIPIENT);
       await page.locator('.mnhome-send-amount input').fill(SEND_NIGHT);
 
       // The fee sentence names who is expected to pay, never which token it costs.
@@ -419,7 +419,7 @@ test.describe('@live the account model on stagenet', () => {
         timeout: 12 * 60_000,
         intervals: [10_000],
         message:
-          'the mUSD activation grant never reached the account — check GET https://funder.midnightpassport.com/balancer/status for assetFunding and assetUnavailableReason',
+          'the mUSD activation grant never reached the account — check GET https://67-205-177-162.sslip.io/balancer/status for assetFunding and assetUnavailableReason',
       })
       .toBe(GRANT_MUSD);
     console.log(`[live] activation stablecoin: ${GRANT_MUSD} mUSD in the account`);
@@ -442,7 +442,7 @@ test.describe('@live the account model on stagenet', () => {
          carrying the network's unshielded prefix as its placeholder, and what
          decides the ledger is the wallet SDK's codec reading what was pasted
          into it. The title changing is that codec having said "shielded". */
-      await page.getByPlaceholder(/^mn_addr_stagenet1/).fill(SHIELDED_RECIPIENT);
+      await page.getByPlaceholder(/alice\.night|^mn_addr_stagenet1/).fill(SHIELDED_RECIPIENT);
       await expect(page.locator('#mnhome-send-title')).toHaveText('Send a shielded token');
 
       /* The account's own colours, read from the contract when a shielded
@@ -566,7 +566,7 @@ async function waitForSponsor(timeoutMs = 6 * 60_000): Promise<void> {
   let last = 'never answered';
   while (Date.now() < deadline) {
     try {
-      const response = await fetch('https://funder.midnightpassport.com/balancer/wallet-status');
+      const response = await fetch('https://67-205-177-162.sslip.io/balancer/wallet-status');
       const body = (await response.json()) as { available?: unknown; total?: unknown };
       last = `available ${String(body.available)}/${String(body.total)}`;
       if (typeof body.available === 'number' && body.available > 0) return;
