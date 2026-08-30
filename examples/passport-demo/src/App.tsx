@@ -3004,7 +3004,7 @@ export default function PassportDemo() {
       if (availability.status === 'unreachable') {
         throw new AliasClaimError(
           'network-unreachable',
-          'The .night registry could not be reached, so the name cannot be claimed right now.',
+          'Names cannot be checked right now, so the name cannot be claimed yet.',
           availability.detail,
         );
       }
@@ -3290,7 +3290,7 @@ export default function PassportDemo() {
           tone: 'success',
           title: `${result.domain} is yours`,
           body: result.registryConfirmed
-            ? 'The registry confirmed the registration.'
+            ? 'Your name is confirmed on the network.'
             : 'Submitted — the registry has not reported it yet.',
           // The toast is the success surface now, so the transaction has to be
           // reachable from it. No link on a network with no public explorer.
@@ -3302,7 +3302,7 @@ export default function PassportDemo() {
         void notify(
           `${result.domain} is yours`,
           result.registryConfirmed
-            ? 'The registry confirmed the registration.'
+            ? 'Your name is confirmed on the network.'
             : 'Submitted — the registry has not reported it yet.',
           { tag: 'passport-name-registered' },
         );
@@ -3403,7 +3403,7 @@ export default function PassportDemo() {
       });
       if (availability.status === 'unreachable') {
         requeue(
-          `The ${selectedNetwork} .night registry could not be reached, so ${record.domain} is still not on chain: ${availability.detail}`,
+          `Names on ${selectedNetwork} cannot be checked right now, so ${record.domain} is still not registered: ${availability.detail}`,
         );
         return;
       }
@@ -3709,7 +3709,7 @@ export default function PassportDemo() {
           queueAlias(
             held.alias,
             next,
-            `The ${NETWORK_LABELS[next]} .night registry could not be reached during the switch, so ${held.alias}.night is not registered there: ${availability.detail}`,
+            `Names on ${NETWORK_LABELS[next]} could not be checked during the switch, so ${held.alias}.night is not registered there: ${availability.detail}`,
           );
           return;
         }

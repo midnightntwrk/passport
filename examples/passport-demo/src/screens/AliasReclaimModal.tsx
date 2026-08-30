@@ -242,8 +242,7 @@ function ReclaimStatus({
       <p className="mnid-status mnid-status-taken" role="status">
         <span className="mnid-status-dot" aria-hidden="true" />
         <span>
-          {aliasDomain(field.alias)} is taken here too — its resolver is{' '}
-          {field.availability.resolverAddress.slice(0, 10)}…
+          {aliasDomain(field.alias)} is taken here too — someone else already holds it
         </span>
       </p>
     )

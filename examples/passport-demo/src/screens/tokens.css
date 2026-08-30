@@ -341,6 +341,7 @@ body:has(.mnob-screen) {
 /* styles.css sets `outline: 2px solid #fff` globally, which disappears on
    a light surface. Re-point it at the accent, scoped to the mobile roots. */
 .mnhome-screen :focus-visible,
+.mnid-screen :focus-visible,
 .mnapps-screen :focus-visible,
 .mnapps-browser :focus-visible,
 .mnapps-sheet-backdrop :focus-visible,
