@@ -51,6 +51,32 @@
   gap: 8px;
 }
 
+/* THE TOP BAR ON A PHONE (2026/08/30).
+   One row of wordmark, beta badge, network switcher, theme toggle, refresh,
+   and sign out. Measured at 390 px — the width of the phone this demo is
+   walked on — that row wants 492 px inside a 350 px bar, and the whole page
+   scrolled sideways as a result. Nothing was ever clipped, so no screenshot
+   looked broken; every screen could simply be dragged off-centre with a
+   thumb. Below 460 px the actions take their own row, right-aligned under the
+   wordmark, and the segments narrow to keep that row on one line down to
+   about 380 px. Narrower still and the actions wrap again rather than pushing
+   the page out. */
+@media (max-width: 460px) {
+  .mnhome-bar {
+    flex-wrap: wrap;
+    padding-bottom: 10px;
+    row-gap: 10px;
+  }
+  .mnhome-bar-actions {
+    flex-basis: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .mnhome-bar-actions .mnthemetoggle-option { width: 26px; }
+}
+
 .mnhome-icon-button {
   position: relative;
   width: 34px;

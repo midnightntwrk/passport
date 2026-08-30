@@ -1,207 +1,116 @@
-import { ExternalLink, Loader2, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, Loader2, ShieldCheck, TriangleAlert } from 'lucide-react'
 
 import type { PassportContractRecord } from '../identity/passportContractStore.js'
-import { explorerTxUrl, isLedgerTxHash } from '../lib/networks.js'
-import { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
 import './identity.css'
 
 /**
- * The Passport account-custody contract card — the C1 surface on Home.
+ * Your account, in one line.
  *
  * STATUS, NOT A CHOICE (2026/08/19)
  * ---------------------------------
  * Hector, at the check-in: "this has to be completely transparent for the user.
  * The user shouldn't choose to deploy the contract. It should automatically
- * happen." So the "Deploy contract" button is gone. Claiming a `.night` name
- * deploys this contract as part of the same single user action, and binds the
- * name to its address; this card reports what that produced.
+ * happen." So there is no deploy button. Claiming a `.night` name sets the
+ * account up as part of the same single user action; this card reports what
+ * that produced.
  *
- * The one action that remains is a RETRY, and only on a record that says a
- * previous automatic deploy FAILED — the single state where the user has a
- * genuine decision rather than a chore the app should have done for them.
+ * The one action that remains is a RETRY, and only where a previous automatic
+ * attempt FAILED — the single state where the user has a genuine decision
+ * rather than a chore the app should have done for them.
  *
- * Deliberately the identity card's sibling: same `identity.css`, same status
- * pill, same transaction row, so the contract reads as part of the same
- * identity story rather than as a developer panel bolted on. It sits directly
- * beneath the name card on Home.
+ * ONE CALM LINE (ruled 2026/08/26)
+ * --------------------------------
+ * This card used to be a developer panel: the account's address as a truncated
+ * hexadecimal string, the deployment's transaction id, a sentence about which
+ * transaction identifier the indexer had or had not mapped yet, and a sentence
+ * about who paid the fee. Shown that on the live site, Karmel's answer was
+ * "let's also hide that, please" — and she is right that none of it is a fact a
+ * person acts on. The address a sender needs is offered in Receive, where it is
+ * the thing you copy; the transaction is linked from the activity trail, where
+ * a hash belongs.
  *
- * The status pill is load-bearing, exactly as it is on the identity card. A
- * deployed contract shows its real address and its real deployment transaction,
- * linked to the explorer where one exists. Anything else says what it actually
- * is — not deployed, deploying, or failed with the reason. There is no state
- * that shows an address the chain did not give us.
+ * What is left is the answer to the only question this card was ever asked:
+ * is my account ready? Three states, one line each, and a retry on the one that
+ * failed. A state with nothing to report — no account yet, nothing in flight —
+ * renders nothing at all rather than explaining machinery that has not run.
  */
 
 export type PassportContractPhase = 'deriving' | 'deploying' | 'confirming'
 
-/* User-facing wording, ruled 2026/08/26: this card is on screen throughout a
-   claim, and what it narrates is the account being set up — not a contract
-   being deployed. The contract is how Passport does it; "setting up your
-   account" is what is happening to the person reading. The record's own
-   technical fields below are unchanged: an address is still an address. */
+/* User-facing wording, ruled 2026/08/26: what this narrates is the account
+   being set up, not a contract being deployed. The contract is HOW Passport
+   does it; "setting up your account" is what is happening to the person
+   reading. All three phases now say the same calm thing, because the
+   difference between them is machinery — the stages a user is genuinely
+   waiting through are narrated on the claim screen's own stepper. */
 const PHASE_LABELS: Record<PassportContractPhase, string> = {
-  deriving: 'Preparing your device key…',
-  deploying: 'Setting up your account on-chain…',
-  confirming: 'Confirming…',
+  deriving: 'Setting up your account…',
+  deploying: 'Setting up your account…',
+  confirming: 'Setting up your account…',
 }
 
 export interface PassportContractCardProps {
-  /** The network whose contract this card is about. */
-  network: PassportNetwork
   /** The stored record for this credential and network, or null when none. */
   record: PassportContractRecord | null
   /**
-   * Re-runs a deployment that FAILED automatically. Offered on nothing else:
-   * there is no first-run deploy action, because the first run is the name
-   * claim's job. Omit (with no disabled reason) to hide the affordance.
+   * Re-runs an attempt that FAILED. Offered on nothing else: there is no
+   * first-run action, because the first run is the name claim's job. Omit
+   * (with no disabled reason) to hide the affordance.
    */
   onRetry?: () => void
-  /** True while a deployment is genuinely in flight. */
+  /** True while the account is genuinely being set up. */
   busy?: boolean
-  /** Live phase while the deployment is in flight. */
+  /** Live phase while that is in flight. */
   phase?: PassportContractPhase | null
   /**
    * When set, the retry renders disabled with this sentence beneath it — the
    * honest reason it cannot run right now (Passport is still starting up, the
-   * fee sponsor is unavailable, the network is not one this build deploys on).
+   * network is not one this build sets accounts up on).
    */
   disabledReason?: string | null
-  /**
-   * How the fee will be paid, in the send sheet's own words. Passed through
-   * verbatim so the two surfaces never tell different stories about fees.
-   */
-  feeNote?: string | null
-}
-
-function shortHash(value: string): string {
-  return value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}`
 }
 
 export default function PassportContractCard(props: PassportContractCardProps) {
-  const { network, record, onRetry, busy, phase, disabledReason, feeNote } = props
+  const { record, onRetry, busy, phase, disabledReason } = props
 
-  const deployed = record?.status === 'deployed'
-  const explorer = deployed && record.deployTxId ? explorerTxUrl(record.network, record.deployTxId) : null
-  /* The id is real; whether it is the thing an EXPLORER can resolve is a
-     separate question. midnight-js answers a submit with a 33-byte transaction
-     identifier and the indexer maps it to the 32-byte ledger hash; when that
-     mapping had not happened yet, what is stored is the identifier, and a link
-     built from it lands on "transaction not found". So it is rendered as text
-     with the reason, and `App.tsx` asks the indexer again in the background. */
-  const txIdUnresolved = Boolean(deployed && record.deployTxId && !isLedgerTxHash(record.deployTxId))
   const failed = record?.status === 'failed'
-  /* The ONLY action: retrying an automatic deploy that failed. A Passport with
-     no contract yet gets no button at all — the claim will deploy it. */
+  /* Submitted, and not yet answered for by the network — the state a restore
+     also lands in, where the address came from a file and nothing on this
+     device has seen it. It is not "ready", so it does not say so: it is still
+     being set up, and the next refresh settles it. */
+  const settling = record?.status === 'deployed' && record.ledgerConfirmed === false
+  const working = Boolean(busy) || settling
+  /* The ONLY action: retrying an attempt that failed. */
   const showRetry = failed && !busy && (Boolean(onRetry) || Boolean(disabledReason))
 
-  return (
-    <article className="mnid-card mnid-card-embedded">
-      <div className="mnid-card-head">
-        <p className="mnid-kicker">Your Passport contract on {NETWORK_LABELS[network]}</p>
-        <StatusPill record={record} busy={Boolean(busy)} network={network} />
-      </div>
+  /* Nothing to report is reported as nothing. A Passport with no account and
+     nothing in flight is mid-onboarding — the name step is what makes the
+     account exist, and it is on screen at the time. A card explaining that
+     here would be machinery narrating itself. */
+  if (!record && !busy) return null
 
-      {deployed && record.address ? (
-        <p className="mnid-alias" title={record.address}>
-          <code>{shortHash(record.address)}</code>
-        </p>
-      ) : (
-        <p className="mnid-alias mnid-alias-muted">
-          {busy ? (
-            <Loader2 className="mnid-register-spinner" size={14} aria-hidden="true" />
-          ) : null}
-          {busy
+  return (
+    <article className="mnid-card mnid-card-embedded mnid-account">
+      <p className={`mnid-account-line${working ? ' mnid-account-line-busy' : ''}`} role="status">
+        {working ? (
+          <Loader2 className="mnid-spin" size={16} aria-hidden="true" />
+        ) : failed ? (
+          <TriangleAlert className="mnid-account-icon-attention" size={16} aria-hidden="true" />
+        ) : (
+          <CheckCircle2 className="mnid-account-icon-ready" size={16} aria-hidden="true" />
+        )}
+        <span>
+          {working
             ? PHASE_LABELS[phase ?? 'deploying']
             : failed
-              ? 'No contract on this network yet'
-              : /* Not an instruction and not a promise about timing — just what
-                   will actually cause it to exist. */
-                'Deploys with your Midnight name'}
-        </p>
-      )}
+              ? 'Your account needs attention'
+              : 'Your account is ready'}
+        </span>
+      </p>
 
-      {deployed && record.deployTxId ? (
-        <ul className="mnid-txs">
-          <li className="mnid-tx">
-            <span className="mnid-tx-label">Deployment</span>
-            {explorer ? (
-              <a href={explorer} target="_blank" rel="noreferrer" title={record.deployTxId}>
-                {shortHash(record.deployTxId)}
-                <ExternalLink size={12} aria-hidden="true" />
-              </a>
-            ) : (
-              /* No public explorer for this network, or an id the explorer
-                 cannot resolve — shown without pretending it goes somewhere. */
-              <code title={record.deployTxId}>{shortHash(record.deployTxId)}</code>
-            )}
-          </li>
-        </ul>
-      ) : null}
-
-      {txIdUnresolved ? (
-        <p className="mnid-reason">
-          This is the transaction identifier the deployment returned. The indexer had not yet mapped
-          it to the ledger hash an explorer resolves, so there is no link to it — reopen Passport to
-          re-check.
-        </p>
-      ) : null}
-
-      {/* Recovered from the passkey rather than deployed here. There is no
-          transaction to show because this device never saw one, and saying so
-          is the whole point — the address above was confirmed by the indexer
-          before this record was allowed to exist. */}
-      {deployed && record.recovered ? (
-        <p className="mnid-reason">
-          This contract was read from your passkey when you signed in here, and the indexer
-          confirmed it on {NETWORK_LABELS[network]}. Its deployment happened on another device,
-          so there is no transaction to link from this one.
-        </p>
-      ) : null}
-
-      {/* An unconfirmed record has two entirely different stories behind it,
-          and they were being told with one sentence. A record this device
-          wrote carries a deployment IT submitted; a record a restore wrote
-          carries an address a FILE asserted, and nothing on this device has
-          ever seen it. `restoredFromBackup` is set only by
-          `../identity/backup.ts`, which is what separates them. */}
-      {deployed && record.ledgerConfirmed === false ? (
-        record.restoredFromBackup ? (
-          <p className="mnid-reason">
-            This record was restored from a backup; it is awaiting confirmation on{' '}
-            {NETWORK_LABELS[network]}. Nothing on this device submitted the deployment, so the
-            address above is what the backup said — reopen Passport to re-check it against the
-            indexer.
-          </p>
-        ) : (
-          <p className="mnid-reason">
-            The deployment was submitted and returned a real address and transaction id. The indexer
-            had not yet served the contract&apos;s state when this was written — reopen Passport to
-            re-check.
-          </p>
-        )
-      ) : null}
-
-      {/* Fees are the sponsor's, and the user has no fee balance to reason
-          about — so this says who covered it and never how. */}
-      {deployed && record.feePaidBy ? (
-        <p className="mnid-reason">
-          {record.feePaidBy === 'sponsored'
-            ? 'The deployment fee was covered by the fee sponsor.'
-            : 'The fee sponsor did not cover this one.'}
-        </p>
-      ) : null}
-
+      {/* The reason it failed, because "needs attention" without one is not an
+          explanation. It is the record's own sentence, unedited. */}
       {failed ? <p className="mnid-reason">{record.failureReason}</p> : null}
-
-      {/* What makes the contract appear, said once, where a button used to be.
-          Only in the state it is true of: no record at all, and nothing in
-          flight. */}
-      {!record && !busy ? (
-        <p className="mnid-reason">
-          Your Passport deploys this contract for you the first time you claim a Midnight name, and
-          the name is registered pointing at it. There is nothing to press.
-        </p>
-      ) : null}
 
       {showRetry ? (
         <div className="mnid-panel-actions mnid-register-row">
@@ -212,48 +121,13 @@ export default function PassportContractCard(props: PassportContractCardProps) {
             disabled={Boolean(disabledReason || !onRetry)}
           >
             <ShieldCheck size={14} aria-hidden="true" />
-            {/* Same wording rule as the phase labels above (2026/08/26): what
-                the user is retrying is their account being set up. */}
             Try setting up again
           </button>
           {disabledReason ? (
             <p className="mnid-reason mnid-register-reason">{disabledReason}</p>
-          ) : feeNote ? (
-            <p className="mnid-reason mnid-register-reason">{feeNote}</p>
           ) : null}
         </div>
       ) : null}
     </article>
   )
-}
-
-function StatusPill({
-  record,
-  busy,
-  network,
-}: {
-  record: PassportContractRecord | null
-  busy: boolean
-  network: PassportNetwork
-}) {
-  /* "via a claim" is the truthful attribution now: nothing else starts a
-     deployment except a retry, which the failed record's own pill precedes. */
-  if (busy) return <span className="mnid-pill mnid-pill-queued">Setting up…</span>
-  if (record?.status === 'deployed') {
-    return (
-      <span className="mnid-pill mnid-pill-registered">
-        {record.recovered
-          ? /* Never "submitted": this device submitted nothing. A recovered
-               record only exists once the indexer answered for it. */
-            `Recovered on ${NETWORK_LABELS[network]}`
-          : record.ledgerConfirmed === false
-            ? 'Submitted — awaiting the indexer'
-            : `Active on ${NETWORK_LABELS[network]}`}
-      </span>
-    )
-  }
-  if (record?.status === 'failed') {
-    return <span className="mnid-pill mnid-pill-failed">Deployment failed</span>
-  }
-  return <span className="mnid-pill mnid-pill-queued">Not deployed yet</span>
 }

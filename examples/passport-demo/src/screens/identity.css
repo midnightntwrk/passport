@@ -450,42 +450,32 @@
   .mnid-register { transition: none; }
 }
 
-.mnid-txs {
-  margin: 14px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 8px;
-}
-.mnid-tx {
+/* ---------------------------------------------------------------- */
+/* Your account — one calm line (ruled 2026/08/26)                    */
+/*                                                                    */
+/* The transaction rows that used to live here, and the address and   */
+/* deploy hash on the account card, were removed on the same ruling.  */
+/* Nothing on an informational surface is a hexadecimal string any    */
+/* more; the one address a sender needs is in Receive, as the thing   */
+/* you copy.                                                          */
+/* ---------------------------------------------------------------- */
+
+.mnid-account { padding: 16px 18px; }
+.mnid-account-line {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
-  min-height: 44px;
-  padding: 8px 12px;
-  border-radius: var(--mn-radius-md);
-  background: var(--mn-surface-raised);
-  border: var(--mn-hairline) solid var(--mn-border-hairline);
-}
-.mnid-tx-label {
-  color: var(--mn-text-muted);
-  font-size: 11px;
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  letter-spacing: -.01em;
+  line-height: 1.4;
 }
-.mnid-tx a,
-.mnid-tx code {
-  color: var(--mn-accent-ink);
-  font-family: var(--mn-font-mono);
-  font-size: 12px;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.mnid-tx a:hover { text-decoration: underline; }
+.mnid-account-line svg { flex: 0 0 auto; }
+.mnid-account-icon-ready { color: var(--mn-accent); }
+.mnid-account-icon-attention { color: var(--mn-text-secondary); }
+.mnid-account-line-busy { color: var(--mn-text-secondary); }
 
 .mnid-section {
   margin-top: 24px;

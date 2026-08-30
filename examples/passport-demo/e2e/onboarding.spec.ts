@@ -389,14 +389,27 @@ test('Home names the account contract, and never the wallet', async () => {
   await page.reload();
 
   /* The identity card: the name, its registry status, and — the whole point of
-     the account model — the sentence that says what the name RESOLVES to. */
+     the account model — the sentence that says where the name leads. */
   await expect(page.getByText(`${NAME}.night`).first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(/Registered on Stagenet/i)).toBeVisible();
-  await expect(
-    page.getByText(/Resolves to your Passport account contract \(7c2f4a19e6…d5e6f7\)\./),
-  ).toBeVisible();
-  // And the contract card beside it, active on the network the name is on.
-  await expect(page.getByText(/Active on Stagenet/i)).toBeVisible();
+  await expect(page.getByText(/People sending to this name reach your account\./)).toBeVisible();
+  // And the account beside it, in one line, with nothing else on it.
+  await expect(page.getByText(/Your account is ready/)).toBeVisible();
+
+  /* NOT ONE HEXADECIMAL STRING on the identity surface (ruled 2026/08/26).
+     The resolver's address, the resolver deploy, the registration, and the
+     account's own deployment were all printed here as truncated hashes; a
+     reviewer shown his own name was shown those instead. The transactions are
+     real and still linked from the activity trail — this surface is not where
+     a hash belongs. Asserted against the seeded values themselves, truncated
+     exactly as the card used to truncate them. */
+  const identityText = await visibleText();
+  for (const seededHex of ['aaaaaaaaaa', 'bbbbbbbbbb', 'cccccccccc', 'dddddddddd', '7c2f4a19e6']) {
+    expect(identityText).not.toContain(seededHex);
+  }
+  expect(identityText).not.toMatch(/Resolver deploy|Registration|Deployment/);
+  // Nor the machinery the card used to narrate around them.
+  expect(identityText).not.toMatch(/deploy|indexer|ledger hash|fee sponsor/i);
 
   /* The receiving surface. ONE address, and it is the account contract the
      name resolves to — under the account model nothing is ever sent to the

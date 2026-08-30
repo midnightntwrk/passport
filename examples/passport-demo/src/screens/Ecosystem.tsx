@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUpRight, ExternalLink, Loader2, Sparkles, Tag } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Loader2, Sparkles, Tag } from 'lucide-react'
 
 import type { AliasRecord } from '../identity/aliasStore.js'
 import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
@@ -14,9 +14,19 @@ import './identity.css'
  * (`variant="screen"`), and as the identity card at the top of Home
  * (`variant="card"`).
  *
- * The status pill is load-bearing. A registered claim shows both real
- * transaction ids, linked to the explorer; a queued claim shows the sentence
- * explaining why it is not on chain. The two never look alike.
+ * The status pill is load-bearing. A registered claim reads as registered; a
+ * queued claim shows the sentence explaining why it is not registered yet. The
+ * two never look alike, and a queued one is never called done.
+ *
+ * WHAT IS NOT HERE, AND WHY (ruled 2026/08/26)
+ * -------------------------------------------
+ * The two transaction rows — the resolver deploy and the registration — and the
+ * resolver's own address were removed from this card. A reviewer looking at
+ * their own name was shown two 64-character hexadecimal strings and the address
+ * a name points at, none of which is a thing a person holds, checks, or acts
+ * on: "we can hide all of that". The transactions still happened, are still
+ * real, and are still linked from the activity trail, which is where a hash
+ * belongs. What stays here is what the name IS and whether it works.
  */
 
 export interface EcosystemProps {
@@ -68,8 +78,8 @@ const REGISTER_PHASE_LABELS: Record<RegisterPhase, string> = {
   preparing: 'Preparing your Passport…',
   'confirm-passkey': 'Confirm with your passkey',
   'attaching-account': 'Setting up your account…',
-  'deploying-resolver': 'Deploying resolver…',
-  registering: 'Registering on-chain…',
+  'deploying-resolver': 'Setting your name up…',
+  registering: 'Registering your name…',
   confirming: 'Confirming…',
 }
 
@@ -120,45 +130,35 @@ export function EcosystemIdentity(props: EcosystemProps) {
           <p className="mnid-alias mnid-alias-muted">No name on this network yet</p>
         )}
 
-        {record?.status === 'registered' ? (
-          <ul className="mnid-txs">
-            <TxRow
-              label="Resolver deploy"
-              txId={record.resolverDeployTxId}
-              network={record.network}
-            />
-            <TxRow label="Registration" txId={record.registerTxId} network={record.network} />
-          </ul>
-        ) : null}
-
         {/* WHAT THE NAME POINTS AT — stated for every registered record, and
             stated differently for the ones that predate the choice.
 
-            A name claimed from 2026/08/19 resolves to this Passport's
-            account-custody contract. Names claimed before that resolve to a
-            technical address of the transaction engine, because that was the
-            only path the code had; those records carry no `resolverTarget` at
-            all and are NOT back-filled. Saying so plainly is the point: an
-            older record is not broken, it is simply bound to a different
-            thing — and the copy no longer calls that thing a wallet, because a
-            Passport holder has an account, not one of those. */}
+            A name claimed from 2026/08/19 points at this Passport's account.
+            Names claimed before that point at an older part of this Passport,
+            because that was the only path the code had; those records carry no
+            `resolverTarget` at all and are NOT back-filled. Saying so plainly
+            is the point: an older record is not broken, it is simply bound to a
+            different thing.
+
+            The address it points AT used to be printed here beside the
+            sentence. It is gone (2026/08/26): the one address anybody needs is
+            offered in Receive, as the thing you copy, and a hexadecimal string
+            on a status card is not a fact a person can use. */}
         {record?.status === 'registered' ? (
           <p className="mnid-reason">
             {record.resolverTarget === 'contract'
-              ? `Resolves to your Passport account contract${
-                  record.resolverTargetHex ? ` (${shortHash(record.resolverTargetHex)})` : ''
-                }.`
+              ? 'People sending to this name reach your account.'
               : record.resolverTarget === 'wallet'
-                ? 'Resolves to one of this Passport’s technical addresses, not to your account.'
-                : 'Claimed before names bound to the account contract, so it resolves to one of ' +
-                  'this Passport’s technical addresses rather than to your account.'}
+                ? 'This name points at an older part of this Passport, not at your account.'
+                : 'Claimed before names pointed at your account, so it reaches an older part of ' +
+                  'this Passport instead.'}
           </p>
         ) : null}
 
         {record?.status === 'registered' && record.registryConfirmed === false ? (
           <p className="mnid-reason">
-            Both transactions were submitted and returned real ids. The registry had not yet
-            reported the name when this view was written — reopen Passport to re-check.
+            Your name was submitted and accepted. It had not been reported back yet when this was
+            written — reopen Passport to re-check.
           </p>
         ) : null}
 
@@ -253,35 +253,11 @@ function StatusPill({ record, network }: { record: AliasRecord; network: Passpor
     )
   }
   if (record.status === 'queued') {
-    return <span className="mnid-pill mnid-pill-queued">Queued — not yet on-chain</span>
+    /* "Queued" is the honest word and it stays. A name that is waiting is
+       never shown as one that is done (ruled 2026/08/25). */
+    return <span className="mnid-pill mnid-pill-queued">Queued — not registered yet</span>
   }
   return <span className="mnid-pill mnid-pill-failed">Not registered</span>
-}
-
-function TxRow({
-  label,
-  txId,
-  network,
-}: {
-  label: string
-  txId: string | undefined
-  network: string
-}) {
-  if (!txId) return null
-  const url = explorerUrl(network, txId)
-  return (
-    <li className="mnid-tx">
-      <span className="mnid-tx-label">{label}</span>
-      {url ? (
-        <a href={url} target="_blank" rel="noreferrer" title={txId}>
-          {shortHash(txId)}
-          <ExternalLink size={12} aria-hidden="true" />
-        </a>
-      ) : (
-        <code title={txId}>{shortHash(txId)}</code>
-      )}
-    </li>
-  )
 }
 
 /** The full-screen entry view shown at the end of onboarding. */

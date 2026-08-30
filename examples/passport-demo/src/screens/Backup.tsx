@@ -229,7 +229,7 @@ export default function BackupScreen(props: BackupProps) {
           </div>
           <p className="mnid-lede">
             One encrypted file holding what this browser knows and cannot work out again:
-            the name you claimed, your account contract, and anything apps have granted you.
+            the name you claimed, your account, and anything apps have granted you.
             Chain sync state is left out — a new device rebuilds it from the
             chain.
           </p>
@@ -314,7 +314,7 @@ export default function BackupScreen(props: BackupProps) {
           ) : holdings === null ? null : heldRecords === 0 ? (
             <p className="mnid-foot">
               <Info size={13} aria-hidden="true" />
-              This browser holds no name claim, no account contract, and no rewards yet, so there
+              This browser holds no name, no account, and no rewards yet, so there
               is nothing to back up.
             </p>
           ) : (
@@ -450,7 +450,7 @@ export default function BackupScreen(props: BackupProps) {
                   : 'Restored from this backup file, which carries no readable date'}
               </p>
               <p>
-                Names: {restored.aliases.restored} of {restored.aliases.found}. Contracts:{' '}
+                Names: {restored.aliases.restored} of {restored.aliases.found}. Accounts:{' '}
                 {restored.passportContracts.restored} of {restored.passportContracts.found}.
                 Rewards: {restored.incentives.restored} of {restored.incentives.found}.
               </p>
@@ -477,15 +477,15 @@ export default function BackupScreen(props: BackupProps) {
                   did. See `confirmRestoredContracts` in App.tsx. */}
               {restored.ledgerCheck === undefined ? (
                 <p>
-                  The restored contract records were not re-checked against the chain, so each
-                  is a record, not a proof.
+                  The restored account records were not re-checked against the network, so
+                  each is a record, not a proof.
                 </p>
               ) : restored.ledgerCheck.ran ? (
                 <p>
                   Checked against {restored.ledgerCheck.network}:{' '}
-                  {restored.ledgerCheck.confirmed} contract record(s) confirmed by the indexer
+                  {restored.ledgerCheck.confirmed} account record(s) confirmed by the network
                   {restored.ledgerCheck.unconfirmed > 0
-                    ? `, ${restored.ledgerCheck.unconfirmed} not answered for and now marked awaiting the indexer — a record, not a proof`
+                    ? `, ${restored.ledgerCheck.unconfirmed} not answered for and now marked as awaiting an answer — a record, not a proof`
                     : ''}
                   {restored.ledgerCheck.otherNetworks > 0
                     ? `, ${restored.ledgerCheck.otherNetworks} left unchecked because they belong to another network`
@@ -494,8 +494,8 @@ export default function BackupScreen(props: BackupProps) {
                 </p>
               ) : (
                 <p>
-                  The restored contract records were not re-checked against the chain:{' '}
-                  {restored.ledgerCheck.reason} Until the indexer answers for one, it is a
+                  The restored account records were not re-checked against the network:{' '}
+                  {restored.ledgerCheck.reason} Until the network answers for one, it is a
                   record, not a proof.
                 </p>
               )}
@@ -504,10 +504,10 @@ export default function BackupScreen(props: BackupProps) {
                   in `../identity/backup.ts`. */}
               {restored.registryCheck === undefined || !restored.registryCheck.ran ? null : (
                 <p>
-                  Names re-checked against the registry: {restored.registryCheck.confirmed}{' '}
+                  Names re-checked: {restored.registryCheck.confirmed}{' '}
                   confirmed
                   {restored.registryCheck.unconfirmed > 0
-                    ? `, ${restored.registryCheck.unconfirmed} still awaiting the registry — restored as a record, not as a confirmed identity`
+                    ? `, ${restored.registryCheck.unconfirmed} still awaiting confirmation — restored as a record, not as a confirmed identity`
                     : ''}
                   {restored.registryCheck.otherNetworks > 0
                     ? `, ${restored.registryCheck.otherNetworks} on a network Passport does not read names from`
@@ -518,7 +518,7 @@ export default function BackupScreen(props: BackupProps) {
                       to be passed over in silence while "Names: 2 of 2" stood
                       above it. */}
                   {restored.registryCheck.notRegistered > 0
-                    ? `, ${restored.registryCheck.notRegistered} with no registration for the registry to answer for`
+                    ? `, ${restored.registryCheck.notRegistered} with no registration to confirm`
                     : ''}
                   .
                 </p>

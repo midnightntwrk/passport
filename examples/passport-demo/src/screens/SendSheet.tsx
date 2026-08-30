@@ -562,7 +562,7 @@ export default function SendSheet(props: SendSheetProps) {
     phase === 'checking'
       ? 'Checking your account’s balance and the fee sponsor.'
       : phase === 'connecting'
-        ? 'Opening your account contract and verifying it against this build.'
+        ? 'Opening your account and checking it against this build.'
         : phase === 'confirming'
           ? 'Submitted. Waiting for the network to report the transaction.'
           : provingMode === 'http'
@@ -830,7 +830,7 @@ export default function SendSheet(props: SendSheetProps) {
                     : holdings === null
                       ? 'Reading which shielded tokens this Passport holds…'
                       : holdings.length === 0
-                        ? 'This Passport’s account holds no shielded tokens, so there is nothing to pay a shielded address with. Shielded tokens are minted by contracts; NIGHT is unshielded and never appears here.'
+                        ? 'This Passport’s account holds no shielded tokens, so there is nothing to pay a shielded address with. NIGHT is unshielded and never appears here.'
                         : `${(selectedHolding?.amount ?? 0n).toString()} units of this token available. A shielded token has no decimal scale on the ledger, so this is a whole-unit count. The network fee does not come out of it, so the whole balance can go.`}
                 </span>
               ) : (
@@ -838,7 +838,7 @@ export default function SendSheet(props: SendSheetProps) {
                   {availableBalance === null
                     ? balanceUnreadable
                       ? 'The balance could not be read, so sending is disabled until it can be.'
-                      : 'The balance is still being read from the indexer, so nothing is capped yet.'
+                      : 'Your balance is still being read, so nothing is capped yet.'
                     : `${availableBalance} NIGHT available in your account. The network fee does not come out of it, so the whole balance can go.`}
                 </span>
               )}

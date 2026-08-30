@@ -89,7 +89,7 @@ export default function NotificationToggle(props: NotificationToggleProps) {
         if (answer === 'granted') {
           void notify(
             'Notifications are on',
-            'Passport will tell you when NIGHT arrives, and when your name and account contract land on chain.',
+            'Passport will tell you when NIGHT arrives, and when your name and your account are ready.',
             { tag: 'passport-notifications-on' },
           )
         }

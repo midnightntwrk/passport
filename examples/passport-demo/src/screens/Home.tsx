@@ -1,16 +1,17 @@
 import {
   AlertTriangle,
   ArrowDownLeft,
+  Banknote,
   Check,
   Coins,
   Copy,
   Layers,
   LogOut,
+  Moon,
   RefreshCw,
   Send,
   SendHorizontal,
   ShieldCheck,
-  Wallet,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
@@ -48,8 +49,8 @@ export interface HomeScreenProps {
    */
   aliasLabel?: string | null
   /**
-   * The ecosystem identity card: the name held on this network with its status,
-   * its real transaction ids, and everything redeemed. Omit to hide the card.
+   * The ecosystem identity card: the name held on this network with its status
+   * and everything redeemed. Omit to hide the card.
    */
   identity?: {
     record: AliasRecord | null
@@ -71,16 +72,16 @@ export interface HomeScreenProps {
       | null
   } | null
   /**
-   * The Passport account-custody contract (C1) on the active network: its
-   * status, its real address and deployment transaction, and the deploy action.
+   * Whether this Passport's account is ready, being set up, or in trouble —
+   * one line, and the retry when a set-up attempt failed. The address and the
+   * deployment hash it used to carry went on 2026/08/26; see
+   * `PassportContract.tsx`.
    *
-   * Omit to hide the card. It is omitted rather than disabled whenever no
-   * passkey wallet session is open, on the same principle as the Send seam: a
-   * surface that cannot act should not be on screen implying it nearly could.
-   * Deploying is NOT part of onboarding — the card simply sits below the
-   * identity card, doing nothing until the user asks.
+   * Omit to hide it. It is omitted rather than disabled whenever no passkey
+   * session is open, on the same principle as the Send seam: a surface that
+   * cannot act should not be on screen implying it nearly could.
    */
-  passportContract?: Omit<PassportContractCardProps, 'network'> | null
+  passportContract?: PassportContractCardProps | null
   /**
    * What this Passport's account-custody contract holds — the ONLY money this
    * screen shows since 2026/08/24.
@@ -433,7 +434,7 @@ export default function HomeScreen(props: HomeScreenProps) {
         {account ? (
           <div className="mnhome-assets">
             <BalanceCard
-              icon={<Wallet size={14} aria-hidden="true" />}
+              icon={<Moon size={14} aria-hidden="true" />}
               label="NIGHT"
               value={account.nightBalance}
               unit="native token"
@@ -481,7 +482,7 @@ export default function HomeScreen(props: HomeScreenProps) {
         {legacyFunds ? (
           <article className="mnhome-card">
             <p className="mnhome-card-head">
-              <Wallet size={14} aria-hidden="true" />
+              <Banknote size={14} aria-hidden="true" />
               <span className="mnhome-micro">Money outside your account</span>
             </p>
             <p className="mnhome-card-unit">
@@ -517,11 +518,9 @@ export default function HomeScreen(props: HomeScreenProps) {
           />
         ) : null}
 
-        {/* The account-custody contract, directly beneath the name it belongs
-            to: same card language, same status-pill discipline. */}
-        {passportContract ? (
-          <PassportContractCard network={network} {...passportContract} />
-        ) : null}
+        {/* Whether the account behind the name is ready — one line, directly
+            beneath the name it belongs to. */}
+        {passportContract ? <PassportContractCard {...passportContract} /> : null}
 
         {/* The applications, directly below the wallet summary — the same
             registry, cards, and in-Passport browser as the Apps tab. */}

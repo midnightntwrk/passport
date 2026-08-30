@@ -1024,12 +1024,6 @@ export default function PassportDemo() {
    * so a joining caller cannot write a duplicate.
    */
   const contractDeploysInFlight = useRef(new Map<string, Promise<PassportContractDeployment>>());
-  /**
-   * How the deployment fee would be paid, in the send sheet's own words. Read
-   * from the wallet's advisory `feeReadiness()` probe — never assumed, and
-   * cleared to null when the wallet could not tell us.
-   */
-  const [contractFeeNote, setContractFeeNote] = useState<string | null>(null);
   /** The pending per-network reclaim conflict, when the target says "taken". */
   const [reclaim, setReclaim] = useState<{ target: PassportNetwork; alias: string } | null>(null);
   const [reclaimBusy, setReclaimBusy] = useState(false);
@@ -2403,57 +2397,6 @@ export default function PassportDemo() {
       live = false;
     };
   }, [localWalletStatus]);
-
-  /**
-   * The contract card's fee sentence, read from the wallet's own advisory
-   * `feeReadiness()` probe — the SAME probe the send sheet quotes, so the two
-   * surfaces can never tell different stories about who pays.
-   *
-   * Deliberately the send sheet's wording, including its hedging: `sponsored`
-   * earns "expected to be covered" because the probe is a prediction and a
-   * sponsor can drain between this quote and the submit. There is no third
-   * sentence, because there is no second fee payer — an unsponsored fee is a
-   * refusal, not a bill. A wallet that cannot answer leaves the note null
-   * rather than guessing at a mode.
-   */
-  useEffect(() => {
-    /* The same condition `localSessionActive` expresses, spelled out because
-       that binding is derived further down the component than this effect. */
-    if (localWalletStatus !== 'ready' || localSurfaces === null || contractBusy) return undefined;
-    const handle = localWalletRef.current;
-    if (!handle) return undefined;
-    /* A deployed contract has no deploy action, so it has no fee sentence —
-       and `feeReadiness()` probes the sponsor over the network. Asking who
-       would pay for a deployment that already happened is a request nobody
-       reads the answer to. */
-    if (
-      profile &&
-      contractRecords[
-        passportContractRecordKey(profile.passkey.credentialId, handle.network.networkId)
-      ]?.status === 'deployed'
-    ) {
-      setContractFeeNote(null);
-      return undefined;
-    }
-    let live = true;
-    void (async () => {
-      try {
-        const readiness = await handle.feeReadiness();
-        if (!live) return;
-        setContractFeeNote(
-          readiness.mode === 'sponsored'
-            ? 'Network fee expected to be covered by the fee sponsor.'
-            : /* The sponsor's own refusal sentence, verbatim. */ readiness.reason,
-        );
-      } catch {
-        // "We could not tell" must not be printed as a fee mode.
-        if (live) setContractFeeNote(null);
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, [contractBusy, contractRecords, localSurfaces, localWalletNetworkId, localWalletStatus, profile]);
 
   /**
    * Re-asks the indexer, ONCE, for the ledger hash of a deployment whose
@@ -4705,11 +4648,11 @@ export default function PassportDemo() {
    * the network the wallet signs on, so a browsing switch cannot make it lie.
    */
   const contractDeployDisabledReason = !localSessionActive
-    ? 'Sign in with your passkey to open Passport before deploying your contract.'
+    ? 'Sign in with your passkey to open Passport before setting your account up.'
     : selectedNetwork !== walletPresentedNetwork
-      ? `This Passport signs on ${signingNetworkLabel}, so its contract can only be deployed there.`
+      ? `This Passport works on ${signingNetworkLabel}, so its account can only be set up there.`
       : walletStillSyncing
-        ? 'Passport is still syncing. Deployment opens once the sync completes.'
+        ? 'Passport is still catching up. Setting up again opens once it has.'
         : null;
   /**
    * The card. Present only when a passkey wallet session is genuinely open and
@@ -4751,7 +4694,6 @@ export default function PassportDemo() {
           phase: contractPhase,
           disabledReason:
             activeContractRecord?.status === 'failed' ? contractDeployDisabledReason : null,
-          feeNote: activeContractRecord?.status === 'failed' ? contractFeeNote : null,
         }
       : null;
   /**

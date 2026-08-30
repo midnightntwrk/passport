@@ -337,14 +337,14 @@ export default function AppsScreen(props: AppsScreenProps) {
               strokeWidth={2}
               aria-hidden="true"
             />
-            Loading the 1AM registry…
+            Loading the 1AM app directory…
           </p>
         ) : null}
 
         {state === 'ready' && stale ? (
           <div className="mnapps-status mnapps-status-stale" role="status">
             <span>
-              The 1AM registry could not be reached. Showing a small built-in
+              The 1AM app directory could not be reached. Showing a small built-in
               list instead.
             </span>
             <button
@@ -387,16 +387,15 @@ export default function AppsScreen(props: AppsScreenProps) {
         {empty ? (
           <p className="mnapps-empty">
             {query
-              ? `No app in the registry matches “${query}”.`
-              : 'The registry returned no apps.'}
+              ? `No app matches “${query}”.`
+              : 'No apps are listed right now.'}
           </p>
         ) : null}
 
         <p className="mnapps-note">
-          Passport cannot inject a wallet provider into an app served from another origin
-          — the browser's same-origin policy forbids it, and no framework works
-          around that. Apps that speak the Passport profile protocol ask over
-          postMessage instead, and every request surfaces here for your approval.
+          Passport cannot reach inside an app that is served from another site — every
+          browser forbids it, and no framework works around that. Apps built for Passport
+          ask you directly instead, and every request appears here for your approval.
         </p>
       </section>
 

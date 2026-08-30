@@ -8,7 +8,6 @@ import {
   PenLine,
   ShieldCheck,
   TriangleAlert,
-  Wallet,
   X,
 } from 'lucide-react'
 import {
@@ -703,8 +702,8 @@ export default function AppBrowser(props: AppBrowserProps) {
           <div className="mnapps-frame-invalid" role="alert">
             <TriangleAlert size={20} strokeWidth={2} aria-hidden="true" />
             <p>
-              This registry entry does not carry a usable web address on a
-              separate origin, so Passport will not open it.
+              This app does not list a usable web address on a separate site, so
+              Passport will not open it.
             </p>
           </div>
         )}
@@ -892,7 +891,7 @@ export default function AppBrowser(props: AppBrowserProps) {
           >
             <header className="mnapps-sheet-head">
               <span className="mnapps-sheet-mark" aria-hidden="true">
-                <Wallet size={19} strokeWidth={2} />
+                <ShieldCheck size={19} strokeWidth={2} />
               </span>
               <div>
                 <p>Passport</p>

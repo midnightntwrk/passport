@@ -225,7 +225,7 @@ function ReclaimStatus({
     return (
       <p className="mnid-status mnid-status-checking" role="status">
         <Loader2 className="mnid-spin" size={13} aria-hidden="true" />
-        <span>Checking the registry…</span>
+        <span>Checking that name…</span>
       </p>
     )
   }
@@ -251,7 +251,7 @@ function ReclaimStatus({
   return (
     <p className="mnid-status mnid-status-error" role="status">
       <span className="mnid-status-dot" aria-hidden="true" />
-      <span>The registry cannot be reached right now; your name will be queued.</span>
+      <span>Names cannot be checked right now; your name will be queued.</span>
     </p>
   )
 }

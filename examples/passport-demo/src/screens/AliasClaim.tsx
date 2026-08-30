@@ -121,7 +121,7 @@ const PHASE_COPY: Record<AliasClaimProgress['phase'], (domain: string) => string
   'attaching-account': () => 'Setting up your account…',
   'deploying-resolver': () => "Deploying your name's resolver…",
   registering: (domain) => `Registering ${domain}…`,
-  confirming: () => 'Waiting for the registry to confirm…',
+  confirming: () => 'Confirming your name…',
 }
 
 /**
@@ -212,7 +212,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
 
   const queueReasonForNetwork = `Passport signs and submits on ${signingNetworkLabel} only, so this name is reserved for you locally but is NOT registered on ${NETWORK_LABELS[networkId]}.`
   const queueReasonForRegistry = isUnreachable
-    ? `The .night registry on ${NETWORK_LABELS[networkId]} could not be reached when the name was chosen: ${
+    ? `Passport could not check names on ${NETWORK_LABELS[networkId]} when this one was chosen: ${
         availability?.status === 'unreachable' ? availability.detail : 'no detail reported'
       }`
     : ''
@@ -348,7 +348,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
           <div className="mnid-panel" role="status">
             <p className="mnid-panel-head">
               <Wifi size={15} aria-hidden="true" />
-              The registry cannot be reached right now
+              Names cannot be checked right now
             </p>
             <p>
               Your name will be queued. Passport keeps it against{' '}
@@ -436,7 +436,7 @@ function AvailabilityLine({
     return (
       <p className="mnid-status mnid-status-checking" role="status">
         <Loader2 className="mnid-spin" size={13} aria-hidden="true" />
-        <span>Checking the registry…</span>
+        <span>Checking that name…</span>
       </p>
     )
   }
@@ -467,7 +467,7 @@ function AvailabilityLine({
   return (
     <p className="mnid-status mnid-status-error" role="status">
       <span className="mnid-status-dot" aria-hidden="true" />
-      <span>The registry cannot be reached right now; your name will be queued.</span>
+      <span>Names cannot be checked right now; your name will be queued.</span>
     </p>
   )
 }
