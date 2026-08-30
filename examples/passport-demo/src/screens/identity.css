@@ -112,6 +112,30 @@
   border-color: var(--mn-accent);
   box-shadow: var(--mn-shadow-accent);
 }
+
+/* THE RING GOES ON THE PILL, NOT ON THE INPUT.
+   The input is a rectangle stretched across a pill, so a ring drawn around
+   IT is a rectangle: on the deployed site the focused field wore a hard
+   square outline that cut the corners off the pill and sliced through the
+   ".night" suffix, in both themes. `.mnid-field input { outline: 0 }` was
+   meant to prevent exactly that and could not — `styles.css` sets
+   `input:focus-visible { outline: 2px solid #fff }` globally, the two
+   selectors weigh the same, and that stylesheet is imported last.
+
+   So the input's outline is suppressed at a weight that wins, and the ring
+   is drawn on the pill instead, where it follows the pill's own radius.
+   `:focus-visible` on the input, not `:focus-within` on the pill: the ring
+   belongs to the keyboard, and a pointer user who has just tapped the field
+   already has the accent border below as their answer. */
+.mnid-field input:focus,
+.mnid-field input:focus-visible {
+  outline: none;
+}
+.mnid-field:has(input:focus-visible) {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 3px;
+}
+
 .mnid-field-invalid { border-color: var(--mn-border-medium); }
 
 .mnid-field input {
@@ -120,7 +144,6 @@
   height: 56px;
   padding: 0 6px 0 20px;
   border: 0;
-  outline: 0;
   color: var(--mn-text-primary);
   background: transparent;
   font-family: var(--mn-font-body);
