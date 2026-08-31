@@ -84,6 +84,21 @@
  * debounce, the resolving state, and the confirmation chip stay out with the
  * rest of the `.tsx`.
  *
+ * `src/lib/passkeyRecovery.ts` went IN on 2026/08/30, the day it was written,
+ * and it is in the denominator because it is the rule that decides whether a
+ * person who cannot sign in is offered a way forward or only an explanation.
+ * Both ways of getting it wrong are user-visible and neither is loud: too
+ * cautious and the reported dead end comes straight back — records here, no
+ * credential the keystore will produce, and a screen that can only describe
+ * that; too eager and Passport suggests enrolling a second passkey to somebody
+ * whose first one worked perfectly and whose actual failure was a decryption or
+ * a chain read. It holds no DOM, no React, no WebAuthn, and deliberately no
+ * import of `backend.ts` — the authenticator's reason is passed in as a string
+ * — so every branch is drilled directly in `src/lib/passkeyRecovery.test.ts`.
+ * The two `catch` blocks in `App.tsx` that consult it, and the panel in
+ * `Onboarding.tsx` that renders its answer, stay out with the rest of the app
+ * shell and the `.tsx`.
+ *
  * `src/lib/feeReadinessPoll.ts` went IN on 2026/08/25 rather than out with the
  * screens it serves: it is the sponsor watcher, it holds no DOM and no React,
  * and its whole contract — probe now, probe again every five seconds, publish
@@ -192,6 +207,7 @@ export default mergeConfig(
           'src/lib/feeReadinessPoll.ts',
           'src/lib/networks.ts',
           'src/lib/notifications.ts',
+          'src/lib/passkeyRecovery.ts',
           'src/lib/qrScan.ts',
           'src/lib/recipientName.ts',
           'src/lib/sponsor.ts',
