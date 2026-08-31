@@ -23,9 +23,11 @@ export {
   parsePassportTxRequest,
 } from 'passport-demo-backend';
 export type {
+  AssertPassportPasskeyOptions,
   DiscoveredPassportPasskey,
   EnrolledPassportPasskey,
   PassportAccountBlob,
+  PassportAccountBlobWriteOutcome,
   PassportAccountBlobWriteResult,
   PassportIncentiveReport,
   PassportPasskeyOnboarding,

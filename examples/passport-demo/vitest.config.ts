@@ -19,6 +19,17 @@
  *
  * WHAT IS OUT, AND WHY — `src/lib`
  * --------------------------------
+ * `src/lib/accountOnPasskey.ts` went IN on 2026/08/31, the day it was written,
+ * and it is in the denominator because it decides whether somebody is asked to
+ * touch an authenticator. It is the rule that replaced a blob write fired at
+ * the end of a name claim — a whole user-verified assertion, which arrived as
+ * a passkey prompt sitting on top of a finished Home screen that the reader
+ * had pressed nothing to summon. Every branch in it is either a way of asking
+ * for a ceremony nobody wanted or a way of silently never writing at all, and
+ * both have been met. It holds no DOM, no React, no storage, and no WebAuthn:
+ * a profile in, a decision out, drilled directly in
+ * `src/lib/accountOnPasskey.test.ts`.
+ *
  * `src/lib/appBusy.ts` went IN on 2026/08/26, the day it was written. It is the
  * counter that answers "is Passport in the middle of something?" for the
  * service-worker update path in `src/pwa.tsx`, and getting that answer wrong in
@@ -241,6 +252,7 @@ export default mergeConfig(
         /* The denominator. See the module header for every module that is not
            in it and the reason it is not. */
         include: [
+          'src/lib/accountOnPasskey.ts',
           'src/lib/activation.ts',
           'src/lib/activityFeed.ts',
           'src/lib/address.ts',

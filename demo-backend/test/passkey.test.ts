@@ -346,8 +346,118 @@ describe('WebAuthn largeBlob account metadata', () => {
     expect('write' in (extensions.largeBlob ?? {})).toBe(false);
     expect(extensions.prf).toBeDefined();
     expect(once.accountBlob).toEqual(blob);
+    // Nothing was asked to be written, so there is no write to report.
+    expect(once.accountBlobWritten).toBeNull();
     // No second ceremony was needed to obtain it.
     expect(assertions).toBe(1);
+    once.dispose();
+  });
+
+  /* THE RIDE-ALONG (2026/08/31). A largeBlob write is only possible during an
+     assertion and may not be paired with a read, so on its own it is a whole
+     user-verified ceremony — which arrived, for the product owner, as a passkey
+     prompt on a finished Home screen they had pressed nothing to summon. These
+     three hold the alternative: the write is carried by an assertion that was
+     happening anyway, it costs nothing, and what became of it is reported
+     precisely enough that a caller knows whether to try again. */
+  const assertionExtensions = (
+    options: CredentialRequestOptions | undefined,
+  ): { prf?: unknown; largeBlob?: { read?: boolean; write?: unknown } } =>
+    (options?.publicKey as Record<string, unknown>).extensions as {
+      prf?: unknown;
+      largeBlob?: { read?: boolean; write?: unknown };
+    };
+
+  it('carries a blob on the sign-in assertion instead of a read, for no extra ceremony', async () => {
+    let capturedOptions: CredentialRequestOptions | undefined;
+    let assertions = 0;
+    replaceNavigator({
+      credentials: {
+        get: async (options: CredentialRequestOptions) => {
+          assertions += 1;
+          capturedOptions = options;
+          return {
+            rawId: new Uint8Array([1, 2, 3, 4]).buffer,
+            getClientExtensionResults: () => ({
+              prf: { results: { first: new Uint8Array(32).fill(4).buffer } },
+              largeBlob: { written: true },
+            }),
+          };
+        },
+      },
+    });
+
+    const once = await WebAuthnPrfKeyProvider.assertOnce(reference, {
+      writeAccountBlob: blob,
+    });
+    const extensions = assertionExtensions(capturedOptions);
+    // The write, and — because the specification forbids the pair — no read.
+    expect(extensions.largeBlob?.write).toBeInstanceOf(ArrayBuffer);
+    expect('read' in (extensions.largeBlob ?? {})).toBe(false);
+    // The PRF still rides along: this is the sign-in's own assertion.
+    expect(extensions.prf).toBeDefined();
+    expect(await once.deriveWalletSeed(scope)).toHaveLength(32);
+    expect(once.accountBlobWritten).toBe('written');
+    // An assertion that wrote read nothing, and does not pretend otherwise.
+    expect(once.accountBlob).toBeNull();
+    // ONE ceremony, which is the whole point.
+    expect(assertions).toBe(1);
+    once.dispose();
+  });
+
+  it('separates a refusal, which is retryable, from a platform that has no largeBlob', async () => {
+    const outcomeFor = async (largeBlob: unknown): Promise<string | null> => {
+      replaceNavigator({
+        credentials: {
+          get: async () => ({
+            rawId: new Uint8Array([1, 2, 3, 4]).buffer,
+            getClientExtensionResults: () => ({
+              prf: { results: { first: new Uint8Array(32).fill(4).buffer } },
+              ...(largeBlob === undefined ? {} : { largeBlob }),
+            }),
+          }),
+        },
+      });
+      const once = await WebAuthnPrfKeyProvider.assertOnce(reference, {
+        writeAccountBlob: blob,
+      });
+      const outcome = once.accountBlobWritten;
+      once.dispose();
+      return outcome;
+    };
+
+    // The extension answered and the write did not land: ask again next time.
+    expect(await outcomeFor({ written: false })).toBe('refused');
+    // The slice is absent altogether: this credential will never hold a blob.
+    expect(await outcomeFor(undefined)).toBe('unsupported');
+  });
+
+  it('falls back to the read rather than failing a sign-in over an unencodable blob', async () => {
+    /* An oversize payload is a programming error. It must not be the reason
+       somebody cannot get into their Passport, so the assertion sends exactly
+       what it would have sent with nothing offered. */
+    let capturedOptions: CredentialRequestOptions | undefined;
+    replaceNavigator({
+      credentials: {
+        get: async (options: CredentialRequestOptions) => {
+          capturedOptions = options;
+          return {
+            rawId: new Uint8Array([1, 2, 3, 4]).buffer,
+            getClientExtensionResults: () => ({
+              prf: { results: { first: new Uint8Array(32).fill(4).buffer } },
+            }),
+          };
+        },
+      },
+    });
+
+    const once = await WebAuthnPrfKeyProvider.assertOnce(reference, {
+      writeAccountBlob: { ...blob, alias: 'a'.repeat(MAX_ACCOUNT_BLOB_BYTES) },
+    });
+    const extensions = assertionExtensions(capturedOptions);
+    expect(extensions.largeBlob?.read).toBe(true);
+    expect('write' in (extensions.largeBlob ?? {})).toBe(false);
+    expect(once.accountBlobWritten).toBeNull();
     once.dispose();
   });
 

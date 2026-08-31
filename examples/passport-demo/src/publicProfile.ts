@@ -1,4 +1,5 @@
 import type { PassportPasskeyReference } from './backend.js';
+import type { PassportAccountOnPasskey } from './lib/accountOnPasskey.js';
 
 const DATABASE = 'midnight-passport';
 const STORE = 'public-profile';
@@ -29,6 +30,16 @@ export interface DemoPassportProfile {
    * rides on the sign-in assertion either way.
    */
   largeBlobSupported?: boolean;
+  /**
+   * The account-custody contract a claim bound to this Passport, and whether
+   * it has reached the passkey's largeBlob yet.
+   *
+   * Public metadata only — an address, a network, and a name. It is kept here
+   * rather than written at claim time because writing it is an assertion, and
+   * an assertion nobody asked for is a passkey prompt on a finished Home
+   * screen. See `src/lib/accountOnPasskey.ts` for the rule and the incident.
+   */
+  accountOnPasskey?: PassportAccountOnPasskey;
 }
 
 async function database(): Promise<IDBDatabase> {

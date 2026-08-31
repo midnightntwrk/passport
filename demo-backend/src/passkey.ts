@@ -178,6 +178,15 @@ export interface DiscoveredPassportPasskey {
    * on the same assertion that produced the PRF output.
    */
   accountBlob: PassportAccountBlob | null;
+  /**
+   * What became of a blob this assertion was asked to WRITE, or `null` when it
+   * was asked to write nothing — which is every assertion but the ride-along
+   * described on {@link AssertPassportPasskeyOptions.writeAccountBlob}.
+   *
+   * `'refused'` is retryable and `'unsupported'` is not: see
+   * {@link PassportAccountBlobWriteOutcome}.
+   */
+  accountBlobWritten: PassportAccountBlobWriteOutcome | null;
   /** Same bytes {@link WebAuthnPrfKeyProvider.deriveWalletSeed} would produce for `scope`. */
   deriveWalletSeed(scope: PassportStateScope): Promise<Uint8Array>;
   /** Same key {@link WebAuthnPrfKeyProvider.getKey} would derive for `scope` (uncached). */
@@ -238,6 +247,18 @@ export interface PassportAccountBlob {
  * runs to a couple of hundred bytes.
  */
 export const MAX_ACCOUNT_BLOB_BYTES = 2048;
+
+/**
+ * What one blob write did, in the three answers a caller acts on differently.
+ *
+ *   `'written'`      the authenticator stored it. Nothing more is owed.
+ *   `'refused'`      the extension is there and the write did not happen —
+ *                    RETRYABLE, because the next assertion may well succeed.
+ *   `'unsupported'`  the platform did not answer for largeBlob at all, which
+ *                    is a permanent property of this credential. Asking again
+ *                    can only cost somebody else's time.
+ */
+export type PassportAccountBlobWriteOutcome = 'written' | 'refused' | 'unsupported';
 
 /** What one write attempt did, and — when it did nothing — why. */
 export interface PassportAccountBlobWriteResult {
@@ -446,6 +467,7 @@ function oneShotFromPrf(
   credentialId: string,
   prfResult: ArrayBuffer,
   accountBlob: PassportAccountBlob | null = null,
+  accountBlobWritten: PassportAccountBlobWriteOutcome | null = null,
 ): DiscoveredPassportPasskey {
   let output: Uint8Array | null = new Uint8Array(prfResult);
   const take = (): Uint8Array => {
@@ -455,6 +477,7 @@ function oneShotFromPrf(
   return {
     credentialId,
     accountBlob,
+    accountBlobWritten,
     deriveWalletSeed: async (scope) => deriveWalletSeedBytes(take(), scope),
     deriveStateKey: async (scope) => deriveKey(take(), scope),
     dispose: () => {
@@ -488,6 +511,66 @@ function readExtensions(): AuthenticationExtensionsClientInputs {
     prf: { eval: { first: asArrayBuffer(PRF_SALT) } },
     largeBlob: { read: true },
   } as AuthenticationExtensionsClientInputs;
+}
+
+/**
+ * The same bag with the blob in place of the read — the RIDE-ALONG WRITE.
+ *
+ * The specification forbids `read` and `write` in one assertion, so this is a
+ * real either/or; it does not forbid `prf` alongside either, which is what
+ * makes a write free. Whoever asks for this is giving up the read, so it is
+ * only ever correct where the caller already holds what a read would have
+ * recovered — see {@link AssertPassportPasskeyOptions.writeAccountBlob}.
+ *
+ * `null` for a blob that will not encode. A payload over the ceiling is a
+ * programming error, not a reason to fail somebody's sign-in, so the caller
+ * falls back to the read it would otherwise have sent.
+ */
+function writeExtensions(
+  blob: PassportAccountBlob,
+): AuthenticationExtensionsClientInputs | null {
+  let payload: Uint8Array;
+  try {
+    payload = encodeAccountBlob(blob);
+  } catch {
+    return null;
+  }
+  return {
+    prf: { eval: { first: asArrayBuffer(PRF_SALT) } },
+    largeBlob: { write: asArrayBuffer(payload) },
+  } as AuthenticationExtensionsClientInputs;
+}
+
+/** Reads the three answers out of an assertion that carried a write. */
+function accountBlobWriteOutcome(
+  extension: PrfExtensionResults,
+): PassportAccountBlobWriteOutcome {
+  // The whole slice absent is the platform saying it has no largeBlob at all.
+  if (extension.largeBlob === undefined) return 'unsupported';
+  return extension.largeBlob.written === true ? 'written' : 'refused';
+}
+
+/** Options for {@link WebAuthnPrfKeyProvider.assertOnce}. */
+export interface AssertPassportPasskeyOptions {
+  /**
+   * A blob to WRITE onto the credential during this assertion, in place of
+   * reading the one already there. Absent — the norm — reads.
+   *
+   * WHY THIS EXISTS. A largeBlob write is only possible during an assertion,
+   * and pairing one with a read is forbidden, so on its own it costs a
+   * user-verified ceremony of its own: a passkey prompt out of nowhere for a
+   * piece of metadata the user never asked to save. Passport raised exactly
+   * that on the way to Home, and it is not a prompt this app is willing to
+   * charge anyone (2026/08/31). Carried HERE the write is free: the assertion
+   * was going to happen anyway, and the extension bag costs nothing.
+   *
+   * WHEN IT IS SAFE. Only when the caller already holds the record a read
+   * would have recovered — an account this browser has seen deployed. It then
+   * gives up nothing: {@link accountBlob} comes back `null` on this one
+   * assertion, and the recovery path it feeds does nothing for a browser that
+   * already knows its own contract.
+   */
+  writeAccountBlob?: PassportAccountBlob | null;
 }
 
 /**
@@ -728,11 +811,19 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
    * {@link deriveWalletSeed} pair — same PRF salt, same HKDF constants.
    *
    * Callers MUST call `dispose()`; the PRF output must never outlive the flow.
+   *
+   * `options.writeAccountBlob` turns this one assertion's largeBlob slice from
+   * a read into a write, at no extra cost and no extra prompt. See
+   * {@link AssertPassportPasskeyOptions}.
    */
   static async assertOnce(
     reference: PassportPasskeyReference,
+    options: AssertPassportPasskeyOptions = {},
   ): Promise<DiscoveredPassportPasskey> {
     const navigator = getNavigator();
+    /* Null both when nothing was offered and when what was offered will not
+       encode; either way this assertion reads, exactly as it always did. */
+    const write = options.writeAccountBlob ? writeExtensions(options.writeAccountBlob) : null;
     try {
       const assertion = (await navigator.credentials.get({
         publicKey: {
@@ -741,7 +832,7 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
             { type: 'public-key', id: asArrayBuffer(fromBase64(reference.credentialId)) },
           ],
           userVerification: 'required',
-          extensions: readExtensions(),
+          extensions: write ?? readExtensions(),
           ...(reference.rpId ? { rpId: reference.rpId } : {}),
         },
       })) as PublicKeyCredential | null;
@@ -753,7 +844,9 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
         // Targeted: the answer must come from the credential that was named.
         assertAnsweredAsRequested(reference.credentialId, assertion.rawId),
         result,
-        decodeAccountBlob(extension.largeBlob?.blob),
+        // An assertion that wrote read nothing — the two are exclusive.
+        write ? null : decodeAccountBlob(extension.largeBlob?.blob),
+        write ? accountBlobWriteOutcome(extension) : null,
       );
     } catch (error) {
       throw new Error(errorMessage(error));
@@ -821,14 +914,20 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
    * Writes the account blob onto a credential — ONE targeted assertion, and a
    * best effort that NEVER throws.
    *
-   * WHY A SEPARATE CEREMONY. The specification forbids `largeBlob.read` and
-   * `largeBlob.write` in the same assertion, and a write is only possible
-   * during `credentials.get` — never during `credentials.create`. So the blob
-   * cannot be written as part of the enrolment or the sign-in that reads it;
-   * it costs its own user-verified assertion. Callers should run it inside the
-   * user gesture that already earned a prompt (immediately after a successful
-   * claim), so the user experiences one continuous action rather than a prompt
-   * out of nowhere.
+   * IT COSTS A PROMPT, WHICH IS WHY PASSPORT NO LONGER CALLS IT (2026/08/31).
+   * A write is only possible during `credentials.get` and may not be paired
+   * with a read, so on its own it is a full user-verified assertion. This was
+   * fired at the end of a name claim, on the advice that it would ride the
+   * gesture that earned the claim's own prompt. It does not: a claim is
+   * minutes of chain work, and what the user actually met was a passkey prompt
+   * on a finished Home screen, for a piece of metadata they never asked to
+   * save. Passport now carries the blob on the next assertion it was going to
+   * make anyway — see {@link AssertPassportPasskeyOptions.writeAccountBlob} —
+   * so the write is free and unprompted.
+   *
+   * What remains here is the standalone write, for a caller that is NOT about
+   * to assert for another reason and has decided a prompt of its own is worth
+   * it. Do not call it on a path the user did not ask for.
    *
    * WHY IT NEVER THROWS. Everything this write buys is a nicety on a future
    * device. Nothing that has already happened — the deployed contract, the

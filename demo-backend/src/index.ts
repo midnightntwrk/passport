@@ -34,11 +34,13 @@ export {
   MemoryPassportEncryptedRecordStore,
 } from './privateState.js';
 export type {
+  AssertPassportPasskeyOptions,
   DiscoverPassportPasskeyOptions,
   DiscoveredPassportPasskey,
   EnrollPassportPasskeyOptions,
   EnrolledPassportPasskey,
   PassportAccountBlob,
+  PassportAccountBlobWriteOutcome,
   PassportAccountBlobWriteResult,
   PassportPasskeyOnboarding,
   PassportPasskeyDiscoveryFailure,

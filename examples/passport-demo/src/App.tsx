@@ -7,8 +7,16 @@ import {
   PassportStateInjection,
   WebAuthnPrfKeyProvider,
 } from './backend.js';
-import type { DiscoveredPassportPasskey, PassportAccountBlob } from './backend.js';
-
+import type {
+  DiscoveredPassportPasskey,
+  PassportAccountBlob,
+  PassportAccountBlobWriteOutcome,
+} from './backend.js';
+import {
+  accountToRemember,
+  pendingAccountBlob,
+  settledAccountOnPasskey,
+} from './lib/accountOnPasskey.js';
 import { compactAddress } from './lib/address.js';
 import { holdCriticalWork } from './lib/appBusy.js';
 import { normalisedColourHex, shortColour } from './lib/colour.js';
@@ -1736,15 +1744,17 @@ export default function PassportDemo() {
   /* ---------------------------------------------------------------------- */
 
   /**
-   * Records what the platform proved about largeBlob on this credential, in
-   * BOTH places that read it: the stored profile, so the next session knows,
-   * and this session's state, so a second claim in the same session does not
-   * re-ask a question already answered. A storage failure is a non-event —
-   * the worst it costs is one more prompt next time.
+   * Persists a patch to the stored profile in BOTH places that read it: the
+   * record on disk, so the next session knows, and this session's state, so a
+   * second claim does not re-ask a question already answered. A storage
+   * failure is a non-event — the worst it costs is one more attempt later.
    */
-  const rememberLargeBlobSupport = useCallback(
-    async (activeProfile: DemoPassportProfile, supported: boolean): Promise<void> => {
-      const updated: DemoPassportProfile = { ...activeProfile, largeBlobSupported: supported };
+  const patchProfile = useCallback(
+    async (
+      activeProfile: DemoPassportProfile,
+      patch: Partial<DemoPassportProfile>,
+    ): Promise<void> => {
+      const updated: DemoPassportProfile = { ...activeProfile, ...patch };
       setProfile((current) =>
         current && current.subjectId === activeProfile.subjectId ? updated : current,
       );
@@ -1754,67 +1764,63 @@ export default function PassportDemo() {
   );
 
   /**
-   * Writes this Passport's account-custody contract onto the passkey itself,
-   * so a device that has never seen this Passport can find it again.
+   * REMEMBERS the account this Passport now holds. Prompts for nothing.
    *
-   * ALWAYS BEST EFFORT, NEVER BLOCKING. The claim it follows has already
-   * succeeded on chain; nothing about it depends on this. So the whole thing
-   * is fire-and-forget: `writeAccountBlob` does not throw, whatever the
-   * platform does, and the outcome is recorded in the activity feed in the
-   * platform's own words rather than surfaced as a failure the user cannot act
-   * on.
+   * This is the whole of what a finished claim does about the passkey, and the
+   * change is deliberate (2026/08/31). It used to call `writeAccountBlob`
+   * here, fire-and-forget, on the reasoning that the write would ride the
+   * gesture that earned the claim's own prompt. It did not: a claim is minutes
+   * of chain work, a largeBlob write may not be paired with the read every
+   * other assertion makes, and so it was a second whole user-verified
+   * assertion. The product owner met it as a macOS passkey prompt sitting on
+   * top of a finished Home screen — name registered, account deployed,
+   * balances rendered — having pressed nothing to summon it.
    *
-   * WHY IT IS A SEPARATE CEREMONY. The WebAuthn specification allows a
-   * largeBlob write only during an assertion, and forbids pairing it with a
-   * read in the same one. The claim's own assertion happened before the
-   * contract existed and minutes of chain work ago, so there is no live user
-   * gesture left to ride on: this is a second prompt or it is nothing.
-   *
-   * WHICH IS WHY IT IS NOT ALWAYS ATTEMPTED. On a credential the platform said
-   * cannot hold a blob, the write is skipped entirely — it would cost a real
-   * prompt and achieve nothing. The first attempt that reports the extension
-   * missing writes that fact back to the profile, so nobody is asked twice for
-   * nothing.
+   * The bytes still reach the passkey. They go on during the next assertion
+   * the user asks for anyway (see {@link unlockLocalPassportProfile}), where
+   * the largeBlob slice is free and the read it displaces is worthless to a
+   * browser that already holds the record. Arriving on Home costs nothing.
    */
-  const rememberAccountOnPasskey = useCallback(
+  const noteAccountForPasskey = useCallback(
     async (
       activeProfile: DemoPassportProfile,
       account: { address: string; network: string },
       alias?: string,
     ): Promise<void> => {
-      if (activeProfile.largeBlobSupported === false) return;
-      const result = await WebAuthnPrfKeyProvider.writeAccountBlob(activeProfile.passkey, {
-        v: 1,
-        acc: { address: account.address, network: account.network },
-        ...(alias ? { alias } : {}),
-      });
-      if (result.written) {
-        addActivity({
-          label: 'Passport saved to your passkey',
-          detail:
-            'A new device signing in with this passkey can now find your Passport on its own. No keys were stored — only where to look.',
-          status: 'complete',
-          source: 'local',
-        });
-        if (activeProfile.largeBlobSupported !== true) {
-          await rememberLargeBlobSupport(activeProfile, true);
-        }
-        return;
-      }
+      const note = accountToRemember(activeProfile, account, alias);
+      if (!note) return;
+      await patchProfile(activeProfile, { accountOnPasskey: note });
+    },
+    [patchProfile],
+  );
+
+  /**
+   * Records what an assertion that CARRIED a write made of it, and says so
+   * once — in the activity trail, where the user can go and look.
+   *
+   * A refusal records nothing and is retried on the next assertion; a platform
+   * with no largeBlob at all is a permanent answer for this credential and
+   * stops the ride-along for good. Neither is surfaced: nothing the user did
+   * failed, and there is nothing for them to act on.
+   */
+  const settleAccountOnPasskey = useCallback(
+    async (
+      activeProfile: DemoPassportProfile,
+      outcome: PassportAccountBlobWriteOutcome | null,
+    ): Promise<void> => {
+      const patch = settledAccountOnPasskey(activeProfile, outcome);
+      if (!patch) return;
+      await patchProfile(activeProfile, patch);
+      if (outcome !== 'written') return;
       addActivity({
-        label: 'Passport not saved to your passkey',
-        detail: `${result.reason ?? 'The write did not happen.'} Nothing else is affected — your name and your account are unchanged.`,
-        status: 'blocked',
+        label: 'Passport saved to your passkey',
+        detail:
+          'A new device signing in with this passkey can now find your Passport on its own. No keys were stored — only where to look.',
+        status: 'complete',
         source: 'local',
       });
-      /* A platform without the extension is a permanent answer for this
-         credential; a refusal or a cancellation is not, and must stay
-         retryable. */
-      if (result.reason?.includes('does not implement')) {
-        await rememberLargeBlobSupport(activeProfile, false);
-      }
     },
-    [addActivity, rememberLargeBlobSupport],
+    [addActivity, patchProfile],
   );
 
   /**
@@ -2353,6 +2359,15 @@ export default function PassportDemo() {
    * Decrypting the stored state proves the passkey is the right one (and fails
    * loudly if the record belongs to another device); the wallet seed comes
    * from the very same assertion instead of a second prompt.
+   *
+   * AND, SINCE 2026/08/31, IT CARRIES THE ACCOUNT BLOB. A claim only notes the
+   * account it bound; the bytes go onto the credential here, in the largeBlob
+   * slice of an assertion that was happening anyway. That slice is either a
+   * read or a write and never both, so the trade is real — and it is free,
+   * because a browser holding this profile already knows its own contract and
+   * `recoverAccountFromPasskey` does nothing for it. The alternative was a
+   * ceremony of its own, which is the prompt this app raised on Home for a
+   * piece of metadata nobody asked to save. See `src/lib/accountOnPasskey.ts`.
    */
   const unlockLocalPassportProfile = async (): Promise<DemoPassportProfile> => {
     const existing = await resolveDefaultLocalProfile();
@@ -2377,8 +2392,17 @@ export default function PassportDemo() {
        still excludes this profile's credential, so a passkey that turns out to
        be alive after all is refused by the authenticator rather than replaced. */
     let handle: DiscoveredPassportPasskey;
+    /* What this Passport owes its passkey, if anything. `null` on every
+       session that owes nothing, and the assertion then reads as it always
+       has. */
+    const pendingBlob = pendingAccountBlob(existing);
     try {
-      handle = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.assertOnce(existing.passkey));
+      handle = await withPasskeyWatchdog(() =>
+        WebAuthnPrfKeyProvider.assertOnce(
+          existing.passkey,
+          pendingBlob ? { writeAccountBlob: pendingBlob } : {},
+        ),
+      );
     } catch (cause) {
       throw signInCeremonyFailure(cause);
     }
@@ -2390,8 +2414,13 @@ export default function PassportDemo() {
       await openLocalWalletWithSeed(seed, unlockScope, existing.passkey.credentialId);
       /* The blob rode in on the assertion above, so this costs no prompt. It
          does nothing at all unless this browser has no record of the contract
-         AND the indexer confirms the address. */
+         AND the indexer confirms the address — which is exactly why the
+         assertion above may spend its largeBlob slice writing instead. */
       await recoverAccountFromPasskey(existing.passkey.credentialId, handle.accountBlob);
+      /* What the write did, recorded rather than announced. Never awaited into
+         the sign-in's own outcome: a blob is a nicety, and a signed-in
+         Passport does not depend on one. */
+      void settleAccountOnPasskey(existing, handle.accountBlobWritten);
       return existing;
     } finally {
       handle.dispose();
@@ -3511,14 +3540,20 @@ export default function PassportDemo() {
            (see its own comment); here it is fired and forgotten. */
         void fundAccountOnce(contractAddress);
 
-        /* (6) Attach the account to the passkey, so a device that has never
-           seen this Passport can find the contract again. Deliberately NOT
-           awaited: the name is registered and the contract is deployed, and a
-           largeBlob write is a separate assertion the specification will not
-           let us fold into either of them. It must never hold the claim open
-           or be able to fail it — see `rememberAccountOnPasskey`, which does
-           not throw. */
-        void rememberAccountOnPasskey(
+        /* (6) REMEMBER the account, so a device that has never seen this
+           Passport can find the contract again — and remember it WITHOUT
+           asking the user for anything.
+
+           This used to write the blob onto the passkey here, which is a second
+           user-verified assertion the specification will not let us fold into
+           the claim's own. The gesture it was supposed to ride was minutes
+           gone by then, so what it really produced was a passkey prompt on a
+           finished Home screen that nobody had asked for (reported repeatedly;
+           fixed 2026/08/31). The write now rides the next assertion the user
+           makes — see `noteAccountForPasskey` and
+           `unlockLocalPassportProfile`. Still not awaited, and still unable to
+           fail the claim: it is a storage write that swallows its own error. */
+        void noteAccountForPasskey(
           activeProfile,
           { address: contractAddress, network },
           alias,
@@ -3529,7 +3564,7 @@ export default function PassportDemo() {
         contractRootSecret.fill(0);
       }
     },
-    [addActivity, deployPassportContractOnce, fundAccountOnce, rememberAccountOnPasskey],
+    [addActivity, deployPassportContractOnce, fundAccountOnce, noteAccountForPasskey],
   );
 
   /**
