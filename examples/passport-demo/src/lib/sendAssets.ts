@@ -22,6 +22,20 @@
  * of recipient it can be paid to and — in the asset's own name — what to say
  * about one it cannot.
  *
+ * THE RECIPIENT TYPE DECIDES TOO (2026/08/31, later the same day)
+ * ----------------------------------------------------------------
+ * The first pass of the inversion left one dead end in it: a shielded asset was
+ * refused a `.night` name outright, in a sentence claiming that a name is
+ * always paid in NIGHT. That was a fact about what had been BUILT and not about
+ * the ledger, and stating it as a fact about the ledger is exactly the kind of
+ * confident wrong sentence this module exists to avoid.
+ *
+ * So a rule is now asked about the PAIR — the chosen asset and the kind of
+ * recipient in the field — and it is told what the Passport behind the sheet
+ * can actually do ({@link SendCapabilities}). The agreed model then reads
+ * straight off {@link routeFor}: a shielded ADDRESS takes a withdrawal only, a
+ * PASSPORT takes the account route, in either asset.
+ *
  * The address TAXONOMY is not here and does not move: the wallet SDK's own
  * codec still decides whether a string is an address, whose network it belongs
  * to, and which of the two ledgers it names. This module only checks that
@@ -183,6 +197,30 @@ export function buildSendAssets(input: BuildSendAssetsInput): SendAsset[] {
   return assets;
 }
 
+/**
+ * What the Passport behind the sheet can actually do, as far as these rules
+ * care.
+ *
+ * There is exactly one of these, and it exists because "where may this asset
+ * go" stopped being a question about the LEDGER alone on 2026/08/31. Paying a
+ * name in a shielded asset is possible — the deposit side of an account is
+ * permissionless and takes a whole note — but it is a route the host has to
+ * implement and hand in, and a build without it must refuse a name rather than
+ * offer one it cannot pay. So the rule is told what the host can do, instead of
+ * guessing from the asset alone.
+ *
+ * It defaults to what a host that supplies nothing can do, which is the honest
+ * default: a sheet with no shielded-name seam behind it refuses a name for a
+ * shielded asset, exactly as every build before that date did.
+ */
+export interface SendCapabilities {
+  /** Whether a `.night` name can be paid in a shielded asset. */
+  shieldedToName: boolean;
+}
+
+/** What a host that supplies no shielded-name seam can do. */
+const NO_CAPABILITIES: SendCapabilities = { shieldedToName: false };
+
 /** What a recipient field currently contains, as far as this rule cares. */
 export type SendRecipientKind =
   /** An address the SDK's codec has already placed on one of the two ledgers. */
@@ -205,25 +243,42 @@ export interface RecipientRule {
 /**
  * Where an asset may be sent.
  *
- * Two rules, and both of them are facts about the ledger rather than choices
- * this app made:
+ * THE LEDGER'S HALF, which no capability changes:
  *
  * NIGHT is unshielded. `nativeToken()` is tagged `unshielded`, the ledger keys
  * its balance check by that tag, and the account keeps the two in separate
- * maps — so NIGHT cannot reach a shielded address by any route.
+ * maps — so NIGHT cannot reach a shielded address by any route. A shielded
+ * colour cannot reach an unshielded address for the mirror-image reason. That
+ * is what `accepts` and `addressRefusal` are about, and both are facts rather
+ * than choices this app made.
  *
- * A NAME IS ALWAYS PAID IN NIGHT. What a name resolves to is an account, and
- * the route into an account is `deposit_night`; the shielded route consumes one
- * specific coin and has no equivalent. So a shielded asset can be paid to a
- * shielded address and to nothing else, which is what the sentences say.
+ * THE RECIPIENT'S HALF, which is where 2026/08/31 changed something. Until that
+ * date this said "a name is always paid in NIGHT", and it was wrong about the
+ * ledger rather than merely cautious: what a name resolves to is an ACCOUNT,
+ * and an account's shielded deposit is as permissionless as its unshielded one
+ * — it takes one whole note rather than a colour and an amount, which is a
+ * constraint on how the payment is assembled and not on whether it can be made.
+ * What was really true was that nothing behind the sheet had been built to
+ * assemble it. That is a fact about the HOST, so the host now states it: see
+ * {@link SendCapabilities}.
+ *
+ * The two halves compose the way the agreed model reads — a shielded ADDRESS
+ * takes a withdrawal, a PASSPORT takes the account route — and the sheet's own
+ * dispatch is on that same pair rather than on the asset alone.
  *
  * Every sentence NAMES THE ASSET. "That is a shielded address" leaves the
  * reader to work out which of the two things they are holding is the problem;
  * "mUSD goes to a shielded address — this is an unshielded one" tells them, and
  * tells them in the same ticker the picker above is showing. None of them names
- * any machinery: what is refused is a send, not a subsystem.
+ * any machinery: what is refused is a send, not a subsystem. The refusal a
+ * capability-less host earns says what PASSPORT cannot do, because that is what
+ * is true — never that the ledger forbids it, which would be a tidier sentence
+ * and a false one.
  */
-export function recipientRuleFor(asset: SendAsset): RecipientRule {
+export function recipientRuleFor(
+  asset: SendAsset,
+  capabilities: SendCapabilities = NO_CAPABILITIES,
+): RecipientRule {
   if (asset.mode === 'unshielded') {
     return {
       accepts: 'unshielded',
@@ -234,9 +289,11 @@ export function recipientRuleFor(asset: SendAsset): RecipientRule {
   }
   return {
     accepts: 'shielded',
-    acceptsName: false,
+    acceptsName: capabilities.shieldedToName,
     addressRefusal: `${asset.symbol} goes to a shielded (mn_shield-addr…) address — this is an unshielded one.`,
-    nameRefusal: `A name is always paid in NIGHT, so ${asset.symbol} cannot go to one. Choose NIGHT above, or paste a shielded (mn_shield-addr…) address.`,
+    nameRefusal: capabilities.shieldedToName
+      ? null
+      : `This Passport cannot pay a name in ${asset.symbol}. Choose NIGHT above, or paste a shielded (mn_shield-addr…) address.`,
   };
 }
 
@@ -247,8 +304,47 @@ export function recipientRuleFor(asset: SendAsset): RecipientRule {
  * sheet shows it INSTEAD OF sending — never by quietly changing the asset to
  * suit the address, which is the behaviour this whole inversion replaced.
  */
-export function refusalFor(asset: SendAsset, recipient: SendRecipientKind): string | null {
-  const rule = recipientRuleFor(asset);
+export function refusalFor(
+  asset: SendAsset,
+  recipient: SendRecipientKind,
+  capabilities: SendCapabilities = NO_CAPABILITIES,
+): string | null {
+  const rule = recipientRuleFor(asset, capabilities);
   if (recipient.kind === 'name') return rule.acceptsName ? null : rule.nameRefusal;
   return recipient.mode === rule.accepts ? null : rule.addressRefusal;
+}
+
+/**
+ * WHICH SEND this pair is, once both halves are known and agreed.
+ *
+ * The agreed model, said as data: a shielded ADDRESS gets a withdrawal only; a
+ * PASSPORT — which is what a `.night` name resolves to — gets the account
+ * route. Until 2026/08/31 the sheet dispatched on the recipient FIRST and the
+ * asset second, so a shielded asset paid to a name was unreachable by
+ * construction rather than by rule; this makes the pair the thing that decides,
+ * which is the only shape in which all four combinations can be read at once.
+ *
+ * `null` when the two do not go together at all — {@link refusalFor} owns the
+ * sentence for that, and this deliberately does not repeat it.
+ */
+export type SendRoute =
+  /** NIGHT to an `mn_addr…`. One transaction out of the account. */
+  | 'night-address'
+  /** NIGHT to a Passport. Out of the sender's account, then into theirs. */
+  | 'night-name'
+  /** A shielded colour to an `mn_shield-addr…`. One transaction. */
+  | 'shielded-address'
+  /** A shielded colour to a Passport. Out, then into their account. */
+  | 'shielded-name';
+
+export function routeFor(
+  asset: SendAsset,
+  recipient: SendRecipientKind,
+  capabilities: SendCapabilities = NO_CAPABILITIES,
+): SendRoute | null {
+  if (refusalFor(asset, recipient, capabilities) !== null) return null;
+  if (recipient.kind === 'name') {
+    return asset.mode === 'shielded' ? 'shielded-name' : 'night-name';
+  }
+  return asset.mode === 'shielded' ? 'shielded-address' : 'night-address';
 }

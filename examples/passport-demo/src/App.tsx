@@ -38,6 +38,9 @@ import {
 } from './lib/activityFeed.js';
 import type { ActivityFeedItem } from './screens/ActivityFeed.js';
 import type { NameLookup } from './lib/recipientName.js';
+/* The note a shielded transfer's two legs are joined by. Type-only, so the rule
+   itself is still loaded beside the account module at the moment of the send. */
+import type { WalletShieldedNote } from './lib/shieldedNote.js';
 import { requestPassportStoragePersistence } from './pwa.js';
 import {
   listLocalProfiles,
@@ -4886,9 +4889,15 @@ export default function PassportDemo() {
    * It exists because a name's transfer is genuinely two transactions and the
    * person watching has to be told so — a progress line that hid the second
    * would leave an apparently finished send running for another minute.
+   *
+   * `returning` is the shielded path's fourth state and belongs to a FAILURE
+   * rather than to the transfer: it is the amount being put back into the
+   * sender's own account after the paying leg refused. See
+   * {@link executeShieldedSendToName} for why that path puts money back where
+   * the NIGHT path leaves it at the receiving address for Home to sweep in.
    */
   const [nameSendLeg, setNameSendLeg] = useState<
-    'withdrawing' | 'settling' | 'depositing' | null
+    'withdrawing' | 'settling' | 'depositing' | 'returning' | null
   >(null);
 
   /**
@@ -5201,6 +5210,259 @@ export default function PassportDemo() {
   );
 
   /**
+   * Paying a `.night` name in a SHIELDED asset — a Passport-to-Passport
+   * shielded transfer.
+   *
+   * WHY THIS IS TWO TRANSACTIONS, AND WHAT IT WOULD TAKE TO MAKE IT ONE
+   * -------------------------------------------------------------------
+   * Both halves of the pair already exist in `account.compact` and neither can
+   * be made to reach the other in a single call:
+   *
+   *   - `withdraw_shielded(recipient: ZswapCoinPublicKey, colour, amount)`
+   *     sends through `left<ZswapCoinPublicKey, ContractAddress>(recipient)`.
+   *     The recipient is a USER key BY TYPE, so a recipient account cannot be
+   *     named with it at all. Unlike the NIGHT withdrawal this fails CLOSED
+   *     rather than silently: the address decoder refuses anything that is not
+   *     an `mn_shield-addr…`, and the transaction builder refuses to resolve an
+   *     encryption key for contract bytes before anything is submitted.
+   *   - `deposit_shielded(coin: ShieldedCoinInfo)` calls no `require_device()`,
+   *     so it is permissionless exactly as `deposit_night` is — anyone may pay
+   *     into a stranger's account. What it takes is one WHOLE note, nonce and
+   *     all, because `receiveShielded` consumes that specific note.
+   *
+   * The two cannot be batched into one transaction either: batching is scoped
+   * to a single contract by design, and the two legs are two different
+   * accounts. One transaction would need a NEW circuit on the account contract
+   * making a cross-contract call — send in the caller, receive in the callee —
+   * and adding any circuit to `account.compact` invalidates every account
+   * already deployed, because opening a contract verifies EVERY local circuit's
+   * verifier key against the deployed state. That is a migration for every
+   * existing Passport, and it is not this unit's to spend.
+   *
+   * So the pair, mirroring {@link executeSendToName} step for step:
+   *
+   *   1. `withdraw_shielded` out of the sender's account to the SENDER's own
+   *      shielded address, for EXACTLY the transfer amount — because a note is
+   *      deposited whole, and a note larger than the amount cannot be split on
+   *      the way in. One passkey ceremony, because this is the only leg that
+   *      spends from an account;
+   *   2. wait for the wallet to hold the note, and identify it by NONCE rather
+   *      than by colour and value. A wallet that already held a note of the
+   *      same colour and the same size would otherwise offer two candidates and
+   *      the wrong one strands the new one — see `lib/shieldedNote.ts`, which
+   *      holds that rule and is drilled directly;
+   *   3. `deposit_shielded` that exact note into the RECIPIENT's account. No
+   *      ceremony, and the recipient's own `coins` ledger is credited, which is
+   *      what makes the value theirs to spend.
+   *
+   * IF THE PAYING LEG FAILS the money is put BACK into the sender's account,
+   * which is where this path departs from the NIGHT one. That is not cleverness
+   * for its own sake: the NIGHT path can leave the amount at the receiving
+   * address because Home's "Money outside your account" card sweeps unshielded
+   * value back in on one press, and that card cannot see a shielded note. With
+   * no card to hand the reader, the honest thing is to undo the leg that did
+   * run — one more permissionless deposit, no ceremony — and say so. If the
+   * return ALSO fails, or the note never arrived to return, the row says
+   * exactly where the value is rather than claiming it came back.
+   *
+   * PRIVACY, said plainly because the contract's own header admits it: value
+   * held by an account is PUBLIC ledger state. This hides the sender and the
+   * recipient from the shielded pool, and it does not hide the amount from
+   * anybody reading either account. Nothing in the copy implies otherwise.
+   */
+  const executeShieldedSendToName = useCallback(
+    async (params: {
+      domain: string;
+      accountAddress: string;
+      tokenType: string;
+      amount: bigint;
+    }): Promise<void> => {
+      const account = requireAccount();
+      const ownShieldedAddress = localSurfaces?.shieldedAddress ?? null;
+      if (!ownShieldedAddress) {
+        throw Object.assign(
+          new Error(
+            'Passport cannot see its own receiving address yet, so it cannot route a payment to a name. Try again in a moment.',
+          ),
+          { code: 'wallet-closed' as const },
+        );
+      }
+      const amountText = `${params.amount} units`;
+      try {
+        const { depositShielded, shieldedCoinFromNote, walletShieldedNotes, withdrawShielded } =
+          await import('./identity/accountCustody.js');
+        const { findArrivedNote, shieldedNoteIds } = await import('./lib/shieldedNote.js');
+        await withAccountDeviceSecret(async (deviceSecret) => {
+          /* Raised only now the ceremony has answered: a cancelled approval
+             signed nothing, so it writes no activity row either. */
+          const entry = addActivity({
+            label: `Sending to ${params.domain}`,
+            detail: `${amountText} of a shielded token, in two steps.`,
+            status: 'pending',
+            source: 'wallet',
+          });
+          let withdrawn = false;
+          /* The note the first leg produced, once it has arrived. Held out here
+             so the failure path can put it back. */
+          let arrived: WalletShieldedNote | null = null;
+          try {
+            /* WHAT THE WALLET ALREADY HELD, read before anything is submitted.
+               This is the whole of what makes step 2 exact: the note to deposit
+               is the one whose nonce was not in this set. */
+            const heldBefore = shieldedNoteIds(await walletShieldedNotes(account.handle));
+
+            setNameSendLeg('withdrawing');
+            const out = await withdrawShielded(
+              account.handle,
+              deviceSecret,
+              {
+                contractAddress: account.address,
+                colourHex: params.tokenType,
+                amount: params.amount,
+                recipientShieldedAddress: ownShieldedAddress,
+              },
+              (progress) => setAccountPhase(progress.phase),
+            );
+            withdrawn = true;
+            updateActivity(entry.id, {
+              detail: `${amountText} left your account. Paying it into ${params.domain}’s account next.`,
+              source: 'chain',
+              txHash: out.txId,
+            });
+
+            /* The wait between the legs. The deposit spends a note the wallet
+               has to actually hold, so one built before the arrival has synced
+               fails inside the SDK rather than against a check we wrote — and
+               that failure is unreadable. The same two-minute window the NIGHT
+               path allows, read more often: each poll is a value off a live
+               state stream and touches no network, so there is nothing to be
+               gained by waiting four seconds to look again. */
+            setNameSendLeg('settling');
+            const settleBy = Date.now() + 120_000;
+            for (;;) {
+              arrived = findArrivedNote(await walletShieldedNotes(account.handle), {
+                tokenType: params.tokenType,
+                amount: params.amount,
+                heldBefore,
+              });
+              if (arrived !== null) break;
+              if (Date.now() > settleBy) {
+                throw Object.assign(
+                  new Error(
+                    'The amount left your account but has not arrived at your receiving address yet, so the second step did not run.',
+                  ),
+                  { code: 'settling-timeout' as const },
+                );
+              }
+              await pause(1_000);
+            }
+
+            setNameSendLeg('depositing');
+            const paid = await depositShielded(
+              account.handle,
+              {
+                contractAddress: params.accountAddress,
+                coin: shieldedCoinFromNote(arrived),
+              },
+              (progress) => setAccountPhase(progress.phase),
+            );
+            updateActivity(entry.id, {
+              status: 'complete',
+              label: `Sent to ${params.domain}`,
+              detail: `${amountText} is now in ${params.domain}’s account.`,
+              source: 'chain',
+              txHash: paid.txId,
+            });
+            pushToast({
+              tone: 'success',
+              /* Accepted, not yet included — the same claim every other
+                 transfer on this surface makes. */
+              title: `${params.domain} paid — confirming`,
+              body: 'The fee sponsor covered both network fees.',
+              link: explorerTxLink(paid.txId, paid.network),
+            });
+            void refreshLocalBalances();
+          } catch (cause) {
+            const message = cause instanceof Error ? cause.message : String(cause);
+            /* PUTTING IT BACK. Only possible when the note genuinely arrived
+               and was therefore never paid to anybody: a deposit that failed
+               because it had in fact landed leaves nothing to return, and this
+               attempt then fails at balancing, which is the correct outcome. */
+            let returned = false;
+            if (arrived !== null) {
+              try {
+                setNameSendLeg('returning');
+                await depositShielded(
+                  account.handle,
+                  {
+                    contractAddress: account.address,
+                    coin: shieldedCoinFromNote(arrived),
+                  },
+                  (progress) => setAccountPhase(progress.phase),
+                );
+                returned = true;
+              } catch (returnCause) {
+                /* The ORIGINAL failure is what the reader is told about; this
+                   one only changes which sentence says where the money is. The
+                   diagnostic goes where diagnostics go. */
+                console.info(
+                  '[send] the shielded amount could not be returned to the account',
+                  returnCause,
+                );
+              }
+            }
+            updateActivity(entry.id, {
+              status: 'error',
+              label: withdrawn ? `${params.domain} was not paid` : 'Nothing was sent',
+              /* WHERE THE MONEY IS. A half-finished transfer is the one state
+                 where saying only "it failed" would be a lie by omission. */
+              detail: returned
+                ? `${message} Nothing was paid to ${params.domain}, and the ${amountText} is back in your account.`
+                : withdrawn
+                  ? `${message} The ${amountText} left your account and is at your own receiving address — nothing was paid to ${params.domain}.`
+                  : message,
+              source: 'local',
+            });
+            if (withdrawn) {
+              pushToast({
+                tone: 'error',
+                title: `${params.domain} was not paid`,
+                body: returned
+                  ? `Your ${amountText} is back in your account.`
+                  : `Your ${amountText} is safe at your own receiving address.`,
+              });
+              void refreshLocalBalances();
+            }
+            throw cause;
+          }
+        });
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        const code =
+          typeof cause === 'object' && cause !== null &&
+          typeof (cause as { code?: unknown }).code === 'string'
+            ? (cause as { code: string }).code
+            : null;
+        if (code === 'wallet-closed') {
+          pushToast({ tone: 'error', title: 'Nothing was sent', body: message });
+        }
+        throw cause;
+      } finally {
+        setNameSendLeg(null);
+        setAccountPhase(null);
+      }
+    },
+    [
+      addActivity,
+      localSurfaces,
+      refreshLocalBalances,
+      requireAccount,
+      updateActivity,
+      withAccountDeviceSecret,
+    ],
+  );
+
+  /**
    * Sweeps NIGHT the passkey WALLET still holds into the account contract.
    *
    * The one flow that runs the other way, and the one that needs no device
@@ -5293,6 +5555,11 @@ export default function PassportDemo() {
              a promise nothing behind it could keep. */
           resolveName: resolveRecipientName,
           onSendToName: executeSendToName,
+          /* The shielded half of paying a name. Supplied separately from
+             `onSendToName` because it is a different pair of circuits, and a
+             build that had one and not the other must refuse the combination
+             it cannot make rather than quietly route it to the other one. */
+          onSendShieldedToName: executeShieldedSendToName,
           phase: accountPhase,
           nameLeg: nameSendLeg,
         }

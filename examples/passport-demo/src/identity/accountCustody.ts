@@ -301,6 +301,58 @@ export function shieldedCoinFromWalletCoin(coin: {
 }
 
 /**
+ * The same translation, from a note in THIS APP's vocabulary.
+ *
+ * One line, and it earns its place: `type` is the ledger's word for a colour
+ * and `tokenType` is the word every surface in Passport uses, so the crossing
+ * between the two belongs here — beside both of them — rather than at each call
+ * site that holds a note and wants a coin.
+ */
+export function shieldedCoinFromNote(note: {
+  tokenType: string;
+  nonce: string;
+  value: bigint;
+}): AccountShieldedCoin {
+  return shieldedCoinFromWalletCoin({
+    type: note.tokenType,
+    nonce: note.nonce,
+    value: note.value,
+  });
+}
+
+/**
+ * Every shielded note the CALLING WALLET holds and could deposit, with each
+ * note's own nonce.
+ *
+ * Deliberately not the same thing as `LocalMidnightWallet.shieldedHoldings()`,
+ * which sums the wallet's notes into a balance per colour. A balance is what a
+ * screen shows; a NOTE is what {@link depositShielded} moves, and the two are
+ * not interchangeable — `receiveShielded` consumes one specific note, so a
+ * colour and an amount cannot describe a deposit however precise they are. This
+ * is the only read in the app that exposes the nonce, which is why it lives
+ * beside {@link shieldedCoinFromWalletCoin} rather than in the wallet module.
+ *
+ * `availableCoins` and not `totalCoins`: a pending note has not been confirmed
+ * as the wallet's yet, and building a deposit around one would fail at
+ * balancing rather than at anything a reader could act on.
+ *
+ * Nothing is filtered by colour or value here. Which of these notes matters is
+ * a rule with a wrong answer in it — see `lib/shieldedNote.ts`, where it is
+ * decided against a snapshot of what the wallet held BEFORE — and mixing a
+ * guess into the read would put that rule in two places.
+ */
+export async function walletShieldedNotes(
+  handle: LocalMidnightWallet,
+): Promise<{ tokenType: string; nonce: string; value: bigint }[]> {
+  const state = await currentWalletState(handle);
+  return state.shielded.availableCoins.map(({ coin }) => ({
+    tokenType: coin.type,
+    nonce: coin.nonce,
+    value: coin.value,
+  }));
+}
+
+/**
  * A grant commitment, as the counterparty may hand it over: the `Field` the
  * contract stores, or the 32 bytes that Field is carried in.
  */
@@ -734,6 +786,14 @@ interface WalletFacadeState {
   shielded: {
     coinPublicKey: { toHexString(): string };
     encryptionPublicKey: { toHexString(): string };
+    /**
+     * The wallet's own confirmed notes — `AvailableCoin[]` from
+     * `wallet-sdk-shielded`, narrowed here to the three fields
+     * {@link walletShieldedNotes} reads. The commitment and the nullifier are
+     * the SDK's business; the `mt_index` on the coin is deliberately not read,
+     * for the reason {@link shieldedCoinFromWalletCoin} gives.
+     */
+    availableCoins: readonly { coin: { type: string; nonce: string; value: bigint } }[];
   };
   unshielded: { balances: Record<string, bigint> };
   dust: { balance(now: Date): bigint };

@@ -24,8 +24,13 @@ import {
   NIGHT_ASSET_ID,
   recipientRuleFor,
   refusalFor,
+  routeFor,
   type SendAsset,
+  type SendCapabilities,
 } from './sendAssets.js';
+
+/** A Passport that can pay a name in a shielded asset. */
+const CAN_PAY_SHIELDED_NAMES: SendCapabilities = { shieldedToName: true };
 
 const ITEM = 'ab'.repeat(32);
 const OTHER_ITEM = 'cd'.repeat(32);
@@ -193,16 +198,35 @@ describe('recipientRuleFor', () => {
     );
   });
 
-  it('sends a shielded asset to a shielded address, and to nothing else', () => {
+  it('sends a shielded asset to a shielded address, whatever the Passport can do', () => {
+    /* The LEDGER's half, and the half no capability moves: a shielded colour
+       cannot reach an unshielded address by any route. */
+    for (const capabilities of [undefined, CAN_PAY_SHIELDED_NAMES]) {
+      const rule = recipientRuleFor(musd, capabilities);
+      expect(rule.accepts).toBe('shielded');
+      expect(rule.addressRefusal).toBe(
+        'mUSD goes to a shielded (mn_shield-addr…) address — this is an unshielded one.',
+      );
+    }
+  });
+
+  it('refuses a shielded asset a name when nothing behind the sheet could pay one', () => {
     const rule = recipientRuleFor(musd);
-    expect(rule.accepts).toBe('shielded');
     expect(rule.acceptsName).toBe(false);
-    expect(rule.addressRefusal).toBe(
-      'mUSD goes to a shielded (mn_shield-addr…) address — this is an unshielded one.',
-    );
+    /* WHAT PASSPORT CANNOT DO, never what the ledger forbids. This sentence
+       read "a name is always paid in NIGHT" until 2026/08/31, which was a fact
+       about what had been built stated as a fact about the ledger — and it
+       stopped being either the moment the shielded name route landed. */
     expect(rule.nameRefusal).toBe(
-      'A name is always paid in NIGHT, so mUSD cannot go to one. Choose NIGHT above, or paste a shielded (mn_shield-addr…) address.',
+      'This Passport cannot pay a name in mUSD. Choose NIGHT above, or paste a shielded (mn_shield-addr…) address.',
     );
+  });
+
+  it('lets a shielded asset go to a name once the Passport can pay one', () => {
+    const rule = recipientRuleFor(musd, CAN_PAY_SHIELDED_NAMES);
+    expect(rule.acceptsName).toBe(true);
+    // Nothing to say about a recipient that is now accepted.
+    expect(rule.nameRefusal).toBeNull();
   });
 
   it('names an item in its refusals exactly as the picker names it', () => {
@@ -216,10 +240,12 @@ describe('recipientRuleFor', () => {
        leak is likeliest, because it is written under pressure about something
        that went wrong. */
     const forbidden = /\b(?:wallet|contract|registry|indexer|resolver|dust)\b/i;
-    for (const asset of assets) {
-      const rule = recipientRuleFor(asset);
-      expect(rule.addressRefusal).not.toMatch(forbidden);
-      if (rule.nameRefusal !== null) expect(rule.nameRefusal).not.toMatch(forbidden);
+    for (const capabilities of [undefined, CAN_PAY_SHIELDED_NAMES]) {
+      for (const asset of assets) {
+        const rule = recipientRuleFor(asset, capabilities);
+        expect(rule.addressRefusal).not.toMatch(forbidden);
+        if (rule.nameRefusal !== null) expect(rule.nameRefusal).not.toMatch(forbidden);
+      }
     }
   });
 });
@@ -246,12 +272,49 @@ describe('refusalFor', () => {
     );
   });
 
-  it('accepts a name for NIGHT and for nothing else', () => {
+  it('accepts a name for NIGHT whatever the Passport can otherwise do', () => {
     expect(refusalFor(night, { kind: 'name' })).toBeNull();
-    expect(refusalFor(musd, { kind: 'name' })).toContain('always paid in NIGHT');
+    expect(refusalFor(night, { kind: 'name' }, CAN_PAY_SHIELDED_NAMES)).toBeNull();
+  });
+
+  it('refuses a name for a shielded asset only while the Passport cannot pay one', () => {
+    expect(refusalFor(musd, { kind: 'name' })).toContain('cannot pay a name in mUSD');
     expect(refusalFor(assetFor(assets, ITEM), { kind: 'name' })).toContain(
-      'always paid in NIGHT',
+      'cannot pay a name in Item · abab…',
     );
+    expect(refusalFor(musd, { kind: 'name' }, CAN_PAY_SHIELDED_NAMES)).toBeNull();
+  });
+});
+
+describe('routeFor — the agreed model, as data', () => {
+  const assets = fullAccount();
+  const night = assetFor(assets, NIGHT_ASSET_ID);
+  const musd = assetFor(assets, MUSD_COLOUR_HEX);
+
+  it('gives a shielded ADDRESS a withdrawal and a PASSPORT the account route', () => {
+    /* The rule agreed with the owner, and the whole reason the dispatch moved
+       off the recipient alone: an address and a name are two different sends
+       in the SAME asset, so the pair has to be what decides. */
+    expect(routeFor(musd, { kind: 'address', mode: 'shielded' }, CAN_PAY_SHIELDED_NAMES)).toBe(
+      'shielded-address',
+    );
+    expect(routeFor(musd, { kind: 'name' }, CAN_PAY_SHIELDED_NAMES)).toBe('shielded-name');
+  });
+
+  it('leaves the two NIGHT routes exactly where they were', () => {
+    expect(routeFor(night, { kind: 'address', mode: 'unshielded' })).toBe('night-address');
+    expect(routeFor(night, { kind: 'name' })).toBe('night-name');
+    // And they do not change when the shielded capability appears.
+    expect(routeFor(night, { kind: 'name' }, CAN_PAY_SHIELDED_NAMES)).toBe('night-name');
+  });
+
+  it('has no route at all for a pair the rules refused', () => {
+    /* `null` rather than a fallback, and the sheet throws on it rather than
+       quietly sending somewhere: a pair with no route is a pair that earned a
+       refusal, and obeying it anyway is the wrong-send in a new costume. */
+    expect(routeFor(night, { kind: 'address', mode: 'shielded' })).toBeNull();
+    expect(routeFor(musd, { kind: 'address', mode: 'unshielded' })).toBeNull();
+    expect(routeFor(musd, { kind: 'name' })).toBeNull();
   });
 });
 

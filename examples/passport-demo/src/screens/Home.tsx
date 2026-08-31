@@ -206,6 +206,13 @@ export interface HomeScreenProps {
      */
     resolveName?: SendSheetProps['resolveName']
     onSendToName?: SendSheetProps['onSendToName']
+    /**
+     * Paying a name in a SHIELDED asset. Separate from `onSendToName` because
+     * it is a different pair of circuits, and a host that has one and not the
+     * other must have the combination it cannot make refused rather than
+     * quietly routed to the other one.
+     */
+    onSendShieldedToName?: SendSheetProps['onSendShieldedToName']
     /** The live phase of the account call, narrated by the sheet. */
     phase?: 'checking' | 'connecting' | 'submitting' | 'confirming' | null
     /** Which of a name transfer's two legs is running. See the Send sheet. */
@@ -784,6 +791,9 @@ export default function HomeScreen(props: HomeScreenProps) {
             {...(send.onSendShielded ? { onSendShielded: send.onSendShielded } : {})}
             {...(send.resolveName ? { resolveName: send.resolveName } : {})}
             {...(send.onSendToName ? { onSendToName: send.onSendToName } : {})}
+            {...(send.onSendShieldedToName
+              ? { onSendShieldedToName: send.onSendShieldedToName }
+              : {})}
             /* The sponsor's own name for its colour, so the picker and the
                balance list call the same colour the same thing. */
             sponsoredToken={sponsoredToken}

@@ -60,7 +60,9 @@ import {
   buildSendAssets,
   NIGHT_ASSET_ID,
   refusalFor,
+  routeFor,
   type SendAsset,
+  type SendCapabilities,
 } from '../lib/sendAssets.js'
 
 import './home.css'
@@ -140,6 +142,26 @@ import './home.css'
  * unshielded one for the mirror-image reason. The two therefore quote different
  * balances, different units, and different refusals; what they share is the fee
  * sentence, because the fee is the same either way.
+ *
+ * THE RECIPIENT TYPE DECIDES TOO (2026/08/31, later the same day)
+ * ----------------------------------------------------------------
+ * The inversion above left one dead end behind it: a shielded asset was refused
+ * a name outright, in a sentence claiming that a name is always paid in NIGHT.
+ * That was true of what had been BUILT and not of the ledger — an account's
+ * shielded deposit is as permissionless as its unshielded one — and the
+ * dispatch made it structural as well as textual, because `handleSend` tested
+ * the resolved name FIRST and the asset second, so the name branch shadowed the
+ * shielded one whatever the rules said.
+ *
+ * Both are now decided by the PAIR. `routeFor` in `lib/sendAssets.ts` names the
+ * four sends, the dispatch is a switch over its answer, and the shielded name
+ * route has its own seam, {@link SendSheetProps.onSendShieldedToName}, whose
+ * presence is what the rules are told about when they are asked whether a name
+ * may be paid in a shielded asset. The agreed model then reads off the code
+ * rather than off a comment: a shielded ADDRESS takes a withdrawal only, a
+ * PASSPORT takes the account route, in either asset.
+ *
+ * It is still two transactions, and it is still said so before the confirm.
  *
  * The shielded assets exist only when the host supplies both
  * {@link SendSheetProps.readShieldedHoldings} and
@@ -285,6 +307,30 @@ export interface SendSheetProps {
     amount: bigint
   }) => Promise<void>
   /**
+   * Pays the account a name resolves to, in a SHIELDED asset.
+   *
+   * A separate seam from {@link SendSheetProps.onSendToName} for the same
+   * reason that one is separate from {@link SendSheetProps.onSend}: it is a
+   * different pair of circuits. The shielded withdrawal's recipient is a user
+   * key BY TYPE, so it cannot name an account at all, and the way into an
+   * account is its own permissionless deposit — which takes one whole note
+   * rather than a colour and an amount. The host's implementation withdraws to
+   * the sender's own shielded address for exactly this amount and then deposits
+   * that note into the recipient's account; see `App.tsx`.
+   *
+   * Optional, and its absence is what decides the sheet's answer to "may a
+   * shielded asset be paid to a name?" — a build without it refuses the
+   * combination rather than offering a promise nothing behind the sheet could
+   * keep. It also needs {@link SendSheetProps.resolveName}, without which
+   * nothing is ever read as a name in the first place.
+   */
+  onSendShieldedToName?: (params: {
+    domain: string
+    accountAddress: string
+    tokenType: string
+    amount: bigint
+  }) => Promise<void>
+  /**
    * The colour the fee sponsor named for itself, when it named one.
    *
    * Passed so the picker calls a colour exactly what the balance list on Home
@@ -303,8 +349,15 @@ export interface SendSheetProps {
    * name's transfer is two transactions — out of the sender's account, then
    * into the recipient's — and a progress line that hid the second would leave
    * somebody watching an apparently finished send carry on for another minute.
+   *
+   * `returning` is not a leg of the transfer at all: it is the amount being put
+   * back after the paying leg refused, which the shielded path does because
+   * there is no card on Home that could sweep a shielded amount back in. It is
+   * narrated for the same reason the other three are — something is still
+   * happening, and a spinner that said "Step 2 of 2" through it would be
+   * describing a step that has already failed.
    */
-  nameLeg?: 'withdrawing' | 'settling' | 'depositing' | null
+  nameLeg?: 'withdrawing' | 'settling' | 'depositing' | 'returning' | null
   /**
    * Leaves the session for the landing screen — offered ONLY beside a failure
    * the host marked as a passkey ceremony that could not be completed.
@@ -522,6 +575,7 @@ export default function SendSheet(props: SendSheetProps) {
     onSendShielded,
     resolveName,
     onSendToName,
+    onSendShieldedToName,
     sponsoredToken,
     phase,
     nameLeg,
@@ -579,6 +633,17 @@ export default function SendSheet(props: SendSheetProps) {
 
   const shieldedSupported = Boolean(readShieldedHoldings && onSendShielded)
   const nameSupported = Boolean(resolveName && onSendToName)
+  /* WHAT THIS PASSPORT CAN DO, handed to the rules that decide where an asset
+     may go. It is a fact about the HOST rather than about the ledger — the
+     shielded deposit an account offers is as permissionless as the unshielded
+     one — so the rules are told rather than left to infer it from the asset.
+     See `lib/sendAssets.ts`. */
+  const capabilities = useMemo(
+    (): SendCapabilities => ({
+      shieldedToName: Boolean(shieldedSupported && resolveName && onSendShieldedToName),
+    }),
+    [onSendShieldedToName, resolveName, shieldedSupported],
+  )
 
   /* The fee sentence describes what will really happen, so the sponsor is
      probed when the sheet opens rather than assumed ready — and then KEPT
@@ -768,9 +833,9 @@ export default function SendSheet(props: SendSheetProps) {
      address, which is the silent wrong-send the picker exists to replace. See
      `lib/sendAssets.ts` for both sentences. */
   const assetRefusal = nameMode
-    ? refusalFor(asset, { kind: 'name' })
+    ? refusalFor(asset, { kind: 'name' }, capabilities)
     : verdict && 'mode' in verdict
-      ? refusalFor(asset, { kind: 'address', mode: verdict.mode })
+      ? refusalFor(asset, { kind: 'address', mode: verdict.mode }, capabilities)
       : null
   /* The asset's refusal LEADS on the name path: told that mUSD cannot go to a
      name at all, "no Passport has this name" is an answer to a question they
@@ -783,6 +848,20 @@ export default function SendSheet(props: SendSheetProps) {
       ? verdict.error
       : assetRefusal
   const resolvedName = nameState.status === 'found' ? nameState : null
+
+  /* WHICH OF THE FOUR SENDS THIS IS — decided by the PAIR, not by the recipient
+     alone. Until 2026/08/31 `handleSend` tested `resolvedName` first and the
+     asset second, so a shielded asset paid to a name could not be reached even
+     if the rules had allowed it: the name branch shadowed the shielded one. The
+     dispatch now reads off the same rule the refusal above does, which is the
+     only shape in which all four combinations are visible at once. `null` while
+     the two do not go together — the sentence for that is the refusal's. */
+  const sendRoute =
+    resolvedName !== null
+      ? routeFor(asset, { kind: 'name' }, capabilities)
+      : verdict && 'mode' in verdict
+        ? routeFor(asset, { kind: 'address', mode: verdict.mode }, capabilities)
+        : null
 
   /* An item is sent whole or not at all — the rule that made it an item is that
      the account holds exactly one — so the amount is STATED rather than typed,
@@ -920,7 +999,13 @@ export default function SendSheet(props: SendSheetProps) {
           ? 'Step 1 of 2 done. Waiting for the amount to clear before it goes on.'
           : nameLeg === 'depositing'
             ? `Step 2 of 2 — paying it into ${resolvedName.domain}’s account.`
-            : null
+            : nameLeg === 'returning'
+              ? /* Not a step of the transfer: the paying leg refused, and the
+                   amount is being put back. Said plainly and immediately,
+                   because the alternative is a spinner still claiming "Step 2
+                   of 2" over a step that has already failed. */
+                `${resolvedName.domain} was not paid. Putting the amount back into your account.`
+              : null
 
   const handleMax = useCallback(() => {
     if (mode === 'shielded') {
@@ -966,10 +1051,22 @@ export default function SendSheet(props: SendSheetProps) {
       return
     }
     try {
-      if (resolvedName !== null) {
-        /* `canReview` already required a resolved name and a name seam; both
-           are re-read so this branch cannot be entered on a `null`. */
-        if (!onSendToName) {
+      /* ONE DISPATCH, ON THE PAIR. Every seam it can reach is re-read on the
+         way in: `canReview` already required each of them, and re-reading is
+         what makes it impossible for a branch to be entered on a `null` that
+         changed between the render that enabled the button and this click. */
+      if (sendRoute === 'shielded-name') {
+        if (!onSendShieldedToName || tokenType === null || resolvedName === null) {
+          throw new Error('This Passport cannot pay a name in this asset right now.')
+        }
+        await onSendShieldedToName({
+          domain: resolvedName.domain,
+          accountAddress: resolvedName.accountAddress,
+          tokenType,
+          amount,
+        })
+      } else if (sendRoute === 'night-name') {
+        if (!onSendToName || resolvedName === null) {
           throw new Error('This Passport cannot send to a name right now.')
         }
         await onSendToName({
@@ -977,15 +1074,19 @@ export default function SendSheet(props: SendSheetProps) {
           accountAddress: resolvedName.accountAddress,
           amount,
         })
-      } else if (mode === 'shielded') {
-        // `canReview` already required a chosen colour and a shielded seam;
-        // both are re-read here so this branch cannot be entered on a `null`.
+      } else if (sendRoute === 'shielded-address') {
         if (!onSendShielded || tokenType === null) {
           throw new Error('This Passport cannot send a shielded token right now.')
         }
         await onSendShielded({ recipientAddress: recipient.trim(), tokenType, amount })
-      } else {
+      } else if (sendRoute === 'night-address') {
         await onSend({ recipientAddress: recipient.trim(), amount })
+      } else {
+        /* Unreachable behind `recipientReady`, and deliberately not a silent
+           fall-through to the plain send: a pair with no route is a pair the
+           rules refused, and quietly sending it somewhere is the wrong-send
+           this whole dispatch exists to make impossible. */
+        throw new Error('This Passport cannot make that transfer.')
       }
       // A real txId came back from the node. The host owns the toast, the
       // activity row, and the refreshes; the sheet's job here is to get out
@@ -1016,15 +1117,16 @@ export default function SendSheet(props: SendSheetProps) {
     amount,
     busy,
     fee,
-    mode,
     onClose,
     onSend,
     onSendShielded,
+    onSendShieldedToName,
     onSendToName,
     readFeeReadiness,
     recipient,
     recipientReady,
     resolvedName,
+    sendRoute,
     tokenType,
   ])
 
@@ -1129,8 +1231,14 @@ export default function SendSheet(props: SendSheetProps) {
                   {asset.kind === 'nft'
                     ? `A one-of-a-kind item. It goes whole — there is one of it, so the amount below is fixed at one. Its colour is ${asset.name}.`
                     : asset.id === NIGHT_ASSET_ID
-                      ? 'Everything your account holds is here. NIGHT is the only asset a Midnight name can be paid in.'
-                      : `Everything your account holds is here. ${asset.symbol} goes to a shielded address, and cannot be paid to a name.`}
+                      ? 'Everything your account holds is here. NIGHT goes to a Midnight name or to an unshielded address.'
+                      : capabilities.shieldedToName
+                        ? /* True since the shielded name route landed. It read
+                             "cannot be paid to a name" before that, which was a
+                             fact about what had been built and was said as a
+                             fact about the ledger. */
+                          `Everything your account holds is here. ${asset.symbol} goes to a Midnight name or to a shielded address.`
+                        : `Everything your account holds is here. ${asset.symbol} goes to a shielded address.`}
                 </span>
               </label>
             ) : (
@@ -1181,11 +1289,17 @@ export default function SendSheet(props: SendSheetProps) {
                    `alice.night` whatever was selected, which invited into the
                    field the one thing a shielded asset can never be paid to. */
                 placeholder={
-                  mode === 'shielded'
-                    ? `mn_shield-addr_${networkId}1…`
-                    : nameSupported
-                      ? 'alice.night'
-                      : `mn_addr_${networkId}1…`
+                  /* A name leads wherever a name can be paid, in either asset:
+                     it is the recipient Passport is FOR, and the address form
+                     is what somebody falls back to. It stops leading only where
+                     the chosen asset genuinely cannot reach a name. */
+                  capabilities.shieldedToName && mode === 'shielded'
+                    ? 'alice.night'
+                    : mode === 'shielded'
+                      ? `mn_shield-addr_${networkId}1…`
+                      : nameSupported
+                        ? 'alice.night'
+                        : `mn_addr_${networkId}1…`
                 }
                 rows={2}
                 spellCheck={false}
@@ -1222,13 +1336,23 @@ export default function SendSheet(props: SendSheetProps) {
                   account behind it — you never need their address.
                 </span>
               ) : mode === 'shielded' ? (
-                /* The hint follows the CHOSEN asset, so it names the one kind
-                   of address that will be accepted rather than listing both and
-                   leaving the refusal to do the teaching. */
-                <span className="mnhome-send-hint">
-                  A shielded (mn_shield-addr…) {networkId} address — the only kind{' '}
-                  {asset.symbol} can go to. Paste it; nothing is guessed from a partial one.
-                </span>
+                /* The hint follows the CHOSEN asset, so it names what will be
+                   accepted rather than listing everything and leaving the
+                   refusal to do the teaching. A name is named FIRST where one
+                   can be paid: it is the recipient Passport exists for, and an
+                   address is the fallback. */
+                capabilities.shieldedToName ? (
+                  <span className="mnhome-send-hint">
+                    A Midnight name, or a shielded (mn_shield-addr…) {networkId} address — the
+                    two things {asset.symbol} can go to. Nothing is guessed from a partial
+                    address.
+                  </span>
+                ) : (
+                  <span className="mnhome-send-hint">
+                    A shielded (mn_shield-addr…) {networkId} address — the only kind{' '}
+                    {asset.symbol} can go to. Paste it; nothing is guessed from a partial one.
+                  </span>
+                )
               ) : (
                 <span className="mnhome-send-hint">
                   {nameSupported ? 'A Midnight name, or an' : 'An'} unshielded (mn_addr…){' '}

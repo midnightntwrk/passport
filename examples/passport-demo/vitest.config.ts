@@ -138,6 +138,21 @@
  * amount field it drives, and the review rows stay out with the rest of the
  * `.tsx`.
  *
+ * `src/lib/shieldedNote.ts` went IN on 2026/08/31, the day it was written, and
+ * it is in the denominator because getting it wrong loses somebody money
+ * quietly. It decides WHICH shielded note the second leg of a Passport-to-
+ * Passport transfer deposits, and the deposit takes a note WHOLE — so a wallet
+ * that already held a note of the same colour and the same size offers two
+ * candidates the moment the first leg lands, and picking the older one pays the
+ * recipient out of money the sender had put aside and strands the note the
+ * transfer produced. Every branch in it is either a way of matching on
+ * resemblance instead of identity or a way of acting on a note that cannot be
+ * read at all, and both are met. It holds no DOM, no React, no network, and no
+ * wallet SDK — the notes are read in `identity/accountCustody.ts` and handed
+ * in — so all of it is drilled directly in `src/lib/shieldedNote.test.ts`. The
+ * poll that calls it, its deadline, and the transfer's two submissions stay out
+ * in `App.tsx` with the rest of the app shell.
+ *
  * `src/lib/passkeyRecovery.ts` went IN on 2026/08/30, the day it was written,
  * and it is in the denominator because it is the rule that decides whether a
  * person who cannot sign in is offered a way forward or only an explanation.
@@ -267,6 +282,7 @@ export default mergeConfig(
           'src/lib/qrScan.ts',
           'src/lib/recipientName.ts',
           'src/lib/sendAssets.ts',
+          'src/lib/shieldedNote.ts',
           'src/lib/sponsor.ts',
           'src/identity/backup.ts',
           'src/identity/claimWarmup.ts',

@@ -199,14 +199,17 @@ test('choosing an asset re-quotes the amount and re-writes the recipient hint', 
   await expect(page.locator('.mnhome-send-unit')).toHaveText('mUSD');
   await expect(page.getByPlaceholder('0', { exact: true })).toBeVisible();
   await expect(page.getByText(/100 mUSD available/)).toBeVisible();
-  /* The placeholder follows the asset as well. It read `alice.night` whatever
-     was chosen, which invited into the field the one thing mUSD can never be
-     paid to. */
-  await expect(page.getByPlaceholder('mn_shield-addr_stagenet1…')).toBeVisible();
-  /* The hint names the ONE address form this asset can go to, rather than
-     listing both and leaving the refusal to do the teaching. */
+  /* A name leads for a shielded asset too, since the shielded name route
+     landed: it is the recipient Passport exists for, and an address is the
+     fallback. Before that route this read `mn_shield-addr_stagenet1…`, because
+     a name was the one thing mUSD could not be paid to. */
+  await expect(page.getByPlaceholder('alice.night')).toBeVisible();
+  /* The hint names what this asset can go to, rather than listing everything
+     and leaving the refusal to do the teaching. */
   await expect(
-    page.getByText(/A shielded \(mn_shield-addr…\) stagenet address — the only kind mUSD can go to/),
+    page.getByText(
+      /A Midnight name, or a shielded \(mn_shield-addr…\) stagenet address — the two things mUSD can go to/,
+    ),
   ).toBeVisible();
 
   /* Max means this asset's whole balance, in this asset's own units — and the
@@ -257,24 +260,43 @@ test('an address for the wrong ledger is refused by name, never silently obeyed'
   await expect(refusal()).toHaveCount(0);
 });
 
-test('a name takes NIGHT, and says so when something else is chosen', async () => {
+test('a name takes a shielded asset too, and is reviewed as the two steps it is', async () => {
+  /* THE DEAD END THIS UNIT REMOVED. Until 2026/08/31 this pair earned "a name
+     is always paid in NIGHT, so mUSD cannot go to one" — a fact about what had
+     been built, said as a fact about the ledger. Both halves of that were then
+     structural as well as textual: the sheet's dispatch tested the resolved
+     name first, so a shielded asset paid to a name was unreachable whatever the
+     rules said. It is now a route of its own. */
   // Still on mUSD from the test above.
   await expect(picker()).toHaveValue(/^[0-9a-f]{64}$/);
   await recipient().fill('');
   await recipient().fill(`${RESOLVABLE_NAME}.night`);
 
-  await expect(refusal()).toHaveText(
-    'A name is always paid in NIGHT, so mUSD cannot go to one. Choose NIGHT above, or paste a shielded (mn_shield-addr…) address.',
-  );
-  /* The registry's answer is not what is wrong here, so it is not what is said.
-     "No Passport has this name" would answer a question nobody is asking. */
-  expect(await refusal().innerText()).not.toMatch(/No Passport has/i);
-  await expect(page.getByRole('button', { name: /^Review$/ })).toBeDisabled();
-
-  /* Choosing NIGHT clears it, and the same name resolves exactly as it always
-     did — through the real recorded registry, two real reads. */
-  await picker().selectOption('night');
   const chip = page.locator('.mnhome-send-resolved');
+  await expect(chip).toBeVisible({ timeout: 30_000 });
+  await expect(chip).toContainText(`${RESOLVABLE_NAME}.night`);
+  await expect(refusal()).toHaveCount(0);
+
+  /* And it can be reviewed — the pair is a real send, not merely an accepted
+     recipient. The amount is a whole count: a shielded colour publishes no
+     decimal scale on the ledger. */
+  await page.getByPlaceholder('0', { exact: true }).fill('1');
+  await page.getByRole('button', { name: /^Review$/ }).click();
+  const review = await page.locator('.mnhome-send-rows').innerText();
+  expect(review).toContain('1 mUSD');
+  expect(review).toContain(`${RESOLVABLE_NAME}.night`);
+  /* SAID BEFORE THE CONFIRM. Paying a name in a shielded asset is two
+     transactions exactly as paying one in NIGHT is, and somebody about to wait
+     through both should know that is what they are waiting for. */
+  expect(review).toContain('Two steps');
+  // Still no colour and still no account address on the step that confirms.
+  expect(review).not.toMatch(/\b[0-9a-f]{16,}\b/);
+  expect(review).not.toContain(PASSPORT_ACCOUNT_ADDRESS);
+
+  await page.getByRole('button', { name: /^Back$/ }).click();
+  /* Choosing NIGHT keeps the same name, resolved exactly as it always was —
+     through the real recorded registry. */
+  await picker().selectOption('night');
   await expect(chip).toBeVisible({ timeout: 30_000 });
   await expect(chip).toContainText(`${RESOLVABLE_NAME}.night`);
 });
