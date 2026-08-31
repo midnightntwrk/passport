@@ -123,11 +123,13 @@
   background: var(--mn-surface-hover);
 }
 
-/* The `unusable-credential` recovery.
-   A credential answered and cannot open a Passport. This is the one onboarding
-   state that carries an ACTION of its own, so it is styled as a panel with a
-   real button rather than as another line of error text — the previous version
-   was text alone and its advice pointed at a control that could not help. */
+/* The way-out panel, shared by both recoveries (`PasskeyWayOut`).
+   A credential answered and cannot open a Passport, or no credential could be
+   produced at all. These are the onboarding states that carry an ACTION of
+   their own, so they are styled as a panel with a real button rather than as
+   another line of error text — both previous versions were text alone, and the
+   advice in them pointed at controls that could not help. They share one class
+   because they are one species of thing and must not drift apart. */
 .mnob-unusable {
   display: flex;
   flex-direction: column;

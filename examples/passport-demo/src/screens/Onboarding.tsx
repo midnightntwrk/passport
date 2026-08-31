@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { ArrowRight, Fingerprint, Loader2, X } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
 import './onboarding.css'
@@ -61,15 +62,70 @@ export interface OnboardingProps {
    */
   unusableCredential?: string | null
   /**
+   * The sign-in produced NO credential at all, or null when that has not
+   * happened. Holds the sentence to show.
+   *
+   * The second state that needs a control rather than a paragraph, and the one
+   * the user named on 2026/08/30: "if there is no key, can you not just create
+   * it? Why does it always have to load it?" This browser holds Passport
+   * records, the platform keystore can no longer produce the passkey they
+   * name — deleted, another OS profile, never synced — and the "use a saved
+   * passkey" sheet comes back with nothing loadable. Everything on the screen
+   * then pointed at loading; nothing pointed at making.
+   *
+   * Distinct from {@link OnboardingProps.unusableCredential} because the two
+   * are different facts and deserve different sentences: there, something
+   * answered and cannot open a Passport; here, nothing answered. The way out
+   * happens to be the same button.
+   */
+  keylessPasskey?: string | null
+  /**
    * Enrols a NEW passkey, deliberately. Offered only alongside
-   * {@link OnboardingProps.unusableCredential}, because that is the one state
-   * in which creating is both safe and what the user has asked for: the
-   * credential that answered demonstrably opens no Passport, and the
-   * integrator still passes every credential this browser has a Passport
-   * record for as an exclusion, so a real Passport cannot be replaced.
+   * {@link OnboardingProps.unusableCredential} or
+   * {@link OnboardingProps.keylessPasskey}, because those are the states in
+   * which creating is both safe and what the user has asked for: no credential
+   * that could open a Passport is available either way, and the integrator
+   * still passes every credential this browser has a Passport record for as an
+   * exclusion, so a real Passport cannot be replaced.
    */
   onCreateNewPasskey?: () => void
   onDismissError?: () => void
+}
+
+/**
+ * A failure that carries its own way out: the explanation, and beneath it the
+ * control that resolves it.
+ *
+ * One component for both states rather than two nearly-identical blocks, so
+ * they cannot drift apart — a way out that looked like an afterthought in one
+ * of them and a real offer in the other would teach users to ignore both.
+ *
+ * The hint says only what the button DOES. The promise that a surviving
+ * Passport is safe belongs to the copy above it, and is made there once, in
+ * each state's own words: saying it twice on one panel — which is what this
+ * looked like when both states first shared the hint — reads as protesting.
+ */
+function PasskeyWayOut(props: { copy: ReactNode; onCreateNewPasskey?: () => void }) {
+  return (
+    <div className="mnob-unusable" role="alert">
+      <p className="mnob-unusable-copy">{props.copy}</p>
+      {props.onCreateNewPasskey ? (
+        <>
+          <button
+            type="button"
+            className="mnob-unusable-action"
+            onClick={props.onCreateNewPasskey}
+          >
+            <Fingerprint size={16} strokeWidth={2} aria-hidden="true" />
+            Create a new passkey
+          </button>
+          <p className="mnob-hint">
+            Makes a new passkey on this device and opens a Passport with it.
+          </p>
+        </>
+      ) : null}
+    </div>
+  )
 }
 
 export default function OnboardingScreen(props: OnboardingProps) {
@@ -81,6 +137,7 @@ export default function OnboardingScreen(props: OnboardingProps) {
     onContinue,
     onUseDifferentPasskey,
     unusableCredential,
+    keylessPasskey,
     onCreateNewPasskey,
     onDismissError,
   } = props
@@ -131,7 +188,7 @@ export default function OnboardingScreen(props: OnboardingProps) {
           </div>
         ) : null}
 
-        {/* THE ONE DEAD END, AND ITS WAY OUT.
+        {/* DEAD END ONE, AND ITS WAY OUT.
             A resident credential answered and returned no PRF output, so it
             cannot open a Passport. The explanation stays — it is the only
             thing that makes the next click comprehensible — but the advice is
@@ -140,28 +197,29 @@ export default function OnboardingScreen(props: OnboardingProps) {
             enrols, so the same credential answered the picker again and the
             user was stuck (found by adversarial verification, 2026/08/26). */}
         {unusableCredential && stage === 'welcome' ? (
-          <div className="mnob-unusable" role="alert">
-            <p className="mnob-unusable-copy">
-              {unusableCredential} It cannot open a Passport — Passport needs the WebAuthn PRF
-              extension to derive your keys.
-            </p>
-            {onCreateNewPasskey ? (
+          <PasskeyWayOut
+            copy={
               <>
-                <button
-                  type="button"
-                  className="mnob-unusable-action"
-                  onClick={onCreateNewPasskey}
-                >
-                  <Fingerprint size={16} strokeWidth={2} aria-hidden="true" />
-                  Create a new passkey
-                </button>
-                <p className="mnob-hint">
-                  Makes a new passkey on this device and opens a Passport with it. Any passkey
-                  this browser already holds a Passport for is left untouched.
-                </p>
+                {unusableCredential} It cannot open a Passport — Passport needs the WebAuthn PRF
+                extension to derive your keys. Any passkey this browser already holds a Passport
+                for is left untouched.
               </>
-            ) : null}
-          </div>
+            }
+            onCreateNewPasskey={onCreateNewPasskey}
+          />
+        ) : null}
+
+        {/* DEAD END TWO, AND THE SAME WAY OUT (2026/08/30).
+            Nothing answered at all. This browser holds Passport records, the
+            platform will not produce the passkey they name, and the saved-
+            passkey sheet had nothing in it to load. Every control on this
+            screen used to be a way of LOADING a passkey, which is exactly what
+            had just failed, so the state was terminal — the user's own
+            question was why it always has to load one. The copy does not claim
+            the passkey is gone, because WebAuthn never says so; it says what
+            can be seen, and offers the thing that works either way. */}
+        {keylessPasskey && stage === 'welcome' ? (
+          <PasskeyWayOut copy={keylessPasskey} onCreateNewPasskey={onCreateNewPasskey} />
         ) : null}
 
         {stage === 'welcome' ? (
