@@ -53,9 +53,15 @@ import {
    two — `QrPayload` itself arrives typed from the scan sheet. */
 import { normalisedAccountHex } from '../lib/qrPayload.js'
 
-/* Naming a colour. Pure and drilled, and — like `recipientName.ts` — free of
-   the wallet SDK, which `identity/accountCustody.ts` would drag in. */
-import { describeColour } from '../lib/colour.js'
+/* What this account can send, and where each of those things is allowed to go.
+   Pure and drilled, and — like `recipientName.ts` — free of the wallet SDK,
+   which `identity/accountCustody.ts` would drag in. */
+import {
+  buildSendAssets,
+  NIGHT_ASSET_ID,
+  refusalFor,
+  type SendAsset,
+} from '../lib/sendAssets.js'
 
 import './home.css'
 
@@ -104,27 +110,42 @@ import './home.css'
  * Pasting a raw address still works, unchanged, and everything below is about
  * that path.
  *
- * TWO KINDS OF RECIPIENT, DECIDED BY THE ADDRESS
- * ----------------------------------------------
- * The address the user pastes or scans decides what is being sent, because on
- * Midnight the two are not interchangeable:
+ * THE ASSET IS CHOSEN, AND THE ASSET DECIDES THE RECIPIENT (2026/08/31)
+ * ---------------------------------------------------------------------
+ * Until this date this sheet worked the other way round: whatever address was
+ * pasted decided what was being sent — `mn_addr…` meant NIGHT, `mn_shield-addr…`
+ * meant one of the shielded colours the account held — and the person sending
+ * never chose. That reads fine with one token in the account and stops being
+ * true the moment there are several: "right now I can only send NIGHT; I want
+ * to be able to send mUSD, and any other asset I have going forward".
  *
- *   `mn_addr…`         unshielded — NIGHT, quoted with six decimals.
- *   `mn_shield-addr…`  shielded — one of the shielded colours this account
- *                      holds, quoted in whole units.
+ * So the FIRST field is the asset, offered from what this account actually
+ * holds, and everything below it follows from that choice: which units the
+ * amount is quoted in, what Max means, what the review step names, and — the
+ * point — which recipients are valid. The list and the rules are in
+ * `lib/sendAssets.ts`, where they can be drilled.
+ *
+ * The address taxonomy did NOT move. {@link classifyRecipient} still runs the
+ * wallet SDK's own codec over whatever is in the field and still owns every
+ * sentence about what an address is, whose network it belongs to, and which
+ * ledger it names. What changed is what happens to its verdict: it is now
+ * CHECKED AGAINST the chosen asset rather than used to pick one. A shielded
+ * address pasted while NIGHT is chosen is refused in NIGHT's name — never
+ * silently answered by switching the asset, which is the same wrong-send in a
+ * new costume.
  *
  * NIGHT cannot be sent to a shielded address. `nativeToken()` is tagged
  * `unshielded`, the ledger keys its balance check by that tag, and the contract
- * keeps the two in separate maps — so the shielded mode offers the ACCOUNT's
- * own shielded colours and says plainly when there are none. The two modes
- * therefore quote different balances, different units, and different refusals;
- * what they share is the fee sentence, because the fee is the same either way.
+ * keeps the two in separate maps. A shielded colour cannot be sent to an
+ * unshielded one for the mirror-image reason. The two therefore quote different
+ * balances, different units, and different refusals; what they share is the fee
+ * sentence, because the fee is the same either way.
  *
- * The shielded mode exists only when the host supplies both
+ * The shielded assets exist only when the host supplies both
  * {@link SendSheetProps.readShieldedHoldings} and
- * {@link SendSheetProps.onSendShielded}. Without them a shielded address is
- * refused, which is the honest answer when nothing behind the sheet could act
- * on one.
+ * {@link SendSheetProps.onSendShielded}. Without them the picker offers NIGHT
+ * alone and a shielded address is refused, which is the honest answer when
+ * nothing behind the sheet could act on one.
  *
  * The host mounts this ONLY while there is genuinely an account to withdraw
  * from. Without one there is no Send button at all — a control that cannot work
@@ -197,14 +218,32 @@ export interface SendSheetProps {
   onSend: (params: { recipientAddress: string; amount: bigint }) => Promise<void>
   /**
    * Reads the shielded colours the ACCOUNT holds, in each colour's own atomic
-   * units. Called once, when a shielded recipient first turns up. An empty
-   * array is a real answer — this Passport's account holds nothing shielded —
-   * and the sheet says so rather than offering a control that cannot work.
+   * units. Called ONCE, when the sheet opens — since 2026/08/31 the asset is
+   * the first field, so what can be sent has to be known before anything is
+   * typed rather than after a shielded address turns up. An empty array is a
+   * real answer — this Passport's account holds nothing shielded — and the
+   * picker then offers NIGHT alone.
+   *
+   * This is the AUTHORITY on what may be sent, and its answer is what a
+   * shielded send is enabled against; {@link SendSheetProps.knownHoldings} only
+   * lets the picker be drawn before it lands.
    *
    * Optional together with {@link SendSheetProps.onSendShielded}: a host that
    * supplies neither leaves shielded addresses refused.
    */
   readShieldedHoldings?: () => Promise<SendSheetHolding[]>
+  /**
+   * The shielded colours the host is ALREADY showing, so the asset picker can
+   * be drawn on the first frame instead of after a network read.
+   *
+   * Advisory, and deliberately not trusted for a send: it is a mirror of the
+   * same account state the host painted its balance list from, and it is
+   * replaced the moment {@link SendSheetProps.readShieldedHoldings} answers.
+   * Until it does, a shielded asset can be CHOSEN and read about but not sent
+   * — the control says what it is waiting for — because a stale figure is not
+   * something to check an amount against.
+   */
+  knownHoldings?: readonly SendSheetHolding[]
   /**
    * Runs the shielded withdrawal, resolving only once the node has taken it.
    * `recipientAddress` is the WHOLE `mn_shield-addr…` string: the note's
@@ -479,6 +518,7 @@ export default function SendSheet(props: SendSheetProps) {
     readFeeReadiness,
     onSend,
     readShieldedHoldings,
+    knownHoldings,
     onSendShielded,
     resolveName,
     onSendToName,
@@ -510,7 +550,12 @@ export default function SendSheet(props: SendSheetProps) {
      that holds nothing, which is `[]` and gets its own sentence. */
   const [holdings, setHoldings] = useState<SendSheetHolding[] | null>(null)
   const [holdingsError, setHoldingsError] = useState<string | null>(null)
-  const [tokenType, setTokenType] = useState<string | null>(null)
+  /* WHAT IS BEING SENT — the first field, and since 2026/08/31 a choice rather
+     than something inferred from the recipient. NIGHT to begin with: it is the
+     one asset every Passport can send, and a picker that opened on whatever
+     happened to sort first would move under the thumb of somebody who had
+     opened this sheet a hundred times. */
+  const [assetId, setAssetId] = useState<string>(NIGHT_ASSET_ID)
 
   /* What the registry said about the name in the field, if there is one. */
   const [nameState, setNameState] = useState<NameState>({ status: 'idle' })
@@ -629,6 +674,64 @@ export default function SendSheet(props: SendSheetProps) {
     }
   }, [resolveName, typedDomain])
 
+  /* WHAT THIS ACCOUNT CAN SEND, read when the sheet OPENS.
+
+     It used to be read only once a shielded address had turned up, on the
+     reasoning that somebody sending NIGHT should not pay for a query they will
+     never look at. That reasoning belonged to a sheet where the address came
+     first. The asset is now the first field, so the list has to exist before
+     anything is typed — and there is nothing to look at at all until it does. */
+  useEffect(() => {
+    if (!readShieldedHoldings) return undefined
+    let live = true
+    void (async () => {
+      try {
+        const read = await readShieldedHoldings()
+        if (!live) return
+        setHoldings(read)
+        setHoldingsError(null)
+      } catch (cause) {
+        if (!live) return
+        setHoldings(null)
+        setHoldingsError(messageOf(cause))
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [readShieldedHoldings])
+
+  /* What the picker draws from. The host's own mirror of the account gets the
+     picker on screen in the first frame; the read above replaces it and is what
+     a send is actually enabled against — see `knownHoldings`. */
+  const pickerHoldings = holdings ?? knownHoldings ?? null
+  /* Whether the authoritative read is still in flight. Distinct from an account
+     that holds nothing, which is `[]`, and from a read that failed. */
+  const holdingsPending = shieldedSupported && holdings === null && holdingsError === null
+
+  const assets = useMemo(
+    () =>
+      buildSendAssets({
+        nightBalance: atomicFromFormatted(availableBalance),
+        /* Without both shielded seams there is no shielded send to offer, so
+           the picker offers NIGHT alone rather than options that would be
+           refused on confirming. */
+        holdings: shieldedSupported ? pickerHoldings : [],
+        sponsored: sponsoredToken ?? null,
+      }),
+    [availableBalance, pickerHoldings, shieldedSupported, sponsoredToken],
+  )
+  /* The selection is DERIVED, not corrected by an effect. A colour that goes
+     away between the host's mirror and the authoritative read falls back to
+     NIGHT for as long as it is missing and is honoured again the moment it
+     comes back — where an effect would have overwritten the choice for good.
+     NIGHT is always present, so this can never be undefined. */
+  const asset: SendAsset = assets.find((entry) => entry.id === assetId) ?? assets[0]
+  const tokenType = asset.tokenType
+  /* Which ledger is being spent from — now a consequence of the choice above,
+     where until 2026/08/31 it was a consequence of the recipient. */
+  const mode: Mode = asset.mode
+
   const verdict = useMemo(
     () => (nameMode ? null : classifyRecipient(recipient, networkId, shieldedSupported)),
     [nameMode, networkId, recipient, shieldedSupported],
@@ -657,79 +760,53 @@ export default function SendSheet(props: SendSheetProps) {
         : nameState.status === 'error'
           ? nameState.message
           : scannedClaimBroken
+  /* THE CHOSEN ASSET, CHECKED AGAINST WHAT IS IN THE FIELD.
+
+     `classifyRecipient` still owns the address taxonomy; this only asks whether
+     its verdict and the selection can go together. A mismatch is REFUSED in the
+     asset's own name — never answered by switching the asset to suit the
+     address, which is the silent wrong-send the picker exists to replace. See
+     `lib/sendAssets.ts` for both sentences. */
+  const assetRefusal = nameMode
+    ? refusalFor(asset, { kind: 'name' })
+    : verdict && 'mode' in verdict
+      ? refusalFor(asset, { kind: 'address', mode: verdict.mode })
+      : null
+  /* The asset's refusal LEADS on the name path: told that mUSD cannot go to a
+     name at all, "no Passport has this name" is an answer to a question they
+     are no longer asking. On the address path the codec speaks first, because
+     "that is not a Midnight address" is about the string itself and comes
+     before anything can be said about where it would have gone. */
   const recipientError = nameMode
-    ? nameError
+    ? (assetRefusal ?? nameError)
     : verdict && 'error' in verdict
       ? verdict.error
-      : null
-  /* A name is always paid in NIGHT: what it resolves to is an account, and the
-     route into one is `deposit_night`. A shielded note cannot take that route —
-     `deposit_shielded` consumes one specific coin — so nothing here offers it. */
-  const mode: Mode = nameMode
-    ? 'unshielded'
-    : verdict && 'mode' in verdict
-      ? verdict.mode
-      : 'unshielded'
+      : assetRefusal
   const resolvedName = nameState.status === 'found' ? nameState : null
 
-  /* The shielded colours are read once, and only once a shielded recipient has
-     actually turned up: a user sending NIGHT should not pay for a balance
-     query they will never look at. */
-  useEffect(() => {
-    if (mode !== 'shielded' || !readShieldedHoldings) return
-    if (holdings !== null || holdingsError !== null) return
-    let live = true
-    void (async () => {
-      try {
-        const read = await readShieldedHoldings()
-        if (!live) return
-        setHoldings(read)
-        setHoldingsError(null)
-      } catch (cause) {
-        if (!live) return
-        setHoldings(null)
-        setHoldingsError(messageOf(cause))
-      }
-    })()
-    return () => {
-      live = false
-    }
-  }, [holdings, holdingsError, mode, readShieldedHoldings])
+  /* An item is sent whole or not at all — the rule that made it an item is that
+     the account holds exactly one — so the amount is STATED rather than typed,
+     and what was typed for the last asset does not leak into it. */
+  const amountLocked = asset.amountCap !== null
+  const effectiveAmountText = asset.amountCap !== null ? asset.amountCap.toString() : amountText
 
-  /* One colour is chosen for the user; several are offered. Re-chosen whenever
-     the current selection is no longer one of the colours actually held. */
-  useEffect(() => {
-    if (holdings === null || holdings.length === 0) return
-    if (tokenType !== null && holdings.some((held) => held.tokenType === tokenType)) return
-    setTokenType(holdings[0].tokenType)
-  }, [holdings, tokenType])
-
-  const selectedHolding = useMemo(
-    () => holdings?.find((held) => held.tokenType === tokenType) ?? null,
-    [holdings, tokenType],
-  )
-
-  const availableAtomic = useMemo(
-    () =>
-      mode === 'shielded'
-        ? (selectedHolding?.amount ?? null)
-        : atomicFromFormatted(availableBalance),
-    [availableBalance, mode, selectedHolding],
-  )
+  const availableAtomic = asset.available
   const parsedAmount = useMemo(() => {
-    if (!amountText.trim()) return null
-    return mode === 'shielded' ? parseShieldedUnits(amountText) : parseNight(amountText)
-  }, [amountText, mode])
+    if (!effectiveAmountText.trim()) return null
+    return mode === 'shielded'
+      ? parseShieldedUnits(effectiveAmountText)
+      : parseNight(effectiveAmountText)
+  }, [effectiveAmountText, mode])
   const amountError = useMemo(() => {
     if (!parsedAmount) return null
     if ('error' in parsedAmount) return parsedAmount.error
     if (availableAtomic !== null && parsedAmount.amount > availableAtomic) {
       return mode === 'shielded'
-        ? `That is more than your account holds — ${availableAtomic.toString()} units of this token are available.`
+        ? `That is more than your account holds — ${availableAtomic.toString()} ${asset.symbol} available.`
         : `That is more than your account holds — ${availableBalance} NIGHT is available.`
     }
     return null
-  }, [availableAtomic, availableBalance, mode, parsedAmount])
+  }, [asset.symbol, availableAtomic, availableBalance, mode, parsedAmount])
 
   const amount = parsedAmount && !('error' in parsedAmount) ? parsedAmount.amount : null
   /* A name is not "ready" merely because it is well formed: it is ready when
@@ -748,10 +825,9 @@ export default function SendSheet(props: SendSheetProps) {
     mode === 'shielded'
       ? holdingsError !== null || holdings === null
       : availableBalance === null && balanceStatus === 'unavailable'
-  /* Nothing shielded to send is not an error and not a loading state: it is a
-     fact about this Passport, and it removes the Send control rather than
-     disabling it. */
-  const noShieldedTokens = mode === 'shielded' && holdings !== null && holdings.length === 0
+  /* An account with nothing shielded in it no longer needs a state of its own.
+     It is simply an account with one asset to choose from, said by the picker
+     above rather than by a disabled control at the bottom of the sheet. */
   const canReview =
     recipientReady &&
     amount !== null &&
@@ -848,13 +924,15 @@ export default function SendSheet(props: SendSheetProps) {
 
   const handleMax = useCallback(() => {
     if (mode === 'shielded') {
-      if (selectedHolding === null) return
-      setAmountText(selectedHolding.amount.toString())
+      if (asset.available === null) return
+      setAmountText(asset.available.toString())
       return
     }
+    /* The formatted string, not the atomic figure re-formatted: it is the exact
+       decimal the account reported, so nothing is lost on the round trip. */
     if (availableBalance === null) return
     setAmountText(availableBalance)
-  }, [availableBalance, mode, selectedHolding])
+  }, [asset.available, availableBalance, mode])
 
   const handleSend = useCallback(async () => {
     if (amount === null || !recipientReady || busy) return
@@ -989,11 +1067,10 @@ export default function SendSheet(props: SendSheetProps) {
       >
         <div className="mnhome-addr-head">
           <p className="mnhome-micro" id="mnhome-send-title">
-            {step === 'review'
-              ? 'Review this transfer'
-              : mode === 'shielded'
-                ? 'Send a shielded token'
-                : 'Send NIGHT'}
+            {/* The heading names the CHOSEN asset, because that is now the
+                first thing decided on this sheet rather than the last thing
+                inferred from it. */}
+            {step === 'review' ? 'Review this transfer' : `Send ${asset.symbol}`}
           </p>
           <button
             type="button"
@@ -1008,6 +1085,71 @@ export default function SendSheet(props: SendSheetProps) {
 
         {step === 'compose' ? (
           <div className="mnhome-send-form">
+            {/* THE FIRST FIELD (2026/08/31). What is being sent is a choice,
+                made before the recipient, and it is what decides which
+                recipients the field below will accept. With one asset there is
+                nothing to choose, so it is STATED rather than offered as a
+                control with a single option in it. */}
+            {assets.length > 1 ? (
+              <label className="mnhome-send-field">
+                <span className="mnhome-send-label">Asset</span>
+                <select
+                  className="mnhome-send-input mnhome-send-asset"
+                  value={asset.id}
+                  onChange={(event) => {
+                    setAssetId(event.target.value)
+                    /* THE AMOUNT BELONGS TO THE ASSET. "100" means a hundred of
+                       whatever was chosen when it was typed, and carrying it
+                       across is how "100 mUSD" quietly becomes "100 NIGHT" on
+                       an account that can afford both. Cleared here rather than
+                       recomputed: there is no honest conversion between two
+                       colours, so the only safe amount for a new asset is one
+                       the person types for it. The recipient is NOT cleared —
+                       a mismatched one earns a sentence saying so, which is
+                       the whole point of choosing the asset first. */
+                    setAmountText('')
+                  }}
+                  disabled={busy}
+                >
+                  {assets.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.symbol}
+                      {' — '}
+                      {entry.available === null
+                        ? 'balance not known yet'
+                        : entry.id === NIGHT_ASSET_ID
+                          ? `${availableBalance ?? formatNight(entry.available)} available`
+                          : entry.kind === 'nft'
+                            ? 'one held'
+                            : `${entry.available.toString()} available`}
+                    </option>
+                  ))}
+                </select>
+                <span className="mnhome-send-hint">
+                  {asset.kind === 'nft'
+                    ? `A one-of-a-kind item. It goes whole — there is one of it, so the amount below is fixed at one. Its colour is ${asset.name}.`
+                    : asset.id === NIGHT_ASSET_ID
+                      ? 'Everything your account holds is here. NIGHT is the only asset a Midnight name can be paid in.'
+                      : `Everything your account holds is here. ${asset.symbol} goes to a shielded address, and cannot be paid to a name.`}
+                </span>
+              </label>
+            ) : (
+              /* A `div`, not a `label`: with one asset there is no control to
+                 label — it is stated. The sentence says WHY there is only one,
+                 and which of the three reasons applies. */
+              <div className="mnhome-send-field">
+                <span className="mnhome-send-label">Asset</span>
+                <span className="mnhome-send-hint">
+                  <strong>{asset.symbol}</strong>
+                  {holdingsPending
+                    ? ' — still checking what else this Passport’s account holds.'
+                    : holdingsError !== null
+                      ? ' — what else this Passport’s account holds could not be read just now, so nothing else is offered.'
+                      : ' — the only asset this Passport’s account holds.'}
+                </span>
+              </div>
+            )}
+
             <label className="mnhome-send-field">
               <span className="mnhome-send-label">
                 Recipient
@@ -1035,7 +1177,16 @@ export default function SendSheet(props: SendSheetProps) {
                   // Typed into: whatever was scanned no longer describes it.
                   setScannedClaim(null)
                 }}
-                placeholder={nameSupported ? 'alice.night' : `mn_addr_${networkId}1…`}
+                /* The placeholder follows the CHOSEN asset too. It offered
+                   `alice.night` whatever was selected, which invited into the
+                   field the one thing a shielded asset can never be paid to. */
+                placeholder={
+                  mode === 'shielded'
+                    ? `mn_shield-addr_${networkId}1…`
+                    : nameSupported
+                      ? 'alice.night'
+                      : `mn_addr_${networkId}1…`
+                }
                 rows={2}
                 spellCheck={false}
                 autoCapitalize="none"
@@ -1071,55 +1222,20 @@ export default function SendSheet(props: SendSheetProps) {
                   account behind it — you never need their address.
                 </span>
               ) : mode === 'shielded' ? (
+                /* The hint follows the CHOSEN asset, so it names the one kind
+                   of address that will be accepted rather than listing both and
+                   leaving the refusal to do the teaching. */
                 <span className="mnhome-send-hint">
-                  A shielded {networkId} address. This pays one of the shielded tokens this
-                  Passport&rsquo;s account holds — not NIGHT, which is unshielded and cannot
-                  reach a shielded account.
+                  A shielded (mn_shield-addr…) {networkId} address — the only kind{' '}
+                  {asset.symbol} can go to. Paste it; nothing is guessed from a partial one.
                 </span>
               ) : (
                 <span className="mnhome-send-hint">
-                  {nameSupported ? 'A Midnight name, or ' : ''}
-                  {shieldedSupported
-                    ? `${nameSupported ? 'an' : 'An'} unshielded (mn_addr…) or shielded (mn_shield-addr…) ${networkId} address. Paste it — nothing is guessed from a partial one.`
-                    : `${nameSupported ? 'an' : 'An'} unshielded ${networkId} address. Paste it — nothing is guessed from a partial one.`}
+                  {nameSupported ? 'A Midnight name, or an' : 'An'} unshielded (mn_addr…){' '}
+                  {networkId} address. Paste it — nothing is guessed from a partial one.
                 </span>
               )}
             </label>
-
-            {/* The colour picker. One held colour is simply named; several are
-                offered; none at all is said plainly by the amount hint below,
-                and the Send control goes with it. */}
-            {mode === 'shielded' && holdings !== null && holdings.length === 1 ? (
-              /* A `div`, not a `label`: there is no control here to label — one
-                 held colour is stated, not chosen. */
-              <div className="mnhome-send-field">
-                <span className="mnhome-send-label">Token</span>
-                <span className="mnhome-send-hint">
-                  <strong>{describeColour(holdings[0].tokenType, sponsoredToken).symbol}</strong> —
-                  the only shielded token this Passport&rsquo;s account holds
-                  {describeColour(holdings[0].tokenType, sponsoredToken).known
-                    ? '.'
-                    : `, colour ${describeColour(holdings[0].tokenType, sponsoredToken).name}.`}
-                </span>
-              </div>
-            ) : null}
-            {mode === 'shielded' && holdings !== null && holdings.length > 1 ? (
-              <label className="mnhome-send-field">
-                <span className="mnhome-send-label">Token</span>
-                <select
-                  className="mnhome-send-input mnhome-send-input-mono"
-                  value={tokenType ?? ''}
-                  onChange={(event) => setTokenType(event.target.value)}
-                >
-                  {holdings.map((held) => (
-                    <option key={held.tokenType} value={held.tokenType}>
-                      {describeColour(held.tokenType, sponsoredToken).symbol} —{' '}
-                      {held.amount.toString()} units
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
 
             <label className="mnhome-send-field">
               <span className="mnhome-send-label">
@@ -1131,7 +1247,16 @@ export default function SendSheet(props: SendSheetProps) {
                   type="button"
                   className="mnhome-send-max"
                   onClick={handleMax}
-                  disabled={availableAtomic === null || availableAtomic === 0n}
+                  /* Its own name. A button nested inside a `<label>` inherits
+                     that label as its accessible name, so this one announced
+                     itself as "Amount mUSD 100 mUSD available. A shielded token
+                     carries no decimal scale…" — the whole field read out for a
+                     control that does one thing. */
+                  aria-label={`Send the whole ${asset.symbol} balance`}
+                  /* Nothing to fill in for an item — the amount is already the
+                     only one it can be — and nothing to fill in from a balance
+                     that is zero or not yet known. */
+                  disabled={amountLocked || availableAtomic === null || availableAtomic === 0n}
                 >
                   Max
                 </button>
@@ -1139,29 +1264,43 @@ export default function SendSheet(props: SendSheetProps) {
               <span className="mnhome-send-amount">
                 <input
                   className="mnhome-send-input"
-                  value={amountText}
+                  value={effectiveAmountText}
                   onChange={(event) => setAmountText(event.target.value)}
                   placeholder={mode === 'shielded' ? '0' : '0.0'}
                   inputMode={mode === 'shielded' ? 'numeric' : 'decimal'}
                   spellCheck={false}
+                  /* Rendered, filled in, and not editable — the house rule for
+                     a control that cannot be used, with the sentence beneath
+                     saying why. Removing the field would leave the review step
+                     quoting an amount nothing on this screen had shown. */
+                  readOnly={amountLocked}
                   aria-invalid={amountError !== null}
                   aria-describedby={amountError ? 'mnhome-send-amount-error' : undefined}
                 />
-                <span className="mnhome-send-unit">{mode === 'shielded' ? 'units' : 'NIGHT'}</span>
+                {/* The chosen asset's own ticker, where until 2026/08/31 this
+                    read the fixed word "units" and named nothing. An item says
+                    "item" instead: its handle is `Item · abab…`, which is a
+                    label rather than a unit, and it is already on the field
+                    above and on the review step. */}
+                <span className="mnhome-send-unit">
+                  {asset.kind === 'nft' ? 'item' : asset.symbol}
+                </span>
               </span>
               {amountError ? (
                 <span className="mnhome-send-error" id="mnhome-send-amount-error" role="alert">
                   {amountError}
                 </span>
+              ) : amountLocked ? (
+                <span className="mnhome-send-hint">
+                  There is one of this item, so one is what goes. Nothing here divides.
+                </span>
               ) : mode === 'shielded' ? (
                 <span className="mnhome-send-hint">
                   {holdingsError !== null
-                    ? `The shielded balances could not be read, so sending is disabled until they can be: ${holdingsError}`
+                    ? `What this Passport’s account holds could not be read just now, so sending is disabled until it can be: ${holdingsError}`
                     : holdings === null
-                      ? 'Reading which shielded tokens this Passport holds…'
-                      : holdings.length === 0
-                        ? 'This Passport’s account holds no shielded tokens, so there is nothing to pay a shielded address with. NIGHT is unshielded and never appears here.'
-                        : `${(selectedHolding?.amount ?? 0n).toString()} units of this token available. A shielded token has no decimal scale on the ledger, so this is a whole-unit count. The network fee does not come out of it, so the whole balance can go.`}
+                      ? `Checking what your account holds. ${asset.symbol} can be chosen now and sent once that answers.`
+                      : `${(asset.available ?? 0n).toString()} ${asset.symbol} available. A shielded token carries no decimal scale on the ledger, so this is a whole-unit count. The network fee does not come out of it, so the whole balance can go.`}
                 </span>
               ) : (
                 <span className="mnhome-send-hint">
@@ -1178,11 +1317,11 @@ export default function SendSheet(props: SendSheetProps) {
               {feeNote}
             </p>
 
-            {/* ALWAYS RENDERED. When the fee cannot be paid — or there is
-                nothing shielded to pay with — this is disabled and says what it
-                is waiting for, and the row beneath it says how long and offers a
-                re-check. It used to be removed outright, which left a sheet with
-                no action in it at all for a state that clears itself. */}
+            {/* ALWAYS RENDERED. When the fee cannot be paid this is disabled
+                and says what it is waiting for, and the row beneath it says how
+                long and offers a re-check. It used to be removed outright,
+                which left a sheet with no action in it at all for a state that
+                clears itself. */}
             <button
               type="button"
               className="mnhome-send-primary"
@@ -1192,7 +1331,7 @@ export default function SendSheet(props: SendSheetProps) {
                 setFeeChanged(false)
                 setStep('review')
               }}
-              disabled={!canReview || feeBlocksSend || noShieldedTokens}
+              disabled={!canReview || feeBlocksSend}
             >
               {feeBlocksSend ? (
                 <span>{blockedPrimaryLabel}</span>
@@ -1208,6 +1347,22 @@ export default function SendSheet(props: SendSheetProps) {
         ) : (
           <div className="mnhome-send-form">
             <dl className="mnhome-send-rows">
+              {/* THE ASSET LEADS THE REVIEW, because it is what was chosen
+                  first. It is named here whether or not it is shielded: the
+                  row used to appear only for a shielded send, which left the
+                  one thing the user picked off the summary of what they picked
+                  whenever they picked NIGHT. */}
+              <div className="mnhome-send-row">
+                <dt>Asset</dt>
+                <dd>
+                  {/* NEVER the raw colour. This row used to print all 64
+                      characters underneath the shortened form, which is the one
+                      place on the review step a reader could mistake a colour
+                      for something they should check. */}
+                  <strong>{asset.symbol}</strong>
+                  <small>{asset.kind === 'nft' ? `A one-of-a-kind item — ${asset.name}` : asset.name}</small>
+                </dd>
+              </div>
               <div className="mnhome-send-row">
                 <dt>Amount</dt>
                 <dd>
@@ -1215,39 +1370,22 @@ export default function SendSheet(props: SendSheetProps) {
                     {amount === null
                       ? '—'
                       : mode === 'shielded'
-                        ? `${amount.toString()} units`
+                        ? `${amount.toString()} ${asset.symbol}`
                         : `${formatNight(amount)} NIGHT`}
                   </strong>
                   <small>
                     {amount === null
                       ? ''
-                      : mode === 'shielded'
-                        ? /* There is no second scale to convert to: the figure
-                             above already IS the ledger's own count. */
-                          'A shielded token has no decimal scale on the ledger.'
-                        : `${amount.toString()} atomic ${amount === 1n ? 'unit' : 'units'}`}
+                      : asset.kind === 'nft'
+                        ? 'There is one of it, and it goes whole.'
+                        : mode === 'shielded'
+                          ? /* There is no second scale to convert to: the figure
+                               above already IS the ledger's own count. */
+                            'A shielded token has no decimal scale on the ledger.'
+                          : `${amount.toString()} atomic ${amount === 1n ? 'unit' : 'units'}`}
                   </small>
                 </dd>
               </div>
-              {mode === 'shielded' ? (
-                <div className="mnhome-send-row">
-                  <dt>Token</dt>
-                  <dd>
-                    {/* NEVER the raw colour. This row used to print all 64
-                        characters underneath the shortened form, which is the
-                        one place on the review step a reader could mistake a
-                        colour for something they should check. */}
-                    <strong>
-                      {tokenType === null
-                        ? '—'
-                        : describeColour(tokenType, sponsoredToken).symbol}
-                    </strong>
-                    <small>
-                      {tokenType === null ? '' : describeColour(tokenType, sponsoredToken).name}
-                    </small>
-                  </dd>
-                </div>
-              ) : null}
               <div className="mnhome-send-row">
                 <dt>Recipient</dt>
                 <dd>
@@ -1336,8 +1474,11 @@ export default function SendSheet(props: SendSheetProps) {
               >
                 <AlertTriangle size={14} aria-hidden="true" />
                 <span>
-                  Nothing was sent — {mode === 'shielded' ? 'no shielded token' : 'no NIGHT'}{' '}
-                  moved from your account. {failure.message}
+                  Nothing was sent —{' '}
+                  {asset.kind === 'nft'
+                    ? 'the item is still in your account'
+                    : `no ${asset.symbol} moved from your account`}
+                  . {failure.message}
                   {failure.detail ? ` ${failure.detail}` : ''}
                 </span>
                 {/* The passkey could not be used, and this sheet's own Send

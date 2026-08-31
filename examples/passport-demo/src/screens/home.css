@@ -745,18 +745,60 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
 .mnhome-send-input:focus-visible { outline: 2px solid var(--mn-focus-ring); outline-offset: 2px; }
 .mnhome-send-input[aria-invalid='true'] { border-color: var(--mn-border-strong); }
 
+/* The asset picker — the FIRST field on the Send sheet since 2026/08/31, and
+   the one that decides what every field under it means.
+
+   It reuses `.mnhome-send-input` for its box so the three fields line up
+   exactly, and adds only what a `<select>` needs on top: the platform arrow is
+   dropped and drawn as one chevron in the text colour, because Safari and
+   Chrome disagree about the native one and the disagreement is visible beside
+   two fields that are not selects. It is NOT set in the mono face — a ticker is
+   a word, not a colour, and the raw colour never appears here. */
+.mnhome-send-asset {
+  appearance: none;
+  padding-right: 38px;
+  background-image: linear-gradient(45deg, transparent 50%, currentcolor 50%),
+    linear-gradient(135deg, currentcolor 50%, transparent 50%);
+  background-position: right 17px center, right 12px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  font-weight: 600;
+  /* An option list is the browser's own surface; without this the popup on a
+     dark build paints light text on a light ground in some engines. */
+  color-scheme: var(--mn-color-scheme);
+}
+.mnhome-send-asset:disabled { opacity: .55; cursor: default; }
+
 .mnhome-send-amount { position: relative; display: block; }
-.mnhome-send-amount .mnhome-send-input { padding-right: 68px; }
+/* Room for the UNIT, which since 2026/08/31 is the chosen asset's own ticker
+   rather than the fixed word "units" — and a ticker can be a disambiguated one
+   ("mUSD · aaaa…") when two colours on this account claim the same name. The
+   reservation is sized for that, and the chip is capped and elided so the
+   longest imaginable one can never sit over the digits. */
+.mnhome-send-amount .mnhome-send-input { padding-right: 124px; }
 .mnhome-send-unit {
   position: absolute;
   top: 50%;
   right: 13px;
+  max-width: 110px;
   transform: translateY(-50%);
+  overflow: hidden;
   color: var(--mn-text-muted);
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: .06em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   pointer-events: none;
+}
+/* A locked amount is stated, not typed. It keeps the field's box so the three
+   rows stay aligned, and reads as settled rather than as a control that has
+   stopped working. */
+.mnhome-send-input[readonly] {
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-sunken);
+  cursor: default;
 }
 .mnhome-send-max {
   padding: 3px 9px;

@@ -383,6 +383,36 @@ export default function HomeScreen(props: HomeScreenProps) {
 
   const visibleTokens = showAllTokens ? tokenRows : tokenRows.slice(0, TOKENS_VISIBLE)
 
+  /**
+   * The shielded colours this screen is already showing, handed to the Send
+   * sheet so its asset picker can be drawn on the first frame.
+   *
+   * Since 2026/08/31 the asset is the FIRST field on that sheet, so the list
+   * has to exist before anything is typed — and Home has already read exactly
+   * this, for the cards above. Advisory only: `readShieldedHoldings` is still
+   * the authority a send is enabled against, and it replaces this the moment it
+   * answers. See `SendSheetProps.knownHoldings`.
+   *
+   * A ZERO IS FILTERED OUT. The stablecoin card is rendered at a real zero —
+   * the sponsor named the colour, so the row belongs on screen either way — but
+   * an asset with none of it in the account is not something to offer as a
+   * thing to send, and the authoritative read drops zeros too.
+   */
+  const sendableHoldings = useMemo((): SendSheetHolding[] => {
+    if (!account) return []
+    const held: SendSheetHolding[] = []
+    if (account.stablecoin) {
+      held.push({
+        tokenType: account.stablecoin.colourHex,
+        amount: account.stablecoin.amount,
+      })
+    }
+    for (const other of account.otherShielded) {
+      held.push({ tokenType: other.colourHex, amount: other.amount })
+    }
+    return held.filter((entry) => entry.amount > 0n)
+  }, [account])
+
   // Escape closes the Receive sheet, mirroring the scrim click.
   useEffect(() => {
     if (!receiveOpen) return undefined
@@ -747,6 +777,10 @@ export default function HomeScreen(props: HomeScreenProps) {
             {...(send.readShieldedHoldings
               ? { readShieldedHoldings: send.readShieldedHoldings }
               : {})}
+            /* What this screen is already showing, so the sheet's asset picker
+               is populated in its first frame rather than after a read. The
+               read above stays the authority a send is enabled against. */
+            knownHoldings={sendableHoldings}
             {...(send.onSendShielded ? { onSendShielded: send.onSendShielded } : {})}
             {...(send.resolveName ? { resolveName: send.resolveName } : {})}
             {...(send.onSendToName ? { onSendToName: send.onSendToName } : {})}

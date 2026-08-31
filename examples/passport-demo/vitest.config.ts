@@ -99,6 +99,23 @@
  * `src/lib/qrPayload.test.ts`. The camera, the image decode, and the SVG that
  * paints the answer stay out with the rest of the `.tsx`.
  *
+ * `src/lib/sendAssets.ts` went IN on 2026/08/31, the day the Send sheet stopped
+ * inferring what was being sent from the address it was going to. It is the
+ * module that answers two questions about somebody's money: what this account
+ * can send, and where each of those things is allowed to go. Both ways of
+ * getting the first wrong are visible on the picker — an asset missing from a
+ * list of what is held, or two options carrying the same ticker over different
+ * colours, which is the wrong-send the naming work exists to prevent. Getting
+ * the second wrong is worse and quieter: a refusal that does not name the asset
+ * leaves somebody re-reading an address that was never the problem, and a rule
+ * that accepted a mismatch would offer a send the ledger cannot make. It holds
+ * no DOM, no React, no network, and no wallet SDK — the address taxonomy stays
+ * in the sheet with the codec that owns it, and this only checks that answer
+ * against a choice — so every entry, every ordering rule, and every sentence is
+ * drilled directly in `src/lib/sendAssets.test.ts`. The picker itself, the
+ * amount field it drives, and the review rows stay out with the rest of the
+ * `.tsx`.
+ *
  * `src/lib/passkeyRecovery.ts` went IN on 2026/08/30, the day it was written,
  * and it is in the denominator because it is the rule that decides whether a
  * person who cannot sign in is offered a way forward or only an explanation.
@@ -226,6 +243,7 @@ export default mergeConfig(
           'src/lib/qrPayload.ts',
           'src/lib/qrScan.ts',
           'src/lib/recipientName.ts',
+          'src/lib/sendAssets.ts',
           'src/lib/sponsor.ts',
           'src/identity/backup.ts',
           'src/identity/claimWarmup.ts',
