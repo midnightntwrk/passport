@@ -1,0 +1,14 @@
+[Unit]
+Description=Restart the Midnight Passport balancer if it stops answering
+Documentation=file:///opt/passport-balancer/deploy/passport-balancer-watchdog.sh
+# Nothing to do while the service it watches is not meant to be running.
+After=passport-balancer.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/passport-balancer-watchdog.sh
+# One check must never outlive its own interval, or two of them overlap and
+# both strike for the same failure.
+TimeoutStartSec=60
+StandardOutput=journal
+StandardError=journal

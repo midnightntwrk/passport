@@ -460,6 +460,27 @@ contractProving                            wasm | server — how CONTRACT circui
                                            question from `proving` above
 settling                                   not ready, but only because a spend's
                                            change is still in flight
+health                                     the watchdog's own account of itself
+                                           — see "Keeping itself alive" below
+```
+
+`health` is what makes the watchdog observable without an SSH session:
+
+```json
+"health": {
+  "intervalMs": 600000,
+  "checks": 42,
+  "lastCheckAt": "2026-08-31T12:41:07.881Z",
+  "verdict": "healthy",
+  "reason": "synced, connected, 3 DUST UTxO(s), able to prove",
+  "consecutiveUnhealthy": 0,
+  "lastRemedy": null,
+  "restartsRequestedSinceBoot": 0,
+  "restartsRequestedTotal": 0,
+  "lastRestartRequestAt": null,
+  "lastRestartReason": null,
+  "awaitingHealthyTick": false
+}
 ```
 
 `assetsFundedTotal` can lag `accountsFundedTotal`: an activation whose asset leg
@@ -467,6 +488,130 @@ failed is a real, recorded NIGHT credit with no asset entry, and the gap is
 precisely the set of accounts a retried `/fund-account` would top up.
 
 None of these is key material and none of them names a user.
+
+---
+
+## Keeping itself alive
+
+Two legs, because one of the four things that go wrong cannot be seen from
+inside the process it happens to.
+
+### What actually goes wrong, and why the remedy differs
+
+| | What it looks like | What it is | What to do |
+| --- | --- | --- | --- |
+| **Settling** | `available: 0`, `utxoCount: 0`, sometimes `synced: false`, for 20–60 s (and up to ~2 min for the sync flap) | The wallet holds **one large NIGHT UTxO**, so every fee-bearing submission nullifies its DUST and the replacement only appears when that transaction lands | **Nothing.** Intervening here is the bug |
+| **Busy** | `available: 0` with `balancing` or `busy` true, for up to ~2 min | A grant's shielded proof, or a contract call holding a claim on coin state | **Nothing.** This is the "locked while in use" the service is asked for |
+| **Degraded** | `synced: false` with nothing in flight, an indexer subscription dropped (`RPC-CORE: disconnected … Normal Closure`), key material that never loaded, or `available: 0` long after anything could still be settling | A real fault the process can still see | Escalating in-process remedies, then a restart |
+| **Wedged** | The process is up and answering nothing | Not visible from inside | The external timer |
+
+### Leg A — the in-process health loop (`src/health.ts`)
+
+A tick every ten minutes (`BALANCER_HEALTH_INTERVAL_MS`), jittered by ±5 % so it
+never lands on the same second as the sixty-second snapshot save or the DUST
+registration retry. One tick at a time, remedy included.
+
+Each tick gathers the same facts `walletStatus()` gathers — readable, synced,
+every sub-wallet's subscription connected, DUST balance, UTxO count,
+`isReserved()`, `isBusy()`, proving readiness, time since the last successful
+sponsorship, time since the sync indices last moved, and the current unhealthy
+streak — and hands them to a **pure** verdict function, `assessHealth`. No clock,
+no chain, no wallet: it is `test/health.test.ts`'s to drive, and that is where
+every branch is proved.
+
+The order of its branches is the policy, and it is the safe order — the two "do
+nothing" verdicts are decided **before** any of the acting ones, so no
+combination of facts can reach a remedy while a spend is in flight or while the
+DUST is on its way back:
+
+1. `busy` — `isReserved()`, then `isBusy()`. Unconditional.
+2. `wedged` / `degraded` — the wallet could not be read at all. Ahead of the
+   start-up grace, because a *syncing* wallet answers `currentState()` perfectly
+   well and simply reports `isSynced: false`; one that answers nothing is a
+   different thing, and being young is no excuse for it.
+3. `settling` — still inside the 15-minute start-up grace and not yet synced or
+   funded, **or** DUST-less within 5 minutes of a sponsorship. Deliberately not
+   gated on `synced`, because the post-spend flap and the nullified DUST are one
+   event.
+4. `degraded` — unsynced; a dropped subscription; `proving: failed`;
+   `proving: warming` long past a cold start; no DUST with nothing to explain
+   it; sync indices that have not moved in half an hour.
+5. `healthy`.
+
+Only `healthy` clears the unhealthy streak. `busy` and `settling` **hold** it: a
+wallet that was degraded and is now merely mid-spend has not been shown to be
+well, and zeroing the count there would let a fault that coincides with traffic
+escalate never.
+
+**The remedies, cheapest first, each rate-limited, each logged with a `[health]`
+prefix:**
+
+| Rung | Reached at | What it calls | Rate limit |
+| --- | --- | --- | --- |
+| `refresh` | every acting tick | `wallet.currentState()` then `wallet.progress()` — a fresh read off the facade's state observable, which carries its own 30 s timeout | one per tick |
+| `rewarm` | 2 consecutive unhealthy ticks | `wallet.warmProvingKeys()` then `wallet.saveSnapshot()` | once per 5 min |
+| `restart` | 3 consecutive unhealthy ticks (immediately for `wedged`) | `wallet.saveSnapshot()` then `process.exit(1)`; `Restart=always` brings the unit back | once per 30 min, **persisted** |
+
+`rewarm` is the rung that repairs something in place rather than merely looking:
+`warmProvingKeys()` re-attempts the key-material fetch whenever readiness is
+`warming` or `failed` (it short-circuits only on `ready` and `server`), so a
+start-up in which the 31 MiB of circuit keys could not be fetched — which
+otherwise pins `/balance-only` on `PROVER_UNAVAILABLE` for the life of the
+process — heals here. The checkpoint that follows is insurance for the next
+rung: a restart that resumes from a recent snapshot is a second, not a chain
+walk.
+
+**There is deliberately no "reopen the wallet in place" rung, and that is a
+finding rather than an omission.** `WalletFacade` does expose `start()` and
+`stop()`, and the seed never leaves the process, so `stop()` then `start()`
+looks like exactly the in-place reconnection this wants. It is not one:
+`stop()` closes the submission service's Effect scope
+(`submissionService.close()` → `Scope.close`) and `start()` does **not** reopen
+it — it starts only the shielded, unshielded, and dust wallets and the
+pending-transactions service. A facade restarted that way would sync happily and
+then fail to submit anything, which is a worse fault than the one being repaired
+and a silent one. So the escalation goes straight from `rewarm` to a process
+restart, which is the only reopen the SDK actually supports.
+
+**Every restart gate, all of which must hold:**
+
+- `isReserved()` and `isBusy()` are both false — checked in the verdict *and*
+  again in the ladder, because this is the gate that must be impossible to reach
+  past by adding a branch above.
+- The cause is one a restart could plausibly fix. A prover whose key material
+  will not download is not fixed by restarting into the same download; a wallet
+  whose sync indices have merely gone quiet is too soft a signal to bounce a live
+  sponsor on. Both are `degraded`, neither is restart-eligible.
+- At most once in any 30 minutes, and **the clock is persisted** to
+  `health-<network>.json` in the state directory. An in-memory limit would reset
+  on the very event it exists to bound, which is how restart loops get written by
+  accident.
+- Never twice without an intervening healthy tick — likewise persisted, and
+  reported on `/status` as `awaitingHealthyTick`.
+
+### Leg B — the external timer, for the wedged case
+
+A process that is alive but no longer answering HTTP cannot notice itself: the
+loop that would notice is on the same event loop that is not running.
+
+`deploy/passport-balancer-watchdog.{sh,service,timer}` — install the script at
+`/usr/local/lib/passport-balancer-watchdog.sh` and the two units in
+`/etc/systemd/system/`. The timer fires every **2 minutes** (`OnBootSec=5min`,
+`RandomizedDelaySec=20`) and the script restarts `passport-balancer` only when
+all three hold:
+
+1. `/wallet-status` has been unreachable or has answered `ready: false` on **3
+   consecutive** checks — six minutes of continuous failure, comfortably longer
+   than a ~2-minute shielded proof and the ~2-minute post-spend sync flap, so a
+   busy sponsor is never mistaken for a dead one;
+2. `/status` does not report `balancing` or `busy`. A spend in flight is a reason
+   to **wait**, not to strike, so the strike count is left where it is. A
+   `/status` that cannot be read at all does *not* block the restart — that is
+   the wedged case this exists for;
+3. the last watchdog restart was more than 30 minutes ago. That clock is a file
+   in the state directory, so it survives the restart it bounds.
+
+Everything it decides goes to `journalctl -u passport-balancer-watchdog`.
 
 ---
 
@@ -489,6 +634,7 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_NODE_URL` | `wss://rpc.stagenet.shielded.tools` | Submission relay source. |
 | `BALANCER_FEE_BLOCKS_MARGIN` | `5` | Fee-estimate margin. A wallet with only a few blocks of DUST refuses its own transactions under a larger one. |
 | `BALANCER_BALANCE_TTL_MS` | `1800000` | TTL on every balanced transaction, and the `expiresAt` handed back. |
+| `BALANCER_HEALTH_INTERVAL_MS` | `600000` | How often the in-process watchdog evaluates the wallet. Minimum `5000`; **`0` turns it off**, and the external timer is unaffected. |
 | `BALANCER_MIDNAMES_TLD_ADDRESS` | our stagenet TLD | The `.night` registry names go to. Unset **and** no known default disables `/register-alias`. |
 | `BALANCER_ALIAS_MAX_PER_HOUR` | `20` | Sponsored registrations per rolling hour. |
 | `BALANCER_ACCOUNT_GRANT_ATOMIC` | `2000` | The activation grant, in atomic NIGHT (0.002 NIGHT). |
@@ -679,6 +825,24 @@ reason, and activations still deposit their NIGHT.
 
 The service handles `SIGTERM` by saving its sync snapshot before exiting, so a
 restart resumes in under a second instead of walking the chain again.
+
+`Restart=always` with `RestartSec=5` on the unit is load-bearing, not
+decoration: it is what the health loop's last-resort rung relies on, since the
+only way this process can reopen its wallet is to be given a new one. Install
+the external watchdog beside it — the second leg of "Keeping itself alive"
+above:
+
+```sh
+rsync -a deploy/ root@<droplet>:/opt/passport-balancer/deploy/
+ssh root@<droplet> '
+  install -m 755 /opt/passport-balancer/deploy/passport-balancer-watchdog.sh \
+    /usr/local/lib/passport-balancer-watchdog.sh
+  install -m 644 /opt/passport-balancer/deploy/passport-balancer-watchdog.service \
+    /opt/passport-balancer/deploy/passport-balancer-watchdog.timer \
+    /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable --now passport-balancer-watchdog.timer'
+```
 
 ---
 

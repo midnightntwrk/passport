@@ -47,6 +47,12 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    */
   balanceTtlMs: number;
   /**
+   * How often the in-process health watchdog evaluates this wallet. Zero turns
+   * it off — the external `passport-balancer-watchdog.timer` on the droplet is
+   * a separate leg and is unaffected.
+   */
+  healthIntervalMs: number;
+  /**
    * The deployed `.night` TLD registry this service sponsors names against.
    * `undefined` disables `/register-alias`, and the refusal says so.
    */
@@ -141,6 +147,14 @@ export const DEFAULT_ALIAS_MAX_PER_HOUR = 20;
 /** Two thousand atomic NIGHT — 0.002 NIGHT — as an account's opening balance. */
 export const DEFAULT_ACCOUNT_GRANT_ATOMIC = 2_000n;
 export const DEFAULT_ACCOUNT_MAX_PER_HOUR = 30;
+/**
+ * Ten minutes between health checks — the cadence the service owner asked for,
+ * and comfortably longer than anything that self-heals. The DUST a sponsorship
+ * spends is back in 20 to 60 seconds and the post-spend syncing flap clears in
+ * about two minutes, so a check landing anywhere in a ten-minute cycle sees a
+ * settled wallet unless something is genuinely wrong. See `../src/health.ts`.
+ */
+export const DEFAULT_HEALTH_INTERVAL_MS = 10 * 60 * 1_000;
 
 /**
  * The asset an account opens holding, and how much of it.
@@ -277,6 +291,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     throw new Error('BALANCER_BALANCE_TTL_MS must be a positive integer of milliseconds.');
   }
 
+  const healthIntervalMs = Number(
+    trimmed(env.BALANCER_HEALTH_INTERVAL_MS) ?? DEFAULT_HEALTH_INTERVAL_MS,
+  );
+  /* A floor of five seconds rather than one: the check reads the wallet's state
+     observable, and a sub-second interval would be a hot loop against the
+     facade rather than a watchdog. Zero is the documented way to turn it off. */
+  if (!Number.isInteger(healthIntervalMs) || healthIntervalMs < 0) {
+    throw new Error(
+      'BALANCER_HEALTH_INTERVAL_MS must be a non-negative integer of milliseconds (0 disables the health watchdog).',
+    );
+  }
+  if (healthIntervalMs > 0 && healthIntervalMs < 5_000) {
+    throw new Error('BALANCER_HEALTH_INTERVAL_MS must be at least 5000 ms, or 0 to disable.');
+  }
+
   const aliasMaxPerHour = Number(trimmed(env.BALANCER_ALIAS_MAX_PER_HOUR) ?? DEFAULT_ALIAS_MAX_PER_HOUR);
   if (!Number.isInteger(aliasMaxPerHour) || aliasMaxPerHour < 0) {
     throw new Error('BALANCER_ALIAS_MAX_PER_HOUR must be a non-negative integer.');
@@ -344,6 +373,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     host: trimmed(env.BALANCER_HOST) ?? '0.0.0.0',
     feeBlocksMargin,
     balanceTtlMs,
+    healthIntervalMs,
     ...(midnamesTldAddress ? { midnamesTldAddress } : {}),
     ...(trimmed(env.BALANCER_MIDNAMES_ASSETS)
       ? { midnamesAssetsPath: trimmed(env.BALANCER_MIDNAMES_ASSETS) as string }

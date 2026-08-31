@@ -7,7 +7,9 @@
  *   GET  /status         →  a human answer: network, address, balances, whether
  *                           the wallet is synced, how it proves, what the DUST
  *                           registration did, how many transactions it balanced,
- *                           how many names and accounts it has sponsored
+ *                           how many names and accounts it has sponsored, and
+ *                           — as `health` — what its own watchdog last decided
+ *                           about it, why, and what it did about it
  *   GET  /wallet-status  →  { total, available, wallets[] } — the exact shape
  *                           `examples/passport-demo/src/lib/sponsor.ts` parses,
  *                           down to `wallets[].dust.balance` being a STRING
@@ -89,6 +91,17 @@
  * Everything else — env-only configuration, a sync snapshot on disk, a CORS
  * allow-list, SIGTERM saving before it exits — is `examples/passport-funder`'s
  * shape, so an operator running both on the same droplet learns one service.
+ *
+ * KEEPING ITSELF ALIVE. A watchdog runs in here on a ten-minute interval
+ * (`BALANCER_HEALTH_INTERVAL_MS`), classifies the wallet, and repairs it when
+ * repair is what is called for — and, far more often, does nothing, because the
+ * two states this wallet is usually in when it looks broken are states in which
+ * acting would BE the fault. It never runs while `isReserved()` or `isBusy()`,
+ * and it never treats the 20-to-60-second DUST settle after a sponsorship as a
+ * problem. `./health.ts` carries the classifier, the remedies, and the reasons.
+ * The failure it cannot see from in here — a live process that has stopped
+ * answering HTTP — belongs to `passport-balancer-watchdog.timer` on the
+ * droplet, which probes `/wallet-status` from outside.
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -107,6 +120,13 @@ import {
 import { walletAvailability } from './availability.js';
 import { ASSET_SYMBOL, applyEnvFile, loadConfig, type BalancerConfig } from './config.js';
 import { rawContractAddress } from './contractRuntime.js';
+import {
+  EMPTY_HEALTH_RECORD,
+  startHealthLoop,
+  type HealthMonitor,
+  type HealthProbeReading,
+  type HealthRecord,
+} from './health.js';
 import {
   HourlyRateLimiter,
   JsonLedger,
@@ -183,6 +203,9 @@ async function main(): Promise<void> {
   console.log(`state     ${config.stateDir}`);
   console.log(`ttl       ${config.balanceTtlMs} ms on every balanced transaction`);
   console.log(
+    `health    ${config.healthIntervalMs > 0 ? `a watchdog check every ${config.healthIntervalMs} ms` : 'watchdog disabled (BALANCER_HEALTH_INTERVAL_MS=0)'}`,
+  );
+  console.log(
     `alias     ${config.midnamesTldAddress ? `.night TLD ${config.midnamesTldAddress}` : `no .night registry known for ${config.networkId} — /register-alias disabled`}`,
   );
   console.log(`alias cap ${config.aliasMaxPerHour} sponsored registrations per rolling hour`);
@@ -204,6 +227,20 @@ async function main(): Promise<void> {
     config.stateDir,
     config.networkId,
     'accounts',
+  );
+  /**
+   * The health watchdog's restart bookkeeping, on the same atomic
+   * write-and-rename the once-only ledgers use.
+   *
+   * On disk rather than in memory because it is the rate limit on RESTARTS: a
+   * limit the restarted process forgets is not a limit, and forgetting it is
+   * precisely how a service ends up bouncing itself every ten minutes. One key,
+   * because there is one wallet. See `./health.ts`.
+   */
+  const healthLedger = await JsonLedger.open<HealthRecord>(
+    config.stateDir,
+    config.networkId,
+    'health',
   );
   const aliasLimiter = new HourlyRateLimiter(config.aliasMaxPerHour);
   const accountLimiter = new HourlyRateLimiter(config.accountMaxPerHour);
@@ -247,6 +284,13 @@ async function main(): Promise<void> {
   let registrationDetail: string | null = null;
   let balancesServed = 0;
   let lastBalanceAt: string | null = null;
+  /** The same instant as `lastBalanceAt`, kept as a number for the watchdog. */
+  let lastBalanceMs = 0;
+  /**
+   * Assigned once the wallet is open. `null` while it is being built, and when
+   * `BALANCER_HEALTH_INTERVAL_MS=0` turns the in-process leg off.
+   */
+  let healthMonitor: HealthMonitor | null = null;
   let aliasesSponsored = 0;
   let accountsFunded = 0;
   /** Asset legs completed since this process started, counted apart from NIGHT. */
@@ -656,9 +700,125 @@ async function main(): Promise<void> {
          that is genuinely out of NIGHT read identically on the chain. */
       settling: !ready && Date.now() - lastSpendAt < CHANGE_SETTLE_MS,
       uptimeSeconds: Math.round((Date.now() - startedAt) / 1_000),
+      /* The watchdog's own account of itself: what it last decided, why, how
+         long the current unhealthy streak is, what it last did about it, and
+         how many restarts it has ever asked for. Published here so the thing
+         can be watched working — and, more to the point, watched NOT firing —
+         without an SSH session. `null` only when it is switched off. */
+      health: healthMonitor ? healthMonitor.snapshot() : null,
       ready,
     };
   };
+
+  /* -------------------------------------------------------------------------- */
+  /* The health watchdog                                                        */
+  /* -------------------------------------------------------------------------- */
+
+  /**
+   * One tick's worth of facts, gathered the same way `walletStatus()` gathers
+   * them and refusing to throw for the same reason: a wallet that cannot answer
+   * its own state is a FACT about the wallet, not an error in the reading of
+   * it, and turning it into an exception would hide the one failure the
+   * watchdog exists to catch.
+   */
+  const healthProbe = async (): Promise<HealthProbeReading> => {
+    let stateReadable = false;
+    let synced = false;
+    let connected = false;
+    let dustSpecks = 0n;
+    let utxoCount = 0;
+    let fingerprint = 'unreadable';
+    try {
+      const state = await wallet.currentState();
+      const walked = await wallet.progress(state);
+      stateReadable = true;
+      synced = walked.isSynced;
+      connected = walked.shielded.connected && walked.unshielded.connected && walked.dust.connected;
+      dustSpecks = await wallet.dustBalance(state);
+      utxoCount = await wallet.dustUtxoCount(state);
+      /* Deliberately the sync INDICES and not the DUST balance. The balance is
+         computed against the current time — `state.dust.balance(new Date())` —
+         so it moves every tick even on a wallet that has stopped following the
+         chain, which would make it useless as a staleness signal and actively
+         misleading as a healthy one. */
+      fingerprint = [
+        synced,
+        connected,
+        walked.shielded.applied,
+        walked.unshielded.applied,
+        walked.dust.applied,
+        utxoCount,
+      ].join('|');
+    } catch {
+      // Reported as `stateReadable: false`, which is what `wedged` reads.
+    }
+    const lastSponsorship = Math.max(lastSpendAt, lastBalanceMs);
+    return {
+      uptimeMs: Date.now() - startedAt,
+      stateReadable,
+      synced,
+      connected,
+      dustSpecks,
+      utxoCount,
+      proving: wallet.provingReadiness().state,
+      reserved: wallet.isReserved(),
+      busy: wallet.isBusy(),
+      lastSponsorshipAt: lastSponsorship > 0 ? lastSponsorship : null,
+      fingerprint,
+    };
+  };
+
+  if (config.healthIntervalMs > 0) {
+    healthMonitor = startHealthLoop({
+      intervalMs: config.healthIntervalMs,
+      probe: healthProbe,
+      store: {
+        read: () => healthLedger.get('restart') ?? EMPTY_HEALTH_RECORD,
+        write: (record) => healthLedger.record('restart', record),
+      },
+      remedies: {
+        /* Rung one. A fresh read off the facade's state observable, which
+           carries its own 30-second timeout, so a wallet that has stopped
+           answering makes this reject rather than hang. */
+        refresh: async () => {
+          const state = await wallet.currentState();
+          await wallet.progress(state);
+        },
+        /* Rung two, and the one that actually repairs something in place:
+           `warmProvingKeys()` re-attempts the key-material fetch whenever
+           readiness is `warming` or `failed`, which is the difference between a
+           service that refuses every `/balance-only` with PROVER_UNAVAILABLE
+           until an operator notices and one that fixes itself. The checkpoint
+           that follows is insurance for rung three — a restart that resumes
+           from a recent snapshot is a second, not a chain walk. */
+        rewarm: async () => {
+          const readiness = await wallet.warmProvingKeys();
+          console.log(`[health] proving readiness after re-warming: ${readiness.state}`);
+          await wallet.saveSnapshot();
+        },
+        /* Rung three. Everything that could be saved has been; leaving with a
+           non-zero status is how this process asks systemd (`Restart=always`,
+           `RestartSec=5`) to give it a new wallet, because the SDK will not
+           give it one in place — `WalletFacade.stop()` closes the submission
+           service's scope and `start()` does not reopen it, so a facade
+           restarted inside this process would sync and never submit. */
+        restart: async (reason: string) => {
+          console.warn(`[health] saving the sync snapshot before restarting — ${reason}`);
+          try {
+            await wallet.saveSnapshot();
+          } catch (cause) {
+            console.warn('[health] the snapshot could not be saved; restarting anyway', cause);
+          }
+          process.exit(1);
+        },
+      },
+    });
+    console.log(
+      `[health] watchdog on: every ${Math.round(config.healthIntervalMs / 1_000)} s (slightly jittered), and it stands off entirely while the wallet is claimed or busy`,
+    );
+  } else {
+    console.warn('[health] watchdog OFF — BALANCER_HEALTH_INTERVAL_MS is 0');
+  }
 
   /* -------------------------------------------------------------------------- */
   /* POST /fund-account                                                         */
@@ -1444,7 +1604,8 @@ async function main(): Promise<void> {
         try {
           const result = await wallet.balanceOnly(bytes);
           balancesServed += 1;
-          lastBalanceAt = new Date().toISOString();
+          lastBalanceMs = Date.now();
+          lastBalanceAt = new Date(lastBalanceMs).toISOString();
           console.log(
             `[balance] added a DUST fee leg to ${result.txHash} (${bytes.length} bytes in, ${result.txBytes.length / 2} bytes out, expires ${result.expiresAt})`,
           );
@@ -1524,6 +1685,9 @@ async function main(): Promise<void> {
 
   const shutdown = (signal: string) => {
     console.log(`\n${signal} — saving the sync snapshot and stopping`);
+    /* Stopped first, so a tick cannot start while the wallet is closing and
+       read a half-shut facade as a fault. */
+    healthMonitor?.stop();
     server.close();
     void wallet
       .close()

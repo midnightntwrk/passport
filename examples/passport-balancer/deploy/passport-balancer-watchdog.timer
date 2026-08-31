@@ -1,0 +1,21 @@
+[Unit]
+Description=Probe the Midnight Passport balancer every two minutes
+
+[Timer]
+# Five minutes after boot: the balancer resumes from its snapshot in about a
+# second, but a cold start walks the chain, and probing it before it can
+# possibly be ready would only ever produce noise.
+OnBootSec=5min
+OnUnitActiveSec=2min
+# Three strikes two minutes apart is six minutes of continuous failure before
+# anything is restarted — longer than a shielded proof (~2 min) and longer than
+# the post-spend syncing flap (~2 min), so a busy sponsor is never mistaken for
+# a dead one.
+AccuracySec=5s
+# So the probe never lands on the same second as the balancer's own
+# sixty-second snapshot save or its DUST registration retry.
+RandomizedDelaySec=20
+Unit=passport-balancer-watchdog.service
+
+[Install]
+WantedBy=timers.target
