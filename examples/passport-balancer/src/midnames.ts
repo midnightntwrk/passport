@@ -28,7 +28,10 @@
  *   1. it deploys the resolver leaf with `DOMAIN_TARGET = [contractAddress,
  *      AddressType.ContractAddr]` (the user's account-custody contract) and
  *      `DOMAIN_OWNER` = the owner key the caller supplied; then
- *   2. it calls `register_domain_for` on the network's TLD with that same owner
+ *   2. where the caller declared the target still pending, it waits for that
+ *      contract to appear on chain — see `awaitTarget`, and the gate in
+ *      `./server.ts` that decides when that is allowed; then
+ *   3. it calls `register_domain_for` on the network's TLD with that same owner
  *      key, paying COST from the balancer's own NIGHT and the fee from the
  *      balancer's own DUST.
  *
@@ -104,7 +107,28 @@ export const RESERVED_ALIASES: readonly string[] = [
 ];
 
 /** Attempts, {@link CONFIRM_INTERVAL_MS} apart, to watch the binding appear. */
-const CONFIRM_ATTEMPTS = 45;
+const CONFIRM_ATTEMPTS = 180;
+
+/**
+ * How long a pending account contract gets to appear before the registration is
+ * refused, as attempts times an interval: sixty seconds.
+ *
+ * Sized against what it is waiting for rather than picked round. The client
+ * submits the account deploy and asks for the name within a second; the deploy
+ * needs one block (6.000 s, measured over 15 consecutive intervals on
+ * 2026/08/31) and then the indexer's own lag (13.2–14.1 s over 16 observations
+ * the same day) before this read can answer — around twenty seconds, and the
+ * resolver deploy above has already spent more than that. Sixty seconds is
+ * therefore three times the expected wait, which is enough for a bad minute on
+ * the indexer and short enough that a target which is never coming does not
+ * hold the wallet's queue for long.
+ *
+ * Exceeding it refuses the registration with `target-missing`. The name stays
+ * free, the user's client keeps it queued, and the only thing spent is the
+ * resolver leaf — which the gate in `./server.ts` accounts for.
+ */
+const TARGET_ATTEMPTS = 120;
+const TARGET_INTERVAL_MS = 500;
 
 /* -------------------------------------------------------------------------- */
 /* Pure helpers — copies of the funder's, and they must stay copies           */
@@ -276,7 +300,13 @@ export type AliasSponsorErrorCode =
   /** The TLD refused the registration; the leaf is deployed but unnamed. */
   | 'register-rejected'
   /** Both transactions landed, but the registry never showed the binding. */
-  | 'confirmation-failed';
+  | 'confirmation-failed'
+  /**
+   * The account contract the name was to resolve to never appeared on chain
+   * inside the window a pending target is given. The leaf was deployed and is
+   * unused; nothing was registered and the name is still free.
+   */
+  | 'target-missing';
 
 export class AliasSponsorError extends Error {
   constructor(
@@ -311,6 +341,19 @@ export interface AliasRegistrationRequest {
    * its own, or a payment meant for the user would land on the balancer.
    */
   ownerAddressBytes?: Uint8Array;
+  /**
+   * Wait for {@link contractAddress} to appear on chain before calling
+   * `register_domain_for`, rather than requiring it to be there already.
+   *
+   * Set by the server when its fourth gate found no state at the address AND
+   * the client declared the deploy pending. It does not weaken the rule that a
+   * name is never bound to a contract that does not exist — it moves where that
+   * rule is enforced, from before the request to after the resolver leaf, which
+   * is several proofs and at least one block later. See the gate itself in
+   * `./server.ts` for the anti-spam reasoning and for what a target that never
+   * appears costs.
+   */
+  awaitTarget?: boolean;
 }
 
 export interface AliasRegistration {
@@ -345,8 +388,9 @@ export interface MidnamesSponsor {
   /** What the name resolves to right now, or null when it is not registered. */
   resolve(label: string): Promise<{ resolverAddress: string; target: ResolvedDomainTarget } | null>;
   /**
-   * Deploys the leaf, registers the name, and reads the binding back. Resolves
-   * only when the registry really reports the requested contract address.
+   * Deploys the leaf, waits for the target where the caller asked it to, calls
+   * `register_domain_for`, and reads the binding back. Resolves only when the
+   * registry really reports the requested contract address.
    *
    * MUST be called inside `wallet.exclusive(...)`: it spends the balancer's
    * coins twice and would otherwise contend with a fee-sponsorship request.
@@ -538,6 +582,33 @@ export async function createMidnamesSponsor(
           `The resolver contract for ${aliasDomain(label)} could not be deployed, so nothing was registered.`,
           cause instanceof Error ? cause.message : String(cause),
         );
+      }
+
+      /* THE TARGET GATE, ASKED HERE RATHER THAN AT THE DOOR. By now the leaf
+         has been built, proved, balanced, signed, submitted, and — because
+         `deployContract` waits on the indexer — served back, which on stagenet
+         is a block plus the indexer's own 13.2–14.1 s. A client that submitted
+         its account deploy just before asking will have had all of that to
+         land. Nothing is registered until this passes; the only thing the
+         earlier gate bought that this does not is the resolver deploy above,
+         and the ceilings around this call are what cap that. */
+      if (request.awaitTarget) {
+        let appeared = false;
+        for (let attempt = 0; attempt < TARGET_ATTEMPTS && !appeared; attempt += 1) {
+          if (attempt > 0) await wait(TARGET_INTERVAL_MS);
+          try {
+            appeared = Boolean(await reader.queryContractState(contractAddress));
+          } catch {
+            // Indexer lag or a transient failure; asked again below.
+          }
+        }
+        if (!appeared) {
+          throw new AliasSponsorError(
+            'target-missing',
+            `No contract state is served at ${contractAddress}, so there is nothing for ${aliasDomain(label)} to resolve to. The account contract was reported as being deployed, but it has not appeared.`,
+            `resolver ${resolverAddress} was deployed and is unused; deploy ${resolverDeployTx}`,
+          );
+        }
       }
 
       let registerTx: string;

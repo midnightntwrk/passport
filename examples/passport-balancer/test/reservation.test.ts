@@ -17,7 +17,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { walletAvailability } from '../src/availability.js';
-import { createWalletReservation, type WalletReservation } from '../src/reservation.js';
+import {
+  SpendPriority,
+  createWalletReservation,
+  type WalletReservation,
+} from '../src/reservation.js';
 
 const wait = (ms: number): Promise<void> => new Promise((settle) => setTimeout(settle, ms));
 
@@ -152,6 +156,61 @@ describe('the wallet reservation', () => {
     clearInterval(watch);
 
     assert.ok(peak <= 1, `two queued grants should never claim the wallet at once (peak ${peak})`);
+  });
+
+  it('lets a registration overtake grants that are only waiting', async () => {
+    const reservation = createWalletReservation();
+    const order: string[] = [];
+    const job = (name: string, priority: number): Promise<string> =>
+      reservation.exclusive(
+        async () => {
+          await wait(20);
+          order.push(name);
+          return name;
+        },
+        { priority },
+      );
+
+    /* The first grant is RUNNING by the time the others arrive, so it finishes
+       first however it is prioritised: the queue reorders what is waiting, and
+       never interrupts what has started. */
+    const first = job('grant-running', SpendPriority.Normal);
+    const second = job('grant-waiting', SpendPriority.Normal);
+    const registration = job('registration', SpendPriority.Registration);
+
+    assert.deepEqual(await Promise.all([first, second, registration]), [
+      'grant-running',
+      'grant-waiting',
+      'registration',
+    ]);
+    assert.deepEqual(
+      order,
+      ['grant-running', 'registration', 'grant-waiting'],
+      'the registration must jump the grant that had not started',
+    );
+  });
+
+  it('keeps equal priorities in the order they arrived', async () => {
+    const reservation = createWalletReservation();
+    const order: string[] = [];
+    const job = (name: string, priority: number): Promise<string> =>
+      reservation.exclusive(
+        async () => {
+          await wait(10);
+          order.push(name);
+          return name;
+        },
+        { priority },
+      );
+
+    await Promise.all([
+      job('running', SpendPriority.Registration),
+      job('first', SpendPriority.Registration),
+      job('second', SpendPriority.Registration),
+      job('third', SpendPriority.Registration),
+    ]);
+
+    assert.deepEqual(order, ['running', 'first', 'second', 'third']);
   });
 
   it('releases the claim when a phase throws', async () => {

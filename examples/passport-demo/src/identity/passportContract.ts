@@ -44,10 +44,19 @@
  * live wallet owns the process-wide network id, and moving it would corrupt
  * every address the wallet then encodes.
  *
- * HONESTY: no code path here reports a deployment that did not come back from
- * the chain. The contract address is read from the deploy transaction's own
- * response and from nowhere else, and `ledgerConfirmed` is only true when the
- * indexer was afterwards seen serving state at that address.
+ * HONESTY: no code path here reports a DEPLOYMENT that did not come back from
+ * the chain, and `ledgerConfirmed` is only true when the indexer was seen
+ * serving state at that address.
+ *
+ * Since 2026/08/31 there is a second, weaker thing this module can report, and
+ * it is deliberately a different type with a different name. A SUBMISSION —
+ * {@link PassportContractSubmission} — carries the contract address before the
+ * chain has been asked, because the address is a pure function of the initial
+ * contract state the constructor just produced and is therefore known the
+ * moment the transaction is built rather than the moment it lands. It has no
+ * `ledgerConfirmed` field at all, so it cannot be mistaken for a deployment; it
+ * carries a `settled` promise, and only that promise's answer may be reported
+ * as an account that exists.
  */
 
 
@@ -64,7 +73,6 @@ import {
   rawContractAddress,
   resolveTransactionHash,
   resolveTxHashOnce,
-  transactionId,
   wait,
   type ContractFeePayer,
 } from './contractRuntime.js';
@@ -76,9 +84,29 @@ export { rawContractAddress };
 /* Constants                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/** Attempts, at two seconds apart, to see the indexer serve the new state. */
-const LEDGER_CONFIRM_ATTEMPTS = 30;
-const LEDGER_CONFIRM_INTERVAL_MS = 2_000;
+/**
+ * The window in which the indexer must be seen serving the new contract's
+ * state, expressed as attempts times an interval.
+ *
+ * The WINDOW is sixty seconds and has not changed. The INTERVAL dropped from
+ * two seconds to five hundred milliseconds on 2026/08/31, and the attempt count
+ * rose by the same factor to hold the window exactly where it was: an indexer
+ * query costs 102–123 ms warm (16 samples, stagenet, 2026/08/31), so a two
+ * second gap was twenty times the cost of the question it asked, and the
+ * overshoot — half an interval on average — was paid on a loop that is entered
+ * immediately after something else already waited out the indexer's ~14 s lag.
+ *
+ * THE RISK, SAID PLAINLY. This loop exists so that a deployment is reported as
+ * confirmed only when the chain has been seen carrying it. Shortening the
+ * interval without scaling the count would have quietly narrowed the tolerance
+ * for a lagging indexer from sixty seconds to fifteen, which is the one thing
+ * this loop is for. When the window IS exceeded — an indexer more than a minute
+ * behind — nothing is lost and nothing is invented: the deployment is recorded
+ * with `ledgerConfirmed: false`, the screen says "submitted" rather than
+ * "live", and the transaction id is real either way.
+ */
+const LEDGER_CONFIRM_ATTEMPTS = 120;
+const LEDGER_CONFIRM_INTERVAL_MS = 500;
 
 /* -------------------------------------------------------------------------- */
 /* Secret derivation — one passkey ceremony, two domain-separated secrets     */
@@ -282,6 +310,63 @@ export interface PassportContractDeployment {
   deployedAt: string;
 }
 
+/**
+ * A deployment that has been PROVED, BALANCED, SIGNED, and SUBMITTED, handed
+ * back before the indexer has been asked about it.
+ *
+ * WHY THIS EXISTS (2026/08/31)
+ * ---------------------------
+ * `deployContract` blocks on `publicDataProvider.watchForTxData(txId)` — see
+ * `@midnight-ntwrk/midnight-js-contracts/dist/index.mjs:71-74` — and on
+ * stagenet that is a wait on the INDEXER, which runs 13.2–14.1 s behind the
+ * node's own tip (16 consecutive observations, 2026/08/31, mean 13.7 s). A
+ * claim then spent that wait before it could even ASK for the name, because the
+ * name's registration is addressed to a contract address the claim did not yet
+ * think it had.
+ *
+ * It did have it. `createUnprovenDeployTx` returns `public.contractAddress`
+ * BEFORE proving, balancing, or submission — the address is
+ * `new ContractDeploy(initialState).address` (midnight-js-contracts
+ * `dist/index.mjs:937-944`), a pure function of the initial contract state —
+ * and the whole of the local work that produces it measured 54 ms in a real
+ * tab. So the address is known a full indexer-lag earlier than the claim was
+ * using it, and the registration can be asked for on the strength of it.
+ *
+ * WHAT IS NOT CLAIMED HERE. A submission is not a deployment. This carries no
+ * `ledgerConfirmed` field at all, rather than a `false` one that a caller could
+ * forget to read: the only thing that says the chain has it is {@link settled},
+ * and nothing may report the account as live before that resolves.
+ */
+export interface PassportContractSubmission {
+  /**
+   * Raw 64-hex contract address, computed from the constructor's own initial
+   * state. It is the address the deployment WILL have if it lands, and the
+   * address it already has if it has landed — the chain cannot give it another
+   * one.
+   */
+  address: string;
+  /** The network the wallet actually signed on. */
+  network: string;
+  /** The device commitment the submitted contract carries, as a decimal Field. */
+  deviceCommitment: string;
+  /** Who paid. See {@link PassportContractDeployment.feePaidBy}. */
+  feePaidBy: PassportContractFeePayer;
+  /** The 33-byte midnight-js transaction identifier, as submitted. */
+  identifier: string;
+  submittedAt: string;
+  /**
+   * The same deployment once the chain has answered.
+   *
+   * REJECTS when the transaction landed in a state other than
+   * `SucceedEntirely`, which is the failure `deployContract` used to raise —
+   * the account genuinely does not exist, and a caller that has already asked
+   * for a name against its address must hear about it. RESOLVES with
+   * `ledgerConfirmed: false` for the far milder case where the indexer simply
+   * had not caught up inside {@link LEDGER_CONFIRM_ATTEMPTS}.
+   */
+  settled: Promise<PassportContractDeployment>;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Transaction-id resolution and ledger read-back                             */
 /* -------------------------------------------------------------------------- */
@@ -358,8 +443,9 @@ export async function checkPassportContractFunds(): Promise<
 /* -------------------------------------------------------------------------- */
 
 /**
- * Deploys this Passport's account-custody contract on the network the open
- * wallet actually signs on.
+ * Builds, proves, balances, signs, and SUBMITS this Passport's account-custody
+ * contract on the network the open wallet actually signs on — and hands the
+ * address back without waiting for the indexer.
  *
  * `rootSecret` is 32 bytes the caller obtained from the passkey with ONE
  * user-verified WebAuthn assertion — that assertion IS this transaction's
@@ -367,14 +453,38 @@ export async function checkPassportContractFunds(): Promise<
  * claim. The caller owns those bytes and should zero them afterwards; this
  * function does not retain them.
  *
- * Every failure mode is a real one. Nothing here reports a deployment without
- * an address that came back from the chain.
+ * WHY THIS IS SPELLED OUT RATHER THAN LEFT TO `deployContract`
+ * -----------------------------------------------------------
+ * These are the same five steps `deployContract` runs, in the same order, from
+ * the same package: `createUnprovenDeployTx` (which is where the constructor
+ * runs and the address falls out), then `submitTxAsync` — which is
+ * midnight-js's own name for "prove, balance, submit, and DO NOT wait" — and
+ * then the watch, moved into {@link PassportContractSubmission.settled}. The
+ * proving, the balancing, and the sponsorship gate are untouched: `proveTx`,
+ * `walletProvider.balanceTx`, and `midnightProvider.submitTx` are called by
+ * `submitTxCore` exactly as they were, so the fee is still the sponsor's and a
+ * sponsor that is not ready still refuses before anything is built.
+ *
+ * The signing key is sampled here because `deployContract` samples it for you
+ * (`createDeployTxOptions`, same module) and the address depends on it: the
+ * contract's maintenance authority is part of the initial contract state that
+ * the address is the hash of, so it has to be chosen before the address is
+ * read, not after.
+ *
+ * `onProgress` is called for `deriving` and `deploying` only. `confirming`
+ * belongs to whoever chooses to wait, because after this returns the waiting is
+ * no longer the caller's only business — see {@link deployPassportContract},
+ * which does wait and does report it.
+ *
+ * Every failure mode is a real one. Nothing here reports an address that did
+ * not come out of the contract's own constructor, and nothing reports a
+ * deployment at all — see {@link PassportContractSubmission}.
  */
-export async function deployPassportContract(
+export async function submitPassportContract(
   wallet: LocalMidnightWallet,
   rootSecret: Uint8Array,
   onProgress?: (progress: PassportContractProgress) => void,
-): Promise<PassportContractDeployment> {
+): Promise<PassportContractSubmission> {
   onProgress?.({ phase: 'deriving' });
 
   // Fees before secrets: refuse early, with the honest reason, rather than
@@ -404,23 +514,42 @@ export async function deployPassportContract(
        for a publicly verifiable scheme, and it is called out in the prototype's
        own `shamir.ts` for the same reason. */
     const shares = split(recoverySecret, 2, 3);
+    const deviceCommitment = accountModule.pureCircuits.derive_device_commitment(deviceSecret);
 
     onProgress?.({ phase: 'deploying' });
-    let deployed: { deployTxData: { public: { contractAddress: string } } };
+    let address: string;
+    let identifier: string;
+    let unprovenDeploy: UnprovenDeployTxData;
     try {
-      const { deployContract } = await import('@midnight-ntwrk/midnight-js-contracts');
-      deployed = (await deployContract(providers as never, {
+      const [{ createUnprovenDeployTx, submitTxAsync }, { sampleSigningKey }] = await Promise.all([
+        import('@midnight-ntwrk/midnight-js-contracts'),
+        import('@midnight-ntwrk/compact-runtime'),
+      ]);
+      unprovenDeploy = (await createUnprovenDeployTx(providers as never, {
         compiledContract,
         privateStateId,
         initialPrivateState,
+        signingKey: sampleSigningKey(),
         args: [
-          accountModule.pureCircuits.derive_device_commitment(deviceSecret),
+          deviceCommitment,
           accountModule.pureCircuits.derive_recovery_commitment(recoverySecret),
           shares[0].value,
           shares[1].value,
           shares[2].value,
         ],
-      } as never)) as never;
+      } as never)) as unknown as UnprovenDeployTxData;
+      /* The chain cannot hand back a different one — the address IS the hash of
+         the state the constructor just produced — but it is still normalised
+         through the same refusal every stored address passes. */
+      address = rawContractAddress(unprovenDeploy.public.contractAddress);
+      identifier = String(
+        await submitTxAsync(providers as never, {
+          unprovenTx: unprovenDeploy.private.unprovenTx,
+        } as never),
+      );
+      if (!identifier) {
+        throw new Error('The deployment was submitted without a transaction id.');
+      }
     } catch (cause) {
       throw new PassportContractError(
         'deploy-failed',
@@ -431,56 +560,27 @@ export async function deployPassportContract(
       );
     }
 
-    // The address is the chain's answer, never ours. `rawContractAddress`
-    // refuses anything that is not a contract address rather than storing it.
-    const address = rawContractAddress(deployed.deployTxData.public.contractAddress);
-    let identifier: string;
-    try {
-      identifier = transactionId(deployed.deployTxData);
-    } catch {
-      throw new PassportContractError(
-        'deploy-failed',
-        'The deployment returned no transaction id, so it cannot be reported as landed.',
-      );
-    }
-
-    onProgress?.({ phase: 'confirming' });
-    const deployTxId = await resolveTransactionHash(wallet.network.indexerHttpUrl, identifier);
-
-    // Confirmation is a real read of the new contract's state through the
-    // indexer — the check that proves the deployment landed.
-    const { indexerPublicDataProvider } = await import(
-      '@midnight-ntwrk/midnight-js-indexer-public-data-provider'
-    );
-    const reader = indexerPublicDataProvider({
-      queryURL: wallet.network.indexerHttpUrl,
-      subscriptionURL: wallet.network.indexerWsUrl,
-    });
-    let ledgerConfirmed = false;
-    for (let attempt = 0; attempt < LEDGER_CONFIRM_ATTEMPTS; attempt += 1) {
-      try {
-        if (await reader.queryContractState(address)) {
-          ledgerConfirmed = true;
-          break;
-        }
-      } catch {
-        // Indexer lag or a transient failure; retried until the window closes.
-      }
-      await wait(LEDGER_CONFIRM_INTERVAL_MS);
-    }
-
     return {
       address,
-      deployTxId,
       network: wallet.network.networkId,
-      deviceCommitment: accountModule.pureCircuits
-        .derive_device_commitment(deviceSecret)
-        .toString(),
-      ledgerConfirmed,
+      deviceCommitment: deviceCommitment.toString(),
       /* Constant because there is one fee payer, and true because `balanceTx`
          refused to produce this transaction any other way. */
       feePaidBy: 'sponsored',
-      deployedAt: new Date().toISOString(),
+      identifier,
+      submittedAt: new Date().toISOString(),
+      settled: settlePassportContract(
+        wallet,
+        providers as ContractProvidersView,
+        privateStateId,
+        unprovenDeploy,
+        {
+          address,
+          identifier,
+          network: wallet.network.networkId,
+          deviceCommitment: deviceCommitment.toString(),
+        },
+      ),
     };
   } finally {
     // The derived secrets are reproducible from the passkey, so nothing is lost
@@ -488,4 +588,126 @@ export async function deployPassportContract(
     deviceSecret.fill(0);
     recoverySecret.fill(0);
   }
+}
+
+/** Only the two provider fields the settle half needs, named rather than `any`. */
+interface ContractProvidersView {
+  publicDataProvider: {
+    watchForTxData(txId: string): Promise<{ status: string }>;
+    queryContractState(address: string): Promise<unknown>;
+  };
+  privateStateProvider: {
+    setContractAddress(address: string): void;
+    set(id: string, state: unknown): Promise<void>;
+    setSigningKey(address: string, key: unknown): Promise<void>;
+  };
+}
+
+/** What `createUnprovenDeployTx` hands back, narrowed to what is used here. */
+interface UnprovenDeployTxData {
+  public: { contractAddress: string };
+  private: { unprovenTx: unknown; signingKey: unknown; initialPrivateState: unknown };
+}
+
+/**
+ * The half of a deployment that happens after the wallet has let go of it: wait
+ * for the chain, refuse a transaction that did not succeed entirely, resolve
+ * the identifier to a ledger hash, and read the new contract's state back.
+ *
+ * This is `submitDeployTx`'s tail, unchanged in what it checks. The
+ * `SucceedEntirely` test is the one `deployContract` raises
+ * `DeployTxFailedError` from, and it is kept because it is the whole difference
+ * between "the transaction landed" and "the account exists": a fallible-phase
+ * failure is recorded on chain and deploys nothing usable.
+ */
+async function settlePassportContract(
+  wallet: LocalMidnightWallet,
+  providers: ContractProvidersView,
+  privateStateId: string,
+  unprovenDeploy: UnprovenDeployTxData,
+  submitted: {
+    address: string;
+    identifier: string;
+    network: string;
+    deviceCommitment: string;
+  },
+): Promise<PassportContractDeployment> {
+  const { SucceedEntirely } = await import('@midnight-ntwrk/midnight-js-types');
+  let finalized: { status: string };
+  try {
+    finalized = await providers.publicDataProvider.watchForTxData(submitted.identifier);
+  } catch (cause) {
+    throw new PassportContractError(
+      'deploy-failed',
+      'Your Passport account could not be set up.',
+      cause instanceof Error ? cause.message : String(cause),
+    );
+  }
+  if (finalized.status !== SucceedEntirely) {
+    throw new PassportContractError(
+      'deploy-failed',
+      'Your Passport account could not be set up.',
+      `the deployment transaction landed with status ${finalized.status}`,
+    );
+  }
+
+  /* What `submitDeployTx` does once the chain has agreed. The store is
+     session-lifetime and in memory (see `contractRuntime.ts`), so these are
+     cheap; they are done anyway, because a caller that later builds a client
+     against this address through the same provider set should find what
+     midnight-js would have left there. */
+  providers.privateStateProvider.setContractAddress(submitted.address);
+  await providers.privateStateProvider.set(privateStateId, unprovenDeploy.private.initialPrivateState);
+  await providers.privateStateProvider.setSigningKey(
+    submitted.address,
+    unprovenDeploy.private.signingKey,
+  );
+
+  const deployTxId = await resolveTransactionHash(
+    wallet.network.indexerHttpUrl,
+    submitted.identifier,
+  );
+
+  // Confirmation is a real read of the new contract's state through the
+  // indexer — the check that proves the deployment landed.
+  let ledgerConfirmed = false;
+  for (let attempt = 0; attempt < LEDGER_CONFIRM_ATTEMPTS; attempt += 1) {
+    try {
+      if (await providers.publicDataProvider.queryContractState(submitted.address)) {
+        ledgerConfirmed = true;
+        break;
+      }
+    } catch {
+      // Indexer lag or a transient failure; retried until the window closes.
+    }
+    await wait(LEDGER_CONFIRM_INTERVAL_MS);
+  }
+
+  return {
+    address: submitted.address,
+    deployTxId,
+    network: submitted.network,
+    deviceCommitment: submitted.deviceCommitment,
+    ledgerConfirmed,
+    feePaidBy: 'sponsored',
+    deployedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Deploys this Passport's account-custody contract and waits for the chain.
+ *
+ * {@link submitPassportContract} plus its own settlement, which is what every
+ * caller wanted before a claim learned to carry on without it — and still what
+ * the Home card's retry wants, because a retry has nothing to do next except
+ * find out whether it worked.
+ */
+export async function deployPassportContract(
+  wallet: LocalMidnightWallet,
+  rootSecret: Uint8Array,
+  onProgress?: (progress: PassportContractProgress) => void,
+): Promise<PassportContractDeployment> {
+  const submission = await submitPassportContract(wallet, rootSecret, onProgress);
+  onProgress?.({ phase: 'confirming' });
+  return submission.settled;
 }

@@ -87,7 +87,28 @@ export interface ClaimStep {
   expectedSeconds: number | null
 }
 
-/** The three steps, in order. Exported so a screen cannot invent a fourth. */
+/**
+ * The three steps, in order. Exported so a screen cannot invent a fourth.
+ *
+ * THE ACCOUNT STEP'S 120 SECONDS, AND WHY IT DID NOT MOVE ON 2026/08/31
+ * ---------------------------------------------------------------------
+ * The claim's work was cut on that day — the activation grant no longer takes
+ * the sponsor's spend queue in front of the registration, and the registration
+ * is asked for on the account's address rather than on the indexer's word that
+ * the account exists — and the shape it was cut from was measured: three
+ * consecutive real claims reconstructed block by block from the stagenet
+ * indexer (register blocks 257787, 257685, 257522) each ran 84 s from the
+ * account deploy's block to the registration's, which with the deploy's own
+ * lead-in matched this 120 s estimate honestly.
+ *
+ * The number stays until a claim on the NEW path has been timed end to end,
+ * because an estimate here is a measurement and nothing else. Lowering it on
+ * the strength of the arithmetic would put a number on screen that no claim had
+ * produced, and a reader whose claim then ran over would be told it was "taking
+ * a little longer than usual" every single time — which is the copy this file
+ * has for something going wrong. Over-stating an estimate costs a reader
+ * nothing; understating one turns the normal case into an alarm.
+ */
 export const CLAIM_STEPS: readonly Omit<ClaimStep, 'state'>[] = [
   { id: 'name', label: 'Checking your name', expectedSeconds: 10 },
   /* No estimate, on purpose: this step is the USER'S, and a countdown against

@@ -48,13 +48,22 @@ const PROBE_TTL_MS = 30_000;
 /** Ceiling on the probe round-trip — a slow funder must not stall a claim. */
 const PROBE_TIMEOUT_MS = 4_000;
 /**
- * Ceiling on the registration round-trip. The service submits two
- * transactions and waits for the registry to confirm before answering: 63 s
- * measured on preview with a remote proof server (2026/08/20), 113 s on
- * stagenet proving in-process on a laptop (2026/08/24), and slower again on a
- * small server. Matches the fee sponsor's own patience — abandoning a
- * registration the service is still proving costs more than waiting, because
- * the name then lands with nobody listening.
+ * Ceiling on the registration round-trip. The service submits two transactions
+ * and waits for the registry to confirm before answering.
+ *
+ * What that costs, measured rather than remembered: 63 s on preview with a
+ * remote proof server (2026/08/20); the stagenet balancer proves on a LOCAL
+ * proof server at 127.0.0.1:6300 — its own `/status` says so — and took ~9 s
+ * from receiving a request to landing a fully proved circuit call in a block,
+ * with the rest of the wait being blocks and indexer lag rather than proving.
+ * An earlier version of this comment quoted 113 s for "stagenet proving
+ * in-process on a laptop", which stopped describing this deployment when the
+ * proof server arrived.
+ *
+ * The ceiling stays where it is regardless, and generously: it matches the fee
+ * sponsor's own patience, and abandoning a registration the service is still
+ * proving costs more than waiting, because the name then lands with nobody
+ * listening.
  */
 const REGISTER_TIMEOUT_MS = 600_000;
 
@@ -151,6 +160,42 @@ export interface SponsorAliasRequest {
      value to the wallet, which the account model forbids. The service
      zero-fills it, and the account remains the only target. */
   network: MidnamesNetwork;
+  /**
+   * True when {@link contractAddress} names an account contract that has been
+   * SUBMITTED but may not yet be served by the indexer.
+   *
+   * The service's fourth gate reads the target's state and refuses
+   * `target-missing` when it finds none — both a correctness gate (a name bound
+   * to nothing is worse than no name) and its anti-spam gate (a target costs a
+   * real transaction to mint). This flag does not waive that gate; it moves
+   * WHEN it is answered, from a precondition on the request to a precondition
+   * on the registry call, which the service makes after it has deployed the
+   * resolver leaf. A caller that sets it is saying "the deploy is in flight,
+   * wait for it rather than turning me away", and a service that has never
+   * heard of the flag simply ignores it and refuses exactly as it does today —
+   * which is what {@link SponsorAliasOptions.awaitTarget} is for.
+   */
+  targetPending?: boolean;
+}
+
+export interface SponsorAliasOptions {
+  /**
+   * How to wait for the account contract, used ONLY after the service has
+   * refused with `target-missing`.
+   *
+   * This is the compatibility half of {@link SponsorAliasRequest.targetPending}
+   * and it is not optional politeness: a service that predates the flag refuses
+   * a submitted-but-unindexed target, and without this the claim would fail on
+   * a contract that is perfectly real and merely fourteen seconds early. So the
+   * refusal is taken as "not yet", this is awaited, and the request is made
+   * once more — after which a second `target-missing` is a genuine refusal and
+   * is reported as one.
+   *
+   * It may REJECT, and a rejection is not swallowed: the account deploy failing
+   * is precisely why the target will never appear, and the caller needs that
+   * error rather than a sentence about the name service.
+   */
+  awaitTarget?: () => Promise<unknown>;
 }
 
 interface FunderSuccessBody {
@@ -180,39 +225,70 @@ const bytesToHex = (bytes: Uint8Array): string =>
  * Refusals throw {@link AliasSponsorRefusal}; the caller inspects
  * `selfPayWorthTrying` to decide whether the name is worth queueing for another
  * attempt or whether it must stop with the service's own sentence.
+ *
+ * Exactly ONE refusal is retried here rather than reported: `target-missing`,
+ * and only when the caller both declared the target pending and said how to
+ * wait for it. See {@link SponsorAliasOptions.awaitTarget}.
  */
 export async function sponsorAliasRegistration(
   funderUrl: string,
   request: SponsorAliasRequest,
+  options: SponsorAliasOptions = {},
 ): Promise<AliasClaimResult> {
-  let response: Response;
-  try {
-    response = await fetchWithTimeout(`${funderUrl}/register-alias`, REGISTER_TIMEOUT_MS, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        alias: request.alias,
-        ownerKey: bytesToHex(request.ownerKey),
-        contractAddress: request.contractAddress,
-        network: request.network,
-      }),
-    });
-  } catch (cause) {
-    invalidateSponsorshipProbe(funderUrl);
-    throw new AliasSponsorRefusal(
-      'unreachable',
-      `The sponsorship service could not be reached: ${
-        cause instanceof Error ? cause.message : String(cause)
-      }`,
-      true,
-    );
-  }
+  const post = async (): Promise<{ response: Response; body: unknown }> => {
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(`${funderUrl}/register-alias`, REGISTER_TIMEOUT_MS, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          alias: request.alias,
+          ownerKey: bytesToHex(request.ownerKey),
+          contractAddress: request.contractAddress,
+          network: request.network,
+          /* Omitted rather than sent as `false`, so the request a settled
+             target makes is byte-identical to the one this client has always
+             sent. */
+          ...(request.targetPending ? { targetPending: true } : {}),
+        }),
+      });
+    } catch (cause) {
+      invalidateSponsorshipProbe(funderUrl);
+      throw new AliasSponsorRefusal(
+        'unreachable',
+        `The sponsorship service could not be reached: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+        true,
+      );
+    }
+    let parsed: unknown = null;
+    try {
+      parsed = await response.json();
+    } catch {
+      // Handled below: a non-JSON body from the funder is a refusal, not a crash.
+    }
+    return { response, body: parsed };
+  };
 
-  let body: unknown = null;
-  try {
-    body = await response.json();
-  } catch {
-    // Handled below: a non-JSON body from the funder is a refusal, not a crash.
+  let { response, body } = await post();
+
+  /* THE ONE RETRY, and the only refusal that earns one. `target-missing` from
+     a service that was told the target is pending means that service does not
+     know the flag: it read the indexer once, before the account deploy had been
+     served, and turned the claim away for a contract that exists. Waiting for
+     the deploy and asking again costs one HTTP round trip and restores exactly
+     the behaviour this client had before it started asking early. Every other
+     refusal is final on the first answer, and a SECOND `target-missing` is
+     reported as the refusal it is. */
+  if (
+    !response.ok &&
+    options.awaitTarget &&
+    request.targetPending &&
+    (body as { error?: unknown } | null)?.error === 'target-missing'
+  ) {
+    await options.awaitTarget();
+    ({ response, body } = await post());
   }
 
   if (!response.ok) {

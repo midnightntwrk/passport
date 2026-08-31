@@ -94,6 +94,7 @@ import {
 import type {
   PassportContractDeployment,
   PassportContractProgress,
+  PassportContractSubmission,
 } from './identity/passportContract.js';
 /* The account-custody contract's own progress vocabulary. Type-only, so the
    module — and the ledger it statically imports — stays behind the dynamic
@@ -139,6 +140,25 @@ type ProfileStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
 type ActivitySource = 'local' | 'wallet' | 'chain';
 type OnboardingIntent = 'local-create' | 'local-signin';
 type LocalWalletStatus = 'idle' | 'opening' | 'ready' | 'error';
+
+/**
+ * One account-custody deploy in flight, as the two moments a caller can want.
+ *
+ * `submitted` is the transaction handed to the node — and with it the contract
+ * ADDRESS, which is a pure function of the constructor's initial state and so
+ * is known before any of the waiting starts. `landed` is the chain agreeing,
+ * which on stagenet arrives an indexer-lag later (13.2–14.1 s, measured
+ * 2026/08/31). A claim needs the first to ask for a name; the Home card's retry
+ * needs the second, because finding out whether it worked is the whole of what
+ * a retry is for.
+ *
+ * Both reject when the deploy fails, and a caller that reads only one of them
+ * must still account for the other — see `deployPassportContractOnce`.
+ */
+interface PassportContractRun {
+  submitted: Promise<PassportContractSubmission>;
+  landed: Promise<PassportContractDeployment>;
+}
 
 interface ActivityEntry {
   id: string;
@@ -1230,8 +1250,21 @@ export default function PassportDemo() {
    * Whichever caller STARTED a deploy owns the recording of it: see
    * {@link deployPassportContractOnce}, which writes the deployed record itself
    * so a joining caller cannot write a duplicate.
+   *
+   * Each entry holds BOTH halves of a deploy — the submission, which carries
+   * the contract address, and the landing, which is the chain agreeing — so a
+   * joining caller gets whichever of the two it actually needs rather than the
+   * slower one by default.
    */
-  const contractDeploysInFlight = useRef(new Map<string, Promise<PassportContractDeployment>>());
+  const contractDeploysInFlight = useRef(new Map<string, PassportContractRun>());
+  /**
+   * True while a name claim owns this Passport's critical path.
+   *
+   * It gates ONE thing — the pending-activation pickup below — and it exists
+   * because the two were racing for the sponsor's single spend queue. See that
+   * effect for the measurement.
+   */
+  const [claimHoldsThePath, setClaimHoldsThePath] = useState(false);
   /** The pending per-network reclaim conflict, when the target says "taken". */
   const [reclaim, setReclaim] = useState<{ target: PassportNetwork; alias: string } | null>(null);
   const [reclaimBusy, setReclaimBusy] = useState(false);
@@ -3001,29 +3034,41 @@ export default function PassportDemo() {
    *
    * Starts `run` only when no deploy for this credential and network is already
    * running; when one is, the caller joins it and receives that deploy's
-   * outcome instead of issuing a second one. `joined` says which happened, so
-   * the caller can tell "I deployed this" from "somebody else did, and here it
-   * is" — the two want different activity entries and only the first wants a
-   * toast.
+   * submission and outcome instead of issuing a second one. `joined` says which
+   * happened, so the caller can tell "I deployed this" from "somebody else did,
+   * and here it is" — the two want different activity entries and only the
+   * first wants a toast.
    *
-   * The DEPLOYED record is written here rather than by the callers, because it
-   * must be written exactly once no matter how many callers were waiting on the
-   * deploy. Failure records stay with the callers: each has its own words for
-   * what the failure meant to the flow it interrupted, and each writes one only
-   * when it owned the run.
+   * TWO PROMISES, AND WHY (2026/08/31)
+   * ----------------------------------
+   * `submitted` settles when the transaction has been proved, balanced, signed,
+   * and handed to the node — the moment the contract ADDRESS is a fact. `landed`
+   * settles when the chain has been seen carrying it. They used to be the same
+   * moment, and the ~14 s of indexer lag between them was time the claim spent
+   * not asking for a name it already had the target for.
+   *
+   * The DEPLOYED record is still written from `landed`, and deliberately: this
+   * store's own rule is that nothing is written here until the chain has
+   * answered (see `identity/passportContractStore.ts`), and knowing an address
+   * early is not the chain answering. It is written here rather than by the
+   * callers because it must be written exactly once no matter how many callers
+   * were waiting. Failure records stay with the callers: each has its own words
+   * for what the failure meant to the flow it interrupted, and each writes one
+   * only when it owned the run.
    */
   const deployPassportContractOnce = useCallback(
     (
       credentialId: string,
       network: string,
-      run: () => Promise<PassportContractDeployment>,
-    ): { outcome: Promise<PassportContractDeployment>; joined: boolean } => {
+      run: () => Promise<PassportContractSubmission>,
+    ): PassportContractRun & { joined: boolean } => {
       const key = passportContractRecordKey(credentialId, network);
       const existing = contractDeploysInFlight.current.get(key);
-      if (existing) return { outcome: existing, joined: true };
+      if (existing) return { ...existing, joined: true };
 
-      const started = (async () => {
-        const deployment = await run();
+      const submitted = run();
+      const landed = (async () => {
+        const deployment = await (await submitted).settled;
         /* `deployTxId` is whatever the resolution loop ended with: the ledger
            HASH where the indexer had caught up, and the raw 33-byte identifier
            where it had not. Which of the two it is gets recorded, because an
@@ -3045,15 +3090,26 @@ export default function PassportDemo() {
 
       /* Claimed synchronously — before anything awaits — and released however
          it settles, so a failed deploy never leaves the pair permanently
-         un-deployable. */
-      contractDeploysInFlight.current.set(key, started);
+         un-deployable. Released on `landed`, not on `submitted`: until the
+         chain has answered there is still a deploy in flight for this pair, and
+         a second caller arriving in that window must join it rather than start
+         another contract. */
+      const entry: PassportContractRun = { submitted, landed };
+      contractDeploysInFlight.current.set(key, entry);
       const release = () => {
-        if (contractDeploysInFlight.current.get(key) === started) {
+        if (contractDeploysInFlight.current.get(key) === entry) {
           contractDeploysInFlight.current.delete(key);
         }
       };
-      started.then(release, release);
-      return { outcome: started, joined: false };
+      landed.then(release, release);
+      /* `submitted` and `landed` both reject when a deploy fails, and every
+         caller reads at most one of them. The other would be an unhandled
+         rejection — a console error the user's browser reports and nobody
+         asked for — so both are given a no-op handler here. Nothing is
+         swallowed: these are extra handlers, not replacements. */
+      submitted.catch(() => undefined);
+      landed.catch(() => undefined);
+      return { ...entry, joined: false };
     },
     [],
   );
@@ -3199,11 +3255,38 @@ export default function PassportDemo() {
    * Costs nothing when there is nothing to do: `fundAccountOnce` returns
    * immediately on a marked contract and on one already in flight, so the
    * claim's own call and this effect can never both run a schedule.
+   *
+   * NOT WHILE A CLAIM IS RUNNING (2026/08/31), and this is the single largest
+   * saving in the whole claim.
+   * ------------------------------------------------------------------------
+   * This effect used to fire the moment `accountContractAddress` became
+   * non-null, which is the moment the deployed record is written — before the
+   * claim had posted `/register-alias`. The sponsor runs ONE spend job at a
+   * time (`exclusive`, `examples/passport-balancer/src/wallet.ts`), so the
+   * grant did not merely run alongside the registration: it ran IN FRONT of it,
+   * and held the queue through its own confirmation loop.
+   *
+   * The cost was measurable on chain and was measured. Three consecutive real
+   * claims reconstructed block by block from the stagenet indexer on
+   * 2026/08/31 (register blocks 257787, 257685, 257522) each show the identical
+   * shape: account deploy at +0 s, `deposit_night` at +24 s, resolver deploy at
+   * +48 s, `register_domain_for` at +84 s. Those two middle blocks are this
+   * effect, sitting between the account and the name.
+   *
+   * So the pickup waits its turn. Nothing about the name depends on the grant —
+   * step (5) of the claim fires the same call the moment the Passport is whole,
+   * which is what the code always intended — and nothing is lost by deferring:
+   * `claimHoldsThePath` is a dependency, so the moment the claim lets go this
+   * effect runs again and finishes any grant the claim did not. That covers the
+   * claim that FAILED at the registration, too, which never reaches step (5)
+   * and would otherwise leave a deployed account unfunded until the next
+   * launch.
    */
   useEffect(() => {
     if (localWalletStatus !== 'ready' || !accountContractAddress) return;
+    if (claimHoldsThePath) return;
     void fundAccountOnce(accountContractAddress);
-  }, [accountContractAddress, fundAccountOnce, localWalletStatus]);
+  }, [accountContractAddress, claimHoldsThePath, fundAccountOnce, localWalletStatus]);
 
   /**
    * ONE user action, from the passkey prompt to the registered name.
@@ -3243,7 +3326,7 @@ export default function PassportDemo() {
    * name to the wallet address, because a name that silently points somewhere
    * other than where the user was told is the one outcome worth failing for.
    */
-  const claimAliasBoundToAccount = useCallback(
+  const runClaimBoundToAccount = useCallback(
     async (
       handle: LocalMidnightWallet,
       activeProfile: DemoPassportProfile,
@@ -3262,7 +3345,7 @@ export default function PassportDemo() {
          here with its own message. */
       const [
         { AliasClaimError, deriveMidnamesOwnerKey },
-        { deployPassportContract },
+        { submitPassportContract },
         { deriveWalletSeed },
         { AliasSponsorRefusal, sponsorAliasRegistration },
       ] = await Promise.all([
@@ -3364,6 +3447,60 @@ export default function PassportDemo() {
         oneShot.dispose();
       }
 
+      /**
+       * One place the account deploy's failure becomes the claim's failure.
+       *
+       * It is reached from two directions now that the deploy is not waited on
+       * in a straight line: the submission itself refusing, and the chain later
+       * refusing a transaction that was already submitted. Both mean the same
+       * thing to the reader — there is nothing for the name to point at — so
+       * both say it in the same words, and the failure RECORD (which is what
+       * puts "Try deploying again" on the Home card) is written exactly once,
+       * by whichever claim owned the run.
+       */
+      const accountFailure = (cause: unknown, owned: boolean): Error => {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        const detail = (cause as { detail?: string })?.detail;
+        if (owned) {
+          savePassportContractRecord({
+            credentialId,
+            network,
+            status: 'failed',
+            failureReason: detail ? `${message} (${detail})` : message,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+        return new AliasClaimError(
+          'account-contract-failed',
+          /* No machinery in a sentence a person reads. What failed is the
+             ACCOUNT — the thing they were waiting for — and the reason the name
+             did not follow is that there was nothing for it to point at. The
+             parts' own names go in the detail, for a log. */
+          `${alias}.night was not registered: your Passport account could not be set up, so there was nothing for the name to point at.`,
+          /* The inner REASON only. Its message now says the same thing as the
+             sentence above, and carrying both put one fact on screen twice with
+             a dash between the copies. */
+          detail ?? message,
+        );
+      };
+
+      /* The claim failure the deploy's own landing produced, when the chain
+         refused a transaction that had already been submitted. The RECORD is
+         written by the handler that sets this — not by whoever reads it — so a
+         deploy that fails while the claim is busy elsewhere still puts "Try
+         deploying again" on the Home card, whatever the claim does next.
+
+         Read SYNCHRONOUSLY where the registration fails, so a name refused for
+         its own reasons — taken, rate-limited — is never made to wait on a
+         deploy it has nothing to do with. */
+      let accountDeployFailure: Error | null = null;
+      /* How the registration waits for the account to appear on chain, when
+         this claim submitted it and the chain has not answered yet. */
+      let awaitAccountOnChain: (() => Promise<unknown>) | undefined;
+      /* Whether this claim OWNS the deploy it is watching, and therefore
+         whether it is the one that records how it ended. */
+      let ownsDeploy = false;
+
       try {
         /* (3) The account-custody contract. An existing DEPLOYED record for
            this credential and network is reused — a Passport has one contract
@@ -3373,107 +3510,124 @@ export default function PassportDemo() {
         if (!contractAddress) {
           onPhase('attaching-account');
           setContractBusy(true);
-          /* Hoisted out of the try so the catch below knows whether this claim
-             merely waited on somebody else's deploy. A joined deploy is theirs
-             to record; this claim only reads its outcome. */
-          let joinedDeploy = false;
           try {
-            /* Through the shared gate, never straight to `deployPassportContract`:
-               the Home card's retry may already have one running for this
-               credential and network, and a second would be a second contract
-               the user paid for and the records would forget. */
-            const { outcome, joined } = deployPassportContractOnce(
+            /* Through the shared gate, never straight to
+               `submitPassportContract`: the Home card's retry may already have
+               one running for this credential and network, and a second would
+               be a second contract the user paid for and the records would
+               forget. */
+            const { submitted, landed, joined } = deployPassportContractOnce(
               credentialId,
               network,
               () =>
-                deployPassportContract(handle, contractRootSecret, (progress) =>
+                submitPassportContract(handle, contractRootSecret, (progress) =>
                   setContractPhase(progress.phase),
                 ),
             );
-            joinedDeploy = joined;
-            const deployment = await outcome;
-            if (!joinedDeploy) {
-              // The deployed record was written by the gate; this is the claim's
-              // own account of it, which a joining claim must not duplicate.
-              addActivity({
-                /* "Your account is set up", not "the contract deployed":
-                   ruled 2026/08/26. The contract is the machinery; the
-                   account is the thing the user was waiting for. The
-                   transaction is still linked, so nothing is hidden. */
-                label: 'Your account is set up',
-                detail: `It is ${
-                  deployment.ledgerConfirmed ? 'live' : 'submitted'
-                } on ${deployment.network}, ready for ${alias}.night to point at it.`,
-                status: 'complete',
-                source: 'chain',
-                txHash: deployment.deployTxId,
-              });
-              /* The deploy is the long half of onboarding, and since
-                 2026/08/25 it says so on screen the moment it lands rather than
-                 waiting for the name. It is the FIRST transaction this Passport
-                 ever submits and the only one the passkey wallet itself
-                 originates, so it is the one most worth being able to go and
-                 look at — and the indexer has usually not mapped its identifier
-                 to a ledger hash yet, which is what the verifier fallback is
-                 for. */
-              pushToast({
-                tone: 'success',
-                title: 'Your account is set up',
-                body: `${compactAddress(deployment.address)} is ${
-                  deployment.ledgerConfirmed ? 'live' : 'submitted'
-                } on ${deployment.network}. Registering ${alias}.night against it now.`,
-                link: explorerTxLink(
-                  deployment.deployTxId,
-                  deployment.network,
-                  aliasDomainOf(alias),
-                ),
-              });
-              void notify(
-                'Your account is set up',
-                `${deployment.ledgerConfirmed ? 'It is live' : 'It is submitted'} on ${
-                  deployment.network
-                }. Registering ${alias}.night against it now.`,
-                { tag: 'passport-contract-deployed' },
-              );
-            }
-            contractAddress = deployment.address;
-          } catch (cause) {
-            /* The failure is recorded as a failure — that record is what puts
-               the "Try deploying again" affordance on the Home card — and then
-               re-thrown, because the claim must not continue. A deploy this
-               claim merely joined has already been recorded by whoever started
-               it, so only the owner writes. */
-            const message = cause instanceof Error ? cause.message : String(cause);
-            const detail = (cause as { detail?: string })?.detail;
-            if (!joinedDeploy) {
-              savePassportContractRecord({
-                credentialId,
-                network,
-                status: 'failed',
-                failureReason: detail ? `${message} (${detail})` : message,
-                updatedAt: new Date().toISOString(),
-              });
-            }
-            throw new AliasClaimError(
-              'account-contract-failed',
-              /* No machinery in a sentence a person reads. What failed is
-                 the ACCOUNT — the thing they were waiting for — and the reason
-                 the name did not follow is that there was nothing for it to
-                 point at. The parts' own names go in the detail, for a log. */
-              `${alias}.night was not registered: your Passport account could not be set up, so there was nothing for the name to point at.`,
-              /* The inner REASON only. Its message now says the same thing as
-                 the sentence above, and carrying both put one fact on screen
-                 twice with a dash between the copies. */
-              detail ?? message,
+            ownsDeploy = !joined;
+
+            /* THE MOMENT THIS CLAIM STOPS WAITING (2026/08/31). What the name
+               needs from the account is its ADDRESS, and the address is settled
+               when the transaction is built — it is the hash of the initial
+               contract state the constructor produced, so the chain cannot
+               answer with a different one. Waiting for the indexer to serve the
+               deploy before asking for the name cost a full indexer lag
+               (13.2–14.1 s on stagenet, measured 2026/08/31) of doing nothing,
+               and then a further four blocks before the resolver was deployed.
+               So the claim takes the address and carries on; the landing is
+               WATCHED below, and nothing is reported as an account that exists
+               until it lands. */
+            const submission = await submitted;
+            contractAddress = submission.address;
+            awaitAccountOnChain = () => landed;
+
+            /* The landing, watched rather than waited on. Its handlers are
+               attached HERE, before the registration is posted, so the failure
+               flag is already set by the time a `target-missing` refusal
+               travels back up through `awaitAccountOnChain`. */
+            void landed.then(
+              (deployment) => {
+                setContractBusy(false);
+                if (!ownsDeploy) return;
+                // The deployed record was written by the gate; this is the
+                // claim's own account of it, which a joining claim must not
+                // duplicate.
+                addActivity({
+                  /* "Your account is set up", not "the contract deployed":
+                     ruled 2026/08/26. The contract is the machinery; the
+                     account is the thing the user was waiting for. The
+                     transaction is still linked, so nothing is hidden. */
+                  label: 'Your account is set up',
+                  detail: `It is ${
+                    deployment.ledgerConfirmed ? 'live' : 'submitted'
+                  } on ${deployment.network}, ready for ${alias}.night to point at it.`,
+                  status: 'complete',
+                  source: 'chain',
+                  txHash: deployment.deployTxId,
+                });
+                /* The deploy is the long half of onboarding, and since
+                   2026/08/25 it says so on screen the moment it lands rather
+                   than waiting for the name. It is the FIRST transaction this
+                   Passport ever submits and the only one the passkey wallet
+                   itself originates, so it is the one most worth being able to
+                   go and look at — and the indexer has usually not mapped its
+                   identifier to a ledger hash yet, which is what the verifier
+                   fallback is for. */
+                pushToast({
+                  tone: 'success',
+                  title: 'Your account is set up',
+                  body: `${compactAddress(deployment.address)} is ${
+                    deployment.ledgerConfirmed ? 'live' : 'submitted'
+                  } on ${deployment.network}. Registering ${alias}.night against it now.`,
+                  link: explorerTxLink(
+                    deployment.deployTxId,
+                    deployment.network,
+                    aliasDomainOf(alias),
+                  ),
+                });
+                void notify(
+                  'Your account is set up',
+                  `${deployment.ledgerConfirmed ? 'It is live' : 'It is submitted'} on ${
+                    deployment.network
+                  }. Registering ${alias}.night against it now.`,
+                  { tag: 'passport-contract-deployed' },
+                );
+              },
+              (cause) => {
+                /* Recorded, not thrown: nothing is awaiting this promise on the
+                   happy path, and an unhandled rejection would be a console
+                   error rather than a message to anybody. `accountFailure`
+                   writes the failed record here, once, and the registration
+                   below throws what it returns. */
+                setContractBusy(false);
+                accountDeployFailure = accountFailure(cause, ownsDeploy);
+              },
             );
-          } finally {
-            setContractPhase(null);
+          } catch (cause) {
+            /* The submission itself refused — nothing was signed, nothing was
+               submitted, and there is no landing to watch. */
             setContractBusy(false);
+            throw accountFailure(cause, ownsDeploy);
+          } finally {
+            /* `contractPhase` is the deploy's own sub-label and it belongs to
+               the part of the deploy the reader is watching; the claim's next
+               phase names itself. `contractBusy` is NOT cleared here — it is
+               cleared when the deploy lands or fails, because until then there
+               genuinely is a deploy in flight. The Home card's retry is guarded
+               by `contractDeploysInFlight` in any case, which is the guard that
+               actually holds. */
+            setContractPhase(null);
           }
         }
 
-        /* (4) The claim itself, bound to the contract address the chain gave
-           us — never to a value assembled from anything else.
+        /* (4) The claim itself, bound to the account contract's own address —
+           never to a value assembled from anything else. Since 2026/08/31 that
+           address comes out of the deploy transaction's construction rather
+           than out of the chain's answer about it, which is the same 32 bytes
+           a block earlier: the address IS the hash of the initial contract
+           state, so there is nothing for the chain to disagree with. The chain
+           is still asked, and the registry call still waits for its answer —
+           see `targetPending` below.
 
            Sponsored, and only sponsored: the service registers the name FOR
            this Passport — user's key as owner, this contract as target —
@@ -3487,18 +3641,43 @@ export default function PassportDemo() {
         if (sponsored && FUNDER_URL) {
           onPhase('registering');
           try {
-            claimed = await sponsorAliasRegistration(FUNDER_URL, {
-              alias,
-              ownerKey: await deriveMidnamesOwnerKey(ownerSecret),
-              contractAddress,
-              /* No payment address: the leaf's owner-address half used to carry
-                 the wallet's address, which a resolver honouring it would PAY —
-                 outside the account model. The service zero-fills it; the
-                 registry's authority is the owner key, and the target is the
-                 account (audit finding, 2026/08/25). */
-              network: registryNetwork,
-            });
+            claimed = await sponsorAliasRegistration(
+              FUNDER_URL,
+              {
+                alias,
+                ownerKey: await deriveMidnamesOwnerKey(ownerSecret),
+                contractAddress,
+                /* No payment address: the leaf's owner-address half used to
+                   carry the wallet's address, which a resolver honouring it
+                   would PAY — outside the account model. The service zero-fills
+                   it; the registry's authority is the owner key, and the target
+                   is the account (audit finding, 2026/08/25). */
+                network: registryNetwork,
+                /* Set only where this claim submitted the deploy and is not
+                   waiting for it: the service is being told to check the target
+                   before it REGISTERS rather than before it accepts, which is
+                   the whole of what buys the time. A claim reusing an account
+                   that was already on the record sends nothing, because there
+                   is nothing pending about it. */
+                targetPending: awaitAccountOnChain !== undefined,
+              },
+              {
+                /* The compatibility half, and the correctness one: a service
+                   that has never heard of `targetPending` refuses
+                   `target-missing`, and a service that has may still be asked
+                   about an account whose deploy is genuinely slow. Either way
+                   the answer is to wait for the chain and ask once more. */
+                awaitTarget: awaitAccountOnChain,
+              },
+            );
           } catch (cause) {
+            /* THE DEPLOY'S OWN FAILURE OUTRANKS THE NAME SERVICE'S. Read
+               synchronously — the flag is set by the landing handler attached
+               before this request went out — so a name refused for its own
+               reasons never waits on a deploy, and a name refused BECAUSE the
+               account never landed is reported as the account failing rather
+               than as the registry being unhelpful. */
+            if (accountDeployFailure !== null) throw accountDeployFailure;
             if (!(cause instanceof AliasSponsorRefusal)) throw cause;
             if (cause.code === 'name-taken') {
               throw new AliasClaimError('taken', cause.message);
@@ -3565,6 +3744,33 @@ export default function PassportDemo() {
       }
     },
     [addActivity, deployPassportContractOnce, fundAccountOnce, noteAccountForPasskey],
+  );
+
+  /**
+   * {@link runClaimBoundToAccount}, with the flag that keeps the activation
+   * grant out of its way raised for as long as it runs.
+   *
+   * A thin wrapper rather than two lines inside the claim, because the flag has
+   * to fall on EVERY exit — a refused name, a failed deploy, a passkey the
+   * platform would not use — and a `finally` around a hundred-line body that
+   * already has one of its own reads as though the two were related. They are
+   * not: that one zeroes secrets, this one lets the sponsor's queue go.
+   */
+  const claimAliasBoundToAccount = useCallback(
+    async (
+      handle: LocalMidnightWallet,
+      activeProfile: DemoPassportProfile,
+      alias: string,
+      onPhase: (phase: AliasClaimProgress['phase']) => void,
+    ): Promise<AliasClaimResult> => {
+      setClaimHoldsThePath(true);
+      try {
+        return await runClaimBoundToAccount(handle, activeProfile, alias, onPhase);
+      } finally {
+        setClaimHoldsThePath(false);
+      }
+    },
+    [runClaimBoundToAccount],
   );
 
   /**
@@ -3886,7 +4092,7 @@ export default function PassportDemo() {
        all, is genuinely this call's own and is recorded as usual. */
     let joinedDeploy = false;
     try {
-      const [{ deployPassportContract, checkPassportContractFunds }, { deriveWalletSeed }] =
+      const [{ submitPassportContract, checkPassportContractFunds }, { deriveWalletSeed }] =
         await Promise.all([
           import('./identity/passportContract.js'),
           import('./lib/localWallet.js'),
@@ -3915,14 +4121,23 @@ export default function PassportDemo() {
            check at the top of this function cannot cover the awaits since —
            the imports, the funds probe, the passkey derivation — so a claim may
            have started a deploy in the meantime. If so this joins it rather
-           than issuing a second one for the same credential and network. */
-        const { outcome, joined } = deployPassportContractOnce(credentialId, network, () =>
-          deployPassportContract(handle, rootSecret, (progress) =>
+           than issuing a second one for the same credential and network.
+
+           This path waits for the LANDING, unlike a claim: a retry has nothing
+           to do with the address except find out whether it worked, so a
+           submission it did not wait for would be a card that changed its mind
+           twice for no reader's benefit. `submitPassportContract` reports the
+           `confirming` phase itself here, through the same callback. */
+        const { landed, joined } = deployPassportContractOnce(credentialId, network, () =>
+          submitPassportContract(handle, rootSecret, (progress) =>
             setContractPhase(progress.phase),
-          ),
+          ).then((submission) => {
+            setContractPhase('confirming');
+            return submission;
+          }),
         );
         joinedDeploy = joined;
-        deployment = await outcome;
+        deployment = await landed;
       } finally {
         // The root secret's only job is done; nothing retains it.
         rootSecret.fill(0);

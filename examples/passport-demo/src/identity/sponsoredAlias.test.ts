@@ -203,6 +203,146 @@ describe('sponsorAliasRegistration — the request it sends', () => {
   });
 });
 
+describe('sponsorAliasRegistration — a target that is submitted but not yet served', () => {
+  const confirmed = (): void => {
+    resolveAliasTarget.mockResolvedValue({
+      resolverAddress: RESOLVER,
+      target: { kind: 'contract', hex: ACCOUNT },
+    });
+  };
+
+  it('sends `targetPending` only when the caller says the deploy is in flight', async () => {
+    const spy = installFetch(async () => json(registeredBody()));
+    confirmed();
+
+    await sponsorAliasRegistration(FUNDER, { ...request, targetPending: true });
+    const [, pending] = spy.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(pending.body as string)).toMatchObject({ targetPending: true });
+
+    await sponsorAliasRegistration(FUNDER, request);
+    const [, settled] = spy.mock.calls[1] as unknown as [string, RequestInit];
+    /* Absent, not `false`: the request a settled target makes is byte-identical
+       to the one this client has always sent. */
+    expect(Object.keys(JSON.parse(settled.body as string))).not.toContain('targetPending');
+  });
+
+  it('waits for the account and asks once more when the service says target-missing', async () => {
+    let posts = 0;
+    installFetch(async () => {
+      posts += 1;
+      return posts === 1
+        ? json({ error: 'target-missing', message: 'No contract state is served there.' }, 400)
+        : json(registeredBody());
+    });
+    confirmed();
+    const waited: string[] = [];
+
+    const result = await sponsorAliasRegistration(
+      FUNDER,
+      { ...request, targetPending: true },
+      {
+        awaitTarget: async () => {
+          waited.push('landed');
+        },
+      },
+    );
+
+    expect(posts).toBe(2);
+    expect(waited).toEqual(['landed']);
+    expect(result.alias).toBe('alice');
+  });
+
+  it('reports a SECOND target-missing as the refusal it is, and does not loop', async () => {
+    let posts = 0;
+    installFetch(async () => {
+      posts += 1;
+      return json({ error: 'target-missing', message: 'Still nothing there.' }, 400);
+    });
+
+    const refusal = await sponsorAliasRegistration(
+      FUNDER,
+      { ...request, targetPending: true },
+      { awaitTarget: async () => undefined },
+    ).catch((cause) => cause);
+
+    expect(posts).toBe(2);
+    expect(refusal).toBeInstanceOf(AliasSponsorRefusal);
+    expect((refusal as AliasSponsorRefusal).code).toBe('target-missing');
+    expect((refusal as AliasSponsorRefusal).message).toBe('Still nothing there.');
+  });
+
+  it('lets the deploy’s own failure travel rather than blaming the name service', async () => {
+    installFetch(async () =>
+      json({ error: 'target-missing', message: 'No contract state is served there.' }, 400),
+    );
+
+    await expect(
+      sponsorAliasRegistration(
+        FUNDER,
+        { ...request, targetPending: true },
+        {
+          awaitTarget: async () => {
+            throw new Error('Your Passport account could not be set up.');
+          },
+        },
+      ),
+    ).rejects.toThrow('Your Passport account could not be set up.');
+  });
+
+  it('does not retry target-missing without a way to wait, or without the flag', async () => {
+    let posts = 0;
+    installFetch(async () => {
+      posts += 1;
+      return json({ error: 'target-missing', message: 'Nothing there.' }, 400);
+    });
+
+    // Declared pending, but the caller offered no way to wait.
+    await sponsorAliasRegistration(FUNDER, { ...request, targetPending: true }).catch(
+      (cause) => cause,
+    );
+    expect(posts).toBe(1);
+
+    // A way to wait, but nothing was declared pending — so this is a real refusal.
+    await sponsorAliasRegistration(FUNDER, request, {
+      awaitTarget: async () => undefined,
+    }).catch((cause) => cause);
+    expect(posts).toBe(2);
+  });
+
+  it('retries nothing but target-missing', async () => {
+    let posts = 0;
+    installFetch(async () => {
+      posts += 1;
+      return json({ error: 'rate-limited', message: 'Try again later.' }, 429);
+    });
+
+    const refusal = await sponsorAliasRegistration(
+      FUNDER,
+      { ...request, targetPending: true },
+      { awaitTarget: async () => undefined },
+    ).catch((cause) => cause);
+
+    expect(posts).toBe(1);
+    expect((refusal as AliasSponsorRefusal).code).toBe('rate-limited');
+  });
+
+  it('treats an unparseable target-missing body as no retry', async () => {
+    let posts = 0;
+    installFetch(async () => {
+      posts += 1;
+      return new Response('not json', { status: 400 });
+    });
+
+    await sponsorAliasRegistration(
+      FUNDER,
+      { ...request, targetPending: true },
+      { awaitTarget: async () => undefined },
+    ).catch((cause) => cause);
+
+    expect(posts).toBe(1);
+  });
+});
+
 describe('sponsorAliasRegistration — refusals', () => {
   it('reports an unreachable service as retryable, and dates the probe', async () => {
     installFetch(async (url) => {

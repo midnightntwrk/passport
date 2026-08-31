@@ -341,8 +341,11 @@ export interface BalancerWallet {
    * It does NOT by itself claim the wallet's coins — the phases inside do, for
    * as long as they need them. That is why {@link contractWalletProvider} may
    * take a claim inside a job that already holds the queue without deadlocking.
+   *
+   * `priority` reorders only what is still WAITING — see {@link SpendPriority},
+   * which is where the measurement behind the one non-default value lives.
    */
-  exclusive<T>(task: () => Promise<T>): Promise<T>;
+  exclusive<T>(task: () => Promise<T>, options?: { priority?: number }): Promise<T>;
   /**
    * The provider midnight-js balances, signs, and submits contract
    * transactions through. Built per job, because it snapshots the wallet's

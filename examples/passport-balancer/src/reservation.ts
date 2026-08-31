@@ -43,6 +43,51 @@
  * holding the wallet.
  */
 
+/**
+ * Where a spend job sits in the queue when it has to wait.
+ *
+ * There are only two answers and there is a measurement behind the second.
+ * Onboarding is one user watching one screen, and the two things this service
+ * does for that user are not equal: registering the name is what they are
+ * waiting for, and the activation grant is money that can arrive a minute later
+ * without anybody noticing. Left in arrival order they collided — the grant is
+ * fired the moment the account contract exists, which is BEFORE the client can
+ * post the registration, so the grant took the queue and the name waited behind
+ * it and its whole confirmation loop.
+ *
+ * The cost was 24 seconds, and it was read off the chain rather than guessed:
+ * three consecutive real claims reconstructed block by block from the stagenet
+ * indexer on 2026/08/31 (register blocks 257787, 257685, 257522) each show a
+ * `deposit_night` landing exactly four blocks — one block is 6.000 s — between
+ * the account deploy and the resolver deploy that the registration begins with.
+ *
+ * THIS IS NOT WHAT FIXED THAT, AND THE MEASUREMENT SAYS SO. A priority
+ * reorders what is WAITING and never interrupts what is running, and in the
+ * single-Passport case above the grant is already running by the time the
+ * registration arrives. Benched against the promise chain this replaces, with
+ * the 38 s the chain shows a grant job holding the wallet, the registration
+ * still started 37.80 s later either way — a saving of 0.00 s. The fix for that
+ * case is the client no longer firing the grant during a claim at all.
+ *
+ * What this DOES buy is the case one browser's ordering cannot reach: a grant
+ * belonging to somebody else, already stacked on the queue when a registration
+ * arrives. Same bench, one running job in front: 39.80 s before, 1.80 s after —
+ * 38.00 s. That is the whole of its claim, and it is worth having, because two
+ * Passports onboarding within a minute of each other is the demo.
+ */
+export const SpendPriority = {
+  /** Fee sponsorship, activation grants, housekeeping. */
+  Normal: 0,
+  /** A sponsored registration: somebody is watching a screen for this one. */
+  Registration: 10,
+} as const;
+
+/** One job on the queue, waiting its turn. */
+interface QueuedJob {
+  priority: number;
+  start: () => void;
+}
+
 export interface WalletReservation {
   /**
    * True while some phase CLAIMS the wallet's coin state — balancing, signing,
@@ -63,10 +108,15 @@ export interface WalletReservation {
    * Queues `task` behind every other spend job. Does NOT claim the wallet —
    * the phases inside `task` claim it for themselves through {@link reserve}.
    *
-   * `then(run, run)` so a failed predecessor does not poison the queue: the
-   * next job runs either way, and its own rejection is its caller's.
+   * A failed predecessor does not poison the queue: the next job runs either
+   * way, and its own rejection is its caller's.
+   *
+   * `priority` decides the order among jobs that are WAITING, and nothing else.
+   * A job that has started is never interrupted, and equal priorities keep the
+   * order they arrived in, so the queue is still first-come, first-served for
+   * everything that does not say otherwise. See {@link SpendPriority}.
    */
-  exclusive<T>(task: () => Promise<T>): Promise<T>;
+  exclusive<T>(task: () => Promise<T>, options?: { priority?: number }): Promise<T>;
   /** Both counters, for `/status` and for the tests. */
   counts(): { reserved: number; jobs: number };
 }
@@ -89,7 +139,23 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
   const slowClaimMs = options.slowClaimMs ?? 5_000;
   let reserved = 0;
   let jobs = 0;
-  let queue: Promise<unknown> = Promise.resolve();
+  const waiting: QueuedJob[] = [];
+
+  /* One job runs at a time, and `jobs` is the count of running ones — which is
+     zero exactly when the wallet is free to start the next. Called after every
+     arrival and after every completion, so a queue can never stall with work
+     in it.
+
+     A job arriving at an idle wallet therefore STARTS synchronously, where the
+     old promise chain gave it a microtask's delay first. That is the more
+     honest of the two — `isBusy()` is true from the moment the job is running —
+     and nothing depended on the delay: every task here is an async function,
+     which cannot get past its own first await in the same tick. */
+  const drain = (): void => {
+    if (jobs > 0) return;
+    const next = waiting.shift();
+    if (next) next.start();
+  };
 
   const reserve = async <T>(phase: () => Promise<T>, label = 'phase'): Promise<T> => {
     reserved += 1;
@@ -103,21 +169,44 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
     }
   };
 
-  const exclusive = <T>(task: () => Promise<T>): Promise<T> => {
-    const run = async (): Promise<T> => {
-      jobs += 1;
-      try {
-        return await task();
-      } finally {
-        jobs -= 1;
-      }
-    };
-    const next = queue.then(run, run);
-    queue = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    return next;
+  const exclusive = <T>(task: () => Promise<T>, options: { priority?: number } = {}): Promise<T> => {
+    const priority = options.priority ?? SpendPriority.Normal;
+    return new Promise<T>((settle, fail) => {
+      /* Inserted BEFORE the first waiting job of lower priority, and after
+         every job of equal or higher priority. That is what makes equal
+         priorities first-come, first-served: the scan stops at the first
+         strictly-lower entry, so an arrival never overtakes its own peers. */
+      const entry: QueuedJob = {
+        priority,
+        start: () => {
+          jobs += 1;
+          const finish = (settleJob: () => void): void => {
+            jobs -= 1;
+            settleJob();
+            drain();
+          };
+          let running: Promise<T>;
+          try {
+            running = task();
+          } catch (cause: unknown) {
+            /* A task that throws before its first await. Async functions cannot
+               do this, and every caller passes one — but a queue that let a
+               synchronous throw escape `exclusive` would leave `jobs` standing
+               at one for ever and stall every spend after it. */
+            finish(() => fail(cause));
+            return;
+          }
+          running.then(
+            (value) => finish(() => settle(value)),
+            (cause: unknown) => finish(() => fail(cause)),
+          );
+        },
+      };
+      let index = waiting.length;
+      while (index > 0 && waiting[index - 1]!.priority < priority) index -= 1;
+      waiting.splice(index, 0, entry);
+      drain();
+    });
   };
 
   return {

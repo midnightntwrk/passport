@@ -143,6 +143,7 @@ import {
   ownerKeyBytes,
   type MidnamesSponsor,
 } from './midnames.js';
+import { SpendPriority } from './reservation.js';
 import {
   BalanceRefusal,
   formatNight,
@@ -1179,6 +1180,12 @@ async function main(): Promise<void> {
     ownerAddress?: unknown;
     /** Optional; when present it must name THIS service's network. */
     network?: unknown;
+    /**
+     * Optional. `true` says the account contract at `contractAddress` has been
+     * SUBMITTED and the indexer may not be serving it yet — see gate 4, which
+     * is where the whole of this flag's meaning is written down.
+     */
+    targetPending?: unknown;
   }
 
   /**
@@ -1273,6 +1280,11 @@ async function main(): Promise<void> {
       );
     }
 
+    /* Strictly `true`, never anything truthy: a client sending a string or a
+       number has not made this claim, and a flag that decides when a gate is
+       answered should not be settable by accident. */
+    const targetPending = body.targetPending === true;
+
     /* The leaf's owner ADDRESS half is optional and is not the registry's
        authority — see `AliasRegistrationRequest.ownerAddressBytes`. When one is
        given it must be a real unshielded address on this network, because
@@ -1354,7 +1366,31 @@ async function main(): Promise<void> {
       /* 4. The target must exist. This is both a correctness gate — a name
             bound to nothing is worse than no name — and the anti-spam gate:
             deploying an account-custody contract costs a real transaction, so
-            an abuser cannot mint free targets faster than the chain allows. */
+            an abuser cannot mint free targets faster than the chain allows.
+
+            WHEN IT IS ASKED, AND WHY THAT MOVED (2026/08/31)
+            ------------------------------------------------
+            This is an INDEXER read, and the stagenet indexer runs 13.2–14.1 s
+            behind the node's own tip (16 consecutive observations, 2026/08/31).
+            A client that has just submitted its account deploy therefore fails
+            this gate for fourteen seconds on a contract that is perfectly real,
+            which is why it used to wait out the indexer before asking — and
+            then wait again while the resolver was deployed.
+
+            So a client may now say `targetPending`, meaning "I have submitted
+            the deploy; check it when you need it rather than before you will
+            talk to me". The gate is not waived by that: it moves to the moment
+            before `register_domain_for`, which `register` reaches only after it
+            has deployed the resolver leaf — several proofs and at least one
+            block later. Nothing is ever bound to a contract that does not
+            exist.
+
+            What the flag DOES cost is a resolver deploy on a target that never
+            appears. That is bounded by the gates around it and not by trust:
+            one sponsored name per Passport (gate 5), an hourly ceiling on how
+            many the balancer will pay for at all (gate 6, consumed before any
+            spend), and the in-flight lock above. A request that does NOT set
+            the flag is refused exactly as it always was. */
       let targetExists: boolean;
       try {
         targetExists = await midnames.contractExists(contractAddress);
@@ -1367,7 +1403,7 @@ async function main(): Promise<void> {
           ),
         );
       }
-      if (!targetExists) {
+      if (!targetExists && !targetPending) {
         return fail(
           refusal(
             400,
@@ -1426,8 +1462,19 @@ async function main(): Promise<void> {
         /* Both transactions run under the wallet's spend lock, so a fee
            sponsorship cannot reserve the coins this registration is balancing
            against. */
-        const result = await wallet.exclusive(() =>
-          midnames.register({ label, ownerKey, contractAddress, ownerAddressBytes }),
+        const result = await wallet.exclusive(
+          () =>
+            midnames.register({
+              label,
+              ownerKey,
+              contractAddress,
+              ownerAddressBytes,
+              awaitTarget: !targetExists,
+            }),
+          /* Ahead of any activation grant that is merely waiting. Somebody is
+             watching a screen for this one and nobody is watching for a grant;
+             see `SpendPriority`. */
+          { priority: SpendPriority.Registration },
         );
         aliasesSponsored += 1;
         lastSpendAt = Date.now();
@@ -1468,7 +1515,16 @@ async function main(): Promise<void> {
           /* `name-taken` can still surface here: the availability read above is
              a snapshot, and someone else's registration can land in between. */
           const status =
-            cause.code === 'name-taken' ? 409 : cause.code === 'registry-unreachable' ? 503 : 502;
+            cause.code === 'name-taken'
+              ? 409
+              : cause.code === 'registry-unreachable'
+                ? 503
+                : /* Same code and same status as gate 4's own refusal, because
+                     it is the same refusal asked later. A client that knows how
+                     to wait for its target treats the two identically. */
+                  cause.code === 'target-missing'
+                  ? 400
+                  : 502;
           return fail(
             refusal(status, cause.code, cause.message, cause.detail ? { detail: cause.detail } : undefined),
           );
