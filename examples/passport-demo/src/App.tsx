@@ -3,6 +3,7 @@ import {
   EncryptedPassportPrivateStateStore,
   IndexedDbPassportEncryptedRecordStore,
   PassportEnrolmentConflictError,
+  PassportPasskeyDiscoveryError,
   PassportStateInjection,
   WebAuthnPrfKeyProvider,
 } from './backend.js';
@@ -11,6 +12,7 @@ import type { DiscoveredPassportPasskey, PassportAccountBlob } from './backend.j
 import { compactAddress } from './lib/address.js';
 import { holdCriticalWork } from './lib/appBusy.js';
 import { normalisedColourHex, shortColour } from './lib/colour.js';
+import { KEYLESS_PASSKEY_MESSAGE, passkeySignInRecovery } from './lib/passkeyRecovery.js';
 import { classifyFundAccountAnswer } from './lib/activation.js';
 import type { FundAccountAnswer } from './lib/activation.js';
 import {
@@ -559,6 +561,54 @@ const PASSKEY_TIMEOUT_MESSAGE =
   'Your device never showed the passkey prompt. A wallet browser extension — Lace, for example — can intercept it. Try disabling the extension, or open Passport in a private window, then try again.';
 
 /**
+ * Passport gave up waiting — a DIFFERENT failure from the platform saying no,
+ * and the recovery rule has to be able to tell them apart.
+ *
+ * A `NotAllowedError` means something was decided: a sheet was dismissed, or a
+ * picker had nothing in it. This means nothing was decided at all, so nothing
+ * has been learnt about whether a credential exists, and offering to enrol
+ * over it would be a guess. Same message as before, so what the user reads is
+ * unchanged; the class exists purely so `passkeySignInRecovery` can be told.
+ */
+class PasskeyCeremonyTimeout extends Error {
+  constructor() {
+    super(PASSKEY_TIMEOUT_MESSAGE);
+    this.name = 'PasskeyCeremonyTimeout';
+  }
+}
+
+/** What the `unusable-credential` panel's own error says, in one place. */
+const UNUSABLE_CREDENTIAL_MESSAGE =
+  'A passkey on this device answered but does not support the extension Passport needs, so it cannot open a Passport. Choose "Create a new passkey" to make one that can — the passkeys this browser already has a Passport for are left untouched.';
+
+/**
+ * A sign-in failure the screen answers with a PANEL AND A BUTTON rather than a
+ * banner, and the reason that distinction is drawn in the type system.
+ *
+ * Both of the states that carry a way out — no credential could be produced,
+ * and a credential answered that cannot open a Passport — are explained on
+ * screen by a panel whose whole purpose is to say the thing and then offer the
+ * control that resolves it. An error banner above that panel saying the same
+ * sentence a second time, usually in the platform's words rather than ours, is
+ * the screen telling one story twice and burying the button under it. So a
+ * failure of this shape suppresses the banner.
+ *
+ * It still carries `detail`: the platform's own account of what happened,
+ * which goes to the activity trail. Nothing is discarded, it is just not the
+ * thing put in front of somebody who needs a next step.
+ */
+class PasskeyWayOutError extends Error {
+  constructor(
+    message: string,
+    /** The platform's own words, for the activity trail rather than the screen. */
+    readonly detail: string,
+  ) {
+    super(message);
+    this.name = 'PasskeyWayOutError';
+  }
+}
+
+/**
  * Races a passkey ceremony against {@link PASSKEY_CEREMONY_TIMEOUT_MS}.
  *
  * A ceremony that answers after we have given up is disposed rather than
@@ -571,10 +621,7 @@ async function withPasskeyWatchdog<T>(ceremony: () => Promise<T>): Promise<T> {
   const pending = ceremony();
   let timer: number | undefined;
   const watchdog = new Promise<never>((_resolve, reject) => {
-    timer = window.setTimeout(
-      () => reject(new Error(PASSKEY_TIMEOUT_MESSAGE)),
-      PASSKEY_CEREMONY_TIMEOUT_MS,
-    );
+    timer = window.setTimeout(() => reject(new PasskeyCeremonyTimeout()), PASSKEY_CEREMONY_TIMEOUT_MS);
   });
   try {
     return await Promise.race([pending, watchdog]);
@@ -973,6 +1020,24 @@ export default function PassportDemo() {
    * Holds the authenticator's own account of what happened.
    */
   const [unusableCredential, setUnusableCredential] = useState<string | null>(null);
+  /**
+   * Set when a sign-in ceremony ended with NO credential in hand — the dead
+   * end reported on 2026/08/30 and the reason this state exists.
+   *
+   * A browser can hold Passport records whose credential the platform keystore
+   * will no longer produce: the passkey deleted, a different OS profile, a
+   * keychain that never synced. Sign-in then raises the platform's "use a
+   * saved passkey" sheet, nothing in it is loadable, and WebAuthn returns
+   * `NotAllowedError`. Until now the screen said so and stopped — there was no
+   * control on it that could get that user a Passport, and they asked the
+   * obvious question: if there is no key, why can it only ever load one?
+   *
+   * Like `unusableCredential` it is a state rather than an error string,
+   * because it needs a control of its own — `enrolNewLocalPassportProfile`,
+   * the same one, reached through `onCreateNewPasskey`. Holds the sentence the
+   * panel shows.
+   */
+  const [keylessPasskey, setKeylessPasskey] = useState<string | null>(null);
   const [localSurfaces, setLocalSurfaces] = useState<LocalWalletSurfaces | null>(null);
   const [localWalletStatus, setLocalWalletStatus] = useState<LocalWalletStatus>('idle');
   const [localSyncPercent, setLocalSyncPercent] = useState<number | null>(null);
@@ -1846,6 +1911,46 @@ export default function PassportDemo() {
    * {@link PassportEnrolmentConflictError}. Empty on a genuinely first visit,
    * which is the case discovery covers instead.
    */
+  /**
+   * Turns a failed CREDENTIAL ceremony into the way out the screen will offer.
+   *
+   * Every sign-in journey funnels its ceremony failure through here, and it is
+   * one function rather than a `catch` apiece so the targeted unlock behind
+   * "Continue with Passport" and the discoverable assertion behind "Use a
+   * different passkey" cannot drift into offering different things for the
+   * same fact. `passkeySignInRecovery` holds the rule and the reasoning; this
+   * is only the wiring between it, the two panel states, and the error the
+   * caller rethrows.
+   *
+   * It is called ONLY around the ceremony itself — never around the wallet
+   * bring-up or the state decryption that follow it. A credential that worked
+   * is not a credential worth replacing, and a new passkey would leave a
+   * failed decryption exactly as failed.
+   *
+   * Returns what to throw, so the caller reads `throw signInCeremonyFailure(cause)`
+   * and nothing else about the failure has to be remembered.
+   */
+  const signInCeremonyFailure = (cause: unknown): unknown => {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    const recovery = passkeySignInRecovery({
+      stage: 'credential',
+      /* The authenticator's own reason, where the discoverable path preserved
+         it. The targeted path flattens its DOMException to text on the way out
+         of the backend, so `null` here means "not said", which the rule reads
+         as keyless — the honest answer when WebAuthn will not distinguish a
+         dismissed sheet from an empty one. */
+      reason: cause instanceof PassportPasskeyDiscoveryError ? cause.reason : null,
+      timedOut: cause instanceof PasskeyCeremonyTimeout,
+    });
+    if (recovery === 'unusable-credential') {
+      setUnusableCredential(detail);
+      return new PasskeyWayOutError(UNUSABLE_CREDENTIAL_MESSAGE, detail);
+    }
+    if (recovery === 'none') return cause;
+    setKeylessPasskey(KEYLESS_PASSKEY_MESSAGE);
+    return new PasskeyWayOutError(KEYLESS_PASSKEY_MESSAGE, detail);
+  };
+
   const knownLocalCredentialIds = async (): Promise<string[]> =>
     (await listLocalProfiles().catch(() => []))
       .map((candidate) => candidate.passkey.credentialId)
@@ -1866,8 +1971,13 @@ export default function PassportDemo() {
     try {
       recovered = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.discover());
     } catch {
+      /* The authenticator has just PROVED it holds a Passport credential, by
+         refusing to create over it. So this is the one failure on which
+         offering to enrol would be wrong — it would be refused again, and the
+         user would loop. Both controls the screen already carries do lead
+         somewhere from here, and the sentence names them. */
       throw new Error(
-        'You already have a Passport on this device. Choose "Use a different passkey" to sign in to it.',
+        'You already have a Passport on this device. Choose "Use a different passkey" to pick it, or "Continue with Passport" to try again.',
       );
     }
     try {
@@ -1964,6 +2074,35 @@ export default function PassportDemo() {
    * credential answered the picker again and the user looped. The only escape
    * was to dismiss the OS picker so the `cancelled` path fell through to
    * enrolment, which nobody could be expected to guess.
+   *
+   * SINCE 2026/08/30 IT IS ALSO THE WAY OUT OF `keylessPasskey` — a browser
+   * holding Passport records whose credential the keystore will no longer
+   * produce. That case is the reason to be precise about what a NEW passkey
+   * does to the OLD records, and the answer, verified rather than assumed, is
+   * that it does nothing to them:
+   *
+   *   - the profile record is stored under `localProfileId(credentialId)`, an
+   *     IndexedDB key derived from the credential id, so a new credential gets
+   *     a new key and the old record is still sitting there under its own;
+   *   - the private state is stored under a key derived from the scope, and
+   *     the scope's accountId is `localCredentialAccountId(credentialId)` — so
+   *     no write under the new passkey can land on the old passkey's
+   *     ciphertext, and no read under it can even address it;
+   *   - and the old ciphertext is encrypted under a key HKDF'd from the old
+   *     credential's PRF output, so it stays unreadable to everything but that
+   *     credential, whatever any key collision might have done.
+   *
+   * The old Passport is therefore intact, not deleted and not overwritten. If
+   * its passkey comes back — a keychain that syncs late, the right OS profile
+   * — signing in with it reopens exactly the Passport it left. If it does not,
+   * those records are recoverable only from a backup, which is what backup is
+   * for; nothing here can derive a seed without the credential.
+   *
+   * The one thing that is NOT per-credential is the alias record
+   * (`passport-alias:v1`, keyed by network), which a later claim under the new
+   * passkey would replace. That is pre-existing multi-passkey behaviour rather
+   * than anything this path introduces, and it is a display record: the name
+   * itself is held on chain by the wallet that registered it.
    */
   const enrolNewLocalPassportProfile = async (): Promise<{
     profile: DemoPassportProfile;
@@ -2018,8 +2157,18 @@ export default function PassportDemo() {
     const existing = await resolveDefaultLocalProfile();
     if (existing) {
       setLocalPassportKnown(true);
+      /* THE GUARD, AND THE WAY THROUGH IT. Creating here could replace a
+         credential this browser's Passport depends on, so the create journey
+         stops — but it stops POINTING SOMEWHERE. It used to name "Sign in", a
+         control that has not existed since the one-button consolidation on
+         2026/08/05, which made this a sentence about a button the reader could
+         not find. It now names the button that is on the screen, and that
+         button runs the targeted unlock; if the unlock cannot produce the
+         credential, that path ends at the keyless panel with its create
+         action. So the chain from here reaches a working Passport in every
+         case, rather than terminating in advice. */
       throw new Error(
-        'This browser already holds a Passport passkey. Choose Sign in to reopen it.',
+        'This browser already holds a Passport passkey. Choose "Continue with Passport" to reopen it.',
       );
     }
     const knownCredentialIds = await knownLocalCredentialIds();
@@ -2091,13 +2240,14 @@ export default function PassportDemo() {
          resolves it: `enrolNewLocalPassportProfile`, which enrols deliberately
          with the exclusion guard still on. The thrown message stays as the
          explanation and now describes the button beside it. */
-      setUnusableCredential(
+      const detail =
         onboarding.message ||
-          'A passkey on this device answered but does not support the extension Passport needs.',
-      );
-      throw new Error(
-        'A passkey on this device answered but does not support the extension Passport needs, so it cannot open a Passport. Choose "Create a new passkey" to make one that can — the passkeys this browser already has a Passport for are left untouched.',
-      );
+        'A passkey on this device answered but does not support the extension Passport needs.';
+      setUnusableCredential(detail);
+      /* Thrown as a way-out failure so the banner stands down and the panel
+         below is the only thing saying this. It used to be both, in two
+         near-identical sentences, with the button underneath the second one. */
+      throw new PasskeyWayOutError(UNUSABLE_CREDENTIAL_MESSAGE, detail);
     }
     if (onboarding.outcome === 'existing') {
       /* A passkey answered, so this device already has a Passport whatever
@@ -2126,15 +2276,30 @@ export default function PassportDemo() {
     const existing = await resolveDefaultLocalProfile();
     if (!existing) {
       setLocalPassportKnown(false);
+      /* The mirror of the create path's guard, and named after the same
+         control for the same reason: "Create passkey" has not been on this
+         screen since 2026/08/05. */
       throw new Error(
-        'No Passport passkey is enrolled in this browser yet. Choose Create passkey to make one.',
+        'No Passport passkey is enrolled in this browser yet. Choose "Continue with Passport" to make one.',
       );
     }
     setOnboardingBusyLabel('Unlocking your Passport with this device');
     const unlockScope = localScopeFor(existing);
-    const handle = await withPasskeyWatchdog(() =>
-      WebAuthnPrfKeyProvider.assertOnce(existing.passkey),
-    );
+    /* THE KEYLESS DEAD END, CLOSED (2026/08/30).
+       This is the exact ceremony the reported failure died on: a stored
+       profile names a credential, the platform keystore can no longer produce
+       it — deleted, another OS profile, never synced — and the "use a saved
+       passkey" sheet comes back empty as `NotAllowedError`. Everything the
+       user could see then was an explanation. `signInCeremonyFailure` raises
+       the panel that offers to enrol instead, and the enrolment it offers
+       still excludes this profile's credential, so a passkey that turns out to
+       be alive after all is refused by the authenticator rather than replaced. */
+    let handle: DiscoveredPassportPasskey;
+    try {
+      handle = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.assertOnce(existing.passkey));
+    } catch (cause) {
+      throw signInCeremonyFailure(cause);
+    }
     try {
       await loadPassportState(existing, unlockScope, oneShotVaultFor(handle));
       setProfile(existing);
@@ -2162,8 +2327,11 @@ export default function PassportDemo() {
     setOnboardingError(null);
     /* Whatever happens next supersedes the dead end. Cleared on the way IN as
        well as on success, so a second attempt is never read against the first
-       attempt's explanation. */
+       attempt's explanation. Both way-out panels go: pressing either control
+       is a new attempt, and the one being pressed is very often the button one
+       of these panels put there. */
     setUnusableCredential(null);
+    setKeylessPasskey(null);
     setError(null);
     // Provisional intent so the screen flips to its working stage at once;
     // the resolved journey below corrects the label.
@@ -2230,15 +2398,21 @@ export default function PassportDemo() {
         });
       }
     } catch (cause) {
+      const wayOut = cause instanceof PasskeyWayOutError;
       const message = cause instanceof Error ? cause.message : String(cause);
       setLocalWalletStatus('error');
-      setOnboardingError(message);
+      // A failure with a way out is explained by its own panel, which carries
+      // the control that resolves it. See `PasskeyWayOutError`.
+      setOnboardingError(wayOut ? null : message);
       addActivity({
         label:
           intent === 'create' && !created
             ? 'Passport could not be created'
             : 'Passport could not be opened',
-        detail: message,
+        /* The trail keeps the platform's own words even where the screen shows
+           ours: a diagnosis nobody can act on is still a diagnosis somebody
+           may have to read later. */
+        detail: wayOut ? cause.detail : message,
         status: 'error',
         source: 'local',
       });
@@ -2269,6 +2443,11 @@ export default function PassportDemo() {
     onboardingRunning.current = true;
     cancelSessionRestore();
     setOnboardingError(null);
+    /* Same rule as `runLocalOnboarding`, and it was missing here: whatever
+       happens next supersedes the last attempt's way-out panel, so a second
+       try is never read against the first try's explanation. */
+    setUnusableCredential(null);
+    setKeylessPasskey(null);
     setError(null);
     setOnboardingIntent('local-signin');
     setOnboardingBusyLabel('Choose a passkey on this device');
@@ -2278,14 +2457,32 @@ export default function PassportDemo() {
       // Credential-key the legacy record first, so an existing single-profile
       // browser matches its own passkey below.
       await migrateLegacyLocalProfile().catch(() => null);
-      discovered = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.discover());
+      /* The OTHER half of the keyless dead end. A picker the user dismisses
+         and a picker with nothing in it are one and the same `NotAllowedError`
+         to WebAuthn, and this path used to answer both with a sentence and no
+         control — which is precisely where a user with no loadable passkey was
+         being sent by the advice on the create path. It now ends where the
+         targeted unlock ends: a panel offering to enrol one. */
+      try {
+        discovered = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.discover());
+      } catch (cause) {
+        throw signInCeremonyFailure(cause);
+      }
       activeProfile = await adoptDiscoveredPasskey(discovered);
       setOnboardingError(null);
     } catch (cause) {
+      const wayOut = cause instanceof PasskeyWayOutError;
       const message = cause instanceof Error ? cause.message : String(cause);
       setLocalWalletStatus('error');
-      setOnboardingError(message);
-      addActivity({ label: 'Could not sign in', detail: message, status: 'error', source: 'local' });
+      // The panel says it, and offers the button. A banner above it would say
+      // it again. See `PasskeyWayOutError`.
+      setOnboardingError(wayOut ? null : message);
+      addActivity({
+        label: 'Could not sign in',
+        detail: wayOut ? cause.detail : message,
+        status: 'error',
+        source: 'local',
+      });
     } finally {
       discovered?.dispose();
       if (activeProfile) {
@@ -3801,6 +3998,7 @@ export default function PassportDemo() {
     setOnboardingBusyLabel(null);
     setOnboardingError(null);
     setUnusableCredential(null);
+    setKeylessPasskey(null);
     // The identity steps re-decide on the next sign-in. The alias records
     // themselves are NOT cleared: the same passkey re-derives the same wallet,
     // so the name it registered is still that wallet's name.
@@ -3832,8 +4030,15 @@ export default function PassportDemo() {
    */
   const localSessionActive = localWalletStatus === 'ready' && localSurfaces !== null;
   const sessionActive = localSessionActive;
+  /* The two way-out panels hold the screen open in their own right. They have
+     to: a failure that suppresses the error banner in favour of its panel
+     would otherwise have nothing left keeping onboarding on screen. */
   const showOnboarding =
-    !sessionActive || onboardingIntent !== null || onboardingError !== null;
+    !sessionActive ||
+    onboardingIntent !== null ||
+    onboardingError !== null ||
+    keylessPasskey !== null ||
+    unusableCredential !== null;
   // The §2.2 session restore opens the wallet with no onboarding intent set,
   // so an opening local wallet also reads as the working stage.
   const onboardingStage: 'welcome' | 'working' =
@@ -5259,10 +5464,13 @@ export default function PassportDemo() {
           onContinue={() => startPasskeyOnboarding('auto')}
           onUseDifferentPasskey={() => void runDiscoverableSignIn()}
           onDismissError={() => setOnboardingError(null)}
-          /* The dead end that now has a way out. `onCreateNewPasskey` enrols
-             DELIBERATELY — it is deliberately not `onUseDifferentPasskey`,
-             which only ever asserts and was the false remedy this replaces. */
+          /* The two dead ends that now have a way out, and it is the SAME way
+             out: `onCreateNewPasskey` enrols DELIBERATELY. It is deliberately
+             not `onUseDifferentPasskey`, which only ever asserts and was the
+             false remedy both of these replace — advice to run a discovery for
+             a user who has just watched a discovery find nothing. */
           unusableCredential={unusableCredential}
+          keylessPasskey={keylessPasskey}
           onCreateNewPasskey={() => startPasskeyOnboarding('enrol-new')}
         />
       ) : identityStep === 'welcome' ? (
