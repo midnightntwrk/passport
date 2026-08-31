@@ -97,9 +97,19 @@ import {
 
 /** How long the wallet facade gets to answer with a state snapshot. */
 const STATE_TIMEOUT_MS = 15_000;
-/** Attempts, at two seconds apart, to map a transaction identifier to a hash. */
-const TX_HASH_ATTEMPTS = 5;
-const TX_HASH_INTERVAL_MS = 2_000;
+/**
+ * The window in which the indexer must map a transaction identifier to a ledger
+ * hash: ten seconds, unchanged, as twenty attempts half a second apart rather
+ * than five attempts two seconds apart (2026/08/31).
+ *
+ * The query being repeated costs 102–123 ms warm against stagenet, so a
+ * two-second gap was twenty times the cost of the question and the average
+ * overshoot was a second of pure waiting. Exceeding the window is unchanged and
+ * harmless: the identifier comes back as itself with `resolved: false`, and no
+ * caller links an unresolved id.
+ */
+const TX_HASH_ATTEMPTS = 20;
+const TX_HASH_INTERVAL_MS = 500;
 /** A Compact `Field` is carried as 32 bytes, so its hex form is 64 characters. */
 const FIELD_HEX_LENGTH = 64;
 

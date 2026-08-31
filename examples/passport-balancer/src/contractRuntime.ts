@@ -32,10 +32,27 @@ import type { BalancerConfig } from './config.js';
 import type { ContractWalletProvider } from './wallet.js';
 
 /** Attempts, {@link CONFIRM_INTERVAL_MS} apart, to resolve an identifier to a hash. */
-const TX_HASH_ATTEMPTS = 15;
+const TX_HASH_ATTEMPTS = 60;
 
-/** The poll interval every confirmation loop in this service uses. */
-export const CONFIRM_INTERVAL_MS = 2_000;
+/**
+ * The poll interval every confirmation loop in this service uses.
+ *
+ * Five hundred milliseconds since 2026/08/31, down from two seconds, with every
+ * attempt count in the service multiplied by four on the same commit so that
+ * not one confirmation WINDOW changed length. The windows are the tolerances —
+ * how long a lagging indexer is given before a submitted transaction is
+ * reported as unconfirmed — and shortening those would have been a change to
+ * what the service is willing to say, not to how fast it says it.
+ *
+ * What changed is only the overshoot. Every one of these loops repeats a single
+ * indexer query, measured at 102–123 ms warm and 346 ms cold against stagenet
+ * over sixteen samples, and most of them are entered immediately after
+ * something that has already waited out the indexer's own ~14 s lag — so on the
+ * happy path the first attempt succeeds and the whole cost of the loop was the
+ * fraction of an interval it slept through before asking. Four loops of it in
+ * one claim.
+ */
+export const CONFIRM_INTERVAL_MS = 500;
 
 /**
  * How long one contract-circuit proof may take.

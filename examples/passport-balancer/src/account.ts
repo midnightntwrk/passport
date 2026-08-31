@@ -92,7 +92,7 @@ import {
 import type { BalancerWallet } from './wallet.js';
 
 /** Attempts, {@link CONFIRM_INTERVAL_MS} apart, to watch the credit appear. */
-const CONFIRM_ATTEMPTS = 45;
+const CONFIRM_ATTEMPTS = 180;
 
 /**
  * Attempts, {@link CONFIRM_INTERVAL_MS} apart, to watch a freshly minted coin
@@ -103,7 +103,7 @@ const CONFIRM_ATTEMPTS = 45;
  * on the first poll; a wallet that is momentarily behind the indexer would take
  * longer, and giving up early would strand a coin that was about to appear.
  */
-const MINT_VISIBLE_ATTEMPTS = 90;
+const MINT_VISIBLE_ATTEMPTS = 360;
 
 /**
  * The mUSD faucet's domain separator, as the drills used it: 32 zero bytes with

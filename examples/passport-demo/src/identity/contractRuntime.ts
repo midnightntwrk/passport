@@ -538,16 +538,32 @@ export async function resolveTxHashOnce(
  * other. The transaction is already finalized when this runs, so the retries
  * only cover indexer lag; if every attempt fails the identifier is returned
  * unchanged, which every caller records as UNRESOLVED rather than linking.
+ *
+ * THE INTERVAL, AND WHY IT IS NOT TWO SECONDS ANY MORE (2026/08/31). The
+ * lookup this loop repeats is one indexer GraphQL query, measured at 102–123 ms
+ * warm and 346 ms cold over sixteen samples against stagenet. A two-second gap
+ * between attempts was twenty times the cost of the question, and on the happy
+ * path — where the caller has already waited out the indexer for the same
+ * transaction — the whole cost of this function was the half-interval it
+ * overshot by. The default attempt count rose by the same factor as the
+ * interval fell, so the WINDOW is still ten seconds.
+ *
+ * What happens when the window IS exceeded is unchanged and is the reason the
+ * window was not shortened: the identifier comes back as itself, the caller
+ * records `txIdResolved: false`, and no surface builds an explorer link out of
+ * it. A lagging indexer costs a link, never a wrong one.
  */
+const TX_HASH_INTERVAL_MS = 500;
+
 export async function resolveTransactionHash(
   indexerHttpUrl: string,
   identifier: string,
-  attempts = 5,
+  attempts = 20,
 ): Promise<string> {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const hash = await resolveTxHashOnce(indexerHttpUrl, identifier);
     if (hash) return hash;
-    await wait(2_000);
+    await wait(TX_HASH_INTERVAL_MS);
   }
   return identifier;
 }
