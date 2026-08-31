@@ -406,14 +406,88 @@
 }
 .mnid-stepper-note { color: var(--mn-text-muted); }
 
+/* ---------------------------------------------------------------- */
+/* The clock, and the long step's four states (2026/08/31)            */
+/*                                                                    */
+/* "With a timer — this is how much it is supposed to take, and it's  */
+/* almost done." Two shapes carry that: one line of timing under the  */
+/* running step, and four pips under the step that costs the minutes. */
+/*                                                                    */
+/* `tabular-nums` is not a nicety here. A proportional `1` is         */
+/* narrower than a `0`, so an m:ss that ticks past 0:11 shifts every  */
+/* character after it and the line twitches once a second — which     */
+/* reads as the screen fighting itself rather than as time passing.   */
+/* ---------------------------------------------------------------- */
+
+.mnid-stepper-timing {
+  margin-top: 1px;
+  color: var(--mn-text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: .01em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+.mnid-stepper-item[data-state='active'] .mnid-stepper-timing {
+  color: var(--mn-text-secondary);
+}
+
+/* Four rows, and they are on screen from the first frame of the claim: the
+   step's shape rule holds inside it, so they fill in rather than appearing
+   under a reader who is already waiting. Indented past the label by the width
+   of their own pip column, so the eye reads them as PART of the step above
+   rather than as three more steps. */
+.mnid-substages {
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.mnid-substage {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr);
+  column-gap: 9px;
+  align-items: center;
+}
+.mnid-substage-pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mn-border-medium);
+  transition: background .3s ease;
+}
+.mnid-substage-label {
+  color: var(--mn-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.mnid-substage[data-state='done'] .mnid-substage-pip { background: var(--mn-accent); }
+.mnid-substage[data-state='done'] .mnid-substage-label { color: var(--mn-text-secondary); }
+.mnid-substage[data-state='active'] .mnid-substage-pip {
+  background: var(--mn-accent);
+  animation: mnid-step-pulse 1.8s ease-in-out infinite;
+}
+.mnid-substage[data-state='active'] .mnid-substage-label {
+  color: var(--mn-text-primary);
+  font-weight: 600;
+}
+/* The warning is about the whole step, not about the last of its four states,
+   so it needs air above it — butted against the list it read as a fifth row. */
+.mnid-substages + .mnid-stepper-note { margin-top: 9px; }
+
 @keyframes mnid-step-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: .4; transform: scale(.62); }
 }
 @media (prefers-reduced-motion: reduce) {
   .mnid-stepper-item[data-state='active'] .mnid-stepper-dot { animation: none; }
+  .mnid-substage[data-state='active'] .mnid-substage-pip { animation: none; }
   .mnid-stepper-item::before,
-  .mnid-stepper-mark { transition: none; }
+  .mnid-stepper-mark,
+  .mnid-substage-pip { transition: none; }
 }
 
 /* ---------------------------------------------------------------- */

@@ -54,6 +54,17 @@
  * drilled directly in `src/lib/claimSteps.test.ts`. The JSX that paints circles
  * and lines from its answer stays out with the rest of the `.tsx`.
  *
+ * It grew a second job on 2026/08/31 and it belongs in the denominator for the
+ * same reason: the words a waiting person is told about TIME. It holds each
+ * step's expected duration, the four sub-states the long step is made of, and
+ * the three sentences a timing line can be — inside the estimate, past it, or
+ * waiting on the reader. Every one of those is a way of lying to somebody who
+ * is waiting: an estimate said as a promise, a counter that resets when a
+ * phase changes, a stage that freezes at its estimate rather than admitting it
+ * has run over. The clock ITSELF — the interval, the start times, the cleanup —
+ * stays in the screen, because it is a timer and not a rule; what is drilled
+ * here is what the screen is allowed to say with it.
+ *
  * `src/lib/activityFeed.ts` went IN on 2026/08/30, the day it was written, and
  * it is in the denominator because it is the only place a person can go back and
  * check what happened to their own money. Every function in it is a way of
