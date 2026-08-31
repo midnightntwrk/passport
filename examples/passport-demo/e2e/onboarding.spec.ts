@@ -950,3 +950,319 @@ test('a passkey this browser does not know about never blocks the way in', async
     await context.close();
   }
 });
+
+/* -------------------------------------------------------------------------- */
+/* The keyless dead end (2026/08/30)                                          */
+/*                                                                            */
+/* A browser can hold Passport records whose credential the platform keystore  */
+/* will no longer produce — the passkey deleted, a different OS profile, a     */
+/* keychain that never synced. Sign-in then raises the platform's "use a saved */
+/* passkey" sheet with nothing loadable in it, and WebAuthn reports the same   */
+/* `NotAllowedError` it reports for a sheet the user dismissed. Every control  */
+/* on the screen was a way of LOADING a passkey, which is exactly what had     */
+/* just failed, so the state was terminal. The user's own words: "If there is  */
+/* no key, can you not just create it? Why does it always have to load it?"    */
+/*                                                                            */
+/* THE FIXTURE. The profile record is seeded straight into this browser's own  */
+/* IndexedDB, naming a credential no authenticator has ever held. That IS the  */
+/* reported state — records here, no credential there — and it is the honest   */
+/* way to reach it: a virtual authenticator cannot be made to forget a         */
+/* credential while keeping the records that name it, and removing the         */
+/* authenticator removes the ability to enrol the replacement the test is      */
+/* about. Nothing else is stubbed; the ceremonies below are real.              */
+/* -------------------------------------------------------------------------- */
+
+/** A credential id no authenticator in this run will ever hold. */
+const STRANDED_CREDENTIAL_ID = Buffer.alloc(32, 0x5a).toString('base64');
+
+/** The storage key `publicProfile.ts` derives from a credential id. */
+function localProfileKey(credentialId: string): string {
+  return `passkey:${credentialId.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')}`;
+}
+
+/**
+ * Writes a local Passport profile bound to `credentialId` into the page's own
+ * IndexedDB — the returning-Passport record, exactly as `saveDemoProfile`
+ * writes it, for a passkey this device cannot produce.
+ */
+async function seedStrandedProfile(target: Page, credentialId: string): Promise<void> {
+  await target.evaluate(async (id: string) => {
+    const scoped = id.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const open = indexedDB.open('midnight-passport', 2);
+      open.onupgradeneeded = () => {
+        if (!open.result.objectStoreNames.contains('public-profile')) {
+          open.result.createObjectStore('public-profile');
+        }
+        if (!open.result.objectStoreNames.contains('private-state')) {
+          open.result.createObjectStore('private-state');
+        }
+      };
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => resolve(open.result);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('public-profile', 'readwrite');
+      transaction.objectStore('public-profile').put(
+        {
+          subjectId: `passkey:${scoped}`,
+          passkey: { credentialId: id, label: 'Midnight Passport', rpId: location.hostname },
+          accountId: `passport-local:${scoped}`,
+          createdAt: new Date().toISOString(),
+        },
+        `passkey:${scoped}`,
+      );
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    db.close();
+  }, credentialId);
+}
+
+/** Every local profile key this browser holds, newest write included. */
+async function storedProfileKeys(target: Page): Promise<string[]> {
+  return target.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const open = indexedDB.open('midnight-passport', 2);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => resolve(open.result);
+    });
+    const keys = await new Promise<string[]>((resolve, reject) => {
+      const request = db.transaction('public-profile', 'readonly').objectStore('public-profile').getAllKeys();
+      request.onsuccess = () => resolve(request.result.map(String));
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return keys;
+  });
+}
+
+test('a Passport whose passkey this device cannot produce is offered a new one', async ({
+  browser,
+}) => {
+  /* The reported dead end, and the whole of its way out: "Continue with
+     Passport" targets the stored credential, the keystore has nothing to
+     answer with, and the screen that comes back offers to make one. */
+  test.setTimeout(180_000);
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const stranded = await context.newPage();
+  await installNetworkBoundary(stranded);
+  const authenticator = await installVirtualAuthenticator(context, stranded);
+
+  try {
+    await stranded.goto('/');
+    await seedStrandedProfile(stranded, STRANDED_CREDENTIAL_ID);
+    await stranded.reload();
+
+    await stranded.getByRole('button', { name: /Continue with Passport/i }).click();
+
+    /* Not a sentence about what went wrong. A sentence about what can be done
+       about it, and the control that does it. */
+    await expect(stranded.getByText(/Could not load your passkey/i)).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(stranded.getByText(/stays untouched/i)).toBeVisible();
+    const create = stranded.getByRole('button', { name: /Create a new passkey/i });
+    await expect(create).toBeVisible();
+
+    /* And the retry is still there beside it: this state offers both readings
+       of what happened — the passkey is gone, or it is merely not here now. */
+    await expect(stranded.getByRole('button', { name: /Continue with Passport/i })).toBeVisible();
+
+    /* Nothing raw from the platform. `NotAllowedError`'s own message says the
+       operation "either timed out or was not allowed", which is true of four
+       different things and useful for none of them. */
+    await expect(stranded.getByText(/NotAllowedError|not allowed/i)).toHaveCount(0);
+
+    await create.click();
+
+    /* A working Passport, not a second error: the welcome screen is only ever
+       reached once PRF has derived a seed and the wallet has opened. */
+    await expect(stranded.getByRole('heading', { name: /Welcome to Passport/i })).toBeVisible({
+      timeout: 120_000,
+    });
+    await stranded.getByRole('button', { name: 'Choose my name' }).click();
+    await expect(stranded.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 60_000 });
+
+    /* THE OLD RECORDS ARE STILL THERE. The new Passport keys its profile and
+       its private-state scope by ITS credential id, so it cannot have landed
+       on the stranded one — which is what makes the panel's promise that a
+       Passport this browser holds "stays untouched" a fact rather than a
+       hope. If the missing passkey turns up, it reopens its own Passport. */
+    const keys = await storedProfileKeys(stranded);
+    expect(keys).toContain(localProfileKey(STRANDED_CREDENTIAL_ID));
+    expect(keys.length).toBe(2);
+  } finally {
+    await authenticator.remove().catch(() => {});
+    await context.close();
+  }
+});
+
+test('a picker with nothing in it offers a new passkey too, not just an apology', async ({
+  browser,
+}) => {
+  /* The other half. "Use a different passkey" runs a DISCOVERABLE assertion,
+     so the platform shows its own picker — and for this user it is empty, or
+     they close it, which WebAuthn reports identically. This path used to end
+     in a sentence, which was the worse failure of the two: it is where the
+     create path's advice sent people, so the advice led from one dead end to
+     another. */
+  test.setTimeout(180_000);
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const stranded = await context.newPage();
+  await installNetworkBoundary(stranded);
+  const authenticator = await installVirtualAuthenticator(context, stranded);
+
+  try {
+    await stranded.goto('/');
+    await seedStrandedProfile(stranded, STRANDED_CREDENTIAL_ID);
+    await stranded.reload();
+
+    await stranded.getByRole('button', { name: /Use a different passkey/i }).click();
+
+    await expect(stranded.getByText(/Could not load your passkey/i)).toBeVisible({
+      timeout: 60_000,
+    });
+    const create = stranded.getByRole('button', { name: /Create a new passkey/i });
+    await expect(create).toBeVisible();
+
+    await create.click();
+    await expect(stranded.getByRole('heading', { name: /Welcome to Passport/i })).toBeVisible({
+      timeout: 120_000,
+    });
+    await stranded.getByRole('button', { name: 'Choose my name' }).click();
+    await expect(stranded.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 60_000 });
+  } finally {
+    await authenticator.remove().catch(() => {});
+    await context.close();
+  }
+});
+
+test('a passkey that is still there is signed in to, never created over', async ({ browser }) => {
+  /* THE GUARD, DRIVEN THROUGH THE NEW BUTTON. The way out above enrols
+     deliberately — so the question it raises is what happens when the user
+     presses it and the passkey was there all along. The answer must be that
+     the authenticator refuses (the enrolment excludes every credential this
+     browser holds a Passport record for), that the refusal is not shown as a
+     failure, and that the user ends up signed in to the Passport they still
+     have. A create that succeeded here would take the PRF secret every coin in
+     that wallet derives from, unrecoverably.
+
+     Getting to the panel with a live credential: ONE assertion is refused with
+     the real `NotAllowedError` a dismissed sheet produces, at the
+     `navigator.credentials` boundary and armed a call at a time. That is the
+     same class of fixture as the virtual authenticator itself — both stand in
+     for a platform decision no test can make — and it is the only one that
+     works here. `WebAuthn.setUserVerified` turns verification off and, as of
+     Chrome 140, does not turn it back on, so an authenticator crippled that
+     way could not perform the enrolment this test is about. */
+  test.setTimeout(240_000);
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const held = await context.newPage();
+  await installNetworkBoundary(held);
+
+  const client = await context.newCDPSession(held);
+  await client.send('WebAuthn.enable', { enableUI: false });
+  const { authenticatorId } = await client.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      ctap2Version: 'ctap2_1',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      hasPrf: true,
+      hasLargeBlob: true,
+      automaticPresenceSimulation: true,
+    },
+  });
+
+  /* Every ceremony the page raises, so the test can prove the create was made
+     WITH the exclusion and that a sign-in followed it. */
+  const calls: { kind: string; excluded?: number }[] = [];
+  await held.exposeFunction('__recordCeremony', (entry: { kind: string; excluded?: number }) => {
+    calls.push(entry);
+  });
+  await held.addInitScript(() => {
+    const api = navigator.credentials;
+    const create = api.create.bind(api);
+    const get = api.get.bind(api);
+    api.create = (options?: CredentialCreationOptions) => {
+      const publicKey = options?.publicKey as { excludeCredentials?: unknown[] } | undefined;
+      void (window as unknown as Record<string, (entry: unknown) => void>).__recordCeremony({
+        kind: 'create',
+        excluded: publicKey?.excludeCredentials?.length ?? 0,
+      });
+      return create(options);
+    };
+    api.get = (options?: CredentialRequestOptions) => {
+      void (window as unknown as Record<string, (entry: unknown) => void>).__recordCeremony({
+        kind: 'get',
+      });
+      /* One refusal, armed by the test immediately before the click it belongs
+         to — the sheet the user closed, or the sheet that had nothing in it.
+         WebAuthn reports both as this exact error and will not say which. */
+      const armed = window as unknown as { __refuseNextAssertion?: boolean };
+      if (armed.__refuseNextAssertion) {
+        armed.__refuseNextAssertion = false;
+        return Promise.reject(
+          new DOMException(
+            'The operation either timed out or was not allowed.',
+            'NotAllowedError',
+          ),
+        );
+      }
+      return get(options);
+    };
+  });
+
+  try {
+    await held.goto('/');
+    await held.getByRole('button', { name: /Continue with Passport/i }).click();
+    await expect(held.getByRole('heading', { name: /Welcome to Passport/i })).toBeVisible({
+      timeout: 120_000,
+    });
+
+    /* Back to the landing screen with the profile and the credential both
+       intact. The session record is the reload stopgap, and clearing it is
+       what signing out does; the Passport itself is untouched. */
+    await held.evaluate(
+      async () =>
+        new Promise<void>((resolve) => {
+          const request = indexedDB.deleteDatabase('midnight-passport-session');
+          request.onsuccess = () => resolve();
+          request.onerror = () => resolve();
+          request.onblocked = () => resolve();
+        }),
+    );
+    await held.reload();
+
+    calls.length = 0;
+    await held.evaluate(() => {
+      (window as unknown as { __refuseNextAssertion?: boolean }).__refuseNextAssertion = true;
+    });
+    await held.getByRole('button', { name: /Continue with Passport/i }).click();
+    await expect(held.getByText(/Could not load your passkey/i)).toBeVisible({ timeout: 60_000 });
+
+    await held.getByRole('button', { name: /Create a new passkey/i }).click();
+
+    /* The name step, reached WITHOUT the welcome screen in front of it: the
+       welcome is shown only to a Passport that was just created, so arriving
+       straight here is the observable difference between "created a second
+       passkey" and "signed in to the one that was already there". */
+    await expect(held.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 120_000 });
+    await expect(held.getByRole('heading', { name: /Welcome to Passport/i })).toHaveCount(0);
+
+    /* The enrolment was attempted, it named the credential this browser holds
+       a Passport for, and a discoverable assertion followed it. That sequence
+       IS the guard: refused by exclusion, routed into sign-in. */
+    expect(calls.map((entry) => entry.kind)).toEqual(['get', 'create', 'get']);
+    expect(calls.find((entry) => entry.kind === 'create')?.excluded).toBe(1);
+
+    /* And exactly one Passport in this browser, which is the point. */
+    expect((await storedProfileKeys(held)).length).toBe(1);
+  } finally {
+    await client.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId }).catch(() => {});
+    await context.close();
+  }
+});
