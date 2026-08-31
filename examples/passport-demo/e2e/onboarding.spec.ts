@@ -659,6 +659,12 @@ test('every token on the balance list is named, and none of them is 64 character
   });
   const assets = page.locator('.mnhome-assets');
   await expect(assets).toBeVisible({ timeout: 60_000 });
+  /* THE READ LANDS AFTER THE SCREEN DOES, so the strip is briefly one card of
+     "Syncing" and everything below is a SNAPSHOT of whatever was on it at the
+     instant it was taken. Waited for with a retrying assertion first — without
+     this the file passed alone and failed whenever another spec ran ahead of
+     it and the account read came back a moment later (seen 2026/08/31). */
+  await expect(assets).toContainText(/mUSD/i, { timeout: 60_000 });
   const cards = await assets.innerText();
 
   /* Matched case-insensitively: the card's own label is upper-cased in CSS, so

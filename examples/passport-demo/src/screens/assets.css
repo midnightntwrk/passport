@@ -1,0 +1,371 @@
+@import './tokens.css';
+
+/* Assets screen — prefix "mnassets-".
+
+   Every colour, radius, and shadow comes from tokens.css. The top-bar anatomy
+   is Apps', the measure and the card are Home's, and neither is copied for
+   tidiness: moving between the three tabs should be a change of CONTENT, not a
+   change of theme, and a screen arriving with a look of its own would make the
+   bar feel like three apps rather than one.
+
+   The card itself is Home's balance card, down to the container query that
+   sizes a figure against the card it has to fit inside. That is not
+   copy-paste for its own sake: the same holding is shown on both screens, and
+   a token that rendered one way on Home and another way here would read as
+   two different facts about the same money. */
+
+.mnassets-screen {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-page);
+  color-scheme: var(--mn-color-scheme);
+  font-family: var(--mn-font-body);
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  /* Clear of the floating bar AND of the opaque strip behind it, with room
+     left over — a card whose bottom edge lands on the strip's hairline reads
+     as clipped even when nothing is. */
+  padding-bottom: calc(var(--mn-nav-height) + 40px + env(safe-area-inset-bottom));
+  animation: mnassets-in .35s ease-out both;
+}
+
+/* THE COLUMN. Every band on this screen sits in the measure Home's body and
+   the nav bar itself already use, so the three tabs read as one page at one
+   width rather than as a phone screen beside a full-bleed desktop one. On a
+   wide window the alternative was a 1248 px row of balance cards, which is not
+   a balance list — it is a spreadsheet. */
+.mnassets-bar,
+.mnassets-head,
+.mnassets-shelf,
+.mnassets-screen > .mnassets-empty {
+  width: min(100% - 40px, 520px);
+  margin-inline: auto;
+}
+@media (min-width: 560px) {
+  .mnassets-bar,
+  .mnassets-head,
+  .mnassets-shelf,
+  .mnassets-screen > .mnassets-empty {
+    width: min(100% - 64px, 560px);
+  }
+}
+
+/* --- Top bar ------------------------------------------------------------- */
+
+.mnassets-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+  background: var(--mn-surface-page);
+}
+.mnassets-wordmark {
+  width: 96px;
+  height: auto;
+  filter: var(--mn-wordmark-filter);
+}
+.mnassets-bar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The bar carries a wordmark, a network switcher, a theme toggle, and a
+   refresh. Measured at 390 px that row wants more than the bar has, and the
+   whole page scrolled sideways as a result — the same defect Home's bar was
+   fixed for on 2026/08/30, so it takes the same fix: below 460 px the actions
+   drop to their own right-aligned row and the toggle's segments narrow. */
+@media (max-width: 460px) {
+  .mnassets-bar {
+    flex-wrap: wrap;
+    padding-bottom: 10px;
+    row-gap: 10px;
+  }
+  .mnassets-bar-actions {
+    flex-basis: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .mnassets-bar-actions .mnthemetoggle-option { width: 26px; }
+}
+
+.mnassets-icon-button {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.mnassets-icon-button:hover {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+.mnassets-icon-button:active { background: var(--mn-surface-active); }
+.mnassets-icon-button:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+/* Touch slop: the drawn square stays 34 px, the effective target is 44 px. */
+.mnassets-icon-button::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
+
+/* --- Head ---------------------------------------------------------------- */
+
+/* The first shelf brings its own 24 px of air, so the head only has to stop
+   the lede running into it. */
+.mnassets-head { padding: 16px 0 4px; }
+.mnassets-kicker {
+  margin: 0 0 14px;
+  color: var(--mn-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.mnassets-title {
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  font-size: clamp(38px, 11vw, 52px);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: .95;
+}
+.mnassets-lede {
+  max-width: 420px;
+  margin: 16px 0 0;
+  color: var(--mn-text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* --- Shelves ------------------------------------------------------------- */
+
+.mnassets-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24px;
+}
+.mnassets-shelf + .mnassets-shelf { padding-top: 32px; }
+
+/* The heading carries a count on its right, because the first question about
+   a shelf is how much is on it — and on the empty shelf the zero is the
+   honest half of the answer the sentence below spells out. */
+.mnassets-shelf-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mnassets-shelf-title {
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -.015em;
+}
+.mnassets-count {
+  min-width: 22px;
+  padding: 2px 8px;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-muted);
+  background: var(--mn-surface-card);
+  font-size: 11px;
+  font-variant-numeric: var(--mn-numeric);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-align: center;
+}
+
+/* Two up, at every width. The column above caps at 560 px, so a third
+   column would only ever squeeze the figures — and the point of the card is
+   that the figure is readable at its own size. */
+.mnassets-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* --- Card ---------------------------------------------------------------- */
+
+.mnassets-card {
+  /* Container so a figure is sized against the card it has to fit inside,
+     not against the viewport. See .mnassets-card-value. */
+  container-type: inline-size;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-sm);
+}
+/* An item is not a balance, and the card says so before the words do: the
+   accent hairline and its soft wash are the only difference, so the two
+   shelves still read as one system. */
+.mnassets-card-item {
+  border-color: var(--mn-accent);
+  background:
+    linear-gradient(var(--mn-accent-soft), var(--mn-accent-soft)),
+    var(--mn-surface-raised);
+}
+.mnassets-card-item .mnassets-card-head { color: var(--mn-accent-ink); }
+
+.mnassets-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--mn-text-muted);
+}
+.mnassets-micro {
+  margin: 0;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mnassets-card-value {
+  margin: 0;
+  min-width: 0;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  /* A figure is one number. It never breaks across lines: it shrinks to fit
+     the card, and only if it still cannot fit does it truncate. Tabular
+     figures keep the digits on a fixed grid so a value does not jitter as it
+     refreshes. */
+  font-size: clamp(15px, 14cqi, 26px);
+  font-variant-numeric: var(--mn-numeric);
+  font-weight: 700;
+  letter-spacing: -.015em;
+  /* Loose enough that `overflow: hidden` never clips a comma's tail. */
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mnassets-card-value-muted {
+  color: var(--mn-text-muted);
+  font-size: clamp(14px, 9cqi, 18px);
+}
+/* "1 of 1" is a statement, not a balance, so it is set at label weight rather
+   than at the size a figure gets. */
+.mnassets-card-item .mnassets-card-value {
+  color: var(--mn-accent-ink);
+  font-size: clamp(14px, 10cqi, 19px);
+}
+.mnassets-card-unit {
+  margin: 0;
+  min-height: 15px;
+  color: var(--mn-text-secondary);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A COLOUR IS NOT A LABEL. "Stablecoin" is a word about the row and is set
+   like one; a shortened colour is the row's only distinguishing DATA, and
+   upper-casing it both shouts and makes two similar values harder to tell
+   apart at a glance. Monospaced, in its own case, with the tracking off. */
+.mnassets-card-unit-colour {
+  font-family: var(--mn-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* --- Disclosure, notice, empty shelf ------------------------------------- */
+
+.mnassets-more {
+  appearance: none;
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 12px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-secondary);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mnassets-more:hover {
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-hover);
+}
+.mnassets-more:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.mnassets-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  padding: 12px 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-card);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mnassets-notice svg { flex: 0 0 auto; margin-top: 2px; }
+
+/* The empty shelf. A dashed edge rather than a solid one: it is a place
+   something will go, not a thing that is there. */
+.mnassets-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 20px 16px;
+  border: var(--mn-hairline) dashed var(--mn-border-medium);
+  border-radius: var(--mn-radius);
+  color: var(--mn-text-secondary);
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mnassets-empty svg { flex: 0 0 auto; color: var(--mn-text-muted); }
+
+@keyframes mnassets-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnassets-screen { animation: none; }
+  .mnassets-icon-button { transition: none; }
+}

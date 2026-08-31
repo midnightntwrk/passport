@@ -10,13 +10,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  classifyHolding,
   describeColour,
   describeColours,
   MUSD_COLOUR_HEX,
   NIGHT_COLOUR_HEX,
+  nftTitle,
   normalisedColourHex,
   shortColour,
   sortTokenHoldings,
+  splitHoldings,
 } from './colour.js';
 
 const NIGHT = '0'.repeat(64);
@@ -240,5 +243,75 @@ describe('describeColours, on input a caller should not send but might', () => {
     expect(described[0].symbol).toBe('Token · nota…');
     expect(described[1].symbol).toBe('Token · nota…');
     expect(described[0].name).not.toBe(described[1].name);
+  });
+});
+
+describe('classifyHolding', () => {
+  /* THE ONE THAT MUST NOT BE AN ITEM. An account down to its last atomic unit
+     of the stablecoin holds a balance of one, not a collectible — and the
+     stablecoin arrives with a scale of zero, so a balance of one is a real
+     state a real account reaches, not a contrived input. */
+  it('keeps a named colour on the token shelf at a balance of exactly one', () => {
+    expect(classifyHolding({ colourHex: MUSD_COLOUR_HEX, amount: 1n })).toBe('token');
+    expect(classifyHolding({ colourHex: NIGHT_COLOUR_HEX, amount: 1n })).toBe('token');
+  });
+
+  it('keeps the colour the SPONSOR named on the token shelf at one', () => {
+    /* The sponsor's colour is not in the table — its name arrives over
+       `/status` — so this is the half of the rule the table alone cannot
+       enforce, and the deployment that produces it is the ordinary one. */
+    const sponsored = { colourHex: 'aa'.repeat(32), symbol: 'mUSD' };
+    expect(classifyHolding({ colourHex: 'aa'.repeat(32), amount: 1n }, sponsored)).toBe('token');
+  });
+
+  it('files a colour nobody can name, held exactly once, as an item', () => {
+    expect(classifyHolding({ colourHex: 'ab'.repeat(32), amount: 1n })).toBe('nft');
+  });
+
+  it('files two of an unnameable colour as a token balance, not two items', () => {
+    /* Two is a quantity. Whatever it is, it is divisible, and a shelf of
+       one-of-a-kind things is the wrong place to read it. */
+    expect(classifyHolding({ colourHex: 'ab'.repeat(32), amount: 2n })).toBe('token');
+    expect(classifyHolding({ colourHex: 'ab'.repeat(32), amount: 0n })).toBe('token');
+  });
+});
+
+describe('splitHoldings', () => {
+  it('partitions without touching the order it was given', () => {
+    /* Sorted FIRST, split second — `sortTokenHoldings` is the authority on
+       order, and a split that re-sorted would silently overrule a caller who
+       had already asked for one. */
+    const sponsored = { colourHex: 'aa'.repeat(32), symbol: 'mUSD' };
+    const holdings = [
+      { colourHex: 'ff'.repeat(32), amount: 1n },
+      { colourHex: 'aa'.repeat(32), amount: 7n },
+      { colourHex: 'bb'.repeat(32), amount: 1n },
+      { colourHex: 'cc'.repeat(32), amount: 9n },
+    ];
+    const sorted = sortTokenHoldings(holdings, sponsored);
+    const { tokens, nfts } = splitHoldings(sorted, sponsored);
+
+    // Every row lands on exactly one shelf, and none is invented or lost.
+    expect(tokens.length + nfts.length).toBe(sorted.length);
+    // Each half is the sorted list with the other half filtered out of it.
+    expect(tokens).toEqual(sorted.filter((held) => tokens.includes(held)));
+    expect(nfts).toEqual(sorted.filter((held) => nfts.includes(held)));
+    expect(nfts.map((held) => held.colourHex)).toEqual(['bb'.repeat(32), 'ff'.repeat(32)]);
+  });
+
+  it('is two empty shelves for an empty account', () => {
+    expect(splitHoldings([])).toEqual({ tokens: [], nfts: [] });
+  });
+});
+
+describe('nftTitle', () => {
+  it('re-nouns the handle the naming authority produced', () => {
+    /* The same four characters, so an item reads the same way wherever it is
+       shown — only the noun in front of them changes. */
+    expect(nftTitle(describeColour('ab'.repeat(32)).symbol)).toBe('Item · abab…');
+  });
+
+  it('leaves a real ticker alone', () => {
+    expect(nftTitle('NIGHT')).toBe('NIGHT');
   });
 });

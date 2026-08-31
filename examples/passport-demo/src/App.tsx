@@ -99,6 +99,7 @@ import {
   type PassportNetwork,
 } from './screens/NetworkSwitcher.js';
 import AppsScreen from './screens/Apps.js';
+import AssetsScreen from './screens/Assets.js';
 import PassportNav, { type MobileTab } from './screens/Nav.js';
 import PassportToasts, { pushToast } from './screens/ToastStack.js';
 // In-app notifications only — a closed Passport notifies nobody. The module's
@@ -5700,6 +5701,17 @@ export default function PassportDemo() {
                  browser with no records needs. */
               onOpenBackup={profile ? () => setIdentityStep('backup') : undefined}
               onSignOut={() => void signOutPassport()}
+            />
+          ) : mobileTab === 'assets' ? (
+            /* The Assets shelf. Fed from the SAME `homeAccount` Home's balance
+               strip reads, so the two screens cannot disagree about what this
+               Passport holds — and `null` there means no account yet, which
+               the screen says in one line rather than filling with zeros. */
+            <AssetsScreen
+              account={homeAccount}
+              network={selectedNetwork}
+              onSelectNetwork={handleSelectNetwork}
+              onRefresh={refreshMobile}
             />
           ) : (
             <AppsScreen

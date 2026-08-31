@@ -40,7 +40,10 @@
   height: var(--mn-nav-height);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Three since 2026/08/31 — Home, Assets, Apps. Equal columns rather than
+     content-sized ones: the tab a thumb is aiming for should be in the same
+     place whatever the labels happen to be. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 6px;
   border: var(--mn-hairline) solid var(--mn-border-hairline);
@@ -88,9 +91,18 @@
   .mnnav-tab { transition: none; }
 }
 
+/* THE THIRD TAB ON A NARROW PHONE. Three equal columns inside a 366 px bar
+   leave about 115 px each, which "ASSETS" fits comfortably — but the tracking
+   and the side padding are what it fits WITH, so both come in rather than
+   letting a label wrap to two lines inside a fixed-height pill. Measured at
+   390 px and again at 320 px, the narrowest phone still worth drawing for. */
 @media (max-width: 400px) {
   .mnnav { width: calc(100% - 24px); }
-  .mnnav-tab { letter-spacing: .04em; }
+  .mnnav-tab {
+    padding: 0 6px;
+    letter-spacing: .04em;
+  }
+  .mnnav-tab span { white-space: nowrap; }
 }
 
 /* Track the Home body column, which widens at the same breakpoint

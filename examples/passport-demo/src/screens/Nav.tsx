@@ -1,4 +1,4 @@
-import { House, LayoutGrid } from 'lucide-react'
+import { Gem, House, LayoutGrid } from 'lucide-react'
 import './nav.css'
 
 /**
@@ -12,9 +12,14 @@ import './nav.css'
  * a sibling backdrop strip (z-index 99) spans the full viewport width behind
  * it, painted in the page surface. Scrolled content disappears cleanly at the
  * strip's top hairline instead of slicing through the gaps around the card.
+ *
+ * THREE tabs since 2026/08/31. Assets sits in the middle, between the screen a
+ * person lands on and the screen they go out from — what you hold is the thing
+ * both of the others act on, and it was previously readable only as a strip of
+ * cards on Home with no shelf of its own.
  */
 
-export type MobileTab = 'home' | 'apps'
+export type MobileTab = 'home' | 'assets' | 'apps'
 
 export interface PassportNavProps {
   active: MobileTab
@@ -23,6 +28,7 @@ export interface PassportNavProps {
 
 const TABS: { key: MobileTab; label: string; icon: typeof House }[] = [
   { key: 'home', label: 'Home', icon: House },
+  { key: 'assets', label: 'Assets', icon: Gem },
   { key: 'apps', label: 'Apps', icon: LayoutGrid },
 ]
 

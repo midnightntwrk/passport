@@ -195,3 +195,96 @@ export function describeColours(
     return { ...identity, symbol: `${identity.symbol} · ${normalised[index].slice(0, 4)}…` };
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* Tokens and items (2026/08/31)                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What kind of thing a holding is, as the Assets screen files it.
+ *
+ * Two shelves, because a person asked for two: "those assets can be NFTs and
+ * tokens". A balance and a one-of-a-kind item are read differently — one is a
+ * quantity you spend down, the other is a thing you either have or do not —
+ * and putting both on one list makes the second look like a rounding error.
+ */
+export type HoldingClass = 'token' | 'nft';
+
+/** The least a colour-carrying row has to be for this file to file it. */
+export interface ColourHolding {
+  colourHex: string;
+  amount: bigint;
+}
+
+/**
+ * Which shelf a holding belongs on.
+ *
+ * THE RULE: a holding is an item iff the account holds exactly ONE of it AND
+ * nothing can name the colour. Both halves matter.
+ *
+ * The second half is what keeps a NAMED colour off the item shelf however
+ * little of it is held: an account down to its last atomic unit of the
+ * sponsor's stablecoin holds a stablecoin balance of one, not a collectible,
+ * and NIGHT is never an item at any amount. `describeColour` already knows
+ * every colour that has a name — the two in `KNOWN_COLOURS` and whatever the
+ * fee sponsor named for itself over `/status` — so this asks it rather than
+ * keeping a second list that could disagree with the first.
+ *
+ * The first half is a PROXY, and an honest one to state plainly here because
+ * the screen does not state it: a holding of one is not the same fact as a
+ * SUPPLY of one, and nothing this app can currently read reports supply. Until
+ * a real item source lands, "you hold exactly one of a colour nobody can name"
+ * is the closest thing to a one-of-a-kind this ledger will answer, and it is
+ * the same evidence a person would use looking at the raw numbers themselves.
+ * When that source arrives, this function is the ONE place the rule changes.
+ */
+export function classifyHolding(
+  holding: ColourHolding,
+  sponsored?: { colourHex: string; symbol: string } | null,
+): HoldingClass {
+  if (holding.amount !== 1n) return 'token';
+  return describeColour(holding.colourHex, sponsored).known ? 'token' : 'nft';
+}
+
+/**
+ * The same holdings, split onto the two shelves, IN THE ORDER THEY ARRIVED.
+ *
+ * Order is the caller's business — {@link sortTokenHoldings} is the authority
+ * on it, and a split that re-sorted would silently overrule a caller that had
+ * already sorted. So this only partitions: whatever order went in comes out of
+ * both halves unchanged.
+ */
+export function splitHoldings<T extends ColourHolding>(
+  holdings: readonly T[],
+  sponsored?: { colourHex: string; symbol: string } | null,
+): { tokens: T[]; nfts: T[] } {
+  const tokens: T[] = [];
+  const nfts: T[] = [];
+  for (const held of holdings) {
+    if (classifyHolding(held, sponsored) === 'nft') nfts.push(held);
+    else tokens.push(held);
+  }
+  return { tokens, nfts };
+}
+
+/**
+ * What an item card leads with, given the symbol {@link describeColours} gave
+ * that colour.
+ *
+ * `describeColour` calls a colour nobody can name `Token · a1b2…`, which is
+ * right on a balance list and wrong on the item shelf: on a card whose whole
+ * job is to say "this is a one-of-a-kind thing", the first word must not be
+ * "Token". This RE-NOUNS the handle the naming authority already produced
+ * rather than inventing a second naming scheme beside it — the four characters
+ * are the same four, so two items that read alike here read alike everywhere,
+ * and the shortened colour beneath is still what tells them apart.
+ *
+ * A symbol that is a real ticker is returned untouched. Nothing classified as
+ * an item can carry one — the rule above requires that nothing could name the
+ * colour — but a function that answers only for its expected input is one the
+ * next caller has to read the rule before using.
+ */
+export function nftTitle(symbol: string): string {
+  const prefix = 'Token · ';
+  return symbol.startsWith(prefix) ? `Item · ${symbol.slice(prefix.length)}` : symbol;
+}

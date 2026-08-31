@@ -26,6 +26,7 @@ import {
   describeColours,
   NIGHT_COLOUR_HEX,
   sortTokenHoldings,
+  splitHoldings,
   TOKENS_VISIBLE,
 } from '../lib/colour.js'
 /* The names this screen shares with the wallet (Contract W). Type-only, and
@@ -345,7 +346,18 @@ export default function HomeScreen(props: HomeScreenProps) {
         value: account.stablecoin.amount.toString(),
       })
     }
-    for (const other of sortTokenHoldings(account.otherShielded, sponsored)) {
+    /* ITEMS ARE NOT BALANCES, and since 2026/08/31 they are not on this
+       strip. A one-of-a-kind holding rendered here as a card reading "1"
+       looked like a rounding error beside real balances; it has a shelf of its
+       own on the Assets tab, where it can say what it is. `splitHoldings` is
+       the single authority on which is which — see `lib/colour.ts` — so this
+       strip, that shelf, and the Send picker cannot disagree. Sorted first,
+       split second: the split preserves the order it is given. */
+    const { tokens: otherTokens } = splitHoldings(
+      sortTokenHoldings(account.otherShielded, sponsored),
+      sponsored,
+    )
+    for (const other of otherTokens) {
       held.push({
         colourHex: other.colourHex,
         amount: other.amount,
