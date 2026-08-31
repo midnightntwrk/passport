@@ -60,4 +60,12 @@ describe('extractMidnightAddress', () => {
     expect(extractMidnightAddress('mn_addr_preview')).toBeNull();
     expect(extractMidnightAddress('mn_')).toBeNull();
   });
+
+  it('reports no address for a code that carried a name', () => {
+    // A Passport Receive code is a NAME payload. Asking this function for an
+    // address in it must come back empty rather than inventing one; the caller
+    // that wants the name asks `parseQrPayload` directly.
+    expect(extractMidnightAddress('midnight:alice.night')).toBeNull();
+    expect(extractMidnightAddress('alice.night')).toBeNull();
+  });
 });

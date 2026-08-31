@@ -48,6 +48,11 @@ import {
   type NameLookup,
 } from '../lib/recipientName.js'
 
+/* The scanner's vocabulary. Only the account normaliser is needed here, so the
+   registry's answer and a scanned code's claim go through one rule rather than
+   two — `QrPayload` itself arrives typed from the scan sheet. */
+import { normalisedAccountHex } from '../lib/qrPayload.js'
+
 /* Naming a colour. Pure and drilled, and — like `recipientName.ts` — free of
    the wallet SDK, which `identity/accountCustody.ts` would drag in. */
 import { describeColour } from '../lib/colour.js'
@@ -509,6 +514,16 @@ export default function SendSheet(props: SendSheetProps) {
 
   /* What the registry said about the name in the field, if there is one. */
   const [nameState, setNameState] = useState<NameState>({ status: 'idle' })
+  /* What a SCANNED code claimed the name behind it points at, when it carried
+     that claim. It is never spent to — the registry is the sole authority on
+     what a name pays — and exists only so a code that disagrees with the
+     registry can be refused rather than quietly obeyed by whichever half a
+     reader happens to trust. Cleared whenever the field is typed into, because
+     from that keystroke on the field is no longer what was scanned. */
+  const [scannedClaim, setScannedClaim] = useState<{
+    domain: string
+    accountHex: string
+  } | null>(null)
 
   const recipientRef = useRef<HTMLTextAreaElement | null>(null)
   const feePollRef = useRef<FeeReadinessPoll | null>(null)
@@ -621,6 +636,19 @@ export default function SendSheet(props: SendSheetProps) {
   /* A name earns the NAME's refusals; an address earns the codec's. Mixing the
      two is how somebody gets told "that is not a Midnight address" about a
      name they typed correctly. */
+  /* The scanned code's claim, checked against the answer that actually decides
+     where money goes. A code naming Alice and carrying somebody else's account
+     is either stale or hostile, and neither is worth guessing about: the sheet
+     refuses and says so, rather than picking a winner. */
+  const scannedClaimBroken =
+    scannedClaim !== null &&
+    nameState.status === 'found' &&
+    nameState.domain === scannedClaim.domain &&
+    /* Both sides through the SAME rule, so a leading `0x` on either one is not
+       mistaken for a disagreement. */
+    normalisedAccountHex(nameState.accountAddress) !== scannedClaim.accountHex
+      ? `That code does not match what ${scannedClaim.domain} points at now. Ask for a fresh code before sending anything.`
+      : null
   const nameError =
     typed?.kind === 'name-invalid'
       ? typed.reason
@@ -628,7 +656,7 @@ export default function SendSheet(props: SendSheetProps) {
         ? nameState.reason
         : nameState.status === 'error'
           ? nameState.message
-          : null
+          : scannedClaimBroken
   const recipientError = nameMode
     ? nameError
     : verdict && 'error' in verdict
@@ -983,10 +1011,12 @@ export default function SendSheet(props: SendSheetProps) {
             <label className="mnhome-send-field">
               <span className="mnhome-send-label">
                 Recipient
-                {/* The camera fills this field; it never bypasses it. Whatever
-                    the scanner hands over meets the same validator a pasted
-                    address does, so a scanned wrong-network address gets the
-                    same honest sentence. */}
+                {/* The scanner — a camera, or an image of a code on a machine
+                    with no camera — fills this field; it never bypasses it.
+                    Whatever it hands over meets the same validator a pasted
+                    address does and the same registry read a typed name does,
+                    so a scanned wrong-network address gets the same honest
+                    sentence. */}
                 <button
                   type="button"
                   className="mnhome-send-max"
@@ -1000,7 +1030,11 @@ export default function SendSheet(props: SendSheetProps) {
                 ref={recipientRef}
                 className="mnhome-send-input mnhome-send-input-mono"
                 value={recipient}
-                onChange={(event) => setRecipient(event.target.value)}
+                onChange={(event) => {
+                  setRecipient(event.target.value)
+                  // Typed into: whatever was scanned no longer describes it.
+                  setScannedClaim(null)
+                }}
                 placeholder={nameSupported ? 'alice.night' : `mn_addr_${networkId}1…`}
                 rows={2}
                 spellCheck={false}
@@ -1384,8 +1418,17 @@ export default function SendSheet(props: SendSheetProps) {
     {scanning && (
       <Suspense fallback={null}>
         <QrScanSheet
-          onAddress={(address) => {
-            setRecipient(address)
+          onResult={(payload) => {
+            /* A name goes into the field as a NAME, so the registry read and
+               the confirmation chip happen exactly as they would for a typed
+               one. The account the code carried, if it carried one, is kept
+               only to check that answer against — never as a destination. */
+            setRecipient(payload.kind === 'name' ? payload.domain : payload.address)
+            setScannedClaim(
+              payload.kind === 'name' && payload.accountHex !== null
+                ? { domain: payload.domain, accountHex: payload.accountHex }
+                : null,
+            )
             setScanning(false)
           }}
           onClose={() => setScanning(false)}

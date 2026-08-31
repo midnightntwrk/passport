@@ -520,6 +520,47 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
 }
 .mnhome-addr-foot .mnhome-addr-note { margin: 0; flex: 1 1 200px; }
 
+/* The Receive code (2026/08/31). Black on white in BOTH themes, deliberately:
+   a camera reads contrast, not a colour scheme, and an accent-tinted or
+   inverted code is a handsome square that some scanners refuse. The plate is
+   the white it needs; the quiet zone is drawn into the matrix itself, so the
+   padding here is breathing room rather than load-bearing. */
+.mnhome-recv-qr {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.mnhome-recv-qr-plate {
+  width: min(100%, 236px);
+  /* Tight, because the quiet zone is already in the matrix. Padding on top of
+     it would only shrink the modules a camera has to resolve. */
+  padding: 6px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  background: #fff;
+}
+.mnhome-recv-qr-code {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* The single frame between opening the sheet and the generator resolving. A
+   held square rather than a collapse, so the name below it does not jump. */
+.mnhome-recv-qr-wait {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--mn-radius-sm, 8px);
+  background: #f2f3f5;
+}
+.mnhome-recv-qr-note {
+  margin: 0;
+  color: var(--mn-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
 /* The `.night` name at the head of Receive — the identity the user actually
    hands out. It leads the sheet; the address below it is the fallback until
    senders resolve names. */
@@ -913,6 +954,67 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
   border: 2px solid rgba(255, 255, 255, 0.75);
   border-radius: var(--mn-radius-md);
   pointer-events: none;
+}
+
+/* The aiming line belongs to the viewport above it, not welded to its edge. */
+.mnhome-qrscan .mnhome-send-hint { margin-top: 8px; }
+
+/* The image path into the scanner (2026/08/31), and the reason it works on a
+   desktop at all. Offered at all times — beside a running camera and beneath a
+   refused one — because a code on a second screen or saved as a file is the
+   case a webcam pointed at a keyboard was never going to cover. Dashed until
+   something is dragged over it, solid and accented while it is: the only two
+   states a drop target owes a reader. */
+.mnhome-qrdrop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 62px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: var(--mn-hairline) dashed var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-card);
+  color: var(--mn-text-muted);
+  transition: border-color .12s ease, background-color .12s ease, color .12s ease;
+}
+.mnhome-qrdrop.is-dragging {
+  border-style: solid;
+  border-color: var(--mn-accent);
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+}
+.mnhome-qrdrop > svg { flex: 0 0 auto; }
+.mnhome-qrdrop-copy {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.mnhome-qrdrop-pick {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mn-accent-ink);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.mnhome-qrdrop-pick:hover { text-decoration-thickness: 2px; }
+.mnhome-qrdrop-pick:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* Hidden rather than styled: the button above is the reachable control, and
+   two tab stops for one action is one too many. */
+.mnhome-qrdrop-input { display: none; }
+/* The scan sheet's own error line sits under the drop zone, not over it. */
+.mnhome-qrscan > .mnhome-send-error { margin-top: 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnhome-qrdrop { transition: none; }
 }
 
 /* Every surface in the family carries the same beta mark: micro-caps on the

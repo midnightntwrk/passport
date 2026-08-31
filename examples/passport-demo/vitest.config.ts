@@ -84,6 +84,21 @@
  * debounce, the resolving state, and the confirmation chip stay out with the
  * rest of the `.tsx`.
  *
+ * `src/lib/qrPayload.ts` went IN on 2026/08/31, the day Receive learned to draw
+ * a code rather than only read one. It is the ONE place both directions of the
+ * QR format are written down, and an encoder and a decoder that drift apart
+ * produce a square Passport draws and Passport cannot read — a failure that
+ * looks like a broken camera and is not. The rules it holds are all rules about
+ * trust: which query parameter is honoured and which is ignored, that an
+ * embedded account is kept only when it is exactly 32 bytes of hex, that an
+ * all-upper scan is the same payload as a lower-case one, and that a URL or a
+ * Wi-Fi config is nothing at all rather than something to act on. It is regular
+ * expressions, a `URLSearchParams`, and one call into `recipientName.ts` so
+ * there is a single definition of what a Passport name may be — no DOM, no
+ * React, no camera, and no canvas — so every branch is drilled directly in
+ * `src/lib/qrPayload.test.ts`. The camera, the image decode, and the SVG that
+ * paints the answer stay out with the rest of the `.tsx`.
+ *
  * `src/lib/passkeyRecovery.ts` went IN on 2026/08/30, the day it was written,
  * and it is in the denominator because it is the rule that decides whether a
  * person who cannot sign in is offered a way forward or only an explanation.
@@ -208,6 +223,7 @@ export default mergeConfig(
           'src/lib/networks.ts',
           'src/lib/notifications.ts',
           'src/lib/passkeyRecovery.ts',
+          'src/lib/qrPayload.ts',
           'src/lib/qrScan.ts',
           'src/lib/recipientName.ts',
           'src/lib/sponsor.ts',

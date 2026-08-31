@@ -32,6 +32,9 @@ import {
 /* The names this screen shares with the wallet (Contract W). Type-only, and
    only the two that describe the FEE — a fee is still the wallet's to pay. */
 import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js'
+/* The Receive code's payload, written by the same module that reads one back —
+   see `lib/qrPayload.ts` for why both directions live in one place. */
+import { encodeReceivePayload } from '../lib/qrPayload.js'
 import { FeaturedApps, type AppsScreenProps, type FeaturedAppsProps } from './Apps.js'
 import { EcosystemIdentity } from './Ecosystem.js'
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
@@ -452,6 +455,56 @@ export default function HomeScreen(props: HomeScreenProps) {
      but says plainly that the address below is what works meanwhile. */
   const nameResolves = identity?.record?.status === 'registered'
 
+  /* The Receive code.
+   *
+   * It carries the name and, behind it, the account that name points at — the
+   * one address a sender needs, which is why it lives here and nowhere else.
+   * Putting it inside the square rather than beside it as a second string to
+   * read keeps that rule intact: the sheet still shows one truncated address
+   * and one name, and the full address travels only in a form a camera reads.
+   *
+   * `null` payload means there is no name yet, and no code is drawn — a square
+   * carrying only a raw account is one no Passport can scan, and drawing it
+   * would be this sheet promising something it cannot keep.
+   */
+  const receivePayload = useMemo(
+    () => encodeReceivePayload({ domain: nightName, accountAddress }),
+    [accountAddress, nightName],
+  )
+  const [receiveCode, setReceiveCode] = useState<{ size: number; path: string } | null>(null)
+  useEffect(() => {
+    setReceiveCode(null)
+    if (!receiveOpen || !receivePayload) return undefined
+    let live = true
+    /* Imported only when the sheet is open: a QR generator has no business in
+       the first bundle of a Passport that never opens Receive. It is ten
+       kilobytes with no dependencies of its own, and it is content-hashed, so
+       the second opening — and every offline one after it — is served from the
+       cache rather than the network. */
+    void import('uqr')
+      .then(({ encode }) => {
+        if (!live) return
+        /* `border: 4` is the quiet zone the QR specification asks for, drawn
+           INTO the matrix rather than left to a stylesheet — a camera reads
+           the image, not the CSS around it. */
+        const matrix = encode(receivePayload, { ecc: 'M', border: 4 })
+        let path = ''
+        for (let row = 0; row < matrix.size; row += 1) {
+          for (let column = 0; column < matrix.size; column += 1) {
+            if (matrix.data[row]?.[column]) path += `M${column} ${row}h1v1h-1z`
+          }
+        }
+        setReceiveCode({ size: matrix.size, path })
+      })
+      .catch((cause: unknown) => {
+        // The address row below still works; nothing here claims otherwise.
+        console.warn('[passport] the Receive code could not be drawn:', cause)
+      })
+    return () => {
+      live = false
+    }
+  }, [receiveOpen, receivePayload])
+
   return (
     <section className="mnhome-screen" aria-busy={balancesLoading}>
       <header className="mnhome-bar">
@@ -739,6 +792,32 @@ export default function HomeScreen(props: HomeScreenProps) {
                       <X size={15} aria-hidden="true" />
                     </button>
                   </div>
+
+                  {/* The code leads the sheet: it is the fastest way to hand
+                      this Passport to somebody standing next to you, and the
+                      only place the full account address is ever expressed. */}
+                  {receivePayload ? (
+                    <div className="mnhome-recv-qr">
+                      <div className="mnhome-recv-qr-plate">
+                        {receiveCode ? (
+                          <svg
+                            className="mnhome-recv-qr-code"
+                            viewBox={`0 0 ${receiveCode.size} ${receiveCode.size}`}
+                            shapeRendering="crispEdges"
+                            role="img"
+                            aria-label={`QR code for ${nightName ?? 'your Passport'}`}
+                          >
+                            <path d={receiveCode.path} fill="#000000" />
+                          </svg>
+                        ) : (
+                          <div className="mnhome-recv-qr-wait" aria-hidden="true" />
+                        )}
+                      </div>
+                      <p className="mnhome-recv-qr-note">
+                        Scan this from another Passport to send here.
+                      </p>
+                    </div>
+                  ) : null}
 
                   {nightName ? (
                     <div className="mnhome-recv-name">
