@@ -1,0 +1,42 @@
+/* The mid-session way out, styled to be recognisably the same object as the
+   onboarding way-out panel (`.mnob-unusable-action` in `onboarding.css`): a
+   hairline pill on the surface it sits on, body font, no fill. It is not that
+   panel's class because the two live on screens that load different
+   stylesheets, and it is not a copy of the whole panel because these controls
+   sit INSIDE each surface's own failure card — the claim's "The claim did not
+   complete", the Send sheet's "Nothing was sent" — rather than replacing it.
+
+   Two controls, side by side, wrapping on a narrow phone rather than
+   overflowing. `Try again` leads because it is the answer in the case where
+   the platform's own cross-device sheet was right. */
+.mnwo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mnwo-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 16px;
+  border: var(--mn-hairline) solid var(--mn-border-medium);
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-primary);
+  background: transparent;
+  font-family: var(--mn-font-body);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s ease, opacity .15s ease;
+}
+
+.mnwo-action:hover:not(:disabled) { background: var(--mn-surface-hover); }
+.mnwo-action:disabled { opacity: .55; cursor: default; }
+
+/* The retry carries the weight of the two — it is the one that resolves the
+   commonest cause — without becoming a second primary button on a screen that
+   already has one. */
+.mnwo-action-primary { border-color: var(--mn-text-primary); }

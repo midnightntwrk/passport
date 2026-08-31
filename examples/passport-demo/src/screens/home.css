@@ -281,6 +281,22 @@
 .mnhome-notice svg { flex: 0 0 auto; }
 .mnhome-notice-dismiss { margin-left: auto; }
 
+/* A notice that carries CONTROLS as well as a sentence — the mid-session
+   passkey way out (`PasskeyWayOut.tsx`). The row layout above centres one line
+   of text against its icon, which is right for a notice and wrong for a card
+   with buttons on it: the controls would sit beside the sentence and shrink it.
+   So this variant keeps the icon in its own column and stacks everything else
+   under the text, where a person reads the explanation and then reaches the
+   thing that resolves it. */
+.mnhome-notice-stacked {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 9px;
+}
+.mnhome-notice-stacked > svg { margin-top: 2px; }
+.mnhome-notice-stacked > *:not(svg) { grid-column: 2; }
+
 /* --- Addresses ----------------------------------------------------------- */
 
 .mnhome-address-block { display: grid; gap: 10px; }

@@ -690,6 +690,11 @@ export default function HomeScreen(props: HomeScreenProps) {
             sponsoredToken={sponsoredToken}
             phase={send.phase ?? null}
             nameLeg={send.nameLeg ?? null}
+            /* The sheet's approval is a passkey assertion, so it can hit the
+               same mid-session dead end the name step reported on 2026/08/31.
+               Home already holds the sign-out; the sheet offers it only beside
+               a failure the host marked as that one. */
+            onSignOut={onSignOut}
             onClose={() => setSendOpen(false)}
           />
         ) : null}

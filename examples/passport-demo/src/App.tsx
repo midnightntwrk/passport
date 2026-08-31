@@ -12,7 +12,14 @@ import type { DiscoveredPassportPasskey, PassportAccountBlob } from './backend.j
 import { compactAddress } from './lib/address.js';
 import { holdCriticalWork } from './lib/appBusy.js';
 import { normalisedColourHex, shortColour } from './lib/colour.js';
-import { KEYLESS_PASSKEY_MESSAGE, passkeySignInRecovery } from './lib/passkeyRecovery.js';
+import {
+  isMidSessionWayOut,
+  KEYLESS_PASSKEY_MESSAGE,
+  markMidSessionWayOut,
+  midSessionPasskeyMessage,
+  PASSKEY_CEREMONY_TIMEOUT_MESSAGE,
+  passkeySignInRecovery,
+} from './lib/passkeyRecovery.js';
 import { classifyFundAccountAnswer } from './lib/activation.js';
 import type { FundAccountAnswer } from './lib/activation.js';
 import {
@@ -340,6 +347,53 @@ function passkeyCeremonyFailure(cause: unknown): PasskeyPresenceError {
 }
 
 /**
+ * The refusal a MID-SESSION ceremony raises, carrying a way out rather than
+ * only an account of itself.
+ *
+ * THE REPORT (2026/08/31, with a screenshot). A session restored a stored
+ * profile whose credential is not in this browser's keychain. On the name step
+ * — whose header is the wordmark, "Last step", and the theme toggle, and which
+ * therefore has NO sign-out on it — the user pressed Claim, macOS raised its
+ * cross-device sheet because the passkey lives on their phone, and what came
+ * back was a card with one line of text and no control at all. There was
+ * nothing on that screen that could get them anywhere.
+ *
+ * WHAT IS DIFFERENT FROM `signInCeremonyFailure`, and why it is a second
+ * function rather than a flag on the first: the two paths reach the same rule
+ * (`passkeySignInRecovery`, told `context: 'mid-session'`) and deliberately
+ * different offers. Sign-in answers a keyless failure with "create a new
+ * passkey"; mid-session may not, because a new passkey is a new seed and
+ * therefore a NEW Passport — it would abandon the name and account on the
+ * screen rather than recover them. So this marks the error, and the surface
+ * that receives it offers to run the same action again or to sign out, which
+ * are the two things that are safe whether the passkey is on a phone in the
+ * next room or gone for good.
+ *
+ * The error keeps its `PasskeyPresenceError` shape and its code, because
+ * `lib/txApproval.ts` maps that code for a framed app and nothing about the
+ * app-facing protocol changes here. The mark rides beside it, non-enumerable.
+ */
+function midSessionCeremonyFailure(cause: unknown): PasskeyPresenceError {
+  const refusal = passkeyCeremonyFailure(cause);
+  const recovery = passkeySignInRecovery({
+    context: 'mid-session',
+    stage: 'credential',
+    timedOut: cause instanceof PasskeyCeremonyTimeout,
+  });
+  /* The rule answers `retry-or-sign-out` for every mid-session credential
+     failure today. It is still asked, and its answer still branched on, so a
+     later narrowing of the rule changes what the screens offer rather than
+     leaving this function quietly asserting the old answer. */
+  if (recovery !== 'retry-or-sign-out') return refusal;
+  return markMidSessionWayOut(
+    new PasskeyPresenceError(
+      refusal.code,
+      midSessionPasskeyMessage({ timedOut: cause instanceof PasskeyCeremonyTimeout }),
+    ),
+  );
+}
+
+/**
  * An account-custody refusal, in the vocabulary `lib/txApproval.ts` already
  * maps for a framed or redirected app.
  *
@@ -554,11 +608,23 @@ type IdentityStep = 'welcome' | 'alias' | 'backup' | 'ecosystem' | null;
  * pending forever — Lace was observed doing exactly this on 2026/08/06, where
  * the passkey window simply never appeared — and the user sees a spinner with
  * no end. Better an honest error with a retry than an infinite wait.
+ *
+ * 25 s → 180 s on 2026/08/31, and the reason is a screenshot. A user on the
+ * live name step pressed Claim, the platform raised its CROSS-DEVICE sheet
+ * ("Sign In: Scan QR Code / Use Security key") because the passkey lives on
+ * their phone, and the watchdog fired underneath it — 25 seconds is not enough
+ * time to pick up a phone, unlock it, open the camera, and approve. The
+ * ceremony was proceeding correctly and Passport killed it, then said the
+ * prompt had never appeared.
+ *
+ * Three minutes is chosen to comfortably exceed that walk rather than to be a
+ * round number: fetching a phone from another room and completing a QR sign-in
+ * is a minute or two, and the ceiling only has to sit beyond the slowest
+ * legitimate case. It still bounds the hang this exists for — a dialog held by
+ * an extension ends, with words, rather than never — which is the only thing
+ * the timeout was ever for.
  */
-const PASSKEY_CEREMONY_TIMEOUT_MS = 25_000;
-
-const PASSKEY_TIMEOUT_MESSAGE =
-  'Your device never showed the passkey prompt. A wallet browser extension — Lace, for example — can intercept it. Try disabling the extension, or open Passport in a private window, then try again.';
+const PASSKEY_CEREMONY_TIMEOUT_MS = 180_000;
 
 /**
  * Passport gave up waiting — a DIFFERENT failure from the platform saying no,
@@ -567,12 +633,15 @@ const PASSKEY_TIMEOUT_MESSAGE =
  * A `NotAllowedError` means something was decided: a sheet was dismissed, or a
  * picker had nothing in it. This means nothing was decided at all, so nothing
  * has been learnt about whether a credential exists, and offering to enrol
- * over it would be a guess. Same message as before, so what the user reads is
- * unchanged; the class exists purely so `passkeySignInRecovery` can be told.
+ * over it would be a guess. The class exists so `passkeySignInRecovery` can be
+ * told the two apart, and so the copy can be: the timeout's own sentence no
+ * longer claims the prompt never appeared, because on 2026/08/31 it was
+ * photographed saying exactly that underneath a platform sheet that WAS on
+ * screen. See `PASSKEY_CEREMONY_TIMEOUT_MESSAGE` in `lib/passkeyRecovery.ts`.
  */
 class PasskeyCeremonyTimeout extends Error {
   constructor() {
-    super(PASSKEY_TIMEOUT_MESSAGE);
+    super(PASSKEY_CEREMONY_TIMEOUT_MESSAGE);
     this.name = 'PasskeyCeremonyTimeout';
   }
 }
@@ -1071,7 +1140,19 @@ export default function PassportDemo() {
   const [incentives, setIncentives] = useState<PassportIncentiveRecord[]>(loadIncentives);
   const [identityStep, setIdentityStep] = useState<IdentityStep>(null);
   const [claimPhase, setClaimPhase] = useState<AliasClaimProgress['phase'] | null>(null);
-  const [aliasError, setAliasError] = useState<string | null>(null);
+  /**
+   * Why the last claim did not complete, and whether the screen owes the user
+   * a WAY OUT as well as a sentence.
+   *
+   * One state rather than a message beside a flag, so the two cannot desync
+   * into a passkey panel over a registry failure's words: every path that
+   * writes a failure writes both halves at once. See `lib/passkeyRecovery.ts`
+   * for what makes a failure one that carries a way out.
+   */
+  const [aliasFailure, setAliasFailure] = useState<{
+    message: string;
+    wayOut: boolean;
+  } | null>(null);
   /**
    * Whether the fee sponsor has really told us it can pay this registration's
    * fee — `available > 0` on its own `/wallet-status`, never an assumption. It
@@ -3230,9 +3311,19 @@ export default function PassportDemo() {
          line is now the warmed pre-checks alone, which is what keeps the call
          inside the activation window platforms require. */
       onPhase('confirm-passkey');
-      const oneShot = await withPasskeyWatchdog(() =>
-        WebAuthnPrfKeyProvider.assertOnce(activeProfile.passkey),
-      );
+      let oneShot: DiscoveredPassportPasskey;
+      try {
+        oneShot = await withPasskeyWatchdog(() =>
+          WebAuthnPrfKeyProvider.assertOnce(activeProfile.passkey),
+        );
+      } catch (cause) {
+        /* THE MID-SESSION DEAD END, CLOSED (2026/08/31). Nothing is deployed,
+           registered, or spent at this point — the gates above have all
+           answered — so the whole of what is owed here is a refusal the screen
+           can act on. `midSessionCeremonyFailure` marks it, and the claim
+           screen's own failure card grows the two controls. */
+        throw midSessionCeremonyFailure(cause);
+      }
       let ownerSecret: Uint8Array;
       let contractRootSecret: Uint8Array;
       try {
@@ -3451,10 +3542,13 @@ export default function PassportDemo() {
       const handle = localWalletRef.current;
       const activeProfile = profile;
       if (!handle || !activeProfile) {
-        setAliasError('Your Passport is not open yet. Wait for it to finish opening and try again.');
+        setAliasFailure({
+          message: 'Your Passport is not open yet. Wait for it to finish opening and try again.',
+          wayOut: false,
+        });
         return;
       }
-      setAliasError(null);
+      setAliasFailure(null);
       /* The first phase the button narrates is the first thing that really
          happens — the availability re-check. It used to say "Deploying your
          name's resolver…" here, which was a sentence about a step three stages
@@ -3514,7 +3608,14 @@ export default function PassportDemo() {
         const detail = (cause as { detail?: string })?.detail;
         /* An em dash, not parentheses. The detail routinely carries its own
            parenthetical, and nesting them produced "A. (B. (C))" on screen. */
-        setAliasError(detail ? `${message} — ${detail}` : message);
+        setAliasFailure({
+          message: detail ? `${message} — ${detail}` : message,
+          /* A passkey the platform would not use is the one claim failure the
+             screen can DO something about, and the only one whose way out is
+             not "try a different name". The mark comes from the ceremony
+             itself — see `midSessionCeremonyFailure`. */
+          wayOut: isMidSessionWayOut(cause),
+        });
         addActivity({
           label: 'Your name could not be registered',
           detail: detail ? `${message} — ${detail}` : message,
@@ -3581,7 +3682,7 @@ export default function PassportDemo() {
     const activeProfile = profile;
     if (!handle || !activeProfile) return; // The card disables the action first.
     setRegisterNowBusy(true);
-    setAliasError(null);
+    setAliasFailure(null);
     const requeue = (reason: string) =>
       saveAliasRecord({
         ...record,
@@ -3980,7 +4081,17 @@ export default function PassportDemo() {
     // Sign-out is the boundary of the §2.2 session stopgap: the wrapped seed
     // and its wrapping key are removed before anything else is torn down.
     await clearPersistedWalletSession();
-    await closeLocalWallet();
+    /* THE WALLET IS DETACHED, NOT WAITED FOR (2026/08/31).
+       `closeLocalWallet` drops the handle SYNCHRONOUSLY and only then awaits
+       the SDK's own teardown — which is a network conversation and takes as
+       long as the network takes. Awaiting it here put that conversation
+       between the user and the landing screen: pressing Sign out did nothing
+       visible at all, which is intolerable on the surface that made this
+       control necessary. The name step has no other exit, so its Sign out is
+       the one control in Passport that may not depend on a remote close.
+       Nothing below reads the handle — the ref is already null — so nothing
+       below needs to wait for it, and the teardown still happens. */
+    void closeLocalWallet();
     setLocalSurfaces(null);
     setLocalWalletStatus('idle');
     setLocalWalletNetworkId(null);
@@ -4004,7 +4115,7 @@ export default function PassportDemo() {
     // so the name it registered is still that wallet's name.
     setIdentityStep(null);
     setClaimPhase(null);
-    setAliasError(null);
+    setAliasFailure(null);
     setReclaim(null);
     setReclaimError(null);
     identityStepResolved.current = false;
@@ -4108,7 +4219,13 @@ export default function PassportDemo() {
           'Passport cannot find the passkey this session signed in with, so nothing was signed or sent. Sign in again, then retry.',
         );
       }
-      await withPasskeyWatchdog(() => confirmPresence(passkey, reason));
+      try {
+        await withPasskeyWatchdog(() => confirmPresence(passkey, reason));
+      } catch (cause) {
+        /* Same ceremony, same platform sheet, same two things it can mean —
+           so the same offer. Nothing has been signed or submitted here either. */
+        throw midSessionCeremonyFailure(cause);
+      }
     },
     [profile],
   );
@@ -4148,8 +4265,11 @@ export default function PassportDemo() {
       try {
         oneShot = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.assertOnce(passkey));
       } catch (cause) {
-        // Nothing has been built, proved, or submitted at this point.
-        throw passkeyCeremonyFailure(cause);
+        /* Nothing has been built, proved, or submitted at this point — so this
+           refusal can afford to be an offer. The Send sheet renders the two
+           controls inside its own "Nothing was sent" notice; see
+           `midSessionCeremonyFailure`. */
+        throw midSessionCeremonyFailure(cause);
       }
       let rootSecret: Uint8Array;
       try {
@@ -5288,7 +5408,7 @@ export default function PassportDemo() {
     record: activeAliasRecord,
     incentives,
     onClaimName: () => {
-      setAliasError(null);
+      setAliasFailure(null);
       setIdentityStep('alias');
     },
     ...registerNowProps,
@@ -5499,14 +5619,19 @@ export default function PassportDemo() {
           onClaim={(alias) => claimOrQueueAlias(alias, selectedNetwork)}
           onQueue={queueFromClaimScreen}
           onSkip={() => {
-            setAliasError(null);
+            setAliasFailure(null);
             // Remembered per credential, so a reload — or the next sign-in —
             // never asks again. Home keeps the "Claim a name" entry point.
             if (profile) storeNameStep(profile.passkey.credentialId, 'skipped');
             setIdentityStep(null);
           }}
           claimPhase={claimPhase}
-          error={aliasError}
+          error={aliasFailure?.message ?? null}
+          /* The name step has no sign-out in its header, so when a passkey
+             ceremony refuses here the failure card is the ONLY place a way out
+             can be. See `midSessionCeremonyFailure`. */
+          errorIsPasskeyWayOut={aliasFailure?.wayOut === true}
+          onSignOut={() => void signOutPassport()}
         />
       ) : identityStep === 'backup' ? (
         /* Off the onboarding chain since 2026/08/06 — reached on demand from
@@ -5529,7 +5654,7 @@ export default function PassportDemo() {
           variant="screen"
           onContinue={() => setIdentityStep(null)}
           onClaimName={() => {
-            setAliasError(null);
+            setAliasFailure(null);
             setIdentityStep('alias');
           }}
           {...registerNowProps}

@@ -32,6 +32,11 @@ import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js
    which is erased. */
 import { startFeeReadinessPoll, type FeeReadinessPoll } from '../lib/feeReadinessPoll.js'
 
+/* Whether a refusal is a passkey ceremony the host could not complete. Pure,
+   drilled, and imports nothing — see `lib/passkeyRecovery.ts`. */
+import { isMidSessionWayOut } from '../lib/passkeyRecovery.js'
+import { PasskeyWayOutActions } from './PasskeyWayOut.js'
+
 /* Reading the recipient field's two vocabularies, and remembering what each
    name resolved to. Pure, drilled, and free of the wallet SDK — which is why
    the label rule is spelled out there rather than imported from
@@ -256,6 +261,19 @@ export interface SendSheetProps {
    * somebody watching an apparently finished send carry on for another minute.
    */
   nameLeg?: 'withdrawing' | 'settling' | 'depositing' | null
+  /**
+   * Leaves the session for the landing screen — offered ONLY beside a failure
+   * the host marked as a passkey ceremony that could not be completed.
+   *
+   * The send's approval IS a passkey assertion (it is what yields the device
+   * secret `withdraw_night` is gated on), so the mid-session dead end reported
+   * on 2026/08/31 for the name step can land here too: a passkey on another
+   * device, the platform's cross-device sheet, and a refusal the sheet could
+   * only report. `lib/passkeyRecovery.ts` holds the rule that decides, and
+   * `PasskeyWayOut.tsx` the two controls; this is the seam for the one of them
+   * the sheet cannot perform itself.
+   */
+  onSignOut?: () => void
   onClose: () => void
 }
 
@@ -462,6 +480,7 @@ export default function SendSheet(props: SendSheetProps) {
     sponsoredToken,
     phase,
     nameLeg,
+    onSignOut,
     onClose,
   } = props
 
@@ -470,7 +489,13 @@ export default function SendSheet(props: SendSheetProps) {
   const [scanning, setScanning] = useState(false)
   const [amountText, setAmountText] = useState('')
   const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<{ message: string; detail: string | null } | null>(null)
+  /* `wayOut` is set when the host marked the refusal as a passkey ceremony that
+     could not be completed — see `SendSheetProps.onSignOut`. It rides on the
+     failure rather than in a state of its own so it can never outlive the
+     failure it describes. */
+  const [failure, setFailure] = useState<
+    { message: string; detail: string | null; wayOut: boolean } | null
+  >(null)
   const [showFullRecipient, setShowFullRecipient] = useState(false)
   const [fee, setFee] = useState<FeeReadiness | null>(null)
   const [feeUnknown, setFeeUnknown] = useState<string | null>(null)
@@ -873,7 +898,13 @@ export default function SendSheet(props: SendSheetProps) {
         return
       }
       setBusy(false)
-      setFailure({ message: messageOf(cause), detail: detailOf(cause) })
+      setFailure({
+        message: messageOf(cause),
+        detail: detailOf(cause),
+        /* The host's own reading of the failure, never this sheet's: only the
+           host saw the ceremony. See `lib/passkeyRecovery.ts`. */
+        wayOut: isMidSessionWayOut(cause),
+      })
     }
   }, [
     amount,
@@ -1259,14 +1290,34 @@ export default function SendSheet(props: SendSheetProps) {
             ) : null}
 
             {failure ? (
-              <p className="mnhome-notice" role="alert">
+              /* A div rather than the `<p>` this used to be, so the way out can
+                 stand under the sentence instead of inside it. The sentence is
+                 unchanged, and it still LEADS with the fact that matters most
+                 to somebody who cancelled deliberately: nothing moved. */
+              <div
+                className={`mnhome-notice${
+                  failure.wayOut && onSignOut ? ' mnhome-notice-stacked' : ''
+                }`}
+                role="alert"
+              >
                 <AlertTriangle size={14} aria-hidden="true" />
                 <span>
                   Nothing was sent — {mode === 'shielded' ? 'no shielded token' : 'no NIGHT'}{' '}
                   moved from your account. {failure.message}
                   {failure.detail ? ` ${failure.detail}` : ''}
                 </span>
-              </p>
+                {/* The passkey could not be used, and this sheet's own Send
+                    button is behind a Back click from here — so the retry is
+                    put where the failure is read. Not a toast: the way out of a
+                    dead end may not expire after five seconds. */}
+                {failure.wayOut && onSignOut ? (
+                  <PasskeyWayOutActions
+                    onRetry={() => void handleSend()}
+                    onSignOut={onSignOut}
+                    busy={busy}
+                  />
+                ) : null}
+              </div>
             ) : null}
 
             {busy ? (

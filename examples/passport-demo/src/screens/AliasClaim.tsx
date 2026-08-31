@@ -16,6 +16,7 @@ import {
 } from '../identity/midnames.js'
 import { claimSteps } from '../lib/claimSteps.js'
 import { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
+import { PasskeyWayOutActions } from './PasskeyWayOut.js'
 import ThemeToggle from './ThemeToggle.js'
 import './identity.css'
 
@@ -77,6 +78,28 @@ export interface AliasClaimProps {
   onSkip: () => void
   claimPhase: AliasClaimProgress['phase'] | null
   error: string | null
+  /**
+   * True when {@link AliasClaimProps.error} is a PASSKEY ceremony that could
+   * not be completed, rather than anything about the name or the registry.
+   *
+   * It changes what the failure card carries, not what it says: the sentence
+   * is still the host's, and beneath it go the two controls
+   * {@link PasskeyWayOutActions} defines. The host decides, because only the
+   * host saw the failure — see `lib/passkeyRecovery.ts` for the rule.
+   *
+   * This screen is the one that needed it most. Its header is the wordmark,
+   * "Last step", and the theme toggle: there is NO sign-out on it, so before
+   * this a user whose passkey the browser could not use read one line of error
+   * text and had nowhere at all to go (reported with a screenshot,
+   * 2026/08/31).
+   */
+  errorIsPasskeyWayOut?: boolean
+  /**
+   * Leaves the session for the landing screen. Required for the way out above
+   * to be offered at all — a panel that named a control this screen could not
+   * perform would be the same dead end with more words on it.
+   */
+  onSignOut?: () => void
   /**
    * Whether the Passport service will genuinely REGISTER this name — its own
    * `/status` reporting `aliasSponsorship: "available"` on this network, read
@@ -156,6 +179,8 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     onSkip,
     claimPhase,
     error,
+    errorIsPasskeyWayOut,
+    onSignOut,
     nameSponsored,
   } = props
 
@@ -412,6 +437,20 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
               The claim did not complete
             </p>
             <p>{error}</p>
+            {/* THE CARD THAT HAD NOTHING ON IT.
+                A passkey failure here used to end at the line above, on a
+                screen with no sign-out anywhere — so the only exits were the
+                browser's back button and closing the tab. Both controls go in
+                THIS card rather than in a toast: the card is where the user is
+                already reading, and a toast that carried the only way out of a
+                dead end would take it away again after five seconds. */}
+            {errorIsPasskeyWayOut && onSignOut ? (
+              <PasskeyWayOutActions
+                onRetry={handleSubmit}
+                onSignOut={onSignOut}
+                busy={busy}
+              />
+            ) : null}
           </div>
         ) : null}
 
