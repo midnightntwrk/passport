@@ -857,6 +857,98 @@ test('a busy fee sponsor disables the Send control rather than removing it', asy
   ).toBeVisible();
 });
 
+test('a send whose passkey will not answer offers a retry and a way out, in the sheet', async () => {
+  /* THE SAME DEAD END, ON THE OTHER SURFACE THAT RAISES A CEREMONY.
+     The Send sheet's confirm IS a passkey assertion — it is what yields the
+     device secret `withdraw_night` is gated on — so a passkey the platform
+     will not use lands here exactly as it lands on the name step. Before
+     2026/08/31 the sheet reported it and stopped: "Approval cancelled —
+     nothing was signed or sent", with the sheet's Send button a Back click
+     away and no account of what to do if the passkey is on another device.
+
+     THE FIXTURE is the platform decision no test can make: ONE assertion
+     refused with the real `NotAllowedError` a dismissed or unanswerable sheet
+     produces, armed a call at a time at the `navigator.credentials` boundary.
+     Everything else is the shipped bundle — the sheet, the account seam, and
+     the rule in `src/lib/passkeyRecovery.ts` that decides what is offered. */
+  await page.evaluate(() => {
+    const api = navigator.credentials;
+    const get = api.get.bind(api);
+    const state = window as unknown as { __prompts: number; __refuseNextAssertion?: boolean };
+    state.__prompts = 0;
+    api.get = (options?: CredentialRequestOptions) => {
+      state.__prompts += 1;
+      if (state.__refuseNextAssertion) {
+        state.__refuseNextAssertion = false;
+        return Promise.reject(
+          new DOMException('The operation either timed out or was not allowed.', 'NotAllowedError'),
+        );
+      }
+      return get(options);
+    };
+  });
+
+  /* The sheet is still open from the test above, with the recipient in it.
+     An amount the account can genuinely cover, so nothing but the ceremony is
+     in the way. */
+  await page.getByPlaceholder('0.0').fill('0.000001');
+  await page.getByRole('button', { name: /^Review$/ }).click();
+  await expect(page.getByText('Review this transfer')).toBeVisible();
+
+  await page.evaluate(() => {
+    (window as unknown as { __refuseNextAssertion?: boolean }).__refuseNextAssertion = true;
+  });
+  /* The sheet's own primary, not Home's Send behind it — both say "Send". */
+  await page.locator('.mnhome-send-primary').click();
+
+  /* The fact that matters most STILL LEADS — somebody who cancelled on purpose
+     needs to read that nothing moved before anything else. */
+  await expect(page.getByText(/Nothing was sent/)).toBeVisible({ timeout: 60_000 });
+  /* Then the explanation, which does not claim to know which of the two things
+     happened, and names the phone case first because that is the case in which
+     the platform's own sheet was right. */
+  await expect(page.getByText(/Your passkey could not be used on this device/)).toBeVisible();
+  await expect(page.getByText(/follow the QR option/)).toBeVisible();
+  await expect(page.getByText(/stay on chain/)).toBeVisible();
+
+  /* Scoped to the SHEET. Home is still mounted behind the scrim with a sign-out
+     of its own, and the controls this failure owes the user are the ones inside
+     the surface they are reading — a way out they cannot reach without closing
+     the sheet first is not a way out of the sheet. */
+  const sheet = page.locator('.mnhome-send');
+  const retry = sheet.getByRole('button', { name: 'Try again' });
+  const signOut = sheet.getByRole('button', { name: 'Sign out' });
+  await expect(retry).toBeVisible();
+  await expect(signOut).toBeVisible();
+
+  // Nothing raw from the platform. `NotAllowedError` is true of four different
+  // things and useful for none of them.
+  await expect(page.getByText(/NotAllowedError|not allowed/i)).toHaveCount(0);
+
+  /* TRY AGAIN RUNS THE SAME ACTION, which is the whole of what it promises —
+     and the only honest way to see that is the ceremony being raised a second
+     time. One prompt for the send, one for the retry. */
+  expect(await page.evaluate(() => (window as unknown as { __prompts: number }).__prompts)).toBe(1);
+  await page.evaluate(() => {
+    (window as unknown as { __refuseNextAssertion?: boolean }).__refuseNextAssertion = true;
+  });
+  await retry.click();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __prompts: number }).__prompts), {
+      timeout: 60_000,
+    })
+    .toBe(2);
+  await expect(page.getByText(/Your passkey could not be used on this device/)).toBeVisible();
+
+  /* And the other control genuinely leaves. This is the half a user cannot
+     reach any other way when the failure happens on the name step, and it is
+     the same control here. */
+  await signOut.click();
+  await expect(page.getByRole('button', { name: /Continue with Passport/i })).toBeVisible({
+    timeout: 60_000,
+  });
+});
+
 test('a passkey this browser does not know about never blocks the way in', async ({
   browser,
 }) => {
@@ -1263,6 +1355,147 @@ test('a passkey that is still there is signed in to, never created over', async 
     expect((await storedProfileKeys(held)).length).toBe(1);
   } finally {
     await client.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId }).catch(() => {});
+    await context.close();
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* THE MID-SESSION DEAD END (reported with a screenshot, 2026/08/31).          */
+/*                                                                            */
+/* A session restored a stored profile whose credential is not in this        */
+/* browser's keychain. On the NAME STEP the user pressed Claim, the targeted  */
+/* ceremony went up, and macOS showed its cross-device sheet — "Sign In: Scan */
+/* QR Code / Use Security key" — because the passkey lives on their phone.    */
+/* When it did not complete, the claim's failure card carried one line of     */
+/* text and NO CONTROL AT ALL, on a screen whose header is the wordmark,      */
+/* "Last step", and the theme toggle: there is no sign-out on it, so that     */
+/* card was the whole of what they had.                                       */
+/*                                                                            */
+/* Two failures are covered by one offer because WebAuthn refuses to tell     */
+/* them apart: the passkey is on a phone and the QR path works — try again —  */
+/* or it is gone, and the way on is to leave this session and make a new      */
+/* Passport from the landing screen, where that offer already exists and      */
+/* already explains itself.                                                   */
+/*                                                                            */
+/* THE FIXTURE, and why it is not a removed authenticator. Removing it would  */
+/* model the failure and then make the recovery untestable: the enrolment at  */
+/* the end of the walk needs an authenticator to enrol INTO. So the platform  */
+/* decision is made where the platform makes it — one assertion refused with  */
+/* the real `NotAllowedError`, armed a call at a time — and everything else,  */
+/* including both ceremonies that follow, is real.                            */
+/* -------------------------------------------------------------------------- */
+
+test('a claim whose passkey will not answer offers a retry, a way out, and a way back', async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const stalled = await context.newPage();
+  await installNetworkBoundary(stalled);
+  const authenticator = await installVirtualAuthenticator(context, stalled);
+
+  /* Installed before the first navigation, because this walk reloads: the
+     sign-out lands on the landing screen through the app's own teardown. */
+  await stalled.addInitScript(() => {
+    const api = navigator.credentials;
+    const get = api.get.bind(api);
+    const state = window as unknown as { __prompts: number; __refuseNextAssertion?: boolean };
+    state.__prompts = 0;
+    api.get = (options?: CredentialRequestOptions) => {
+      state.__prompts += 1;
+      if (state.__refuseNextAssertion) {
+        state.__refuseNextAssertion = false;
+        return Promise.reject(
+          new DOMException('The operation either timed out or was not allowed.', 'NotAllowedError'),
+        );
+      }
+      return get(options);
+    };
+  });
+
+  const arm = () =>
+    stalled.evaluate(() => {
+      (window as unknown as { __refuseNextAssertion?: boolean }).__refuseNextAssertion = true;
+    });
+
+  try {
+    await stalled.goto('/');
+    await stalled.getByRole('button', { name: /Continue with Passport/i }).click();
+    await expect(stalled.getByRole('heading', { name: /Welcome to Passport/i })).toBeVisible({
+      timeout: 120_000,
+    });
+    await stalled.getByRole('button', { name: 'Choose my name' }).click();
+    await expect(stalled.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 60_000 });
+
+    /* A name this run has not asked about, so the claim's own pre-checks run
+       and the refusal below is genuinely the ceremony's rather than a gate's. */
+    const claimName = 'passportmidsession';
+    await stalled.getByLabel('Your Midnight name').fill(claimName);
+    await expect(stalled.getByText(`${claimName}.night is available`)).toBeVisible({
+      timeout: 30_000,
+    });
+
+    await arm();
+    await stalled.getByRole('button', { name: new RegExp(`Claim ${claimName}\\.night`) }).click();
+
+    /* The card the screenshot showed — now with something on it. */
+    await expect(stalled.getByText(/The claim did not complete/i)).toBeVisible({ timeout: 90_000 });
+    await expect(stalled.getByText(/Your passkey could not be used on this device/)).toBeVisible();
+    await expect(stalled.getByText(/follow the QR option/)).toBeVisible();
+    /* The sentence that answers the fear the second control raises: signing out
+       does not take the name or the account with it. */
+    await expect(stalled.getByText(/stay on chain/)).toBeVisible();
+    await expect(stalled.getByText(/backup file/)).toBeVisible();
+
+    const retry = stalled.getByRole('button', { name: 'Try again' });
+    const signOut = stalled.getByRole('button', { name: 'Sign out' });
+    await expect(retry).toBeVisible();
+    await expect(signOut).toBeVisible();
+
+    /* NOT the onboarding offer. Creating a passkey mid-session derives a new
+       seed and therefore a new Passport, which would abandon the name on the
+       screen rather than recover it — so this surface must not offer it. */
+    await expect(stalled.getByRole('button', { name: /Create a new passkey/i })).toHaveCount(0);
+    // And nothing raw from the platform.
+    await expect(stalled.getByText(/NotAllowedError|not allowed/i)).toHaveCount(0);
+
+    /* TRY AGAIN RUNS THE CLAIM AGAIN, ceremony included — the case where the
+       passkey really is on a phone and the second attempt is the one the user
+       completes. One prompt for the claim, one for the retry. */
+    expect(await stalled.evaluate(() => (window as unknown as { __prompts: number }).__prompts)).toBe(
+      1,
+    );
+    await arm();
+    await retry.click();
+    await expect
+      .poll(
+        () => stalled.evaluate(() => (window as unknown as { __prompts: number }).__prompts),
+        { timeout: 90_000 },
+      )
+      .toBe(2);
+    await expect(stalled.getByText(/Your passkey could not be used on this device/)).toBeVisible();
+
+    /* THE WAY OUT, WALKED THE WHOLE WAY. Sign out is the only exit this screen
+       has, and it has to lead somewhere: the landing screen, whose keyless
+       panel makes the offer this one deliberately does not. */
+    await stalled.getByRole('button', { name: 'Sign out' }).click();
+    await expect(stalled.getByRole('button', { name: /Continue with Passport/i })).toBeVisible({
+      timeout: 60_000,
+    });
+
+    await arm();
+    await stalled.getByRole('button', { name: /Continue with Passport/i }).click();
+    await expect(stalled.getByText(/Could not load your passkey/i)).toBeVisible({ timeout: 90_000 });
+    await stalled.getByRole('button', { name: /Create a new passkey/i }).click();
+
+    /* And a working Passport at the end of it. The authenticator still holds
+       the credential this browser has a record for, so the enrolment is refused
+       by exclusion and the user is signed back into the Passport they had —
+       which is why this lands on the name step rather than on the welcome. */
+    await expect(stalled.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 180_000 });
+    await expect(stalled.getByRole('heading', { name: /Welcome to Passport/i })).toHaveCount(0);
+  } finally {
+    await authenticator.remove().catch(() => {});
     await context.close();
   }
 });
