@@ -64,25 +64,42 @@ env:
   # sponsored name registration, and activation grants rode one host; the two
   # that have a second provider on stagenet now name it.
   #
-  # OUR BALANCER IS FIRST, AND THE 1AM GATEWAY IS A STANDBY. That order is a
-  # measurement, not a preference. Drilled against stagenet on 2026/08/31
-  # through the app's own wiring, the gateway's prover-enclave (0.11.0) refuses
-  # every one of our proofs:
+  # OUR BALANCER IS FIRST, AND THE 1AM GATEWAY IS A WORKING SECOND. The order
+  # is a measurement, and the measurement has already moved once.
   #
-  #   POST /prove  500  prove: expected header tag 'midnight:ir-source[v3-generic]:',
-  #                     got 'midnight:ir-source[v2]:'
-  #   POST /check  500  the same, on the IR
-  #   POST /balance-only  500  BALANCE_FAILED: Failed to prove transaction
+  # On 2026/08/31 the gateway could not serve us at all: its prover-enclave
+  # answered `POST /prove` and `POST /check` with `expected header tag
+  # 'midnight:ir-source[v3-generic]:', got 'midnight:ir-source[v2]:'`, and
+  # `POST /balance-only` with `BALANCE_FAILED: Failed to prove transaction` for
+  # the same reason, since it proves the dust leg on the same enclave. Our
+  # artefacts are Compact 0.33.0-rc.2 and zkir-v2, which emit v2, and they
+  # cannot be rebuilt: that compiler is no longer installable and the deployed
+  # contract's verifier keys travel with a release.
   #
-  # Our artefacts are Compact 0.33.0-rc.2 / zkir-v2, which emits `ir-source[v2]`,
-  # and they cannot be rebuilt — that compiler is no longer installable and the
-  # deployed account contract's verifier keys travel with the release. So the
-  # gateway cannot serve Passport today. Naming it second costs nothing while
-  # the balancer is healthy (it is never contacted) and makes it a real second
-  # provider the day 1AM's prover accepts v2 again, or the day our contracts are
-  # rebuilt against v3. Putting it FIRST was measured at 41–43 s per contract
-  # call against 24 s with the balancer first, all of the difference being 500s
-  # and their retry backoff.
+  # On 2026/09/01 1AM shipped a build named `ledger9-zkir2-dispatch`
+  # (`binaryHash` a02f9c81 to fd377eaf) and it now serves us. Re-drilled the
+  # same day, gateway first, through a logging proxy. Every call a 200:
+  #
+  #   POST /balance-only  200  1331 ms  in  19330 B  out 45303 B   (deploy)
+  #   POST /check         200   191 ms  in   1388 B  out    72 B
+  #   POST /prove         200   561 ms  in 283375 B  out  2940 B   (add_grant)
+  #   POST /balance-only  200   935 ms  in   3735 B  out 14095 B
+  #
+  # It is still second, and that is now a judgement rather than a fact. The fix
+  # is one day old, `release.services` in the gateway's own /health still
+  # reports the superseded git_commit 7f6a497 with `git_dirty: true`, and
+  # stagenet is explicitly an experimental environment. The cost of being wrong
+  # is asymmetric: a 429 from the gateway's balance wallet falls through in
+  # 144 ms, measured under deliberate contention, but a REGRESSION TO 500 costs
+  # about seven seconds per circuit, because midnight-js's own proof-server
+  # client retries a 500 three times with 1/2/4 s backoff. That is what made
+  # the broken gateway cost 41-43 s per contract call against 24 s with the
+  # balancer first.
+  #
+  # The argument for flipping, once it has held for a while: our balancer is
+  # the ONLY thing that can serve /register-alias and /fund-account, so every
+  # DUST speck the gateway pays for a fee is one our balancer keeps for the
+  # path that has no second provider at all.
   #
   # `VITE_FUNDER_URL` stays a single URL on purpose: `/register-alias` and
   # `/fund-account` exist nowhere but our balancer (the gateway 404s both).
