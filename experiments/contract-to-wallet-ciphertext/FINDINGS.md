@@ -8,8 +8,8 @@ Question, design, and the interpretation grid fixed in advance:
 | Probe | Verdict | Tx hash / error | Ran | Note |
 |-------|---------|-----------------|-----|------|
 | **P1** api-surface | **PASS** | — | 2026/09/01 | The mechanism is documented public API on both sides. A user-targeted output REQUIRES a recipient encryption key; omitting the ciphertext is sanctioned only whe |
-| **P2** ciphertext-discovery | **PASS** | `00bb87ccb5748e47…` | 2026/09/01 | A contract sent shielded value to an ordinary wallet in ONE transaction and the recipient found it by ordinary scanning, with no out-of-band hint. The circuit u |
-| **P3** spend-and-secrecy | **PASS** | `00de03c5f657f828…` | 2026/09/01 | The coin the recipient discovered is an ordinary spendable shielded coin: it entered the recipient’s available balance and funded a later transaction of the rec |
+| **P2** ciphertext-discovery | **PASS** | `00a8cf4d145ce737…` | 2026/09/01 | A contract sent shielded value to an ordinary wallet in ONE transaction and the recipient found it by ordinary scanning, with no out-of-band hint. The circuit u |
+| **P3** spend-and-secrecy | **PASS** | `000aedd56ce8ec1f…` | 2026/09/01 | The coin the recipient discovered is an ordinary spendable shielded coin: it entered the recipient’s available balance and funded a later transaction of the rec |
 
 <!-- END RESULTS -->
 

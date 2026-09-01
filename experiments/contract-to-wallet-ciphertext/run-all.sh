@@ -70,16 +70,14 @@ npm run compile
 
 mkdir -p "$EVIDENCE_DIR"
 
-# ── W1 needs no chain — run it before compose ───────────────────────────────
-
-
+# P1 reads the installed toolchain only; P2 and P3 need the devnet.
 NEEDS_CHAIN=true
 
 if $NEEDS_CHAIN; then
   # ── Compose ───────────────────────────────────────────────────────────────
   # The macOS override (inherited from account-custody-prototype) maps the
-  # STANDARD ports — unlike dust-sponsorship's +10000 offsets — so the same
-  # ports apply on every host OS.
+  # The macOS override maps the STANDARD ports, so the same ports apply on
+  # every host OS.
   COMPOSE_FILES="-f $INFRA_DIR/docker-compose.yml"
   NODE_PORT=9944
   INDEXER_PORT=8088
@@ -103,7 +101,13 @@ if $NEEDS_CHAIN; then
 
   echo ""
   echo "=== Starting local Midnight devnet ==="
-  $COMPOSE up -d node indexer proof-server
+  # The node and the proof server come up first. The indexer is held back
+  # deliberately: its SPO component asks the node for block 1 as soon as it
+  # connects, and on a freshly reset chain the node reports healthy while
+  # still at block 0. Starting them together loses that race often enough
+  # to break `--fresh`, and the indexer exits with
+  #   Cannot construct OnlineClientAtBlock: block number 1 not found
+  $COMPOSE up -d node proof-server
 
   echo "Waiting for node..."
   ELAPSED=0
@@ -117,13 +121,45 @@ if $NEEDS_CHAIN; then
   done
   echo " OK"
 
+  node_height() {
+    curl -s -H 'Content-Type: application/json' \
+      -d '{"jsonrpc":"2.0","id":1,"method":"chain_getHeader","params":[]}' \
+      "http://localhost:$NODE_PORT" 2>/dev/null \
+      | sed -n 's/.*"number":"0x\([0-9a-f]*\)".*/\1/p'
+  }
+
+  echo "Waiting for the first block..."
+  ELAPSED=0
+  until [[ -n "$(node_height)" && "$(node_height)" != "0" ]]; do
+    if (( ELAPSED >= 120 )); then
+      echo "ERROR: node produced no block within 120s"
+      $COMPOSE logs node --tail 20
+      exit 1
+    fi
+    printf "."; sleep 2; (( ELAPSED += 2 ))
+  done
+  echo " OK (block 0x$(node_height))"
+
+  echo ""
+  echo "=== Starting indexer ==="
+  $COMPOSE up -d indexer
+
   echo "Waiting for indexer..."
   ELAPSED=0
   until curl -sf http://localhost:$INDEXER_PORT/api/v4/graphql -H 'Content-Type: application/json' \
     -d '{"query":"{ __typename }"}' > /dev/null 2>&1; do
+    # A crashed indexer never becomes ready; surface it rather than waiting out
+    # the timeout, and retry once in case it still lost the race.
+    if ! docker ps --format '{{.Names}}' | grep -q "indexer"; then
+      echo ""
+      echo "WARN: indexer exited; restarting once"
+      $COMPOSE logs indexer --tail 5
+      $COMPOSE up -d indexer
+    fi
     if (( ELAPSED >= 120 )); then
-      echo "WARN: indexer not ready after 120s"
-      break
+      echo "ERROR: indexer not ready after 120s"
+      $COMPOSE logs indexer --tail 20
+      exit 1
     fi
     printf "."; sleep 3; (( ELAPSED += 3 ))
   done

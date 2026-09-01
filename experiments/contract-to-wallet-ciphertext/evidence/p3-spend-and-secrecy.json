@@ -3,62 +3,62 @@
   "name": "spend-and-secrecy",
   "description": "The discovered coin is spendable, and the attached ciphertext stays sealed",
   "verdict": "PASS",
-  "txHash": "00de03c5f657f828b8910baeb182ab4d4a77c1e16272d1c2e5865caa56fbd08400",
+  "txHash": "000aedd56ce8ec1f0045f025f3cf816701f3c3cac5ff4ae782ede1883255d9f5ac",
   "note": "The coin the recipient discovered is an ordinary spendable shielded coin: it entered the recipient’s available balance and funded a later transaction of the recipient’s own. Attaching the ciphertext costs no secrecy: the ciphertext-bearing output carries neither the coin nonce nor its value in the clear, and whatever the token colour discloses it discloses equally in the ciphertext-less contract-owned control output in the same transaction, so it is a property of the output encoding rather than of the attachment. The cooperative circuit’s disclosed coin is identical to what the executor’s runtime held, so the runtime read P2 relies on is sound.",
   "details": {
-    "vault": "db262737ef663741740bef0a9487f05bbed8315a9010697231e01c04a8fb086f",
+    "vault": "d1bfaa8e853f27d0b8008e2087d0573969d218216d2a35a1b0cb0c57169c3f0c",
     "recipient": {
       "cpk": "5aee546a493df3ac6ee85ef3ae8d647c9b9f3a640c114883113527d67ca2ec69",
       "epk": "49000c4a57b3f60829f4d3143c13adbcb73c9e4b34db8062f78c6ccb9399f1b3"
     },
     "recipientBalanceBefore": "0",
-    "sendTx": "00de03c5f657f828b8910baeb182ab4d4a77c1e16272d1c2e5865caa56fbd08400",
+    "sendTx": "000aedd56ce8ec1f0045f025f3cf816701f3c3cac5ff4ae782ede1883255d9f5ac",
     "sendAttempts": [
       {
-        "mtIndex": "47",
-        "outcome": "accepted: 00de03c5f657f828b8910baeb182ab4d4a77c1e16272d1c2e5865caa56fbd08400"
+        "mtIndex": "35",
+        "outcome": "accepted: 000aedd56ce8ec1f0045f025f3cf816701f3c3cac5ff4ae782ede1883255d9f5ac"
       }
     ],
     "circuitRuntimeAgreement": {
       "agree": true,
       "fromCircuit": {
-        "nonce": "494569563c3eacf8c548fa247121db58eea399312213e85cb03287ac1f2e5000",
-        "colour": "048c70417f90eea3b0861da457ed1c0f141c802caa3508ef677f47c79e9b4b68",
+        "nonce": "6a390dbcedb58e8164be2162654852114266c80cf1a7e29c6929197297d1e700",
+        "colour": "53d3c3c5e8a102bc246613031fb91d0219a80fb4edd0e5ddd116b971e8f8ea0b",
         "value": "250"
       },
       "fromRuntime": {
-        "nonce": "494569563c3eacf8c548fa247121db58eea399312213e85cb03287ac1f2e5000",
-        "colour": "048c70417f90eea3b0861da457ed1c0f141c802caa3508ef677f47c79e9b4b68",
+        "nonce": "6a390dbcedb58e8164be2162654852114266c80cf1a7e29c6929197297d1e700",
+        "colour": "53d3c3c5e8a102bc246613031fb91d0219a80fb4edd0e5ddd116b971e8f8ea0b",
         "value": "250"
       },
       "allRuntimeOutputs": [
         {
           "recipientIsUser": true,
-          "nonce": "494569563c3eacf8c548fa247121db58eea399312213e85cb03287ac1f2e5000",
-          "colour": "048c70417f90eea3b0861da457ed1c0f141c802caa3508ef677f47c79e9b4b68",
+          "nonce": "6a390dbcedb58e8164be2162654852114266c80cf1a7e29c6929197297d1e700",
+          "colour": "53d3c3c5e8a102bc246613031fb91d0219a80fb4edd0e5ddd116b971e8f8ea0b",
           "value": "250"
         },
         {
           "recipientIsUser": false,
-          "nonce": "bfb097e2f128bceb3c048552d84625b5dc77132f7d062440f9a962f24c354600",
-          "colour": "048c70417f90eea3b0861da457ed1c0f141c802caa3508ef677f47c79e9b4b68",
+          "nonce": "43d1c2b783ffd153df2eae03f5d07893fbc33dc64cb01d020b1fa94993c1db00",
+          "colour": "53d3c3c5e8a102bc246613031fb91d0219a80fb4edd0e5ddd116b971e8f8ea0b",
           "value": "550"
         }
       ]
     },
     "outputs": [
       {
-        "commitment": "5fcb50b4cab68839…",
-        "contractOwned": true,
-        "serialisedBytes": 598,
+        "commitment": "70762fce5fb6db0c…",
+        "contractOwned": false,
+        "serialisedBytes": 783,
         "carriesNonce": false,
         "carriesColour": false,
         "carriesValue": false
       },
       {
-        "commitment": "bce06ad8106caca0…",
-        "contractOwned": false,
-        "serialisedBytes": 783,
+        "commitment": "d4ed19d592a24855…",
+        "contractOwned": true,
+        "serialisedBytes": 594,
         "carriesNonce": false,
         "carriesColour": false,
         "carriesValue": false
@@ -69,23 +69,23 @@
       "colourVisibleWithCiphertext": false,
       "colourVisibleWithoutCiphertext": false,
       "colourIsEncodingNotCiphertext": true,
-      "ciphertextSizeDeltaBytes": 185
+      "ciphertextSizeDeltaBytes": 189
     },
     "discovered": true,
     "recipientBalanceAfter": "250",
     "recipientCoinRecord": {
       "value": "250",
-      "mtIndex": "49",
+      "mtIndex": "36",
       "available": true
     },
     "onwardSpend": {
       "spent": true,
-      "txId": "001b382af018fe137fc698c2a6604b2ba3acaac5ec250205fd8d8a40992ddda181",
+      "txId": "00729706733ea247c1947a693472f88448de65632271bf39972c639a86a70ea6c1",
       "amount": "100",
-      "vault": "aa54e0bdf60c40cbed9d05c2779a43c5bd2890770559db7fa6843d7054102f12"
+      "vault": "38c16d9f096e15f26c5cb41e18a673d915c61d6e58c8be8373e4158de4eba88f"
     }
   },
-  "ranAt": "2026-09-01T10:54:44.772Z",
+  "ranAt": "2026-09-01T11:28:26.593Z",
   "stack": {
     "node": "midnightntwrk/midnight-node:1.0.0",
     "indexer": "midnightntwrk/indexer-standalone:4.3.3",

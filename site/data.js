@@ -1032,6 +1032,13 @@ window.PASSPORT_DATA = {
       components: ['C1', 'C4', 'C5', 'C17'],
       evidence: ['account-custody-reference'],
     },
+    {
+      when: '2026/09', kind: 'validated',
+      title: 'A custody contract can pay an ordinary wallet in shielded value',
+      detail: 'A shielded output carries ownership and discoverability as separate properties: the commitment binds the recipient\'s coin public key, while a ciphertext sealed to their separate encryption key is what a scanning wallet actually finds. A circuit holds only the first key, which is why contract-sent coins were thought to need an application-layer channel. The party executing the circuit holds both — the circuit runs on their machine — and supplying the recipient encryption key when the SDK builds the output makes an unmodified wallet discover and spend the coin in the same transaction. The encrypted inbox stays correct for counterparties implementing the standard, but it is no longer required of a payee who is an ordinary wallet.',
+      components: ['C4', 'C17'],
+      evidence: ['contract-to-wallet-ciphertext'],
+    },
   ],
 
   // ---------------------------------------------------------------------------
@@ -1378,7 +1385,7 @@ window.PASSPORT_DATA = {
       title: 'Experiments validating both paths',
       summary: 'Cryptographic and protocol experiments whose results are relied on equally by the demo and the spec.',
       kind: 'experiments',
-      items: ['redjubjub-wallet', 'redjubjub-wallet-rs', 'account-custody-prototype', 'contract-custody-feasibility', 'stateless-shielded-custody', 'dust-sponsorship-feasibility', 'contract-to-contract-transfer', 'account-custody-reference'],
+      items: ['redjubjub-wallet', 'redjubjub-wallet-rs', 'account-custody-prototype', 'contract-custody-feasibility', 'stateless-shielded-custody', 'dust-sponsorship-feasibility', 'contract-to-contract-transfer', 'contract-to-wallet-ciphertext', 'account-custody-reference'],
     },
   ],
 
@@ -1438,6 +1445,14 @@ window.PASSPORT_DATA = {
       summary: 'One client-composed transaction pairs a custody contract\'s witness-supplied spend with another custody contract\'s claim — no Compact cross-contract calls. The received coin is first-class, and the measured privacy cost is exactly the predicted address linking, with value, color, and nonce hidden. The technical leg of the one-hop rule falls; the privacy leg stands, and both payment modes are now normative in MIP-0012.',
       validates: ['C4', 'C22'],
       status: 'Complete (P1–P3)',
+    },
+    {
+      id: 'contract-to-wallet-ciphertext',
+      url: 'https://github.com/midnightntwrk/passport/tree/main/experiments/contract-to-wallet-ciphertext',
+      name: 'Contract-to-wallet shielded payment (P1–P3)',
+      summary: 'A contract pays an ordinary wallet in shielded value, in one transaction, and the wallet finds the coin by its own scanning — no encrypted inbox, no out-of-band hint. A circuit cannot seal the recipient ciphertext because it holds only the coin public key; the party executing the circuit can, because the circuit runs on the caller\'s machine and the caller\'s runtime therefore holds the coin description. Three arms isolate the mechanism: supply no key and the SDK refuses to build the output, supply the wrong key and the recipient owns a coin it can never see, supply the right key and an unmodified wallet discovers and spends it.',
+      validates: ['C4', 'C17'],
+      status: 'Complete (P1–P3); residual gap is that attaching the ciphertext is voluntary',
     },
     {
       id: 'account-custody-reference',
