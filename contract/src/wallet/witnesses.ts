@@ -57,8 +57,37 @@ export function withoutCoin(state: CoinStorePrivateState, color: Uint8Array): Co
 
 type Ctx = WitnessContext<Ledger, CoinStorePrivateState>;
 
+// ── The ephemeral recovery secret (recovery MIP, REC-6) ─────────────────────
+//
+// `s` is never part of persisted private state: holding it at rest would
+// convert any device compromise into a permanent account takeover. The
+// recovery ceremony arms this transient holder immediately before building
+// the recover_submit call and disarms (zeroising) immediately after. The
+// witness throws when unarmed, so no flow can source `s` from storage by
+// accident.
+
+let ephemeralRecoverySecret: Uint8Array | null = null;
+
+export function armRecoverySecret(secret: Uint8Array): void {
+  ephemeralRecoverySecret = new Uint8Array(secret);
+}
+
+export function disarmRecoverySecret(): void {
+  if (ephemeralRecoverySecret) ephemeralRecoverySecret.fill(0);
+  ephemeralRecoverySecret = null;
+}
+
 export function makeWitnesses() {
   return {
+    recovery_secret(ctx: Ctx): [CoinStorePrivateState, Uint8Array] {
+      if (!ephemeralRecoverySecret) {
+        throw new Error(
+          'recovery_secret witness: not armed — REC-6 forbids sourcing the ' +
+          'recovery secret from persisted private state',
+        );
+      }
+      return [ctx.privateState, new Uint8Array(ephemeralRecoverySecret)];
+    },
     held_coin(ctx: Ctx, color: Uint8Array): [CoinStorePrivateState, QualifiedCoin] {
       const key = bytesToHex(color);
       const stored = ctx.privateState.coins[key];
