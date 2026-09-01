@@ -103,6 +103,7 @@ import {
 import * as Rx from 'rxjs';
 
 import type { PassportStateScope, PassportWalletSeedProvider } from '../backend.js';
+import { parseEndpointList } from './endpoints.js';
 import { sponsorReadiness, sponsorRefusal } from './sponsor.js';
 import type { SponsorUnavailableCause } from './sponsor.js';
 import { wasmWalletProvingService } from './wasmProver.js';
@@ -143,8 +144,34 @@ export interface LocalWalletNetworkConfig {
    * proved in-tab either way (see {@link LocalWalletProvingMode}); it is the
    * contract clients in `../identity/` that need this, and they say so plainly
    * when it is absent rather than pretending a URL exists.
+   *
+   * This is the FIRST of {@link LocalWalletNetworkConfig.provingServerUrls} and
+   * exists because the wallet SDK's own facade takes one URL and no more.
    */
   provingServerUrl: string;
+  /**
+   * Every proof server this build may use, in the operator's own order.
+   *
+   * `VITE_MIDNIGHT_PROVING_URL` takes a comma-separated list since 2026/08/31,
+   * for the reason set out in `./endpoints.ts`: proving used to ride the same
+   * single droplet as fee sponsorship, name registration, and activation
+   * grants, and the 1AM stagenet gateway serves `POST /prove` and `POST /check`
+   * on the identical wire contract — anonymously, verified 2026/08/31 — so a
+   * second, independent prover costs one comma.
+   *
+   * WHERE THE LIST IS HONOURED, AND WHERE IT IS NOT. Contract circuits go
+   * through `createContractProviders` in `../identity/contractRuntime.ts`,
+   * which falls through per REQUEST. The wallet facade's own balancing
+   * circuits take {@link LocalWalletNetworkConfig.provingServerUrl} alone,
+   * because `WalletFacade.init` accepts a single `provingServerUrl` and
+   * nothing in its surface lets a second one be tried. That is a smaller loss
+   * than it sounds: this app balances every token kind EXCEPT dust locally
+   * (`BALANCE_WITHOUT_DUST`), a Passport wallet holds nothing of its own to
+   * balance, and the dust leg is proved by the SPONSOR — so on the Passport
+   * path the facade's prover has nothing to do, which is exactly why stagenet
+   * worked with no proof server configured at all.
+   */
+  provingServerUrls: string[];
 }
 
 /**
@@ -251,6 +278,8 @@ function warnOnLoopbackEndpoints(config: LocalWalletNetworkConfig): void {
  *   VITE_MIDNIGHT_RELAY_URL     default derived from VITE_MIDNIGHT_NODE_URL
  *   VITE_MIDNIGHT_PROVING_URL   default NONE — stagenet publishes no proof
  *                               server. See {@link DEFAULT_PROVING_SERVER_URL}.
+ *                               Takes one URL or SEVERAL, comma-separated and
+ *                               tried in the order written.
  */
 export function localWalletNetworkConfig(
   overrides: Partial<LocalWalletNetworkConfig> = {},
@@ -259,14 +288,23 @@ export function localWalletNetworkConfig(
   const indexerHttpUrl =
     overrides.indexerHttpUrl ?? env.VITE_INDEXER_URL ?? DEFAULT_INDEXER_HTTP_URL;
   const nodeUrl = env.VITE_MIDNIGHT_NODE_URL ?? DEFAULT_NODE_URL;
+  /* One list, and `provingServerUrl` is its head rather than a second source
+     of truth — a config where the two disagreed would prove a contract circuit
+     on one host and a balancing circuit on another, silently. An override may
+     still name either, and a single-URL override parses to a list of one. */
+  const provingServerUrls =
+    overrides.provingServerUrls ??
+    parseEndpointList(
+      overrides.provingServerUrl ?? env.VITE_MIDNIGHT_PROVING_URL ?? DEFAULT_PROVING_SERVER_URL,
+    );
   const config: LocalWalletNetworkConfig = {
     networkId: overrides.networkId ?? env.VITE_MIDNIGHT_NETWORK_ID ?? DEFAULT_NETWORK_ID,
     indexerHttpUrl,
     indexerWsUrl:
       overrides.indexerWsUrl ?? env.VITE_INDEXER_WS_URL ?? indexerWsFrom(indexerHttpUrl),
     relayUrl: overrides.relayUrl ?? env.VITE_MIDNIGHT_RELAY_URL ?? relayFrom(nodeUrl),
-    provingServerUrl:
-      overrides.provingServerUrl ?? env.VITE_MIDNIGHT_PROVING_URL ?? DEFAULT_PROVING_SERVER_URL,
+    provingServerUrls,
+    provingServerUrl: provingServerUrls[0] ?? DEFAULT_PROVING_SERVER_URL,
   };
   warnOnLoopbackEndpoints(config);
   return config;

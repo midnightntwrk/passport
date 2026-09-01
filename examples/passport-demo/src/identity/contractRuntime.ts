@@ -49,6 +49,7 @@
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
+import { describeEndpointRefusals, firstEndpointThatServes } from '../lib/endpoints.js';
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
 import {
   sponsorBalanceOnly,
@@ -352,6 +353,13 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
       /* The sponsor stamps an expiry. An already expired balanced transaction
          is refused here rather than submitted; an empty or unparseable stamp
          reads as "no expiry given". */
+      /* WHICH sponsor paid, for an operator reading a console after the fact.
+         Never a screen: constraint (b) keeps wallet, DUST, contract, registry,
+         indexer, and resolver vocabulary out of everything a user reads, and a
+         gateway hostname is the whole set at once. */
+      console.info(
+        `[contract] transaction ${balanced.txHash} balanced by ${balanced.servedBy}`,
+      );
       const expiresAtMs = Date.parse(balanced.expiresAt);
       if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
         throw new Error(
@@ -469,20 +477,43 @@ export async function createContractProviders(
  * mode because they are separate questions: the wallet's balancing circuits are
  * four fixed system circuits whose keys come from a public bucket, while a
  * contract's keys come from the staged artefacts this app ships.
+ *
+ * ONE proof server is the path it has always been, unchanged and unwrapped.
+ * SEVERAL — `VITE_MIDNIGHT_PROVING_URL` carrying a comma-separated list — are
+ * tried in the operator's order, per REQUEST, by
+ * {@link failoverProvingProvider}.
  */
 async function createContractProofProvider(
   wallet: LocalMidnightWallet,
   zkConfigProvider: unknown,
 ): Promise<unknown> {
-  if (wallet.network.provingServerUrl) {
+  const provers = wallet.network.provingServerUrls;
+  if (provers.length === 1) {
     const { httpClientProofProvider } = await import(
       '@midnight-ntwrk/midnight-js-http-client-proof-provider'
     );
     return httpClientProofProvider({
-      url: wallet.network.provingServerUrl,
+      url: provers[0] as string,
       zkConfigProvider: zkConfigProvider as never,
       timeout: PROOF_TIMEOUT_MS,
     });
+  }
+
+  if (provers.length > 1) {
+    const [{ createProofProvider }, { httpClientProvingProvider }] = await Promise.all([
+      import('@midnight-ntwrk/midnight-js-types'),
+      import('@midnight-ntwrk/midnight-js-http-client-proof-provider'),
+    ]);
+    return createProofProvider(
+      failoverProvingProvider(
+        provers.map((url) => ({
+          url,
+          provider: httpClientProvingProvider(url, zkConfigProvider as never, {
+            timeout: PROOF_TIMEOUT_MS,
+          }) as ProvingProviderLike,
+        })),
+      ) as never,
+    );
   }
 
   if (typeof Worker === 'undefined') {
@@ -496,6 +527,85 @@ async function createContractProofProvider(
     import('../lib/wasmProver.js'),
   ]);
   return createProofProvider(wasmProvingProvider(zkConfigProvider as never) as never);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Proving across more than one proof server                                  */
+/* -------------------------------------------------------------------------- */
+
+/** The ledger's circuit-level proving contract, as midnight-js 5 calls it. */
+interface ProvingProviderLike {
+  check(preimage: Uint8Array, keyLocation: string): Promise<unknown>;
+  prove(preimage: Uint8Array, keyLocation: string, obi?: bigint): Promise<Uint8Array>;
+  lookupKey(keyLocation: string): Promise<unknown>;
+}
+
+/** One proof server, named so a log can say which one served. */
+interface NamedProvingProvider {
+  url: string;
+  provider: ProvingProviderLike;
+}
+
+/**
+ * One proving provider over an ORDERED LIST of proof servers.
+ *
+ * The choice is made per REQUEST rather than per session, and that is the
+ * point: a proof server that dies between the first circuit of a transaction
+ * and its third should cost the third circuit a retry elsewhere, not cost the
+ * user the whole transaction. Nothing is remembered between calls — no sticky
+ * winner, no health cache — so the operator's order is the order every time
+ * and a recovered first choice is used again immediately.
+ *
+ * `lookupKey` is NOT failed over, and deliberately. It resolves key material
+ * from the ZK config provider this app serves from its own origin; every
+ * entry in the list is handed the same one, so their answers are identical by
+ * construction and asking a second is asking the same question twice. It is
+ * also part of the `ProvingProvider` contract midnight-js calls before proving
+ * — see the note in `../lib/wasmProver.ts` — rather than an internal.
+ *
+ * A failure at every endpoint throws with each one's reason named, so an
+ * operator can tell "both provers are down" from "this circuit cannot be
+ * proved anywhere", which are the same message today and different problems.
+ */
+function failoverProvingProvider(provers: readonly NamedProvingProvider[]): ProvingProviderLike {
+  const urls = provers.map((prover) => prover.url);
+  const byUrl = new Map(provers.map((prover) => [prover.url, prover.provider]));
+
+  const attempt = async <T>(
+    what: string,
+    run: (provider: ProvingProviderLike) => Promise<T>,
+  ): Promise<T> => {
+    const outcome = await firstEndpointThatServes(urls, async (url) => ({
+      served: true as const,
+      value: await run(byUrl.get(url) as ProvingProviderLike),
+    }));
+    if (outcome.served) {
+      /* An operator's line, and only an operator's — it names a host, which no
+         user-facing surface in this app is allowed to. A fall-through names
+         what it fell through, because a proof server that quietly stopped
+         working is the failure the second one exists to absorb, and a silent
+         success is how it goes unnoticed until both are down. */
+      console.info(
+        outcome.refusals.length === 0
+          ? `[contract] ${what} by ${outcome.url}`
+          : `[contract] ${what} by ${outcome.url} after ${describeEndpointRefusals(
+              outcome.refusals,
+            )}`,
+      );
+      return outcome.value;
+    }
+    throw new Error(
+      `no proof server could ${what}: ${describeEndpointRefusals(outcome.refusals)}`,
+    );
+  };
+
+  return {
+    check: (preimage, keyLocation) =>
+      attempt(`check ${keyLocation}`, (provider) => provider.check(preimage, keyLocation)),
+    prove: (preimage, keyLocation, obi) =>
+      attempt(`prove ${keyLocation}`, (provider) => provider.prove(preimage, keyLocation, obi)),
+    lookupKey: (keyLocation) => (provers[0] as NamedProvingProvider).provider.lookupKey(keyLocation),
+  };
 }
 
 /* -------------------------------------------------------------------------- */

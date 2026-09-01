@@ -37,6 +37,13 @@ worker, which needs `node scripts/fetch-zk-params.mjs` run once. Set
 `VITE_MIDNIGHT_PROVING_URL` to use a server instead; the matching image is
 `midnightntwrk/proof-server:9.0.0-rc.6`.
 
+`VITE_MIDNIGHT_PROVING_URL` and `VITE_SPONSOR_URL` each take a comma-separated,
+ORDERED list of endpoints, tried left to right per request and fallen through on
+a failure or a timeout. A single URL is a list of one and behaves exactly as it
+did before. `VITE_FUNDER_URL` does not: `/register-alias` and `/fund-account`
+exist nowhere but our own balancer. See `.env.example` for the syntax and for
+what the 1AM stagenet gateway can and cannot serve today.
+
 Validate the installable production build, manifest, icon set, service-worker
 registration source, and offline network boundary:
 

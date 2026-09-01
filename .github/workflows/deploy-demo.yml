@@ -57,9 +57,38 @@ env:
   # Exactly the values the old `deploy:passport` built with. Kept here rather
   # than in the npm script so that what ships is visible in the run log, and so
   # `deploy:passport:manual` and this workflow cannot drift apart silently.
+  #
+  # PROVING AND FEE SPONSORSHIP TAKE A LIST (2026/08/31). Both variables are
+  # comma-separated and tried left to right, per request, falling through on a
+  # failure or a timeout. Until today all four of proving, fee sponsorship,
+  # sponsored name registration, and activation grants rode one host; the two
+  # that have a second provider on stagenet now name it.
+  #
+  # OUR BALANCER IS FIRST, AND THE 1AM GATEWAY IS A STANDBY. That order is a
+  # measurement, not a preference. Drilled against stagenet on 2026/08/31
+  # through the app's own wiring, the gateway's prover-enclave (0.11.0) refuses
+  # every one of our proofs:
+  #
+  #   POST /prove  500  prove: expected header tag 'midnight:ir-source[v3-generic]:',
+  #                     got 'midnight:ir-source[v2]:'
+  #   POST /check  500  the same, on the IR
+  #   POST /balance-only  500  BALANCE_FAILED: Failed to prove transaction
+  #
+  # Our artefacts are Compact 0.33.0-rc.2 / zkir-v2, which emits `ir-source[v2]`,
+  # and they cannot be rebuilt — that compiler is no longer installable and the
+  # deployed account contract's verifier keys travel with the release. So the
+  # gateway cannot serve Passport today. Naming it second costs nothing while
+  # the balancer is healthy (it is never contacted) and makes it a real second
+  # provider the day 1AM's prover accepts v2 again, or the day our contracts are
+  # rebuilt against v3. Putting it FIRST was measured at 41–43 s per contract
+  # call against 24 s with the balancer first, all of the difference being 500s
+  # and their retry backoff.
+  #
+  # `VITE_FUNDER_URL` stays a single URL on purpose: `/register-alias` and
+  # `/fund-account` exist nowhere but our balancer (the gateway 404s both).
   VITE_MIDNIGHT_NETWORK_ID: stagenet
-  VITE_MIDNIGHT_PROVING_URL: https://funder.midnightpassport.com/prover
-  VITE_SPONSOR_URL: https://funder.midnightpassport.com/balancer
+  VITE_MIDNIGHT_PROVING_URL: https://funder.midnightpassport.com/prover,https://api-stagenet.1am.xyz
+  VITE_SPONSOR_URL: https://funder.midnightpassport.com/balancer,https://api-stagenet.1am.xyz
   VITE_FUNDER_URL: https://funder.midnightpassport.com/balancer
   VITE_RAFFLE_URL: https://raffle.midnightpassport.com
 

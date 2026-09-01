@@ -76,6 +76,27 @@
  * stays in the screen, because it is a timer and not a rule; what is drilled
  * here is what the screen is allowed to say with it.
  *
+ * `src/lib/endpoints.ts` went IN on 2026/08/31, the day it was written, and it
+ * belongs in the denominator because it is the rule that decides WHERE a
+ * transaction gets proved and who pays for it. Until that day proving, fee
+ * sponsorship, sponsored name registration, and activation grants all rode one
+ * droplet; two of those four now take an ordered list of providers, and this is
+ * the part of that which is a decision rather than a network call. Every way it
+ * can be wrong is a way of making the demo LESS reliable than the single URL it
+ * replaced: an order silently reshuffled would make "gateway first" untestable,
+ * an endpoint dropped from the list would be a single point of failure nobody
+ * knows they have, a refusal swallowed rather than carried would strip the
+ * error a caller needs to tell a busy sponsor from a dead one, and — the worst
+ * of them — a fallback that reported success when nothing served would claim a
+ * covered fee that was never covered. It holds no `fetch`, no clock, and no
+ * environment: an array in, a decision out, with the asking injected. So the
+ * ordering, the skip-unready case, the fall-through-on-failure case, the
+ * all-refused case, and the single-endpoint compatibility case are all drilled
+ * directly in `src/lib/endpoints.test.ts`. The HTTP either side of it — the
+ * `/wallet-status` probe, the `/balance-only` POST, and the proof server's
+ * `/prove` — stays out with the rest of the network calls, and is drilled
+ * against the real 1AM stagenet gateway and our own balancer instead.
+ *
  * `src/lib/activityFeed.ts` went IN on 2026/08/30, the day it was written, and
  * it is in the denominator because it is the only place a person can go back and
  * check what happened to their own money. Every function in it is a way of
@@ -274,6 +295,7 @@ export default mergeConfig(
           'src/lib/appBusy.ts',
           'src/lib/claimSteps.ts',
           'src/lib/colour.ts',
+          'src/lib/endpoints.ts',
           'src/lib/feeReadinessPoll.ts',
           'src/lib/networks.ts',
           'src/lib/notifications.ts',

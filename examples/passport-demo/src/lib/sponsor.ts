@@ -39,6 +39,31 @@
  * `/ready` is NOT used: it is the legacy check and 404s on the deployed
  * gateway. `/wallet-status` is the deployed truth.
  *
+ * MORE THAN ONE SPONSOR (2026/08/31)
+ * ----------------------------------
+ * `VITE_SPONSOR_URL` now takes a COMMA-SEPARATED, ORDERED list, and a list of
+ * one is byte-for-byte the behaviour it had when it was a single URL. Rule 1
+ * above is unchanged, rule 3 is unchanged, and rule 2 is now applied per
+ * endpoint: the first one that reports `available > 0` serves, and an endpoint
+ * that cannot — or that fails mid-request — is fallen through to the next.
+ *
+ * The reason is not redundancy for its own sake. Proving, fee sponsorship,
+ * sponsored name registration, and activation grants all rode ONE droplet, and
+ * two of those four have a second provider available on stagenet: the 1AM
+ * gateway at `https://api-stagenet.1am.xyz`, which serves `GET /wallet-status`
+ * and `POST /balance-only` on exactly this contract and accepts them
+ * anonymously (probed 2026/08/31 — a deliberately malformed body came back
+ * `400 INVALID_TX`, not `401`, so no API key is involved). `/register-alias`
+ * and `/fund-account` are ours alone and stay on our balancer; nothing in this
+ * module touches them.
+ *
+ * WHAT A SECOND SPONSOR IS NOT ALLOWED TO CHANGE. The refusal vocabulary. If
+ * every endpoint refuses, the user reads the same sentence they read when one
+ * endpoint refused — see {@link combineSponsorReadiness}, which folds a list of
+ * answers into exactly one of the states {@link sponsorRefusal} already knows
+ * how to speak about. The endpoint names and their diagnostics travel in
+ * `reason`, which belongs in a log and nowhere else.
+ *
  * Service state on 2026/08/05 (probed live over HTTPS at
  * `https://api-preview.1am.xyz`): healthy cluster, one balance wallet, fully
  * synced, zero DUST, therefore `available: 0` and `/balance-only` answering
@@ -48,6 +73,12 @@
  * holds DUST, this module correctly reports `unavailable` and nothing in the
  * demo changes.
  */
+
+import {
+  describeEndpointRefusals,
+  firstEndpointThatServes,
+  parseEndpointList,
+} from './endpoints.js';
 
 /* -------------------------------------------------------------------------- */
 /* Configuration                                                              */
@@ -184,34 +215,61 @@ const DEFAULT_SPONSOR_URLS: Record<string, string> = {
 };
 
 /**
- * Reads the sponsor configuration from the environment.
+ * Reads the sponsor configuration from the environment, in the operator's own
+ * order.
  *
- *   VITE_SPONSOR_URL         base URL of the ProofStation gateway. Unset falls
- *                            back to the network's default gateway; the
- *                            literal `off` disables sponsorship outright.
+ *   VITE_SPONSOR_URL         base URL of the ProofStation gateway, or SEVERAL
+ *                            separated by commas and tried left to right.
+ *                            Unset falls back to the network's default
+ *                            gateway; the literal `off` disables sponsorship
+ *                            outright.
  *   VITE_SPONSOR_API_KEY     optional `X-API-Key`.
  *   VITE_SPONSOR_CLIENT_ID   optional `X-Client-ID`.
  *
- * Returns `null` when sponsorship is disabled or the network has no gateway,
- * and throws when a URL could leak a signed transaction over plaintext.
+ * Returns an EMPTY list when sponsorship is disabled or the network has no
+ * gateway, and throws when any URL in the list could leak a signed transaction
+ * over plaintext — a bad entry is refused at configuration time rather than
+ * quietly skipped at send time, because an endpoint silently dropped from a
+ * failover list is a single point of failure nobody knows they have.
+ *
+ * The credentials are shared across the list. Both are optional and neither is
+ * needed by the two gateways this build ships with: our own balancer takes no
+ * key, and the 1AM stagenet gateway serves `/wallet-status` and
+ * `/balance-only` anonymously (an API key there is for `/rpc/midnight` and
+ * `/api/v4/graphql`, which nothing here uses).
+ */
+export function sponsorConfigs(
+  env: Record<string, string | undefined> = environment(),
+): SponsorConfig[] {
+  const explicit = trimmed(env.VITE_SPONSOR_URL);
+  if (explicit === 'off') return [];
+  const raw =
+    explicit ??
+    DEFAULT_SPONSOR_URLS[trimmed(env.VITE_MIDNIGHT_NETWORK_ID) ?? 'stagenet'];
+  if (!raw) return [];
+  const apiKey = trimmed(env.VITE_SPONSOR_API_KEY);
+  const clientId = trimmed(env.VITE_SPONSOR_CLIENT_ID);
+  return parseEndpointList(raw).map((url) => {
+    assertSecureSponsorUrl(url);
+    const config: SponsorConfig = { url };
+    if (apiKey) config.apiKey = apiKey;
+    if (clientId) config.clientId = clientId;
+    return config;
+  });
+}
+
+/**
+ * The FIRST configured sponsor, or `null` when there is none.
+ *
+ * Kept because a caller that only wants to know "is sponsorship configured at
+ * all, and where does it point first" should not have to reason about a list.
+ * Every path that actually sponsors a transaction goes through
+ * {@link sponsorConfigs} and honours the whole of it.
  */
 export function sponsorConfig(
   env: Record<string, string | undefined> = environment(),
 ): SponsorConfig | null {
-  const explicit = trimmed(env.VITE_SPONSOR_URL);
-  if (explicit === 'off') return null;
-  const raw =
-    explicit ??
-    DEFAULT_SPONSOR_URLS[trimmed(env.VITE_MIDNIGHT_NETWORK_ID) ?? 'stagenet'];
-  if (!raw) return null;
-  const url = raw.replace(/\/+$/, '');
-  assertSecureSponsorUrl(url);
-  const config: SponsorConfig = { url };
-  const apiKey = trimmed(env.VITE_SPONSOR_API_KEY);
-  const clientId = trimmed(env.VITE_SPONSOR_CLIENT_ID);
-  if (apiKey) config.apiKey = apiKey;
-  if (clientId) config.clientId = clientId;
-  return config;
+  return sponsorConfigs(env)[0] ?? null;
 }
 
 /**
@@ -249,6 +307,23 @@ export interface SponsorBalanceResult {
   txBytes: string;
   /** ISO timestamp after which the balanced transaction is stale. May be ''. */
   expiresAt: string;
+}
+
+/**
+ * A balanced transaction, plus WHICH sponsor paid for it.
+ *
+ * The provider is carried out of {@link sponsorBalanceOnly} rather than only
+ * logged inside it, because "where was this transaction's fee paid" is a
+ * question an operator asks after the fact, about a specific transaction, and
+ * a log line that scrolled past cannot answer it. It is an operator's fact and
+ * only an operator's: no surface renders it, and constraint (b) is why — a
+ * user reading a screen must meet no wallet, DUST, contract, registry,
+ * indexer, or resolver vocabulary, and a gateway hostname is all of those at
+ * once.
+ */
+export interface SponsoredBalance extends SponsorBalanceResult {
+  /** The base URL of the endpoint that balanced this transaction. */
+  servedBy: string;
 }
 
 export interface SponsorWalletStatus {
@@ -422,7 +497,15 @@ export function sponsorRetryDelayMs(retryAfterMs: number | undefined, remainingM
 /* -------------------------------------------------------------------------- */
 
 export interface SponsorClientOptions {
+  /**
+   * Exactly ONE endpoint, or `null` for none. The single-endpoint seam, kept
+   * because most callers and every existing test mean one service when they
+   * say `config`. {@link SponsorClientOptions.configs} wins when both are
+   * given.
+   */
   config?: SponsorConfig | null;
+  /** The ordered list. Absent means "read the build's own environment". */
+  configs?: SponsorConfig[];
   fetch?: typeof globalThis.fetch;
   now?: () => number;
   sleep?: (milliseconds: number) => Promise<void>;
@@ -452,8 +535,19 @@ function authHeaders(config: SponsorConfig): Record<string, string> {
   return headers;
 }
 
-function resolveConfig(options: SponsorClientOptions): SponsorConfig | null {
-  return options.config !== undefined ? options.config : sponsorConfig();
+/**
+ * The endpoints one call should use, in order.
+ *
+ * Precedence is explicit-list, then explicit-single, then the build's own
+ * environment. `config: null` is a deliberate "no sponsor" rather than "ask
+ * the environment" — that distinction is drilled, because getting it backwards
+ * would make a test that meant to disable sponsorship silently reach the real
+ * default gateway.
+ */
+function resolveConfigs(options: SponsorClientOptions): SponsorConfig[] {
+  if (options.configs !== undefined) return options.configs;
+  if (options.config !== undefined) return options.config ? [options.config] : [];
+  return sponsorConfigs();
 }
 
 /**
@@ -566,8 +660,58 @@ interface ProbeFailure {
   message: string;
 }
 
+/**
+ * One endpoint's verdict. The whole {@link SponsorReadiness} union minus
+ * `disabled`, because `disabled` is a fact about the BUILD and never about an
+ * endpoint — an endpoint that exists cannot be "not configured".
+ */
+export type SponsorEndpointReadiness = Exclude<SponsorReadiness, { state: 'disabled' }>;
+
+/**
+ * Folds what each endpoint said into the one answer a caller branches on.
+ *
+ * THE RULE, AND WHY IT IS THIS ONE:
+ *
+ *   * **No endpoints** is `disabled` — sponsorship is not configured, which is
+ *     a different sentence from "nobody could pay".
+ *   * **Exactly one endpoint** is returned VERBATIM. A list of one must be
+ *     indistinguishable from the single URL this variable used to hold, down
+ *     to the diagnostic string, so nothing that reads a reason had to change.
+ *   * **The first `ready` wins**, and the walk stops there — the endpoints
+ *     after it are never contacted, so a healthy first choice costs one probe.
+ *   * **All refused** collapses to ONE cause, and it is `busy` if ANY endpoint
+ *     said `busy`. That is the transient one: at least one service answered
+ *     and told us about its DUST, so "the sponsor cannot be reached" would be
+ *     a claim contradicted by the evidence. `unreachable` survives only when
+ *     nothing was learned from any of them.
+ *
+ * The user-facing half is unchanged in every branch: {@link sponsorRefusal}
+ * turns each of these into the same two sentences it turned one endpoint's
+ * answer into. Only `reason` grew, and `reason` is a log line.
+ */
+export function combineSponsorReadiness(
+  answers: readonly SponsorEndpointReadiness[],
+): SponsorReadiness {
+  if (answers.length === 0) return { state: 'disabled' };
+  const first = answers[0] as SponsorEndpointReadiness;
+  if (answers.length === 1) return first;
+  const ready = answers.find((answer) => answer.state === 'ready');
+  if (ready) return ready;
+  const refused = answers as readonly Extract<
+    SponsorEndpointReadiness,
+    { state: 'unavailable' }
+  >[];
+  return {
+    state: 'unavailable',
+    url: first.url,
+    reason: describeEndpointRefusals(refused),
+    cause: refused.some((answer) => answer.cause === 'busy') ? 'busy' : 'unreachable',
+  };
+}
+
 interface CachedReadiness {
-  url: string;
+  /** The whole list, joined — a different list is a different verdict. */
+  key: string;
   at: number;
   value: SponsorReadiness;
 }
@@ -590,15 +734,16 @@ export function resetSponsorReadinessCache(): void {
 export async function sponsorReadiness(
   options: SponsorClientOptions = {},
 ): Promise<SponsorReadiness> {
-  const config = resolveConfig(options);
-  if (!config) return { state: 'disabled' };
+  const configs = resolveConfigs(options);
+  if (configs.length === 0) return { state: 'disabled' };
 
   const now = options.now ?? Date.now;
+  const key = configs.map((config) => config.url).join(',');
   const cached = readinessCache;
   if (
     !options.force &&
     cached &&
-    cached.url === config.url &&
+    cached.key === key &&
     now() - cached.at < SPONSOR_READINESS_TTL_MS
   ) {
     return cached.value;
@@ -609,13 +754,17 @@ export async function sponsorReadiness(
   const sleep = options.sleep ?? defaultSleep;
 
   /**
-   * One probe attempt: a readiness verdict, or the reason it produced none.
+   * One probe attempt against ONE endpoint: a readiness verdict, or the reason
+   * it produced none.
    *
    * The two failure kinds are kept apart because they are different bugs and
    * a single "could not be fetched or parsed" reason sent an operator hunting
    * a network problem that was really a body the parser did not recognise.
    */
-  const attempt = async (timeoutMs: number): Promise<SponsorReadiness | ProbeFailure> => {
+  const attempt = async (
+    config: SponsorConfig,
+    timeoutMs: number,
+  ): Promise<SponsorEndpointReadiness | ProbeFailure> => {
     try {
       const response = await fetchRequest(`${config.url}/wallet-status`, {
         method: 'GET',
@@ -656,24 +805,28 @@ export async function sponsorReadiness(
     }
   };
 
-  const probe = (async (): Promise<SponsorReadiness> => {
+  /** The two-attempt probe of one endpoint, always ending in a verdict. */
+  const probeEndpoint = async (config: SponsorConfig): Promise<SponsorEndpointReadiness> => {
     /* A readiness verdict is cached and read by fee gates downstream, so one
        transient failure must not poison it: measured live on 2026/08/19, a
        single unparseable answer mid-drill turned a ready sponsor into a
        refused contract deploy. A failed attempt gets exactly one retry; a
        well-formed "unavailable" answer is believed first time.
 
-       WORST CASE, asserted here because a fee optimiser must never be the
-       slowest thing on a send: SPONSOR_STATUS_TIMEOUT_MS (6 s) +
+       WORST CASE PER ENDPOINT, asserted here because a fee optimiser must
+       never be the slowest thing on a send: SPONSOR_STATUS_TIMEOUT_MS (6 s) +
        SPONSOR_PROBE_RETRY_DELAY_MS (0.5 s) + SPONSOR_STATUS_RETRY_TIMEOUT_MS
-       (2 s) = 8.5 s, and only when both attempts time out. */
-    let value = await attempt(SPONSOR_STATUS_TIMEOUT_MS);
+       (2 s) = 8.5 s, and only when both attempts time out. A list of N
+       endpoints multiplies that, and only in the case where every one of them
+       is dead — the first endpoint that answers ends the walk, so the cost of
+       having a second sponsor configured is nil while the first is healthy. */
+    let value = await attempt(config, SPONSOR_STATUS_TIMEOUT_MS);
     if ('kind' in value) {
       await sleep(SPONSOR_PROBE_RETRY_DELAY_MS);
-      value = await attempt(SPONSOR_STATUS_RETRY_TIMEOUT_MS);
+      value = await attempt(config, SPONSOR_STATUS_RETRY_TIMEOUT_MS);
     }
     if ('kind' in value) {
-      value = {
+      return {
         state: 'unavailable',
         url: config.url,
         /* The SECOND attempt's kind names the failure, and a transport
@@ -686,7 +839,22 @@ export async function sponsorReadiness(
         cause: 'unreachable',
       };
     }
-    readinessCache = { url: config.url, at: now(), value };
+    return value;
+  };
+
+  const probe = (async (): Promise<SponsorReadiness> => {
+    /* In the operator's order, stopping at the first endpoint that can pay.
+       Every endpoint's answer is kept even after one of them serves, so the
+       fold below has the whole picture; the ones AFTER the winner are never
+       asked at all. */
+    const answers: SponsorEndpointReadiness[] = [];
+    for (const config of configs) {
+      const answer = await probeEndpoint(config);
+      answers.push(answer);
+      if (answer.state === 'ready') break;
+    }
+    const value = combineSponsorReadiness(answers);
+    readinessCache = { key, at: now(), value };
     return value;
   })();
 
@@ -704,28 +872,50 @@ export async function sponsorCanPay(options: SponsorClientOptions = {}): Promise
 }
 
 /**
- * `POST /balance-only` with a raw serialised PROVEN transaction.
+ * `POST /balance-only` with a raw serialised PROVEN transaction, against the
+ * first sponsor in the list that will take it.
  *
  * The service adds its own DUST fee input, proves and balances the dust
  * segment, and returns the balanced transaction for *this* wallet to submit.
- * A 429 `PENDING_TRANSACTION` is retried inside a bounded window; every other
- * failure ends the attempt so the caller can fall back to real fees.
+ *
+ * WHAT A LIST CHANGED, AND WHAT IT DELIBERATELY DID NOT. The unit of work is
+ * now a ROUND — one POST to each endpoint, in order, stopping the moment one
+ * answers with a balanced transaction. A round in which every endpoint refused
+ * is what the 429 `PENDING_TRANSACTION` retry window now measures, and only a
+ * round containing at least one pending-transaction refusal is worth repeating.
+ *
+ * That ordering matters more than it looks. Waiting out a busy sponsor is the
+ * right thing when it is the ONLY sponsor — a contract deploy has nothing to
+ * fall back to, which is why {@link SPONSOR_CONTRACT_RETRY_WINDOW_MS} is ten
+ * minutes — and the wrong thing when another one is sitting idle. Falling
+ * through first and waiting second gets both: a second provider is used
+ * immediately, and a single provider still gets waited out exactly as long as
+ * it did before.
+ *
+ * With ONE endpoint this is the loop it has always been, down to the number of
+ * POSTs and the sleeps between them: one POST per round, one retry for a
+ * thrown fetch, no retry for anything that answered, and the endpoint's own
+ * error rethrown verbatim when the window closes.
  */
 export async function sponsorBalanceOnly(
   provenTxBytes: Uint8Array,
   options: SponsorClientOptions = {},
-): Promise<SponsorBalanceResult> {
-  const config = resolveConfig(options);
-  if (!config) throw new Error('Sponsorship is not configured (VITE_SPONSOR_URL is unset).');
-  assertSecureSponsorUrl(config.url);
+): Promise<SponsoredBalance> {
+  const configs = resolveConfigs(options);
+  if (configs.length === 0) {
+    throw new Error('Sponsorship is not configured (VITE_SPONSOR_URL is unset).');
+  }
+  for (const config of configs) assertSecureSponsorUrl(config.url);
 
   const fetchRequest = options.fetch ?? globalThis.fetch;
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? defaultSleep;
   const retryWindowMs = options.pendingRetryWindowMs ?? SPONSOR_PENDING_RETRY_WINDOW_MS;
   const deadline = now() + retryWindowMs;
+  const byUrl = new Map(configs.map((config) => [config.url, config]));
+  const urls = configs.map((config) => config.url);
 
-  const post = (): Promise<Response> =>
+  const post = (config: SponsorConfig): Promise<Response> =>
     fetchRequest(`${config.url}/balance-only`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream', ...authHeaders(config) },
@@ -735,13 +925,11 @@ export async function sponsorBalanceOnly(
       signal: AbortSignal.timeout(SPONSOR_BALANCE_TIMEOUT_MS),
     });
 
-  for (;;) {
-    let body: unknown;
-    let ok: boolean;
-    let status: number;
+  /** One endpoint, one round: a balanced transaction, or a throw. */
+  const balanceAt = async (config: SponsorConfig): Promise<SponsorBalanceResult> => {
     let response: Response;
     try {
-      response = await post();
+      response = await post(config);
     } catch {
       /* Exactly one retry, and ONLY for a thrown fetch. A throw means no
          response reached us at all, so re-posting cannot act twice on a
@@ -750,17 +938,57 @@ export async function sponsorBalanceOnly(
          never repeated: that is what keeps a 503, a 429, or a balanced
          transaction from being sent through the service twice. */
       await sleep(SPONSOR_PROBE_RETRY_DELAY_MS);
-      response = await post();
+      response = await post(config);
     }
-    ok = response.ok;
-    status = response.status;
-    body = await response.json().catch(() => null);
+    const body = await response.json().catch(() => null);
+    if (response.ok) return validateSponsorBalanceResult(body);
+    throw createSponsorError(response.status, body);
+  };
 
-    if (ok) return validateSponsorBalanceResult(body);
+  for (;;) {
+    const outcome = await firstEndpointThatServes(urls, async (url) => ({
+      served: true as const,
+      value: await balanceAt(byUrl.get(url) as SponsorConfig),
+    }));
 
-    const error = createSponsorError(status, body);
+    if (outcome.served) {
+      /* An operator's line, and only an operator's. It says WHERE a
+         transaction was paid for, which after the fact is otherwise
+         unanswerable — and it says it in a console, never on a screen.
+         A fall-through says so and names what it fell through: the day the
+         first sponsor breaks, a silent success is how nobody finds out until
+         the second one breaks too. */
+      console.info(
+        outcome.refusals.length === 0
+          ? `[sponsor] fee covered by ${outcome.url}`
+          : `[sponsor] fee covered by ${outcome.url} after ${describeEndpointRefusals(
+              outcome.refusals,
+            )}`,
+      );
+      return { ...outcome.value, servedBy: outcome.url };
+    }
+
+    /* Every endpoint refused this round. A `429 PENDING_TRANSACTION` anywhere
+       in it means DUST that is spoken for rather than absent, and that clears
+       on its own — so the round is worth repeating while the window lasts. */
+    const errors = outcome.refusals
+      .map((refusal) => refusal.cause)
+      .filter((cause): cause is SponsorError => cause instanceof SponsorError);
+    const pending = errors.find((error) => error.isPendingTransaction);
     const remainingMs = deadline - now();
-    if (!error.isPendingTransaction || retryWindowMs <= 0 || remainingMs <= 0) throw error;
-    await sleep(sponsorRetryDelayMs(error.retryAfterMs, remainingMs));
+    if (pending && retryWindowMs > 0 && remainingMs > 0) {
+      await sleep(sponsorRetryDelayMs(pending.retryAfterMs, remainingMs));
+      continue;
+    }
+
+    /* One endpoint keeps its own failure, whole. Anything a caller used to
+       catch — a typed SponsorError, a raw transport TypeError — reaches it
+       unchanged, because a list of one must not be a new failure mode. */
+    if (outcome.refusals.length === 1) throw (outcome.refusals[0] as { cause?: unknown }).cause;
+    throw new Error(
+      `no fee sponsor would balance this transaction — ${describeEndpointRefusals(
+        outcome.refusals,
+      )}`,
+    );
   }
 }
