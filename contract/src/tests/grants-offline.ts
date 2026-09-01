@@ -189,6 +189,8 @@ function stubWitnesses() {
       ctx.privateState,
       { nonce: ZERO32, color: ZERO32, value: 0n, mt_index: 0n },
     ],
+    // The recovery gate is not exercised here; the witness only has to exist.
+    recovery_secret: (ctx: { privateState: PrivateState }): [PrivateState, Uint8Array] => [ctx.privateState, ZERO32],
   };
 }
 
@@ -232,6 +234,9 @@ async function openAccount(deviceArm: Arm): Promise<Account> {
     createConstructorContext<PrivateState>({} as PrivateState, coinPk),
     owner.bootCommitment(salt),
     rnd(32),
+    rnd(32),             // birth recovery commitment (opaque here)
+    new Uint8Array(64),  // birth wrap
+    259_200n,            // veto window, seconds
   );
 
   let state: any = init.currentContractState;

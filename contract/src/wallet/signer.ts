@@ -213,6 +213,29 @@ export const jubjubChallenges = {
     (ctx: CallContext, pk: JubjubPoint): ChallengeBuilder =>
     (sigR, grind) =>
       pureCircuits.challenge_revoke_all_grants_with_jubjub(addr(ctx), sigR, pk, ctx.authNonce, grind),
+
+  // Recovery (recovery MIP section 5, section 6): the session publish binds
+  // the whole artefact set; the cancel binds only the standard set.
+  publishRecoverySession:
+    (
+      ctx: CallContext,
+      pk: JubjubPoint,
+      newCommitment: Uint8Array,
+      sessionNonce: Uint8Array,
+      phi: readonly [bigint, bigint, bigint, bigint],
+      phiLen: bigint,
+      wrap: Uint8Array,
+    ): ChallengeBuilder =>
+    (sigR, grind) =>
+      pureCircuits.challenge_publish_recovery_session_with_jubjub(
+        addr(ctx), sigR, pk, newCommitment, sessionNonce,
+        phi[0], phi[1], phi[2], phi[3], phiLen, wrap, ctx.authNonce, grind,
+      ),
+
+  recoverCancel:
+    (ctx: CallContext, pk: JubjubPoint): ChallengeBuilder =>
+    (sigR, grind) =>
+      pureCircuits.challenge_recover_cancel_with_jubjub(addr(ctx), sigR, pk, ctx.authNonce, grind),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -368,6 +391,25 @@ export const k256Challenges = {
 
   revokeAllGrants: (ctx: CallContext, pk: Secp256k1Point): Uint8Array =>
     pureCircuits.challenge_revoke_all_grants_with_k256(addr(ctx), pk, ctx.authNonce),
+
+  // Recovery (recovery MIP section 5, section 6), family
+  // `midnight:account:auth:k1:v1:<op>`; see the jubjub builders.
+  publishRecoverySession: (
+    ctx: CallContext,
+    pk: Secp256k1Point,
+    newCommitment: Uint8Array,
+    sessionNonce: Uint8Array,
+    phi: readonly [bigint, bigint, bigint, bigint],
+    phiLen: bigint,
+    wrap: Uint8Array,
+  ): Uint8Array =>
+    pureCircuits.challenge_publish_recovery_session_with_k256(
+      addr(ctx), pk, newCommitment, sessionNonce,
+      phi[0], phi[1], phi[2], phi[3], phiLen, wrap, ctx.authNonce,
+    ),
+
+  recoverCancel: (ctx: CallContext, pk: Secp256k1Point): Uint8Array =>
+    pureCircuits.challenge_recover_cancel_with_k256(addr(ctx), pk, ctx.authNonce),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
