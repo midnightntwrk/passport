@@ -191,6 +191,39 @@ assert.ok(
 );
 pass('the cache rule and the SPA rewrite cover exactly the same paths');
 
+/* THE RESPONSE HEADERS THAT ARE NOT ABOUT CACHING
+   -----------------------------------------------
+   Passport is never legitimately framed. `screens/AppBrowser.tsx` frames
+   registry apps INSIDE Passport and already refuses any entry whose origin
+   equals Passport's own, precisely because `allow-same-origin` on a
+   same-origin document lifts the sandbox. `frame-ancestors 'none'` closes the
+   other direction, which nothing in the app relies on: no page may put
+   Passport in a frame, so a hostile page cannot overlay the owner's own Send
+   sheet, and a registry app that navigates itself to Passport's origin mid-
+   session gets a refused document rather than one it can read.
+
+   `nosniff` and a `Referrer-Policy` ride along because they are free and
+   unconditional. What is DELIBERATELY absent is a `script-src`/`connect-src`
+   policy: the ledger WASM needs `'wasm-unsafe-eval'` and the service worker
+   needs its own `worker-src` allowance, and the exact directive set has to be
+   measured against a real build rather than guessed — a CSP that is wrong by
+   one directive is a blank app. That is a separate change with its own
+   evidence. These three are asserted here so the framing refusal cannot be
+   dropped by a later edit to the caching rules it sits beside. */
+const securityHeaders = {
+  'content-security-policy': "frame-ancestors 'none'",
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+};
+for (const [key, value] of Object.entries(securityHeaders)) {
+  assert.equal(
+    headerValue('/(.*)', key),
+    value,
+    `Every route must carry ${key}: ${value}`,
+  );
+}
+pass('every route carries frame-ancestors, nosniff, and a referrer policy');
+
 const pwaSource = await text(path.join(root, 'src/pwa.tsx'));
 includes(pwaSource, "navigator.serviceWorker.register('/sw.js'", 'client registers the root service worker');
 includes(pwaSource, "updateViaCache: 'none'", 'service worker update checks bypass HTTP cache');

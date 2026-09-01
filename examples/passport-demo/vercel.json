@@ -7,6 +7,14 @@
   ],
   "headers": [
     {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "content-security-policy", "value": "frame-ancestors 'none'" },
+        { "key": "x-content-type-options", "value": "nosniff" },
+        { "key": "referrer-policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
       "source": "/zk-params/(.*)",
       "headers": [{ "key": "content-type", "value": "application/octet-stream" }]
     },
