@@ -159,6 +159,28 @@ await runScenario('recovery-offline', async () => {
   badVersion[0] = 0x02;
   assert(openWrap(s.bytes, addr, badVersion) === null, 'unknown version is refused, not best-effort parsed (§10)');
 
+  step('cross-implementation vectors (buss-rs pins the same bytes)');
+  {
+    // Constants shared with buss-rs/tests/v1_vectors.rs: both
+    // implementations must derive these exact bytes for these inputs.
+    const vecGs = guardianSecretFromPrf(new Uint8Array(32).fill(0x11));
+    assert(
+      Buffer.from(fieldToBytes(vecGs)).toString('hex') ===
+        '3ca3592cdd6ab2c6e2d451cbd96fedaf2ed95c58f1ad60e56bb6876ea4ebb617',
+      'Profile A guardian secret matches the Rust fork',
+    );
+    const vecSigma = deriveShare(
+      new Uint8Array(32).fill(0x33),
+      new Uint8Array(32).fill(0x22),
+      vecGs,
+    );
+    assert(
+      Buffer.from(fieldToBytes(vecSigma)).toString('hex') ===
+        '3ca7810ce096e24ff66e0e0bdd1389a8a9a837b4fa0a21f3720e4eb71e366c07',
+      'v1 share derivation matches the Rust fork',
+    );
+  }
+
   step('challenge domain separation for the new operations (AUTH-3)');
   const device = JubjubDevice.generate();
   const ctx: CallContext = { contractAddress: addr, authNonce: 0n };
