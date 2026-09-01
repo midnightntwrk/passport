@@ -31,8 +31,8 @@ Replaces: N/A
 <!-- WORKING DRAFT. Strip this comment at submission. Markers:
      [CRYPTO-MEMO Qn] = a clause whose final normative form awaits the
      commissioned cryptographic review (sent, response pending);
-     [EXP] = evidence pending from the reference implementation
-     (contract/), which carries no recovery surface yet. -->
+     [EXP: met: ...] = an acceptance criterion whose evidence run has
+     completed on the reference implementation (contract/). -->
 
 ## Table of contents
 
@@ -375,6 +375,10 @@ Ordering: a session MUST complete before any churn that depends on it.
 The contract MUST reject a session whose identifier equals the
 currently stored one, and MUST reject a recovery commitment equal to
 the currently stored one (defence in depth against accidental reuse).
+A session MUST also be rejected while a recovery is pending
+(section 6): a session rotates the commitment, and a pending record
+enacted after that rotation would enrol a successor the rotated
+commitment never authorised. The owner cancels first, then publishes.
 Equality with the stored value is the only reuse a contract can
 observe: genuine freshness, meaning independent randomness in the
 client, remains a client obligation and cannot be enforced on-chain.
@@ -569,8 +573,13 @@ The wrap MUST be an authenticated encryption. Requirements on the AEAD
 (key commitment, nonce policy) and on the separation of the wrap key
 from the gate key are the subject of [CRYPTO-MEMO Q5].
 
-[EXP] Concrete sizes, proof costs, and the achievable roster bound come
-from the reference implementation; see Implementation.
+Concrete figures from the reference implementation: the wrap
+container is sixty-four bytes, the vector bound is four slots
+(admitting every roster with `n - t <= 4`), and the artefact set
+deploys and refreshes within current block limits, though the
+contract as a whole does not deploy in one transaction (see the
+deployment note in Implementation). Proof-cost measurements remain
+future work.
 
 ### 9. Invariants
 
@@ -758,20 +767,21 @@ client obligation is load-bearing.
       Implementation.
 - [ ] Domain-separation tags (`midnight:account:recovery:*:v1`)
       registered under the MPS-0027 registry once it ratifies.
-- [ ] Reference implementation of the session and recovery operations
+- [x] Reference implementation of the session and recovery operations
       in the custody reference contract, with conformance suites
-      passing on a devnet-matching network. [EXP: implemented on the
-      reference contract and exercised in the runtime simulator; the
-      devnet-matching network run is the outstanding half. See
-      Implementation.]
-- [ ] Veto window and cancel path implemented and exercised end to end
-      on a local network. [EXP: implemented; exercised in the
-      simulator under explicit wall-clock control; the local-network
-      run is the outstanding half]
-- [ ] Viewing-key wrap published, recovered, and round-tripped through
-      the artefact set. [EXP: implemented and round-tripped through
-      the ledger cell in the simulator; the local-network run is the
-      outstanding half]
+      passing on a devnet-matching network. [EXP: met: the
+      recovery-conformance suite passes end to end on a local
+      network; evidence recorded with the reference implementation.
+      See Implementation.]
+- [x] Veto window and cancel path implemented and exercised end to end
+      on a local network. [EXP: met: the window held against an
+      early finalisation on real block time, a cancel cleared the
+      pending record with the epoch unchanged, and finalisation
+      succeeded once the window elapsed]
+- [x] Viewing-key wrap published, recovered, and round-tripped through
+      the artefact set. [EXP: met: the wrap read back from the
+      ledger decrypted under the reconstructed secret on a local
+      network]
 - [ ] Liveness attestation and transport messages implemented by at
       least one wallet provider.
 - [ ] Community review period completed.
@@ -783,10 +793,10 @@ implementation, which now carries the whole contract tranche (see
 Implementation). Remaining work divides into three independent
 tranches that can proceed in parallel:
 
-1. **Contract**: landed (the session operation and two-phase gate on
-   the MIP-0013 seam, the pending record, veto window, and cancel
-   path, the wrap cell, and the version tag); the outstanding item is
-   the conformance evidence on a devnet-matching network.
+1. **Contract**: landed and evidenced (the session operation and
+   two-phase gate on the MIP-0013 seam, the pending record, veto
+   window, and cancel path, the wrap cell, and the version tag, with
+   the conformance suite passing on a local network).
 2. **Cryptographic**: the commissioned memo, and the normative
    constructions it fixes in sections 2 and 4.
 3. **Wallet**: transport messages, liveness attestation, the roster
@@ -966,10 +976,16 @@ backstops, the unused-slot asserts, and the pending-recovery
 rejection, the two-phase gate with the possession-based successor
 validation and the explicit epoch and nonce binding, the seam-gated
 cancel, the permissionless finalisation behind the block-time window,
-and the wrap cell. The whole behaviour matrix of Testing, the veto
-window under explicit wall-clock control included, is exercised in
-the toolchain's runtime simulator; the run against a devnet-matching
-network is the outstanding evidence item, tracked in Path to Active.
+and the wrap cell. The whole behaviour matrix of Testing is exercised
+twice: in the toolchain's runtime simulator under explicit wall-clock
+control, and end to end on a local network (node, indexer, and proof
+server), where the lifecycle ran through real proofs and real block
+time: deploy with birth artefacts, session publish through the seam,
+on-node freshness rejection, reconstruction from chain data, the wrap
+round-trip, an early finalisation held by the window, cancel,
+resubmission, finalisation after the window, and a post-recovery
+session from the successor device. The evidence record accompanies
+the reference implementation.
 The client side ships the second independent share-derivation
 implementation (pure TypeScript over the field), the wrap container
 v1, the roster record with trial-assignment fallback, and an
@@ -1009,6 +1025,19 @@ slots, admitting every roster with `n - t <= 4`: three guardians at
 threshold two and five at threshold three among them. The bound is an
 implementation parameter rather than a property of the scheme, and
 section 8 specifies it as a profile parameter for that reason.
+
+**Deployment note**: with the recovery circuits the reference contract
+carries fourteen operations, and a deploy carrying all fourteen
+verifier keys exceeds the node's per-block limits and can never be
+included in a block. The reference implementation deploys in two
+waves: the custody surface with the constructor's full ledger state,
+then the four recovery verifier keys in one batched contract
+maintenance update whose final action retires the maintenance
+authority, because a live authority can replace an asset-releasing
+circuit's verifier key and is therefore a path around the
+authorisation seam. The block-limit constraint is a platform finding
+worth reporting upstream in its own right: it binds any contract with
+this many entry points, not this design specifically.
 
 **The scheme library**: a proof-of-concept library implementing the
 underlying scheme validated the approach. It is unaudited, declares
@@ -1054,7 +1083,8 @@ A conforming implementation SHOULD provide:
 - **Veto and cancel**: finalisation blocked before the window elapses;
   cancel invalidates a pending recovery; cancel is itself not subject
   to the window; a cancelled attempt leaves the epoch unchanged; a
-  second submission while one is pending is rejected.
+  second submission while one is pending is rejected; a session
+  submitted while a recovery is pending is rejected.
 - **Wrap round-trip**: `vk` published under a session, recovered
   through that session's secret, and shown to decrypt current shielded
   state (REC-7).

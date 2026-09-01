@@ -14,7 +14,7 @@
 //   wave 1  deposits + the initial device's arm (10 operations), the
 //           constructor's ledger state, and the maintenance authority:
 //           a functional single-arm account;
-//   wave 2  and every wave after it, the remaining 20 verifier keys packed
+//   wave 2  and every wave after it, the remaining 26 verifier keys packed
 //           greedily under a per-update payload budget and added by batched
 //           contract maintenance updates signed by the authority key wave 1
 //           stored locally. The LAST of those updates also retires that
@@ -93,10 +93,25 @@ export const grantTwins = (arm: Arm): string[] =>
 export const lifecycleCircuits = (arm: Arm): string[] =>
   LIFECYCLE_BASES.map((base) => `${base}_with_${arm}`);
 
+/** The recovery operations gated on a device arm (recovery MIP 5, 6). */
+const RECOVERY_GATED_BASES = [
+  'publish_recovery_session',
+  'recover_cancel',
+] as const;
+
+/** The seam-gated recovery circuits of one arm: `<op>_with_<arm>`. */
+export const recoveryCircuits = (arm: Arm): string[] =>
+  RECOVERY_GATED_BASES.map((base) => `${base}_with_${arm}`);
+
 /** The two permissionless deposits, shared by both arms. */
 export const SHARED_CIRCUITS = ['deposit_unshielded', 'deposit_shielded'];
 
-/** The whole `spec_version = 2` roster: 30 impure circuits. */
+/** The recovery gate itself: secret-gated submission and the permissionless
+ *  finalisation, arm-independent (recovery MIP 6). */
+export const RECOVERY_SHARED_CIRCUITS = ['recover_submit', 'recover_finalise'];
+
+/** The whole roster: the 30 `spec_version = 2` impure circuits plus the
+ *  six recovery circuits (two shared, two per arm). */
 export const allCircuits = (): string[] => [
   ...SHARED_CIRCUITS,
   ...armCircuits('k256'),
@@ -105,6 +120,9 @@ export const allCircuits = (): string[] => [
   ...lifecycleCircuits('k256'),
   ...grantTwins('jubjub'),
   ...lifecycleCircuits('jubjub'),
+  ...RECOVERY_SHARED_CIRCUITS,
+  ...recoveryCircuits('k256'),
+  ...recoveryCircuits('jubjub'),
 ];
 
 const otherArm = (arm: Arm): Arm => (arm === 'jubjub' ? 'k256' : 'jubjub');
@@ -179,7 +197,7 @@ export interface Wave {
  * `getVerifierKey(id)` for every id of `allCircuits()`.
  *
  * Wave 1 is the deploy and is fixed: the deposits plus the initial device's
- * arm, which is the smallest functional account. The remaining 20 keys are
+ * arm, which is the smallest functional account. The remaining 26 keys are
  * packed greedily under `VERIFIER_BYTE_BUDGET` in a deterministic order:
  * the other arm's device circuits first (so both device arms are live as
  * early as possible), then the first arm's grant twins and lifecycle, then
@@ -214,6 +232,12 @@ export function planWaves(
     ...lifecycleCircuits(firstArm),
     ...grantTwins(second),
     ...lifecycleCircuits(second),
+    // Recovery last: the gate and the first arm's session and cancel, then
+    // the other arm's. An account is functional without them; they are the
+    // last thing the authority installs before retiring.
+    ...RECOVERY_SHARED_CIRCUITS,
+    ...recoveryCircuits(firstArm),
+    ...recoveryCircuits(second),
   ];
 
   let current: string[] = [];
