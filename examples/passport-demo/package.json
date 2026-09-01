@@ -7,6 +7,7 @@
     "prepare:zk": "node scripts/prepare-zk-assets.mjs",
     "check:pwa": "node scripts/check-pwa.mjs",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test e2e/onboarding.spec.ts",

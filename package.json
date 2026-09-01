@@ -41,7 +41,20 @@
     "The other deploy:* scripts are unchanged — only the Passport demo has",
     "continuous deployment so far."
   ],
+  "//lint": [
+    "The whole tree at once. `eslint.config.js` at the root carries the rules,",
+    "the two tiers, and the reasons; nothing is configured per workspace.",
+    "",
+    "It is NOT in CI yet, and that is deliberate rather than forgotten. The",
+    "first full run reported 841 findings, so a gate added today would go red",
+    "on every pull request for reasons that have nothing to do with the pull",
+    "request. The order is: land the config, drive the count down, then add",
+    "one step to .github/workflows/verify-demo.yml.",
+    "",
+    "`experiments/` is out of scope — see the note in eslint.config.js."
+  ],
   "scripts": {
+    "lint": "eslint .",
     "build": "npm run build --workspace passport-demo-backend && npm run build --workspace passport-demo && npm run build --workspace passport-profile-client",
     "test": "npm run test --workspace passport-demo-backend",
     "test:demo-backend": "npm run test --workspace passport-demo-backend",
@@ -110,7 +123,10 @@
     "@midnight-ntwrk/platform-js": "3.0.0"
   },
   "devDependencies": {
+    "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.69.0",
     "vitest": "^3.2.4"
   },
   "//overrides": [
