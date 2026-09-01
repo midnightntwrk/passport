@@ -70,25 +70,30 @@ together; the upstream copies are canonical.
 - `mips/mip-xxxx-account-recovery.md` — **Recovery Paths for Custody
   Accounts (building block three)**: total-loss recovery behind the
   MIP-0013 seam, anchored on bottom-up secret sharing (ANARKey/BUSS).
-  Guardians are authenticator credentials that persist no per-account
-  state; the account publishes one artefact set per session (public
-  shares, a recovery commitment, and a wrap of the viewing key), so
-  recovery restores both control and visibility. Covers the guardian
-  model, share derivation, the single session operation, the recovery
-  gate and its veto window, the off-ledger transport, and the REC
-  invariant family. Remaining tags: [CRYPTO-MEMO] the commissioned
-  multi-session review (the published scheme's model is single-session,
-  so the freshness rules are our own normative addition),
-  [EXP] the veto window and the viewing-key wrap, which the reference
-  implementation does not yet carry, and [RULING] the engagement and
-  co-authorship plan. The upstream recovery slot remains unclaimed.
+  Guardians are authenticator credentials, cold signers, or paper
+  keys that persist no per-account state; the account publishes one
+  artefact set per session (public shares, a recovery commitment, and
+  a wrap of the viewing key), so recovery restores both control and
+  visibility. Covers the guardian model and its three profiles, share
+  derivation, the single session operation, the two-phase recovery
+  gate with its pending record and veto window, the off-ledger
+  transport and roster record, and the REC invariant family.
+  Remaining tags: [CRYPTO-MEMO] the commissioned multi-session review
+  (sent, response pending; the published scheme's model is
+  single-session, so the freshness rules are our own normative
+  addition) and [EXP] the whole recovery surface on the reference
+  implementation (`contract/`), which carries none of it yet: the
+  session operation and gate are exercised only in the earlier
+  prototype behind a hash-preimage placeholder, and the veto window
+  and viewing-key wrap exist nowhere. The upstream recovery slot
+  remains unclaimed.
 
 ## Process
 
 Submissions follow the upstream MIP-0001 lifecycle: Draft status on
 entry, editor-assigned numbers, and a separate submission issue. A MIP
-addressing an MPS is listed in that MPS header's Proposed Solutions
-field rather than in the MIP's `Requires` line, which is reserved for
-MIP-on-MIP dependencies. Upstream draft PRs use the literal filename
+addressing an MPS is listed in that MPS's header `MIP` field rather
+than in the MIP's `Requires` line, which is reserved for MIP-on-MIP
+dependencies. Upstream draft PRs use the literal filename
 `mip-xxxx.md`; the descriptive filenames in this folder are local
 conveniences and are renamed on submission.
