@@ -17,7 +17,10 @@
  *   - a day heading computed off UTC rather than the reader's own calendar puts
  *     this morning's transfer under "Yesterday" for anyone west of Greenwich;
  *   - a status dot that flattens `blocked` into `complete` claims something
- *     happened that did not.
+ *     happened that did not;
+ *   - a disclosure that offers more rows than the store will give back after a
+ *     reload promises a history that is not there, and one that stays on screen
+ *     with nothing behind it says the same thing more quietly.
  *
  * WHAT IS NOT HERE
  * ----------------
@@ -136,8 +139,18 @@ export interface ActivityDayGroup {
   entries: ActivityFeedEntry[];
 }
 
-/** How many rows Home shows. Everything older is still stored, just not shown. */
+/** How many rows Home shows FIRST. Everything older is stored and reachable. */
 export const ACTIVITY_VISIBLE = 10;
+
+/**
+ * How many more rows one press of the disclosure reveals.
+ *
+ * The same ten the feed opens on, so a reader who has learnt what a press does
+ * on the first one has learnt it for every one after. Held apart from
+ * {@link ACTIVITY_VISIBLE} because they are two different decisions that happen
+ * to agree: how much a trail opens with, and how much a press is worth.
+ */
+export const ACTIVITY_PAGE = 10;
 
 /**
  * The last {@link ACTIVITY_VISIBLE} rows, newest first, split into days.
@@ -166,6 +179,94 @@ export function groupActivityByDay(
     else groups.push({ heading, entries: [entry] });
   }
   return groups;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Paging (2026/09/01)                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One page of the trail: the rows to paint, and what is still behind them.
+ *
+ * "You should put a pagination on the activity" (2026/09/01). Fifty rows have
+ * been stored per Passport since the trail was written and ten of them were
+ * reachable; the other forty were an answer to "what happened to my money"
+ * that nobody could get to.
+ */
+export interface ActivityPage {
+  /** The visible rows, newest first, already split into days. */
+  groups: ActivityDayGroup[];
+  /** How many rows are on screen. Never more than the pool holds. */
+  shown: number;
+  /** How many stored rows are behind them. Zero means the trail is whole. */
+  remaining: number;
+}
+
+/**
+ * The first `limit` rows of the trail, grouped, plus what is still hidden.
+ *
+ * THE POOL IS CAPPED AT {@link ACTIVITY_KEEP}, and that is the whole reason
+ * this is not just `groupActivityByDay` with a bigger number. A tab that has
+ * been open a long while can hold more rows in memory than a reload would give
+ * back — `serialiseActivity` writes fifty — so paging past fifty would offer a
+ * row that disappears the next time Passport opens. Counting the remainder
+ * against the same cap is what keeps the control's number honest: it promises
+ * only rows that will still be there tomorrow.
+ *
+ * The grouping is redone for the whole visible set on every page rather than
+ * appended to, so a day that straddles a page boundary stays ONE heading with
+ * its rows under it. A page that grouped only its own ten would print "Today"
+ * twice with a fold between them.
+ */
+export function activityPage(
+  entries: readonly ActivityFeedEntry[],
+  limit: number = ACTIVITY_VISIBLE,
+  now: Date = new Date(),
+): ActivityPage {
+  const pool = Math.min(entries.length, ACTIVITY_KEEP);
+  const shown = Math.max(0, Math.min(limit, pool));
+  return {
+    groups: groupActivityByDay(entries, now, shown),
+    shown,
+    remaining: pool - shown,
+  };
+}
+
+/** How far down the trail the next press reaches. */
+export function nextActivityLimit(limit: number): number {
+  return limit + ACTIVITY_PAGE;
+}
+
+/** What the disclosure says, when there is anything for it to say. */
+export interface ActivityMore {
+  /** The control's own words — how many rows a press reveals. */
+  action: string;
+  /**
+   * How many stored rows are hidden in total, when that is a DIFFERENT number
+   * from the one the action already carries. `null` when it is not.
+   */
+  hint: string | null;
+}
+
+/**
+ * The disclosure, or `null` when there is nothing left to disclose.
+ *
+ * Returning `null` rather than an empty string is what makes "the control
+ * disappears once everything is shown" a decision this module makes and the
+ * screen cannot get wrong. A control that stayed behind, disabled or reading
+ * "Show 0 more", would be furniture claiming there is more to see.
+ *
+ * The hint is suppressed on the last page, where the total remaining and the
+ * number the action reveals are the same number: "Show 4 more · 4 older" says
+ * one thing twice.
+ */
+export function activityMoreLabel(remaining: number): ActivityMore | null {
+  if (remaining <= 0) return null;
+  const next = Math.min(remaining, ACTIVITY_PAGE);
+  return {
+    action: `Show ${next} more`,
+    hint: remaining > next ? `${remaining} older` : null,
+  };
 }
 
 /* -------------------------------------------------------------------------- */

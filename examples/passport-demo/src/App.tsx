@@ -1357,10 +1357,10 @@ export default function PassportDemo() {
    * fixed at the moment the row is written because that is when it was true —
    * see {@link ActivityEntry.network}.
    *
-   * {@link ACTIVITY_KEEP} rows are held rather than the ten Home shows. The
-   * feed is now persisted, and a trail that forgot everything past the visible
-   * ten would have nothing to restore after a reload but what was already on
-   * screen.
+   * {@link ACTIVITY_KEEP} rows are held rather than the ten Home OPENS on. The
+   * feed is persisted and paged — a press reveals the next ten, down to all
+   * fifty — so a trail that forgot everything past the first ten would have
+   * nothing to restore after a reload and nothing to disclose before one.
    */
   const addActivity = useCallback(
     (entry: Omit<ActivityEntry, 'id' | 'createdAt' | 'network'>) => {

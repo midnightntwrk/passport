@@ -15,11 +15,15 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ACTIVITY_KEEP,
+  ACTIVITY_PAGE,
   ACTIVITY_VISIBLE,
   activityDot,
+  activityMoreLabel,
+  activityPage,
   activityStorageKey,
   dayHeading,
   groupActivityByDay,
+  nextActivityLimit,
   readStoredActivity,
   relativeTime,
   serialiseActivity,
@@ -182,6 +186,132 @@ describe('groupActivityByDay', () => {
   it('reads the clock itself when none is passed', () => {
     const groups = groupActivityByDay([entry({ createdAt: new Date().toISOString() })]);
     expect(groups[0].heading).toBe('Today');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Paging                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** A trail of `count` rows, newest first, each a minute older than the last. */
+function trail(count: number): ActivityFeedEntry[] {
+  return Array.from({ length: count }, (_, index) =>
+    entry({ id: `row-${index}`, createdAt: at(index * 60_000) }),
+  );
+}
+
+describe('activityPage', () => {
+  it('opens on the newest ten and reports the rest as still there', () => {
+    const page = activityPage(trail(26), undefined, NOW);
+    expect(page.shown).toBe(ACTIVITY_VISIBLE);
+    expect(page.remaining).toBe(16);
+    expect(page.groups.flatMap((group) => group.entries).map((row) => row.id)).toEqual(
+      trail(ACTIVITY_VISIBLE).map((row) => row.id),
+    );
+  });
+
+  it('reveals exactly the next page and keeps the newest rows in place', () => {
+    const entries = trail(26);
+    const second = activityPage(entries, nextActivityLimit(ACTIVITY_VISIBLE), NOW);
+    expect(second.shown).toBe(20);
+    expect(second.remaining).toBe(6);
+    const ids = second.groups.flatMap((group) => group.entries).map((row) => row.id);
+    expect(ids).toHaveLength(20);
+    // The first page is still the first page: nothing re-ordered under it.
+    expect(ids.slice(0, ACTIVITY_VISIBLE)).toEqual(trail(ACTIVITY_VISIBLE).map((row) => row.id));
+    expect(ids[19]).toBe('row-19');
+  });
+
+  it('never offers a row the store would not give back after a reload', () => {
+    /* THE CAP. A long-lived tab can hold more rows in memory than
+       `serialiseActivity` writes, and paging past the stored fifty would offer
+       history that vanishes on the next launch. */
+    const page = activityPage(trail(ACTIVITY_KEEP + 25), 1_000, NOW);
+    expect(page.shown).toBe(ACTIVITY_KEEP);
+    expect(page.remaining).toBe(0);
+  });
+
+  it('counts the remainder against the same cap, not against what is in memory', () => {
+    const page = activityPage(trail(ACTIVITY_KEEP + 25), ACTIVITY_VISIBLE, NOW);
+    expect(page.remaining).toBe(ACTIVITY_KEEP - ACTIVITY_VISIBLE);
+  });
+
+  it('keeps a day that straddles a page boundary under ONE heading', () => {
+    /* Twelve rows this morning and two yesterday. The second page must not
+       print "Today" again with a fold between the two halves of it. */
+    const entries = [
+      ...Array.from({ length: 12 }, (_, index) =>
+        entry({ id: `today-${index}`, createdAt: at(index * 60_000) }),
+      ),
+      entry({ id: 'yesterday', createdAt: new Date(2026, 7, 29, 9, 0).toISOString() }),
+    ];
+    const second = activityPage(entries, nextActivityLimit(ACTIVITY_VISIBLE), NOW);
+    expect(second.groups.map((group) => group.heading)).toEqual(['Today', 'Yesterday']);
+    expect(second.groups[0].entries).toHaveLength(12);
+  });
+
+  it('shows everything, and asks for nothing more, on a short trail', () => {
+    const page = activityPage(trail(3), ACTIVITY_VISIBLE, NOW);
+    expect(page.shown).toBe(3);
+    expect(page.remaining).toBe(0);
+  });
+
+  it('holds a limit that outran the trail to what the trail actually has', () => {
+    const page = activityPage(trail(4), 1_000, NOW);
+    expect(page.shown).toBe(4);
+    expect(page.remaining).toBe(0);
+  });
+
+  it('refuses a negative limit rather than paging backwards', () => {
+    const page = activityPage(trail(4), -5, NOW);
+    expect(page.shown).toBe(0);
+    expect(page.groups).toEqual([]);
+    expect(page.remaining).toBe(4);
+  });
+
+  it('is empty, and finished, for an empty trail', () => {
+    const page = activityPage([], ACTIVITY_VISIBLE, NOW);
+    expect(page).toEqual({ groups: [], shown: 0, remaining: 0 });
+  });
+
+  it('reads the clock itself when none is passed', () => {
+    const page = activityPage([entry({ createdAt: new Date().toISOString() })]);
+    expect(page.groups[0].heading).toBe('Today');
+  });
+});
+
+describe('nextActivityLimit', () => {
+  it('advances by exactly one page', () => {
+    expect(nextActivityLimit(ACTIVITY_VISIBLE)).toBe(ACTIVITY_VISIBLE + ACTIVITY_PAGE);
+    expect(nextActivityLimit(nextActivityLimit(ACTIVITY_VISIBLE))).toBe(
+      ACTIVITY_VISIBLE + 2 * ACTIVITY_PAGE,
+    );
+  });
+});
+
+describe('activityMoreLabel', () => {
+  it('says how many a press reveals, and how many are behind it', () => {
+    expect(activityMoreLabel(32)).toEqual({ action: 'Show 10 more', hint: '32 older' });
+  });
+
+  it('drops the count on the last page, where it would say the same thing twice', () => {
+    expect(activityMoreLabel(4)).toEqual({ action: 'Show 4 more', hint: null });
+    expect(activityMoreLabel(ACTIVITY_PAGE)).toEqual({
+      action: `Show ${ACTIVITY_PAGE} more`,
+      hint: null,
+    });
+  });
+
+  it('names a single remaining row without pretending there are ten', () => {
+    expect(activityMoreLabel(1)).toEqual({ action: 'Show 1 more', hint: null });
+  });
+
+  it('has nothing to offer once the trail is whole', () => {
+    /* NULL, not an empty string: the control disappearing is a decision this
+       module makes, so the screen cannot leave furniture behind claiming there
+       is more to see. */
+    expect(activityMoreLabel(0)).toBeNull();
+    expect(activityMoreLabel(-3)).toBeNull();
   });
 });
 
