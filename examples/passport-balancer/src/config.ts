@@ -10,6 +10,8 @@
 
 import { readFileSync } from 'node:fs';
 
+import { DEFAULT_TRUSTED_PROXIES } from './limits.js';
+
 export interface BalancerNetworkEndpoints {
   indexerHttpUrl: string;
   indexerWsUrl: string;
@@ -79,6 +81,34 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    * in whole mUSD. Zero disables the asset leg.
    */
   assetGrant: bigint;
+  /** The per-client ceiling on `/balance-only`, which pays a DUST fee per call. */
+  balanceRate: RateLimit;
+  /** The per-client ceiling on `/register-alias`. */
+  aliasRate: RateLimit;
+  /** The per-client ceiling on `/fund-account`. */
+  accountRate: RateLimit;
+  /**
+   * How many spend requests may be in flight at once, across every client.
+   * Zero means unbounded.
+   */
+  spendQueueMax: number;
+  /**
+   * The peers whose `X-Forwarded-For` is believed. Everything else is keyed on
+   * the address its socket really came from, whatever its headers claim.
+   */
+  trustedProxies: string[];
+  /**
+   * When set, the three spend endpoints require it in an `X-Passport-Key`
+   * header. Unset — the default — leaves every caller admitted, which is the
+   * deployed behaviour.
+   */
+  clientKey?: string;
+}
+
+/** One endpoint's per-client token bucket. `perMinute: 0` turns it off. */
+export interface RateLimit {
+  perMinute: number;
+  burst: number;
 }
 
 /**
@@ -168,6 +198,31 @@ export const DEFAULT_HEALTH_INTERVAL_MS = 10 * 60 * 1_000;
 export const ASSET_SYMBOL = 'mUSD';
 /** One hundred mUSD, the balance a new Passport opens with. */
 export const DEFAULT_ASSET_GRANT = 100n;
+
+/**
+ * The per-client ceilings.
+ *
+ * `/balance-only` is the one a normal session calls repeatedly — once per Send —
+ * so it gets the loose limit; twelve a minute is far more than a person can
+ * approve and a burst of six absorbs a client that retries. The other two are
+ * once-in-a-lifetime calls per Passport, gated on top of that by a persisted
+ * once-only ledger, so three a minute is generous for a family sharing an
+ * address and useless to anybody draining the wallet.
+ *
+ * These are PER CLIENT and sit UNDER the existing global `aliasMaxPerHour` and
+ * `accountMaxPerHour` ceilings, which are unchanged.
+ */
+export const DEFAULT_BALANCE_MAX_PER_MIN = 12;
+export const DEFAULT_BALANCE_BURST = 6;
+export const DEFAULT_SPEND_MAX_PER_MIN = 3;
+export const DEFAULT_SPEND_BURST = 3;
+/**
+ * How many spend requests may be in flight at once. Eight, because a spend that
+ * is merely waiting still holds a socket and whatever it read on the way in, and
+ * eight is comfortably more than the demo's own concurrency while being a number
+ * a flood reaches immediately.
+ */
+export const DEFAULT_SPEND_QUEUE_MAX = 8;
 
 /**
  * The mUSD faucet each network's asset grant is minted from.
@@ -354,6 +409,62 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     return normalized;
   };
 
+  /* A non-negative whole number, or the service does not start. A mistyped
+     ceiling that silently became `NaN` would read as "no limit" — the one
+     failure mode a limit must not have. */
+  const wholeNumber = (variable: string, raw: string | undefined, fallback: number): number => {
+    const value = Number(raw ?? fallback);
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error(`${variable} must be a non-negative integer.`);
+    }
+    return value;
+  };
+
+  const rateLimit = (
+    endpoint: string,
+    rateRaw: string | undefined,
+    burstRaw: string | undefined,
+    rateFallback: number,
+    burstFallback: number,
+  ): RateLimit => ({
+    perMinute: wholeNumber(`BALANCER_${endpoint}_MAX_PER_MIN`, rateRaw, rateFallback),
+    burst: wholeNumber(`BALANCER_${endpoint}_BURST`, burstRaw, burstFallback),
+  });
+
+  const balanceRate = rateLimit(
+    'BALANCE',
+    trimmed(env.BALANCER_BALANCE_MAX_PER_MIN),
+    trimmed(env.BALANCER_BALANCE_BURST),
+    DEFAULT_BALANCE_MAX_PER_MIN,
+    DEFAULT_BALANCE_BURST,
+  );
+  const aliasRate = rateLimit(
+    'ALIAS',
+    trimmed(env.BALANCER_ALIAS_MAX_PER_MIN),
+    trimmed(env.BALANCER_ALIAS_BURST),
+    DEFAULT_SPEND_MAX_PER_MIN,
+    DEFAULT_SPEND_BURST,
+  );
+  const accountRate = rateLimit(
+    'ACCOUNT',
+    trimmed(env.BALANCER_ACCOUNT_MAX_PER_MIN),
+    trimmed(env.BALANCER_ACCOUNT_BURST),
+    DEFAULT_SPEND_MAX_PER_MIN,
+    DEFAULT_SPEND_BURST,
+  );
+  const spendQueueMax = wholeNumber(
+    'BALANCER_SPEND_QUEUE_MAX',
+    trimmed(env.BALANCER_SPEND_QUEUE_MAX),
+    DEFAULT_SPEND_QUEUE_MAX,
+  );
+
+  const trustedProxies = (trimmed(env.BALANCER_TRUSTED_PROXIES) ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const clientKey = trimmed(env.BALANCER_CLIENT_KEY);
+
   const midnamesTldAddress = contractAddressFrom(
     'BALANCER_MIDNAMES_TLD_ADDRESS',
     trimmed(env.BALANCER_MIDNAMES_TLD_ADDRESS) ?? MIDNAMES_TLD_DEFAULTS[networkId],
@@ -389,5 +500,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     accountMaxPerHour,
     ...(assetFaucetAddress ? { assetFaucetAddress } : {}),
     assetGrant,
+    balanceRate,
+    aliasRate,
+    accountRate,
+    spendQueueMax,
+    trustedProxies: trustedProxies.length > 0 ? trustedProxies : [...DEFAULT_TRUSTED_PROXIES],
+    ...(clientKey ? { clientKey } : {}),
   };
 }

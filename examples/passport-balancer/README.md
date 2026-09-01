@@ -615,6 +615,72 @@ Everything it decides goes to `journalctl -u passport-balancer-watchdog`.
 
 ---
 
+## Who may spend
+
+The alias and account policies above bound what one **Passport** can be given.
+Until 2026/09/01 nothing bounded what one **caller** could ask for: the three
+spending endpoints ran their handlers for anybody who knew the URL, and
+`/balance-only` paid a DUST fee on every call with no ceiling at all. The CORS
+allow-list was never a gate — it decides which headers a *browser* is handed
+back, long after the handler has run and the fee has been paid.
+
+So each of the three now passes three guards before it reaches a policy gate.
+`GET /wallet-status` and `GET /status` pass none of them: they are what every
+client and both watchdogs poll, and neither spends a Speck.
+
+1. **A per-client token bucket**, keyed on the caller's address.
+   `/balance-only` gets 12/min with a burst of 6 — far more than a person can
+   approve, and enough that a client which retries is never punished for it.
+   `/register-alias` and `/fund-account` get 3/min: they are once-per-Passport
+   calls, gated on top of that by a persisted once-only ledger.
+2. **A cap on spend requests in flight** — 8 — so a flood is refused rather
+   than stacked behind the wallet's one-at-a-time queue, each waiter holding a
+   socket and whatever it read on the way in.
+3. **An optional shared secret.** With `BALANCER_CLIENT_KEY` set, the three
+   endpoints require it in an `X-Passport-Key` header. Unset — the default —
+   admits everybody, which is the behaviour every deployed client is written
+   against today.
+
+The existing global `BALANCER_ALIAS_MAX_PER_HOUR` and
+`BALANCER_ACCOUNT_MAX_PER_HOUR` ceilings are unchanged and still sit above all
+of this: the per-client bucket bounds one caller, the hourly ceiling bounds the
+wallet.
+
+Every refusal is the service's ordinary `{ error, message }` shape, logged under
+the endpoint's own `[balance]` / `[alias]` / `[account] refused:` prefix so the
+watchdog and `journalctl` need to learn nothing new, and counted on `/status`:
+
+```jsonc
+"limits": {
+  "refusedRateLimited": 27, "refusedQueueFull": 9, "refusedUnauthorised": 2,
+  "spendQueueDepth": 0, "spendQueueMax": 8, "clientsTracked": 5,
+  "clientKeyRequired": false
+}
+```
+
+| Status | `error` | When |
+| --- | --- | --- |
+| 429 | `rate-limited` | This client's bucket is empty. Carries `Retry-After` and `retryAfterMs`. |
+| 429 | `queue-full` | `BALANCER_SPEND_QUEUE_MAX` spends are already in flight. |
+| 401 | `unauthorised` | `BALANCER_CLIENT_KEY` is set and the request did not carry it. |
+
+### The forwarded-address rule
+
+A per-client limit keyed on a header anybody can set is not a limit: an abuser
+sends a fresh `X-Forwarded-For` per request and earns a fresh bucket every time.
+So the header is read **only** when the socket's own peer is a trusted proxy —
+loopback by default, which is where Caddy is — and never otherwise. A request
+arriving at the port directly is keyed on the address it really came from,
+whatever its headers claim.
+
+Behind a trusted peer the chain is read **from the right**. Caddy *appends* the
+address it observed to whatever the client sent, so `X-Forwarded-For:
+10.0.0.1, 203.0.113.9` has exactly one entry the client could not have written —
+the last one. Further trusted proxies are skipped, so a two-hop deployment
+(add them to `BALANCER_TRUSTED_PROXIES`) still lands on the real caller.
+
+---
+
 ## Configuration
 
 Everything comes from the environment. Only `BALANCER_SEED` is required.
@@ -641,6 +707,15 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_ACCOUNT_MAX_PER_HOUR` | `30` | Funded accounts per rolling hour. Counts activations, not legs. |
 | `BALANCER_ASSET_GRANT` | `100` | The opening balance, in whole mUSD. **`0` turns the asset leg off.** |
 | `BALANCER_ASSET_FAUCET_ADDRESS` | our stagenet faucet | The mUSD faucet the grant is minted from. Unset **and** no known default disables the asset leg. |
+| `BALANCER_BALANCE_MAX_PER_MIN` | `12` | Per-client ceiling on `/balance-only`. **`0` turns the per-client limit off.** |
+| `BALANCER_BALANCE_BURST` | `6` | How many `/balance-only` calls one client may make at once. |
+| `BALANCER_ALIAS_MAX_PER_MIN` | `3` | Per-client ceiling on `/register-alias`. |
+| `BALANCER_ALIAS_BURST` | `3` | Burst allowance on `/register-alias`. |
+| `BALANCER_ACCOUNT_MAX_PER_MIN` | `3` | Per-client ceiling on `/fund-account`. |
+| `BALANCER_ACCOUNT_BURST` | `3` | Burst allowance on `/fund-account`. |
+| `BALANCER_SPEND_QUEUE_MAX` | `8` | Spend requests in flight at once, across every client. **`0` is unbounded.** |
+| `BALANCER_TRUSTED_PROXIES` | `127.0.0.1,::1` | The peers whose `X-Forwarded-For` is believed. Everything else is keyed on its socket address. |
+| `BALANCER_CLIENT_KEY` | — | When set, the three spend endpoints require it in an `X-Passport-Key` header. Unset leaves them open. |
 | `BALANCER_MIDNAMES_ASSETS` | `contracts-stagenet/managed/midnames` | Overrides where the compiled Midnames ZK artefacts are read from. |
 | `BALANCER_ACCOUNT_ASSETS` | `contracts-stagenet/managed/account` | Overrides where the compiled account ZK artefacts are read from. |
 | `BALANCER_ASSET_ASSETS` | `contracts-stagenet/managed/faucet` | Overrides where the compiled faucet ZK artefacts are read from. |

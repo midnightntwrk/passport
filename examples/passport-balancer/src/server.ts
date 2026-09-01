@@ -88,6 +88,19 @@
  * Every refusal is a clear JSON error, and nothing is reported as done until it
  * has been read back off the chain.
  *
+ * WHO MAY ASK AT ALL. The policies above bound what one PASSPORT can be given;
+ * they say nothing about what one CALLER can ask for, and until 2026/09/01 they
+ * were the only gates the three spending endpoints had. Anybody holding the URL
+ * could post to them — the CORS allow-list decides which headers a browser gets
+ * back, not whether the handler runs — and `/balance-only` had no ceiling at all
+ * while paying a DUST fee on every call. So each of the three now passes through
+ * `./limits.ts` before it reaches a policy gate: a per-client token bucket keyed
+ * on the address the socket really came from, a bound on how many spend requests
+ * may be in flight at once, and — when `BALANCER_CLIENT_KEY` is set — a shared
+ * secret in `X-Passport-Key`. All three refuse in the shape above, with the same
+ * `[balance]`/`[alias]`/`[account] refused:` line in the journal, and the
+ * counters are published as `limits` on `/status`.
+ *
  * Everything else — env-only configuration, a sync snapshot on disk, a CORS
  * allow-list, SIGTERM saving before it exits — is `examples/passport-funder`'s
  * shape, so an operator running both on the same droplet learns one service.
@@ -134,6 +147,7 @@ import {
   type AccountEntry,
   type AliasEntry,
 } from './ledgers.js';
+import { SpendAdmission, TokenBucket, clientAddress, clientKeyAccepted } from './limits.js';
 import {
   AliasSponsorError,
   aliasCostAtomicNight,
@@ -217,7 +231,21 @@ async function main(): Promise<void> {
   console.log(
     `asset     ${config.assetGrant > 0n && config.assetFaucetAddress ? `${config.assetGrant} ${ASSET_SYMBOL} minted from faucet ${config.assetFaucetAddress} into each account contract` : `no ${ASSET_SYMBOL} grant — the asset leg of /fund-account is off`}`,
   );
-  console.log(`origins   ${config.allowedOrigins.join(', ')}\n`);
+  console.log(`origins   ${config.allowedOrigins.join(', ')}`);
+  const describeRate = (limit: { perMinute: number; burst: number }): string =>
+    limit.perMinute > 0
+      ? `${limit.perMinute}/min per client (burst ${limit.burst})`
+      : 'no per-client limit';
+  console.log(
+    `limits    /balance-only ${describeRate(config.balanceRate)}; /register-alias ${describeRate(config.aliasRate)}; /fund-account ${describeRate(config.accountRate)}`,
+  );
+  console.log(
+    `queue     ${config.spendQueueMax > 0 ? `at most ${config.spendQueueMax} spend requests in flight` : 'unbounded spend queue (BALANCER_SPEND_QUEUE_MAX=0)'}`,
+  );
+  console.log(`proxies   X-Forwarded-For believed from ${config.trustedProxies.join(', ')} and nowhere else`);
+  console.log(
+    `key       ${config.clientKey ? 'the three spend endpoints require X-Passport-Key' : 'no BALANCER_CLIENT_KEY set — the spend endpoints are open to anybody who can reach them'}\n`,
+  );
 
   const aliasLedger = await JsonLedger.open<AliasEntry>(
     config.stateDir,
@@ -245,6 +273,30 @@ async function main(): Promise<void> {
   );
   const aliasLimiter = new HourlyRateLimiter(config.aliasMaxPerHour);
   const accountLimiter = new HourlyRateLimiter(config.accountMaxPerHour);
+
+  /**
+   * The per-client ceilings, one bucket per spending endpoint.
+   *
+   * Separate buckets and not one shared one, because the three calls are not
+   * interchangeable: a session sends repeatedly and registers a name once, so a
+   * shared bucket would either let a name-flood through or refuse an ordinary
+   * Send. In memory, like `HourlyRateLimiter`: a restart forgets the window,
+   * which for a back-stop against a flood is fine, and the once-only ledgers —
+   * the gates that must not be forgotten — are still the ones on disk.
+   */
+  const balanceBucket = new TokenBucket({
+    ratePerMinute: config.balanceRate.perMinute,
+    burst: config.balanceRate.burst,
+  });
+  const aliasBucket = new TokenBucket({
+    ratePerMinute: config.aliasRate.perMinute,
+    burst: config.aliasRate.burst,
+  });
+  const accountBucket = new TokenBucket({
+    ratePerMinute: config.accountRate.perMinute,
+    burst: config.accountRate.burst,
+  });
+  const spendAdmission = new SpendAdmission(config.spendQueueMax);
 
   /**
    * Alias registrations in progress, keyed BOTH ways: `alias:<label>` and
@@ -294,6 +346,17 @@ async function main(): Promise<void> {
   let healthMonitor: HealthMonitor | null = null;
   let aliasesSponsored = 0;
   let accountsFunded = 0;
+  /**
+   * Guard refusals since this process started, published as `limits` on
+   * `/status`.
+   *
+   * Counted rather than merely logged because the question an operator asks
+   * during a demo is "is anybody hammering this?", and that is a number, not a
+   * grep. They are per-process for the same reason the buckets are.
+   */
+  let refusedRateLimited = 0;
+  let refusedQueueFull = 0;
+  let refusedUnauthorised = 0;
   /** Asset legs completed since this process started, counted apart from NIGHT. */
   let assetsFunded = 0;
   /**
@@ -696,6 +759,25 @@ async function main(): Promise<void> {
       /* How CONTRACT circuits are proved, which is a different question from
          `proving` above: that one is the wallet's own DUST and Zswap legs. */
       contractProving: sponsor?.provingMode ?? accountFunder?.provingMode ?? null,
+      /* What the abuse guards have turned away, and how they are configured.
+         Nothing here names a caller: an address is what the buckets are keyed
+         on and it stays inside the process. `clientKeyRequired` is a boolean
+         and never the key. */
+      limits: {
+        refusedRateLimited,
+        refusedQueueFull,
+        refusedUnauthorised,
+        balancePerMinute: config.balanceRate.perMinute,
+        balanceBurst: config.balanceRate.burst,
+        aliasPerMinute: config.aliasRate.perMinute,
+        aliasBurst: config.aliasRate.burst,
+        accountPerMinute: config.accountRate.perMinute,
+        accountBurst: config.accountRate.burst,
+        spendQueueDepth: spendAdmission.depth,
+        spendQueueMax: config.spendQueueMax,
+        clientsTracked: balanceBucket.size + aliasBucket.size + accountBucket.size,
+        clientKeyRequired: config.clientKey !== undefined,
+      },
       /* Not ready, but only because a spend's change is still in flight — the
          funder's distinction, and it matters: change settling and a wallet
          that is genuinely out of NIGHT read identically on the chain. */
@@ -1557,7 +1639,14 @@ async function main(): Promise<void> {
     return {
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'content-type, x-api-key, x-client-id',
+      /* `x-passport-key` joins the list so a browser client can send the shared
+         secret once one is configured; the other two are the upstream gateway's
+         and are kept so a client written against it works here unchanged. */
+      'Access-Control-Allow-Headers': 'content-type, x-api-key, x-client-id, x-passport-key',
+      /* A rate-limited answer carries `Retry-After`, and a browser cannot read a
+         response header it was not given permission to. The refusal body still
+         carries `retryAfterMs`, which is what `sponsor.ts` actually parses. */
+      'Access-Control-Expose-Headers': 'retry-after',
       Vary: 'Origin',
     };
   };
@@ -1567,10 +1656,12 @@ async function main(): Promise<void> {
     response: ServerResponse,
     httpStatus: number,
     body: Record<string, unknown>,
+    headers: Record<string, string> = {},
   ): void => {
     response.writeHead(httpStatus, {
       'content-type': 'application/json',
       ...corsHeaders(request),
+      ...headers,
     });
     response.end(JSON.stringify(body));
   };
@@ -1622,7 +1713,99 @@ async function main(): Promise<void> {
     return Uint8Array.from(Buffer.from(hex, 'hex'));
   };
 
+  /* -------------------------------------------------------------------------- */
+  /* Who may spend at all                                                       */
+  /* -------------------------------------------------------------------------- */
+
+  /**
+   * The three endpoints that cost the balancer something, each with the journal
+   * prefix it already refuses under — so a guard refusal reads like every other
+   * refusal that endpoint makes and the watchdog needs to learn nothing new.
+   */
+  const spendGuards: Record<string, { prefix: string; bucket: TokenBucket }> = {
+    '/balance-only': { prefix: 'balance', bucket: balanceBucket },
+    '/register-alias': { prefix: 'alias', bucket: aliasBucket },
+    '/fund-account': { prefix: 'account', bucket: accountBucket },
+  };
+
+  /**
+   * Answers one guard refusal.
+   *
+   * The client address goes in the LINE and never in a response: an operator
+   * asking "is somebody hammering this?" needs it, and a caller does not. The
+   * journal is on the droplet; `/status` is on the internet, and carries only
+   * counts.
+   */
+  const refuseSpend = (
+    request: IncomingMessage,
+    response: ServerResponse,
+    prefix: string,
+    who: string,
+    why: Refusal,
+    retryAfterMs?: number,
+  ): void => {
+    console.warn(`[${prefix}] refused: ${why.error} — ${why.message} (client ${who})`);
+    respond(
+      request,
+      response,
+      why.status,
+      { error: why.error, message: why.message, ...(why.extra ?? {}) },
+      /* Seconds, because that is what `Retry-After` is; the millisecond figure
+         travels in the body as `retryAfterMs`, which is the field `sponsor.ts`
+         parses. Floored at one, because `Retry-After: 0` invites the retry that
+         is being refused. */
+      retryAfterMs === undefined
+        ? {}
+        : { 'retry-after': String(Math.max(1, Math.round(retryAfterMs / 1_000))) },
+    );
+  };
+
+  /**
+   * Everything a spend request must pass before a handler — and therefore the
+   * wallet — sees it. `null` admits.
+   *
+   * The bucket is asked FIRST and the key second, deliberately: a wrong key is
+   * still a request, and a key gate that is not itself rate limited is a
+   * guessing gallery. It is also why a malformed body is limited exactly like a
+   * well-formed one — the cost being bounded is the caller's ability to make
+   * this service do work, and parsing their body is already work.
+   */
+  const guardSpend = (
+    request: IncomingMessage,
+    guard: { prefix: string; bucket: TokenBucket },
+    who: string,
+  ): { refusal: Refusal; retryAfterMs: number } | null => {
+    const verdict = guard.bucket.take(who);
+    if (!verdict.allowed) {
+      refusedRateLimited += 1;
+      const seconds = Math.max(1, Math.round(verdict.retryAfterMs / 1_000));
+      return {
+        refusal: refusal(
+          429,
+          'rate-limited',
+          `Too many requests from this client. Try again in ${seconds} second${seconds === 1 ? '' : 's'}.`,
+          { retryAfterMs: verdict.retryAfterMs },
+        ),
+        retryAfterMs: verdict.retryAfterMs,
+      };
+    }
+    if (!clientKeyAccepted(config.clientKey, request.headers['x-passport-key'])) {
+      refusedUnauthorised += 1;
+      return {
+        refusal: refusal(
+          401,
+          'unauthorised',
+          'This balancer requires a client key. Send it in an X-Passport-Key header.',
+        ),
+        retryAfterMs: 0,
+      };
+    }
+    return null;
+  };
+
   const server = createServer((request, response) => {
+    /** Set once a spend request holds an admission slot; released at the end. */
+    let releaseSlot: (() => void) | null = null;
     void (async () => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname;
 
@@ -1630,6 +1813,43 @@ async function main(): Promise<void> {
         response.writeHead(204, corsHeaders(request));
         response.end();
         return;
+      }
+
+      /* Read-only routes are deliberately NOT guarded. `/wallet-status` is the
+         readiness probe every client polls before every send and `/status` is
+         what both watchdogs read; limiting either would break the things that
+         watch this service while costing an abuser nothing, because neither one
+         spends a Speck. */
+      const guard = request.method === 'POST' ? spendGuards[path] : undefined;
+      if (guard) {
+        const who = clientAddress({
+          socketAddress: request.socket.remoteAddress,
+          forwardedFor: request.headers['x-forwarded-for'],
+          trustedProxies: config.trustedProxies,
+        });
+        const refused = guardSpend(request, guard, who);
+        if (refused) {
+          refuseSpend(request, response, guard.prefix, who, refused.refusal, refused.retryAfterMs);
+          return;
+        }
+        if (!spendAdmission.enter()) {
+          refusedQueueFull += 1;
+          refuseSpend(
+            request,
+            response,
+            guard.prefix,
+            who,
+            refusal(
+              429,
+              'queue-full',
+              `The balancer is already handling ${spendAdmission.max} sponsorship request${spendAdmission.max === 1 ? '' : 's'}. Try again shortly.`,
+              { retryAfterMs: 5_000 },
+            ),
+            5_000,
+          );
+          return;
+        }
+        releaseSlot = () => spendAdmission.leave();
       }
 
       if (request.method === 'GET' && path === '/wallet-status') {
@@ -1722,14 +1942,22 @@ async function main(): Promise<void> {
         message:
           'Routes: GET /status, GET /wallet-status, POST /balance-only, POST /register-alias, POST /fund-account.',
       });
-    })().catch((cause) => {
-      console.error('[http] handler failed', cause);
-      try {
-        respond(request, response, 500, { error: 'internal', message: 'Internal error.' });
-      } catch {
-        response.destroy();
-      }
-    });
+    })()
+      .catch((cause) => {
+        console.error('[http] handler failed', cause);
+        try {
+          respond(request, response, 500, { error: 'internal', message: 'Internal error.' });
+        } catch {
+          response.destroy();
+        }
+      })
+      /* The admission slot is released when the request is DONE, however it
+         ended — served, refused, or thrown. Held out here rather than in a
+         `try` around the routes so that one slot covers the whole of a
+         request's life, including the minutes an activation grant spends
+         proving, which is precisely the window a flood would otherwise stack
+         behind. */
+      .finally(() => releaseSlot?.());
   });
 
   server.listen(config.port, config.host, () => {
