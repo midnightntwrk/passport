@@ -384,7 +384,13 @@ export default function HomeScreen(props: HomeScreenProps) {
       icon: row.icon,
       label: identities[index].symbol,
       value: row.value,
+      /* The line beneath: what kind of thing this is, or the shortened colour
+         for one nothing can name. */
       unit: identities[index].name,
+      /* Which of those two it is, so a WORD is set like a label and DATA is
+         set like data. The Assets tab has made this distinction since it was
+         written; the strip had not, and upper-cased a hex tail. */
+      unitIsColour: !identities[index].known,
     }))
   }, [account])
 
@@ -666,18 +672,44 @@ export default function HomeScreen(props: HomeScreenProps) {
             machinery, and fees are the sponsor's. */}
         {account ? (
           <>
-            <div className="mnhome-assets">
-              {visibleTokens.map((row) => (
-                <BalanceCard
-                  key={row.key}
-                  icon={row.icon}
-                  label={row.label}
-                  value={row.value}
-                  unit={row.unit}
-                  loading={balancesLoading}
-                />
-              ))}
-            </div>
+            {/* LINE ITEMS, NOT CARDS (2026/09/01), and the same line items the
+                Assets tab uses. "We show them like line items, so it's a
+                table" was said of the Assets page, but the strip here was the
+                same two-up grid of boxes — and a token that rendered as a card
+                on one tab and a row on the other would read as two different
+                facts about the same money.
+
+                The column headings are for assistive technology only: this
+                strip has never had a visible heading of its own, and giving it
+                one now to label two columns would be furniture. */}
+            <table className="mnhome-assets">
+              <caption className="mnhome-sr">
+                What your Passport holds, and how much of each.
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="mnhome-sr">
+                    Token
+                  </th>
+                  <th scope="col" className="mnhome-sr">
+                    Balance
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleTokens.map((row) => (
+                  <TokenLine
+                    key={row.key}
+                    icon={row.icon}
+                    label={row.label}
+                    value={row.value}
+                    unit={row.unit}
+                    unitIsColour={row.unitIsColour}
+                    loading={balancesLoading}
+                  />
+                ))}
+              </tbody>
+            </table>
             {/* THE CAP. An account with a dozen colours in it used to render a
                 dozen cards, pushing the name, the account, and the apps off the
                 bottom of a phone — "that's not a scalable way to display them",
@@ -953,27 +985,57 @@ export default function HomeScreen(props: HomeScreenProps) {
   )
 }
 
-interface BalanceCardProps {
+interface TokenLineProps {
   icon: ReactNode
   label: string
   value: string | null
   unit: string
+  /** True when `unit` is a shortened colour rather than a word about the row. */
+  unitIsColour: boolean
   loading: boolean
 }
 
-function BalanceCard(props: BalanceCardProps) {
-  const { icon, label, value, unit, loading } = props
+/**
+ * ONE TOKEN, ONE LINE — the same row the Assets tab draws.
+ *
+ * The name on the left with its subtitle under it, the balance hard right in
+ * tabular figures. Right-aligned and tabular together are what let a column of
+ * balances be COMPARED at a glance: the digits land on the same grid, so the
+ * eye reads magnitude off the length of the number rather than off the words
+ * beside it.
+ *
+ * The `<th scope="row">` is not decoration. It is what makes a screen reader
+ * announce "NIGHT, 0.002" rather than "0.002" on its own.
+ */
+function TokenLine(props: TokenLineProps) {
+  const { icon, label, value, unit, unitIsColour, loading } = props
   const unknown = value === null
   return (
-    <article className="mnhome-card">
-      <p className="mnhome-card-head">
-        {icon}
-        <span className="mnhome-micro">{label}</span>
-      </p>
-      <p className={`mnhome-card-value${unknown ? ' mnhome-card-value-muted' : ''}`}>
+    <tr className="mnhome-token-row">
+      <th scope="row" className="mnhome-token-name">
+        <span className="mnhome-token-name-inner">
+          <span className="mnhome-token-icon" aria-hidden="true">
+            {icon}
+          </span>
+          <span className="mnhome-token-text">
+            <span className="mnhome-token-label">{label}</span>
+            <span
+              className={
+                unitIsColour ? 'mnhome-token-unit mnhome-token-unit-colour' : 'mnhome-token-unit'
+              }
+              /* A colour is an identifier, not prose. Marked so a browser's
+                 page translation leaves it alone — a "translated" hex string
+                 would be a different colour. */
+              {...(unitIsColour ? { translate: 'no' as const } : {})}
+            >
+              {unit}
+            </span>
+          </span>
+        </span>
+      </th>
+      <td className={`mnhome-token-value${unknown ? ' mnhome-token-value-muted' : ''}`}>
         {unknown ? (loading ? 'Syncing' : 'Unavailable') : value}
-      </p>
-      <p className="mnhome-card-unit">{unknown ? ' ' : unit}</p>
-    </article>
+      </td>
+    </tr>
   )
 }

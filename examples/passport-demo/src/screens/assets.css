@@ -8,11 +8,11 @@
    change of theme, and a screen arriving with a look of its own would make the
    bar feel like three apps rather than one.
 
-   The card itself is Home's balance card, down to the container query that
-   sizes a figure against the card it has to fit inside. That is not
+   The token TABLE is Home's token table, row for row, and that is not
    copy-paste for its own sake: the same holding is shown on both screens, and
    a token that rendered one way on Home and another way here would read as
-   two different facts about the same money. */
+   two different facts about the same money. The card below it is now the NFT's
+   alone — an item is a thing to look at rather than a figure to compare. */
 
 .mnassets-screen {
   min-height: 100svh;
@@ -209,6 +209,132 @@
   gap: 12px;
 }
 
+/* --- Token table --------------------------------------------------------- */
+
+/* LINE ITEMS (2026/09/01). Tokens used to be cards on this grid, two up. Six
+   tokens were then three screenfuls of boxes on a phone, and a card gives a
+   number a shadow rather than a neighbour to be compared against. A table
+   gives it the neighbour: one row per token, the figure hard right, the digits
+   on a shared grid.
+
+   No visible column headings. The shelf heading a few pixels above already
+   says what this is, and "Token | Balance" over two columns is the kind of
+   furniture this change exists to remove — so the headings are in the
+   accessibility tree only (`.mnassets-sr`), where a two-cell row genuinely
+   needs them. */
+.mnassets-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* Present to a screen reader, absent to the eye. `display: none` and
+   `visibility: hidden` both take it out of the accessibility tree too, which
+   is the one thing it is here for. */
+.mnassets-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mnassets-row > * {
+  padding: 13px 0;
+  border-bottom: var(--mn-hairline) solid var(--mn-border-hairline);
+  vertical-align: middle;
+}
+/* The last hairline would sit directly above the disclosure or the notice and
+   read as that control's own top edge. */
+.mnassets-table tbody tr:last-child > * { border-bottom: 0; }
+
+.mnassets-row-name {
+  /* A `<th>` is bold and centred by default; this one is a row label, not a
+     heading in the visual sense. */
+  text-align: left;
+  font-weight: 400;
+}
+.mnassets-row-name-inner {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+/* A quiet disc rather than a bare glyph: at 360 px the icon is the only thing
+   holding the left edge of the column, and a floating 14 px shape does not
+   hold it. */
+.mnassets-row-icon {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-muted);
+  background: var(--mn-surface-card);
+}
+.mnassets-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+/* Sentence case, NOT upper. The ticker is written the way its issuer writes it
+   — "mUSD" is not "MUSD" — and the disambiguated form `mUSD · a1b2…` shouted
+   in caps reads as an error code. */
+.mnassets-row-label {
+  color: var(--mn-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mnassets-row-unit {
+  color: var(--mn-text-secondary);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A COLOUR IS NOT A LABEL. "Stablecoin" is a word about the row and is set
+   like one; a shortened colour is the row's only distinguishing DATA, and
+   upper-casing it both shouts and makes two similar values harder to tell
+   apart at a glance. Monospaced, in its own case, with the tracking off. */
+.mnassets-row-unit-colour {
+  font-family: var(--mn-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* The figure column takes only the width its longest number needs, so the
+   name column keeps everything else and truncates last. `width: 1%` is the
+   table idiom for shrink-to-fit. */
+.mnassets-row-value {
+  width: 1%;
+  padding-left: 14px;
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-display);
+  font-size: 15px;
+  font-variant-numeric: var(--mn-numeric);
+  font-weight: 700;
+  letter-spacing: -.015em;
+  text-align: right;
+  white-space: nowrap;
+}
+.mnassets-row-value-muted {
+  color: var(--mn-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* --- Card ---------------------------------------------------------------- */
 
 .mnassets-card {
@@ -273,10 +399,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.mnassets-card-value-muted {
-  color: var(--mn-text-muted);
-  font-size: clamp(14px, 9cqi, 18px);
 }
 /* "1 of 1" is a statement, not a balance, so it is set at label weight rather
    than at the size a figure gets. */

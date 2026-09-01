@@ -34,11 +34,15 @@ import './assets.css'
  * Passport user is never shown. Nothing on this screen prints an address, a
  * colour in full, or the word DUST.
  *
- * WHY TWO SHELVES
- * ---------------
+ * WHY TWO SHELVES, AND WHY THEY LOOK DIFFERENT
+ * --------------------------------------------
  * A quantity you spend down and a thing you either have or do not are read
  * differently, and a one-of-a-kind item listed among balances looks like a
- * rounding error. `classifyHolding` in `lib/colour.ts` is the single authority
+ * rounding error. That difference is now in the FORM as well as the section:
+ * tokens are a table of line items and items are cards. "The way we show
+ * assets on the assets page is not like cards. We show them like line items,
+ * so it's a table, and then NFTs can be shown as cards" (2026/09/01, said
+ * twice). `classifyHolding` in `lib/colour.ts` is the single authority
  * on which is which, so Home's cards, this screen, and the Send picker cannot
  * disagree about the same holding. The NFTs section is a real section with an
  * honest empty state rather than a hidden one: a person who has been told
@@ -233,19 +237,49 @@ export default function AssetsScreen(props: AssetsScreenProps) {
               <span className="mnassets-count">{tokens.length}</span>
             </div>
 
-            <div className="mnassets-grid">
-              {visibleTokens.map((row) => (
-                <AssetCard
-                  key={row.key}
-                  icon={row.icon}
-                  label={row.label}
-                  value={row.value}
-                  unit={row.unit}
-                  unitIsColour={row.unitIsColour}
-                  loading={balancesLoading}
-                />
-              ))}
-            </div>
+            {/* LINE ITEMS, NOT CARDS (2026/09/01). "The way we show assets on
+                the assets page is not like cards. We show them like line
+                items, so it's a table, and then NFTs can be shown as cards" —
+                said twice. A balance is one number per name, read down a
+                column; a card gives each of them a box, a shadow, and half a
+                screen, so six tokens became three scrolls of furniture. NFTs
+                keep their cards below, because an item is a thing to look at
+                rather than a figure to compare.
+
+                A REAL `<table>`, not a stack of divs that looks like one. The
+                column headings are for assistive technology only: the shelf
+                heading above already says these are tokens, and a visible
+                "Token | Balance" row would be furniture of the kind this
+                change is removing — but a screen reader announcing a bare
+                two-cell row has nothing to announce it AS. */}
+            <table className="mnassets-table">
+              <caption className="mnassets-sr">
+                Tokens your Passport holds, and how much of each.
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="mnassets-sr">
+                    Token
+                  </th>
+                  <th scope="col" className="mnassets-sr">
+                    Balance
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleTokens.map((row) => (
+                  <TokenLine
+                    key={row.key}
+                    icon={row.icon}
+                    label={row.label}
+                    value={row.value}
+                    unit={row.unit}
+                    unitIsColour={row.unitIsColour}
+                    loading={balancesLoading}
+                  />
+                ))}
+              </tbody>
+            </table>
 
             {/* THE CAP, exactly as Home keeps it: five, then the rest on
                 request and in place. A shelf that grew without bound would
@@ -287,15 +321,13 @@ export default function AssetsScreen(props: AssetsScreenProps) {
             {nfts.length > 0 ? (
               <div className="mnassets-grid">
                 {nfts.map((row) => (
-                  <AssetCard
+                  <NftCard
                     key={row.key}
                     icon={row.icon}
                     label={row.label}
-                    value={row.value}
+                    value={row.value ?? ''}
                     unit={row.unit}
                     unitIsColour={row.unitIsColour}
-                    loading={balancesLoading}
-                    item
                   />
                 ))}
               </div>
@@ -327,7 +359,7 @@ export default function AssetsScreen(props: AssetsScreenProps) {
   )
 }
 
-interface AssetCardProps {
+interface TokenLineProps {
   icon: ReactNode
   label: string
   value: string | null
@@ -335,33 +367,89 @@ interface AssetCardProps {
   /** True when `unit` is a shortened colour rather than a word about the row. */
   unitIsColour: boolean
   loading: boolean
-  /** Items get the accent-tinted card, so the two shelves read apart at a glance. */
-  item?: boolean
 }
 
-function AssetCard(props: AssetCardProps) {
-  const { icon, label, value, unit, unitIsColour, loading, item = false } = props
+/**
+ * ONE TOKEN, ONE LINE.
+ *
+ * The name on the left with its subtitle under it, the balance hard right in
+ * tabular figures. Right-aligned and tabular together are what let a column of
+ * balances be COMPARED at a glance — the digits land on the same grid, so the
+ * eye reads magnitude off the length of the number rather than off the words
+ * beside it. A left-aligned or proportional column is a list of strings that
+ * happen to be numeric.
+ *
+ * The `<th scope="row">` is not decoration: it is what makes a screen reader
+ * announce "NIGHT, 0.002" rather than "0.002" on its own.
+ */
+function TokenLine(props: TokenLineProps) {
+  const { icon, label, value, unit, unitIsColour, loading } = props
   const unknown = value === null
   return (
-    <article className={item ? 'mnassets-card mnassets-card-item' : 'mnassets-card'}>
+    <tr className="mnassets-row">
+      <th scope="row" className="mnassets-row-name">
+        <span className="mnassets-row-name-inner">
+          <span className="mnassets-row-icon" aria-hidden="true">
+            {icon}
+          </span>
+          <span className="mnassets-row-text">
+            <span className="mnassets-row-label">{label}</span>
+            <span
+              className={
+                unitIsColour ? 'mnassets-row-unit mnassets-row-unit-colour' : 'mnassets-row-unit'
+              }
+              /* A colour is an identifier, not prose. Marked so a browser's
+                 page translation leaves it alone — a "translated" hex string
+                 would be a different colour, and this line is the only thing
+                 telling two otherwise identical rows apart. */
+              {...(unitIsColour ? { translate: 'no' as const } : {})}
+            >
+              {unit}
+            </span>
+          </span>
+        </span>
+      </th>
+      <td className={`mnassets-row-value${unknown ? ' mnassets-row-value-muted' : ''}`}>
+        {unknown ? (loading ? 'Syncing' : 'Unavailable') : value}
+      </td>
+    </tr>
+  )
+}
+
+interface NftCardProps {
+  icon: ReactNode
+  label: string
+  value: string
+  unit: string
+  /** True when `unit` is a shortened colour rather than a word about the row. */
+  unitIsColour: boolean
+}
+
+/**
+ * ONE ITEM, ONE CARD — the half of the shelf that stayed a card, deliberately.
+ *
+ * A balance is a figure to compare against the figure above it, which is what
+ * the table is for. An item is not a figure at all: there is exactly one of it,
+ * "1 of 1" is the whole of its quantity, and what a person wants from it is to
+ * SEE the thing. A card gives it the surface to be seen on, and it is the only
+ * thing on this screen that gets one.
+ */
+function NftCard(props: NftCardProps) {
+  const { icon, label, value, unit, unitIsColour } = props
+  return (
+    <article className="mnassets-card mnassets-card-item">
       <p className="mnassets-card-head">
         {icon}
         <span className="mnassets-micro">{label}</span>
       </p>
-      <p className={`mnassets-card-value${unknown ? ' mnassets-card-value-muted' : ''}`}>
-        {unknown ? (loading ? 'Syncing' : 'Unavailable') : value}
-      </p>
+      <p className="mnassets-card-value">{value}</p>
       <p
         className={
           unitIsColour ? 'mnassets-card-unit mnassets-card-unit-colour' : 'mnassets-card-unit'
         }
-        /* A colour is an identifier, not prose. Marked so a browser's page
-           translation leaves it alone — a "translated" hex string would be a
-           different colour, and this line is the only thing telling two
-           otherwise identical rows apart. */
         {...(unitIsColour ? { translate: 'no' as const } : {})}
       >
-        {unknown ? ' ' : unit}
+        {unit}
       </p>
     </article>
   )

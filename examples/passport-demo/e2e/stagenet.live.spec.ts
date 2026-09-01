@@ -254,19 +254,19 @@ test.describe('@live the account model on stagenet', () => {
     /* The stablecoin half: PRESENT OR PENDING, never a fixed figure. Its leg
        has been failing on stagenet, which `classifyFundAccountAnswer` reads as
        a retry rather than a result, so the account can honestly show an mUSD
-       card at zero. What is asserted is that Passport says which of the two it
+       line at zero. What is asserted is that Passport says which of the two it
        is — and never that 100 mUSD landed when it did not. */
-    const stablecoinCard = page.locator('.mnhome-card', { hasText: /stablecoin/i });
-    if ((await stablecoinCard.count()) > 0) {
-      const shown = (await stablecoinCard.first().locator('.mnhome-card-value').innerText()).trim();
-      // A number the ledger gave, or the card's own honest "not read yet".
+    const stablecoinRow = page.locator('.mnhome-token-row', { hasText: /stablecoin/i });
+    if ((await stablecoinRow.count()) > 0) {
+      const shown = (await stablecoinRow.first().locator('.mnhome-token-value').innerText()).trim();
+      // A number the ledger gave, or the row's own honest "not read yet".
       expect(shown).toMatch(/^([0-9]+(\.[0-9]+)?|Syncing|Unavailable)$/);
-      console.log(`[live] activation: NIGHT ${GRANT_NIGHT}, mUSD card shows ${shown}`);
+      console.log(`[live] activation: NIGHT ${GRANT_NIGHT}, mUSD line shows ${shown}`);
     } else {
       const text = await page.locator('body').innerText();
       expect(
         /pending|awaiting|opening balance/i.test(text),
-        `no stablecoin card and no pending sentence:\n${text.slice(0, 800)}`,
+        `no stablecoin line and no pending sentence:\n${text.slice(0, 800)}`,
       ).toBe(true);
       console.log(`[live] activation: NIGHT ${GRANT_NIGHT}, mUSD pending`);
     }
@@ -602,22 +602,22 @@ function sameElidedAddress(left: ElidedAddress, right: ElidedAddress): boolean {
 /**
  * The account's NIGHT balance as Home shows it, as a number.
  *
- * Read off the rendered card rather than out of the contract, deliberately: a
+ * Read off the rendered row rather than out of the contract, deliberately: a
  * balance the user cannot see is not a balance this demo has delivered, and
  * reading the ledger directly would let the screen be wrong while the test
- * passed. `NaN` while the card says "Syncing" or "Unavailable", which is what
+ * passed. `NaN` while the row says "Syncing" or "Unavailable", which is what
  * makes `expect.poll` wait rather than conclude.
  */
 async function nightCardValue(page: Page): Promise<string> {
-  const card = page.locator('.mnhome-card', { hasText: 'native token' }).first();
+  const card = page.locator('.mnhome-token-row', { hasText: 'native token' }).first();
   if ((await card.count()) === 0) return '';
-  return (await card.locator('.mnhome-card-value').innerText()).trim();
+  return (await card.locator('.mnhome-token-value').innerText()).trim();
 }
 
 /**
  * The stablecoin card's figure, after asking Home to re-read the contract.
  *
- * Read off the rendered card for the same reason {@link nightCardValue} is: a
+ * Read off the rendered row for the same reason {@link nightCardValue} is: a
  * balance the user cannot see is not a balance this demo has delivered. The
  * refresh is part of the read because the account's balances are pulled on
  * demand, and a click on a control that is momentarily gone is not a failure
@@ -629,9 +629,9 @@ async function refreshedStablecoinValue(page: Page): Promise<string> {
     .click({ timeout: 10_000 })
     .catch(() => undefined);
   await page.waitForTimeout(2_000);
-  const card = page.locator('.mnhome-card', { hasText: /stablecoin/i }).first();
+  const card = page.locator('.mnhome-token-row', { hasText: /stablecoin/i }).first();
   if ((await card.count()) === 0) return '';
-  return (await card.locator('.mnhome-card-value').innerText()).trim();
+  return (await card.locator('.mnhome-token-value').innerText()).trim();
 }
 
 /**
@@ -743,8 +743,8 @@ async function waitForContractCall(
 }
 
 async function readNightBalance(page: Page): Promise<number> {
-  const card = page.locator('.mnhome-card', { hasText: 'native token' }).first();
+  const card = page.locator('.mnhome-token-row', { hasText: 'native token' }).first();
   if ((await card.count()) === 0) return Number.NaN;
-  const shown = (await card.locator('.mnhome-card-value').innerText()).trim();
+  const shown = (await card.locator('.mnhome-token-value').innerText()).trim();
   return Number.parseFloat(shown);
 }
