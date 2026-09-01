@@ -147,9 +147,16 @@ async function networkNavigation(request) {
 }
 
 /**
- * `/assets/**` only. Every URL there is content-hashed by the build, so its
- * bytes can never change: served from the cache with no revalidation at all,
- * and fetched exactly once per build.
+ * `/assets/**`, `/zk/**`, and `/zk-params/**`: served from the cache with no
+ * revalidation at all, and fetched exactly once per build.
+ *
+ * `/assets/**` earns that by being content-hashed — a given URL's bytes can
+ * never change. The ZK keys do NOT carry a hash in their URL, so they earn it
+ * a different way: the cache these land in is named for `BUILD_ID`, and
+ * `activate` above deletes every cache that is not the current build's. A
+ * contract recompile ships a new build, which is a new id, which is a new
+ * cache — the old keys are dropped rather than pinned. Immutability holds
+ * WITHIN a build, which is exactly the lifetime of the cache holding them.
  */
 async function immutableAsset(request) {
   const cached = await caches.match(request);
@@ -211,7 +218,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname.startsWith('/assets/')) {
+  // The proving and verifier keys are the largest thing this origin serves and
+  // were, until this branch existed, cached by nothing at all: `wasmProver.ts`
+  // fetches them with `destination === ''` and their filenames (`.prover`,
+  // `.verifier`, `.bzkir`) match no extension in the runtime rule below, so
+  // both tests failed and every one fell through uncached. `dist/zk` is 99 MB
+  // and `dist/zk-params` is 45 MB; a first shielded withdrawal pulls roughly
+  // 54 MB of it, and the prover's in-memory Map dies with the tab — so that
+  // download was paid again on every reload. They are immutable for a build
+  // (see `immutableAsset`), so they take the same path `/assets/**` takes.
+  if (
+    url.pathname.startsWith('/assets/') ||
+    url.pathname.startsWith('/zk/') ||
+    url.pathname.startsWith('/zk-params/')
+  ) {
     event.respondWith(immutableAsset(request));
     return;
   }

@@ -136,6 +136,18 @@ includes(sourceWorker, '.then(() => self.skipWaiting())', 'a new worker activate
 includes(sourceWorker, '.then(() => self.clients.claim())', 'an activated worker claims the open page');
 includes(sourceWorker, "new Request(asset, { cache: 'reload' })", 'the shell is precached from the network, not the HTTP cache');
 includes(sourceWorker, "url.pathname.startsWith('/assets/')", 'content-hashed assets are served cache-first');
+/* The ZK keys are 144 MB of the deploy and the one family the runtime rule
+   below cannot reach: `wasmProver.ts` fetches them with an empty
+   `request.destination` and `.prover`/`.verifier` match no cacheable
+   extension, so before this branch existed they were re-downloaded every
+   session. They share `/assets/**`'s cache-first path, which is sound because
+   the cache is named for the build id and `activate` drops every other one. */
+includes(sourceWorker, "url.pathname.startsWith('/zk/')", 'proving keys are served cache-first');
+includes(
+  sourceWorker,
+  "url.pathname.startsWith('/zk-params/')",
+  'shared proving parameters are served cache-first',
+);
 includes(sourceWorker, "'/midnight-wordmark.svg'", 'onboarding art is a precached shell asset');
 includes(sourceWorker, "url.origin !== self.location.origin", 'cross-origin requests bypass caches');
 includes(sourceWorker, "url.pathname.startsWith('/api/')", 'same-origin API requests bypass caches');
