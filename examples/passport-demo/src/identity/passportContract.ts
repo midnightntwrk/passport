@@ -60,7 +60,6 @@
  */
 
 
-import { split } from '../../../../experiments/account-custody-prototype/src/wallet/shamir.js';
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
 import { sponsorFeeRefusal, sponsorReadiness } from '../lib/sponsor.js';
 import {
@@ -111,6 +110,18 @@ const LEDGER_CONFIRM_INTERVAL_MS = 500;
 /* -------------------------------------------------------------------------- */
 /* Secret derivation — one passkey ceremony, two domain-separated secrets     */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Three independent 32-byte values for the contract's public recovery slots.
+ *
+ * They are random, unrelated to each other, and unrelated to the recovery
+ * secret, so combining any two of them yields noise rather than a secret. See
+ * the note at the deploy for why the slots are filled this way.
+ */
+export function recoverySlotFillers(): [Uint8Array, Uint8Array, Uint8Array] {
+  const slot = (): Uint8Array => crypto.getRandomValues(new Uint8Array(32));
+  return [slot(), slot(), slot()];
+}
 
 /**
  * The contract needs TWO independent 32-byte secrets: the device secret (the
@@ -508,12 +519,27 @@ export async function submitPassportContract(
       compiledContractFor('account', 'passport-account', accountWitnesses()),
     ]);
 
-    /* The recovery secret is split 2-of-3 and the share VALUES go into public
-       ledger state. TODO(PVSS): plain Shamir shares in public state mean anyone
-       holding two of them can reconstruct the secret — this is a placeholder
-       for a publicly verifiable scheme, and it is called out in the prototype's
-       own `shamir.ts` for the same reason. */
-    const shares = split(recoverySecret, 2, 3);
+    /* THE THREE RECOVERY SLOTS ARE DELIBERATELY NOT SHARES OF ANYTHING.
+
+       The contract's constructor takes three Bytes<32> and discloses them into
+       public ledger state as `recovery_shares`. Until 2026/09/01 this code put
+       real 2-of-3 Shamir shares of the recovery secret there — and since the
+       `recover` circuit is live in the deployed contract and its prover key is
+       served by this app, anyone who read two shares off the indexer could
+       reconstruct the secret, revoke the owner's device, and take the account.
+       Every account deployed with real shares is to be treated as
+       compromised; on stagenet that is test value only, but it is exactly the
+       class of mistake this project has been told not to make.
+
+       Nothing in this application calls `recover` (verified: zero call sites).
+       So the slots now hold three independent random values that reconstruct
+       nothing, whichever two are combined. The recovery COMMITMENT is still
+       derived from the real secret, which only the passkey can re-derive
+       (`derivePassportContractSecrets`), so a future recovery scheme keyed on
+       that secret stays possible — it will need a contract change to carry
+       publicly verifiable shares rather than plain ones, and a redeploy.
+       {@link recoverySlotFillers} is the single place this is decided. */
+    const [slot1, slot2, slot3] = recoverySlotFillers();
     const deviceCommitment = accountModule.pureCircuits.derive_device_commitment(deviceSecret);
 
     onProgress?.({ phase: 'deploying' });
@@ -533,9 +559,9 @@ export async function submitPassportContract(
         args: [
           deviceCommitment,
           accountModule.pureCircuits.derive_recovery_commitment(recoverySecret),
-          shares[0].value,
-          shares[1].value,
-          shares[2].value,
+          slot1,
+          slot2,
+          slot3,
         ],
       } as never)) as unknown as UnprovenDeployTxData;
       /* The chain cannot hand back a different one — the address IS the hash of
