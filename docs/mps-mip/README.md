@@ -78,15 +78,15 @@ together; the upstream copies are canonical.
   derivation, the single session operation, the two-phase recovery
   gate with its pending record and veto window, the off-ledger
   transport and roster record, and the REC invariant family.
-  Remaining tags: [CRYPTO-MEMO] the commissioned multi-session review
+  Remaining tag: [CRYPTO-MEMO] the commissioned multi-session review
   (sent, response pending; the published scheme's model is
   single-session, so the freshness rules are our own normative
-  addition) and [EXP] the on-node half of the conformance evidence:
-  the whole contract tranche is implemented on the reference
-  implementation (`contract/`) and exercised in the runtime
-  simulator, veto window included, and the run against a
-  devnet-matching network is outstanding. The upstream recovery slot
-  remains unclaimed.
+  addition). The contract tranche is implemented on the reference
+  implementation (`contract/`) and evidenced twice: the full
+  behaviour matrix in the runtime simulator, and the lifecycle end to
+  end on a local network (two-wave deploy, session, veto window on
+  real block time, cancel, finalisation, successor control). The
+  upstream recovery slot remains unclaimed.
 
 ## Process
 
