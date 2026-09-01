@@ -416,28 +416,34 @@ nonce and the round counter (d).
    Nothing after this step requires `s`, so `s` never lives across
    the veto window (REC-6).
 4. **Submission**: the recover circuit verifies knowledge of `s`
-   against the stored commitment. It takes the successor device
-   public key and the successor recovery commitment as public
-   arguments, witnesses `s`, recomputes the gate commitment under
-   `midnight:account:recovery:commit:v1`, and asserts equality with
-   the stored value. The circuit MUST validate the successor device
-   key: a key that is off-curve, outside the prime-order subgroup, or
-   the identity element MUST be rejected, because this is the one
-   enrolment path with no active device to answer for the key. The
-   proof MUST bind the successor device key, the successor recovery
-   commitment, the device epoch, and the current authorisation nonce,
-   so that a proof can neither be replayed to enrol a different
-   successor nor resubmitted after a cancel (a cancel is seam-gated
-   and advances the nonce). Following MIP-0013, the gate is a
-   dedicated circuit per successor device key scheme rather than an
-   in-circuit conditional over schemes; guardian key profiles
-   (section 3) do not multiply circuits, because the guardian secret
-   never enters a proof. Submission records the pending recovery
-   (section 8). A submission arriving while another recovery is
-   pending MUST be rejected: the pending slot is cleared only by a
-   cancel or by finalisation, so a submission can neither silently
-   reset a running window nor displace a competitor's pending
-   attempt.
+   against the stored commitment. It takes the successor recovery
+   commitment as a public argument, witnesses `s`, recomputes the
+   gate commitment under `midnight:account:recovery:commit:v1`, and
+   asserts equality with the stored value. The successor device key
+   MUST be validated: only a non-identity element of the prime-order
+   subgroup may be enrolled, because this is the one enrolment path
+   with no active device to answer for the key. The reference arm
+   achieves this by taking the successor private scalar as a private
+   input and deriving the key in-circuit, which yields a valid
+   element by construction and makes the submission double as a
+   proof of possession: a key nobody can sign for cannot be
+   enrolled. A consequence is that a threshold committee's joint
+   key, whose scalar no single party holds, enters a recovered
+   account through the ordinary device-addition path afterwards
+   rather than as the recovery successor. The proof MUST bind the
+   successor device key, the successor recovery commitment, the
+   device epoch, and the current authorisation nonce, so that a
+   proof can neither be replayed to enrol a different successor nor
+   resubmitted after a cancel (a cancel is seam-gated and advances
+   the nonce). Following MIP-0013, the gate is a dedicated circuit
+   per successor device key scheme rather than an in-circuit
+   conditional over schemes; guardian key profiles (section 3) do
+   not multiply circuits, because the guardian secret never enters a
+   proof. Submission records the pending recovery (section 8). A
+   submission arriving while another recovery is pending MUST be
+   rejected: the pending slot is cleared only by a cancel or by
+   finalisation, so a submission can neither silently reset a
+   running window nor displace a competitor's pending attempt.
 5. **Veto window**: finalisation MUST NOT occur until a block-time
    bound has elapsed from submission, during which an enrolled device
    MAY cancel the pending recovery. In the total-loss case there is,
@@ -543,7 +549,7 @@ submission and finalisation:
 | `phi` | bounded vector of field elements | public shares; length per the formula below |
 | viewing-key wrap | authenticated ciphertext | `vk` under the wrap key of section 2 |
 | session identifier | 32 bytes | distinct per session (REC-4) |
-| pending recovery | record, present at most once | successor device key, successor recovery commitment, and the earliest finalisation time; written by submission, cleared by cancel or finalisation (section 6) |
+| pending recovery | record, present at most once | successor device key (or its derived entry at the post-bump epoch), successor recovery commitment, and the earliest finalisation time; written by submission, cleared by cancel or finalisation (section 6) |
 
 For a roster of `n` guardians with reconstruction threshold `t+1`,
 the published vector's length is `n - t`. The underlying scheme
@@ -754,15 +760,18 @@ client obligation is load-bearing.
       registered under the MPS-0027 registry once it ratifies.
 - [ ] Reference implementation of the session and recovery operations
       in the custody reference contract, with conformance suites
-      passing on a devnet-matching network. [EXP: not met in the
-      reference contract, which carries no recovery surface; the
-      session operation and gate are exercised only in the earlier
-      prototype, behind a hash-preimage placeholder for the seam. See
+      passing on a devnet-matching network. [EXP: implemented on the
+      reference contract and exercised in the runtime simulator; the
+      devnet-matching network run is the outstanding half. See
       Implementation.]
 - [ ] Veto window and cancel path implemented and exercised end to end
-      on a local network. [EXP: not met in either codebase]
+      on a local network. [EXP: implemented; exercised in the
+      simulator under explicit wall-clock control; the local-network
+      run is the outstanding half]
 - [ ] Viewing-key wrap published, recovered, and round-tripped through
-      the artefact set. [EXP: not met in either codebase]
+      the artefact set. [EXP: implemented and round-tripped through
+      the ledger cell in the simulator; the local-network run is the
+      outstanding half]
 - [ ] Liveness attestation and transport messages implemented by at
       least one wallet provider.
 - [ ] Community review period completed.
@@ -770,15 +779,14 @@ client obligation is load-bearing.
 ### Implementation Plan
 
 The specification stacks on the MIP-0012 and MIP-0013 reference
-implementation, which carries the authorisation seam and the device
-epoch state the recovery gate bumps, but no recovery surface of its
-own (see Implementation). Remaining work divides into three
-independent tranches that can proceed in parallel:
+implementation, which now carries the whole contract tranche (see
+Implementation). Remaining work divides into three independent
+tranches that can proceed in parallel:
 
-1. **Contract**: the session operation and the recovery gate on the
-   MIP-0013 seam; the pending record, veto window, and cancel path;
-   the viewing-key wrap as contract state; the version tag of
-   section 10.
+1. **Contract**: landed (the session operation and two-phase gate on
+   the MIP-0013 seam, the pending record, veto window, and cancel
+   path, the wrap cell, and the version tag); the outstanding item is
+   the conformance evidence on a devnet-matching network.
 2. **Cryptographic**: the commissioned memo, and the normative
    constructions it fixes in sections 2 and 4.
 3. **Wallet**: transport messages, liveness attestation, the roster
@@ -951,11 +959,23 @@ Two contract artefacts exist, and this section names them separately,
 because the gap between them is what Path to Active tracks.
 
 **The reference implementation** (`contract/` in the authoring
-repository) implements MIP-0012 and MIP-0013 and is the codebase the
-contract tranche of the Implementation Plan lands on. It carries the
-authorisation seam and the device epoch state the recovery gate
-bumps, and no recovery surface of its own: no session operation, no
-gate, no pending record, no wrap, and no version tag.
+repository) implements MIP-0012 and MIP-0013 and now carries this
+specification's whole contract tranche: the artefact-set ledger cells
+and version tag, the seam-gated session operation with the freshness
+backstops, the unused-slot asserts, and the pending-recovery
+rejection, the two-phase gate with the possession-based successor
+validation and the explicit epoch and nonce binding, the seam-gated
+cancel, the permissionless finalisation behind the block-time window,
+and the wrap cell. The whole behaviour matrix of Testing, the veto
+window under explicit wall-clock control included, is exercised in
+the toolchain's runtime simulator; the run against a devnet-matching
+network is the outstanding evidence item, tracked in Path to Active.
+The client side ships the second independent share-derivation
+implementation (pure TypeScript over the field), the wrap container
+v1, the roster record with trial-assignment fallback, and an
+ephemeral witness holder under which the recovery secret is armed for
+the ceremony and zeroised after, so REC-6 is exercised rather than
+asserted.
 
 **The prototype** (`experiments/account-custody-prototype/` in the
 authoring repository) is the evidence base. It predates this
@@ -984,9 +1004,9 @@ requirement; it neither asserts that unused slots are zero nor
 validates the successor key; and it has no veto window, no cancel
 path, no wrap, no transport messages, and no version tag.
 
-**Bound**: the prototype's public-share vector is capped at four
-slots, which admits three guardians at threshold two and five
-guardians at threshold three, among others. The bound is an
+**Bound**: both implementations cap the public-share vector at four
+slots, admitting every roster with `n - t <= 4`: three guardians at
+threshold two and five at threshold three among them. The bound is an
 implementation parameter rather than a property of the scheme, and
 section 8 specifies it as a profile parameter for that reason.
 
@@ -1026,9 +1046,11 @@ A conforming implementation SHOULD provide:
   session does not contribute (REC-5); a reconstruction attempted
   with one wrong share fails the commitment check and succeeds after
   substituting the correct share.
-- **Successor validation**: a submission whose successor key is the
-  identity element, off-curve, or outside the prime-order subgroup is
-  rejected.
+- **Successor validation**: a submission that would enrol the
+  identity element is rejected (in the possession-based arm, the zero
+  scalar); an arm that accepts a public key directly MUST also reject
+  off-curve and small-order points, and needs the corresponding
+  cases.
 - **Veto and cancel**: finalisation blocked before the window elapses;
   cancel invalidates a pending recovery; cancel is itself not subject
   to the window; a cancelled attempt leaves the epoch unchanged; a

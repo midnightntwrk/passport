@@ -81,11 +81,11 @@ together; the upstream copies are canonical.
   Remaining tags: [CRYPTO-MEMO] the commissioned multi-session review
   (sent, response pending; the published scheme's model is
   single-session, so the freshness rules are our own normative
-  addition) and [EXP] the whole recovery surface on the reference
-  implementation (`contract/`), which carries none of it yet: the
-  session operation and gate are exercised only in the earlier
-  prototype behind a hash-preimage placeholder, and the veto window
-  and viewing-key wrap exist nowhere. The upstream recovery slot
+  addition) and [EXP] the on-node half of the conformance evidence:
+  the whole contract tranche is implemented on the reference
+  implementation (`contract/`) and exercised in the runtime
+  simulator, veto window included, and the run against a
+  devnet-matching network is outstanding. The upstream recovery slot
   remains unclaimed.
 
 ## Process
