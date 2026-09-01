@@ -1,0 +1,94 @@
+{
+  "testId": "P3",
+  "name": "spend-and-secrecy",
+  "description": "The discovered coin is spendable, and the attached ciphertext stays sealed",
+  "verdict": "PASS",
+  "txHash": "00de03c5f657f828b8910baeb182ab4d4a77c1e16272d1c2e5865caa56fbd08400",
+  "note": "The coin the recipient discovered is an ordinary spendable shielded coin: it entered the recipient’s available balance and funded a later transaction of the recipient’s own. Attaching the ciphertext costs no secrecy: the ciphertext-bearing output carries neither the coin nonce nor its value in the clear, and whatever the token colour discloses it discloses equally in the ciphertext-less contract-owned control output in the same transaction, so it is a property of the output encoding rather than of the attachment. The cooperative circuit’s disclosed coin is identical to what the executor’s runtime held, so the runtime read P2 relies on is sound.",
+  "details": {
+    "vault": "db262737ef663741740bef0a9487f05bbed8315a9010697231e01c04a8fb086f",
+    "recipient": {
+      "cpk": "5aee546a493df3ac6ee85ef3ae8d647c9b9f3a640c114883113527d67ca2ec69",
+      "epk": "49000c4a57b3f60829f4d3143c13adbcb73c9e4b34db8062f78c6ccb9399f1b3"
+    },
+    "recipientBalanceBefore": "0",
+    "sendTx": "00de03c5f657f828b8910baeb182ab4d4a77c1e16272d1c2e5865caa56fbd08400",
+    "sendAttempts": [
+      {
+        "mtIndex": "47",
+        "outcome": "accepted: 00de03c5f657f828b8910baeb182ab4d4a77c1e16272d1c2e5865caa56fbd08400"
+      }
+    ],
+    "circuitRuntimeAgreement": {
+      "agree": true,
+      "fromCircuit": {
+        "nonce": "494569563c3eacf8c548fa247121db58eea399312213e85cb03287ac1f2e5000",
+        "colour": "048c70417f90eea3b0861da457ed1c0f141c802caa3508ef677f47c79e9b4b68",
+        "value": "250"
+      },
+      "fromRuntime": {
+        "nonce": "494569563c3eacf8c548fa247121db58eea399312213e85cb03287ac1f2e5000",
+        "colour": "048c70417f90eea3b0861da457ed1c0f141c802caa3508ef677f47c79e9b4b68",
+        "value": "250"
+      },
+      "allRuntimeOutputs": [
+        {
+          "recipientIsUser": true,
+          "nonce": "494569563c3eacf8c548fa247121db58eea399312213e85cb03287ac1f2e5000",
+          "colour": "048c70417f90eea3b0861da457ed1c0f141c802caa3508ef677f47c79e9b4b68",
+          "value": "250"
+        },
+        {
+          "recipientIsUser": false,
+          "nonce": "bfb097e2f128bceb3c048552d84625b5dc77132f7d062440f9a962f24c354600",
+          "colour": "048c70417f90eea3b0861da457ed1c0f141c802caa3508ef677f47c79e9b4b68",
+          "value": "550"
+        }
+      ]
+    },
+    "outputs": [
+      {
+        "commitment": "5fcb50b4cab68839…",
+        "contractOwned": true,
+        "serialisedBytes": 598,
+        "carriesNonce": false,
+        "carriesColour": false,
+        "carriesValue": false
+      },
+      {
+        "commitment": "bce06ad8106caca0…",
+        "contractOwned": false,
+        "serialisedBytes": 783,
+        "carriesNonce": false,
+        "carriesColour": false,
+        "carriesValue": false
+      }
+    ],
+    "secrecy": {
+      "nonceOrValueInClear": false,
+      "colourVisibleWithCiphertext": false,
+      "colourVisibleWithoutCiphertext": false,
+      "colourIsEncodingNotCiphertext": true,
+      "ciphertextSizeDeltaBytes": 185
+    },
+    "discovered": true,
+    "recipientBalanceAfter": "250",
+    "recipientCoinRecord": {
+      "value": "250",
+      "mtIndex": "49",
+      "available": true
+    },
+    "onwardSpend": {
+      "spent": true,
+      "txId": "001b382af018fe137fc698c2a6604b2ba3acaac5ec250205fd8d8a40992ddda181",
+      "amount": "100",
+      "vault": "aa54e0bdf60c40cbed9d05c2779a43c5bd2890770559db7fa6843d7054102f12"
+    }
+  },
+  "ranAt": "2026-09-01T10:54:44.772Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

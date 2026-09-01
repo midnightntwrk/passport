@@ -1,0 +1,59 @@
+{
+  "testId": "P1",
+  "name": "api-surface",
+  "description": "The platform’s own account of who attaches a recipient ciphertext",
+  "verdict": "PASS",
+  "note": "The mechanism is documented public API on both sides. A user-targeted output REQUIRES a recipient encryption key; omitting the ciphertext is sanctioned only when the coin description reaches the recipient another way; a contract-targeted output has no key to seal to; and midnight-js exposes additionalCoinEncPublicKeyMappings so the party executing the circuit can supply the recipient’s key. Where it cannot be resolved the SDK refuses to build the output rather than emitting an undiscoverable coin.",
+  "details": {
+    "versions": {
+      "ledger-v8": "8.1.0",
+      "midnight-js-contracts": "4.1.1",
+      "compact-runtime": "0.16.0"
+    },
+    "ledgerDeclarationFile": "node_modules/@midnight-ntwrk/ledger-v8/ledger-v8.d.ts",
+    "zswapOutputNew": "/**\n   * Creates a new output, targeted to a user's coin public key.\n   *\n   * Optionally the output contains a ciphertext encrypted to the user's\n   * encryption public key, which may be omitted *only* if the {@link ShieldedCoinInfo}\n   * is transferred to the recipient another way\n   */\n  static new(coin: ShieldedCoinInfo, segment: number | undefined, target_cpk: CoinPublicKey, target_epk: EncPublicKey): UnprovenOutput;",
+    "zswapOutputNewContractOwned": "/**\n   * Creates a new output, targeted to a smart contract\n   *\n   * A contract must *also* explicitly receive a coin created in this way for\n   * the output to be valid\n   */\n  static newContractOwned(coin: ShieldedCoinInfo, segment: number | undefined, contract: ContractAddress): UnprovenOutput;",
+    "watchFor": "/**\n   * Adds a coin to the list of coins that are expected to be received\n   *\n   * This should be used if an output is creating a coin for this wallet, which\n   * does not contain a ciphertext to detect it. In this case, the wallet must\n   * know the commitment ahead of time to notice the receipt.\n   */\n  watchFor(coinPublicKey: CoinPublicKey, coin: ShieldedCoinInfo): ZswapLocalState;",
+    "callOptionFile": "node_modules/@midnight-ntwrk/midnight-js-contracts/dist/call.d.ts",
+    "additionalCoinEncPublicKeyMappings": "/**\n     * An optional mapping of {@link CoinPublicKey} to {@link EncPublicKey} that can be used to resolve encryption\n     * keys for coins created during circuit execution.\n     */\n    readonly additionalCoinEncPublicKeyMappings?: ReadonlyMap<CoinPublicKey, EncPublicKey>;",
+    "resolverRefusal": "const createZswapOutput = ({ coinInfo, recipient }, encryptionPublicKeyResolver, segmentNumber = 0) => {\n    if (!recipient.is_left) {\n        return ZswapOutput.newContractOwned(coinInfo, segmentNumber, recipient.right);\n    }\n    const encryptionPublicKey = encryptionPublicKeyResolver(recipient.left);\n    if (!encryptionPublicKey) {\n        throw new Error(`Unable to resolve encryption public key for recipient ${recipient.left}. ` +\n            `Provide a mapping via the encryptionPublicKeyResolver.`);\n    }",
+    "findings": [
+      {
+        "surface": "ZswapOutput.new",
+        "found": true,
+        "note": "The only user-targeted output constructor takes the recipient encryption key as a REQUIRED parameter."
+      },
+      {
+        "surface": "ZswapOutput.new (omission rule)",
+        "found": true,
+        "note": "The ciphertext may be omitted ONLY if the ShieldedCoinInfo reaches the recipient another way — out-of-band delivery is sanctioned, not accidental."
+      },
+      {
+        "surface": "ZswapOutput.newContractOwned",
+        "found": true,
+        "note": "The contract-targeted constructor takes no encryption key at all — a contract recipient has no encryption key to seal to."
+      },
+      {
+        "surface": "ZswapLocalState.watchFor",
+        "found": true,
+        "note": "A recipient told the coin out of band can pre-register it by commitment; this is the manual path an attached ciphertext removes the need for."
+      },
+      {
+        "surface": "CallOptions.additionalCoinEncPublicKeyMappings",
+        "found": true,
+        "note": "A documented public call option mapping CoinPublicKey → EncPublicKey for coins created during circuit execution. This is the executor’s supported route."
+      },
+      {
+        "surface": "encryptionPublicKeyResolver (refusal path)",
+        "found": true,
+        "note": "With no resolvable key the SDK THROWS rather than building a ciphertext-less user output: the undiscoverable coin is not silently produced."
+      }
+    ]
+  },
+  "ranAt": "2026-09-01T10:32:21.200Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}

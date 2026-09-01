@@ -1,0 +1,167 @@
+{
+  "testId": "P2",
+  "name": "ciphertext-discovery",
+  "description": "Contract-to-wallet shielded transfer, one transaction, recipient ciphertext attached by the executor",
+  "verdict": "PASS",
+  "txHash": "00bb87ccb5748e47f0f6e292c0d572a6cebc3fc692eb97032e59cbbe636e091532",
+  "note": "A contract sent shielded value to an ordinary wallet in ONE transaction and the recipient found it by ordinary scanning, with no out-of-band hint. The circuit used was the opaque one, which discloses nothing about the recipient coin: the executor read the coin from its own runtime, because the circuit ran there, and supplied the recipient encryption key through additionalCoinEncPublicKeyMappings. Sealing to the wrong key leaves the coin owned but invisible; supplying no key at all makes the SDK refuse to build the output. Ownership and discoverability are separable, and discoverability is the executor’s to provide.",
+  "details": {
+    "vault": "96b4335bbe50f4381bf2c562073064853a508d3fd9f88495cbc9c9b62aa7f4c1",
+    "recipient": {
+      "coinPublicKey": "5aee546a493df3ac6ee85ef3ae8d647c9b9f3a640c114883113527d67ca2ec69",
+      "encryptionPublicKey": "49000c4a57b3f60829f4d3143c13adbcb73c9e4b34db8062f78c6ccb9399f1b3"
+    },
+    "executor": {
+      "coinPublicKey": "1bd4f827be97ff013c4a702e4b08f30ec378728a54670cf7cc92cb9b1a14eff6",
+      "encryptionPublicKey": "b62e630a030171b5e11af2487f0103e650cc703f284d0a478b2a3abdf9715b70"
+    },
+    "recipientCoinsBefore": 11,
+    "armA": {
+      "refused": true,
+      "message": "Unable to resolve encryption public key for recipient 5aee546a493df3ac6ee85ef3ae8d647c9b9f3a640c114883113527d67ca2ec69. Provide a mapping via the encryptionPublicKeyResolver.",
+      "error": {
+        "name": "Error",
+        "message": "Unable to resolve encryption public key for recipient 5aee546a493df3ac6ee85ef3ae8d647c9b9f3a640c114883113527d67ca2ec69. Provide a mapping via the encryptionPublicKeyResolver.",
+        "stack": "Error: Unable to resolve encryption public key for recipient 5aee546a493df3ac6ee85ef3ae8d647c9b9f3a640c114883113527d67ca2ec69. Provide a mapping via the encryptionPublicKeyResolver.\n    at createZswapOutput (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-ciphertext/experiments/contract-to-wallet-ciphertext/node_modules/@midnight-ntwrk/midnight-js-contracts/src/utils/zswap-utils.ts:153:11)\n    at zswapStateToSegmentedOffer (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-ciphertext/experiments/contract-to-wallet-ciphertext/node_modules/@midnight-ntwrk/midnight-js-contracts/src/utils/zswap-utils.ts:343:9)\n    at createUnprovenLedgerCallTx (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-ciphertext/experiments/contract-to-wallet-ciphertext/node_modules/@midnight-ntwrk/midnight-js-contracts/src/utils/ledger-utils.ts:139:27)\n    at createUnprovenCallTxFromInitialStates (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-ciphertext/experiments/contract-to-wallet-ciphertext/node_modules/@midnight-ntwrk/midnight-js-contracts/src/unproven-call-tx.ts:127:21)\n    at async Vault.sendToUser (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-ciphertext/experiments/contract-to-wallet-ciphertext/src/wallet/vault.ts:225:25)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-ciphertext/experiments/contract-to-wallet-ciphertext/src/tests/p2-ciphertext-discovery.ts:59:5)\n    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-ciphertext/experiments/contract-to-wallet-ciphertext/src/tests/runner.ts:7:5)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport-ciphertext/experiments/contract-to-wallet-ciphertext/src/tests/p2-ciphertext-discovery.ts:34:1)",
+        "causeChain": [
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "Unable to resolve encryption public key for recipient 5aee546a493df3ac6ee85ef3ae8d647c9b9f3a640c114883113527d67ca2ec69. Provide a mapping via the encryptionPublicKeyResolver."
+          }
+        ]
+      }
+    },
+    "armBTx": "00e48f61269c762a8c368a23cee4b672ad4ce073a7d69eb17e33fd8562e514aeca",
+    "armBAttempts": [
+      {
+        "mtIndex": "53",
+        "outcome": "accepted: 00e48f61269c762a8c368a23cee4b672ad4ce073a7d69eb17e33fd8562e514aeca"
+      }
+    ],
+    "armBOutputs": [
+      {
+        "commitment": "24489062e240a8df3b96183a7f92b28dcb7dce282609355268ec78b0e8be7dc4",
+        "contractAddress": null,
+        "serialisedBytes": 784,
+        "serialisedHex": "6d69646e696768743a7a737761702d6f75747075745b76325d2870726f6f662d707265696d616765293a080099034f45a7a0ad6b8803a4b636093463c484dbc66f9ef4fd5db610e48c19dec746247345cd5ddbfa66f52ceeaf263557cfb1b7fefe75185a6e73017aee965dee2a053c73dae336cfd2552bb085dc575586f4695ea7b1f753c8cf29d4b50a95a9f278461073e7b952da3b41698080882c69d1ddb5fff87cae6d21db99fc3bac046fa184656073247ae52316b087c849de1472189f9b40130933fd93a04f63187596a4c76b8a0c733ce1fbbc5a2d313ef7bea4c456d6fa6188383c497d7480959516e3e3b21dd61073358cec88558b297b0d85986a58f81563caeb8467e43d6a0ec09eb4d31b677c1a0400e10724489062e240a8df3b96183a7f92b28dcb7dce282609355268ec78b0e8be7dc44d2335b63abb088a29f8cbed3afb90a34eaa4665b96eaf061a7c25b76b41e10b01002c04a5016f5aee546a493df3ac6ee85ef3ae8d647c9b9f3a640c114883113527d67ca2ec0000006fc730113a139ddd110eba8be7eef98f524c13bfd7a21f88f1e95d52b7b5fe03d5016f7c6cf74922e84ca966f2b1a1f4dfcbd3bc523551de1b6b67da3269fb54fc4de10173117a9931e716eec4bb95383d18e37f6521b1dced984637a4d9977b3c3bcf0706000101c101040400c101040400c841010404044404048011036f24489062e240a8df3b96183a7f92b28dcb7dce282609355268ec78b0e8be7d45028502c10104040438048502c101040408c8410104040028440045028902c0410104041430040800400404040844040873fffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed7373fffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73730efca35b0e237d314d8f060e6596a63acd4da3f810fd98afa23999205af49659734d2335b63abb088a29f8cbed3afb90a34eaa4665b96eaf061a7c25b76b41e10b45020400735613db04b4a404a6afd27d94f5acbe2c80c3b608d5bfde17dc49c956270fd93f00546d69646e696768742f7a737761702f6f7574707574"
+      },
+      {
+        "commitment": "de9e65a2a2b1c5cf23b18645f29a93448afc41d2330c74caeb5c5eb9ab27bdbf",
+        "contractAddress": "96b4335bbe50f4381bf2c562073064853a508d3fd9f88495cbc9c9b62aa7f4c1",
+        "serialisedBytes": 598,
+        "serialisedHex": "6d69646e696768743a7a737761702d6f75747075745b76325d2870726f6f662d707265696d616765293a08008096b4335bbe50f4381bf2c562073064853a508d3fd9f88495cbc9c9b62aa7f4c104001508de9e65a2a2b1c5cf23b18645f29a93448afc41d2330c74caeb5c5eb9ab27bdbf08b0f2cf515c8bca6ea85df4d6d9901bd6d2c92e82fd60ed737bc8948fd7695f00012c00000005036f96b4335bbe50f4381bf2c562073064853a508d3fd9f88495cbc9c9b62aa7f4006f1350a29f1b8e4a0f472a6a45509775a44f1deab6d2938e9c771878ce83c264d5016f7c6cf74922e84ca966f2b1a1f4dfcbd3bc523551de1b6b67da3269fb54fc4d310c739bd94ef37bc95559b51cf8ee0bc3c16c94007348f16f7f3775b293080ec5bc0c003101c101040400c101040400c8410104040444040480fd026fde9e65a2a2b1c5cf23b18645f29a93448afc41d2330c74caeb5c5eb9ab27bd45028502c10104040438048502c101040408c8410104040028440045028902400404040c4404048005036f96b4335bbe50f4381bf2c562073064853a508d3fd9f88495cbc9c9b62aa7f44502c0410104041430040800400404040844040873fffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed7373fffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed7373766945bb3ad8be750b701f786dea52047600c9ebfdaec11327590679b2ef5c347308b0f2cf515c8bca6ea85df4d6d9901bd6d2c92e82fd60ed737bc8948fd7695f450204000000546d69646e696768742f7a737761702f6f7574707574"
+      }
+    ],
+    "executorReadOpaqueCoin": {
+      "value": "120",
+      "nonce": "c730113a139ddd110eba8be7eef98f524c13bfd7a21f88f1e95d52b7b5fe0300",
+      "color": "7c6cf74922e84ca966f2b1a1f4dfcbd3bc523551de1b6b67da3269fb54fc4d75",
+      "runtimeShapes": {
+        "nonce": "string(64)",
+        "color": "string(64)",
+        "value": "bigint"
+      }
+    },
+    "armBDiscovered": false,
+    "armCTx": "00bb87ccb5748e47f0f6e292c0d572a6cebc3fc692eb97032e59cbbe636e091532",
+    "armCAttempts": [
+      {
+        "mtIndex": "54",
+        "outcome": "rejected: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", c"
+      },
+      {
+        "mtIndex": "55",
+        "outcome": "accepted: 00bb87ccb5748e47f0f6e292c0d572a6cebc3fc692eb97032e59cbbe636e091532"
+      }
+    ],
+    "armCOutputs": [
+      {
+        "commitment": "1c4e36e0f25b2666b9808b61f3ab2d1869bb1db56a7d648b606128478286ca79",
+        "contractAddress": "96b4335bbe50f4381bf2c562073064853a508d3fd9f88495cbc9c9b62aa7f4c1",
+        "serialisedBytes": 598,
+        "serialisedHex": "6d69646e696768743a7a737761702d6f75747075745b76325d2870726f6f662d707265696d616765293a08008096b4335bbe50f4381bf2c562073064853a508d3fd9f88495cbc9c9b62aa7f4c1040015081c4e36e0f25b2666b9808b61f3ab2d1869bb1db56a7d648b606128478286ca79683fea52145b2ce2f71cc6a8b70cc535c6821d4bfa6eb8f25c39cfcf1c8ae2b500012c00000005036f96b4335bbe50f4381bf2c562073064853a508d3fd9f88495cbc9c9b62aa7f4006f7e8ad76d63b6f02ad211401a87a830c74a07f34b45ce838219242c2b38d505d5016f7c6cf74922e84ca966f2b1a1f4dfcbd3bc523551de1b6b67da3269fb54fc4dd90973ffef589f2f015b2d83e00e8987efc7507f81878a9c1fa024c41dc2a8dea3b70c003101c101040400c101040400c8410104040444040480e5016f1c4e36e0f25b2666b9808b61f3ab2d1869bb1db56a7d648b606128478286ca45028502c10104040438048502c101040408c8410104040028440045028902400404040c4404048005036f96b4335bbe50f4381bf2c562073064853a508d3fd9f88495cbc9c9b62aa7f44502c0410104041430040800400404040844040873fffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed7373fffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73730fc42b1faae93449cb170427198ea1773e23718829d06831968dd4846bf9b75373683fea52145b2ce2f71cc6a8b70cc535c6821d4bfa6eb8f25c39cfcf1c8ae235450204000000546d69646e696768742f7a737761702f6f7574707574"
+      },
+      {
+        "commitment": "bdf38fc21bdd4869442500d28ce2fa1f2e2efcd48b4a4fd539a6a313d86cd2bd",
+        "contractAddress": null,
+        "serialisedBytes": 784,
+        "serialisedHex": "6d69646e696768743a7a737761702d6f75747075745b76325d2870726f6f662d707265696d616765293a0800990307363f8c894cee9f7224776b8ebcf968bfd812d0b81a45613c9ca573b3f1bb3273b9bf1d92a6e1230172d1ad9d29c23f66c16d03a8d4c5e4d2679770b26929ec4d731dbffbb1c6e5057c84817d119accd6b75e026cf49e3de17e8ae0856ca5528a35736057c9bbf3f326371b1ab44dc85213332062a8eee8584a6c6ce3db519aef584173561adeec5399044ca0538f5222a4c3e963c30b1acb2677e0951f35f5fa57c93f735ca2453736321375ad32bc732d27d6c905eb5a56ee52be8a600022a0b2e14b5b735dbbede3c3b6bbba16d4d2d3056a5e6ce9e659489df01e3985255679eef512080400e107bdf38fc21bdd4869442500d28ce2fa1f2e2efcd48b4a4fd539a6a313d86cd2bd4aeaf0c3635c49a00250941dcfebb5b47b9f2502ac3ae07b584101f112d7d22b01002c04a5016f5aee546a493df3ac6ee85ef3ae8d647c9b9f3a640c114883113527d67ca2ec0000006f9a3e2ef81e398fde77f2c6ff5ebd2c22091b6767983854ce122474e6577095d5016f7c6cf74922e84ca966f2b1a1f4dfcbd3bc523551de1b6b67da3269fb54fc4d590273897dce87093a150eaa4dac05f60710f0efa6c0385b9b72c2b202569b7e2d480b000101c101040400c101040400c8410104040444040480f5026fbdf38fc21bdd4869442500d28ce2fa1f2e2efcd48b4a4fd539a6a313d86cd245028502c10104040438048502c101040408c8410104040028440045028902c0410104041430040800400404040844040873fffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed7373fffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed7373cac048a1348e8274176e62d08b22ba4ccdc1b140bbe6ff640ca88d52d3320c2d734aeaf0c3635c49a00250941dcfebb5b47b9f2502ac3ae07b584101f112d7d22b45020400734d0a3a6660b34bf8028880ca3d942b96f2b86339f1fdb621b30184e47ad7d95a00546d69646e696768742f7a737761702f6f7574707574"
+      }
+    ],
+    "armCSentCoin": {
+      "value": "150",
+      "nonce": "9a3e2ef81e398fde77f2c6ff5ebd2c22091b6767983854ce122474e657709500"
+    },
+    "armCDiscovered": true,
+    "armBStillHidden": true,
+    "recipientScan": [
+      {
+        "value": "50000000000000",
+        "nonce": "85c37033fe897a7e…",
+        "mtIndex": "5"
+      },
+      {
+        "value": "150",
+        "nonce": "920de35260ba6456…",
+        "mtIndex": "50"
+      },
+      {
+        "value": "50000000000000",
+        "nonce": "28d2effe2f444128…",
+        "mtIndex": "1"
+      },
+      {
+        "value": "50000000000000",
+        "nonce": "ae8bcfd087e92cfa…",
+        "mtIndex": "26"
+      },
+      {
+        "value": "50000000000000",
+        "nonce": "f194d4fae6350937…",
+        "mtIndex": "12"
+      },
+      {
+        "value": "50000000000000",
+        "nonce": "b2e5073130b63e45…",
+        "mtIndex": "23"
+      },
+      {
+        "value": "250",
+        "nonce": "127460bd9084e5ef…",
+        "mtIndex": "44"
+      },
+      {
+        "value": "150",
+        "nonce": "ea5888d3eaf7b983…",
+        "mtIndex": "37"
+      },
+      {
+        "value": "50000000000000",
+        "nonce": "93eaf6a24bb0f7e9…",
+        "mtIndex": "19"
+      },
+      {
+        "value": "50000000000000",
+        "nonce": "fd0212f54743af9a…",
+        "mtIndex": "24"
+      },
+      {
+        "value": "150",
+        "nonce": "9a3e2ef81e398fde…",
+        "mtIndex": "57"
+      },
+      {
+        "value": "250",
+        "nonce": "22aa29e037231438…",
+        "mtIndex": "41"
+      }
+    ]
+  },
+  "ranAt": "2026-09-01T10:59:55.808Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:1.0.0",
+    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
+    "proofServer": "midnightntwrk/proof-server:8.1.0"
+  }
+}
