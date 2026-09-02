@@ -315,6 +315,15 @@ export interface AccountFunder {
    * `/balance-only` is queued behind.
    */
   fundAsset(contractAddress: string): Promise<AssetFunding>;
+  /**
+   * Mints one grant-sized asset coin AHEAD of the next activation, if there is
+   * not one ready already, so the asset leg is a single `deposit_shielded`
+   * rather than a mint plus the three minutes it takes this wallet to see its
+   * own coin. Called at start-up and after every grant; never throws.
+   */
+  ensureSpareCoin(): Promise<void>;
+  /** What the spare is doing, for the start-up log and `/status`. */
+  spareState(): 'ready' | 'minting' | 'none' | 'unsupported';
 }
 
 /**
@@ -536,6 +545,143 @@ export async function createAccountFunder(
     };
   };
 
+  /* -------------------------------------------------------------------------- */
+  /* The spare mUSD coin                                                        */
+  /* -------------------------------------------------------------------------- */
+
+  /**
+   * One minted, spendable mUSD coin of exactly the grant size, held ready so an
+   * activation's asset leg is a single `deposit_shielded`.
+   *
+   * The leg used to be mint → wait for the coin to become spendable → deposit,
+   * and the middle step is a wallet catching up with its own transaction: about
+   * three of the roughly four minutes an activation took. Minting one coin
+   * AHEAD of the request — at start-up, and again after each grant — takes that
+   * wait out of the user's onboarding entirely and puts it on a quiet service.
+   *
+   * Never more than one, so this cannot drift into minting money in a loop, and
+   * never minted while a spend job holds the wallet, so it cannot queue itself
+   * in front of somebody's fee.
+   */
+  let spareCoin: { nonce: string; value: bigint; mintTx: string } | null = null;
+  let spareInFlight: Promise<void> | null = null;
+
+  /** Mints one grant-sized coin to this wallet and waits for it to be spendable. */
+  const mintAssetCoin = async (): Promise<{ nonce: string; value: bigint; mintTx: string }> => {
+    const { tokenType, faucetAddress } = requireAsset();
+    const recipientBytes = await wallet.shieldedCoinPublicKeyBytes();
+    /* The nonce is what makes the minted coin identifiable in a wallet that
+       may already hold other coins of the same colour — a coin stranded by an
+       earlier deposit that failed, say. Everything below matches on it rather
+       than on the value, so two grants of the same size can never be confused
+       for one another. */
+    const mintNonce = new Uint8Array(randomBytes(32));
+    const mintNonceHex = bytesToHex(mintNonce);
+
+    const faucetProviders = await contractProviders(config, {
+      privateStateId: 'passport-balancer-faucet',
+      initialPrivateState: {},
+      zkConfigProvider: faucetZkConfigProvider as never,
+      proofProvider: faucetProofProvider,
+      walletProvider: wallet.contractWalletProvider(),
+    });
+
+    let mintTx: string;
+    try {
+      mintTx = await wallet.exclusive(async () => {
+        const found = await findDeployedContract(faucetProviders as never, {
+          compiledContract: compiledFaucet,
+          contractAddress: faucetAddress,
+        } as never);
+        const callTx = (found as { callTx: Record<string, (...args: unknown[]) => Promise<unknown>> })
+          .callTx;
+        const mint = await callTx.mint_shielded(MUSD_DOMAIN_SEPARATOR, config.assetGrant, mintNonce, {
+          bytes: recipientBytes,
+        });
+        return transactionIdentifier(mint);
+      });
+    } catch (cause) {
+      throw new AccountFundingError(
+        'mint-failed',
+        `The ${ASSET_SYMBOL} grant could not be minted, so nothing was deposited.`,
+        cause instanceof Error ? cause.message : String(cause),
+      );
+    }
+
+    /* Outside the spend lock deliberately. This is the balancer's own wallet
+       catching up with a transaction it has just made, and holding the queue
+       through it would stall `/balance-only` for no reason. */
+    for (let attempt = 0; attempt < MINT_VISIBLE_ATTEMPTS; attempt += 1) {
+      try {
+        const coins = await wallet.availableShieldedCoins(tokenType);
+        const found = coins.find(
+          (candidate) =>
+            candidate.nonce.replace(/^0x/, '').toLowerCase() === mintNonceHex &&
+            candidate.value === config.assetGrant,
+        );
+        if (found) return { nonce: found.nonce, value: found.value, mintTx };
+      } catch {
+        // A momentary wallet-state timeout; asked again below.
+      }
+      await wait(CONFIRM_INTERVAL_MS);
+    }
+    throw new AccountFundingError(
+      'mint-not-visible',
+      `The ${ASSET_SYMBOL} grant was minted but has not become spendable in the balancer's wallet yet.`,
+      `mint ${mintTx}, nonce ${mintNonceHex}`,
+    );
+  };
+
+  /**
+   * Makes sure one spare coin is ready, minting if there is none.
+   *
+   * Never throws at its caller: a spare that could not be minted costs an
+   * activation the three minutes it used to cost anyway, and a start-up or a
+   * post-grant housekeeping task is no place to fail a request from.
+   */
+  const ensureSpareCoin = async (): Promise<void> => {
+    if (!assetAvailable || spareCoin || spareInFlight) return;
+    /* Never in front of somebody's fee or somebody's grant. There is always a
+       next call — the start-up preflight, or the end of the next activation. */
+    if (wallet.isBusy()) return;
+    spareInFlight = (async () => {
+      try {
+        const minted = await mintAssetCoin();
+        spareCoin = minted;
+        console.log(`[asset] spare ${ASSET_SYMBOL} coin ready (mint ${minted.mintTx})`);
+      } catch (cause) {
+        console.warn(
+          `[asset] no spare ${ASSET_SYMBOL} coin: ${cause instanceof Error ? cause.message : String(cause)} — the next activation will mint its own`,
+        );
+      } finally {
+        spareInFlight = null;
+      }
+    })();
+    await spareInFlight;
+  };
+
+  /** Takes the spare if there is one, and mints inline if there is not. */
+  const takeAssetCoin = async (): Promise<{
+    nonce: string;
+    value: bigint;
+    mintTx: string;
+    fromSpare: boolean;
+  }> => {
+    const take = (): { nonce: string; value: bigint; mintTx: string } | null => {
+      const taken = spareCoin;
+      spareCoin = null;
+      return taken;
+    };
+    const ready = take();
+    if (ready) return { ...ready, fromSpare: true };
+    /* A mint already under way is worth waiting for — it is minutes ahead of
+       starting a second one, and two would leave a coin stranded. */
+    if (spareInFlight) await spareInFlight.catch(() => undefined);
+    const arrived = take();
+    if (arrived) return { ...arrived, fromSpare: true };
+    return { ...(await mintAssetCoin()), fromSpare: false };
+  };
+
   return {
     assetsPath: managedPath,
     grantAtomic: config.accountGrantAtomic,
@@ -633,92 +779,37 @@ export async function createAccountFunder(
       };
     },
 
+    ensureSpareCoin,
+
+    spareState(): 'ready' | 'minting' | 'none' | 'unsupported' {
+      if (!assetAvailable) return 'unsupported';
+      if (spareCoin) return 'ready';
+      return spareInFlight ? 'minting' : 'none';
+    },
+
     async fundAsset(contractAddress: string): Promise<AssetFunding> {
-      const { colourBytes, tokenType, faucetAddress } = requireAsset();
+      const { colourBytes } = requireAsset();
       const address = rawContractAddress(contractAddress);
       /* The same baseline discipline as the NIGHT leg: the confirmation below
          is "THIS deposit's credit is visible", not "the map is non-empty". */
       const before = heldAsset(await readAccount(address));
 
       /* ------------------------------------------------------------------ */
-      /* 1. Mint the coin to the balancer's OWN shielded address             */
+      /* 1. Take a grant-sized coin — the spare if one is ready              */
       /* ------------------------------------------------------------------ */
 
-      const recipientBytes = await wallet.shieldedCoinPublicKeyBytes();
-      /* The nonce is what makes the minted coin identifiable in a wallet that
-         may already hold other coins of the same colour — a coin stranded by an
-         earlier deposit that failed, say. Everything below matches on it rather
-         than on the value, so two grants of the same size can never be
-         confused for one another. */
-      const mintNonce = new Uint8Array(randomBytes(32));
-      const mintNonceHex = bytesToHex(mintNonce);
-
-      const faucetProviders = await contractProviders(config, {
-        privateStateId: 'passport-balancer-faucet',
-        initialPrivateState: {},
-        zkConfigProvider: faucetZkConfigProvider as never,
-        proofProvider: faucetProofProvider,
-        walletProvider: wallet.contractWalletProvider(),
-      });
-
-      let mintTx: string;
-      try {
-        mintTx = await wallet.exclusive(async () => {
-          const found = await findDeployedContract(faucetProviders as never, {
-            compiledContract: compiledFaucet,
-            contractAddress: faucetAddress,
-          } as never);
-          const callTx = (
-            found as { callTx: Record<string, (...args: unknown[]) => Promise<unknown>> }
-          ).callTx;
-          const mint = await callTx.mint_shielded(MUSD_DOMAIN_SEPARATOR, config.assetGrant, mintNonce, {
-            bytes: recipientBytes,
-          });
-          return transactionIdentifier(mint);
-        });
-      } catch (cause) {
-        throw new AccountFundingError(
-          'mint-failed',
-          `The ${ASSET_SYMBOL} grant could not be minted, so nothing was deposited into ${address}.`,
-          cause instanceof Error ? cause.message : String(cause),
-        );
-      }
+      /* This is where the activation's time went. A coin minted on demand is
+         only spendable once this wallet has seen its own transaction, which is
+         about three minutes of a caller's onboarding; a spare minted ahead of
+         the request makes the leg one `deposit_shielded`. */
+      const coin = await takeAssetCoin();
+      const mintTx = coin.mintTx;
+      console.log(
+        `[asset] ${coin.fromSpare ? 'using the spare' : 'minted a'} ${ASSET_SYMBOL} coin for ${address} (mint ${mintTx})`,
+      );
 
       /* ------------------------------------------------------------------ */
-      /* 2. Wait for the coin to be SPENDABLE in this wallet                 */
-      /* ------------------------------------------------------------------ */
-
-      /* Outside the spend lock deliberately. This is the balancer's own wallet
-         catching up with a transaction it has just made, and holding the queue
-         through it would stall `/balance-only` for no reason. */
-      let coin: { nonce: string; value: bigint } | null = null;
-      for (let attempt = 0; attempt < MINT_VISIBLE_ATTEMPTS; attempt += 1) {
-        try {
-          const coins = await wallet.availableShieldedCoins(tokenType);
-          const found = coins.find(
-            (candidate) =>
-              candidate.nonce.replace(/^0x/, '').toLowerCase() === mintNonceHex &&
-              candidate.value === config.assetGrant,
-          );
-          if (found) {
-            coin = found;
-            break;
-          }
-        } catch {
-          // A momentary wallet-state timeout; asked again below.
-        }
-        await wait(CONFIRM_INTERVAL_MS);
-      }
-      if (!coin) {
-        throw new AccountFundingError(
-          'mint-not-visible',
-          `The ${ASSET_SYMBOL} grant was minted but has not become spendable in the balancer's wallet yet, so it could not be deposited into ${address}.`,
-          `mint ${mintTx}, nonce ${mintNonceHex}`,
-        );
-      }
-
-      /* ------------------------------------------------------------------ */
-      /* 3. deposit_shielded — the coin into the ACCOUNT                     */
+      /* 2. deposit_shielded — the coin into the ACCOUNT                     */
       /* ------------------------------------------------------------------ */
 
       const privateStateId = `passport-balancer-account-${address}`;
@@ -762,7 +853,7 @@ export async function createAccountFunder(
       }
 
       /* ------------------------------------------------------------------ */
-      /* 4. Read the credit back off the chain                               */
+      /* 3. Read the credit back off the chain                               */
       /* ------------------------------------------------------------------ */
 
       const target = before + config.assetGrant;
@@ -786,6 +877,12 @@ export async function createAccountFunder(
           `mint ${mintTx}, deposit ${depositTx}, held ${before} before`,
         );
       }
+
+      /* Mint the NEXT one now, while nobody is waiting on it. Not awaited: the
+         caller's grant is already on chain and confirmed, and the three minutes
+         a mint takes to become spendable is precisely what this keeps off the
+         next caller's onboarding. */
+      void ensureSpareCoin();
 
       const [mintResolved, depositResolved] = await Promise.all([
         resolveTransactionHash(config.indexerHttpUrl, mintTx),
