@@ -58,7 +58,20 @@ function seconds(line: string): number {
 }
 
 test.beforeAll(async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  /* NO SERVICE WORKER IN THIS CONTEXT, and the reason is the route below.
+     `public/sw.js` serves `/zk/**` cache-first, so on a cold cache the request
+     that actually leaves the browser is issued BY the worker — and a worker's
+     fetches are not the page's, so `page.route` never sees them. The prover
+     would then not be held open at all: the deploy would proceed, ask the
+     balancer for a balance nothing here mocks, and fail on its own retry
+     window minutes later. Blocking the worker puts the `/zk/**` request back on
+     the page, which is where this file means to stall it. Nothing asserted here
+     is about caching or offline behaviour — `check-pwa.mjs` and `pwa.tsx`'s own
+     tests hold the worker to its contract. */
+  const context = await browser.newContext({
+    viewport: { width: 420, height: 900 },
+    serviceWorkers: 'block',
+  });
   page = await context.newPage();
   network = await installNetworkBoundary(page);
 
