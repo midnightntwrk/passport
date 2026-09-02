@@ -19,7 +19,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { feeCapableCoinCount, spendLaneCount } from '../src/wallet.js';
+import { createWalletReservation } from '../src/reservation.js';
 import { FEE_CAPABLE_SPECKS } from '../src/resolverPool.js';
+
+const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
 /** One fee-capable coin and two freshly landed change coins — the live shape. */
 const oneCapableTwoChange = [
@@ -64,5 +67,70 @@ describe('spend lanes', () => {
   it('never drops to zero, because a stopped queue never drains again', () => {
     assert.equal(spendLaneCount(0, 3), 1);
     assert.equal(spendLaneCount(0, 0), 1);
+  });
+});
+
+describe('a lane that opens with no job ending', () => {
+  it('starts the job that was waiting for it', async () => {
+    /* THE STALL, on the deployed service on 2026/09/02 at 22:36. One job
+       running, `lanes: 3`, and a job waiting behind it for eight minutes with
+       two lanes standing open. `drain` runs on arrival and on completion, which
+       was enough while the lane count was a constant — the only thing that
+       could free a lane was a job ending, and that drains. It stopped being
+       enough when lanes became a reading of the free fee-capable coins, because
+       a lane now also opens when a coin the wallet already holds finishes
+       regenerating, and the queue never hears that. */
+    let capable = 1;
+    const reservation = createWalletReservation({ lanes: () => spendLaneCount(capable, 3) });
+    const ran: string[] = [];
+    let releaseFirst: () => void = () => undefined;
+    const first = reservation.exclusive(
+      () =>
+        new Promise<void>((resolve) => {
+          ran.push('first');
+          releaseFirst = resolve;
+        }),
+    );
+    await settle();
+    const second = reservation.exclusive(async () => {
+      ran.push('second');
+    });
+    await settle();
+    assert.deepEqual(ran, ['first'], 'one coin, one lane, one job');
+
+    /* A coin the wallet already held has regenerated. */
+    capable = 2;
+    reservation.laneCountChanged();
+    await settle();
+    assert.deepEqual(ran, ['first', 'second']);
+
+    releaseFirst();
+    await Promise.all([first, second]);
+    assert.deepEqual(reservation.counts(), { reserved: 0, jobs: 0 });
+  });
+
+  it('starts nothing when the count has not really moved', async () => {
+    const reservation = createWalletReservation({ lanes: () => 1 });
+    const ran: string[] = [];
+    let releaseFirst: () => void = () => undefined;
+    const first = reservation.exclusive(
+      () =>
+        new Promise<void>((resolve) => {
+          ran.push('first');
+          releaseFirst = resolve;
+        }),
+    );
+    await settle();
+    const second = reservation.exclusive(async () => {
+      ran.push('second');
+    });
+    await settle();
+    reservation.laneCountChanged();
+    reservation.laneCountChanged();
+    await settle();
+    assert.deepEqual(ran, ['first']);
+    releaseFirst();
+    await Promise.all([first, second]);
+    assert.deepEqual(ran, ['first', 'second']);
   });
 });
