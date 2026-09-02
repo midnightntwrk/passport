@@ -182,21 +182,21 @@ describe('a 200 with both legs in', () => {
       {
         label: 'Opening balance deposited',
         detail:
-          'The sponsor deposited 2000 atomic NIGHT into your account contract 7c2f4a19e...4d5e6f7.',
+          'The sponsor deposited 2000 atomic NIGHT into your account 7c2f4a19e...4d5e6f7.',
         status: 'complete',
         txHash: 'ab'.repeat(32),
       },
       {
         label: 'Stablecoin deposited',
         detail:
-          '100 mUSD went into your account contract 7c2f4a19e...4d5e6f7 alongside the NIGHT.',
+          '100 mUSD went into your account 7c2f4a19e...4d5e6f7 alongside the NIGHT.',
         status: 'complete',
         txHash: 'cd'.repeat(32),
       },
     ]);
   });
 
-  it('never names a wallet or a DUST balance in what it says', () => {
+  it('never names the machinery in what it says', () => {
     const plan = classifyFundAccountAnswer(
       {
         kind: 'response',
@@ -208,9 +208,8 @@ describe('a 200 with both legs in', () => {
     );
     const said = plan.activities.map((activity) => `${activity.label} ${activity.detail}`).join(' ');
     // The account is the only thing value ever reaches, and the copy says so.
-    expect(said).toMatch(/account contract/);
-    expect(said.toLowerCase()).not.toContain('dust');
-    expect(said.toLowerCase()).not.toContain('wallet');
+    expect(said).toMatch(/your account\b/);
+    expect(said).not.toMatch(/contract|wallet|DUST|registry|indexer|resolver/i);
     expect(said).not.toContain('mn_addr');
   });
 

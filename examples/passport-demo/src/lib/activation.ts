@@ -131,7 +131,7 @@ function asNonEmptyString(value: unknown): string | null {
 }
 
 /**
- * Classifies one `/fund-account` answer for one account contract.
+ * Classifies one `/fund-account` answer for one Passport account.
  *
  * Pure: it reads the answer and returns the plan. It writes no marker, adds no
  * activity, and touches no balance — see {@link ActivationPlan}.
@@ -243,7 +243,7 @@ export function classifyFundAccountAnswer(
       label: 'Opening balance deposited',
       detail: `The sponsor deposited ${
         typeof body.amountAtomic === 'string' ? body.amountAtomic : 'an opening'
-      } atomic NIGHT into your account contract ${compactAddress(contractAddress)}.${
+      } atomic NIGHT into your account ${compactAddress(contractAddress)}.${
         assetError ? ` The stablecoin half did not land: ${assetError}` : ''
       }`,
       status: 'complete',
@@ -255,7 +255,7 @@ export function classifyFundAccountAnswer(
       label: 'Stablecoin deposited',
       detail: `${
         typeof body.assetAmount === 'string' ? body.assetAmount : 'The sponsor’s stablecoin'
-      } went into your account contract ${compactAddress(contractAddress)} alongside the NIGHT.`,
+      } went into your account ${compactAddress(contractAddress)} alongside the NIGHT.`,
       status: 'complete',
       txHash: assetTx,
     });
