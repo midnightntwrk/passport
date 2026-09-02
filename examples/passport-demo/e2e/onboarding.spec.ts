@@ -59,6 +59,7 @@ import {
   installNetworkBoundary,
   PASSPORT_ACCOUNT_ADDRESS,
   RESOLVABLE_NAME,
+  sponsorRoute,
   type NetworkBoundary,
 } from './mocks.js';
 import { installVirtualAuthenticator } from './passkey.js';
@@ -212,6 +213,27 @@ test('the availability line quotes no price, no balance, and no faucet', async (
   expect(text).not.toMatch(/\bDUST\b/);
 });
 
+test('every sponsor call this build makes is answered here, and none leaves the box', async () => {
+  /* THE ONE THING A MOCKED TIER CANNOT ASSERT BY PASSING.
+     `import.meta.env` is a compile-time substitution, so the sponsor origin is
+     baked into the bundle `previewEnv` builds. If that origin and the route
+     globs in `mocks.ts` ever name different hosts, every interception here
+     misses, the app talks to a real machine on the internet, and the specs go
+     on passing — quietly graded against whatever that machine happened to say.
+     That is exactly what this tier had been doing against a host deleted on
+     2026/08/27 whose address is now somebody else's.
+
+     Interception and the network are mutually exclusive in Playwright: a
+     fulfilled route opens no socket. So the two counters agreeing is the proof
+     that nothing reached the network, and the count being above zero is the
+     proof that the walk so far — the sponsorship probe and the fee-sponsor
+     readiness read behind the availability line — asked the sponsor anything
+     at all. Both halves are needed: zero and zero also "agree". */
+  const traffic = network.sponsorTraffic();
+  expect(traffic.intercepted).toBeGreaterThan(0);
+  expect(traffic.requests).toBe(traffic.intercepted);
+});
+
 test('with no sponsor, the screen promises a queue and never a payment', async () => {
   /* The sponsor is the only thing that registers a name. When it stands down,
      the honest answer is a QUEUE — and the sentence under the field changes to
@@ -222,7 +244,7 @@ test('with no sponsor, the screen promises a queue and never a payment', async (
   /* A sponsor that takes its time, and stands down. Both halves matter: the
      delay is what makes the second stage long enough to read, and the refusal
      is what proves the gate still stops the claim before any ceremony. */
-  await page.route('**/funder.midnightpassport.com/**/status', async (route) => {
+  await page.route(sponsorRoute('/status'), async (route) => {
     /* Slower than the registry below, deliberately. The two probes now run
        CONCURRENTLY — removing that serialisation is half of the fix — so the
        second stage is only long enough to observe when the sponsor is the
@@ -261,7 +283,7 @@ test('with no sponsor, the screen promises a queue and never a payment', async (
 
   /* Put the sponsoring answer back, so the rest of the walk runs against the
      service as it really behaves. */
-  await page.route('**/funder.midnightpassport.com/**/status', (route) =>
+  await page.route(sponsorRoute('/status'), (route) =>
     route.fulfill({
       json: { network: 'stagenet', aliasSponsorship: 'available', assetSymbol: 'mUSD' },
     }),
@@ -287,7 +309,7 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
   /* A sponsor that takes its time, and stands down. Both halves matter: the
      delay is what makes the second stage long enough to read, and the refusal
      is what proves the gate still stops the claim before any ceremony. */
-  await page.route('**/funder.midnightpassport.com/**/status', async (route) => {
+  await page.route(sponsorRoute('/status'), async (route) => {
     /* Slower than the registry below, deliberately. The two probes now run
        CONCURRENTLY — removing that serialisation is half of the fix — so the
        second stage is only long enough to observe when the sponsor is the
@@ -402,7 +424,7 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
   expect(network.calls.filter((call) => call.includes('register-alias'))).toHaveLength(0);
 
   network.setRegistryDelay(0);
-  await page.route('**/funder.midnightpassport.com/**/status', (route) =>
+  await page.route(sponsorRoute('/status'), (route) =>
     route.fulfill({
       json: { network: 'stagenet', aliasSponsorship: 'available', assetSymbol: 'mUSD' },
     }),
@@ -476,7 +498,7 @@ test('the claim shows three steps, and the long wait is one of them — not thre
      `setRegistryDelay` holds the indexer's answer back exactly as a poor link
      does. The sponsor is stood down, so the walk still costs no ceremony. */
   test.setTimeout(200_000);
-  await page.route('**/funder.midnightpassport.com/**/status', (route) =>
+  await page.route(sponsorRoute('/status'), (route) =>
     route.fulfill({ json: { network: 'stagenet', aliasSponsorship: 'paused' } }),
   );
   await page.reload();
@@ -528,7 +550,7 @@ test('the claim shows three steps, and the long wait is one of them — not thre
   await expect(page.getByText(/The claim did not complete/i)).toBeVisible({ timeout: 30_000 });
 
   network.setRegistryDelay(0);
-  await page.route('**/funder.midnightpassport.com/**/status', (route) =>
+  await page.route(sponsorRoute('/status'), (route) =>
     route.fulfill({
       json: { network: 'stagenet', aliasSponsorship: 'available', assetSymbol: 'mUSD' },
     }),

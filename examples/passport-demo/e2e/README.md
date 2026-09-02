@@ -120,7 +120,7 @@ over a flake:
   the sponsor is taken in between.
 
 If either fails twice the message carries the service's own sentence. Check
-`GET https://funder.midnightpassport.com/balancer/wallet-status` before
+`GET https://67-205-177-162.sslip.io/balancer/wallet-status` before
 concluding the app is broken.
 
 A clean run is about seven minutes; a run that has to wait out a reservation is

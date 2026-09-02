@@ -57,7 +57,7 @@
 
 import { expect, test, type Page } from '@playwright/test';
 
-import { installNetworkBoundary, PASSPORT_ACCOUNT_ADDRESS } from './mocks.js';
+import { installNetworkBoundary, PASSPORT_ACCOUNT_ADDRESS, sponsorRoute } from './mocks.js';
 import { installVirtualAuthenticator } from './passkey.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -202,7 +202,7 @@ test('a finished claim lands on Home without asking for anything', async () => {
   /* The sponsor registers the name, naming this Passport's own account as the
      target — which is the one thing `sponsoredAlias.ts` refuses to take on
      faith from a 200 with anything else in it. */
-  await page.route('**/funder.midnightpassport.com/**/register-alias', (route) =>
+  await page.route(sponsorRoute('/register-alias'), (route) =>
     route.fulfill({
       json: {
         alias: NAME,

@@ -32,11 +32,22 @@ const live = process.env.RUN_LIVE === '1';
  * with (.github/workflows/deploy-demo.yml, and `deploy:passport:manual` for the
  * break-glass path), minus the raffle origin, so the mocked walk exercises the same
  * code paths the deployment does.
+ *
+ * The host is `67-205-177-162.sslip.io`. It is not the retired funder name
+ * this file carried until 2026/09/02: the 1 GB droplet behind that name was
+ * deleted on 2026/08/27 and its address has since been recycled to somebody
+ * else, so a build compiled against it points sponsorship and funding at a
+ * stranger's machine. The deployment stopped using it that day; this file was
+ * the last one still compiling the mocked tier against it, which made tier 1
+ * exercise a code path production no longer has.
+ * `e2e/mocks.ts` derives every route glob from the same host, so the two cannot
+ * drift apart again without the mocked run failing.
  */
 const previewEnv = {
   VITE_MIDNIGHT_NETWORK_ID: 'stagenet',
-  VITE_SPONSOR_URL: 'https://funder.midnightpassport.com/balancer',
-  VITE_FUNDER_URL: 'https://funder.midnightpassport.com/balancer',
+  VITE_SPONSOR_URL: 'https://67-205-177-162.sslip.io/balancer,https://api-stagenet.1am.xyz',
+  VITE_FUNDER_URL: 'https://67-205-177-162.sslip.io/balancer',
+  VITE_MIDNIGHT_PROVING_URL: 'https://67-205-177-162.sslip.io/prover,https://api-stagenet.1am.xyz',
   VITE_INDEXER_URL: 'https://indexer.stagenet.shielded.tools/api/v4/graphql',
 };
 

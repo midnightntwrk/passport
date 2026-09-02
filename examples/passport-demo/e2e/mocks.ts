@@ -132,8 +132,65 @@ export const RECIPIENT_ACCOUNT_ADDRESS =
  */
 const MOCK_CHAIN_HEIGHT = 120;
 
-/** The sponsor and balancer origin this build is compiled against. */
-export const BALANCER_ORIGIN = 'https://funder.midnightpassport.com/balancer';
+/**
+ * The host the funder and primary fee sponsor live on, and the ONE place it is
+ * written.
+ *
+ * It is `67-205-177-162.sslip.io`, the droplet the deployment builds against
+ * (`.github/workflows/deploy-demo.yml`) and the one `playwright.config.ts`'s
+ * `previewEnv` now compiles tier 1 against. The funder host these routes named
+ * until 2026/09/02 was a 1 GB droplet deleted on 2026/08/27 whose address has
+ * since been recycled; a route that still named it would silently stop matching
+ * the moment the build moved, and every mocked request would go to a stranger's
+ * machine instead of being answered here.
+ *
+ * Every route below and in the specs is built from it by {@link sponsorRoute},
+ * so the host can only move in one edit, and if it moves without the build
+ * moving the mocked run fails loudly rather than reaching the network.
+ */
+export const BALANCER_HOST = '67-205-177-162.sslip.io';
+
+/**
+ * A matcher for balancer traffic — all of it, or one endpoint of it.
+ *
+ * A `RegExp` rather than a glob string so the host is interpolated once, from
+ * the constant above, and a spec that needs `/status` alone cannot end up
+ * writing the host a second time. `sponsorRoute('/status')` matches that
+ * endpoint whatever path prefix the configured base URL carries, and — because
+ * the optional prefix must end in a slash — does NOT also match
+ * `/wallet-status`.
+ */
+export function sponsorRoute(endpoint = ''): RegExp {
+  const host = BALANCER_HOST.replaceAll('.', '\\.');
+  const name = endpoint.replace(/^\//, '');
+  const tail = endpoint ? `(?:.*\\/)?${name}(?:[?#].*)?$` : '';
+  return new RegExp(`^https:\\/\\/${host}\\/${tail}`);
+}
+
+/**
+ * The SECOND fee sponsor the build lists, and why it has to be answered here.
+ *
+ * `VITE_SPONSOR_URL` is an ordered list, and `src/lib/sponsor.ts` probes
+ * `GET /wallet-status` on EVERY entry before it lets a send go — the first
+ * endpoint reporting `available > 0` serves. So a tier that mocks only the
+ * balancer is not a mocked tier: the readiness probe goes out to the real 1AM
+ * gateway, and a spec that has just dialled the balancer to busy is graded on
+ * whatever that gateway happens to hold. That is not hypothetical — it is what
+ * `a busy fee sponsor disables the Send control` did on 2026/09/02: it read
+ * `Review`, because a live third party said it had DUST.
+ *
+ * The gateway only ever serves `/wallet-status` and `/balance-only`;
+ * `/status`, `/register-alias`, and `/fund-account` come from
+ * `VITE_FUNDER_URL` and are ours alone. The handler below answers accordingly
+ * rather than pretending the gateway is a second balancer.
+ */
+export const SPONSOR_FAILOVER_HOST = 'api-stagenet.1am.xyz';
+
+/** Matches every request the app makes to the failover sponsor. */
+export const SPONSOR_FAILOVER_ROUTE_GLOB = `**/${SPONSOR_FAILOVER_HOST}/**`;
+
+/** Every host a sponsored build may talk to, in the order it is configured. */
+export const SPONSOR_HOSTS: readonly string[] = [BALANCER_HOST, SPONSOR_FAILOVER_HOST];
 
 /** Every request the mocked tier answered, plus the dials a spec can turn. */
 export interface NetworkBoundary {
@@ -157,6 +214,18 @@ export interface NetworkBoundary {
    * so this is the dial that makes it happen. Default 0.
    */
   setRegistryDelay(ms: number): void;
+  /**
+   * How the sponsor traffic split between "answered here" and "left the box".
+   *
+   * Interception and the real network are mutually exclusive in Playwright — a
+   * fulfilled route never opens a socket — so the two numbers being equal, and
+   * both above zero, is the proof that the mocked tier both TALKED to the
+   * sponsor host the build names and reached none of it. A build whose
+   * `VITE_SPONSOR_URL` drifted off {@link BALANCER_HOST} shows `requests`
+   * climbing past `intercepted`; one that never asked shows both at zero, which
+   * is a mocked run asserting nothing.
+   */
+  sponsorTraffic(): { requests: number; intercepted: number };
 }
 
 /** @deprecated The old name for {@link NetworkBoundary}. */
@@ -170,9 +239,19 @@ export async function installNetworkBoundary(page: Page): Promise<NetworkBoundar
   const calls: string[] = [];
   let sponsorAvailable = 1;
   let registryDelayMs = 0;
+  let sponsorRequests = 0;
+  let sponsorIntercepted = 0;
 
-  await page.route('**/funder.midnightpassport.com/**', async (route) => {
+  /* Counted before routing decides anything, so a request that slipped past the
+     matcher and went to a real machine still shows up here. See
+     `sponsorTraffic`. */
+  page.on('request', (request) => {
+    if (SPONSOR_HOSTS.some((host) => request.url().includes(host))) sponsorRequests += 1;
+  });
+
+  await page.route(sponsorRoute(), async (route) => {
     const url = route.request().url();
+    sponsorIntercepted += 1;
     calls.push(`${route.request().method()} ${url}`);
 
     if (url.endsWith('/status')) {
@@ -229,6 +308,39 @@ export async function installNetworkBoundary(page: Page): Promise<NetworkBoundar
     return route.fulfill({ status: 404, json: { error: 'not-mocked' } });
   });
 
+  /* The failover sponsor, answering the two endpoints it really serves and
+     refusing the rest. Its DUST follows the same dial as the balancer's: a
+     spec that says "the fee sponsor is busy" means the whole list is busy,
+     which is what the user's screen is a function of — `combineSponsorReadiness`
+     folds the list, and one endpoint with DUST is a send that may proceed. */
+  await page.route(SPONSOR_FAILOVER_ROUTE_GLOB, async (route) => {
+    const url = route.request().url();
+    sponsorIntercepted += 1;
+    calls.push(`${route.request().method()} ${url}`);
+
+    if (url.endsWith('/wallet-status')) {
+      return route.fulfill({
+        json: {
+          total: 1,
+          available: sponsorAvailable,
+          wallets: [
+            {
+              index: 0,
+              ready: true,
+              dust: {
+                balance:
+                  sponsorAvailable > 0 ? '288384879317778538' : '4993664979775282371',
+                utxoCount: 3,
+                isSynced: true,
+              },
+            },
+          ],
+        },
+      });
+    }
+    return route.fulfill({ status: 404, json: { error: 'not-mocked' } });
+  });
+
   await page.route('**/indexer.stagenet.shielded.tools/**', async (route) => {
     const body = route.request().postData() ?? '';
     if (body.includes('BlockHeight')) {
@@ -271,6 +383,9 @@ export async function installNetworkBoundary(page: Page): Promise<NetworkBoundar
     },
     setRegistryDelay(ms: number) {
       registryDelayMs = ms;
+    },
+    sponsorTraffic() {
+      return { requests: sponsorRequests, intercepted: sponsorIntercepted };
     },
   };
 }

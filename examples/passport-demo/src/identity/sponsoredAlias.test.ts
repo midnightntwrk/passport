@@ -44,7 +44,7 @@ vi.mock('./midnames.js', () => ({
   resolveAliasTarget: (...args: unknown[]) => resolveAliasTarget(...args),
 }));
 
-const FUNDER = 'https://funder.midnightpassport.com/balancer';
+const FUNDER = 'https://67-205-177-162.sslip.io/balancer';
 const ACCOUNT = '7c2f4a19e6d0b83c5194fe2a77bb0c61d8a3e94f20cb5d7e8f16a0b3c4d5e6f7';
 const RESOLVER = '3d1c8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4';
 const OWNER_KEY = Uint8Array.from({ length: 32 }, (_unused, index) => index);

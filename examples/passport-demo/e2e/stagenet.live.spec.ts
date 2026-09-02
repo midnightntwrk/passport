@@ -670,10 +670,18 @@ async function storedAccountContract(page: Page): Promise<string> {
  * stale the day that changes. `null` when the service cannot be read — the
  * sheet then keeps whichever colour it chose, and the balance assertions still
  * decide whether the right one moved.
+ *
+ * The origin comes from `VITE_FUNDER_URL` when the run sets it, and otherwise
+ * from the droplet the deployment builds against. Until 2026/09/02 it was
+ * hard-coded to the retired funder host, whose droplet was deleted on
+ * 2026/08/27, so every live run since had been taking the `catch` and silently
+ * returning `null` — which reads exactly like a run that checked the colour
+ * and found it fine.
  */
 async function sponsorStablecoinColour(): Promise<string | null> {
+  const funder = process.env.VITE_FUNDER_URL ?? 'https://67-205-177-162.sslip.io/balancer';
   try {
-    const response = await fetch('https://funder.midnightpassport.com/balancer/status');
+    const response = await fetch(`${funder}/status`);
     const body = (await response.json()) as { assetColourHex?: unknown };
     return typeof body.assetColourHex === 'string' && body.assetColourHex ? body.assetColourHex : null;
   } catch {
