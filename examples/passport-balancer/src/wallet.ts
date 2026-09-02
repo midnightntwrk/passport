@@ -1010,6 +1010,13 @@ export interface BalancerWallet {
    */
   hold(priority: number): () => void;
   /**
+   * Runs `work` with this job's spend LANE given back, and takes one again
+   * before returning. See `yieldLane` in `./reservation.ts` — it is for the
+   * wait a running job cannot avoid making, of which there is exactly one: the
+   * catch-up poll inside `withNodeRejectionRetry`.
+   */
+  yieldLane<T>(work: () => Promise<T>, priority?: number): Promise<T>;
+  /**
    * The provider midnight-js balances, signs, and submits contract
    * transactions through. Built per job, because it snapshots the wallet's
    * shielded keys; calls made through it MUST be inside {@link exclusive}.
@@ -1316,7 +1323,7 @@ export async function openBalancerWallet(
         `[claim] ${label} held this wallet for ${(heldMs / 1_000).toFixed(1)} s — /wallet-status answered available: 0 for that long`,
       ),
   });
-  const { exclusive, reserve, hold } = reservation;
+  const { exclusive, reserve, hold, yieldLane } = reservation;
 
   /* Every transaction this wallet has balanced and handed away, until the chain
      has been seen carrying it or `config.balanceOrphanMs` has passed without
@@ -1627,6 +1634,7 @@ export async function openBalancerWallet(
 
     exclusive,
     hold,
+    yieldLane,
 
     contractWalletProvider(options: ContractWalletProviderOptions = {}): ContractWalletProvider {
       const waitForDustMs = options.waitForDustMs ?? 0;
