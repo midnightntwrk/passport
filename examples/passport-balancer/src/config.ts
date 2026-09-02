@@ -108,6 +108,12 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    */
   spendLanes: number;
   /**
+   * How long `/register-alias` and `/fund-account` may wait, outside the spend
+   * queue, for a fee-capable DUST coin to come free before refusing. See
+   * {@link DEFAULT_DUST_WAIT_MS} for why four minutes.
+   */
+  dustWaitMs: number;
+  /**
    * How many pre-deployed resolver leaves the sponsor tries to hold. The filler
    * tops the shelf up to here and never past it. Zero switches the pool off and
    * every registration deploys its own leaf, which is the behaviour this
@@ -282,6 +288,28 @@ export const DEFAULT_SPEND_QUEUE_MAX = 8;
  * suspected of a fault.
  */
 export const DEFAULT_SPEND_LANES = 3;
+
+/**
+ * How long a user's spend may WAIT for a fee-capable DUST coin to come free
+ * before this service gives up and refuses.
+ *
+ * Four minutes, and the figure is measured rather than chosen for roundness.
+ * The sponsor holds ONE coin above the fee floor, and the thing that books it
+ * during an onboarding is the user's OWN account deploy, which holds it for
+ * about 100 s. Before this existed, `/register-alias` passed a budget of zero
+ * to its fee estimate, so the first claim after that deploy answered 502
+ * `DustUnavailable` about 60 s after the click — 5/5 attempts on 2026/09/02 —
+ * and the user had to press Claim a second time, after which it completed in
+ * 52–58 s. Four minutes covers that hold twice over and still leaves the whole
+ * request inside the client's own 600-second ceiling with the ~55 s
+ * registration to follow.
+ *
+ * It is spent OUTSIDE the spend queue, holding nothing: see
+ * `BalancerWallet.awaitFreeDustCoin`. Waiting inside a job is what let one fee
+ * estimate block every other job for ten minutes on 2026/09/02, and that
+ * budget is still zero.
+ */
+export const DEFAULT_DUST_WAIT_MS = 240_000;
 
 /**
  * How many pre-deployed resolver leaves to hold, and the depth below which the
@@ -550,6 +578,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     throw new Error('BALANCER_SPEND_LANES must be at least 1 (1 runs spends strictly one at a time).');
   }
 
+  const dustWaitMs = Number(trimmed(env.BALANCER_DUST_WAIT_MS) ?? DEFAULT_DUST_WAIT_MS);
+  if (!Number.isInteger(dustWaitMs) || dustWaitMs < 0) {
+    throw new Error(
+      'BALANCER_DUST_WAIT_MS must be a whole number of milliseconds (0 refuses immediately rather than waiting).',
+    );
+  }
+
   const resolverPoolTarget = wholeNumber(
     'RESOLVER_POOL_TARGET',
     trimmed(env.RESOLVER_POOL_TARGET),
@@ -614,6 +649,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     accountRate,
     spendQueueMax,
     spendLanes,
+    dustWaitMs,
     resolverPoolTarget,
     resolverPoolFloor,
     trustedProxies: trustedProxies.length > 0 ? trustedProxies : [...DEFAULT_TRUSTED_PROXIES],

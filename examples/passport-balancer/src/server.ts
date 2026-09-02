@@ -171,12 +171,14 @@ import {
 } from './resolverPool.js';
 import {
   BalanceRefusal,
+  DustWaitExhausted,
   formatNight,
   isEffectivelySynced,
   isLegEffectivelySynced,
   markDustColdStart,
   openBalancerWallet,
   syncAheadDetail,
+  withDustWait,
   type BalancerWallet,
 } from './wallet.js';
 
@@ -253,6 +255,7 @@ async function main(): Promise<void> {
       : 'no per-client limit';
   console.log(
     `limits    /balance-only ${describeRate(config.balanceRate)}; /register-alias ${describeRate(config.aliasRate)}; /fund-account ${describeRate(config.accountRate)}`,
+    `dust      a name claim or a grant waits up to ${Math.round(config.dustWaitMs / 1_000)} s, outside the spend queue, for a fee-capable DUST coin before it refuses`,
   );
   console.log(
     `queue     ${config.spendQueueMax > 0 ? `at most ${config.spendQueueMax} spend requests in flight` : 'unbounded spend queue (BALANCER_SPEND_QUEUE_MAX=0)'}`,
@@ -592,6 +595,52 @@ async function main(): Promise<void> {
       await new Promise((settle) => setTimeout(settle, SETTLE_POLL_MS));
     }
   };
+
+  /**
+   * How long a refused caller is told to wait after the whole window is gone.
+   *
+   * Fifteen seconds rather than the three `/wallet-status` publishes: three is
+   * the figure for a settle that is already most of the way through, and a
+   * caller that has just watched this service wait four minutes should not be
+   * sent straight back into another four.
+   */
+  const DUST_WAIT_RETRY_AFTER_MS = 15_000;
+
+  /**
+   * Runs one user-facing spend, WAITING for a fee-capable DUST coin rather than
+   * refusing when none is free.
+   *
+   * THE FAILURE THIS EXISTS FOR, with a measurement against it. The sponsor
+   * holds one DUST coin above the fee floor. During onboarding the user's OWN
+   * account deploy books it for about 100 s, and the registration that follows
+   * the click arrives inside that window — so `/register-alias` answered 502
+   * about 60 s after the click, 5/5 times on 2026/09/02, and the user had to
+   * press Claim again. The second press worked, in 52–58 s, because by then the
+   * coin was back. Nothing was wrong except that this service would not wait
+   * for its own coin.
+   *
+   * THE SHAPE OF THE ANSWER IS "SAY NOTHING UNTIL IT IS DONE", and that is read
+   * off the client rather than chosen. `sponsoredAlias.ts` gives a registration
+   * a 600-second ceiling and treats every non-2xx as a typed refusal; a 202
+   * would count as `response.ok`, fail its body check, and come back as
+   * `confirmation-failed` — the one code it will never retry. So the request
+   * simply stays open: a 240-second wait plus a ~55-second registration is
+   * comfortably inside its patience, and Node bounds the REQUEST rather than
+   * the response, with Caddy proxying the answer whenever it comes.
+   *
+   * The wait is spent OUTSIDE the spend queue, holding no lane — see
+   * `withDustWait` — so a caller waiting here blocks nobody.
+   */
+  const spendWaitingForDust = <T>(label: string, spend: () => Promise<T>): Promise<T> =>
+    withDustWait(spend, {
+      label,
+      windowMs: config.dustWaitMs,
+      /* Fee-CAPABLE coins, not any coin: the SDK selects per coin, so a wallet
+         holding four small coins can be woken by every one of them and still
+         not balance a contract call. */
+      awaitFreeCoin: (maxMs) => wallet.awaitFreeDustCoin(maxMs, { minSpecks: FEE_CAPABLE_SPECKS }),
+      retryAfterMs: DUST_WAIT_RETRY_AFTER_MS,
+    });
 
   /* The wallet syncs in the background and the HTTP server starts NOW. A
      sponsor that is unreachable for the length of a chain walk looks, from
@@ -1444,7 +1493,10 @@ async function main(): Promise<void> {
              NIGHT out of this wallet, the asset leg is a shielded coin the
              faucet mints — and running them in series is most of the five
              minutes an activation used to take to show its assets. */
-          const result = await wallet.exclusive(() => funder.fund(contractAddress));
+          const result = await spendWaitingForDust(
+            `the activation grant for ${contractAddress}`,
+            () => wallet.exclusive(() => funder.fund(contractAddress)),
+          );
           accountsFunded += 1;
           lastSpendAt = Date.now();
           nightTxHash = result.txHash;
@@ -1466,6 +1518,19 @@ async function main(): Promise<void> {
             `[account] ${formatNight(result.amountAtomic)} NIGHT → ${contractAddress} (tx ${result.txHash}${result.block ? `, block ${result.block}` : ''}, holds ${result.balanceAfterAtomic} atomic)`,
           );
         } catch (cause) {
+          /* Same as the registration: a window that ran out with no coin free
+             is a DUST shortfall, not a failed deposit, and nothing was spent. */
+          if (cause instanceof DustWaitExhausted) {
+            console.warn(`[account] ${contractAddress}: ${cause.message} — nothing was credited`);
+            return fail(
+              refusal(
+                503,
+                'funder-no-dust',
+                'The balancer could not free a coin to pay this grant’s fee in time. Nothing was credited; try again shortly.',
+                { retryAfterMs: cause.retryAfterMs },
+              ),
+            );
+          }
           if (cause instanceof AccountFundingError) {
             console.error(
               `[account] FAILED for ${contractAddress}: ${cause.code} — ${cause.message}${cause.detail ? ` (${cause.detail})` : ''}`,
@@ -1901,7 +1966,14 @@ async function main(): Promise<void> {
         /* Both transactions run under the wallet's spend lock, so a fee
            sponsorship cannot reserve the coins this registration is balancing
            against. */
-        const result = await wallet.exclusive(
+        /* Waits for a fee-capable coin instead of refusing, and re-enters the
+           queue with a freshly built transaction when one arrives — which is
+           what carries `withNodeRejectionRetry` into the attempt after the
+           wait: `midnames.register` rebuilds every leg it makes. A pooled leaf
+           already taken off the shelf is reused across the retry, so a wait
+           costs the shelf nothing. */
+        const result = await spendWaitingForDust(`the registration of ${aliasDomain(label)}`, () =>
+          wallet.exclusive(
           () =>
             midnames.register({
               label,
@@ -1923,6 +1995,7 @@ async function main(): Promise<void> {
              watching a screen for this one and nobody is watching for a grant;
              see `SpendPriority`. */
           { priority: SpendPriority.Registration },
+          ),
         );
         aliasesSponsored += 1;
         lastSpendAt = Date.now();
@@ -1957,6 +2030,22 @@ async function main(): Promise<void> {
           },
         };
       } catch (cause) {
+        /* The window ran out with no coin free. Reported as the DUST shortfall
+           it is — never as `register-rejected`, which is what a caller used to
+           be shown for this and is a different fault entirely. `funder-no-dust`
+           is a code `sponsoredAlias.ts` already knows: it drops its cached
+           probe and queues the name for another attempt. */
+        if (cause instanceof DustWaitExhausted) {
+          console.warn(`[alias] ${aliasDomain(label)}: ${cause.message} — nothing was spent`);
+          return fail(
+            refusal(
+              503,
+              'funder-no-dust',
+              'The balancer could not free a coin to pay this registration’s fee in time. Nothing was spent; try again shortly.',
+              { retryAfterMs: cause.retryAfterMs },
+            ),
+          );
+        }
         if (cause instanceof AliasSponsorError) {
           console.error(
             `[alias] FAILED for ${aliasDomain(label)}: ${cause.code} — ${cause.message}${cause.detail ? ` (${cause.detail})` : ''}`,

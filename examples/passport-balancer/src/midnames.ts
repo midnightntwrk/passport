@@ -79,7 +79,7 @@ import {
   type ContractProvingMode,
 } from './contractRuntime.js';
 import { deployTransactionReference, type PooledResolver } from './resolverPool.js';
-import type { BalancerWallet } from './wallet.js';
+import { DustUnavailable, type BalancerWallet } from './wallet.js';
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
@@ -732,6 +732,13 @@ export async function createMidnamesSponsor(
           resolverAddress = rawContractAddress(deployTxData.public.contractAddress);
           resolverDeployTx = transactionIdentifier(deployTxData);
         } catch (cause) {
+          /* A DUST shortfall is NOT the registry refusing anything, and must
+             not be dressed up as one. It travels out untouched so `./server.ts`
+             can wait for a coin and rebuild — and so the sentence a user is
+             shown stops saying the registry rejected their name when what
+             happened is that this service had no coin free. Nothing has landed
+             at this point, so the rebuild is clean. */
+          if (cause instanceof DustUnavailable) throw cause;
           throw new AliasSponsorError(
             'deploy-failed',
             `The resolver contract for ${aliasDomain(label)} could not be deployed, so nothing was registered.`,
@@ -848,6 +855,10 @@ export async function createMidnamesSponsor(
            name that was never registered is the failure a caller can act on. */
         const [target, registration] = await Promise.allSettled([targetLeg(), registerLeg()]);
         if (registration.status === 'rejected') {
+          /* Same passthrough as the deploy leg above: no coin was free, the
+             registry never saw the call, and the name is still unregistered —
+             so this is a wait, not a refusal. */
+          if (registration.reason instanceof DustUnavailable) throw registration.reason;
           throw new AliasSponsorError(
             'register-rejected',
             `The .night registry rejected the registration of ${aliasDomain(label)}.`,
@@ -870,6 +881,7 @@ export async function createMidnamesSponsor(
         try {
           registerTx = await registerLeg();
         } catch (cause) {
+          if (cause instanceof DustUnavailable) throw cause;
           throw new AliasSponsorError(
             'register-rejected',
             `The .night registry rejected the registration of ${aliasDomain(label)}.`,

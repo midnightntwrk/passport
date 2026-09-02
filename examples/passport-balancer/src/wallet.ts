@@ -76,6 +76,7 @@ import {
 
 import type { BalancerConfig } from './config.js';
 import { createWalletReservation } from './reservation.js';
+import { FEE_CAPABLE_SPECKS } from './resolverPool.js';
 
 // The wallet SDK's indexer client needs a global WebSocket under plain Node.
 (globalThis as { WebSocket?: unknown }).WebSocket ??= WebSocket;
@@ -551,6 +552,93 @@ export class DustUnavailable extends Error {
 const SHORTFALL_RETRY_AFTER_MS = 3_000;
 
 /**
+ * The wait for a coin ran out, and nothing was spent.
+ *
+ * Typed and carrying its own `retryAfterMs`, because the caller has to turn it
+ * into a refusal a client can act on rather than into a 502. On 2026/09/02 the
+ * first claim of an onboarding failed 5/5 with `DustUnavailable` surfacing as
+ * a 502 about sixty seconds after the click, and the user had to press Claim
+ * again — which then worked, in 52–58 s, because by then the coin their own
+ * account deploy had booked was back. This service waits for that coin now, and
+ * only when the wait itself is exhausted does anybody see a refusal.
+ */
+export class DustWaitExhausted extends Error {
+  constructor(
+    readonly label: string,
+    readonly waitedMs: number,
+    readonly retryAfterMs: number,
+  ) {
+    super(
+      `no fee-capable DUST coin came free for ${label} within ${Math.round(waitedMs / 1_000)} s`,
+    );
+    this.name = 'DustWaitExhausted';
+  }
+}
+
+export interface DustWaitOptions {
+  /** What is waiting, for the journal and for the refusal. */
+  label: string;
+  /** The whole budget, across every wait this call makes. */
+  windowMs: number;
+  /** Normally `wallet.awaitFreeDustCoin`, bound to {@link FEE_CAPABLE_SPECKS}. */
+  awaitFreeCoin: (maxMs: number) => Promise<boolean>;
+  /** How long a refused caller should be told to wait. */
+  retryAfterMs?: number;
+  now?: () => number;
+  log?: (line: string) => void;
+}
+
+/**
+ * Runs a spend, and WAITS rather than refusing when no coin was free for it.
+ *
+ * THE WAIT IS OUT HERE AND NOT INSIDE THE JOB, and that is the whole shape of
+ * it. `contractWalletProvider`'s own `waitForDustMs` stays zero — a job that
+ * has started and cannot find a coin holds a lane while it waits, which is what
+ * let one fee estimate block every other registration for ten minutes on
+ * 2026/09/02. So the job fails fast with {@link DustUnavailable}, gives its
+ * lane back within a second, and this waits for a coin holding nothing at all
+ * before running `spend` AGAIN.
+ *
+ * Running it again is a REBUILD, not a resubmission: `spend` is a thunk that
+ * re-enters the queue and rebuilds its transaction against the wallet as it now
+ * stands, so whatever rebuild-and-retry ladder lives inside it —
+ * `withNodeRejectionRetry`, in both the registration and the grant — applies to
+ * the attempt after the wait exactly as it did to the first.
+ *
+ * Anything that is not a DUST shortfall is rethrown untouched and immediately:
+ * a refused circuit or an unreachable prover is not made better by waiting.
+ */
+export async function withDustWait<T>(
+  spend: () => Promise<T>,
+  options: DustWaitOptions,
+): Promise<T> {
+  const now = options.now ?? Date.now;
+  const log = options.log ?? ((line: string) => console.log(line));
+  const startedAt = now();
+  const deadline = startedAt + Math.max(0, options.windowMs);
+  const retryAfterMs = options.retryAfterMs ?? SHORTFALL_RETRY_AFTER_MS;
+  for (;;) {
+    try {
+      return await spend();
+    } catch (cause) {
+      if (!(cause instanceof DustUnavailable)) throw cause;
+      const remaining = deadline - now();
+      if (remaining <= 0) throw new DustWaitExhausted(options.label, now() - startedAt, retryAfterMs);
+      log(
+        `[dust] ${options.label} found no fee-capable coin free — waiting up to ${Math.round(remaining / 1_000)} s for one rather than refusing`,
+      );
+      if (!(await options.awaitFreeCoin(remaining))) {
+        throw new DustWaitExhausted(options.label, now() - startedAt, retryAfterMs);
+      }
+      log(
+        `[dust] a fee-capable coin came free after ${Math.round((now() - startedAt) / 1_000)} s — rebuilding ${options.label}`,
+      );
+    }
+  }
+}
+
+
+/**
  * The refusal a DUST shortfall or an unsynced read earns.
  *
  * A 429 while it is settling, because `sponsor.ts` retries PENDING_TRANSACTION
@@ -744,8 +832,13 @@ export interface BalancerWallet {
    * it blocks only its own caller, and a caller that gives up gives up without
    * ever having held the queue. `true` when a coin came free, `false` when the
    * budget ran out.
+   *
+   * `minSpecks` counts only coins big enough to carry a fee ON THEIR OWN, which
+   * is the count that actually decides whether a spend can start: the SDK's
+   * selection is per coin. Pass {@link FEE_CAPABLE_SPECKS} for a contract call.
+   * Omitting it counts any coin at all, which is the older, weaker question.
    */
-  awaitFreeDustCoin(maxMs: number): Promise<boolean>;
+  awaitFreeDustCoin(maxMs: number, options?: { minSpecks?: bigint }): Promise<boolean>;
   /** Spend jobs running right now — `/status` publishes it as `jobsRunning`. */
   jobCount(): number;
   /** How many may run at once, given the configured ceiling and the free coins. */
@@ -1139,6 +1232,11 @@ export async function openBalancerWallet(
   const onDustWedged = hooks.onDustWedged ?? ((): void => undefined);
 
   const dustUtxoCountOf = (state: FacadeState): number => state.dust.availableCoins.length;
+  /* Coins, not the balance, and only the ones big enough to carry a fee on
+     their own: the SDK selects per coin, so 3e16 Specks spread over four small
+     coins pays for no contract call at all. See `FEE_CAPABLE_SPECKS`. */
+  const feeCapableCountOf = (state: FacadeState, minSpecks: bigint): number =>
+    state.dust.availableCoins.filter((coin) => coin.generatedNow >= minSpecks).length;
   const pendingCountOf = (state: FacadeState): number => state.pending.all.length;
 
   /**
@@ -1193,11 +1291,25 @@ export async function openBalancerWallet(
    * waited for is a block landing and an event batch replaying, both of which
    * are seconds, and the caller is holding nothing while it waits.
    */
-  const awaitFreeDustCoin = async (maxMs: number): Promise<boolean> => {
+  const awaitFreeDustCoin = async (
+    maxMs: number,
+    options: { minSpecks?: bigint } = {},
+  ): Promise<boolean> => {
+    const minSpecks = options.minSpecks ?? 0n;
     const deadline = Date.now() + Math.max(0, maxMs);
+    let announced = false;
     for (;;) {
       try {
-        if (dustUtxoCountOf(await currentState()) > 0) return true;
+        const state = await currentState();
+        const free =
+          minSpecks > 0n ? feeCapableCountOf(state, minSpecks) : dustUtxoCountOf(state);
+        if (free > 0) return true;
+        if (!announced) {
+          announced = true;
+          console.log(
+            `[dust] no ${minSpecks > 0n ? 'fee-capable ' : ''}DUST coin is free — waiting up to ${Math.round(maxMs / 1_000)} s outside the spend queue`,
+          );
+        }
       } catch {
         // An unreadable state is not a free coin; asked again below.
       }
