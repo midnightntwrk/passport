@@ -30,6 +30,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AliasSponsorRefusal,
+  aliasRefusalMessage,
   checkAliasSponsorship,
   invalidateSponsorshipProbe,
   sponsorAliasRegistration,
@@ -268,7 +269,13 @@ describe('sponsorAliasRegistration — a target that is submitted but not yet se
     expect(posts).toBe(2);
     expect(refusal).toBeInstanceOf(AliasSponsorRefusal);
     expect((refusal as AliasSponsorRefusal).code).toBe('target-missing');
-    expect((refusal as AliasSponsorRefusal).message).toBe('Still nothing there.');
+    /* Passport's own sentence, not the service's: the reader is told the name
+       was not registered and is kept, and "still nothing there" — which is
+       about a contract they have never heard of — goes to the log half. */
+    expect((refusal as AliasSponsorRefusal).message).toBe(
+      'alice.night was not registered. Your name is kept for you and can be registered again.',
+    );
+    expect((refusal as AliasSponsorRefusal).serviceMessage).toBe('Still nothing there.');
   });
 
   it('lets the deploy’s own failure travel rather than blaming the name service', async () => {
@@ -376,15 +383,53 @@ describe('sponsorAliasRegistration — refusals', () => {
     expect(refusal.message).toContain('the tab was closed mid-request');
   });
 
-  it('carries the service’s own code and sentence verbatim', async () => {
+  it('carries the service’s own code, and its sentence in the half a log reads', async () => {
+    /* The code travels verbatim — callers branch on it. The SENTENCE does not:
+       until 2026/09/02 it went straight to the screen, which is how "The .night
+       registry rejected the registration of alice.night" came to be the thing a
+       person was shown when the sponsor simply had no free DUST. */
     installFetch(async () =>
       json({ error: 'funder-empty', message: 'The sponsor holds no NIGHT.' }, 503),
     );
     const refusal = await sponsorAliasRegistration(FUNDER, request).catch((cause) => cause);
     expect(refusal.code).toBe('funder-empty');
-    expect(refusal.message).toBe('The sponsor holds no NIGHT.');
+    expect(refusal.message).toBe(
+      'The sponsor is busy — your name is queued and will register on its own.',
+    );
+    expect(refusal.serviceMessage).toBe('The sponsor holds no NIGHT.');
     expect(refusal.name).toBe('AliasSponsorRefusal');
     expect(refusal.selfPayWorthTrying).toBe(true);
+  });
+
+  it('turns the live 502 into the sponsor’s own sentence, and shows none of its words', async () => {
+    /* The body the deployed balancer actually answered with on 2026/09/02,
+       five times out of five, ~60 s after the first claim of a pair: the
+       registration was refused because the sponsor's single fee-capable DUST
+       coin was booked by the user's own account deploy. Everything the service
+       said about it is read — the diagnostic to classify, the delay to confirm
+       — and none of it reaches the sentence. */
+    installFetch(async () =>
+      json(
+        {
+          error: 'register-rejected',
+          message: 'The .night registry rejected the registration of alice.night.',
+          detail: "DustUnavailable: no DUST coin was free to pay this transaction's fee",
+          retryAfterMs: 5_000,
+        },
+        502,
+      ),
+    );
+    const refusal = await sponsorAliasRegistration(FUNDER, request).catch((cause) => cause);
+    expect(refusal.message).toBe(
+      'The sponsor is busy — your name is queued and will register on its own.',
+    );
+    expect(refusal.message).not.toMatch(/registry|DUST/i);
+    // The name is kept and offered the Register-now control, not abandoned.
+    expect(refusal.selfPayWorthTrying).toBe(true);
+    // And an operator still has every word the service said.
+    expect(refusal.serviceMessage).toBe(
+      'The .night registry rejected the registration of alice.night.',
+    );
   });
 
   it('marks the three double-registration codes as not worth retrying', async () => {
@@ -401,7 +446,10 @@ describe('sponsorAliasRegistration — refusals', () => {
     installFetch(async () => new Response('gateway timeout', { status: 504 }));
     const refusal = await sponsorAliasRegistration(FUNDER, request).catch((cause) => cause);
     expect(refusal.code).toBe('unreachable');
-    expect(refusal.message).toBe('The sponsorship service refused with status 504.');
+    expect(refusal.message).toBe(
+      'alice.night was not registered. Your name is kept for you and can be registered again.',
+    );
+    expect(refusal.serviceMessage).toBe('The sponsorship service refused with status 504.');
     expect(refusal.selfPayWorthTrying).toBe(true);
   });
 
@@ -409,7 +457,10 @@ describe('sponsorAliasRegistration — refusals', () => {
     installFetch(async () => json({ error: 7, message: { text: 'no' } }, 400));
     const refusal = await sponsorAliasRegistration(FUNDER, request).catch((cause) => cause);
     expect(refusal.code).toBe('unreachable');
-    expect(refusal.message).toBe('The sponsorship service refused with status 400.');
+    expect(refusal.message).toBe(
+      'alice.night was not registered. Your name is kept for you and can be registered again.',
+    );
+    expect(refusal.serviceMessage).toBe('The sponsorship service refused with status 400.');
   });
 
   it('drops the cached probe for the three refusals that date it', async () => {
@@ -548,5 +599,72 @@ describe('sponsorAliasRegistration — the independent read-back', () => {
       claimedAt: '2026-08-25T10:00:00.000Z',
       registryConfirmed: false,
     });
+  });
+});
+
+describe('aliasRefusalMessage', () => {
+  const BUSY = 'The sponsor is busy — your name is queued and will register on its own.';
+  const KEPT = 'alice.night was not registered. Your name is kept for you and can be registered again.';
+  const base = { code: 'register-rejected', domain: 'alice.night', detail: null, retryAfterMs: null };
+
+  it('calls the measured fault what it is: the sponsor, busy, and the name kept', () => {
+    /* THE ONE THIS EXISTS FOR. On 2026/09/02 the first claim of a demo pair
+       failed five times out of five and the screen said "The .night registry
+       rejected the registration of alice.night". The registry had rejected
+       nothing: the sponsor held one fee-capable DUST coin, the user's own
+       account deploy had booked it, and the registration was refused before it
+       was ever asked for. The service's own diagnostic said so — this is that
+       diagnostic, verbatim from the journal — and the reader is now told the
+       true thing instead. */
+    expect(
+      aliasRefusalMessage({
+        ...base,
+        detail: "DustUnavailable: no DUST coin was free to pay this transaction's fee",
+      }),
+    ).toBe(BUSY);
+  });
+
+  it('reads a retry delay as the sponsor asking for time, whatever the code says', () => {
+    expect(aliasRefusalMessage({ ...base, retryAfterMs: 5_000 })).toBe(BUSY);
+    // Including zero, which is a delay the service named rather than none.
+    expect(aliasRefusalMessage({ ...base, retryAfterMs: 0 })).toBe(BUSY);
+  });
+
+  it('says the same of the three codes that mean “cannot pay right now”', () => {
+    for (const code of ['funder-empty', 'funder-no-dust', 'rate-limited']) {
+      expect(aliasRefusalMessage({ ...base, code })).toBe(BUSY);
+    }
+  });
+
+  it('keeps a taken name as its own plain sentence, and promises no queue', () => {
+    /* The one refusal that is genuinely about what the reader typed. It must
+       not be folded into the busy sentence: a name somebody else holds will
+       never register on its own, however long the queue runs. */
+    const taken = aliasRefusalMessage({ ...base, code: 'name-taken' });
+    expect(taken).toBe('alice.night has already been taken. Choose another name.');
+    expect(taken).not.toMatch(/queue/i);
+  });
+
+  it('says the honest non-answer when it cannot tell which party failed', () => {
+    expect(aliasRefusalMessage(base)).toBe(KEPT);
+    expect(aliasRefusalMessage({ ...base, code: 'confirmation-failed' })).toBe(KEPT);
+    expect(aliasRefusalMessage({ ...base, detail: 'the leaf could not be deployed' })).toBe(KEPT);
+  });
+
+  it('never says “registry”, and never any of the other machinery words', () => {
+    /* The house rule, held over EVERY sentence this function can produce
+       rather than over the ones a test happened to name. A Passport holder is
+       shown nothing about a registry, a resolver, an indexer, a contract, a
+       wallet, or DUST — they hold none of it and can act on none of it. */
+    const every = [
+      aliasRefusalMessage(base),
+      aliasRefusalMessage({ ...base, code: 'name-taken' }),
+      aliasRefusalMessage({ ...base, code: 'funder-no-dust' }),
+      aliasRefusalMessage({ ...base, retryAfterMs: 1 }),
+      aliasRefusalMessage({ ...base, detail: 'DustUnavailable' }),
+    ];
+    for (const sentence of every) {
+      expect(sentence).not.toMatch(/registry|resolver|indexer|contract|wallet|DUST|ledger|tx\b/i);
+    }
   });
 });

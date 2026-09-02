@@ -42,6 +42,9 @@
  */
 
 import type { AliasClaimResult, MidnamesNetwork } from './midnames.js';
+/* The leaf, not `./midnames.js`: this module is pure transport and must stay
+   importable without the ledger WASM behind it. */
+import { aliasDomain } from './midnamesText.js';
 
 /** How long one probe answer is trusted before the funder is asked again. */
 const PROBE_TTL_MS = 30_000;
@@ -84,10 +87,100 @@ export class AliasSponsorRefusal extends Error {
      * from the wallet, and there is no longer a wallet-funded claim to permit.
      */
     readonly selfPayWorthTrying: boolean,
+    /**
+     * What the SERVICE said, for a log — never for a screen.
+     *
+     * The split is `lib/sponsor.ts`'s, and it is here for the same reason it
+     * is there. Until 2026/09/02 this client put the service's own sentence in
+     * front of the user, and what a person saw when the sponsor ran out of
+     * free DUST mid-claim was "The .night registry rejected the registration
+     * of alice.night" — a machinery word, and a wrong diagnosis: the registry
+     * had rejected nothing, the sponsor could not pay for the transaction that
+     * would have asked it. {@link message} is now Passport's own sentence and
+     * this carries the rest, so an operator loses nothing.
+     *
+     * Deliberately NOT called `detail`: the claim path in `App.tsx` appends a
+     * caught error's `detail` to what it shows and stores, so a field by that
+     * name would put these words back on the screen by another route.
+     */
+    readonly serviceMessage: string = message,
   ) {
     super(message);
     this.name = 'AliasSponsorRefusal';
   }
+}
+
+/**
+ * Refusal codes whose whole meaning to a READER is "not right now".
+ *
+ * All three are the service saying it cannot pay for this transaction at this
+ * moment — no NIGHT free, no DUST free, or too many requests in the window —
+ * and every one of them clears on its own. None of them is a fact about the
+ * name, and none of them is anything a person could act on.
+ */
+const SPONSOR_BUSY_CODES = new Set(['funder-empty', 'funder-no-dust', 'rate-limited']);
+
+/**
+ * The one sentence for a sponsor that cannot pay right now.
+ *
+ * It says the true thing and the useful thing in that order: it is the
+ * sponsor, not the name and not the reader, and the name is not lost. The
+ * Register-now control on the queued name is the manual half of "on its own",
+ * and it is already there — see `App.tsx#registerQueuedAlias`.
+ */
+const SPONSOR_BUSY_SENTENCE =
+  'The sponsor is busy — your name is queued and will register on its own.';
+
+/**
+ * The sentence a PERSON reads when the service will not register their name.
+ *
+ * WHY THE SERVICE'S OWN WORDS ARE NOT IT
+ * --------------------------------------
+ * They were, until 2026/09/02, and the first live claim of a demo pair failed
+ * five times out of five with "The .night registry rejected the registration of
+ * alice.night" on screen. Both halves of that are wrong for a reader: the
+ * registry is machinery a Passport holder is never shown, and it had rejected
+ * nothing — the sponsor held one fee-capable DUST coin, the user's own account
+ * deploy had it booked for a hundred seconds, and the registration was refused
+ * before it was ever asked for. A refusal that names the wrong party sends
+ * somebody to change their name when what they had to do was press the button
+ * again.
+ *
+ * So the code is mapped, and the mapping is the decision:
+ *
+ *   - The sponsor could not pay. `DustUnavailable` inside the service's own
+ *     diagnostic, a `retryAfterMs` beside the refusal, or one of
+ *     {@link SPONSOR_BUSY_CODES}. This is the measured fault, it clears on its
+ *     own, and it gets {@link SPONSOR_BUSY_SENTENCE}.
+ *   - The name itself was refused. `name-taken` is the only one of these the
+ *     service can report, and it is the one refusal that is genuinely ABOUT
+ *     what the reader typed — so it says so plainly, names no machinery, and
+ *     does not promise a queue that would never drain.
+ *   - Anything else. The registration did not happen and the name is kept.
+ *     Said in that order, without a party named, because at this point the
+ *     honest answer is that we do not know which one is at fault.
+ *
+ * `detail` and `retryAfterMs` are read to CLASSIFY and are never rendered:
+ * `detail` is where the service puts the ledger's own words, which is exactly
+ * the vocabulary this function exists to keep off the screen.
+ */
+export function aliasRefusalMessage(refusal: {
+  code: string;
+  domain: string;
+  detail: string | null;
+  retryAfterMs: number | null;
+}): string {
+  if (refusal.code === 'name-taken') {
+    return `${refusal.domain} has already been taken. Choose another name.`;
+  }
+  if (
+    SPONSOR_BUSY_CODES.has(refusal.code) ||
+    refusal.retryAfterMs !== null ||
+    (refusal.detail !== null && refusal.detail.includes('DustUnavailable'))
+  ) {
+    return SPONSOR_BUSY_SENTENCE;
+  }
+  return `${refusal.domain} was not registered. Your name is kept for you and can be registered again.`;
 }
 
 /** Codes after which the name must NOT be re-attempted — see `selfPayWorthTrying`. */
@@ -292,17 +385,37 @@ export async function sponsorAliasRegistration(
   }
 
   if (!response.ok) {
-    const refusal = (body ?? {}) as { error?: unknown; message?: unknown };
+    const refusal = (body ?? {}) as {
+      error?: unknown;
+      message?: unknown;
+      /* The service's own diagnostic — the ledger's words, routinely. Read to
+         classify the refusal and never rendered; see `aliasRefusalMessage`. */
+      detail?: unknown;
+      retryAfterMs?: unknown;
+    };
     const code = typeof refusal.error === 'string' ? refusal.error : 'unreachable';
-    const message =
+    const serviceMessage =
       typeof refusal.message === 'string'
         ? refusal.message
         : `The sponsorship service refused with status ${response.status}.`;
-    if (code === 'funder-empty' || code === 'funder-no-dust' || code === 'rate-limited') {
+    if (SPONSOR_BUSY_CODES.has(code)) {
       // The probe's cached "available" is now demonstrably stale.
       invalidateSponsorshipProbe(funderUrl);
     }
-    throw new AliasSponsorRefusal(code, message, !NO_FALLBACK_CODES.has(code));
+    throw new AliasSponsorRefusal(
+      code,
+      aliasRefusalMessage({
+        code,
+        domain: aliasDomain(request.alias),
+        detail: typeof refusal.detail === 'string' ? refusal.detail : null,
+        retryAfterMs:
+          typeof refusal.retryAfterMs === 'number' && Number.isFinite(refusal.retryAfterMs)
+            ? refusal.retryAfterMs
+            : null,
+      }),
+      !NO_FALLBACK_CODES.has(code),
+      serviceMessage,
+    );
   }
 
   const success = body as FunderSuccessBody;

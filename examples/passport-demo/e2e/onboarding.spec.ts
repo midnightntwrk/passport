@@ -463,6 +463,17 @@ test('a claim that failed keeps the name, and the reload lands on Home with a re
     /The Passport service that registers names is not available right now/i,
   );
 
+  /* AND IN PLAIN WORDS, whichever way the claim failed. This row carries the
+     claim's own failure sentence, and until 2026/09/02 that sentence was
+     whatever the registration service had said — so a claim refused because
+     the sponsor's only fee-capable DUST coin was booked put "The .night
+     registry rejected the registration of …" here: machinery, and the wrong
+     party blamed for a registration that was never asked for. The client owns
+     the sentence now (`identity/sponsoredAlias.ts#aliasRefusalMessage`), and
+     what is held here is the property rather than one wording — over the whole
+     row, because the row is what a person reads. */
+  await expect(identity).not.toContainText(/registry|resolver|indexer|\bDUST\b/i);
+
   /* AND A WAY TO TRY AGAIN, on the row the queued name is on. It is not
      clicked here: "Register now" is the REAL claim re-run — the deploy, the
      prover, and the registry write — which this tier cannot complete and

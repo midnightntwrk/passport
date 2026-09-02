@@ -298,7 +298,13 @@ async function readRegistry(
   const address = MIDNAMES_TLD_ADDRESSES[network];
   const state = await provider.queryContractState(address);
   if (!state) {
-    throw new Error(`The ${network} .night registry (${address.slice(0, 10)}…) returned no state.`);
+    /* THIS SENTENCE IS READ BY A PERSON. It travels out as an `unreachable`
+       availability's `detail`, which the claim screen prints and `App.tsx`
+       stores as a queued name's reason — so it names the service in the words
+       Passport uses for it everywhere else, and carries neither the word
+       "registry" nor a contract address (2026/09/02). What an operator needs
+       to identify the deployment is the network, and that is still here. */
+    throw new Error(`The ${network} name service could not be read right now.`);
   }
   const decoded = ledger((state as { data: unknown }).data);
   registryCache.set(network, { ledger: decoded, readAt: Date.now() });
