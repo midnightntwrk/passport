@@ -157,7 +157,9 @@ parser against this service's live response.
       "dust": { "balance": "0", "utxoCount": 0, "isSynced": true },
       "unavailableCause": "INSUFFICIENT_DUST"
     }
-  ]
+  ],
+  "settling": true,
+  "retryAfterMs": 3000
 }
 ```
 
@@ -188,6 +190,13 @@ queue separately as `busy`. See `src/reservation.ts`.
 is there so an operator reading a raw probe is not left guessing between
 `WALLET_SYNCING`, `INSUFFICIENT_DUST`, `PENDING_TRANSACTION`, `PROVER_WARMING`,
 and `PROVER_UNAVAILABLE`.
+
+`settling` and `retryAfterMs` appear only when the unavailability is a **wait**
+rather than a state: this service's own last spend has not had its change back
+yet, or a transaction it balanced is still outstanding. They never raise
+`available` — an empty wallet cannot pay a fee and saying otherwise would send a
+caller straight into a refusal — they say the wait is short and bounded, so a
+client mid-send can hold rather than go looking for another sponsor.
 
 ### `POST /balance-only`
 
@@ -222,14 +231,64 @@ Refusals are typed, and carry the HTTP status `sponsor.ts` branches on:
 | --- | --- | --- |
 | 400 | `INVALID_TRANSACTION` | The body is not a serialised finalized transaction. |
 | 429 | `PENDING_TRANSACTION` | Another caller is claiming this wallet's coins right now — balancing, signing, or submitting, which is seconds. Carries `retryAfterMs`; the client retries inside a bounded window. A job that is merely *proving* is not a reason to refuse. |
-| 503 | `WALLET_SYNCING` | Not synced yet. |
-| 503 | `INSUFFICIENT_DUST` | No spendable DUST. |
+| 429 | `PENDING_TRANSACTION` | …or the wallet is unsynced or out of DUST **inside** the settle window: its own last spend's change is still in flight, or a transaction it balanced is still outstanding. `cause` carries which of the two it really was, and `retryAfterMs` is 3,000. |
+| 503 | `WALLET_SYNCING` | Not synced, with nothing in flight to explain it. |
+| 503 | `INSUFFICIENT_DUST` | No spendable DUST, with nothing in flight to explain it. |
 | 503 | `PROVER_UNAVAILABLE` | Proving key material could not be loaded. |
 | 502 | `BALANCE_FAILED` | Balancing or proving failed; `cause` carries the detail. |
+
+The 429/503 split on those middle two rows is not cosmetic. `sponsor.ts` waits
+out a `PENDING_TRANSACTION` and **falls through to the next sponsor** on a 503 —
+and a client that changes sponsor between the two legs of a transfer proves its
+second leg against a state its first leg has already moved. On 2026/09/02 that
+cost a send: the balancer answered 503 instantly for a shortfall that was two
+blocks old, the client went to the upstream gateway, and the `withdraw_night`
+never landed. A shortfall the service can explain is now a wait.
 
 Only DUST is balanced (`tokenKindsToBalance: ['dust']`). The caller balanced its
 own shielded and unshielded legs before asking — adding to those here would
 spend the balancer's NIGHT on somebody else's transfer.
+
+#### Booked DUST, and how it is given back
+
+`/balance-only` books a DUST coin as spent and then lets go: the caller submits,
+and this service never learns whether it landed. When it does not — the node
+refuses it, the browser closes, a preflight fails — the booking used to stand
+for the whole `BALANCER_BALANCE_TTL_MS`. On 2026/09/02 at 14:12:57Z a rejected
+transaction (`Custom error: 239`) took this wallet's only DUST coins with it and
+onboarding was refused until 14:42:57Z.
+
+So the booking is provisional. Every balanced transaction is watched; a sweeper
+runs every six seconds, and once one is `BALANCER_BALANCE_ORPHAN_MS` old it asks
+the indexer whether the chain has it:
+
+- **on chain** — dropped, nothing else happens;
+- **definitely absent** — `facade.revert(…)` hands the DUST back, logged as
+  `[balance] released the DUST booked for <hash>: not on chain <n> s after
+  balancing` and counted on `/status` as `balancesOrphaned`;
+- **could not be asked** — left alone and asked again next sweep. An unanswered
+  question is never evidence of absence: reverting a transaction that *had*
+  landed would double-spend.
+
+`/status` also carries `balancesWatched`, the number outstanding right now, and
+the health watchdog reads it — a wallet whose DUST is booked against an
+outstanding balance is `settling`, never `degraded`, however long ago the last
+sponsorship was.
+
+### `POST /balance-only/abandon`
+
+A caller whose own submit failed can say so and not wait out the window:
+
+```sh
+curl -X POST http://127.0.0.1:8807/balance-only/abandon \
+  -H 'content-type: application/json' \
+  -d '{"txHash": "<the txHash /balance-only handed back>"}'
+```
+
+`{ "txHash": "…", "released": true }` when the booking was outstanding and its
+DUST has been given back, `released: false` when nothing was being watched under
+that hash — a second call, or one the sweeper has already ruled on. Rate-limited
+on the same bucket as `/balance-only`.
 
 ### `POST /register-alias`
 
@@ -435,6 +494,11 @@ ready, what the DUST registration did, how many transactions it has balanced —
 plus the sponsorship counters:
 
 ```
+balancesWatched                            transactions this service balanced and
+                                           handed away that the chain has not
+                                           been seen carrying yet
+balancesOrphaned                           bookings whose DUST the sweeper has
+                                           taken back — see "Booked DUST" above
 aliasesSponsored / aliasesSponsoredTotal   this process / the persisted ledger
 aliasSponsorship                           available | unavailable
 aliasTldAddress                            the registry names go to
@@ -455,6 +519,13 @@ assetsFunded / assetsFundedTotal           this process / ledger entries whose
                                            succeed and fail apart
 assetFunding                               available | unavailable
 assetUnavailableReason                     null, or why the asset leg is off
+assetSpare                                 ready | minting | none | unsupported
+                                           — whether a grant-sized mUSD coin is
+                                           already minted and waiting, which is
+                                           the difference between an asset leg
+                                           of one deposit and one of a mint plus
+                                           the three minutes this wallet takes
+                                           to see its own coin
 contractProving                            wasm | server — how CONTRACT circuits
                                            are proved, which is a different
                                            question from `proving` above
@@ -700,6 +771,7 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_NODE_URL` | `wss://rpc.stagenet.shielded.tools` | Submission relay source. |
 | `BALANCER_FEE_BLOCKS_MARGIN` | `5` | Fee-estimate margin. A wallet with only a few blocks of DUST refuses its own transactions under a larger one. |
 | `BALANCER_BALANCE_TTL_MS` | `1800000` | TTL on every balanced transaction, and the `expiresAt` handed back. |
+| `BALANCER_BALANCE_ORPHAN_MS` | `120000` | How long a balanced transaction may go unseen on chain before the DUST it booked is handed back. See "Booked DUST" below. |
 | `BALANCER_HEALTH_INTERVAL_MS` | `600000` | How often the in-process watchdog evaluates the wallet. Minimum `5000`; **`0` turns it off**, and the external timer is unaffected. |
 | `BALANCER_MIDNAMES_TLD_ADDRESS` | our stagenet TLD | The `.night` registry names go to. Unset **and** no known default disables `/register-alias`. |
 | `BALANCER_ALIAS_MAX_PER_HOUR` | `20` | Sponsored registrations per rolling hour. |
@@ -897,6 +969,42 @@ fees — `/register-alias` refuses with `alias-unsupported`, `/fund-account`
 refuses with `funding-unsupported`, and a missing **faucet** build alone costs
 only the asset leg: `GET /status` reports `assetFunding: "unavailable"` with the
 reason, and activations still deposit their NIGHT.
+
+### The TLS proxy, and the two root paths it must carry
+
+`deploy/Caddyfile` is the proxy configuration this service is served through,
+kept here rather than only on the droplet because one of its blocks is a bug fix
+that is invisible from the balancer's own logs.
+
+The wallet SDK's `HttpProverClient` builds its endpoint as
+`new URL('/prove', baseUrl)`, which **discards the path on the base**. A client
+configured with `https://…/prover` therefore posts its Zswap spend proof to
+`https://…/prove`, at the root. Until 2026/09/02 that fell through to the
+catch-all, which answered 200 with no `Access-Control-Allow-Origin`: the browser
+blocked the preflight, every send needing a wallet-side shielded proof failed —
+`deposit_shielded`, and so the second leg of every shielded transfer — and the
+app reported it as a sponsor refusal while the note sat stranded in the sender's
+wallet. So `/prove` and `/check` are proxied to the proof server as well, with
+no path strip, because the proof server wants them exactly as they arrive and
+sets its own CORS headers.
+
+Install and reload it alongside a deploy:
+
+```sh
+rsync -a deploy/ root@<droplet>:/opt/passport-balancer/deploy/
+ssh root@<droplet> '
+  install -m 644 /opt/passport-balancer/deploy/Caddyfile /etc/caddy/Caddyfile
+  caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy'
+```
+
+Check it from the outside rather than from the box — the failure was a missing
+header, not a missing route:
+
+```sh
+curl -s -X OPTIONS -H 'Origin: https://midnightpassport.com' \
+  -H 'Access-Control-Request-Method: POST' -D - \
+  https://67-205-177-162.sslip.io/prove | grep -i access-control-allow-origin
+```
 
 The service handles `SIGTERM` by saving its sync snapshot before exiting, so a
 restart resumes in under a second instead of walking the chain again.

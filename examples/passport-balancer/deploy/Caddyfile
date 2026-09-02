@@ -1,0 +1,63 @@
+# The one public face of the sponsor: the balancer, the proof server, and
+# nothing else.
+#
+# It moved onto this box on 2026/08/27, when the 1 GB droplet that used to hold
+# it was deleted and its address was handed to somebody else. Both services
+# already run here, so the proxy lives beside them and there is no second
+# machine to lose.
+#
+# Both names serve the same thing. The sslip.io name resolves to this droplet by
+# construction and needs no DNS record, so the sponsor has a working HTTPS
+# address even while funder.midnightpassport.com still points at an address that
+# is no longer ours.
+#
+# THE /prove AND /check BLOCKS ARE LOAD-BEARING. Add nothing above them without
+# reading this:
+#
+# The wallet SDK's `HttpProverClient` builds its endpoint as
+# `new URL('/prove', baseUrl)`, which DISCARDS the path on the base — so a
+# client configured with `https://…/prover` posts its Zswap spend proof to
+# `https://…/prove`, at the root. Until 2026/09/02 that fell through to the
+# catch-all below, which answered 200 with no `Access-Control-Allow-Origin`;
+# the browser blocked the preflight, and every send that needed a wallet-side
+# shielded proof — `deposit_shielded`, and so the second leg of every shielded
+# transfer — failed with what the app reported as a sponsor refusal. The note
+# was left stranded in the sender's wallet with no way to recover it.
+#
+# So the root paths the SDK actually uses are proxied to the proof server as
+# well. No `handle_path`: the proof server wants `/prove` and `/check` exactly
+# as they arrive, and it sets its own CORS headers — adding ours produced a
+# header with two values, which browsers refuse outright.
+#
+# Install with:
+#   install -m 644 deploy/Caddyfile /etc/caddy/Caddyfile
+#   caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+funder.midnightpassport.com, 67-205-177-162.sslip.io {
+	encode zstd gzip
+
+	# The balancer: fees, names, and activation.
+	handle_path /balancer/* {
+		reverse_proxy 127.0.0.1:8807
+	}
+
+	# The proof server, passed through untouched. It sets its own CORS
+	# headers, and adding ours produced a header with two values that
+	# browsers refuse outright.
+	handle_path /prover/* {
+		reverse_proxy 127.0.0.1:6300
+	}
+
+	# The same proof server at the root paths the wallet SDK's prover client
+	# builds for itself, whatever base URL it was given. See the note above.
+	handle /prove {
+		reverse_proxy 127.0.0.1:6300
+	}
+
+	handle /check {
+		reverse_proxy 127.0.0.1:6300
+	}
+
+	handle {
+		respond "midnight passport funder" 200
+	}
+}
