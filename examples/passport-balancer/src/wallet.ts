@@ -1249,13 +1249,6 @@ export async function openBalancerWallet(
     feeCapableCoinCount(state.dust.availableCoins, minSpecks);
   const pendingCountOf = (state: FacadeState): number => state.pending.all.length;
 
-  /* Set once the queue below exists. A `let` rather than a direct reference
-     because this stream is subscribed to BEFORE the queue is built, and an
-     event delivered synchronously on subscribe would read a `const` that is
-     still in its temporal dead zone. Nothing is lost by ignoring the events
-     that arrive first: they arrive before any job can be waiting. */
-  let nudgeLanes: (() => void) | null = null;
-
   // Refresh the snapshot every minute while synced, so a killed process resumes
   // from close to the tip rather than replaying 150k blocks.
   let sawSynced = false;
@@ -1285,12 +1278,7 @@ export async function openBalancerWallet(
          failing and then waited 22 s and 45 s for a coin. Sixty-seven seconds
          of a 157-second registration, on the click a user is watching, spent
          losing races the queue should never have started. */
-      const wasFree = freeFeeCapableCoins;
-      freeFeeCapableCoins = feeCapableCoinCount(state.dust.availableCoins, FEE_CAPABLE_SPECKS);
-      /* A lane can open with no job ending — a coin the wallet already held has
-         finished regenerating — and the queue drains only on arrival and on
-         completion, so it has to be told. See `laneCountChanged`. */
-      if (freeFeeCapableCoins > wasFree) nudgeLanes?.();
+      freeDustCoins = feeCapableCoinCount(state.dust.availableCoins, FEE_CAPABLE_SPECKS);
       if (state.isSynced && !sawSynced) {
         sawSynced = true;
         void saveSnapshot();
@@ -1316,19 +1304,18 @@ export async function openBalancerWallet(
      actually finds out whether a coin was free, and it now fails fast when one
      was not. Refreshed on every state event, which on stagenet is every block
      with dust activity. */
-  let freeFeeCapableCoins = 0;
+  let freeDustCoins = 0;
 
   const reservation = createWalletReservation({
     /* The ceiling is configuration; the floor is the chain. A job may start
        only when there is a coin for it to spend, so lanes close as coins are
        taken and reopen as change lands. */
-    lanes: () => spendLaneCount(freeFeeCapableCoins, config.spendLanes),
+    lanes: () => spendLaneCount(freeDustCoins, config.spendLanes),
     onSlowClaim: (label, heldMs) =>
       console.log(
         `[claim] ${label} held this wallet for ${(heldMs / 1_000).toFixed(1)} s — /wallet-status answered available: 0 for that long`,
       ),
   });
-  nudgeLanes = reservation.laneCountChanged;
   const { exclusive, reserve, hold } = reservation;
 
   /* Every transaction this wallet has balanced and handed away, until the chain

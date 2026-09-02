@@ -152,22 +152,6 @@ export interface WalletReservation {
    * that took it. Releasing is idempotent and drains the queue.
    */
   hold(priority: number): () => void;
-  /**
-   * Tells the queue that {@link WalletReservationOptions.lanes} may now answer
-   * differently, so a job that is waiting can start.
-   *
-   * WHY THE QUEUE CANNOT FIND THIS OUT FOR ITSELF. `drain` runs on arrival and
-   * on completion, which is enough while the lane count is a constant: the only
-   * thing that can free a lane is a job ending, and that drains. It stopped
-   * being enough when lanes became a reading of the free FEE-CAPABLE coins,
-   * because a lane now also opens when a coin the wallet already holds finishes
-   * regenerating — an event the queue never hears. On 2026/09/02 at 22:36 that
-   * left one job running, `lanes: 3`, and a job waiting behind it for eight
-   * minutes with two lanes standing open.
-   *
-   * Idempotent and cheap: a call that changes nothing starts nothing.
-   */
-  laneCountChanged(): void;
   /** Both counters, for `/status` and for the tests. */
   counts(): { reserved: number; jobs: number };
   /** How many spend jobs may run at once RIGHT NOW. See {@link WalletReservationOptions.lanes}. */
@@ -316,7 +300,6 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
   };
 
   return {
-    laneCountChanged: drain,
     isReserved: () => reserved > 0,
     isBusy: () => jobs > 0,
     reserve,
