@@ -38,11 +38,39 @@ import './home.css'
  * THE CAMERA IS A PERMISSION THE BROWSER OWNS
  * -------------------------------------------
  * This sheet asks by calling `getUserMedia` and reports the browser's refusal
- * honestly — it cannot and does not try to work around a denial. Every exit
- * path stops the tracks, the new ones included: a code found in a dropped image
- * unmounts the sheet, and the effect's cleanup is what stops the stream, so a
- * camera light left on after the sheet closed cannot happen through a path the
- * effect does not own.
+ * honestly — it cannot and does not try to work around a denial. It asks for
+ * VIDEO ONLY: `audio: false` is written out rather than left off, because an
+ * omitted key and a false one are the same to the specification but not to a
+ * reader, and this is the one line that decides whether opening a scanner can
+ * take somebody's microphone.
+ *
+ * LETTING GO IS A FEATURE, NOT A CLEAN-UP DETAIL (2026/08/31)
+ * ----------------------------------------------------------
+ * On a call that day the scan button took the camera and the microphone away
+ * from a screen share, and the presenter's video and audio were gone for two
+ * minutes. A capture device is exclusive on most platforms: whatever holds it
+ * is the only thing that has it, so a sheet that keeps a track alive one second
+ * longer than it needs is taking that second from something else.
+ *
+ * So the stream is held in a ref rather than in the effect's closure, and
+ * {@link QrScanSheet}'s `release` is the ONE thing that stops a track. Every
+ * way out of this sheet goes through it:
+ *
+ *   close      the button, the scrim, and Escape all unmount the sheet;
+ *   unmount    the effect's cleanup calls it, whatever caused the unmount;
+ *   a scan     `consider` calls it BEFORE handing the payload up, so the
+ *              camera is already off while the host is still deciding what to
+ *              do about it — the unmount that follows is a second or two of
+ *              React later, and that is a second or two of somebody's webcam;
+ *   leaving    `pagehide` calls it. React's cleanup does not run when a
+ *              document is navigated away from or frozen into the back/forward
+ *              cache, so a sheet left open at that moment is exactly the state
+ *              that held the camera for two minutes.
+ *
+ * `release` also clears the sampling interval and drops the video element's
+ * `srcObject`: a stopped track behind a live `srcObject` is enough to keep some
+ * platforms' capture indicator lit, and an interval sampling a dead stream is
+ * work nobody asked for.
  */
 
 /** How often fallback sampling runs. Detection latency, not video smoothness. */
@@ -97,6 +125,33 @@ export default function QrScanSheet({ onResult, onClose }: QrScanSheetProps) {
   const fileRef = useRef<HTMLInputElement | null>(null)
   /* `onResult` fires exactly once even if a drop lands mid-detection-tick. */
   const doneRef = useRef(false)
+  /* The camera, held where every exit can reach it rather than inside the
+     effect that opened it. See the module header. */
+  const streamRef = useRef<MediaStream | null>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  /**
+   * Lets the camera go. The ONLY thing in this file that stops a track.
+   *
+   * Idempotent, and deliberately so: it is called from four places that can
+   * happen in either order — a scan that closes the sheet also unmounts it, and
+   * a `pagehide` during a scan does both — and an exit path that had to know
+   * whether another had already run would be an exit path that sometimes did
+   * not run at all.
+   */
+  const release = useCallback((): void => {
+    if (timerRef.current !== null) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    const stream = streamRef.current
+    streamRef.current = null
+    if (stream) for (const track of stream.getTracks()) track.stop()
+    /* A stopped track behind a live `srcObject` still reads as a held device
+       to some platforms' capture indicator. */
+    const video = videoRef.current
+    if (video) video.srcObject = null
+  }, [])
 
   /* The callback behind a ref, so `consider` — and therefore the camera effect
      that depends on it — is stable for the sheet's whole life. The host passes
@@ -118,19 +173,38 @@ export default function QrScanSheet({ onResult, onClose }: QrScanSheetProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  /* LEAVING THE DOCUMENT. A component's cleanup does not run when the page is
+     navigated away from, closed, or frozen into the back/forward cache — the
+     tree is simply gone — so nothing else here would let the camera go. This
+     is the listener that does. `pagehide` rather than `unload` because it is
+     the one that fires for a bfcache freeze, which is the case where the page
+     lives on with its camera still open. */
+  useEffect(() => {
+    const onPageHide = () => release()
+    window.addEventListener('pagehide', onPageHide)
+    return () => window.removeEventListener('pagehide', onPageHide)
+  }, [release])
+
   /**
    * The one funnel. `true` when the decoded text was a Passport payload and the
    * sheet is now finishing; `false` when it was a real code that is not ours,
    * which each path reports in its own words.
    */
-  const consider = useCallback((decoded: string | null | undefined): boolean => {
-    if (doneRef.current || !decoded) return false
-    const payload = parseQrPayload(decoded)
-    if (!payload) return false
-    doneRef.current = true
-    onResultRef.current(payload)
-    return true
-  }, [])
+  const consider = useCallback(
+    (decoded: string | null | undefined): boolean => {
+      if (doneRef.current || !decoded) return false
+      const payload = parseQrPayload(decoded)
+      if (!payload) return false
+      doneRef.current = true
+      /* BEFORE the payload goes up, not after. The host closes this sheet in
+         response, and that close is a React commit away — a commit during
+         which the camera would still be somebody else's to lose. */
+      release()
+      onResultRef.current(payload)
+      return true
+    },
+    [release],
+  )
 
   /**
    * The image path: a file dropped, pasted, or chosen. Decoded off a canvas,
@@ -200,8 +274,6 @@ export default function QrScanSheet({ onResult, onClose }: QrScanSheetProps) {
 
   useEffect(() => {
     let live = true
-    let stream: MediaStream | null = null
-    let timer: ReturnType<typeof setInterval> | null = null
 
     const considerFrame = (decoded: string | null | undefined): void => {
       if (!live || !decoded) return
@@ -220,8 +292,13 @@ export default function QrScanSheet({ onResult, onClose }: QrScanSheetProps) {
         })
         return
       }
+      let stream: MediaStream
       try {
         stream = await navigator.mediaDevices.getUserMedia({
+          /* VIDEO ONLY. `audio: false` is written rather than omitted: the two
+             mean the same thing to the browser and very different things to a
+             reader, and this is the line that decides whether a scanner can
+             take a microphone. */
           video: { facingMode: 'environment' },
           audio: false,
         })
@@ -229,8 +306,11 @@ export default function QrScanSheet({ onResult, onClose }: QrScanSheetProps) {
         if (live) setState({ phase: 'unavailable', reason: cameraRefusalSentence(cause) })
         return
       }
+      /* Recorded the instant it exists, so a teardown that happens between
+         here and the next line still has something to stop. */
+      streamRef.current = stream
       if (!live) {
-        stream.getTracks().forEach((track) => track.stop())
+        release()
         return
       }
       const video = videoRef.current
@@ -248,7 +328,7 @@ export default function QrScanSheet({ onResult, onClose }: QrScanSheetProps) {
       if (DetectorCtor) {
         try {
           const detector = new DetectorCtor({ formats: ['qr_code'] })
-          timer = setInterval(() => {
+          timerRef.current = setInterval(() => {
             if (doneRef.current || video.readyState < 2) return
             void detector
               .detect(video)
@@ -272,7 +352,7 @@ export default function QrScanSheet({ onResult, onClose }: QrScanSheetProps) {
         })
         return
       }
-      timer = setInterval(() => {
+      timerRef.current = setInterval(() => {
         if (doneRef.current || video.readyState < 2 || video.videoWidth === 0) return
         canvas.width = video.videoWidth
         canvas.height = video.videoHeight
@@ -285,12 +365,13 @@ export default function QrScanSheet({ onResult, onClose }: QrScanSheetProps) {
       }, SAMPLE_INTERVAL_MS)
     })()
 
+    /* UNMOUNT, whatever caused it — the close button, the scrim, Escape, a
+       successful scan, or the whole surface behind this one going away. */
     return () => {
       live = false
-      if (timer !== null) clearInterval(timer)
-      stream?.getTracks().forEach((track) => track.stop())
+      release()
     }
-  }, [consider])
+  }, [consider, release])
 
   const takeFiles = (files: FileList | null | undefined): void => {
     const file = files?.[0]
