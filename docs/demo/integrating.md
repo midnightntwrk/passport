@@ -55,7 +55,7 @@ message sent to the wrong origin is never delivered and never answered.
 
 ### `detect()`
 
-Is a Passport there? The answer has three states, and the SDK refuses to
+Is a Passport there? The answer has three states, and the package refuses to
 launder the third into a boolean:
 
 - `present: true` — a Passport answered the handshake.
