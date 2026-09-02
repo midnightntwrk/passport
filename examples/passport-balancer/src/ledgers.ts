@@ -80,6 +80,40 @@ export interface AccountEntry {
 }
 
 /**
+ * One pre-deployed resolver leaf, keyed by its own contract address.
+ *
+ * The pool exists because the name path's first proof is its slowest: deploying
+ * the leaf is 1.37e16 Specks and a block, and it happens while somebody is
+ * watching a screen. Nothing about that deploy depends on the user — a leaf can
+ * be built with no domain, a zero target, and the sponsor's own key as owner,
+ * and bound to a person later. So the sponsor keeps a shelf of them and pays
+ * for the deploy in its own quiet time instead of in the user's.
+ *
+ * `consumedBy` and `consumedAt` are what stop a leaf being handed out twice.
+ * They are written the INSTANT a leaf is taken — before the binding is even
+ * attempted — because the failure this guards is two registrations racing onto
+ * one leaf, and a leaf marked only on success would be free for the whole
+ * minute the first binding spends proving. A leaf whose binding then fails is
+ * spent and stays spent: it cost one deploy, the pool refills it in the
+ * background, and reusing it would mean reasoning about a half-bound leaf under
+ * a second user's name.
+ *
+ * `consumedBy` is the account-custody contract address the leaf was bound to,
+ * which is what {@link AliasEntry} is keyed on as well — so the two ledgers can
+ * be read against each other without naming a user in either.
+ */
+export interface ResolverEntry {
+  /** Raw 64-hex contract address of the deployed leaf. */
+  address: string;
+  /** The deploy transaction, as the indexer's hash where it knew one. */
+  deployTx: string;
+  deployedAt: string;
+  /** The account-custody contract this leaf was handed to, once it was. */
+  consumedBy?: string;
+  consumedAt?: string;
+}
+
+/**
  * An append-mostly `Record<key, Entry>` on disk. Small enough to rewrite whole
  * on every record: the balancer serves tens of entries a day, not thousands,
  * and a write-and-rename is atomic where a partial append would not be.
@@ -112,6 +146,22 @@ export class JsonLedger<Entry> {
   /** How many entries satisfy `predicate` — one leg of a two-leg entry, say. */
   countWhere(predicate: (entry: Entry) => boolean): number {
     return Object.values(this.entries).filter(predicate).length;
+  }
+
+  /**
+   * The first entry satisfying `predicate`, in insertion order, with its key.
+   *
+   * Insertion order is the point rather than an accident: the resolver pool
+   * hands out its OLDEST unconsumed leaf, so a leaf never sits on the shelf
+   * indefinitely while newer ones are spent around it. `Object.keys` on a
+   * string-keyed object preserves that order, and the ledger is rewritten whole
+   * from the same object on every record, so it survives a restart too.
+   */
+  findWhere(predicate: (entry: Entry, key: string) => boolean): { key: string; entry: Entry } | null {
+    for (const [key, entry] of Object.entries(this.entries)) {
+      if (predicate(entry, key)) return { key, entry };
+    }
+    return null;
   }
 
   async record(key: string, entry: Entry): Promise<void> {

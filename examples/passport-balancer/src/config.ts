@@ -108,6 +108,21 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    */
   spendLanes: number;
   /**
+   * How many pre-deployed resolver leaves the sponsor tries to hold. The filler
+   * tops the shelf up to here and never past it. Zero switches the pool off and
+   * every registration deploys its own leaf, which is the behaviour this
+   * service had before the pool existed.
+   */
+  resolverPoolTarget: number;
+  /**
+   * The depth below which the shelf is reported as LOW. It changes nothing
+   * about how the filler behaves — the filler is always at the lowest priority,
+   * and a shelf running out is never a reason to take a coin off a user — it is
+   * the number an operator reads on `/status` to know the shelf needs a quiet
+   * hour before the next demo.
+   */
+  resolverPoolFloor: number;
+  /**
    * The peers whose `X-Forwarded-For` is believed. Everything else is keyed on
    * the address its socket really came from, whatever its headers claim.
    */
@@ -267,6 +282,24 @@ export const DEFAULT_SPEND_QUEUE_MAX = 8;
  * suspected of a fault.
  */
 export const DEFAULT_SPEND_LANES = 3;
+
+/**
+ * How many pre-deployed resolver leaves to hold, and the depth below which the
+ * shelf is called low.
+ *
+ * A hundred because the demand is a demo, not a market: a hundred leaves is a
+ * hundred names registered without anybody waiting on a leaf deploy, and at
+ * 1.37e16 Specks apiece they are paid for out of the sponsor's idle minutes
+ * rather than out of somebody's onboarding. The floor is half of
+ * it, which is the point where refilling deserves a deliberately quiet hour
+ * rather than whatever gaps the traffic leaves.
+ *
+ * Both are overridden by `RESOLVER_POOL_TARGET` and `RESOLVER_POOL_FLOOR` —
+ * unprefixed, because they are the operator's ruling about the shelf and not a
+ * tuning knob on the balancer's spending.
+ */
+export const DEFAULT_RESOLVER_POOL_TARGET = 100;
+export const DEFAULT_RESOLVER_POOL_FLOOR = 50;
 
 /**
  * The mUSD faucet each network's asset grant is minted from.
@@ -517,6 +550,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     throw new Error('BALANCER_SPEND_LANES must be at least 1 (1 runs spends strictly one at a time).');
   }
 
+  const resolverPoolTarget = wholeNumber(
+    'RESOLVER_POOL_TARGET',
+    trimmed(env.RESOLVER_POOL_TARGET),
+    DEFAULT_RESOLVER_POOL_TARGET,
+  );
+  const resolverPoolFloor = wholeNumber(
+    'RESOLVER_POOL_FLOOR',
+    trimmed(env.RESOLVER_POOL_FLOOR),
+    DEFAULT_RESOLVER_POOL_FLOOR,
+  );
+  if (resolverPoolFloor > resolverPoolTarget) {
+    throw new Error(
+      `RESOLVER_POOL_FLOOR (${resolverPoolFloor}) cannot be above RESOLVER_POOL_TARGET (${resolverPoolTarget}): the filler never fills past the target, so a floor above it would report the shelf as low for ever.`,
+    );
+  }
+
   const trustedProxies = (trimmed(env.BALANCER_TRUSTED_PROXIES) ?? '')
     .split(',')
     .map((entry) => entry.trim())
@@ -565,6 +614,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     accountRate,
     spendQueueMax,
     spendLanes,
+    resolverPoolTarget,
+    resolverPoolFloor,
     trustedProxies: trustedProxies.length > 0 ? trustedProxies : [...DEFAULT_TRUSTED_PROXIES],
     ...(clientKey ? { clientKey } : {}),
   };
