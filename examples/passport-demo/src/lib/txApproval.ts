@@ -35,10 +35,10 @@ const NIGHT_DECIMALS = 6
 /** The app's own parser rejects a reply whose `detail` runs past this. */
 const DETAIL_CAP = 400
 
-/** The reply body, minus the four fields `createPassportTxResponse` binds. */
+/** The reply body, minus the five fields `createPassportTxResponse` binds. */
 export type PassportTxResponseBody = Omit<
   PassportTxResponse,
-  'protocol' | 'type' | 'requestId' | 'nonce'
+  'protocol' | 'type' | 'version' | 'requestId' | 'nonce'
 >
 
 /**

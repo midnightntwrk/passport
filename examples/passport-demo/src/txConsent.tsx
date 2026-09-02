@@ -3,7 +3,8 @@ import { Check, ExternalLink, Loader2, PenLine, Wallet, X } from 'lucide-react';
 import {
   createPassportProfileReady,
   createPassportTxResponse,
-  parsePassportTxRequest,
+  pairOfUnreadableMessage,
+  readPassportTxRequest,
   type PassportTxRequest,
 } from './backend.js';
 import {
@@ -187,14 +188,35 @@ export function PassportTxConsent({
 
     const onMessage = (event: MessageEvent) => {
       if (event.source !== opener) return;
-      const request = parsePassportTxRequest(event.data);
-      if (
-        !request ||
-        request.requestId !== launch.requestId ||
-        request.nonce !== launch.nonce
-      ) {
+      const parsed = readPassportTxRequest(event.data);
+      if (parsed.kind !== 'ok') {
+        /* NOT silence — the same rule as `profileConsent.tsx`. A transaction
+           request this build cannot read is answered with the reason, bound to
+           this window's own launch pair, so the opener learns what happened
+           instead of watching a three-minute spinner. */
+        if (parsed.kind === 'not-passport') return;
+        const pair = pairOfUnreadableMessage(event.data);
+        if (!pair || pair.requestId !== launch.requestId || pair.nonce !== launch.nonce) return;
+        if (answered.current) return;
+        answered.current = true;
+        opener.postMessage(
+          createPassportTxResponse(pair, {
+            status: 'failed',
+            error: parsed.kind === 'version-mismatch' ? 'version-mismatch' : 'invalid-request',
+          }),
+          event.origin,
+        );
+        setOutcome({
+          kind: 'refused',
+          message:
+            parsed.kind === 'version-mismatch'
+              ? 'The app is speaking a revision of the transaction protocol this Passport does not implement. Nothing was signed.'
+              : 'The app sent a request this Passport could not read. Nothing was signed.',
+        });
         return;
       }
+      const request = parsed.value;
+      if (request.requestId !== launch.requestId || request.nonce !== launch.nonce) return;
       /* One exchange per launch. A re-send of the same pair is the same
          request, not a second sheet, so it is ignored rather than refused. */
       setPending((current) =>

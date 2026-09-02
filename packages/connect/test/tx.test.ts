@@ -1,18 +1,31 @@
+/**
+ * Moved here with the code, from `demo-backend/test/txProtocol.test.ts`. The
+ * honesty invariants — `submitted` requires a `txId`, `sponsored: true` only
+ * on `submitted`, and no reply that says two things at once — are the reason
+ * this file exists and they are unchanged.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import {
   PASSPORT_TX_PROTOCOL,
+  createPassportIncentiveReport,
+  createPassportTxErrorResponse,
+  createPassportTxRequest,
   createPassportTxResponse,
+  formatNight,
   parsePassportIncentiveReport,
   parsePassportTxRequest,
   parsePassportTxResponse,
   type PassportTxRequest,
-} from '../src/txProtocol.js';
+} from '../src/protocol/tx.js';
 import {
   MAX_PROFILE_ADDRESS_LENGTH,
   MAX_TX_RECIPIENT_ADDRESS_LENGTH,
-  randomRequestId,
-} from '../src/index.js';
+} from '../src/protocol/limits.js';
+import { PassportProtocolError } from '../src/protocol/errors.js';
+import { PASSPORT_PROTOCOL_VERSION } from '../src/protocol/version.js';
+import { randomRequestId } from '../src/core/random.js';
 
 const VALID_REQUEST = {
   protocol: PASSPORT_TX_PROTOCOL,
@@ -36,6 +49,7 @@ describe('Passport transaction request', () => {
     expect(parsePassportTxRequest(VALID_REQUEST)).toEqual({
       protocol: PASSPORT_TX_PROTOCOL,
       type: 'passport.tx.request',
+      version: 1,
       requestId: 'request-1',
       nonce: 'nonce-1',
       intent: {
@@ -54,7 +68,14 @@ describe('Passport transaction request', () => {
       intent: { ...VALID_REQUEST.intent, feePayer: 'passport' },
     });
     expect(parsed).not.toBeNull();
-    expect(Object.keys(parsed!)).toEqual(['protocol', 'type', 'requestId', 'nonce', 'intent']);
+    expect(Object.keys(parsed!)).toEqual([
+      'protocol',
+      'type',
+      'version',
+      'requestId',
+      'nonce',
+      'intent',
+    ]);
     expect(Object.keys(parsed!.intent)).toEqual([
       'kind',
       'recipientAddress',
@@ -95,9 +116,7 @@ describe('Passport transaction request', () => {
   it('rejects oversize strings', () => {
     expect(parsePassportTxRequest({ ...VALID_REQUEST, requestId: 'r'.repeat(257) })).toBeNull();
     expect(parsePassportTxRequest({ ...VALID_REQUEST, nonce: 'n'.repeat(257) })).toBeNull();
-    expect(
-      parsePassportTxRequest(requestWithIntent({ purpose: 'p'.repeat(141) })),
-    ).toBeNull();
+    expect(parsePassportTxRequest(requestWithIntent({ purpose: 'p'.repeat(141) }))).toBeNull();
     expect(
       parsePassportTxRequest(requestWithIntent({ recipientAddress: 'a'.repeat(201) })),
     ).toBeNull();
@@ -135,6 +154,7 @@ describe('Passport transaction response', () => {
     expect(response).toEqual({
       protocol: PASSPORT_TX_PROTOCOL,
       type: 'passport.tx.response',
+      version: PASSPORT_PROTOCOL_VERSION,
       requestId: 'request-1',
       nonce: 'nonce-1',
       status: 'submitted',
@@ -147,9 +167,9 @@ describe('Passport transaction response', () => {
     expect(() => createPassportTxResponse(request, { status: 'submitted' })).toThrow(
       /transaction id/i,
     );
-    expect(() =>
-      createPassportTxResponse(request, { status: 'submitted', txId: '' }),
-    ).toThrow(/transaction id/i);
+    expect(() => createPassportTxResponse(request, { status: 'submitted', txId: '' })).toThrow(
+      /transaction id/i,
+    );
   });
 
   it('refuses to construct a refusal without a known error code', () => {
@@ -160,30 +180,36 @@ describe('Passport transaction response', () => {
     ).toThrow(/error code/i);
   });
 
+  it('refuses to mint a covered fee on anything but a submission', () => {
+    expect(() =>
+      createPassportTxResponse(request, { status: 'declined', error: 'declined', sponsored: true }),
+    ).toThrow(/sponsored fee/i);
+    expect(() =>
+      createPassportTxResponse(request, {
+        status: 'submitted',
+        txId: '0f2c',
+        feeNote: 'f'.repeat(141),
+      }),
+    ).toThrow(/fee note/i);
+  });
+
   it('rejects a submitted response with no txId when parsing', () => {
-    expect(
-      parsePassportTxResponse({
-        protocol: PASSPORT_TX_PROTOCOL,
-        type: 'passport.tx.response',
-        requestId: 'request-1',
-        nonce: 'nonce-1',
-        status: 'submitted',
-      }),
-    ).toBeNull();
-    expect(
-      parsePassportTxResponse({
-        protocol: PASSPORT_TX_PROTOCOL,
-        type: 'passport.tx.response',
-        requestId: 'request-1',
-        nonce: 'nonce-1',
-        status: 'submitted',
-        txId: '',
-      }),
-    ).toBeNull();
+    for (const txId of [undefined, '', 't'.repeat(257)]) {
+      expect(
+        parsePassportTxResponse({
+          protocol: PASSPORT_TX_PROTOCOL,
+          type: 'passport.tx.response',
+          requestId: 'request-1',
+          nonce: 'nonce-1',
+          status: 'submitted',
+          txId,
+        }),
+      ).toBeNull();
+    }
   });
 
   it('rejects a refusal carrying no error code or an unknown one', () => {
-    for (const error of [undefined, 'denied', 'insufficient_funds', 42]) {
+    for (const error of [undefined, 'denied_', 'insufficient_funds', 42]) {
       expect(
         parsePassportTxResponse({
           protocol: PASSPORT_TX_PROTOCOL,
@@ -198,19 +224,16 @@ describe('Passport transaction response', () => {
   });
 
   it('accepts every named refusal, with an optional detail', () => {
-    const declined = createPassportTxResponse(request, {
-      status: 'declined',
-      error: 'declined',
-    });
+    const declined = createPassportTxResponse(request, { status: 'declined', error: 'declined' });
     expect(parsePassportTxResponse(declined)).toEqual(declined);
 
     const failed = createPassportTxResponse(request, {
       status: 'failed',
       error: 'insufficient-funds',
-      detail: 'This wallet holds 0 NIGHT; 0.1 is required.',
+      detail: 'This account holds 0 NIGHT; 0.1 is required.',
     });
     expect(parsePassportTxResponse(failed)?.detail).toBe(
-      'This wallet holds 0 NIGHT; 0.1 is required.',
+      'This account holds 0 NIGHT; 0.1 is required.',
     );
   });
 
@@ -223,7 +246,7 @@ describe('Passport transaction response', () => {
     ).toBeNull();
   });
 
-  it('rejects an unknown status', () => {
+  it('rejects an unknown status, a bad pair, and a non-record', () => {
     expect(
       parsePassportTxResponse({
         protocol: PASSPORT_TX_PROTOCOL,
@@ -233,6 +256,76 @@ describe('Passport transaction response', () => {
         status: 'pending',
       }),
     ).toBeNull();
+    expect(
+      parsePassportTxResponse({
+        protocol: PASSPORT_TX_PROTOCOL,
+        type: 'passport.tx.response',
+        requestId: '',
+        nonce: 'nonce-1',
+        status: 'submitted',
+        txId: '0f2c',
+      }),
+    ).toBeNull();
+    expect(
+      parsePassportTxResponse({
+        protocol: PASSPORT_TX_PROTOCOL,
+        type: 'passport.tx.response',
+        requestId: 'request-1',
+        nonce: '',
+        status: 'submitted',
+        txId: '0f2c',
+      }),
+    ).toBeNull();
+    expect(parsePassportTxResponse(null)).toBeNull();
+    expect(parsePassportTxResponse({ protocol: 'org.evil/v1' })).toBeNull();
+  });
+
+  it('will not let a truthy string buy a fee-covered badge', () => {
+    /* `"false"` is truthy. Anything that is not a real boolean rejects the
+       whole reply rather than being coerced. */
+    for (const sponsored of ['false', 'true', 1, 0, null]) {
+      expect(
+        parsePassportTxResponse({
+          ...createPassportTxResponse(request, { status: 'submitted', txId: '0f2c' }),
+          sponsored,
+        }),
+      ).toBeNull();
+    }
+    expect(
+      parsePassportTxResponse({
+        ...createPassportTxResponse(request, { status: 'submitted', txId: '0f2c' }),
+        sponsored: false,
+      })?.sponsored,
+    ).toBe(false);
+  });
+
+  it('rejects a covered fee on a transaction that was never submitted', () => {
+    expect(
+      parsePassportTxResponse({
+        protocol: PASSPORT_TX_PROTOCOL,
+        type: 'passport.tx.response',
+        requestId: 'request-1',
+        nonce: 'nonce-1',
+        status: 'failed',
+        error: 'submit-failed',
+        sponsored: true,
+      }),
+    ).toBeNull();
+  });
+
+  it('rejects an oversize fee note', () => {
+    expect(
+      parsePassportTxResponse({
+        ...createPassportTxResponse(request, { status: 'submitted', txId: '0f2c' }),
+        feeNote: 'f'.repeat(141),
+      }),
+    ).toBeNull();
+    expect(
+      parsePassportTxResponse({
+        ...createPassportTxResponse(request, { status: 'submitted', txId: '0f2c' }),
+        feeNote: 'Covered by the 1AM gateway.',
+      })?.feeNote,
+    ).toBe('Covered by the 1AM gateway.');
   });
 
   it('does not carry a transaction id onto a refusal', () => {
@@ -273,6 +366,18 @@ describe('Passport transaction response', () => {
     expect(parsed!.txId).toBe('0f2c9ab1');
     expect(parsed).not.toHaveProperty('error');
   });
+
+  it('builds the refusal that used to be a silence', () => {
+    const mismatch = createPassportTxErrorResponse(
+      { requestId: 'r', nonce: 'n' },
+      'version-mismatch',
+      'this Passport speaks revision 1',
+    );
+    expect(parsePassportTxResponse(mismatch)).toEqual(mismatch);
+    expect(mismatch.error).toBe('version-mismatch');
+    const bare = createPassportTxErrorResponse({ requestId: 'r', nonce: 'n' }, 'invalid-request');
+    expect(bare).not.toHaveProperty('detail');
+  });
 });
 
 describe('Passport incentive report', () => {
@@ -281,6 +386,7 @@ describe('Passport incentive report', () => {
     type: 'passport.incentive.report',
     requestId: 'request-1',
     nonce: 'nonce-1',
+    version: 1,
   } as const;
 
   it('accepts a report with and without a transaction id', () => {
@@ -305,6 +411,9 @@ describe('Passport incentive report', () => {
   it('rejects a report with no id, no label, or oversize fields', () => {
     expect(parsePassportIncentiveReport({ ...base, incentive: { label: 'x' } })).toBeNull();
     expect(parsePassportIncentiveReport({ ...base, incentive: { id: 'x' } })).toBeNull();
+    expect(parsePassportIncentiveReport({ ...base, incentive: 'x' })).toBeNull();
+    expect(parsePassportIncentiveReport({ ...base, requestId: '' , incentive: { id: 'x', label: 'y' } })).toBeNull();
+    expect(parsePassportIncentiveReport({ ...base, nonce: '', incentive: { id: 'x', label: 'y' } })).toBeNull();
     expect(
       parsePassportIncentiveReport({ ...base, incentive: { id: 'x', label: 'l'.repeat(81) } }),
     ).toBeNull();
@@ -318,7 +427,62 @@ describe('Passport incentive report', () => {
 
   it('does not mistake a transaction request or response for a report', () => {
     expect(parsePassportIncentiveReport(VALID_REQUEST)).toBeNull();
+    expect(parsePassportIncentiveReport(null)).toBeNull();
     expect(parsePassportTxRequest({ ...base, incentive: { id: 'x', label: 'y' } })).toBeNull();
+  });
+
+  it('has a factory, which refuses to build an invalid report', () => {
+    const report = createPassportIncentiveReport({
+      requestId: 'r',
+      nonce: 'n',
+      id: 'doorman:entry',
+      label: 'Door entry',
+      txId: '0f2c',
+    });
+    expect(parsePassportIncentiveReport(report)).toEqual(report);
+    expect(
+      createPassportIncentiveReport({ requestId: 'r', nonce: 'n', id: 'i', label: 'l' }).incentive,
+    ).toEqual({ id: 'i', label: 'l' });
+    expect(() =>
+      createPassportIncentiveReport({ requestId: 'r', nonce: 'n', id: '', label: 'l' }),
+    ).toThrow(PassportProtocolError);
+  });
+});
+
+describe('the transaction request factory that did not exist', () => {
+  it('accepts a bigint amount and stamps the version', () => {
+    const request = createPassportTxRequest({
+      requestId: 'r',
+      nonce: 'n',
+      recipientAddress: 'mn_addr_stagenet1qq',
+      amount: 100_000n,
+      purpose: 'Cover charge',
+    });
+    expect(request.intent.amount).toBe('100000');
+    expect(request.version).toBe(PASSPORT_PROTOCOL_VERSION);
+    expect(parsePassportTxRequest(request)).toEqual(request);
+  });
+
+  it('refuses at the call site rather than producing three minutes of silence', () => {
+    const base = {
+      requestId: 'r',
+      nonce: 'n',
+      recipientAddress: 'mn_addr_stagenet1qq',
+      amount: '100000',
+      purpose: 'Cover charge',
+    };
+    expect(() => createPassportTxRequest({ ...base, amount: '0' })).toThrow(/greater than zero/);
+    expect(() => createPassportTxRequest({ ...base, amount: '0.1' })).toThrow(/atomic NIGHT/);
+    expect(() => createPassportTxRequest({ ...base, purpose: '' })).toThrow(/purpose/);
+    expect(() => createPassportTxRequest({ ...base, recipientAddress: '' })).toThrow(
+      /recipientAddress/,
+    );
+    try {
+      createPassportTxRequest({ ...base, amount: '0' });
+      expect.unreachable('a zero amount must be refused');
+    } catch (cause) {
+      expect((cause as PassportProtocolError).code).toBe('invalid-request');
+    }
   });
 });
 
@@ -336,17 +500,20 @@ describe('randomRequestId', () => {
 describe('shared address caps', () => {
   it('keeps the recipient cap deliberately tighter than the profile cap', () => {
     // Both live in one module so the divergence is visible and explained: a
-    // profile address may be shielded and long, a tx recipient is
+    // profile address is a bech32m contract address, a tx recipient is
     // unshielded-only. Values unchanged — this pins them against silent drift.
     expect(MAX_TX_RECIPIENT_ADDRESS_LENGTH).toBe(200);
     expect(MAX_PROFILE_ADDRESS_LENGTH).toBe(512);
     expect(MAX_TX_RECIPIENT_ADDRESS_LENGTH).toBeLessThan(MAX_PROFILE_ADDRESS_LENGTH);
-    // And the tx parser really enforces the tighter one.
-    expect(
-      parsePassportTxRequest({
-        ...VALID_REQUEST,
-        intent: { ...VALID_REQUEST.intent, recipientAddress: 'a'.repeat(201) },
-      }),
-    ).toBeNull();
+  });
+});
+
+describe('formatNight', () => {
+  it('converts atomic units by string arithmetic, never through a float', () => {
+    expect(formatNight('100000')).toBe('0.1');
+    expect(formatNight('1000000')).toBe('1');
+    expect(formatNight('1')).toBe('0.000001');
+    expect(formatNight('0')).toBe('0');
+    expect(formatNight('12345678901234567890')).toBe('12345678901234.56789');
   });
 });

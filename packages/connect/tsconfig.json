@@ -1,0 +1,30 @@
+{
+  "//": [
+    "NodeNext, not Bundler. The emitted JavaScript has to resolve under plain",
+    "Node — `demo-backend` compiles against this package with NodeNext and its",
+    "tests run in Node — as well as inside every example app's Vite build. That",
+    "is why every relative import in `src/` carries an explicit `.js`",
+    "extension: it is the one import form both resolvers agree on."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true
+  },
+  "include": ["src"]
+}

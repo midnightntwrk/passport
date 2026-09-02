@@ -18,9 +18,17 @@ export {
   createPassportProfileReady,
   createPassportProfileResponse,
   createPassportTxResponse,
-  parsePassportIncentiveReport,
-  parsePassportProfileRequest,
-  parsePassportTxRequest,
+  /* Reading a message now yields a RESULT rather than `T | null`, so the three
+     outcomes an app cares about are distinguishable: not addressed to us, a
+     revision we do not speak, and a shape we cannot read. The last two are
+     answered rather than dropped — a silent drop is a three-minute hang the
+     app cannot tell from Passport being absent. */
+  pairOfUnreadableMessage,
+  parsePassportProfileHello,
+  randomRequestId,
+  readPassportIncentiveReport,
+  readPassportProfileRequest,
+  readPassportTxRequest,
 } from 'passport-demo-backend';
 export type {
   AssertPassportPasskeyOptions,
@@ -32,6 +40,9 @@ export type {
   PassportIncentiveReport,
   PassportPasskeyOnboarding,
   PassportPasskeyReference,
+  PassportParseFailure,
+  PassportParseResult,
+  PassportProfile,
   PassportProfileField,
   PassportProfileRequest,
   PassportProfileResponse,

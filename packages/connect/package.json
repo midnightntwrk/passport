@@ -1,0 +1,70 @@
+{
+  "name": "@midnight-passport/connect",
+  "version": "0.1.0",
+  "description": "The Midnight Passport wire protocols and the client that speaks them: profile consent, transaction requests, and the signed redirect channel.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "keywords": [
+    "midnight",
+    "passport",
+    "identity",
+    "wallet",
+    "postmessage"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./redirect": {
+      "types": "./dist/redirect/index.d.ts",
+      "import": "./dist/redirect/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "prepare": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "//dependencies": [
+    "The three curve/hash/encoding libraries are reachable ONLY from the",
+    "`./redirect` entry point, which is why they are quarantined there and why",
+    "`.` and `./react` declare nothing. A dApp that never uses the signed",
+    "redirect channel never pays for a curve implementation: `sideEffects:",
+    "false` plus three separate entry points is what lets a bundler prove it.",
+    "They are pure JavaScript — no WebAssembly, no Midnight SDK — which is the",
+    "whole reason a Midnight identity can be verified inside an ordinary web",
+    "page."
+  ],
+  "dependencies": {
+    "@noble/curves": "^2.3.0",
+    "@noble/hashes": "^2.3.0",
+    "@scure/base": "^2.3.0"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

@@ -124,21 +124,3 @@ export function decodeState<T>(value: Uint8Array): T {
     return fromBase64(nestedValue.value);
   }) as T;
 }
-
-/**
- * A fresh request identifier: `bytes` random bytes, lower-case hex.
- *
- * Every Passport wire protocol binds a reply to the `requestId`/`nonce` pair
- * the caller minted, which only holds if a caller cannot guess or collide
- * with another's. The default 24 bytes is 192 bits — far out of birthday
- * reach, and short enough to ride in a URL query string. Exported so every
- * connector mints ids the same way rather than reaching for `Math.random()`.
- */
-export function randomRequestId(bytes = 24): string {
-  if (!Number.isInteger(bytes) || bytes < 1) {
-    throw new Error('A Passport request id needs at least one random byte.');
-  }
-  const buffer = new Uint8Array(bytes);
-  globalThis.crypto.getRandomValues(buffer);
-  return Array.from(buffer, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}

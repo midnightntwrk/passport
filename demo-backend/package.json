@@ -1,7 +1,7 @@
 {
   "name": "passport-demo-backend",
   "version": "0.1.0",
-  "description": "Demo backend with connectors: private-state storage, passkey, and profile-protocol primitives for the Midnight Passport demo.",
+  "description": "Passport-internal connectors: passkey (WebAuthn PRF), encrypted private state, and the state-injection seam. The wire protocols live in @midnight-passport/connect and are re-exported from here.",
   "type": "module",
   "private": true,
   "main": "./dist/index.js",
@@ -20,5 +20,8 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@midnight-passport/connect": "*"
   }
 }

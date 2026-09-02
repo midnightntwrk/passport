@@ -19,8 +19,23 @@
  * to point at.
  */
 
-/** Profile addresses: unshielded, shielded, and dust. Shielded runs long. */
+/** Profile addresses. The account-custody contract address is bech32m. */
 export const MAX_PROFILE_ADDRESS_LENGTH = 512;
 
 /** Transaction recipients: unshielded only, and deliberately tighter. */
 export const MAX_TX_RECIPIENT_ADDRESS_LENGTH = 200;
+
+/** Ids, nonces, names, network labels — every short string on every channel. */
+export const MAX_STRING_LENGTH = 256;
+
+/** A transaction purpose, as it is shown on Passport's approval sheet. */
+export const MAX_PURPOSE_LENGTH = 140;
+
+/** A wallet's own sentence about why a transaction did not happen. */
+export const MAX_DETAIL_LENGTH = 400;
+
+/** An incentive label, as an app reports it. */
+export const MAX_LABEL_LENGTH = 80;
+
+/** A note about who covered the network fee. */
+export const MAX_FEE_NOTE_LENGTH = 140;
