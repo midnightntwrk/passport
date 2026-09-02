@@ -117,7 +117,9 @@
  * droplet, which probes `/wallet-status` from outside.
  */
 
+import { copyFile, readFile, rename, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { join } from 'node:path';
 
 import {
   MidnightBech32m,
@@ -133,7 +135,9 @@ import {
 import { walletAvailability } from './availability.js';
 import { ASSET_SYMBOL, applyEnvFile, loadConfig, type BalancerConfig } from './config.js';
 import { rawContractAddress } from './contractRuntime.js';
+import { rollbackDustSnapshot } from './dustRollback.js';
 import {
+  DEFAULT_HEALTH_POLICY,
   EMPTY_HEALTH_RECORD,
   startHealthLoop,
   type HealthMonitor,
@@ -161,6 +165,7 @@ import { SpendPriority } from './reservation.js';
 import {
   BalanceRefusal,
   formatNight,
+  markDustColdStart,
   openBalancerWallet,
   type BalancerWallet,
 } from './wallet.js';
@@ -360,10 +365,34 @@ async function main(): Promise<void> {
    */
   let lastSpendAt = 0;
 
+  /**
+   * True from the moment a revert is seen to have given nothing back until this
+   * process leaves to be restarted with a repaired snapshot.
+   *
+   * The wedge is provable at the instant it happens — see `isDustWedged` in
+   * `./wallet.ts` — and the health loop's next tick can be ten minutes away.
+   * Rather than answer ten minutes of requests out of a wallet whose coins are
+   * hidden from it, every spending endpoint refuses with `PENDING_TRANSACTION`
+   * and a five-second retry, which is the refusal `sponsor.ts` already treats
+   * as "try again shortly" rather than "this sponsor is dead". A tick is asked
+   * for immediately alongside.
+   */
+  let dustRepairPending = false;
+
   process.stdout.write('opening the balancer wallet\n');
   const wallet: BalancerWallet = await openBalancerWallet(config, {
     lastSpendAt: () => lastSpendAt,
     settleWindowMs: CHANGE_SETTLE_MS,
+    onDustWedged: () => {
+      if (dustRepairPending) return;
+      dustRepairPending = true;
+      console.warn(
+        '[dust] refusing further sponsorship with PENDING_TRANSACTION until the stored DUST state is repaired — asking the watchdog for a tick now rather than at its next interval',
+      );
+      void healthMonitor?.tick().catch((cause) => {
+        console.warn('[dust] the immediate health tick failed', cause);
+      });
+    },
   });
   console.log(`balancer address ${wallet.address}`);
   console.log(`proving via      ${wallet.provingMode === 'server' ? 'proof server' : 'WASM, in this process'}\n`);
@@ -731,12 +760,14 @@ async function main(): Promise<void> {
   const status = async (): Promise<Record<string, unknown>> => {
     let night = 0n;
     let dust = 0n;
+    let pendingTransactions = 0;
     let progress: Awaited<ReturnType<BalancerWallet['progress']>> | null = null;
     try {
       const state = await wallet.currentState();
       progress = await wallet.progress(state);
       night = await wallet.nightBalance(state);
       dust = await wallet.dustBalance(state);
+      pendingTransactions = await wallet.pendingTransactionCount(state);
     } catch {
       // Reported as `synced: false` below rather than as an HTTP failure.
     }
@@ -777,6 +808,22 @@ async function main(): Promise<void> {
          this service can pay somebody's fee right now. */
       balancing: wallet.isReserved(),
       busy: wallet.isBusy(),
+      /* This wallet's OWN submissions in flight, which is the fact that
+         separates a legitimately DUST-less wallet from a wedged one. Read
+         together with `dustSpecks` and `balanceAtomic`: NIGHT held, no DUST,
+         nothing pending, and nothing watched is the wedge signature the
+         external watchdog matches on. */
+      pendingTransactions,
+      /* True while this process is refusing sponsorship with
+         `PENDING_TRANSACTION` because a revert failed to give it its DUST back
+         and a repair-and-restart is on its way. */
+      dustRepairPending,
+      /* How many spend jobs may run at once, and how many are running. Bounded
+         by free DUST coins as well as by configuration — a lane with no coin to
+         spend is not a lane. */
+      lanes: wallet.spendLanes(),
+      lanesConfigured: config.spendLanes,
+      jobsRunning: wallet.jobCount(),
       /* Since this process started, and — for each `…Total` — the persisted
          once-only ledger, which survives restarts. None of these is key
          material and none of them names a user. */
@@ -864,6 +911,8 @@ async function main(): Promise<void> {
     let connected = false;
     let dustSpecks = 0n;
     let utxoCount = 0;
+    let nightAtomic = 0n;
+    let pendingTransactions = 0;
     let fingerprint = 'unreadable';
     try {
       const state = await wallet.currentState();
@@ -873,6 +922,13 @@ async function main(): Promise<void> {
       connected = walked.shielded.connected && walked.unshielded.connected && walked.dust.connected;
       dustSpecks = await wallet.dustBalance(state);
       utxoCount = await wallet.dustUtxoCount(state);
+      /* The two facts that separate a wedge from an empty wallet and from a
+         wallet mid-spend. NIGHT because DUST comes from NIGHT and nothing else,
+         so no DUST with thousands of NIGHT is a bookkeeping fault rather than a
+         funding one; pending because a coin booked against this wallet's own
+         submission is nullified for a perfectly good reason. */
+      nightAtomic = await wallet.nightBalance(state);
+      pendingTransactions = await wallet.pendingTransactionCount(state);
       /* Deliberately the sync INDICES and not the DUST balance. The balance is
          computed against the current time — `state.dust.balance(new Date())` —
          so it moves every tick even on a wallet that has stopped following the
@@ -897,6 +953,8 @@ async function main(): Promise<void> {
       connected,
       dustSpecks,
       utxoCount,
+      nightAtomic,
+      pendingTransactions,
       proving: wallet.provingReadiness().state,
       reserved: wallet.isReserved(),
       busy: wallet.isBusy(),
@@ -910,6 +968,10 @@ async function main(): Promise<void> {
     healthMonitor = startHealthLoop({
       intervalMs: config.healthIntervalMs,
       probe: healthProbe,
+      /* The floor under a wedge verdict is the sweeper's own window, so the two
+         can never disagree about when a booked coin has stopped being
+         explainable. */
+      policy: { ...DEFAULT_HEALTH_POLICY, orphanMs: config.balanceOrphanMs },
       store: {
         read: () => healthLedger.get('restart') ?? EMPTY_HEALTH_RECORD,
         write: (record) => healthLedger.record('restart', record),
@@ -933,6 +995,49 @@ async function main(): Promise<void> {
           const readiness = await wallet.warmProvingKeys();
           console.log(`[health] proving readiness after re-warming: ${readiness.state}`);
           await wallet.saveSnapshot();
+        },
+        /* The wedge's own rung, and it is not on the ladder above: refresh
+           re-reads the same withheld coins, rewarm touches the prover, and a
+           restart resumes from the snapshot that CARRIES the fault. The repair
+           has to be to the stored state, before the process comes back. */
+        resyncDust: async (reason: string) => {
+          console.warn(`[dust] repairing the stored DUST state before restarting — ${reason}`);
+          /* Checkpoint first, so the file being repaired is this wallet's
+             current position rather than whatever the last minute tick left. */
+          try {
+            await wallet.saveSnapshot();
+          } catch (cause) {
+            console.warn('[dust] the snapshot could not be checkpointed first', cause);
+          }
+          const path = join(config.stateDir, `sync-snapshot-${config.networkId}.json`);
+          try {
+            const raw = await readFile(path, 'utf8');
+            const repaired = rollbackDustSnapshot(raw, Date.now());
+            /* Kept, not overwritten: a repair made on the wrong diagnosis
+               leaves the exact bytes it was made from. */
+            await copyFile(path, `${path}.pre-rollback-${Date.now()}`);
+            const temp = `${path}.rollback.tmp`;
+            await writeFile(temp, repaired.snapshot, 'utf8');
+            await rename(temp, path);
+            console.warn(
+              `[dust] the snapshot now carries ${repaired.utxosAfter} spendable DUST UTxO(s) (${repaired.balanceAfter} Specks) where it carried ${repaired.utxosBefore} — restarting into it`,
+            );
+          } catch (cause) {
+            /* Every failure lands here, `NothingToRepair` included: the live
+               state said wedged, so a stored state that reads clean is a
+               snapshot too old to be the one at fault. The narrower fallback is
+               a DUST-only cold walk — 89.5 s measured — which is cheaper than
+               throwing the shielded and unshielded positions away too. */
+            console.warn(
+              `[dust] the snapshot could not be repaired (${cause instanceof Error ? cause.message : String(cause)}) — asking the next start to walk the DUST from chain instead`,
+            );
+            try {
+              await markDustColdStart(config);
+            } catch (marker) {
+              console.error('[dust] the cold-start marker could not be written either', marker);
+            }
+          }
+          process.exit(1);
         },
         /* Rung three. Everything that could be saved has been; leaving with a
            non-zero status is how this process asks systemd (`Restart=always`,
@@ -1783,7 +1888,10 @@ async function main(): Promise<void> {
        revert rather than a proof, but it is still a caller reaching into this
        wallet's coin state and a client that can call it in a loop should be
        turned away by the same ceiling. */
-    '/balance-only/abandon': { prefix: 'balance', bucket: balanceBucket },
+    /* Its own prefix rather than `balance`, so the DUST-repair gate above can
+       let it through: abandoning a balancing spends nothing and is the earliest
+       news this service can get that one is dead. */
+    '/balance-only/abandon': { prefix: 'abandon', bucket: balanceBucket },
     '/register-alias': { prefix: 'alias', bucket: aliasBucket },
     '/fund-account': { prefix: 'account', bucket: accountBucket },
   };
@@ -1835,6 +1943,22 @@ async function main(): Promise<void> {
     guard: { prefix: string; bucket: TokenBucket },
     who: string,
   ): { refusal: Refusal; retryAfterMs: number } | null => {
+    /* Asked before the bucket, because it is not about this caller at all: the
+       wallet's coins are hidden from it and a repair is on its way, so nothing
+       any caller does can be served until it lands. `/balance-only/abandon` is
+       the one POST that passes — it SPENDS nothing, and telling this service a
+       balancing is dead is exactly what should still get through. */
+    if (dustRepairPending && guard.prefix !== 'abandon') {
+      return {
+        refusal: refusal(
+          429,
+          'PENDING_TRANSACTION',
+          'The balancer is repairing its own DUST bookkeeping and will be able to sponsor again shortly.',
+          { retryAfterMs: 5_000 },
+        ),
+        retryAfterMs: 5_000,
+      };
+    }
     const verdict = guard.bucket.take(who);
     if (!verdict.allowed) {
       refusedRateLimited += 1;

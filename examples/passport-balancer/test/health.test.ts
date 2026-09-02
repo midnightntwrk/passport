@@ -53,6 +53,10 @@ const healthy = (overrides: Partial<HealthFacts> = {}): HealthFacts => ({
   connected: true,
   dustSpecks: 23_464_217_639_022_489_435n,
   utxoCount: 3,
+  /* 4,998.916 NIGHT — what the balancer actually holds, so a wedge case can be
+     written by removing the DUST and changing nothing else. */
+  nightAtomic: 4_998_916_000n,
+  pendingTransactions: 0,
   proving: 'server',
   reserved: false,
   busy: false,
@@ -117,6 +121,12 @@ describe('the health verdict', () => {
   });
 
   it('stops calling it settling once the settle window has passed', () => {
+    /* And names it precisely, rather than lumping it in with `degraded`. This
+       reading — synced, holding NIGHT, no DUST, nothing pending, nothing
+       outstanding, well past the settle — is the wedge and nothing else, which
+       is exactly what the journal said in the coarser words it had on
+       2026/09/02: 'degraded: no spendable DUST 12/22/32 min after the last
+       sponsorship'. Three ticks of a ladder that could not reach it. */
     const verdict = assessHealth(
       healthy({
         now: T0 + DEFAULT_HEALTH_POLICY.settleWindowMs + 1_000,
@@ -125,8 +135,8 @@ describe('the health verdict', () => {
         lastSponsorshipAt: T0,
       }),
     );
-    assert.equal(verdict.verdict, 'degraded');
-    assert.equal(verdict.restartEligible, true);
+    assert.equal(verdict.verdict, 'dust-wedged');
+    assert.equal(verdict.act, true);
   });
 
   /* The 2026/09/02 wedge, and the two halves of what it taught. A transaction
@@ -259,10 +269,24 @@ describe('the health verdict', () => {
     );
   });
 
-  it('calls a wallet with no DUST and no sponsorship to explain it degraded', () => {
+  it('calls a wallet with NIGHT, no DUST, and no sponsorship to explain it a wedge', () => {
+    /* The reading a restart INHERITS. `lastSponsorshipAt` is null because this
+       process has sponsored nothing since it started — which is precisely the
+       state the 16:21:01 restart of 2026/09/02 came back in, having resumed
+       from a snapshot that carried the pending flags forward. Nothing about a
+       fresh process makes the withheld coins less withheld. */
     const verdict = assessHealth(healthy({ dustSpecks: 0n, utxoCount: 0, lastSponsorshipAt: null }));
+    assert.equal(verdict.verdict, 'dust-wedged');
+    assert.equal(verdict.restartEligible, false);
+  });
+
+  it('calls a wallet with neither NIGHT nor DUST degraded — it is empty, not wedged', () => {
+    const verdict = assessHealth(
+      healthy({ dustSpecks: 0n, utxoCount: 0, nightAtomic: 0n, lastSponsorshipAt: null }),
+    );
     assert.equal(verdict.verdict, 'degraded');
     assert.equal(verdict.restartEligible, true);
+    assert.match(verdict.reason, /sponsored nothing to explain it/);
   });
 
   it('reports a stalled wallet, but never bounces the service for it alone', () => {
@@ -270,6 +294,71 @@ describe('the health verdict', () => {
     assert.equal(verdict.verdict, 'degraded');
     assert.equal(verdict.act, true);
     assert.equal(verdict.restartEligible, false, 'staleness is too soft a signal to restart on');
+  });
+
+  /* ---------------------------------------------------------------------- */
+  /* Case 3b: the DUST wedge — a wallet holding money it cannot see.        */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * The reading that took the sponsor down twice on 2026/09/02: 4,998 NIGHT,
+   * a synced wallet, no spendable DUST, and nothing whatsoever to explain it.
+   * The ledger's `spend()` had set `pending_until = ctime + 3 h` on both coins
+   * and the revert that should have cleared them found nothing to clear.
+   *
+   * Every case below is that reading minus one term of the conjunction, and
+   * each of them must fall back to an innocent verdict, because acting on a
+   * wallet that is merely mid-spend is the worse of the two mistakes.
+   */
+  const wedgedDust = (overrides: Partial<HealthFacts> = {}): HealthFacts =>
+    healthy({
+      dustSpecks: 0n,
+      utxoCount: 0,
+      lastSponsorshipAt: T0 - 3 * MINUTE,
+      ...overrides,
+    });
+
+  it('calls a wallet holding NIGHT with no DUST, nothing pending and nothing outstanding dust-wedged', () => {
+    const verdict = assessHealth(wedgedDust());
+    assert.equal(verdict.verdict, 'dust-wedged');
+    assert.equal(verdict.act, true);
+    assert.equal(
+      verdict.restartEligible,
+      false,
+      'a restart resumes from the snapshot, and the snapshot carries the pending flags',
+    );
+  });
+
+  it('calls the same reading settling while one of the wallet’s own transactions is pending', () => {
+    /* Correct and temporary: the coin that paid for that transaction is
+       legitimately nullified until it lands. */
+    assert.equal(assessHealth(wedgedDust({ pendingTransactions: 1 })).verdict, 'settling');
+  });
+
+  it('calls the same reading settling while a balanced transaction is outstanding', () => {
+    /* The sweeper has a claim on that coin and will rule on it. */
+    assert.equal(assessHealth(wedgedDust({ orphans: 1 })).verdict, 'settling');
+  });
+
+  it('calls the same reading busy while the wallet is claimed or holding the queue', () => {
+    assert.equal(assessHealth(wedgedDust({ reserved: true })).verdict, 'busy');
+    assert.equal(assessHealth(wedgedDust({ busy: true })).verdict, 'busy');
+  });
+
+  it('never calls an empty wallet wedged — there is nothing there to withhold', () => {
+    const verdict = assessHealth(wedgedDust({ nightAtomic: 0n, lastSponsorshipAt: null }));
+    assert.equal(verdict.verdict, 'degraded');
+    assert.equal(verdict.restartEligible, true);
+  });
+
+  it('waits out the orphan window before calling a fresh spend a wedge', () => {
+    /* Inside `orphanMs` the reading is exactly what a spend that has just
+       happened looks like, and repairing it would revert a transaction on its
+       way to a block. */
+    assert.equal(
+      assessHealth(wedgedDust({ lastSponsorshipAt: T0 - 30_000 })).verdict,
+      'settling',
+    );
   });
 
   /* ---------------------------------------------------------------------- */
@@ -299,8 +388,13 @@ describe('the health verdict', () => {
 /* The remedy ladder and its rate limits                                      */
 /* -------------------------------------------------------------------------- */
 
-const state = (overrides: Partial<HealthRecord> = {}, lastRewarmAt: number | null = null) => ({
+const state = (
+  overrides: Partial<HealthRecord> = {},
+  lastRewarmAt: number | null = null,
+  lastResyncDustAt: number | null = null,
+) => ({
   lastRewarmAt,
+  lastResyncDustAt,
   record: { ...EMPTY_HEALTH_RECORD, ...overrides },
 });
 
@@ -324,6 +418,72 @@ describe('the remedy ladder', () => {
       ladder.push(chooseRemedy(assessHealth(facts), facts, state()).remedy);
     }
     assert.deepEqual(ladder, ['refresh', 'rewarm', 'restart']);
+  });
+
+  it('resyncs the DUST on the FIRST tick of a wedge, without waiting out the restart ladder', () => {
+    const facts = healthy({
+      dustSpecks: 0n,
+      utxoCount: 0,
+      lastSponsorshipAt: T0 - 3 * MINUTE,
+      consecutiveUnhealthy: 0,
+    });
+    const assessment = assessHealth(facts);
+    assert.equal(assessment.verdict, 'dust-wedged');
+    const choice = chooseRemedy(assessment, facts, state());
+    assert.equal(choice.remedy, 'resyncDust');
+  });
+
+  it('resyncs the DUST even while the restart ladder is barred', () => {
+    /* `awaitingHealthyTick` and a restart four minutes ago would both hold a
+       `degraded` cause at `refresh`. They must not hold this one: those limits
+       exist to stop a soft signal bouncing a live sponsor, and a wedge is
+       proved rather than inferred. */
+    const facts = healthy({ dustSpecks: 0n, utxoCount: 0, lastSponsorshipAt: T0 - 3 * MINUTE });
+    const barred = state({
+      awaitingHealthyTick: true,
+      lastRestartRequestAt: new Date(T0 - 4 * MINUTE).toISOString(),
+      restarts: 3,
+    });
+    assert.equal(chooseRemedy(assessHealth(facts), facts, barred).remedy, 'resyncDust');
+  });
+
+  it('holds the DUST resync to one in any two minutes', () => {
+    const facts = (now: number): HealthFacts =>
+      healthy({ now, dustSpecks: 0n, utxoCount: 0, lastSponsorshipAt: now - 3 * MINUTE });
+    const requestedAt = T0;
+    for (const elapsed of [0, 30_000, 119_999]) {
+      const at = facts(requestedAt + elapsed);
+      const choice = chooseRemedy(assessHealth(at), at, state({}, null, requestedAt));
+      assert.equal(choice.remedy, 'refresh', `${elapsed} ms after a resync`);
+    }
+    const after = facts(requestedAt + DEFAULT_REMEDY_POLICY.resyncDustCooldownMs);
+    assert.equal(
+      chooseRemedy(assessHealth(after), after, state({}, null, requestedAt)).remedy,
+      'resyncDust',
+    );
+  });
+
+  it('never resyncs the DUST while the wallet is in use', () => {
+    /* The remedy exits the process. Doing that mid-spend would abandon a proof
+       somebody is waiting on — the one thing this module must never cause. */
+    for (const inUse of [{ reserved: true }, { busy: true }]) {
+      const facts = healthy({
+        dustSpecks: 0n,
+        utxoCount: 0,
+        lastSponsorshipAt: T0 - 3 * MINUTE,
+        ...inUse,
+      });
+      /* Not reachable through `assessHealth`, which calls this busy — asked of
+         the ladder directly, so the gate holds even if a future branch reorder
+         lets a wedge verdict past the in-use check above it. */
+      const assessment: HealthAssessment = {
+        verdict: 'dust-wedged',
+        reason: 'wedged',
+        act: true,
+        restartEligible: false,
+      };
+      assert.equal(chooseRemedy(assessment, facts, state()).remedy, 'refresh');
+    }
   });
 
   it('sends a wedged facade straight to a restart, because nothing else can reach it', () => {
@@ -449,6 +609,9 @@ function harness(readings: HealthProbeReading[]) {
       rewarm: async () => {
         calls.push('rewarm');
       },
+      resyncDust: async () => {
+        calls.push('resyncDust');
+      },
       /* Emphatically does NOT exit: the real one calls `process.exit(1)`, and a
          test that ran it would take the runner with it. */
       restart: async () => {
@@ -472,6 +635,26 @@ const reading = (overrides: Partial<HealthProbeReading> = {}): HealthProbeReadin
 };
 
 describe('the health loop', () => {
+  it('repairs a DUST wedge on its first tick and publishes when it did', async () => {
+    const wedge = reading({
+      dustSpecks: 0n,
+      utxoCount: 0,
+      lastSponsorshipAt: T0 - 3 * MINUTE,
+    });
+    const h = harness([wedge, wedge]);
+    assert.equal((await h.monitor.tick())?.verdict, 'dust-wedged');
+    assert.deepEqual(h.calls, ['resyncDust'], 'no refresh-then-rewarm ladder in front of it');
+    assert.equal(h.monitor.snapshot().lastResyncDustAt, new Date(T0).toISOString());
+    assert.equal(h.monitor.snapshot().lastRemedy?.outcome, 'ok');
+
+    /* And it does not do it again a minute later. The real remedy exits the
+       process; a cooldown the loop only honoured after a successful exit would
+       be no cooldown at all in the case where the exit fails. */
+    h.advance(MINUTE);
+    await h.monitor.tick();
+    assert.deepEqual(h.calls, ['resyncDust', 'refresh']);
+  });
+
   it('counts consecutive unhealthy ticks and resets on a healthy one', async () => {
     const h = harness([
       reading({ synced: false }),
@@ -621,6 +804,7 @@ describe('the health loop', () => {
           throw new Error('the wallet did not answer');
         },
         rewarm: async () => undefined,
+        resyncDust: async () => undefined,
         restart: async () => undefined,
       },
     });
@@ -646,6 +830,7 @@ describe('the health loop', () => {
       remedies: {
         refresh: async () => undefined,
         rewarm: async () => undefined,
+        resyncDust: async () => undefined,
         restart: async () => undefined,
       },
     });

@@ -38,7 +38,7 @@
  */
 
 import { Buffer } from 'node:buffer';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import WebSocket from 'ws';
 import * as Rx from 'rxjs';
@@ -127,6 +127,32 @@ interface StoredSnapshot {
 
 function snapshotPath(config: BalancerConfig): string {
   return join(config.stateDir, `sync-snapshot-${config.networkId}.json`);
+}
+
+/**
+ * The file that says "resume everything except the DUST".
+ *
+ * The last resort under a wedge, and narrower than deleting the snapshot. The
+ * shielded and unshielded halves of a stored snapshot are never the fault — the
+ * pending flags live in the DUST state alone — so throwing all three away costs
+ * a full chain walk to repair one. Writing this file instead restores the two
+ * that are sound and starts the DUST wallet from chain, which is the only thing
+ * that forgets a `pending_until` no revert will clear.
+ *
+ * Consumed once and deleted, so a cold DUST start can never become permanent
+ * through a file somebody forgot about.
+ */
+function dustColdStartPath(config: BalancerConfig): string {
+  return join(config.stateDir, `dust-cold-start-${config.networkId}`);
+}
+
+/**
+ * `./server.ts`'s `resyncDust` remedy writes this when the snapshot repair
+ * itself failed. Exported so the remedy and the reader agree on the path
+ * without either of them spelling it out twice.
+ */
+export function markDustColdStart(config: BalancerConfig): Promise<void> {
+  return writeFile(dustColdStartPath(config), new Date().toISOString(), 'utf8');
 }
 
 async function loadSnapshot(
@@ -629,6 +655,10 @@ export interface BalancerWallet {
    * budget ran out.
    */
   awaitFreeDustCoin(maxMs: number): Promise<boolean>;
+  /** Spend jobs running right now — `/status` publishes it as `jobsRunning`. */
+  jobCount(): number;
+  /** How many may run at once, given the configured ceiling and the free coins. */
+  spendLanes(): number;
   /**
    * Registers every unregistered NIGHT UTxO for DUST generation, so the
    * balancer has DUST to spend on other people's fees. Returns what happened.
@@ -800,7 +830,10 @@ export async function openBalancerWallet(
           ? UnshieldedWallet(cfg).restore(snapshot.unshielded)
           : UnshieldedWallet(cfg).startWithPublicKey(publicKey),
       dust: (cfg) =>
-        snapshot
+        /* An EMPTY `dust` field is the cold-start request above, and it is a
+           different thing from no snapshot at all: the other two wallets still
+           resume. */
+        snapshot && snapshot.dust
           ? DustWallet(cfg).restore(snapshot.dust)
           : DustWallet(cfg).startWithSecretKey(
               dustSecretKey,
@@ -809,7 +842,24 @@ export async function openBalancerWallet(
     });
 
   await mkdir(config.stateDir, { recursive: true });
-  const cached = await loadSnapshot(config, address);
+  let cached = await loadSnapshot(config, address);
+  /* Consumed here, and deleted whether or not it changes anything: a marker
+     that survived its own restart would cold-walk the DUST wallet on every
+     start for ever. */
+  let dustColdStart = false;
+  try {
+    await readFile(dustColdStartPath(config), 'utf8');
+    dustColdStart = true;
+    await rm(dustColdStartPath(config), { force: true });
+  } catch {
+    // No marker, which is the ordinary case.
+  }
+  if (dustColdStart && cached) {
+    console.warn(
+      '[dust] a DUST cold start was requested — resuming the shielded and unshielded wallets from the snapshot and walking the DUST from chain, which is the only thing that forgets a pending flag the ledger will not clear',
+    );
+    cached = { ...cached, dust: '' };
+  }
   let facade: WalletFacade;
   let resumed = false;
   if (cached) {
@@ -917,6 +967,11 @@ export async function openBalancerWallet(
   snapshotTimer.unref();
   const snapshotSubscription = facade.state().subscribe({
     next: (state) => {
+      /* The lane count, refreshed from the same stream that changes it. Every
+         spend and every block with dust activity comes through here, so a lane
+         closes within a block of its coin being taken and reopens within a
+         block of the change landing. */
+      freeDustCoins = state.dust.availableCoins.length;
       if (state.isSynced && !sawSynced) {
         sawSynced = true;
         void saveSnapshot();
@@ -934,7 +989,20 @@ export async function openBalancerWallet(
      `/wallet-status` publishes as `available`; the queue is only a running
      order. Holding the two apart is the difference between a fee sponsor that
      is busy for a second and one that reads as absent for two minutes. */
+  /* How many DUST coins this wallet can start a job against right now.
+     Cached rather than read per drain: `drain` is synchronous and the state read
+     is not, and a lane count that is a few hundred milliseconds stale is exactly
+     as safe as one that is current — the fee estimate inside the job is what
+     actually finds out whether a coin was free, and it now fails fast when one
+     was not. Refreshed on every state event, which on stagenet is every block
+     with dust activity. */
+  let freeDustCoins = 0;
+
   const reservation = createWalletReservation({
+    /* The ceiling is configuration; the floor is the chain. A job may start
+       only when there is a coin for it to spend, so lanes close as coins are
+       taken and reopen as change lands. */
+    lanes: () => Math.max(1, Math.min(config.spendLanes, freeDustCoins)),
     onSlowClaim: (label, heldMs) =>
       console.log(
         `[claim] ${label} held this wallet for ${(heldMs / 1_000).toFixed(1)} s — /wallet-status answered available: 0 for that long`,
@@ -1153,6 +1221,9 @@ export async function openBalancerWallet(
     dustWedged: readDustWedged,
 
     awaitFreeDustCoin,
+
+    jobCount: () => reservation.counts().jobs,
+    spendLanes: () => reservation.lanes(),
 
     async shieldedBalance(tokenType: string, state?: FacadeState): Promise<bigint> {
       const current = state ?? (await currentState());
