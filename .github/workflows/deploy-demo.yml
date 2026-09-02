@@ -103,10 +103,21 @@ env:
   #
   # `VITE_FUNDER_URL` stays a single URL on purpose: `/register-alias` and
   # `/fund-account` exist nowhere but our balancer (the gateway 404s both).
+  #
+  # THE BALANCER IS NAMED BY ITS SSLIP.IO ADDRESS, NOT BY A DNS RECORD
+  # (2026/09/02). The friendly name this file used until today still resolves,
+  # but to a RECYCLED address: the 1 GB droplet it pointed at was deleted on
+  # 2026/08/27 and its IP was handed to somebody else, so the record now names
+  # a stranger's Caddy — which is why its ACME renewal has been failing hourly
+  # ever since. Every production deploy that worked was built with the values
+  # below passed in by hand; this file was the last place still carrying the
+  # dead name, and a build that took its defaults from it would have shipped
+  # proving and sponsorship pointed at a host that is not ours. sslip.io
+  # encodes the address in the name, so there is no record left to go stale.
   VITE_MIDNIGHT_NETWORK_ID: stagenet
-  VITE_MIDNIGHT_PROVING_URL: https://funder.midnightpassport.com/prover,https://api-stagenet.1am.xyz
-  VITE_SPONSOR_URL: https://funder.midnightpassport.com/balancer,https://api-stagenet.1am.xyz
-  VITE_FUNDER_URL: https://funder.midnightpassport.com/balancer
+  VITE_MIDNIGHT_PROVING_URL: https://67-205-177-162.sslip.io/prover,https://api-stagenet.1am.xyz
+  VITE_SPONSOR_URL: https://67-205-177-162.sslip.io/balancer,https://api-stagenet.1am.xyz
+  VITE_FUNDER_URL: https://67-205-177-162.sslip.io/balancer
   VITE_RAFFLE_URL: https://raffle.midnightpassport.com
 
 jobs:

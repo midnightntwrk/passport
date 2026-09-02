@@ -210,8 +210,16 @@ const DEFAULT_SPONSOR_URLS: Record<string, string> = {
      same error codes — so nothing else in this module changes. Probed live
      2026/08/24: `{"total":1,"available":1,…,"dust":{"balance":
      "288384879317778538","utxoCount":3,"isSynced":true}}`, i.e. genuinely
-     able to pay, which is the only thing rule 2 below accepts. */
-  stagenet: 'https://funder.midnightpassport.com/balancer',
+     able to pay, which is the only thing rule 2 below accepts.
+
+     The HOST changed on 2026/09/02, and this line is why the change had to
+     reach the source rather than only the deployment: the old name still
+     resolves, but to a RECYCLED address (the 1 GB droplet it named was deleted
+     on 2026/08/27 and its IP handed to somebody else), so a build that fell
+     back to this default reached a stranger's Caddy rather than our balancer.
+     The balancer moved to the 8 GB droplet at 67.205.177.162 and is served
+     over its sslip.io name, which needs no DNS record to be right. */
+  stagenet: 'https://67-205-177-162.sslip.io/balancer',
   preview: 'https://api-preview.1am.xyz',
   preprod: 'https://api-preprod.1am.xyz',
 };

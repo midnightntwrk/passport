@@ -70,13 +70,13 @@ describe('sponsorConfig', () => {
        is no 1AM gateway on stagenet. It speaks the identical wire contract, so
        every other assertion in this file is unaffected. */
     expect(sponsorConfig({})).toEqual({
-      url: 'https://funder.midnightpassport.com/balancer',
+      url: 'https://67-205-177-162.sslip.io/balancer',
     });
     expect(sponsorConfig({ VITE_SPONSOR_URL: '   ' })).toEqual({
-      url: 'https://funder.midnightpassport.com/balancer',
+      url: 'https://67-205-177-162.sslip.io/balancer',
     });
     expect(sponsorConfig({ VITE_MIDNIGHT_NETWORK_ID: 'stagenet' })).toEqual({
-      url: 'https://funder.midnightpassport.com/balancer',
+      url: 'https://67-205-177-162.sslip.io/balancer',
     });
     /* The ledger-8 networks keep their entries: this build cannot transact on
        them, but the table is still the one place that says which gateway each
