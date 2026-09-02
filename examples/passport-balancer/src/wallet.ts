@@ -611,6 +611,13 @@ export interface DustWaitOptions {
   awaitFreeCoin: (maxMs: number) => Promise<boolean>;
   /** How long a refused caller should be told to wait. */
   retryAfterMs?: number;
+  /**
+   * Takes a priority hold on the spend queue for the length of the wait, and
+   * returns its release. Without one the wait costs the caller its PRIORITY:
+   * see `hold` in `./reservation.ts`, and the 173.3-second first click that
+   * paid for the lesson.
+   */
+  holdWhileWaiting?: () => () => void;
   now?: () => number;
   log?: (line: string) => void;
 }
@@ -644,9 +651,27 @@ export async function withDustWait<T>(
   const startedAt = now();
   const deadline = startedAt + Math.max(0, options.windowMs);
   const retryAfterMs = options.retryAfterMs ?? SHORTFALL_RETRY_AFTER_MS;
+  /* Released the instant the rebuilt attempt is ON the queue, and never
+     before: `spend` enqueues synchronously (it calls `wallet.exclusive`
+     directly), so between the release and the enqueue there is no tick for a
+     lower-priority job to take the coin this wait was for. A `spend` that
+     somehow did not enqueue synchronously would only lose the priority it
+     never had — it cannot deadlock, because the hold is dropped either way. */
+  let release: (() => void) | null = null;
+  const attempt = async (): Promise<T> => {
+    try {
+      const running = spend();
+      release?.();
+      release = null;
+      return await running;
+    } finally {
+      release?.();
+      release = null;
+    }
+  };
   for (;;) {
     try {
-      return await spend();
+      return await attempt();
     } catch (cause) {
       if (!isDustShortfall(cause)) throw cause;
       const remaining = deadline - now();
@@ -654,11 +679,22 @@ export async function withDustWait<T>(
       log(
         `[dust] ${options.label} found no fee-capable coin free — waiting up to ${Math.round(remaining / 1_000)} s for one rather than refusing`,
       );
-      if (!(await options.awaitFreeCoin(remaining))) {
+      release = options.holdWhileWaiting?.() ?? null;
+      let free: boolean;
+      try {
+        free = await options.awaitFreeCoin(remaining);
+      } catch (waitCause) {
+        release?.();
+        release = null;
+        throw waitCause;
+      }
+      if (!free) {
+        release?.();
+        release = null;
         throw new DustWaitExhausted(options.label, now() - startedAt, retryAfterMs);
       }
       log(
-        `[dust] a fee-capable coin came free after ${Math.round((now() - startedAt) / 1_000)} s — rebuilding ${options.label}`,
+        `[dust] a fee-capable coin came free after ${Math.round((now() - startedAt) / 1_000)} s — rebuilding ${options.label}, ahead of anything of lower priority still waiting`,
       );
     }
   }
@@ -934,6 +970,12 @@ export interface BalancerWallet {
    * which is where the measurement behind the one non-default value lives.
    */
   exclusive<T>(task: () => Promise<T>, options?: { priority?: number }): Promise<T>;
+  /**
+   * Keeps the queue's next lane for a job that is waiting for a DUST coin
+   * outside the queue. See `hold` in `./reservation.ts` for the measurement
+   * that put it there; {@link withDustWait} is its only caller.
+   */
+  hold(priority: number): () => void;
   /**
    * The provider midnight-js balances, signs, and submits contract
    * transactions through. Built per job, because it snapshots the wallet's
@@ -1219,7 +1261,7 @@ export async function openBalancerWallet(
         `[claim] ${label} held this wallet for ${(heldMs / 1_000).toFixed(1)} s — /wallet-status answered available: 0 for that long`,
       ),
   });
-  const { exclusive, reserve } = reservation;
+  const { exclusive, reserve, hold } = reservation;
 
   /* Every transaction this wallet has balanced and handed away, until the chain
      has been seen carrying it or `config.balanceOrphanMs` has passed without
@@ -1537,6 +1579,7 @@ export async function openBalancerWallet(
     orphanStats: () => ({ watching: orphans.size, released: orphans.released }),
 
     exclusive,
+    hold,
 
     contractWalletProvider(options: ContractWalletProviderOptions = {}): ContractWalletProvider {
       const waitForDustMs = options.waitForDustMs ?? 0;

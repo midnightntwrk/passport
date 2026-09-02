@@ -632,12 +632,21 @@ async function main(): Promise<void> {
    * the response, with Caddy proxying the answer whenever it comes.
    *
    * The wait is spent OUTSIDE the spend queue, holding no lane — see
-   * `withDustWait` — so a caller waiting here blocks nobody.
+   * `withDustWait` — so a caller waiting here blocks nobody. It does hold its
+   * PRIORITY: `hold` keeps the next lane for a waiting registration, because
+   * the first live run without it had the two activation grants take both
+   * coins that came free while the registration watched, and the first click
+   * reached Home in 173.3 s. Nobody is watching a screen for a grant.
    */
-  const spendWaitingForDust = <T>(label: string, spend: () => Promise<T>): Promise<T> =>
+  const spendWaitingForDust = <T>(
+    label: string,
+    spend: () => Promise<T>,
+    priority: number = SpendPriority.Normal,
+  ): Promise<T> =>
     withDustWait(spend, {
       label,
       windowMs: config.dustWaitMs,
+      holdWhileWaiting: () => wallet.hold(priority),
       /* Fee-CAPABLE coins, not any coin: the SDK selects per coin, so a wallet
          holding four small coins can be woken by every one of them and still
          not balance a contract call. */
@@ -2011,8 +2020,10 @@ async function main(): Promise<void> {
            activation grant that is merely waiting: somebody is watching a
            screen for this one and nobody is watching for a grant. See
            `SpendPriority`. */
-        const result = await spendWaitingForDust(`the registration of ${aliasDomain(label)}`, () =>
-          wallet.exclusive(registerOnce, { priority: SpendPriority.Registration }),
+        const result = await spendWaitingForDust(
+          `the registration of ${aliasDomain(label)}`,
+          () => wallet.exclusive(registerOnce, { priority: SpendPriority.Registration }),
+          SpendPriority.Registration,
         );
         aliasesSponsored += 1;
         lastSpendAt = Date.now();

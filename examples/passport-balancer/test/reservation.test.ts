@@ -469,6 +469,86 @@ describe('spend lanes', () => {
     ]);
   });
 
+  it('keeps the next lane for a registration that stepped outside to wait', async () => {
+    /* The live shape, 2026/09/02: the registration finds no fee-capable coin,
+       leaves the queue to wait for one, and the activation grant behind it
+       takes the coin that comes free. With a hold it does not. */
+    const reservation = createWalletReservation();
+    const order: string[] = [];
+    const job = (name: string, priority: number): Promise<string> =>
+      reservation.exclusive(
+        async () => {
+          await wait(10);
+          order.push(name);
+          return name;
+        },
+        { priority },
+      );
+
+    const release = reservation.hold(SpendPriority.Registration);
+    const grant = job('grant', SpendPriority.Normal);
+    await wait(30);
+    assert.deepEqual(order, [], 'a held queue must not start the grant');
+
+    /* The coin arrived: the registration rebuilds, and only then is the hold
+       dropped — which is the ordering `withDustWait` relies on. */
+    const registration = job('registration', SpendPriority.Registration);
+    release();
+    assert.deepEqual(await Promise.all([grant, registration]), ['grant', 'registration']);
+    assert.deepEqual(order, ['registration', 'grant']);
+  });
+
+  it('does not hold back a job of equal or higher priority', async () => {
+    const reservation = createWalletReservation();
+    const order: string[] = [];
+    const job = (name: string, priority: number): Promise<string> =>
+      reservation.exclusive(
+        async () => {
+          order.push(name);
+          return name;
+        },
+        { priority },
+      );
+
+    const release = reservation.hold(SpendPriority.Normal);
+    await Promise.all([
+      job('peer', SpendPriority.Normal),
+      job('registration', SpendPriority.Registration),
+    ]);
+    assert.deepEqual(order, ['peer', 'registration']);
+    release();
+  });
+
+  it('never interrupts a job that has started', async () => {
+    const reservation = createWalletReservation();
+    const order: string[] = [];
+    const running = reservation.exclusive(async () => {
+      await wait(20);
+      order.push('running');
+    });
+    const release = reservation.hold(SpendPriority.Registration);
+    await running;
+    release();
+    assert.deepEqual(order, ['running']);
+  });
+
+  it('drains on release, and releases only once', async () => {
+    const reservation = createWalletReservation();
+    const order: string[] = [];
+    const release = reservation.hold(SpendPriority.Registration);
+    const second = reservation.hold(SpendPriority.Registration);
+    const grant = reservation.exclusive(async () => {
+      order.push('grant');
+    });
+    release();
+    release();
+    await wait(5);
+    assert.deepEqual(order, [], 'the second hold still stands');
+    second();
+    await grant;
+    assert.deepEqual(order, ['grant']);
+  });
+
   it('defaults to one lane, which is the behaviour every earlier test asserts', () => {
     assert.equal(createWalletReservation().lanes(), 1);
   });

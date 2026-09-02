@@ -77,6 +77,11 @@
  * arrives. Same bench, one running job in front: 39.80 s before, 1.80 s after —
  * 38.00 s. That is the whole of its claim, and it is worth having, because two
  * Passports onboarding within a minute of each other is the demo.
+ *
+ * AND, since 2026/09/02, the case a priority on the queue alone cannot reach at
+ * all: a registration that has LEFT the queue to wait for a fee-capable coin.
+ * See {@link WalletReservation.hold} — without it the priority evaporates the
+ * moment the wait begins, which is exactly when it is worth the most.
  */
 export const SpendPriority = {
   /** Fee sponsorship, activation grants, housekeeping. */
@@ -120,6 +125,33 @@ export interface WalletReservation {
    * everything that does not say otherwise. See {@link SpendPriority}.
    */
   exclusive<T>(task: () => Promise<T>, options?: { priority?: number }): Promise<T>;
+  /**
+   * Claims the NEXT free lane for a job that is not on the queue yet.
+   *
+   * WHY A JOB THAT IS NOT QUEUED NEEDS A PLACE IN THE QUEUE. A spend that finds
+   * no fee-capable DUST coin gives its lane straight back and waits for one
+   * outside the queue — that is `withDustWait`, and holding a lane while
+   * waiting is the deadlock it exists to avoid. The cost, measured live on
+   * 2026/09/02, is that the waiter also gives up its PRIORITY: the registration
+   * of `bwmtkkh613ar8.night` stepped outside at 20:47:26, and the two
+   * activation grants behind it — `Normal`, and never overtaking a queued
+   * registration — took both coins that came free (20:48:31, 20:49:14) while it
+   * watched. It registered at 20:49:50, and the first click reached Home in
+   * 173.3 s against a bar of 120 s.
+   *
+   * So a waiter takes a HOLD instead of a lane. A hold starts nothing and
+   * occupies nothing; it only stops the queue STARTING a job of strictly lower
+   * priority, so the coin that comes free is still there when the waiter
+   * rebuilds. Jobs already running are never touched — the coin the waiter is
+   * waiting for is precisely the change one of them is about to produce — and
+   * equal priorities are unaffected, so two registrations still take their
+   * turns in arrival order.
+   *
+   * Bounded by construction: the only caller releases the hold when its coin
+   * arrives or when its wait window expires, so a hold cannot outlive the wait
+   * that took it. Releasing is idempotent and drains the queue.
+   */
+  hold(priority: number): () => void;
   /** Both counters, for `/status` and for the tests. */
   counts(): { reserved: number; jobs: number };
   /** How many spend jobs may run at once RIGHT NOW. See {@link WalletReservationOptions.lanes}. */
@@ -169,6 +201,11 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
   let reserved = 0;
   let jobs = 0;
   const waiting: QueuedJob[] = [];
+  /* Outstanding priority holds — see `hold`. A multiset rather than a counter
+     per level, because the only question ever asked of it is its maximum. */
+  const holds: number[] = [];
+  const highestHold = (): number =>
+    holds.reduce((highest, one) => (one > highest ? one : highest), Number.NEGATIVE_INFINITY);
 
   /* One job runs at a time, and `jobs` is the count of running ones — which is
      zero exactly when the wallet is free to start the next. Called after every
@@ -185,8 +222,12 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
        pass: a drain that opened three lanes on one reading could start three
        jobs against a coin count that the first of them has already changed. */
     while (jobs < laneCount()) {
-      const next = waiting.shift();
+      const next = waiting[0];
       if (!next) return;
+      /* A hold outranks what is merely waiting. Peeked rather than shifted, so
+         a blocked job keeps its place: this defers it, it never drops it. */
+      if (next.priority < highestHold()) return;
+      waiting.shift();
       next.start();
     }
   };
@@ -243,11 +284,24 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
     });
   };
 
+  const hold = (priority: number): (() => void) => {
+    holds.push(priority);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const at = holds.indexOf(priority);
+      if (at >= 0) holds.splice(at, 1);
+      drain();
+    };
+  };
+
   return {
     isReserved: () => reserved > 0,
     isBusy: () => jobs > 0,
     reserve,
     exclusive,
+    hold,
     counts: () => ({ reserved, jobs }),
     lanes: laneCount,
   };

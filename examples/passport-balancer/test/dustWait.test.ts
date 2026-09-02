@@ -32,6 +32,104 @@ const AS_MIDNIGHT_JS_REWRAPS_IT = new Error(
   "Unexpected error submitting scoped transaction '<unnamed>': DustUnavailable: no DUST coin was free to pay this transaction's fee: Insufficient Funds: could not balance dust",
 );
 
+describe('the priority a wait must not cost the caller', () => {
+  /* Measured live on 2026/09/02: the registration of `bwmtkkh613ar8.night`
+     stepped outside the queue at 20:47:26, the two activation grants behind it
+     took the coins that came free at 20:48:31 and 20:49:14, and the first click
+     reached Home in 173.3 s against a bar of 120 s. */
+  it('holds the queue for the length of the wait, and lets go once the rebuild is on it', async () => {
+    const log: string[] = [];
+    let attempts = 0;
+    const spend = async (): Promise<string> => {
+      attempts += 1;
+      if (attempts === 1) throw new DustUnavailable('could not balance dust');
+      log.push('rebuilt');
+      return 'registered';
+    };
+
+    const result = await withDustWait(spend, {
+      label: 'the registration of alice.night',
+      windowMs: 240_000,
+      awaitFreeCoin: async () => {
+        log.push('waiting');
+        return true;
+      },
+      holdWhileWaiting: () => {
+        log.push('held');
+        return () => log.push('released');
+      },
+      log: () => {},
+    });
+
+    assert.equal(result, 'registered');
+    assert.deepEqual(log, ['held', 'waiting', 'rebuilt', 'released']);
+  });
+
+  it('lets go when the window is exhausted, so a refusal frees the queue', async () => {
+    const log: string[] = [];
+    await assert.rejects(
+      withDustWait(
+        async () => {
+          throw new DustUnavailable('could not balance dust');
+        },
+        {
+          label: 'the registration of alice.night',
+          windowMs: 30_000,
+          awaitFreeCoin: async () => false,
+          holdWhileWaiting: () => {
+            log.push('held');
+            return () => log.push('released');
+          },
+          log: () => {},
+        },
+      ),
+      DustWaitExhausted,
+    );
+    assert.deepEqual(log, ['held', 'released']);
+  });
+
+  it('takes no hold at all when nothing had to wait', async () => {
+    const log: string[] = [];
+    await withDustWait(async () => 'registered', {
+      label: 'the registration of alice.night',
+      windowMs: 240_000,
+      awaitFreeCoin: async () => true,
+      holdWhileWaiting: () => {
+        log.push('held');
+        return () => log.push('released');
+      },
+      log: () => {},
+    });
+    assert.deepEqual(log, []);
+  });
+
+  it('lets go when the spend fails for a reason waiting cannot mend', async () => {
+    const log: string[] = [];
+    let attempts = 0;
+    await assert.rejects(
+      withDustWait(
+        async () => {
+          attempts += 1;
+          if (attempts === 1) throw new DustUnavailable('could not balance dust');
+          throw new Error('the circuit refused');
+        },
+        {
+          label: 'the registration of alice.night',
+          windowMs: 240_000,
+          awaitFreeCoin: async () => true,
+          holdWhileWaiting: () => {
+            log.push('held');
+            return () => log.push('released');
+          },
+          log: () => {},
+        },
+      ),
+      /the circuit refused/,
+    );
+    assert.deepEqual(log, ['held', 'released']);
+  });
+});
+
 describe('recognising our own DUST shortfall through a re-wrap', () => {
   it('sees the class itself', () => {
     assert.equal(isDustShortfall(new DustUnavailable('could not balance dust')), true);
