@@ -1,0 +1,17 @@
+{
+  "name": "passport-bench",
+  "version": "0.1.0",
+  "description": "A load bench for Midnight Passport's sponsored onboarding path: N virtual Passports, each deploying an account-custody contract and calling add_grant on it, measured per request against the live stagenet sponsors and provers.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "bench": "node scripts/build.mjs && node dist/bench.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.3"
+  }
+}

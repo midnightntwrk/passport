@@ -1,0 +1,3 @@
+# Raw evidence from a run. Kept locally; the report is what is committed.
+*.log
+*.events.ndjson
