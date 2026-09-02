@@ -332,7 +332,8 @@ scheme's construction is a new trailing version segment of its tag
 family. The registry's Status column takes the values Active, Interim
 (registered with a named sunset condition), and Deprecated. A
 post-quantum successor scheme registers by the same mechanism; nothing
-in the registry shape assumes elliptic curves.
+in the registry shape assumes elliptic curves. One concrete candidate
+arm is already identified and described in the Rationale.
 
 ## Rationale
 
@@ -398,6 +399,28 @@ managed rather than device-bound. The r1 scheme serves the opposite
 posture: the key never exists outside the authenticator, at the cost
 of single-credential signatures (threshold ECDSA is deliberately out
 of scope). An account mixes them per its policy (section 1.3).
+
+**A BIP-340 arm is the identified next candidate.** Wallet
+infrastructure built on the Open Wallet Standard emits BIP-340 Schnorr
+over secp256k1 under its native Midnight signing path; its ECDSA
+output is reachable only by invoking the signer under a foreign chain
+identifier, a transitional workaround that carries obligations of its
+own (a dedicated derivation path never used on the borrowed chain, and
+an explicit scheme parameter in any structured-intent signing
+surface). A registered BIP-340 arm would let such a signer enrol on an
+account and authorise operations under its native path with no
+workaround. Its shape is already determined by this document: an
+arm-marked tag family registered under a revising MIP per section 6, a
+per-scheme circuit per section 2.1, and a challenge core that carries
+the key as a single 32-byte x-only element with neither a `sig_r`
+element nor a `grind_nonce` tail, because BIP-340 binds the nonce
+point and the key inside its own tagged challenge hash and reduces it
+modulo the curve order internally. It is not specified here for two
+reasons: no released toolchain exposes a BIP-340 verification surface
+(a dependency of the same kind as the r1 scheme's [DEP], since the
+existing secp256k1 primitive verifies ECDSA only), and no consumer has
+yet committed an enrolment path. The section 6 mechanism is the door
+it enters through.
 
 **Verification, not recovery, and pre-hashed messages.** Two API
 lessons from the evidence, both relevant upstream: a verify primitive
@@ -532,6 +555,10 @@ lands upstream.
 - W3C Web Authentication, Level 3 (assertion signing, client data,
   authenticator data).
 - SEC 1 and SEC 2 (ECDSA verification; secp256k1, secp256r1).
+- BIP-340 (Schnorr signatures for secp256k1; candidate arm, see
+  Rationale).
+- Open Wallet Standard (wallet-infrastructure signing core; motivating
+  consumer for the BIP-340 candidate arm).
 - FIPS 186-5 (ECDSA).
 - RFC 2119 (key words).
 - RFC 9591 (FROST; context for the v1 threshold arm).
