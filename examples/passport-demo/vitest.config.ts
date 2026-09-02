@@ -197,6 +197,31 @@
  * lines of `useEffect` in `SendSheet.tsx`, which stays out with the rest of the
  * `.tsx`.
  *
+ * `src/lib/sendLegs.ts` and `src/lib/walletProver.ts` went IN on 2026/09/02.
+ * Both were written on 2026/09/02 WITH their drills — `sendLegs.test.ts` and
+ * `walletProver.test.ts` — and both were left out of this list, which is worse
+ * than an exclusion with a reason: their coverage was being measured and then
+ * thrown away, so the 100% bar was a percentage of a denominator that quietly
+ * did not include the two newest rules in `src/lib`.
+ *
+ * `sendLegs.ts` is the record a two-leg payment survives a reload in, and every
+ * function in it decides what happens to value that has already left somebody's
+ * account: which stored rows may be resumed, whether a failed leg is worth
+ * retrying, how long to wait, and what the person is told about where their
+ * money is. Dropping a row is losing a payment; retrying an unretryable one is
+ * spending twice. It holds no React, no DOM, no `fetch`, no storage, and no
+ * clock — the orchestrator in `App.tsx` does all of that and hands it what came
+ * back — so all of it is drilled directly.
+ *
+ * `walletProver.ts` is the wallet's own proving path: it is the module that
+ * keeps the proof server's URL PATH, which is the whole of the shielded-send
+ * failure it was written to fix, and it carries the failover between proof
+ * servers for the wallet's circuits. Its network is injected as a
+ * `ProvingProviderLike`, so the rules — the path, the order servers are tried
+ * in, the provider being built once, and the refusal that tells midnight-js the
+ * server resolves the protocol builtins itself — are drilled against a local
+ * HTTP server rather than a real prover.
+ *
  *   assert-shim.ts      A three-line stand-in for Node's `assert`, aliased in
  *                       by `vite.config.ts` for @subsquid/scale-codec. It has
  *                       no behaviour of ours in it.
@@ -320,8 +345,10 @@ export default mergeConfig(
           'src/lib/qrScan.ts',
           'src/lib/recipientName.ts',
           'src/lib/sendAssets.ts',
+          'src/lib/sendLegs.ts',
           'src/lib/shieldedNote.ts',
           'src/lib/sponsor.ts',
+          'src/lib/walletProver.ts',
           'src/identity/backup.ts',
           'src/identity/claimWarmup.ts',
           'src/identity/midnamesText.ts',
