@@ -286,6 +286,20 @@ describe('reading a file that claims to be a backup', () => {
     }
   });
 
+  it('decodes an unpadded field, and refuses a length no byte count produces', async () => {
+    /* `toBase64Url` strips the `=` padding, so every field of a real backup
+       arrives unpadded — the reader pads it back rather than relying on the
+       host's `atob` being lenient. A length of 4n+1 is not a truncated
+       encoding of anything, so it is refused rather than padded into a value
+       that decodes. */
+    const envelope = await sealPassportBackup(contents(), PASSWORD);
+    expect(envelope.salt).not.toMatch(/=/);
+    expect(() => parseBackupEnvelope(JSON.stringify(envelope))).not.toThrow();
+    expect(() =>
+      parseBackupEnvelope(JSON.stringify({ ...envelope, salt: `${envelope.salt}AAA` })),
+    ).toThrow(/not a Passport backup/);
+  });
+
   it('names which field is not base64url rather than failing vaguely', async () => {
     const envelope = await sealPassportBackup(contents(), PASSWORD);
     await expect(
@@ -301,9 +315,9 @@ describe('reading a file that claims to be a backup', () => {
 
   it('refuses base64url that is the right alphabet and the wrong length', async () => {
     const envelope = await sealPassportBackup(contents(), PASSWORD);
-    // Passes the character test, fails the decode — a different sentence.
+    // Passes the character test, fails the length — a different sentence.
     await expect(openPassportBackup({ ...envelope, salt: 'a' }, PASSWORD)).rejects.toThrow(
-      /salt could not be decoded/,
+      /salt is not a whole number of bytes/,
     );
   });
 

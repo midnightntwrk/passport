@@ -436,7 +436,17 @@ function fromBase64Url(value: string, field: string): Uint8Array {
       `This file's ${field} is not base64url, so it is not a Passport backup.`,
     );
   }
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/');
+  /* base64url drops the `=` padding, and `atob` wants it back. A remainder of
+     1 is not a truncated encoding of anything — no byte count produces it — so
+     it is refused rather than padded into something that decodes. */
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  if (base64.length % 4 === 1) {
+    throw new PassportBackupError(
+      'not-a-backup',
+      `This file's ${field} is not a whole number of bytes, so it is not a Passport backup.`,
+    );
+  }
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
   try {
     const binary = atob(padded);
     const bytes = new Uint8Array(binary.length);
