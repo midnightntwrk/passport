@@ -558,8 +558,9 @@ async function main(): Promise<void> {
          DUST fee and no NIGHT, and it never throws — a spare that could not be
          minted only costs the next activation what it used to cost every one. */
       if (accountFunder?.assetAvailable) {
-        console.log(`[asset] spare ${accountFunder.assetSymbol} coin: ${accountFunder.spareState()} — minting one ahead of the first activation`);
-        void accountFunder.ensureSpareCoin();
+        console.log(
+          `[asset] spare ${accountFunder.assetSymbol} coin: ${accountFunder.spareState()} — one will be minted ahead of the first activation, as soon as there is DUST to pay for it`,
+        );
       }
       if (night === 0n) {
         console.warn(
@@ -627,6 +628,15 @@ async function main(): Promise<void> {
             console.warn('[dust] registration failed; retrying in a minute:', cause);
           }
         }
+        /* Housekeeping on the same minute tick and behind the same standoff:
+           mint the next activation's mUSD coin while nobody is waiting on it,
+           so the asset leg is one deposit rather than a mint plus the three
+           minutes this wallet takes to see its own coin. It declines silently
+           whenever there is already a spare, a mint in flight, or no DUST. */
+        if (!wallet.isBusy() && !wallet.isReserved() && accountFunder?.assetAvailable) {
+          await accountFunder.ensureSpareCoin();
+        }
+
         await new Promise((resolve) => setTimeout(resolve, REGISTRATION_RETRY_MS));
       }
     } catch (cause) {

@@ -644,6 +644,16 @@ export async function createAccountFunder(
     /* Never in front of somebody's fee or somebody's grant. There is always a
        next call — the start-up preflight, or the end of the next activation. */
     if (wallet.isBusy()) return;
+    /* And never into an empty wallet. The fee estimate inside a contract call
+       waits up to ten minutes for DUST to accrue, holding the spend queue the
+       whole time — which is the right patience for a caller's grant and quite
+       the wrong patience for housekeeping. The registration loop asks again
+       every minute. */
+    try {
+      if ((await wallet.dustBalance()) <= 0n) return;
+    } catch {
+      return;
+    }
     spareInFlight = (async () => {
       try {
         const minted = await mintAssetCoin();
