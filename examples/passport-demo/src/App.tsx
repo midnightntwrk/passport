@@ -3861,6 +3861,18 @@ export default function PassportDemo() {
              itself — see `midSessionCeremonyFailure`. */
           wayOut: isMidSessionWayOut(cause),
         });
+        /* A claim that died part-way used to leave NO record at all, so the
+           name the user picked vanished from the Passport and the Register-now
+           path had nothing to pick up. Persist it queued, carrying the failure
+           as the reason, exactly as the requeue in `registerQueuedAlias` does. */
+        saveAliasRecord({
+          alias,
+          domain: aliasDomainOf(alias),
+          network: localWalletNetworkId ?? configuredWalletNetwork ?? selectedNetwork,
+          status: 'queued',
+          queuedReason: detail ? `${message} — ${detail}` : message,
+          updatedAt: new Date().toISOString(),
+        });
         addActivity({
           label: 'Your name could not be registered',
           detail: detail ? `${message} — ${detail}` : message,
@@ -3871,7 +3883,14 @@ export default function PassportDemo() {
         setClaimPhase(null);
       }
     },
-    [addActivity, claimAliasBoundToAccount, profile, refreshLocalBalances],
+    [
+      addActivity,
+      claimAliasBoundToAccount,
+      localWalletNetworkId,
+      profile,
+      refreshLocalBalances,
+      selectedNetwork,
+    ],
   );
 
   /**
