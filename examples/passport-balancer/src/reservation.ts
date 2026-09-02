@@ -178,9 +178,12 @@ export interface WalletReservationOptions {
    * selection is "the smallest coin with value above zero, until the fee is
    * covered", so a job that starts with no free coin does not wait politely —
    * it fails to balance, or it sweeps a coin a running job was about to spend.
-   * `./server.ts` therefore passes `min(BALANCER_SPEND_LANES, free DUST coins)`
-   * and the queue reads it at each drain, so lanes close as coins are spent and
-   * reopen as change lands, without anybody publishing an event.
+   * `./wallet.ts` therefore passes `min(BALANCER_SPEND_LANES, free FEE-CAPABLE
+   * DUST coins)` — a spend's change is a DUST coin the moment it lands and
+   * cannot carry a fee of its own for minutes afterwards, so counting it opens
+   * a lane no job can use — and the queue reads it at each drain, so lanes
+   * close as coins are spent and reopen as change becomes fee-capable, without
+   * anybody publishing an event.
    *
    * Defaults to one, which is the behaviour this queue had before lanes
    * existed: strictly one spend at a time.

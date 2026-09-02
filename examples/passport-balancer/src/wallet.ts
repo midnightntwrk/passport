@@ -303,6 +303,36 @@ export function syncAheadDetail(progress: SyncSnapshotProgress): string | null {
  * `nonce` and `type` are the ledger's own string forms — hex, `0x`-prefixed or
  * not, exactly as the wallet reports them.
  */
+/**
+ * How many of these DUST coins could carry a transaction fee ON THEIR OWN.
+ *
+ * Coins, not the balance, and this is the only count a lane may be opened on.
+ * The SDK's selection is per coin, so 3e16 Specks spread over four small coins
+ * pays for no contract call at all — and, the case that cost a live run, a
+ * spend's CHANGE is a DUST coin from the moment it lands and is not fee-capable
+ * for minutes afterwards, because `generatedNow` starts near zero and grows
+ * against the NIGHT backing it.
+ */
+export function feeCapableCoinCount(
+  coins: ReadonlyArray<{ generatedNow: bigint }>,
+  minSpecks: bigint,
+): number {
+  return coins.filter((coin) => coin.generatedNow >= minSpecks).length;
+}
+
+/**
+ * How many spend jobs the queue may run at once, given a ceiling and the coins.
+ *
+ * Never below one: a lane count of zero would not throttle the queue, it would
+ * STOP it — `drain` runs on arrival and on completion, so with nothing running
+ * there would be nothing left to call it again. A wallet with no fee-capable
+ * coin therefore gets one lane, whose job fails fast and waits for a coin
+ * outside the queue. See `withDustWait`.
+ */
+export function spendLaneCount(feeCapableFree: number, ceiling: number): number {
+  return Math.max(1, Math.min(ceiling, feeCapableFree));
+}
+
 export interface ShieldedCoin {
   readonly nonce: string;
   readonly type: string;
@@ -904,7 +934,10 @@ export interface BalancerWallet {
   awaitFreeDustCoin(maxMs: number, options?: { minSpecks?: bigint }): Promise<boolean>;
   /** Spend jobs running right now — `/status` publishes it as `jobsRunning`. */
   jobCount(): number;
-  /** How many may run at once, given the configured ceiling and the free coins. */
+  /**
+   * How many may run at once: the configured ceiling, or the free FEE-CAPABLE
+   * DUST coins if there are fewer.
+   */
   spendLanes(): number;
   /**
    * Registers every unregistered NIGHT UTxO for DUST generation, so the
@@ -1211,6 +1244,11 @@ export async function openBalancerWallet(
     return next;
   };
 
+  const dustUtxoCountOf = (state: FacadeState): number => state.dust.availableCoins.length;
+  const feeCapableCountOf = (state: FacadeState, minSpecks: bigint): number =>
+    feeCapableCoinCount(state.dust.availableCoins, minSpecks);
+  const pendingCountOf = (state: FacadeState): number => state.pending.all.length;
+
   // Refresh the snapshot every minute while synced, so a killed process resumes
   // from close to the tip rather than replaying 150k blocks.
   let sawSynced = false;
@@ -1223,8 +1261,24 @@ export async function openBalancerWallet(
       /* The lane count, refreshed from the same stream that changes it. Every
          spend and every block with dust activity comes through here, so a lane
          closes within a block of its coin being taken and reopens within a
-         block of the change landing. */
-      freeDustCoins = state.dust.availableCoins.length;
+         block of the change landing.
+
+         FEE-CAPABLE coins, not coins. The whole point of a lane is "a job may
+         start because there is a coin for it to spend", and a coin only pays
+         for a contract call if it carries the fee ON ITS OWN — the SDK's
+         selection is per coin. A spend's CHANGE is a DUST coin from the moment
+         it lands and is not fee-capable for minutes afterwards, because its
+         `generatedNow` starts near zero and grows against the NIGHT backing it.
+         Counting it opened lanes that no job could use.
+
+         Measured, on the deployed service on 2026/09/02 21:33: three DUST
+         UTxOs, one of them fee-capable, `lanes: 3` — so the queue started the
+         activation grant, the mUSD leg, AND the registration together, and the
+         two that lost the coin race spent fifteen seconds balancing before
+         failing and then waited 22 s and 45 s for a coin. Sixty-seven seconds
+         of a 157-second registration, on the click a user is watching, spent
+         losing races the queue should never have started. */
+      freeDustCoins = feeCapableCoinCount(state.dust.availableCoins, FEE_CAPABLE_SPECKS);
       if (state.isSynced && !sawSynced) {
         sawSynced = true;
         void saveSnapshot();
@@ -1242,7 +1296,8 @@ export async function openBalancerWallet(
      `/wallet-status` publishes as `available`; the queue is only a running
      order. Holding the two apart is the difference between a fee sponsor that
      is busy for a second and one that reads as absent for two minutes. */
-  /* How many DUST coins this wallet can start a job against right now.
+  /* How many FEE-CAPABLE DUST coins this wallet can start a job against right
+     now — see the subscription above for why the qualifier is load-bearing.
      Cached rather than read per drain: `drain` is synchronous and the state read
      is not, and a lane count that is a few hundred milliseconds stale is exactly
      as safe as one that is current — the fee estimate inside the job is what
@@ -1255,7 +1310,7 @@ export async function openBalancerWallet(
     /* The ceiling is configuration; the floor is the chain. A job may start
        only when there is a coin for it to spend, so lanes close as coins are
        taken and reopen as change lands. */
-    lanes: () => Math.max(1, Math.min(config.spendLanes, freeDustCoins)),
+    lanes: () => spendLaneCount(freeDustCoins, config.spendLanes),
     onSlowClaim: (label, heldMs) =>
       console.log(
         `[claim] ${label} held this wallet for ${(heldMs / 1_000).toFixed(1)} s — /wallet-status answered available: 0 for that long`,
@@ -1299,14 +1354,6 @@ export async function openBalancerWallet(
     });
 
   const onDustWedged = hooks.onDustWedged ?? ((): void => undefined);
-
-  const dustUtxoCountOf = (state: FacadeState): number => state.dust.availableCoins.length;
-  /* Coins, not the balance, and only the ones big enough to carry a fee on
-     their own: the SDK selects per coin, so 3e16 Specks spread over four small
-     coins pays for no contract call at all. See `FEE_CAPABLE_SPECKS`. */
-  const feeCapableCountOf = (state: FacadeState, minSpecks: bigint): number =>
-    state.dust.availableCoins.filter((coin) => coin.generatedNow >= minSpecks).length;
-  const pendingCountOf = (state: FacadeState): number => state.pending.all.length;
 
   /**
    * Read the live state and ask whether the wedge signature is present.
