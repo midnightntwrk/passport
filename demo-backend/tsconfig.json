@@ -1,4 +1,23 @@
 {
+  "//": [
+    "The reference to `packages/connect` is a BUILD-ORDER declaration, not a",
+    "path alias. `src/index.ts` imports `@midnight-passport/connect`, which",
+    "resolves through the workspace symlink to that package's `dist` — and on a",
+    "clean clone `dist` does not exist yet. npm runs the two workspaces'",
+    "`prepare` scripts in its own order, so this package's `tsc` ran first and",
+    "died with TS2307, npm rolled the whole install back, and only a SECOND",
+    "`npm ci` succeeded, off the dist the rolled-back install had left behind.",
+    "Every clean clone and every CI runner hit it.",
+    "",
+    "With the reference declared, `tsc -b` builds `packages/connect` before",
+    "this project whatever order npm picks, so the ordering is a property of",
+    "the compiler rather than of npm's script scheduling.",
+    "",
+    "`tsBuildInfoFile` puts the build ledger INSIDE `dist` — here and in the",
+    "referenced project — so that `rm -rf dist` is a real clean. Left at its",
+    "default it sits beside this file, survives the delete, and `tsc -b` then",
+    "skips the emit and reproduces the very TS2307 above."
+  ],
   "compilerOptions": {
     "target": "ES2022",
     "module": "NodeNext",
@@ -9,9 +28,11 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "rootDir": "src",
     "skipLibCheck": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [{ "path": "../packages/connect" }]
 }

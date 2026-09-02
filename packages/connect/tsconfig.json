@@ -4,9 +4,13 @@
     "Node — `demo-backend` compiles against this package with NodeNext and its",
     "tests run in Node — as well as inside every example app's Vite build. That",
     "is why every relative import in `src/` carries an explicit `.js`",
-    "extension: it is the one import form both resolvers agree on."
+    "extension: it is the one import form both resolvers agree on.",
+    "",
+    "`composite` is what lets `demo-backend` name this project as a reference",
+    "and have `tsc -b` build it first. See demo-backend/tsconfig.json."
   ],
   "compilerOptions": {
+    "composite": true,
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
@@ -21,6 +25,7 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "rootDir": "src",
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,

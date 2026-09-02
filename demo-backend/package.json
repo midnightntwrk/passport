@@ -15,9 +15,14 @@
   "files": [
     "dist"
   ],
+  "//scripts": [
+    "`tsc -b`, not `tsc -p`: tsconfig.json references packages/connect, and the",
+    "build form is what honours that reference and emits the dependency first.",
+    "`tsc -p` would ignore it and fail on a clean clone."
+  ],
   "scripts": {
-    "prepare": "tsc -p tsconfig.json",
-    "build": "tsc -p tsconfig.json",
+    "prepare": "tsc -b",
+    "build": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest"
   },
