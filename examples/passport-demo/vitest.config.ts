@@ -213,6 +213,16 @@
  * clock — the orchestrator in `App.tsx` does all of that and hands it what came
  * back — so all of it is drilled directly.
  *
+ * Admitting it cost one test. `walletProver.ts` was already whole, but
+ * `sendLegs.ts` came in at 98.54% of branches: `serialisePendingSends` writes
+ * its optional keys as conditional spreads, and the run that omits BOTH
+ * `withdrawTxHash` and `expectedNote` — a `withdraw` record written before the
+ * first leg is submitted, the one moment in a payment where nothing has been
+ * spent yet — was the only shape no drill had. That is not an accident of
+ * counting: it is the record that decides whether a person who reloads mid-pay
+ * is offered their money back, so a run of `sendLegs.test.ts` closes it. The
+ * other three optional keys were already covered by the drills around it.
+ *
  * `walletProver.ts` is the wallet's own proving path: it is the module that
  * keeps the proof server's URL PATH, which is the whole of the shielded-send
  * failure it was written to fix, and it carries the failover between proof
