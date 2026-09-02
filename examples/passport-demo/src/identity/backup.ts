@@ -446,18 +446,17 @@ function fromBase64Url(value: string, field: string): Uint8Array {
       `This file's ${field} is not a whole number of bytes, so it is not a Passport backup.`,
     );
   }
+  /* `atob` is not guarded, because after the two refusals above there is
+     nothing left for it to reject: every character is in the base64url
+     alphabet and so maps to a base64 one, and the only length `atob` refuses
+     — a remainder of 1 — was already refused with a sentence that says what
+     is wrong with the file. A `catch` here would be a branch no input can
+     reach, and an unreachable branch is a claim that something was handled. */
   const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
-  try {
-    const binary = atob(padded);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    return bytes;
-  } catch {
-    throw new PassportBackupError(
-      'not-a-backup',
-      `This file's ${field} could not be decoded, so it is not a Passport backup.`,
-    );
-  }
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
 }
 
 /** Web Crypto's typings want an ArrayBuffer-backed view, not a subarray. */
