@@ -78,8 +78,13 @@ import {
   wait,
   type ContractProvingMode,
 } from './contractRuntime.js';
-import { deployTransactionReference, type PooledResolver } from './resolverPool.js';
-import { isDustShortfall, type BalancerWallet } from './wallet.js';
+import { SpendPriority } from './reservation.js';
+import {
+  FEE_CAPABLE_SPECKS,
+  deployTransactionReference,
+  type PooledResolver,
+} from './resolverPool.js';
+import { isDustShortfall, withDustWait, type BalancerWallet } from './wallet.js';
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
@@ -463,6 +468,74 @@ export interface MidnamesSponsor {
    * this spends a fee-capable DUST coin and it is never a user's turn.
    */
   deployPoolLeaf(): Promise<{ address: string; deployTx: string; deployBlock: number | null }>;
+}
+
+/**
+ * What became of a pooled registration's two legs.
+ *
+ * A result rather than an exception for the two legs' own failures, so the
+ * caller can word each one for the person reading it. A DUST shortfall on the
+ * REGISTER leg is the exception to that and is thrown: nothing was registered,
+ * the caller's `withDustWait` is what has the budget to wait for a coin, and
+ * rebuilding the whole registration is exactly the right thing to do.
+ */
+export type PooledLegOutcome<T> =
+  | { kind: 'registered'; registerTx: T }
+  | { kind: 'register-rejected'; cause: unknown }
+  | { kind: 'bind-rejected'; registerTx: T; cause: unknown };
+
+/**
+ * Runs a pooled registration's register and bind legs — TOGETHER OR IN TURN.
+ *
+ * Together needs a fee-capable DUST coin for each of them, and nothing else:
+ * neither leg reads the other's result, because the registry stores the leaf's
+ * ADDRESS and never looks inside it while the leaf's target is its own state.
+ *
+ * With one coin free they must not both start. Two jobs against one coin is one
+ * job plus one that spends fifteen seconds balancing before it fails and then
+ * waits out the coin the first is spending — 22 s and 45 s of a 157-second
+ * registration, measured on the deployed service on 2026/09/02 — and it is a
+ * race this path can simply decline to enter. The register leg goes first,
+ * because a bind against a name nobody registered is wasted either way.
+ *
+ * The bind's own failure is NEVER rethrown, whatever it was. By then the name
+ * is registered, and handing a DUST shortfall back to a wait that rebuilds the
+ * whole registration would send the caller to register a name it already owns.
+ * `bindLeg` is expected to carry its own bounded wait for a coin; this is the
+ * guard that holds even if it stops doing so.
+ */
+export async function runPooledLegs<T>(
+  lanes: number,
+  registerLeg: () => Promise<T>,
+  bindLeg: () => Promise<unknown>,
+): Promise<PooledLegOutcome<T>> {
+  if (lanes >= 2) {
+    /* `allSettled` rather than `all`: `all` rejects on the first failure and
+       leaves the other leg's rejection unhandled, which on Node is a warning
+       today and a killed process on a future default. */
+    const [bind, registration] = await Promise.allSettled([bindLeg(), registerLeg()]);
+    if (registration.status === 'rejected') {
+      if (isDustShortfall(registration.reason)) throw registration.reason;
+      return { kind: 'register-rejected', cause: registration.reason };
+    }
+    if (bind.status === 'rejected') {
+      return { kind: 'bind-rejected', registerTx: registration.value, cause: bind.reason };
+    }
+    return { kind: 'registered', registerTx: registration.value };
+  }
+  let registerTx: T;
+  try {
+    registerTx = await registerLeg();
+  } catch (cause) {
+    if (isDustShortfall(cause)) throw cause;
+    return { kind: 'register-rejected', cause };
+  }
+  try {
+    await bindLeg();
+  } catch (cause) {
+    return { kind: 'bind-rejected', registerTx, cause };
+  }
+  return { kind: 'registered', registerTx };
 }
 
 /**
@@ -879,42 +952,52 @@ export async function createMidnamesSponsor(
         );
       };
 
+      /**
+       * The bind leg, WAITING for a coin of its own rather than refusing.
+       *
+       * It cannot be left to the caller's `withDustWait` the way the register
+       * leg is, and the asymmetry is the whole reason this exists. The
+       * caller's wait rebuilds the WHOLE registration, which is right while
+       * nothing has been registered and catastrophic once it has: a bind that
+       * ran out of coins after `register_domain_for` landed would send the
+       * caller back to register a name it already owns. So the bind waits
+       * here, where the only thing rebuilt is the bind.
+       *
+       * Rebuilding it is safe by construction. `update_domain_target` sets the
+       * leaf's target to one value; running it twice sets the same value
+       * twice, and a run that failed on a DUST shortfall never reached the
+       * node at all. The hold is a registration's, because that is what this
+       * is a leg of — somebody is watching a screen for it.
+       */
+      const bindLeg = (): Promise<string> =>
+        withDustWait(targetLeg, {
+          label: `pointing the resolver for ${aliasDomain(label)} at ${contractAddress}`,
+          windowMs: config.dustWaitMs,
+          holdWhileWaiting: () => wallet.hold(SpendPriority.Registration),
+          awaitFreeCoin: (maxMs) =>
+            wallet.awaitFreeDustCoin(maxMs, { minSpecks: FEE_CAPABLE_SPECKS }),
+        });
+
       let registerTx: string;
       if (pooled) {
-        /* TOGETHER, on two DUST coins. Neither call reads the other's result —
-           the registry stores the leaf's ADDRESS and never looks inside it, and
-           the leaf's target is its own state — so the ordering that the
-           deploy-then-register path is forced into buys nothing here.
-
-           `allSettled` rather than `all` because `all` rejects on the first
-           failure and leaves the other leg's rejection unhandled, which on Node
-           is a warning today and a killed process on a future default. Both
-           outcomes are inspected, and the registration's is reported first: a
-           name that was never registered is the failure a caller can act on. */
-        const [target, registration] = await Promise.allSettled([targetLeg(), registerLeg()]);
-        if (registration.status === 'rejected') {
-          /* Same passthrough as the deploy leg above: no coin was free, the
-             registry never saw the call, and the name is still unregistered —
-             so this is a wait, not a refusal. */
-          if (isDustShortfall(registration.reason)) throw registration.reason;
+        const outcome = await runPooledLegs(wallet.spendLanes(), registerLeg, bindLeg);
+        if (outcome.kind === 'register-rejected') {
           throw new AliasSponsorError(
             'register-rejected',
             `The .night registry rejected the registration of ${aliasDomain(label)}.`,
-            registration.reason instanceof Error
-              ? registration.reason.message
-              : String(registration.reason),
+            outcome.cause instanceof Error ? outcome.cause.message : String(outcome.cause),
           );
         }
-        if (target.status === 'rejected') {
+        if (outcome.kind === 'bind-rejected') {
           throw new AliasSponsorError(
             'bind-failed',
             `${aliasDomain(label)} was registered but its resolver could not be pointed at ${contractAddress}.`,
-            `resolver ${resolverAddress}, register ${registration.value}; ${
-              target.reason instanceof Error ? target.reason.message : String(target.reason)
+            `resolver ${resolverAddress}, register ${outcome.registerTx}; ${
+              outcome.cause instanceof Error ? outcome.cause.message : String(outcome.cause)
             }`,
           );
         }
-        registerTx = registration.value;
+        registerTx = outcome.registerTx;
       } else {
         try {
           registerTx = await registerLeg();
