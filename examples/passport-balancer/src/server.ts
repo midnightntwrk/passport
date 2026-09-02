@@ -255,6 +255,8 @@ async function main(): Promise<void> {
       : 'no per-client limit';
   console.log(
     `limits    /balance-only ${describeRate(config.balanceRate)}; /register-alias ${describeRate(config.aliasRate)}; /fund-account ${describeRate(config.accountRate)}`,
+  );
+  console.log(
     `dust      a name claim or a grant waits up to ${Math.round(config.dustWaitMs / 1_000)} s, outside the spend queue, for a fee-capable DUST coin before it refuses`,
   );
   console.log(
