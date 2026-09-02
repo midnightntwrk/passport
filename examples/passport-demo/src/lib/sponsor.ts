@@ -23,8 +23,10 @@
  *      default gateway (see `DEFAULT_SPONSOR_URLS` — decided 2026/08/07,
  *      because a fresh passkey wallet holds no DUST and default-off failed
  *      every first transaction). `VITE_SPONSOR_URL` overrides it, and the
- *      literal `off` disables sponsorship, returning every caller to exactly
- *      the path it took before sponsorship existed.
+ *      literal `off` is REFUSED at configuration time, naming the variable:
+ *      the passkey wallet holds no DUST, so an unsponsored build cannot pay
+ *      for its one deploy, and the mistake belongs before the ship, not in
+ *      front of a user at their first transaction.
  *   2. **`available > 0`, not "ready".** The upstream `isBalanceServiceReady`
  *      returns `true` for a wallet that is merely *synced* — which is precisely
  *      the state the deployed preview gateway is in today (`total: 1`,
@@ -221,13 +223,16 @@ const DEFAULT_SPONSOR_URLS: Record<string, string> = {
  *   VITE_SPONSOR_URL         base URL of the ProofStation gateway, or SEVERAL
  *                            separated by commas and tried left to right.
  *                            Unset falls back to the network's default
- *                            gateway; the literal `off` disables sponsorship
- *                            outright.
+ *                            gateway; the literal `off` is refused outright,
+ *                            because a build with no sponsor cannot pay.
  *   VITE_SPONSOR_API_KEY     optional `X-API-Key`.
  *   VITE_SPONSOR_CLIENT_ID   optional `X-Client-ID`.
  *
- * Returns an EMPTY list when sponsorship is disabled or the network has no
- * gateway, and throws when any URL in the list could leak a signed transaction
+ * Returns an EMPTY list when the network has no gateway, THROWS when
+ * `VITE_SPONSOR_URL` is the literal `off` — an unsponsored build cannot pay
+ * for its one deploy, so that is a refusal at start-up rather than a failure
+ * at the first transaction — and throws when any URL in the list could leak a
+ * signed transaction
  * over plaintext — a bad entry is refused at configuration time rather than
  * quietly skipped at send time, because an endpoint silently dropped from a
  * failover list is a single point of failure nobody knows they have.
@@ -242,7 +247,18 @@ export function sponsorConfigs(
   env: Record<string, string | undefined> = environment(),
 ): SponsorConfig[] {
   const explicit = trimmed(env.VITE_SPONSOR_URL);
-  if (explicit === 'off') return [];
+  if (explicit === 'off') {
+    /* Refused here rather than answered with an empty list. The passkey wallet
+       holds no DUST, so an unsponsored build cannot pay for its one deploy —
+       an empty list only surfaced that at the first transaction, in front of
+       whoever was using the Passport. Naming the variable makes it a build
+       mistake somebody can fix before shipping. */
+    throw new Error(
+      'VITE_SPONSOR_URL is set to `off`, which leaves this build with no way to pay ' +
+        'for its first transaction. Point VITE_SPONSOR_URL at a sponsor service, or ' +
+        'unset it to use the network default.',
+    );
+  }
   const raw =
     explicit ??
     DEFAULT_SPONSOR_URLS[trimmed(env.VITE_MIDNIGHT_NETWORK_ID) ?? 'stagenet'];

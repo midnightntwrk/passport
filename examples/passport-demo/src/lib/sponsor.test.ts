@@ -89,8 +89,8 @@ describe('sponsorConfig', () => {
     });
   });
 
-  it('is disabled by the literal `off`, and on a network with no gateway', () => {
-    expect(sponsorConfig({ VITE_SPONSOR_URL: 'off' })).toBeNull();
+  it('refuses the literal `off`, and is null on a network with no gateway', () => {
+    expect(() => sponsorConfig({ VITE_SPONSOR_URL: 'off' })).toThrow(/VITE_SPONSOR_URL/);
     expect(sponsorConfig({ VITE_MIDNIGHT_NETWORK_ID: 'undeployed' })).toBeNull();
   });
 
@@ -961,9 +961,12 @@ describe('sponsorConfigs', () => {
     ]);
   });
 
-  it('reads one URL as a list of one, and `off` as no sponsor at all', () => {
+  it('reads one URL as a list of one, and refuses `off` by name', () => {
     expect(sponsorConfigs({ VITE_SPONSOR_URL: GATEWAY })).toEqual([{ url: GATEWAY }]);
-    expect(sponsorConfigs({ VITE_SPONSOR_URL: 'off' })).toEqual([]);
+    /* `off` used to answer with an empty list, which built a Passport whose one
+       deploy could not be paid for and only said so at the first transaction.
+       The refusal names the variable so the operator knows what to change. */
+    expect(() => sponsorConfigs({ VITE_SPONSOR_URL: 'off' })).toThrow(/VITE_SPONSOR_URL/);
     expect(sponsorConfigs({ VITE_MIDNIGHT_NETWORK_ID: 'undeployed' })).toEqual([]);
   });
 
