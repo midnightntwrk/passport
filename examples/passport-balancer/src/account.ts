@@ -319,9 +319,11 @@ export interface AccountFunder {
    * Mints one grant-sized asset coin AHEAD of the next activation, if there is
    * not one ready already, so the asset leg is a single `deposit_shielded`
    * rather than a mint plus the three minutes it takes this wallet to see its
-   * own coin. Called at start-up and after every grant; never throws.
+   * own coin. Called on the registration loop's minute tick and after every
+   * grant; never throws. Resolves `true` when it really attempted a mint, which
+   * spends this wallet's DUST and so has to be recorded as a spend.
    */
-  ensureSpareCoin(): Promise<void>;
+  ensureSpareCoin(): Promise<boolean>;
   /** What the spare is doing, for the start-up log and `/status`. */
   spareState(): 'ready' | 'minting' | 'none' | 'unsupported';
 }
@@ -639,20 +641,20 @@ export async function createAccountFunder(
    * activation the three minutes it used to cost anyway, and a start-up or a
    * post-grant housekeeping task is no place to fail a request from.
    */
-  const ensureSpareCoin = async (): Promise<void> => {
-    if (!assetAvailable || spareCoin || spareInFlight) return;
+  const ensureSpareCoin = async (): Promise<boolean> => {
+    if (!assetAvailable || spareCoin || spareInFlight) return false;
     /* Never in front of somebody's fee or somebody's grant. There is always a
-       next call — the start-up preflight, or the end of the next activation. */
-    if (wallet.isBusy()) return;
+       next call — the next minute tick, or the end of the next activation. */
+    if (wallet.isBusy()) return false;
     /* And never into an empty wallet. The fee estimate inside a contract call
        waits up to ten minutes for DUST to accrue, holding the spend queue the
        whole time — which is the right patience for a caller's grant and quite
        the wrong patience for housekeeping. The registration loop asks again
        every minute. */
     try {
-      if ((await wallet.dustBalance()) <= 0n) return;
+      if ((await wallet.dustBalance()) <= 0n) return false;
     } catch {
-      return;
+      return false;
     }
     spareInFlight = (async () => {
       try {
@@ -668,6 +670,11 @@ export async function createAccountFunder(
       }
     })();
     await spareInFlight;
+    /* True whether or not a coin arrived: the attempt spent this wallet's DUST
+       either way, and the caller needs to know that so a shortfall read in the
+       next thirty seconds is reported as settling rather than as an empty
+       balancer. */
+    return true;
   };
 
   /** Takes the spare if there is one, and mints inline if there is not. */

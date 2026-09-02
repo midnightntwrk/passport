@@ -634,7 +634,13 @@ async function main(): Promise<void> {
            minutes this wallet takes to see its own coin. It declines silently
            whenever there is already a spare, a mint in flight, or no DUST. */
         if (!wallet.isBusy() && !wallet.isReserved() && accountFunder?.assetAvailable) {
-          await accountFunder.ensureSpareCoin();
+          /* A mint is a spend like any other: it nullifies this wallet's DUST
+             for 20 to 60 seconds afterwards, and a `/balance-only` landing in
+             that gap must read as settling rather than as an empty balancer.
+             Recorded only when a mint was really attempted — marking a spend
+             that never happened would make a genuinely empty wallet claim to be
+             recovering, minute after minute. */
+          if (await accountFunder.ensureSpareCoin()) lastSpendAt = Date.now();
         }
 
         await new Promise((resolve) => setTimeout(resolve, REGISTRATION_RETRY_MS));
