@@ -409,6 +409,55 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
   );
 });
 
+test('a claim that failed keeps the name, and the reload lands on Home with a retry', async () => {
+  /* WHAT CHANGED, AND WHY THE OLD ASSERTION WAS WORSE.
+     Until 6ad9bbc a claim that died part-way persisted nothing: the name the
+     user had chosen vanished, and a Passport that had already stored its name
+     step as done reloaded into a dashboard with no name and no way back to
+     one — bricked, for that Passport, for ever. The catch now writes the same
+     QUEUED record the requeue in `registerQueuedAlias` writes, carrying the
+     failure as its reason, so the reload below is no longer a return to the
+     naming screen. It is a return to a Passport that still knows what its
+     owner picked and offers to try again, which is the better answer.
+
+     The claim it is reading is the sponsorless one refused in the test above:
+     nothing extra is arranged for this. */
+  await page.reload();
+
+  // Home, not the naming screen — the name step is resolved, it just is not
+  // on chain.
+  await expect(page.getByRole('heading', { name: new RegExp(NAME, 'i') })).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(page.getByText(/Choose your .night name/i)).toHaveCount(0);
+
+  /* THE NAME IS STILL THERE, said as queued rather than as registered, with
+     the reason the claim gave for it. A queued name that read as registered
+     would be the more damaging bug of the two. */
+  const identity = page.locator('.mnid-card').first();
+  await expect(identity).toContainText(`${NAME}.night`);
+  await expect(identity).toContainText(/Queued — not registered yet/i);
+  await expect(identity).toContainText(
+    /The Passport service that registers names is not available right now/i,
+  );
+
+  /* AND A WAY TO TRY AGAIN, on the row the queued name is on. It is not
+     clicked here: "Register now" is the REAL claim re-run — the deploy, the
+     prover, and the registry write — which this tier cannot complete and
+     `claim-progress.spec.ts` and `stagenet.live.spec.ts` drive between them.
+     What is owed here is that the control exists and is offered, because
+     without it the queued record is a dead end wearing a name. */
+  const retry = identity.getByRole('button', { name: 'Register now' });
+  await expect(retry).toBeVisible();
+  await expect(retry).toBeEnabled();
+
+  /* The walk goes on from a Passport with no name at all, which is the state
+     the tests below are written against. Dropping the record is a fixture
+     reset — the same store, through the same key — and not a claim about the
+     app: what the app does with the record is everything asserted above. */
+  await page.evaluate(() => localStorage.removeItem('passport-alias:v1'));
+});
+
 test('the claim shows three steps, and the long wait is one of them — not three more', async () => {
   /* WHAT WAS PROMISED, AND TO WHOM.
      Hector, 2026/08/26 11:35: no infinite spinner, and tell the user this will
@@ -487,6 +536,11 @@ test('the claim shows three steps, and the long wait is one of them — not thre
 });
 
 test('a reload mid-onboarding returns to the name step, never to Home', async () => {
+  /* The claim above was refused too, so it left its own queued record — and a
+     queued name is a resolved name step, which the test above is what holds.
+     The state THIS test is about is the other one: a Passport with no name at
+     all, which is what the 2026/08/24 sighting was, so the record goes first. */
+  await page.evaluate(() => localStorage.removeItem('passport-alias:v1'));
   await page.reload();
 
   /* The session is restored from this device, and the step is re-armed. A
@@ -1499,9 +1553,22 @@ test('a claim whose passkey will not answer offers a retry, a way out, and a way
     /* And a working Passport at the end of it. The authenticator still holds
        the credential this browser has a record for, so the enrolment is refused
        by exclusion and the user is signed back into the Passport they had —
-       which is why this lands on the name step rather than on the welcome. */
-    await expect(stalled.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 180_000 });
+       never a fresh one, which is what the absent welcome says.
+
+       That the same Passport comes back is now VISIBLE rather than merely
+       implied: since 6ad9bbc the claim abandoned above left the name queued
+       rather than dropping it, so what returns is the Passport WITH the name
+       its owner picked, offered for another attempt. Before that record
+       existed this landed on an empty naming screen, which was the same
+       Passport but could not be told apart from a new one. */
+    await expect(stalled.getByRole('heading', { name: new RegExp(claimName, 'i') })).toBeVisible({
+      timeout: 180_000,
+    });
     await expect(stalled.getByRole('heading', { name: /Welcome to Passport/i })).toHaveCount(0);
+    const recovered = stalled.locator('.mnid-card').first();
+    await expect(recovered).toContainText(`${claimName}.night`);
+    await expect(recovered).toContainText(/Queued — not registered yet/i);
+    await expect(recovered.getByRole('button', { name: 'Register now' })).toBeVisible();
   } finally {
     await authenticator.remove().catch(() => {});
     await context.close();
