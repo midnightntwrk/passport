@@ -200,6 +200,97 @@ export interface WalletProgress {
   complete: boolean;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Synced, and synced ENOUGH                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How far this leg has applied PAST the last progress figure the indexer gave
+ * it. Zero for a leg that is level or behind.
+ *
+ * A malformed figure — an unparseable string from a wallet that answered badly
+ * — reads as zero, which is the conservative answer: it leaves the SDK's own
+ * `complete` as the only thing that can call the leg synced.
+ */
+function aheadBy(leg: WalletProgress): bigint {
+  try {
+    const gap = BigInt(leg.applied) - BigInt(leg.highestRelevant);
+    return gap > 0n ? gap : 0n;
+  } catch {
+    return 0n;
+  }
+}
+
+/**
+ * Is this wallet synced ENOUGH to select coins — including in the two to four
+ * and a half minutes after one of its own spends, when the SDK says it is not?
+ *
+ * WHAT `applied > highest` ACTUALLY MEANS, read out of the SDK rather than
+ * guessed (`@midnight-ntwrk/wallet-sdk-unshielded-wallet/dist/v1/SyncProgress.js`
+ * and `…-abstractions/dist/SyncProgress.js`, both 2.0.0-beta.2):
+ *
+ *     isCompleteWithin(data, maxGap) {
+ *       const applyLag = BigInt(Math.abs(Number(data.highestTransactionId - data.appliedId)));
+ *       return data.isConnected && applyLag <= maxGap;
+ *     }
+ *
+ * and `isStrictlyComplete()` is that with `maxGap` of zero. The lag is an
+ * ABSOLUTE value, so a wallet one id AHEAD of the figure scores exactly as
+ * incomplete as a wallet one id behind — and the two are not the same event at
+ * all. The two figures come from two DIFFERENT messages on the indexer's
+ * subscription (`…/dist/v1/Sync.js`): a `UnshieldedTransactionsProgress`
+ * message sets `highestTransactionId`, and a transaction message sets
+ * `appliedId` to `update.transaction.id`. So when this wallet's OWN submission
+ * arrives before the next progress announcement, it applies a transaction whose
+ * id is higher than the last `highestTransactionId` it was told about, and the
+ * SDK scores that as unsynced until the announcement catches up. Measured live
+ * on 2026/09/02: `unshielded applied 9549 > highest 9521` for 2–4.5 minutes
+ * after every spend, during which `/wallet-status` answered `available: 0` and
+ * a second Passport 20 s behind the first was refused in two seconds.
+ *
+ * A wallet that is AHEAD has everything the indexer has told it about and one
+ * thing more — it is strictly better informed than a `complete` one, never
+ * worse — so for the question this service actually asks ("can this wallet
+ * select coins right now?") it is synced. A leg BEHIND its figure is not, and
+ * a leg whose subscription has dropped is not either: those keep the SDK's own
+ * verdict.
+ *
+ * This is deliberately NOT a redefinition of `isSynced`, which stays exactly
+ * what the SDK says and is still what `/status` publishes as `progress`. It is
+ * the readiness question, asked separately, because those are two questions.
+ */
+/** One leg's answer: the SDK's own `complete`, or connected and AHEAD of it. */
+export function isLegEffectivelySynced(leg: WalletProgress): boolean {
+  if (leg.complete) return true;
+  return leg.connected && aheadBy(leg) > 0n;
+}
+
+export function isEffectivelySynced(progress: SyncSnapshotProgress): boolean {
+  if (progress.isSynced) return true;
+  return (
+    isLegEffectivelySynced(progress.shielded) &&
+    isLegEffectivelySynced(progress.unshielded) &&
+    isLegEffectivelySynced(progress.dust)
+  );
+}
+
+/**
+ * The legs that are ahead, named — `unshielded applied 9549 > highest 9521` —
+ * or `null` when none is. What the health verdict says instead of guessing at
+ * a prover.
+ */
+export function syncAheadDetail(progress: SyncSnapshotProgress): string | null {
+  const named: Array<[string, WalletProgress]> = [
+    ['shielded', progress.shielded],
+    ['unshielded', progress.unshielded],
+    ['dust', progress.dust],
+  ];
+  const ahead = named
+    .filter(([, leg]) => aheadBy(leg) > 0n)
+    .map(([name, leg]) => `${name} applied ${leg.applied} > highest ${leg.highestRelevant}`);
+  return ahead.length > 0 ? ahead.join(', ') : null;
+}
+
 /**
  * One spendable shielded coin, flattened to the three fields a Compact
  * `ShieldedCoinInfo` argument needs.

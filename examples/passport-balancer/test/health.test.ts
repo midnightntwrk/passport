@@ -61,6 +61,7 @@ const healthy = (overrides: Partial<HealthFacts> = {}): HealthFacts => ({
   proving: 'server',
   reserved: false,
   busy: false,
+  syncAhead: null,
   lastSponsorshipAt: T0 - 5 * MINUTE,
   orphans: 0,
   lastStateChangeAt: T0 - MINUTE,

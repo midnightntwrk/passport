@@ -187,6 +187,19 @@ export interface HealthFacts {
   /** A whole spend job on the queue, proving included — minutes. */
   busy: boolean;
   /**
+   * The legs this wallet has applied PAST the indexer's last progress figure,
+   * named — `unshielded applied 9549 > highest 9521` — or `null` when none is.
+   *
+   * This is the post-spend state the SDK scores as unsynced and this service
+   * scores as settled: see `isEffectivelySynced` in `./wallet.ts` for what the
+   * SDK's `Math.abs` lag actually measures. It is carried here because it is
+   * the REASON, and until 2026/09/02 the verdict for those two to four and a
+   * half minutes was `busy: a spend job holds the queue — proving, most
+   * likely`, which was a guess and was wrong: nothing was proving, the wallet
+   * was catching up with a submission of its own.
+   */
+  syncAhead: string | null;
+  /**
    * When this service last successfully sponsored anything — a balanced fee
    * leg, a registered name, a funded account. `null` when it has not sponsored
    * since it started, which is normal on a quiet morning and is why its absence
@@ -297,6 +310,22 @@ export function assessHealth(
     return {
       verdict: 'busy',
       reason: 'a claim on this wallet’s coin state is outstanding — balancing, signing, or submitting',
+      act: false,
+      restartEligible: false,
+    };
+  }
+  /* Before the queue branch, because the queue branch has no way to tell a
+     proof from a wallet catching up and used to guess — wrongly, for the whole
+     of the post-spend window. When a leg is ahead of the indexer's last
+     progress figure, THAT is what is happening, whether or not a job is also on
+     the queue, and it is named rather than inferred. Both verdicts act on
+     nothing, so nothing is risked by preferring the true one. */
+  if (facts.syncAhead !== null) {
+    return {
+      verdict: 'settling',
+      reason: `this wallet has applied its own submission ahead of the indexer’s last progress report (${facts.syncAhead})${
+        facts.busy ? ', with a spend job still on the queue' : ''
+      } — it is catching up with a spend of its own, not proving`,
       act: false,
       restartEligible: false,
     };
@@ -842,6 +871,7 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
           proving: 'failed',
           reserved: false,
           busy: false,
+          syncAhead: null,
           lastSponsorshipAt: null,
           orphans: 0,
           lastStateChangeAt,

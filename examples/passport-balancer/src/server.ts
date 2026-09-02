@@ -172,8 +172,11 @@ import {
 import {
   BalanceRefusal,
   formatNight,
+  isEffectivelySynced,
+  isLegEffectivelySynced,
   markDustColdStart,
   openBalancerWallet,
+  syncAheadDetail,
   type BalancerWallet,
 } from './wallet.js';
 
@@ -756,9 +759,21 @@ async function main(): Promise<void> {
     try {
       const state = await wallet.currentState();
       const progress = await wallet.progress(state);
-      ready = progress.isSynced;
-      dustSynced = progress.dust.complete;
-      syncState = progress.isSynced ? 'ready' : 'syncing';
+      /* Not `progress.isSynced`, and the difference is the two to four and a
+         half minutes after every one of this service's own spends. See
+         `isEffectivelySynced` in `./wallet.ts`: a wallet that has applied its
+         own submission ahead of the indexer's last progress announcement is
+         scored unsynced by the SDK and is in fact better informed than a
+         `complete` one. Gating `available` on the SDK's verdict is what refused
+         a second Passport twenty seconds behind the first, 3/3, on
+         2026/09/02. */
+      ready = isEffectivelySynced(progress);
+      dustSynced = isLegEffectivelySynced(progress.dust);
+      /* Follows `ready`, and deliberately not a third string: `sponsor.ts`
+         carries this value through to its logs and the deploy watchdog greps
+         for `"syncState":"ready"`, so a wallet that can pay a fee must say the
+         word both of them already know. */
+      syncState = ready ? 'ready' : 'syncing';
       dustBalance = await wallet.dustBalance(state);
       dustUtxoCount = await wallet.dustUtxoCount(state);
     } catch {
@@ -826,7 +841,7 @@ async function main(): Promise<void> {
        somebody right now, not merely alive. Computed before the object so
        `settling` can say why it is false. */
     const ready =
-      (progress?.isSynced ?? false) &&
+      (progress !== null && isEffectivelySynced(progress)) &&
       dust > 0n &&
       !wallet.isReserved() &&
       ['ready', 'server'].includes(wallet.provingReadiness().state);
@@ -970,12 +985,17 @@ async function main(): Promise<void> {
     let utxoCount = 0;
     let nightAtomic = 0n;
     let pendingTransactions = 0;
+    let syncAhead: string | null = null;
     let fingerprint = 'unreadable';
     try {
       const state = await wallet.currentState();
       const walked = await wallet.progress(state);
       stateReadable = true;
-      synced = walked.isSynced;
+      /* The readiness question, not the SDK's strict one — see
+         `isEffectivelySynced`. Without this the watchdog read every post-spend
+         minute as `degraded: not synced` and reached for a restart. */
+      synced = isEffectivelySynced(walked);
+      syncAhead = syncAheadDetail(walked);
       connected = walked.shielded.connected && walked.unshielded.connected && walked.dust.connected;
       dustSpecks = await wallet.dustBalance(state);
       utxoCount = await wallet.dustUtxoCount(state);
@@ -1017,6 +1037,9 @@ async function main(): Promise<void> {
          moves off `registered` on its next pass. */
       dustGenerating: registration === 'already-generating' || registration === 'registered',
       pendingTransactions,
+      /* The real reason a post-spend wallet looks unsettled, so the verdict can
+         name it instead of guessing at a prover. `null` when nothing is ahead. */
+      syncAhead,
       proving: wallet.provingReadiness().state,
       reserved: wallet.isReserved(),
       busy: wallet.isBusy(),
