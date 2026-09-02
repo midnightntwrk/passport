@@ -37,10 +37,13 @@
  * is no reason to run it in the middle of somebody's grant when it can simply
  * wait a minute.
  *
- * The queue itself is unchanged in purpose: spends still run one at a time, so
- * two grants arriving together are served in order rather than racing the proof
- * server. What changed is that holding the queue is no longer mistaken for
- * holding the wallet.
+ * The queue itself is unchanged in purpose: it serialises what would otherwise
+ * race. What changed is that holding the queue is no longer mistaken for
+ * holding the wallet — and, since 2026/09/02, that "one at a time" is a
+ * consequence of the coins rather than a rule of the queue. See
+ * {@link WalletReservationOptions.lanes}: a job starts only when a DUST coin is
+ * free for it, so an activation's NIGHT leg and its asset leg can run together
+ * on a wallet with two coins and cannot on a wallet with one.
  */
 
 /**
@@ -119,6 +122,8 @@ export interface WalletReservation {
   exclusive<T>(task: () => Promise<T>, options?: { priority?: number }): Promise<T>;
   /** Both counters, for `/status` and for the tests. */
   counts(): { reserved: number; jobs: number };
+  /** How many spend jobs may run at once RIGHT NOW. See {@link WalletReservationOptions.lanes}. */
+  lanes(): number;
 }
 
 export interface WalletReservationOptions {
@@ -133,10 +138,34 @@ export interface WalletReservationOptions {
    */
   slowClaimMs?: number;
   onSlowClaim?: (label: string, heldMs: number) => void;
+  /**
+   * How many spend jobs may run at once, asked AFRESH before every start.
+   *
+   * WHY THIS IS A FUNCTION AND NOT A NUMBER. The real limit is not a
+   * configuration figure, it is how many DUST coins are free: the SDK's coin
+   * selection is "the smallest coin with value above zero, until the fee is
+   * covered", so a job that starts with no free coin does not wait politely —
+   * it fails to balance, or it sweeps a coin a running job was about to spend.
+   * `./server.ts` therefore passes `min(BALANCER_SPEND_LANES, free DUST coins)`
+   * and the queue reads it at each drain, so lanes close as coins are spent and
+   * reopen as change lands, without anybody publishing an event.
+   *
+   * Defaults to one, which is the behaviour this queue had before lanes
+   * existed: strictly one spend at a time.
+   */
+  lanes?: () => number;
 }
 
 export function createWalletReservation(options: WalletReservationOptions = {}): WalletReservation {
   const slowClaimMs = options.slowClaimMs ?? 5_000;
+  const lanes = options.lanes ?? ((): number => 1);
+  /* Never below one. A lane count of zero would not throttle the queue, it
+     would STOP it: `drain` is called on arrival and on completion, so with no
+     job running there would be nothing left to call it again and the queue
+     would stall with work in it until the next arrival. A caller reporting no
+     free coins gets one lane, whose job then waits on the fee estimate — which
+     is a wait it can be given a budget for, unlike a stalled queue. */
+  const laneCount = (): number => Math.max(1, Math.floor(lanes()));
   let reserved = 0;
   let jobs = 0;
   const waiting: QueuedJob[] = [];
@@ -152,9 +181,14 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
      and nothing depended on the delay: every task here is an async function,
      which cannot get past its own first await in the same tick. */
   const drain = (): void => {
-    if (jobs > 0) return;
-    const next = waiting.shift();
-    if (next) next.start();
+    /* A loop rather than a single start, and the lane count is re-read on every
+       pass: a drain that opened three lanes on one reading could start three
+       jobs against a coin count that the first of them has already changed. */
+    while (jobs < laneCount()) {
+      const next = waiting.shift();
+      if (!next) return;
+      next.start();
+    }
   };
 
   const reserve = async <T>(phase: () => Promise<T>, label = 'phase'): Promise<T> => {
@@ -215,5 +249,6 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
     reserve,
     exclusive,
     counts: () => ({ reserved, jobs }),
+    lanes: laneCount,
   };
 }

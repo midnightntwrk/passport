@@ -103,6 +103,11 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    */
   spendQueueMax: number;
   /**
+   * The CEILING on how many spend jobs may run at once. The real limit is the
+   * number of free DUST coins, and `./server.ts` takes the smaller of the two.
+   */
+  spendLanes: number;
+  /**
    * The peers whose `X-Forwarded-For` is believed. Everything else is keyed on
    * the address its socket really came from, whatever its headers claim.
    */
@@ -245,6 +250,23 @@ export const DEFAULT_SPEND_BURST = 3;
  * a flood reaches immediately.
  */
 export const DEFAULT_SPEND_QUEUE_MAX = 8;
+
+/**
+ * How many spend jobs may run at once, before the free-coin limit is applied.
+ *
+ * Three, because an activation is five sequential sponsored transactions and
+ * the two that can genuinely run in parallel — the NIGHT grant and the asset
+ * leg — plus one registration for the person onboarding behind them is the
+ * concurrency the demo actually produces. Higher would not help: the droplet
+ * has two vCPUs and one proof server shared with every client, so a fourth
+ * concurrent proof would simply queue there instead of here, where at least the
+ * queue is visible on `/status`.
+ *
+ * One restores the strictly-serial behaviour this service had before
+ * 2026/09/02, which is the setting to fall back to if concurrency is ever
+ * suspected of a fault.
+ */
+export const DEFAULT_SPEND_LANES = 3;
 
 /**
  * The mUSD faucet each network's asset grant is minted from.
@@ -486,6 +508,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     trimmed(env.BALANCER_SPEND_QUEUE_MAX),
     DEFAULT_SPEND_QUEUE_MAX,
   );
+  const spendLanes = wholeNumber(
+    'BALANCER_SPEND_LANES',
+    trimmed(env.BALANCER_SPEND_LANES),
+    DEFAULT_SPEND_LANES,
+  );
+  if (spendLanes < 1) {
+    throw new Error('BALANCER_SPEND_LANES must be at least 1 (1 runs spends strictly one at a time).');
+  }
 
   const trustedProxies = (trimmed(env.BALANCER_TRUSTED_PROXIES) ?? '')
     .split(',')
@@ -534,6 +564,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     aliasRate,
     accountRate,
     spendQueueMax,
+    spendLanes,
     trustedProxies: trustedProxies.length > 0 ? trustedProxies : [...DEFAULT_TRUSTED_PROXIES],
     ...(clientKey ? { clientKey } : {}),
   };

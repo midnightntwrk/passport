@@ -332,3 +332,144 @@ describe('the availability policy', () => {
     );
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Lanes                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What a lane really is, and why it is a function of the chain rather than a
+ * setting.
+ *
+ * Every sponsored spend consumes a whole DUST coin, and the SDK's coin
+ * selection takes the smallest coin with a value above zero until the fee is
+ * covered. Two jobs started against one free coin therefore do not queue
+ * politely — the second fails to balance, or sweeps a coin the first was about
+ * to spend. So the queue asks how many coins are free before every start, and
+ * the configured ceiling is only ever the smaller half of that answer.
+ *
+ * On 2026/09/02 the consequence of having no lanes at all was measured: five
+ * sequential sponsored transactions per activation, a second Passport's
+ * registration queued 280 s behind the first's, and 519 s from a landed account
+ * to visible mUSD.
+ */
+describe('spend lanes', () => {
+  /** A job that reports when it starts and finishes on the caller's schedule. */
+  function job(log: string[], name: string) {
+    let release!: () => void;
+    const finished = new Promise<void>((settle) => {
+      release = settle;
+    });
+    return {
+      release,
+      run: async () => {
+        log.push(`start ${name}`);
+        await finished;
+        log.push(`end ${name}`);
+        return name;
+      },
+    };
+  }
+
+  it('runs three jobs at once when three DUST coins are free', async () => {
+    const log: string[] = [];
+    const reservation = createWalletReservation({ lanes: () => 3 });
+    const jobs = ['a', 'b', 'c'].map((name) => job(log, name));
+    const running = jobs.map((entry) => reservation.exclusive(entry.run));
+
+    await wait(5);
+    assert.deepEqual(log, ['start a', 'start b', 'start c']);
+    assert.equal(reservation.counts().jobs, 3);
+
+    for (const entry of jobs) entry.release();
+    assert.deepEqual(await Promise.all(running), ['a', 'b', 'c']);
+  });
+
+  it('runs one job when only one coin is free, however many lanes are configured', async () => {
+    const log: string[] = [];
+    const reservation = createWalletReservation({ lanes: () => Math.min(3, 1) });
+    const jobs = ['a', 'b'].map((name) => job(log, name));
+    const running = jobs.map((entry) => reservation.exclusive(entry.run));
+
+    await wait(5);
+    assert.deepEqual(log, ['start a'], 'the second waits for a coin, not for a lane');
+
+    jobs[0]!.release();
+    await wait(5);
+    assert.deepEqual(log, ['start a', 'end a', 'start b']);
+    jobs[1]!.release();
+    await Promise.all(running);
+  });
+
+  it('opens a lane the moment a coin comes free, without an event to say so', async () => {
+    /* The coin count is read AFRESH at each drain, which is what lets change
+       landing on the chain admit a waiting job with nothing having to notify
+       the queue. */
+    const log: string[] = [];
+    let free = 1;
+    const reservation = createWalletReservation({ lanes: () => free });
+    const jobs = ['a', 'b', 'c'].map((name) => job(log, name));
+    const running = jobs.map((entry) => reservation.exclusive(entry.run));
+
+    await wait(5);
+    assert.deepEqual(log, ['start a']);
+
+    free = 3;
+    jobs[0]!.release();
+    await wait(5);
+    assert.deepEqual(log, ['start a', 'end a', 'start b', 'start c']);
+    jobs[1]!.release();
+    jobs[2]!.release();
+    await Promise.all(running);
+  });
+
+  it('never stalls the queue when the caller reports no free coins at all', async () => {
+    /* Zero lanes would not throttle this queue, it would STOP it: `drain` runs
+       on arrival and on completion, so with nothing running there is nothing
+       left to call it again. One lane whose job then fails its own fee estimate
+       is recoverable; a queue holding work nobody will ever start is not. */
+    const log: string[] = [];
+    const reservation = createWalletReservation({ lanes: () => 0 });
+    assert.equal(reservation.lanes(), 1);
+    const only = job(log, 'a');
+    const running = reservation.exclusive(only.run);
+    await wait(5);
+    assert.deepEqual(log, ['start a']);
+    only.release();
+    await running;
+  });
+
+  it('keeps registration ahead of the jobs waiting behind a full set of lanes', async () => {
+    /* Priorities order what is WAITING and nothing else, so they must survive
+       the change from one lane to several unchanged. */
+    const log: string[] = [];
+    const reservation = createWalletReservation({ lanes: () => 1 });
+    const first = job(log, 'running');
+    const running = reservation.exclusive(first.run);
+    await wait(5);
+
+    const grant = job(log, 'grant');
+    const registration = job(log, 'registration');
+    const queued = [
+      reservation.exclusive(grant.run),
+      reservation.exclusive(registration.run, { priority: SpendPriority.Registration }),
+    ];
+
+    first.release();
+    await wait(5);
+    assert.deepEqual(log, ['start running', 'end running', 'start registration']);
+    registration.release();
+    await wait(5);
+    grant.release();
+    await Promise.all([running, ...queued]);
+    assert.deepEqual(log.filter((line) => line.startsWith('start')), [
+      'start running',
+      'start registration',
+      'start grant',
+    ]);
+  });
+
+  it('defaults to one lane, which is the behaviour every earlier test asserts', () => {
+    assert.equal(createWalletReservation().lanes(), 1);
+  });
+});
