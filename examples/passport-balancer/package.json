@@ -5,9 +5,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/server.ts src/generate-seed.ts src/sync-check.ts --bundle --format=esm --platform=node --packages=external --outdir=dist --out-extension:.js=.mjs",
+    "build": "esbuild src/server.ts src/generate-seed.ts src/sync-check.ts src/dust-rollback.ts --bundle --format=esm --platform=node --packages=external --outdir=dist --out-extension:.js=.mjs",
     "generate-seed": "npm run build && node dist/generate-seed.mjs",
     "sync-check": "npm run build && node dist/sync-check.mjs",
+    "dust-rollback": "npm run build && node dist/dust-rollback.mjs",
     "start": "npm run build && node dist/server.mjs",
     "build:test": "esbuild test/*.test.ts --bundle --format=esm --platform=node --packages=external --outdir=dist/test --out-extension:.js=.mjs",
     "test": "npm run build:test && node --test dist/test/*.test.mjs",
