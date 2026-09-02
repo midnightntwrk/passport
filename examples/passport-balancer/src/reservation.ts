@@ -152,6 +152,28 @@ export interface WalletReservation {
    * that took it. Releasing is idempotent and drains the queue.
    */
   hold(priority: number): () => void;
+  /**
+   * Gives this job's LANE back for the length of `work`, and takes one again
+   * before returning.
+   *
+   * For the wait a running job cannot avoid making. `withNodeRejectionRetry`
+   * polls for this wallet to catch up with the block that refused its
+   * transaction — up to 120 s of doing nothing but asking — and it does that
+   * from inside the job, so on a wallet with one fee-capable coin it holds the
+   * only lane while a name claim somebody is watching waits behind it. Measured
+   * on 2026/09/02 at 21:54:07: a refused `deposit_night` polled until 21:55:50
+   * and the registration behind it reached Home in 151.3 s against a bar of 120.
+   *
+   * The same reasoning as `hold`, from the other side: a wait that occupies
+   * nothing should occupy nothing. Re-entry is queued at `priority` like any
+   * other job, so the resumed work waits its turn rather than jumping a lane it
+   * had already given up, and the job is counted again before `work`'s caller
+   * sees a value — the counter never under-reports what is running.
+   *
+   * A caller that holds no lane simply runs `work`: this is safe to reach for
+   * from code that is sometimes inside a job and sometimes not.
+   */
+  yieldLane<T>(work: () => Promise<T>, priority?: number): Promise<T>;
   /** Both counters, for `/status` and for the tests. */
   counts(): { reserved: number; jobs: number };
   /** How many spend jobs may run at once RIGHT NOW. See {@link WalletReservationOptions.lanes}. */
@@ -287,6 +309,36 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
     });
   };
 
+  const yieldLane = async <T>(work: () => Promise<T>, priority = SpendPriority.Normal): Promise<T> => {
+    /* Nothing to give back. `jobs` is a count rather than a set of handles, so
+       this is the only check available — and it is the right one: every caller
+       is either inside `exclusive` or it is not. */
+    if (jobs <= 0) return work();
+    jobs -= 1;
+    drain();
+    try {
+      return await work();
+    } finally {
+      /* Re-taken through the queue, not by incrementing the counter: the lane
+         may have been given to somebody else, and resuming into a lane that
+         does not exist is how a wallet with one coin ends up running two jobs
+         against it. */
+      await new Promise<void>((resume) => {
+        const entry: QueuedJob = {
+          priority,
+          start: () => {
+            jobs += 1;
+            resume();
+          },
+        };
+        let index = waiting.length;
+        while (index > 0 && waiting[index - 1]!.priority < priority) index -= 1;
+        waiting.splice(index, 0, entry);
+        drain();
+      });
+    }
+  };
+
   const hold = (priority: number): (() => void) => {
     holds.push(priority);
     let released = false;
@@ -305,6 +357,7 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
     reserve,
     exclusive,
     hold,
+    yieldLane,
     counts: () => ({ reserved, jobs }),
     lanes: laneCount,
   };
