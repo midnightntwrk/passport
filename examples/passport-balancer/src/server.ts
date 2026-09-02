@@ -1260,8 +1260,27 @@ async function main(): Promise<void> {
       }
 
       /* ---------------------------------------------------------------- */
-      /* The NIGHT leg                                                     */
+      /* The two legs, run TOGETHER                                        */
       /* ---------------------------------------------------------------- */
+
+      /**
+       * Merges one leg's record into whatever the other has already written.
+       *
+       * The legs now run concurrently, so neither may write the ledger from a
+       * value it captured before the other started: an asset leg holding a
+       * `nightEntry` read at request time would erase a NIGHT credit written
+       * while it was proving, and vice versa. Each write therefore re-reads the
+       * entry at the moment it writes. The ledger is a file behind one
+       * single-threaded process, so read-modify-write here is atomic in the
+       * only sense that matters.
+       */
+      const recordLeg = async (patch: Partial<AccountEntry>): Promise<void> => {
+        const current = accountLedger.get(contractAddress) ?? previous;
+        await accountLedger.record(contractAddress, {
+          ...(current ?? { at: new Date().toISOString() }),
+          ...patch,
+        } as AccountEntry);
+      };
 
       /* Carried forward so the asset leg's ledger write keeps whatever the
          NIGHT leg recorded, whether that happened just now or in an earlier
@@ -1273,11 +1292,20 @@ async function main(): Promise<void> {
       let nightBalanceAfter = previous?.balanceAfterAtomic ?? held.night.toString();
       let fundedAt = previous?.at ?? new Date().toISOString();
 
+      /**
+       * The NIGHT leg. Resolves to a refusal when it fails, rather than
+       * throwing, so the asset leg running beside it is always awaited.
+       */
+      const nightLeg = async (): Promise<{ status: number; body: Record<string, unknown> } | null> => {
       if (nightNeeded) {
         try {
-          /* Under the wallet's spend lock, so a fee-sponsorship request or an
-             alias registration cannot reserve the coins this deposit is
-             balancing against. */
+          /* One job on the spend queue, which since 2026/09/02 means one LANE
+             rather than the whole queue: this leg and the asset leg beside it
+             each take a lane when a DUST coin is free for it, and neither waits
+             on the other. They contend for nothing — the grant is unshielded
+             NIGHT out of this wallet, the asset leg is a shielded coin the
+             faucet mints — and running them in series is most of the five
+             minutes an activation used to take to show its assets. */
           const result = await wallet.exclusive(() => funder.fund(contractAddress));
           accountsFunded += 1;
           lastSpendAt = Date.now();
@@ -1295,7 +1323,7 @@ async function main(): Promise<void> {
           /* Written the moment the credit is confirmed, and not held back until
              the asset leg finishes: the NIGHT is on chain, and a crash between
              the two legs must not be able to lose that fact and pay it twice. */
-          await accountLedger.record(contractAddress, nightEntry);
+          await recordLeg(nightEntry);
           console.log(
             `[account] ${formatNight(result.amountAtomic)} NIGHT → ${contractAddress} (tx ${result.txHash}${result.block ? `, block ${result.block}` : ''}, holds ${result.balanceAfterAtomic} atomic)`,
           );
@@ -1328,6 +1356,8 @@ async function main(): Promise<void> {
           );
         }
       }
+      return null;
+      };
 
       /* ---------------------------------------------------------------- */
       /* The ASSET leg                                                     */
@@ -1345,6 +1375,7 @@ async function main(): Promise<void> {
       let assetBlock: number | null = null;
       let assetError: string | null = null;
 
+      const assetLeg = async (): Promise<void> => {
       if (assetNeeded) {
         try {
           /* Takes the spend lock itself, twice — mint, then deposit — with the
@@ -1363,10 +1394,9 @@ async function main(): Promise<void> {
             balanceAfter: grant.balanceAfter.toString(),
             at: grant.fundedAt,
           };
-          await accountLedger.record(contractAddress, {
-            ...(nightEntry ?? { at: grant.fundedAt }),
-            asset: assetEntry,
-          });
+          /* Re-read at write time rather than merged from `nightEntry`: the
+             NIGHT leg may have confirmed while this one was proving. */
+          await recordLeg({ asset: assetEntry });
           console.log(
             `[asset] ${grant.amount} ${funder.assetSymbol} → ${contractAddress} (mint ${grant.mintTxHash}, deposit ${grant.depositTxHash}${grant.depositBlock ? `, block ${grant.depositBlock}` : ''}, holds ${grant.balanceAfter})`,
           );
@@ -1383,6 +1413,20 @@ async function main(): Promise<void> {
       } else if (!assetSupported) {
         assetError = funder.assetUnavailableReason;
       }
+      };
+
+      /* BOTH LEGS AT ONCE, and `allSettled` rather than `all` because the asset
+         leg is not allowed to abort the NIGHT one — its failure is reported in
+         the 200 as `assetError`, which is the shape this endpoint has always
+         had.
+
+         The NIGHT leg's refusal still wins the response. When it loses a race
+         with an asset leg that landed, the mUSD is on chain and recorded, so the
+         client's retry runs the missing NIGHT half and nothing else — the
+         once-only ledger is per leg for exactly this reason. */
+      const [nightOutcome] = await Promise.allSettled([nightLeg(), assetLeg()]);
+      if (nightOutcome.status === 'rejected') throw nightOutcome.reason;
+      if (nightOutcome.value) return nightOutcome.value;
 
       return {
         status: 200,
