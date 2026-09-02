@@ -365,6 +365,71 @@ export function balancerIsSettling(input: {
   return input.now - input.lastSpendAt < input.settleWindowMs;
 }
 
+/**
+ * Is this wallet's DUST hidden from it rather than absent?
+ *
+ * A wedge has a SIGNATURE, and it is the conjunction below — every one of these
+ * at once, and none of them alone:
+ *
+ *   - the wallet is synced, so it is not merely behind the chain;
+ *   - it holds NIGHT, so there is something for that NIGHT to be generating;
+ *   - it reports no spendable DUST UTxO;
+ *   - nothing is pending — no transaction of its own is in flight, so no coin
+ *     is legitimately booked against one;
+ *   - nothing it balanced is outstanding, so the orphan sweeper has no claim
+ *     either;
+ *   - it is neither claimed nor busy, so nobody is spending from it now;
+ *   - and its last spend is older than the orphan window, so the settle this
+ *     would otherwise be has had every chance to complete.
+ *
+ * That leaves exactly one explanation: the ledger is holding coins the wallet
+ * still owns behind a `pending_until` flag that no revert will now clear. See
+ * `./dustRollback.ts` for how it gets there and what undoes it.
+ *
+ * Pure and clock-free, so `test/health.test.ts` can place a wedge, a settle,
+ * and a spend-in-flight exactly where it wants them.
+ */
+export function isDustWedged(facts: {
+  synced: boolean;
+  nightAtomic: bigint;
+  dustUtxoCount: number;
+  pendingTransactions: number;
+  orphans: number;
+  reserved: boolean;
+  busy: boolean;
+  now: number;
+  lastSpendAt: number;
+  orphanMs: number;
+}): boolean {
+  if (!facts.synced) return false;
+  if (facts.nightAtomic <= 0n) return false;
+  if (facts.dustUtxoCount > 0) return false;
+  if (facts.pendingTransactions > 0) return false;
+  if (facts.orphans > 0) return false;
+  if (facts.reserved || facts.busy) return false;
+  /* Never inside the settle: a spend that has just happened SHOULD read as no
+     DUST, and repairing that would revert a transaction on its way to a block. */
+  if (facts.lastSpendAt > 0 && facts.now - facts.lastSpendAt <= facts.orphanMs) return false;
+  return true;
+}
+
+/**
+ * The fee estimate could not be covered because no DUST coin was free.
+ *
+ * Typed, and thrown rather than waited out, because the wait used to happen
+ * INSIDE the spend job: `balanceTx` sat in a ten-minute retry loop holding the
+ * queue while every registration and every grant behind it waited. On
+ * 2026/09/02 the spare mint did exactly that for ten minutes with a queue depth
+ * of one. The wait belongs before the job — see `awaitFreeDustCoin` — and the
+ * job itself should fail fast and let its caller decide.
+ */
+export class DustUnavailable extends Error {
+  constructor(detail: string) {
+    super(`no DUST coin was free to pay this transaction's fee: ${detail}`);
+    this.name = 'DustUnavailable';
+  }
+}
+
 /** Three seconds — half a block, and the figure `/wallet-status` publishes. */
 const SHORTFALL_RETRY_AFTER_MS = 3_000;
 
@@ -485,6 +550,21 @@ export interface ContractWalletProvider {
   submitTx(tx: unknown): Promise<string>;
 }
 
+export interface ContractWalletProviderOptions {
+  /**
+   * How long `balanceTx` may wait for a DUST coin to come free before it gives
+   * up with a {@link DustUnavailable}.
+   *
+   * ZERO BY DEFAULT, and that default is the fix. The wait used to be an
+   * unconditional ten minutes taken INSIDE the spend job, so a job that found
+   * no free coin held the queue for its whole budget — measured at 15:49:03 to
+   * 15:59:07 on 2026/09/02, blocking every registration behind it. Wait before
+   * the job with {@link BalancerWallet.awaitFreeDustCoin} instead; a job that
+   * has started should fail fast.
+   */
+  waitForDustMs?: number;
+}
+
 export interface BalancerWallet {
   readonly address: string;
   /** `'server'` when an external prover is configured, `'wasm'` when in-process. */
@@ -524,6 +604,31 @@ export interface BalancerWallet {
   shieldedCoinPublicKeyBytes(): Promise<Uint8Array>;
   /** How many DUST UTxOs back that balance — `/wallet-status` reports it. */
   dustUtxoCount(state?: FacadeState): Promise<number>;
+  /**
+   * Transactions this wallet has booked as pending and not yet seen resolved.
+   *
+   * The fact that separates a wallet mid-spend from a wedged one: a DUST
+   * balance of zero with something pending is correct and temporary, and the
+   * same reading with nothing pending is the ledger holding coins behind an
+   * expired grace period. See {@link isDustWedged}.
+   */
+  pendingTransactionCount(state?: FacadeState): Promise<number>;
+  /**
+   * Whether this wallet's DUST is hidden rather than absent, read from the live
+   * state. `false` for every explainable shortfall — see {@link isDustWedged}
+   * for the full conjunction and why each term is in it.
+   */
+  dustWedged(state?: FacadeState): Promise<boolean>;
+  /**
+   * Waits, OUTSIDE any spend job, until at least one DUST coin is free.
+   *
+   * This is the wait `balanceTx` used to do from inside the queue, which is
+   * what let one job's fee estimate block every other job for ten minutes. Here
+   * it blocks only its own caller, and a caller that gives up gives up without
+   * ever having held the queue. `true` when a coin came free, `false` when the
+   * budget ran out.
+   */
+  awaitFreeDustCoin(maxMs: number): Promise<boolean>;
   /**
    * Registers every unregistered NIGHT UTxO for DUST generation, so the
    * balancer has DUST to spend on other people's fees. Returns what happened.
@@ -593,7 +698,7 @@ export interface BalancerWallet {
    * transactions through. Built per job, because it snapshots the wallet's
    * shielded keys; calls made through it MUST be inside {@link exclusive}.
    */
-  contractWalletProvider(): ContractWalletProvider;
+  contractWalletProvider(options?: ContractWalletProviderOptions): ContractWalletProvider;
   saveSnapshot(): Promise<void>;
   close(): Promise<void>;
 }
@@ -612,6 +717,17 @@ export interface BalancerWalletHooks {
   lastSpendAt?: () => number;
   /** `CHANGE_SETTLE_MS` — how long that spend's change may take to come back. */
   settleWindowMs?: number;
+  /**
+   * Called when a revert has just failed to give this wallet its DUST back and
+   * the live state now carries the wedge signature.
+   *
+   * Fired from the one place the failure is provable the instant it happens —
+   * immediately after `facade.revert` on a transaction that spent DUST — so the
+   * repair starts within a health tick rather than at the next ten-minute one.
+   * `./server.ts` turns it into a `dustRepairPending` flag and an immediate
+   * health tick.
+   */
+  onDustWedged?: () => void;
 }
 
 export async function openBalancerWallet(
@@ -832,11 +948,18 @@ export async function openBalancerWallet(
   const orphans = createOrphanWatch({
     orphanMs: config.balanceOrphanMs,
     landed: (identifier) => transactionLanded(config.indexerHttpUrl, identifier),
-    revert: (entry) =>
-      reserve(
+    revert: async (entry) => {
+      await reserve(
         () => facade.revert(entry.finalized as ledger.FinalizedTransaction),
         'orphaned fee-leg release',
-      ),
+      );
+      /* The sweeper's revert is the one most likely to be a no-op: by the time
+         it fires, `balanceOrphanMs` of event batches have gone past and the
+         SDK's `pendingDust` list was emptied by the first of them. On
+         2026/09/02 at 15:51:16 it logged 'released the DUST booked for 693ab0…'
+         and restored nothing at all. */
+      await noticeWedgeAfterRevert();
+    },
   });
 
   const lastSpendAt = hooks.lastSpendAt ?? (() => 0);
@@ -853,6 +976,76 @@ export async function openBalancerWallet(
       settleWindowMs,
       orphans: orphans.size,
     });
+
+  const onDustWedged = hooks.onDustWedged ?? ((): void => undefined);
+
+  const dustUtxoCountOf = (state: FacadeState): number => state.dust.availableCoins.length;
+  const pendingCountOf = (state: FacadeState): number => state.pending.all.length;
+
+  /**
+   * Read the live state and ask whether the wedge signature is present.
+   *
+   * Deliberately swallows a state that cannot be read: this runs on the failure
+   * path of a revert, and a wallet that will not answer is a different fault
+   * with its own verdict in `./health.ts`. Announcing a wedge on no evidence
+   * would be the worst of the two mistakes available here.
+   */
+  const readDustWedged = async (state?: FacadeState): Promise<boolean> => {
+    try {
+      const current = state ?? (await currentState());
+      return isDustWedged({
+        synced: current.isSynced,
+        nightAtomic: current.unshielded.balances[nightTokenType] ?? 0n,
+        dustUtxoCount: dustUtxoCountOf(current),
+        pendingTransactions: pendingCountOf(current),
+        orphans: orphans.size,
+        reserved: reservation.isReserved(),
+        busy: reservation.isBusy(),
+        now: Date.now(),
+        lastSpendAt: lastSpendAt(),
+        orphanMs: config.balanceOrphanMs,
+      });
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * Called after every revert of a transaction that spent DUST.
+   *
+   * The revert is the SDK's only route back from a spend, and after the first
+   * replayed event batch it is a no-op — see `./dustRollback.ts`. So the check
+   * belongs here, where the failure has just happened, rather than at whatever
+   * the health loop's next tick happens to be.
+   */
+  const noticeWedgeAfterRevert = async (): Promise<void> => {
+    if (await readDustWedged()) {
+      console.warn(
+        '[dust] the revert gave nothing back and this wallet now holds NIGHT with no spendable DUST, nothing pending, and nothing outstanding — the ledger is holding its coins behind an expired grace period',
+      );
+      onDustWedged();
+    }
+  };
+
+  /**
+   * Polls for a free DUST coin, from OUTSIDE the spend queue.
+   *
+   * A second is the cadence rather than the ten this replaced: the thing being
+   * waited for is a block landing and an event batch replaying, both of which
+   * are seconds, and the caller is holding nothing while it waits.
+   */
+  const awaitFreeDustCoin = async (maxMs: number): Promise<boolean> => {
+    const deadline = Date.now() + Math.max(0, maxMs);
+    for (;;) {
+      try {
+        if (dustUtxoCountOf(await currentState()) > 0) return true;
+      } catch {
+        // An unreadable state is not a free coin; asked again below.
+      }
+      if (Date.now() >= deadline) return false;
+      await new Promise((settle) => setTimeout(settle, Math.min(1_000, deadline - Date.now() + 1)));
+    }
+  };
 
   /* Six seconds — a block — so a rejected transaction's DUST is back within one
      sweep of the window closing rather than at the next health tick. */
@@ -950,9 +1143,16 @@ export async function openBalancerWallet(
     dustBalance,
 
     async dustUtxoCount(state?: FacadeState): Promise<number> {
-      const current = state ?? (await currentState());
-      return current.dust.availableCoins.length;
+      return dustUtxoCountOf(state ?? (await currentState()));
     },
+
+    async pendingTransactionCount(state?: FacadeState): Promise<number> {
+      return pendingCountOf(state ?? (await currentState()));
+    },
+
+    dustWedged: readDustWedged,
+
+    awaitFreeDustCoin,
 
     async shieldedBalance(tokenType: string, state?: FacadeState): Promise<bigint> {
       const current = state ?? (await currentState());
@@ -1023,12 +1223,22 @@ export async function openBalancerWallet(
     isBusy: reservation.isBusy,
     isSettling,
 
-    abandonBalance: (txHash: string) => orphans.abandon(txHash),
+    async abandonBalance(txHash: string): Promise<boolean> {
+      const released = await orphans.abandon(txHash);
+      /* A caller telling us its submit failed is the EARLIEST this service can
+         learn a balancing is dead, and therefore the best chance a revert has
+         of still finding its own booking in the SDK's list. When it does not —
+         the six-second event window has usually closed — this is where the
+         wedge becomes visible. */
+      if (released) await noticeWedgeAfterRevert();
+      return released;
+    },
     orphanStats: () => ({ watching: orphans.size, released: orphans.released }),
 
     exclusive,
 
-    contractWalletProvider(): ContractWalletProvider {
+    contractWalletProvider(options: ContractWalletProviderOptions = {}): ContractWalletProvider {
+      const waitForDustMs = options.waitForDustMs ?? 0;
       return {
         getCoinPublicKey: () => shieldedSecretKeys.coinPublicKey,
         getEncryptionPublicKey: () => shieldedSecretKeys.encryptionPublicKey,
@@ -1041,7 +1251,13 @@ export async function openBalancerWallet(
              estimated first and the estimate is retried rather than turned into
              a failed registration. `deploy-stagenet` needed exactly this to get
              its TLD on chain. */
-          const budgetMs = 600_000;
+          /* THE BUDGET IS THE CALLER'S, AND IT IS ZERO BY DEFAULT. This loop
+             runs inside a spend job, so every second it waits is a second every
+             other registration and grant waits behind it. The old unconditional
+             ten minutes is what let the spare mint hold the queue from 15:49:03
+             to 15:59:07 on 2026/09/02 with a queue depth of one. A caller that
+             genuinely wants to wait for DUST waits with `awaitFreeDustCoin`
+             before it ever enters the queue. */
           const startedAt = Date.now();
           for (;;) {
             try {
@@ -1049,14 +1265,12 @@ export async function openBalancerWallet(
               break;
             } catch (cause) {
               const message = cause instanceof Error ? cause.message : String(cause);
-              if (
-                !/insufficient funds|could not balance dust/i.test(message) ||
-                Date.now() - startedAt > budgetMs
-              ) {
-                throw cause;
-              }
+              if (!/insufficient funds|could not balance dust/i.test(message)) throw cause;
+              if (Date.now() - startedAt >= waitForDustMs) throw new DustUnavailable(message);
               console.log(`[contract] waiting for DUST (${message.slice(0, 80)})`);
-              await new Promise((settle) => setTimeout(settle, 10_000));
+              await new Promise((settle) =>
+                setTimeout(settle, Math.min(10_000, waitForDustMs - (Date.now() - startedAt))),
+              );
             }
           }
 
@@ -1100,6 +1314,7 @@ export async function openBalancerWallet(
               } catch {
                 // Reserved coins are released on restart anyway.
               }
+              await noticeWedgeAfterRevert();
             }
             throw cause;
           }
@@ -1130,6 +1345,12 @@ export async function openBalancerWallet(
             } catch {
               // Best effort — the original submission failure is the real news.
             }
+            /* The node-rejection path, and the one the two wedges of
+               2026/09/02 came down. When the revert lands within the SDK's
+               six-second event window it works and this finds nothing; when it
+               does not, this is where the service learns it has lost its own
+               DUST rather than an hour later. */
+            await noticeWedgeAfterRevert();
             throw cause;
           }
           return String(finalized.identifiers().at(-1));
@@ -1287,6 +1508,7 @@ export async function openBalancerWallet(
           } catch {
             // Best effort — reserved coins are released on restart anyway.
           }
+          await noticeWedgeAfterRevert();
         }
         if (cause instanceof BalanceRefusal) throw cause;
         const message = cause instanceof Error ? cause.message : String(cause);
