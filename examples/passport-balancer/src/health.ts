@@ -150,6 +150,18 @@ export interface HealthFacts {
    */
   lastSponsorshipAt: number | null;
   /**
+   * Transactions this service has balanced and handed to a caller, which the
+   * chain has not yet been seen carrying.
+   *
+   * Each one holds a DUST coin booked as spent, so a wallet reading zero DUST
+   * with one outstanding is doing exactly what it should be doing — and, unlike
+   * the settle window, this fact ENDS when the sweeper in `./wallet.ts` rules
+   * on the transaction rather than when a clock runs out. A wallet whose orphan
+   * has already been released is a wallet with its DUST back, which is what
+   * makes the verdict `healthy` again without waiting out the window.
+   */
+  orphans: number;
+  /**
    * When the wallet's observed facts last changed — the sync indices, the
    * connection flags, the UTxO count. NOT the DUST balance, which is computed
    * against the current time and therefore moves even on a dead wallet.
@@ -281,6 +293,19 @@ export function assessHealth(
         Deliberately NOT gated on `synced`: a spend puts the wallet through a
         syncing flap of up to about two minutes as well as nullifying its DUST,
         and both halves of that are the same expected event. */
+  if (noDust && facts.orphans > 0) {
+    /* Not a clock at all. The DUST is booked against transactions somebody else
+       was handed and has not been seen submitting; the sweeper asks the chain
+       about each one and either drops it or gives the coin back. Restarting
+       into that would lose the sync position and repair nothing, and the wait
+       ends when the sweeper rules — which is sooner than the window below. */
+    return {
+      verdict: 'settling',
+      reason: `${facts.orphans} balanced transaction(s) still outstanding — their DUST is booked until the chain shows them or the sweeper takes it back`,
+      act: false,
+      restartEligible: false,
+    };
+  }
   if (noDust && facts.lastSponsorshipAt !== null) {
     const since = facts.now - facts.lastSponsorshipAt;
     if (since < policy.settleWindowMs) {
@@ -657,6 +682,7 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
           reserved: false,
           busy: false,
           lastSponsorshipAt: null,
+          orphans: 0,
           lastStateChangeAt,
           consecutiveUnhealthy,
         };

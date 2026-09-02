@@ -57,6 +57,7 @@ const healthy = (overrides: Partial<HealthFacts> = {}): HealthFacts => ({
   reserved: false,
   busy: false,
   lastSponsorshipAt: T0 - 5 * MINUTE,
+  orphans: 0,
   lastStateChangeAt: T0 - MINUTE,
   consecutiveUnhealthy: 0,
   ...overrides,
@@ -126,6 +127,43 @@ describe('the health verdict', () => {
     );
     assert.equal(verdict.verdict, 'degraded');
     assert.equal(verdict.restartEligible, true);
+  });
+
+  /* The 2026/09/02 wedge, and the two halves of what it taught. A transaction
+     the node refused took this wallet's only DUST coins with it; the DUST was
+     booked, not spent, and no clock could tell the difference. The sweeper in
+     `../src/wallet.ts` asks the chain instead — so the fact the watchdog needs
+     is not "how long ago" but "is anything still outstanding". */
+  it('calls a wallet whose DUST is booked against an outstanding balance `settling`', () => {
+    const verdict = assessHealth(
+      healthy({
+        now: T0 + 10 * DEFAULT_HEALTH_POLICY.settleWindowMs,
+        dustSpecks: 0n,
+        utxoCount: 0,
+        lastSponsorshipAt: T0,
+        orphans: 1,
+      }),
+    );
+    assert.equal(verdict.verdict, 'settling', 'restarting would lose the sync and fix nothing');
+    assert.equal(verdict.act, false);
+    assert.equal(verdict.restartEligible, false);
+    assert.match(verdict.reason, /outstanding/);
+  });
+
+  it('is healthy again the moment the sweeper has released that DUST', () => {
+    /* The sweeper reverted the booking, so the coin is back and nothing is
+       outstanding. Nothing here waits out the rest of the settle window: the
+       wallet can pay somebody's fee this instant, which is the only question
+       `healthy` answers. */
+    const verdict = assessHealth(
+      healthy({
+        now: T0 + 30_000,
+        lastSponsorshipAt: T0,
+        orphans: 0,
+      }),
+    );
+    assert.equal(verdict.verdict, 'healthy');
+    assert.equal(verdict.act, false);
   });
 
   it('treats a cold start with no DUST as settling, not as a fault', () => {

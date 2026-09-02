@@ -267,9 +267,13 @@ describe('the availability policy', () => {
       available: 0,
       unavailableCause: 'WALLET_SYNCING',
     });
+    /* A claim is settling BY DEFINITION — it is seconds, and it ends by
+       itself — so this one carries the wait without being told about it. */
     assert.deepEqual(walletAvailability({ ...healthy, reserved: true }), {
       available: 0,
       unavailableCause: 'PENDING_TRANSACTION',
+      settling: true,
+      retryAfterMs: 3_000,
     });
     assert.deepEqual(walletAvailability({ ...healthy, dustSpecks: 0n }), {
       available: 0,
@@ -282,6 +286,42 @@ describe('the availability policy', () => {
     assert.deepEqual(walletAvailability({ ...healthy, proving: 'failed' }), {
       available: 0,
       unavailableCause: 'PROVER_UNAVAILABLE',
+    });
+  });
+
+  /* The two fields `/wallet-status` gained on 2026/09/02, after a client that
+     read a bare `available: 0` mid-send gave up on this service and took its
+     second leg to a different sponsor — which proved it against a state the
+     first leg had already moved, and it never landed. They say the wait is
+     short and bounded; they never say the wallet can pay. */
+  it('says a shortfall is a wait, without ever calling an empty wallet available', () => {
+    const settling = walletAvailability({ ...healthy, dustSpecks: 0n, settling: true });
+    assert.deepEqual(settling, {
+      available: 0,
+      unavailableCause: 'INSUFFICIENT_DUST',
+      settling: true,
+      retryAfterMs: 3_000,
+    });
+
+    assert.deepEqual(walletAvailability({ ...healthy, synced: false, settling: true }), {
+      available: 0,
+      unavailableCause: 'WALLET_SYNCING',
+      settling: true,
+      retryAfterMs: 3_000,
+    });
+  });
+
+  it('does not dress a prover failure up as something worth waiting for', () => {
+    assert.deepEqual(walletAvailability({ ...healthy, proving: 'failed', settling: true }), {
+      available: 0,
+      unavailableCause: 'PROVER_UNAVAILABLE',
+    });
+  });
+
+  it('carries nothing extra when there is nothing in flight to explain the shortfall', () => {
+    assert.deepEqual(walletAvailability({ ...healthy, dustSpecks: 0n, settling: false }), {
+      available: 0,
+      unavailableCause: 'INSUFFICIENT_DUST',
     });
   });
 

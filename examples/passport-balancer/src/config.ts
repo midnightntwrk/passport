@@ -49,6 +49,16 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    */
   balanceTtlMs: number;
   /**
+   * How long a balanced transaction may go unseen on chain before the DUST it
+   * booked is reverted back into this wallet.
+   *
+   * `/balance-only` never submits — the caller does — so a caller whose submit
+   * is rejected or abandoned leaves this wallet's DUST booked against a
+   * transaction that will never land, for the whole of {@link balanceTtlMs}.
+   * This is how long the sweeper waits before it stops believing in one.
+   */
+  balanceOrphanMs: number;
+  /**
    * How often the in-process health watchdog evaluates this wallet. Zero turns
    * it off — the external `passport-balancer-watchdog.timer` on the droplet is
    * a separate leg and is unaffected.
@@ -172,6 +182,18 @@ export const DEFAULT_ALLOWED_ORIGINS = ['https://midnightpassport.com'];
 export const DEFAULT_FEE_BLOCKS_MARGIN = 5;
 /** Thirty minutes, the same window the demo builds its own transfers with. */
 export const DEFAULT_BALANCE_TTL_MS = 30 * 60 * 1_000;
+/**
+ * How long a balanced transaction may go unseen on chain before the DUST it
+ * booked is handed back.
+ *
+ * Two minutes: well past a six-second block plus the indexer lag a caller's
+ * submit travels through (~14 s per round trip, measured 2026/09/02), and far
+ * short of {@link DEFAULT_BALANCE_TTL_MS}, which is the window a transaction the
+ * node has REJECTED would otherwise hold this wallet's DUST for. That is the
+ * failure this exists for: on 2026/09/02 a rejected transaction booked the
+ * balancer's only DUST coins for thirty minutes and onboarding stopped dead.
+ */
+export const DEFAULT_BALANCE_ORPHAN_MS = 120_000;
 /** The funder's ceiling on preview, and the same reasoning applies here. */
 export const DEFAULT_ALIAS_MAX_PER_HOUR = 20;
 /** Two thousand atomic NIGHT — 0.002 NIGHT — as an account's opening balance. */
@@ -346,6 +368,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     throw new Error('BALANCER_BALANCE_TTL_MS must be a positive integer of milliseconds.');
   }
 
+  const balanceOrphanMs = Number(
+    trimmed(env.BALANCER_BALANCE_ORPHAN_MS) ?? DEFAULT_BALANCE_ORPHAN_MS,
+  );
+  if (!Number.isInteger(balanceOrphanMs) || balanceOrphanMs <= 0) {
+    throw new Error('BALANCER_BALANCE_ORPHAN_MS must be a positive integer of milliseconds.');
+  }
+
   const healthIntervalMs = Number(
     trimmed(env.BALANCER_HEALTH_INTERVAL_MS) ?? DEFAULT_HEALTH_INTERVAL_MS,
   );
@@ -484,6 +513,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     host: trimmed(env.BALANCER_HOST) ?? '0.0.0.0',
     feeBlocksMargin,
     balanceTtlMs,
+    balanceOrphanMs,
     healthIntervalMs,
     ...(midnamesTldAddress ? { midnamesTldAddress } : {}),
     ...(trimmed(env.BALANCER_MIDNAMES_ASSETS)

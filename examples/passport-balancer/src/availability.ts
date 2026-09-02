@@ -30,6 +30,14 @@ export interface AvailabilityInput {
   dustSpecks: bigint;
   reserved: boolean;
   proving: ProvingState;
+  /**
+   * Whether a shortfall here is explainable: the balancer's own last spend is
+   * still settling, or a transaction it balanced is still outstanding. It does
+   * NOT make an unavailable wallet available — it says the wait is bounded and
+   * roughly how long, so a client can hold rather than fall through to another
+   * sponsor mid-send.
+   */
+  settling?: boolean;
 }
 
 export interface Availability {
@@ -40,16 +48,40 @@ export interface Availability {
    * not have to guess between "no DUST" and "still syncing".
    */
   unavailableCause?: string;
+  /** Present, and true, only when unavailability is a wait rather than a state. */
+  settling?: boolean;
+  /** How long that wait is worth giving it, in milliseconds. */
+  retryAfterMs?: number;
 }
+
+/**
+ * The wait a settling wallet is worth: three seconds, the same figure
+ * `/balance-only` puts on its 429, and half a block.
+ */
+export const SETTLING_RETRY_AFTER_MS = 3_000;
 
 export function walletAvailability(input: AvailabilityInput): Availability {
   const canProve = input.proving === 'ready' || input.proving === 'server';
   if (input.synced && input.dustSpecks > 0n && !input.reserved && canProve) {
     return { available: 1 };
   }
-  if (!input.synced) return { available: 0, unavailableCause: 'WALLET_SYNCING' };
-  if (input.reserved) return { available: 0, unavailableCause: 'PENDING_TRANSACTION' };
-  if (input.dustSpecks <= 0n) return { available: 0, unavailableCause: 'INSUFFICIENT_DUST' };
+  /* `available` stays 0 in every branch below — a settling wallet cannot pay a
+     fee this instant and saying otherwise would send a caller into a refusal.
+     The two extra fields only tell it whether coming back is worth it. */
+  const waiting =
+    input.settling === true ? { settling: true, retryAfterMs: SETTLING_RETRY_AFTER_MS } : {};
+  if (!input.synced) return { available: 0, unavailableCause: 'WALLET_SYNCING', ...waiting };
+  if (input.reserved) {
+    return {
+      available: 0,
+      unavailableCause: 'PENDING_TRANSACTION',
+      settling: true,
+      retryAfterMs: SETTLING_RETRY_AFTER_MS,
+    };
+  }
+  if (input.dustSpecks <= 0n) {
+    return { available: 0, unavailableCause: 'INSUFFICIENT_DUST', ...waiting };
+  }
   if (input.proving === 'warming') return { available: 0, unavailableCause: 'PROVER_WARMING' };
   return { available: 0, unavailableCause: 'PROVER_UNAVAILABLE' };
 }

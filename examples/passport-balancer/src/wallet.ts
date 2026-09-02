@@ -198,6 +198,230 @@ export interface BalanceOnlyResult {
   expiresAt: string;
 }
 
+/* -------------------------------------------------------------------------- */
+/* The orphan watch                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One balanced transaction this wallet has booked DUST against and handed back
+ * to a caller who has not been seen submitting it.
+ *
+ * `finalized` is the merged transaction `finalizeRecipe` produced, kept only so
+ * `facade.revert` can be given the same object back. Nothing here is key
+ * material and nothing here names a user.
+ */
+export interface OrphanEntry {
+  /** The ledger hash the caller was handed, and the key this map is read by. */
+  txHash: string;
+  /** What the indexer is asked about — `transactions(offset: { identifier })`. */
+  identifier: string;
+  finalized: unknown;
+  balancedAt: number;
+}
+
+export interface OrphanWatchOptions {
+  /**
+   * How long a balanced transaction may go unseen before its DUST is taken
+   * back. `config.balanceOrphanMs`.
+   */
+  orphanMs: number;
+  /**
+   * Whether the chain has this identifier. `null` — and only `null` — means the
+   * question could not be put, which is never grounds for reverting anything.
+   */
+  landed(identifier: string): Promise<boolean | null>;
+  /** Hand the DUST back: `facade.revert(finalized)`, under a claim. */
+  revert(entry: OrphanEntry): Promise<void>;
+  now?: () => number;
+  log?: (line: string) => void;
+  warn?: (line: string) => void;
+}
+
+export interface OrphanWatch {
+  /** Book a balanced transaction as outstanding. */
+  watch(entry: OrphanEntry): void;
+  /**
+   * Release one entry now, on the caller's word that its own submit failed.
+   * `false` when nothing was being watched under that hash — a second call, or
+   * a transaction the sweeper has already ruled on.
+   */
+  abandon(txHash: string): Promise<boolean>;
+  /** One pass: everything past `orphanMs` is asked about and judged. */
+  sweep(): Promise<void>;
+  /** How many balanced transactions are outstanding right now. */
+  readonly size: number;
+  /** How many this watch has released since the process started. */
+  readonly released: number;
+}
+
+/**
+ * `/balance-only` books this wallet's DUST as spent and hands the transaction
+ * to somebody else to submit. When that submit never happens — the node
+ * rejected the transaction, the browser closed, a preflight failed — the
+ * booking stands until the balancing TTL expires, which is thirty minutes of a
+ * balancer that answers `INSUFFICIENT_DUST` to everybody.
+ *
+ * That is not a hypothesis. On 2026/09/02 at 14:12:57Z a transaction the node
+ * refused (`Custom error: 239`) took the wallet's only DUST coins with it;
+ * `/wallet-status` read `dust 0 / utxoCount 0` from 14:13:00Z and onboarding
+ * was refused for the rest of the window.
+ *
+ * So the booking is now provisional: if the chain has not seen the transaction
+ * `orphanMs` after it was balanced, the DUST comes back. The asymmetry is
+ * deliberate — reverting a transaction that DOES land would double-spend, so
+ * an indexer that cannot answer is treated as "still waiting", never as
+ * "absent", and only a definite absence releases anything.
+ *
+ * Pure of the chain and of the clock, so `test/orphans.test.ts` can place a
+ * landing, a rejection, and a sweep exactly where it wants them.
+ */
+export function createOrphanWatch(options: OrphanWatchOptions): OrphanWatch {
+  const entries = new Map<string, OrphanEntry>();
+  const now = options.now ?? Date.now;
+  const log = options.log ?? ((line: string) => console.log(line));
+  const warn = options.warn ?? ((line: string) => console.warn(line));
+  let released = 0;
+
+  /**
+   * Deletes BEFORE reverting, so a sweep and an `/balance-only/abandon` racing
+   * over the same hash cannot revert it twice. A revert that then fails leaves
+   * the booking in the SDK's hands until the TTL or a restart clears it, which
+   * is exactly where it was before this existed.
+   */
+  const release = async (entry: OrphanEntry, why: string): Promise<boolean> => {
+    if (!entries.delete(entry.txHash)) return false;
+    try {
+      await options.revert(entry);
+      released += 1;
+      log(`[balance] released the DUST booked for ${entry.txHash}: ${why}`);
+      return true;
+    } catch (cause) {
+      warn(
+        `[balance] could not release the DUST booked for ${entry.txHash}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      );
+      return false;
+    }
+  };
+
+  return {
+    watch(entry: OrphanEntry): void {
+      entries.set(entry.txHash, entry);
+    },
+
+    async abandon(txHash: string): Promise<boolean> {
+      const entry = entries.get(txHash);
+      if (!entry) return false;
+      return release(entry, 'the caller reported that its own submit failed');
+    },
+
+    async sweep(): Promise<void> {
+      for (const entry of [...entries.values()]) {
+        const age = now() - entry.balancedAt;
+        if (age < options.orphanMs) continue;
+        const seen = await options.landed(entry.identifier);
+        /* The indexer could not be asked. Ask again next tick: an unanswered
+           question is not evidence of absence, and reverting on one would
+           double-spend a transaction that had in fact landed. */
+        if (seen === null) continue;
+        if (seen) {
+          entries.delete(entry.txHash);
+          continue;
+        }
+        await release(entry, `not on chain ${Math.round(age / 1_000)} s after balancing`);
+      }
+    },
+
+    get size(): number {
+      return entries.size;
+    },
+
+    get released(): number {
+      return released;
+    },
+  };
+}
+
+/**
+ * Is a DUST shortfall read right now explainable, or is this wallet empty?
+ *
+ * Two ways it is explainable, and both are bounded: the balancer's own last
+ * spend has not had its change back yet, or a transaction it balanced is still
+ * outstanding and the sweeper has not ruled on it. Either way the answer to the
+ * caller is "come back in three seconds", not "this service cannot help you" —
+ * which is the difference that lost a send on 2026/09/02.
+ *
+ * Pure, so `test/orphans.test.ts` can put the clock exactly where it wants it.
+ */
+export function balancerIsSettling(input: {
+  now: number;
+  /** Epoch milliseconds of this service's last own spend; 0 for "never". */
+  lastSpendAt: number;
+  settleWindowMs: number;
+  /** Balanced transactions still outstanding. */
+  orphans: number;
+}): boolean {
+  if (input.orphans > 0) return true;
+  if (input.lastSpendAt <= 0) return false;
+  return input.now - input.lastSpendAt < input.settleWindowMs;
+}
+
+/** Three seconds — half a block, and the figure `/wallet-status` publishes. */
+const SHORTFALL_RETRY_AFTER_MS = 3_000;
+
+/**
+ * The refusal a DUST shortfall or an unsynced read earns.
+ *
+ * A 429 while it is settling, because `sponsor.ts` retries PENDING_TRANSACTION
+ * inside a 600-second window for a contract call and a 503 sends it to the next
+ * sponsor in its list instead — which, mid-send, means the second leg of a
+ * transfer is proved against a state the first leg has already moved. The
+ * original code travels as `cause`, so an operator still sees which of the two
+ * conditions it was.
+ */
+export function shortfallRefusal(code: string, message: string, settling: boolean): BalanceRefusal {
+  if (settling) {
+    return new BalanceRefusal(429, 'PENDING_TRANSACTION', message, {
+      retryAfterMs: SHORTFALL_RETRY_AFTER_MS,
+      cause: code,
+    });
+  }
+  return new BalanceRefusal(503, code, message);
+}
+
+/**
+ * Whether the indexer has a transaction carrying this identifier — the same
+ * query shape `./contractRuntime.ts` resolves hashes with, asked once, because
+ * the sweeper's own six-second cadence is the retry.
+ *
+ * `null` for anything that is not a definite answer: a network failure, a
+ * GraphQL error, a body that does not parse. Only an empty `transactions` list
+ * from a response that parsed is "not on chain".
+ */
+export async function transactionLanded(
+  indexerHttpUrl: string,
+  identifier: string,
+): Promise<boolean | null> {
+  const query = `{ transactions(offset: { identifier: "${identifier}" }) { hash } }`;
+  try {
+    const response = await fetch(indexerHttpUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    if (!response.ok) return null;
+    const body = (await response.json()) as {
+      data?: { transactions?: Array<{ hash?: string }> };
+      errors?: unknown[];
+    };
+    if (body.errors && body.errors.length > 0) return null;
+    const found = body.data?.transactions;
+    if (!Array.isArray(found)) return null;
+    return found.length > 0;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * A refusal the HTTP layer can turn into the wire shape `sponsor.ts` parses:
  * `{ error, message }` with an optional `cause` and `retryAfterMs`.
@@ -316,6 +540,24 @@ export interface BalancerWallet {
    */
   balanceOnly(transactionBytes: Uint8Array): Promise<BalanceOnlyResult>;
   /**
+   * Gives back the DUST booked for one balanced transaction, on the caller's
+   * word that its own submit failed. `false` when nothing is outstanding under
+   * that hash. The sweeper would get there anyway; this only makes it immediate.
+   */
+  abandonBalance(txHash: string): Promise<boolean>;
+  /**
+   * Balanced transactions still outstanding, and how many this process has
+   * given the DUST back for. Published on `/status` as `balancesWatched` and
+   * `balancesOrphaned`, and read by the health watchdog.
+   */
+  orphanStats(): { watching: number; released: number };
+  /**
+   * True while this wallet's DUST shortfall is explainable — its own last spend
+   * is still settling, or a balanced transaction is still outstanding. The
+   * difference between "come back in three seconds" and "this wallet is empty".
+   */
+  isSettling(): boolean;
+  /**
    * True while a CLAIM on this wallet's coin state is outstanding — a balancing,
    * a signature, a submission, or a revert. Deliberately NOT true while a job is
    * merely proving: see `./reservation.ts` for why the two are different
@@ -356,7 +598,26 @@ export interface BalancerWallet {
   close(): Promise<void>;
 }
 
-export async function openBalancerWallet(config: BalancerConfig): Promise<BalancerWallet> {
+/**
+ * What `./server.ts` knows and this module does not: when the balancer last
+ * spent on its OWN account — a sponsored registration, an activation grant —
+ * and how long that spend's change is allowed to be in flight before a
+ * shortfall stops being explainable.
+ *
+ * Both have defaults, so a `sync-check` or a test can open a wallet without
+ * them and get today's behaviour.
+ */
+export interface BalancerWalletHooks {
+  /** Epoch milliseconds of this service's last own spend; 0 for "never". */
+  lastSpendAt?: () => number;
+  /** `CHANGE_SETTLE_MS` — how long that spend's change may take to come back. */
+  settleWindowMs?: number;
+}
+
+export async function openBalancerWallet(
+  config: BalancerConfig,
+  hooks: BalancerWalletHooks = {},
+): Promise<BalancerWallet> {
   /* The wallet SDK takes its network as a field (point 2 above), but midnight-js
      5 does NOT: it keeps the id in module-level state and `getNetworkId` THROWS
      when it is unset — `Transaction.fromParts` and `parseCoinPublicKeyToHex`
@@ -565,6 +826,41 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
   });
   const { exclusive, reserve } = reservation;
 
+  /* Every transaction this wallet has balanced and handed away, until the chain
+     has been seen carrying it or `config.balanceOrphanMs` has passed without
+     it. See `createOrphanWatch` for what that window is protecting against. */
+  const orphans = createOrphanWatch({
+    orphanMs: config.balanceOrphanMs,
+    landed: (identifier) => transactionLanded(config.indexerHttpUrl, identifier),
+    revert: (entry) =>
+      reserve(
+        () => facade.revert(entry.finalized as ledger.FinalizedTransaction),
+        'orphaned fee-leg release',
+      ),
+  });
+
+  const lastSpendAt = hooks.lastSpendAt ?? (() => 0);
+  const settleWindowMs = hooks.settleWindowMs ?? 300_000;
+  /* A shortfall READ INSIDE this window is a wallet mid-recovery, not an empty
+     one: a spend consumes its whole DUST UTxO and the replacement arrives a
+     block or two later, and an outstanding balancing has the same shape until
+     the sweeper rules on it. `/fund-account` already waits this out; until now
+     `/balance-only` answered 503 instantly and the client gave up on us. */
+  const isSettling = (): boolean =>
+    balancerIsSettling({
+      now: Date.now(),
+      lastSpendAt: lastSpendAt(),
+      settleWindowMs,
+      orphans: orphans.size,
+    });
+
+  /* Six seconds — a block — so a rejected transaction's DUST is back within one
+     sweep of the window closing rather than at the next health tick. */
+  const orphanTimer = setInterval(() => {
+    if (!closed) void orphans.sweep();
+  }, 6_000);
+  orphanTimer.unref();
+
   const dustBalance = async (state?: FacadeState): Promise<bigint> =>
     (state ?? (await currentState())).dust.balance(new Date());
 
@@ -725,6 +1021,10 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
 
     isReserved: reservation.isReserved,
     isBusy: reservation.isBusy,
+    isSettling,
+
+    abandonBalance: (txHash: string) => orphans.abandon(txHash),
+    orphanStats: () => ({ watching: orphans.size, released: orphans.released }),
 
     exclusive,
 
@@ -875,17 +1175,28 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
         );
       }
 
+      /* A shortfall inside the settle window is the same event `/fund-account`
+         waits up to five minutes for, and answering it 503 is what made the
+         client fall through to the upstream gateway mid-send on 2026/09/02 —
+         where its second leg was proved against a state the first leg had
+         already moved, and never landed. So the two conditions below are
+         reported as a 429 the client's existing PENDING_TRANSACTION retry waits
+         out, and stay 503 only for a wallet that is genuinely empty or
+         genuinely unsynced with nothing in flight to explain it. */
+      const settling = isSettling();
+      const refuseShortfall = (code: string, message: string): never => {
+        throw shortfallRefusal(code, message, settling);
+      };
+
       const state = await currentState();
       if (!state.isSynced) {
-        throw new BalanceRefusal(
-          503,
+        refuseShortfall(
           'WALLET_SYNCING',
           'The balancer wallet is still syncing and cannot balance a transaction yet.',
         );
       }
       if ((await dustBalance(state)) <= 0n) {
-        throw new BalanceRefusal(
-          503,
+        refuseShortfall(
           'INSUFFICIENT_DUST',
           'The balancer holds no spendable DUST, so it cannot pay this transaction’s fee.',
         );
@@ -951,11 +1262,20 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
 
         /* `finalizeRecipe` books the merged transaction as pending so the
            wallet does not double-spend its DUST while it is in flight. The
-           balancer never submits it, though: the caller does. Clearing the
-           booking is the caller's submit reaching the chain, or this wallet
-           re-syncing; neither is ours to wait for. */
+           balancer never submits it, though: the caller does — and if that
+           submit never happens the booking would stand for the whole TTL. So
+           the booking is watched, and the sweeper takes the DUST back when the
+           chain has not seen this transaction `balanceOrphanMs` from now. */
+        const txHash = String(balanced.transactionHash());
+        orphans.watch({
+          txHash,
+          identifier: String(balanced.identifiers().at(-1)),
+          finalized: balanced,
+          balancedAt: Date.now(),
+        });
+
         return {
-          txHash: String(balanced.transactionHash()),
+          txHash,
           txBytes: Buffer.from(balanced.serialize()).toString('hex'),
           expiresAt: ttl.toISOString(),
         };
@@ -984,6 +1304,7 @@ export async function openBalancerWallet(config: BalancerConfig): Promise<Balanc
     async close(): Promise<void> {
       if (closed) return;
       clearInterval(snapshotTimer);
+      clearInterval(orphanTimer);
       snapshotSubscription.unsubscribe();
       await saveSnapshot();
       closed = true;

@@ -327,8 +327,44 @@ async function main(): Promise<void> {
   const accountInFlight = new Set<string>();
 
   const startedAt = Date.now();
+
+  /**
+   * A spend consumes its whole UTxO and the change comes back in a new one, so
+   * for a block or two after a spend the wallet really does hold nothing
+   * spendable. Measured on preview 2026/08/07 for the funder: a wallet holding
+   * ~5,000 NIGHT read zero immediately after a drip and was whole again 20 s
+   * later. Reporting that as an empty balancer would be false, so a shortfall
+   * is not believed until it has had time to settle.
+   *
+   * Long enough to outlast the wallet's own post-spend "syncing" flap, which
+   * was measured at ~2 minutes (the SDK scores being one event AHEAD of the
+   * stream the same as being behind). A fund-account request arrives seconds
+   * after the registration that caused the flap; 90 s turned it away with
+   * `wallet-syncing` on the live site (2026/08/25) while the flap self-healed
+   * 30 s later.
+   *
+   * Declared HERE, above the wallet, because the wallet is given it: until
+   * 2026/09/02 only `/fund-account` waited this window out and `/balance-only`
+   * answered 503 instantly, which is what sent a client mid-send to a different
+   * sponsor and lost the second leg of its transfer.
+   */
+  const CHANGE_SETTLE_MS = 300_000;
+  const SETTLE_POLL_MS = 3_000;
+
+  /**
+   * When the balancer last SPENT — a sponsored registration or an activation
+   * grant — so a shortfall read straight afterwards can be reported as
+   * settling rather than as an empty wallet. A spend consumes its whole UTxO
+   * and the change comes back in a new one, so for a block or two the wallet
+   * really does read as holding nothing.
+   */
+  let lastSpendAt = 0;
+
   process.stdout.write('opening the balancer wallet\n');
-  const wallet: BalancerWallet = await openBalancerWallet(config);
+  const wallet: BalancerWallet = await openBalancerWallet(config, {
+    lastSpendAt: () => lastSpendAt,
+    settleWindowMs: CHANGE_SETTLE_MS,
+  });
   console.log(`balancer address ${wallet.address}`);
   console.log(`proving via      ${wallet.provingMode === 'server' ? 'proof server' : 'WASM, in this process'}\n`);
 
@@ -359,15 +395,6 @@ async function main(): Promise<void> {
   let refusedUnauthorised = 0;
   /** Asset legs completed since this process started, counted apart from NIGHT. */
   let assetsFunded = 0;
-  /**
-   * When the balancer last SPENT — a sponsored registration or an activation
-   * grant — so a shortfall read straight afterwards can be reported as
-   * settling rather than as an empty wallet. A spend consumes its whole UTxO
-   * and the change comes back in a new one, so for a block or two the wallet
-   * really does read as holding nothing.
-   */
-  let lastSpendAt = 0;
-
   /**
    * The alias sponsor, built once at start-up so a missing or unreadable
    * Midnames build is a start-up log line rather than a user's first failure.
@@ -418,23 +445,6 @@ async function main(): Promise<void> {
     accountFunderUnavailableReason = cause instanceof Error ? cause.message : String(cause);
     console.warn(`[account] funding is DISABLED: ${accountFunderUnavailableReason}`);
   }
-
-  /**
-   * A spend consumes its whole UTxO and the change comes back in a new one, so
-   * for a block or two after a spend the wallet really does hold nothing
-   * spendable. Measured on preview 2026/08/07 for the funder: a wallet holding
-   * ~5,000 NIGHT read zero immediately after a drip and was whole again 20 s
-   * later. Reporting that as an empty balancer would be false, so a shortfall
-   * is not believed until it has had time to settle.
-   */
-  /* Long enough to outlast the wallet's own post-spend "syncing" flap, which
-     was measured at ~2 minutes (the SDK scores being one event AHEAD of the
-     stream the same as being behind). A fund-account request arrives seconds
-     after the registration that caused the flap; 90 s turned it away with
-     `wallet-syncing` on the live site (2026/08/25) while the flap self-healed
-     30 s later. */
-  const CHANGE_SETTLE_MS = 300_000;
-  const SETTLE_POLL_MS = 3_000;
 
   /**
    * Can the balancer pay for this, right now?
@@ -542,6 +552,15 @@ async function main(): Promise<void> {
 
       const night = await wallet.nightBalance();
       console.log(`[wallet] holds ${formatNight(night)} NIGHT (${night} atomic)`);
+
+      /* Mint the activation's mUSD coin now, on a service nobody is waiting on,
+         so the first activation's asset leg is a single deposit. It costs a
+         DUST fee and no NIGHT, and it never throws — a spare that could not be
+         minted only costs the next activation what it used to cost every one. */
+      if (accountFunder?.assetAvailable) {
+        console.log(`[asset] spare ${accountFunder.assetSymbol} coin: ${accountFunder.spareState()} — minting one ahead of the first activation`);
+        void accountFunder.ensureSpareCoin();
+      }
       if (night === 0n) {
         console.warn(
           `BALANCER IS EMPTY — faucet ${wallet.address} on ${config.networkId}, then wait: the wallet keeps syncing and picks the funds up live, and the DUST registration below retries every minute.`,
@@ -656,11 +675,16 @@ async function main(): Promise<void> {
        on this wallet's coins, and reporting it as pending is what took fee
        sponsorship down for the two minutes an mUSD leg proves. See
        `./reservation.ts` and `./availability.ts`. */
-    const { available, unavailableCause } = walletAvailability({
+    const { available, unavailableCause, settling, retryAfterMs } = walletAvailability({
       synced: ready,
       dustSpecks: dustBalance,
       reserved: wallet.isReserved(),
       proving: wallet.provingReadiness().state,
+      /* Is the shortfall explainable? A spend of this service's own still
+         settling, or a transaction it balanced still outstanding. It never
+         raises `available` — it tells a client the wait is short enough to hold
+         for rather than a reason to go and find another sponsor. */
+      settling: wallet.isSettling(),
     });
 
     return {
@@ -682,6 +706,8 @@ async function main(): Promise<void> {
           ...(unavailableCause ? { unavailableCause } : {}),
         },
       ],
+      ...(settling ? { settling: true } : {}),
+      ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
     };
   };
 
@@ -722,6 +748,13 @@ async function main(): Promise<void> {
       dustRegistrationDetail: registrationDetail,
       balancesServed,
       lastBalanceAt,
+      /* Transactions this service balanced and handed away that the chain has
+         not been seen carrying, and how many it has taken the DUST back for
+         since it started. A non-zero `balancesOrphaned` is not a fault: it is
+         this service refusing to hold its own DUST hostage to somebody else's
+         failed submit. */
+      balancesWatched: wallet.orphanStats().watching,
+      balancesOrphaned: wallet.orphanStats().released,
       /* `balancing` is the CLAIM on this wallet's coins — seconds. `busy` is a
          whole spend job, proving included — minutes, for an mUSD grant. They are
          reported separately because only the first says anything about whether
@@ -753,6 +786,11 @@ async function main(): Promise<void> {
       assetsFunded,
       assetsFundedTotal: accountLedger.countWhere((entry) => entry.asset !== undefined),
       assetFunding: accountFunder?.assetAvailable ? 'available' : 'unavailable',
+      /* Whether a grant-sized mUSD coin is minted and waiting. `ready` is the
+         difference between an activation's asset leg being one deposit and it
+         being a mint plus the three minutes this wallet takes to see its own
+         coin. */
+      assetSpare: accountFunder?.spareState() ?? 'unsupported',
       assetUnavailableReason: accountFunder?.assetAvailable
         ? null
         : (accountFunder?.assetUnavailableReason ?? accountFunderUnavailableReason),
@@ -847,6 +885,7 @@ async function main(): Promise<void> {
       reserved: wallet.isReserved(),
       busy: wallet.isBusy(),
       lastSponsorshipAt: lastSponsorship > 0 ? lastSponsorship : null,
+      orphans: wallet.orphanStats().watching,
       fingerprint,
     };
   };
@@ -1724,6 +1763,11 @@ async function main(): Promise<void> {
    */
   const spendGuards: Record<string, { prefix: string; bucket: TokenBucket }> = {
     '/balance-only': { prefix: 'balance', bucket: balanceBucket },
+    /* Guarded like the route it undoes, and on the same bucket: it costs a
+       revert rather than a proof, but it is still a caller reaching into this
+       wallet's coin state and a client that can call it in a loop should be
+       turned away by the same ceiling. */
+    '/balance-only/abandon': { prefix: 'balance', bucket: balanceBucket },
     '/register-alias': { prefix: 'alias', bucket: aliasBucket },
     '/fund-account': { prefix: 'account', bucket: accountBucket },
   };
@@ -1904,6 +1948,42 @@ async function main(): Promise<void> {
         return;
       }
 
+      if (request.method === 'POST' && path === '/balance-only/abandon') {
+        /* The caller's own submit failed, so the DUST this service booked for
+           it is never going to be spent. Taking its word costs nothing that the
+           sweeper would not do anyway two minutes later — and if the caller is
+           wrong, the transaction it named is one nobody can submit any more
+           anyway, because the revert is what un-books THIS wallet's coins. */
+        let body: { txHash?: unknown };
+        try {
+          body = JSON.parse((await readRawBody(request)).toString('utf8') || '{}') as {
+            txHash?: unknown;
+          };
+        } catch {
+          respond(request, response, 400, {
+            error: 'invalid-request',
+            message: 'The request body must be JSON of the form {"txHash": "…"}.',
+          });
+          return;
+        }
+        const txHash = typeof body.txHash === 'string' ? body.txHash.trim() : '';
+        if (txHash.length === 0) {
+          respond(request, response, 400, {
+            error: 'invalid-request',
+            message: 'The request body must name the txHash this service handed back.',
+          });
+          return;
+        }
+        const released = await wallet.abandonBalance(txHash);
+        console.log(
+          released
+            ? `[balance] abandoned ${txHash} at the caller's request`
+            : `[balance] nothing outstanding under ${txHash} to abandon`,
+        );
+        respond(request, response, 200, { txHash, released });
+        return;
+      }
+
       if (request.method === 'POST' && path === '/fund-account') {
         let body: FundAccountRequestBody;
         try {
@@ -1940,7 +2020,7 @@ async function main(): Promise<void> {
       respond(request, response, 404, {
         error: 'not-found',
         message:
-          'Routes: GET /status, GET /wallet-status, POST /balance-only, POST /register-alias, POST /fund-account.',
+          'Routes: GET /status, GET /wallet-status, POST /balance-only, POST /balance-only/abandon, POST /register-alias, POST /fund-account.',
       });
     })()
       .catch((cause) => {
@@ -1962,7 +2042,7 @@ async function main(): Promise<void> {
 
   server.listen(config.port, config.host, () => {
     console.log(
-      `listening on http://${config.host}:${config.port} — GET /status, GET /wallet-status, POST /balance-only, POST /register-alias, POST /fund-account`,
+      `listening on http://${config.host}:${config.port} — GET /status, GET /wallet-status, POST /balance-only, POST /balance-only/abandon, POST /register-alias, POST /fund-account`,
     );
     console.log('(the wallet is still syncing; /wallet-status answers honestly meanwhile)\n');
   });
