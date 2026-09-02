@@ -220,8 +220,8 @@ export interface NetworkBoundary {
    * Interception and the real network are mutually exclusive in Playwright — a
    * fulfilled route never opens a socket — so the two numbers being equal, and
    * both above zero, is the proof that the mocked tier both TALKED to the
-   * sponsor host the build names and reached none of it. A build whose
-   * `VITE_SPONSOR_URL` drifted off {@link BALANCER_HOST} shows `requests`
+   * sponsor hosts the build names and reached none of them. A build whose
+   * `VITE_SPONSOR_URL` drifted off {@link SPONSOR_HOSTS} shows `requests`
    * climbing past `intercepted`; one that never asked shows both at zero, which
    * is a mocked run asserting nothing.
    */

@@ -45,7 +45,18 @@ Holds the shipped bundle to the account model:
 - the Send sheet is a withdrawal from the account, and never mentions DUST.
 
 `mocks.ts` is the whole network boundary and says where each answer came from.
-Two details worth knowing:
+Three details worth knowing:
+
+- **The hosts are in one place, and the run proves it reached none of them.**
+  `previewEnv` in `playwright.config.ts` compiles tier 1 against the same
+  sponsor, funder, and prover origins the deployment builds against, and
+  `mocks.ts` derives every route from that same host list — `BALANCER_HOST` for
+  the funder and `SPONSOR_FAILOVER_HOST` for the 1AM gateway, which
+  `VITE_SPONSOR_URL` lists second and `sponsor.ts` probes just as readily. If
+  the two ever name different hosts, the interceptions miss and the specs are
+  graded by a real service. `NetworkBoundary.sponsorTraffic()` is the counter
+  that catches it: requests seen and requests intercepted must be equal, and
+  above zero.
 
 - **Availability is decoded for real.** `fixtures/stagenet-night-registry.json`
   is the stagenet `.night` TLD's own contract state, recorded from the indexer
