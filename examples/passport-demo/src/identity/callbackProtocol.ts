@@ -45,8 +45,8 @@
  *
  *   passportFields    REQUIRED, and a subset of the profile vocabulary shared
  *                     with the popup flow — `displayName`,
- *                     `passportContract`, `midnightAddresses` (see
- *                     `demo-backend/src/profileProtocol.ts`). Deliberately not
+ *                     `passportContract` (see
+ *                     `@midnight-passport/connect`). Deliberately not
  *                     optional and with no default: a launch that does not say
  *                     what it wants is a bug in the app, and inventing a
  *                     default would silently share more than it asked for. An
@@ -102,7 +102,7 @@
  *     state:    '<echo>',                    // omitted when none was sent
  *     issuedAt: 1755561234567,               // ms since the epoch
  *     nonce:    '<22 base64url chars>',      // 16 random bytes
- *     fields:   ['displayName', 'midnightAddresses'],
+ *     fields:   ['displayName', 'passportContract'],
  *     profile:  { ... }                      // the profile vocabulary
  *   }
  *
@@ -192,7 +192,6 @@ export const PASSPORT_CALLBACK_ERROR_PARAM = 'passportError' as const;
 export const PASSPORT_CALLBACK_FIELDS = [
   'displayName',
   'passportContract',
-  'midnightAddresses',
 ] as const satisfies readonly PassportProfileField[];
 
 /* The other direction of the same check. `satisfies` above proves every name
@@ -214,7 +213,6 @@ export const PASSPORT_CALLBACK_DEFAULT_MAX_AGE_MS = 5 * 60_000;
 export type PassportCallbackProfile = Partial<{
   displayName: string;
   passportContract: { address: string; network: string };
-  midnightAddresses: { unshielded: string; shielded?: string; dust?: string };
 }>;
 
 export interface PassportCallbackLaunch {
@@ -485,7 +483,6 @@ export function selectPassportCallbackProfile(
   source: {
     displayName: string | null;
     passportContract: { address: string; network: string } | null;
-    midnightAddresses: { unshielded: string; shielded?: string; dust?: string } | null;
   },
 ): PassportCallbackProfile {
   const cap = (value: string, max: number) => value.slice(0, max);
@@ -498,14 +495,6 @@ export function selectPassportCallbackProfile(
       profile.passportContract = {
         address: cap(source.passportContract.address, MAX_ADDRESS_LENGTH),
         network: cap(source.passportContract.network, MAX_STRING_LENGTH),
-      };
-    }
-    if (field === 'midnightAddresses' && source.midnightAddresses) {
-      const addresses = source.midnightAddresses;
-      profile.midnightAddresses = {
-        unshielded: cap(addresses.unshielded, MAX_ADDRESS_LENGTH),
-        ...(addresses.shielded ? { shielded: cap(addresses.shielded, MAX_ADDRESS_LENGTH) } : {}),
-        ...(addresses.dust ? { dust: cap(addresses.dust, MAX_ADDRESS_LENGTH) } : {}),
       };
     }
   }
@@ -746,26 +735,6 @@ function parseCallbackPayload(value: unknown): PassportCallbackPayload | null {
       return null;
     }
     profile.passportContract = { address: contract.address, network: contract.network };
-  }
-  if (source.midnightAddresses !== undefined) {
-    const addresses = source.midnightAddresses;
-    if (
-      !isRecord(addresses) ||
-      typeof addresses.unshielded !== 'string' ||
-      addresses.unshielded.length > MAX_ADDRESS_LENGTH
-    ) {
-      return null;
-    }
-    const parsed: NonNullable<PassportCallbackProfile['midnightAddresses']> = {
-      unshielded: addresses.unshielded,
-    };
-    for (const key of ['shielded', 'dust'] as const) {
-      const candidate = addresses[key];
-      if (candidate === undefined) continue;
-      if (typeof candidate !== 'string' || candidate.length > MAX_ADDRESS_LENGTH) return null;
-      parsed[key] = candidate;
-    }
-    profile.midnightAddresses = parsed;
   }
   return {
     protocol: PASSPORT_CALLBACK_PROTOCOL,

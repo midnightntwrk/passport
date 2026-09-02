@@ -14,11 +14,14 @@ import {
   createPassportProfileReady,
   createPassportProfileResponse,
   createPassportTxResponse,
-  parsePassportIncentiveReport,
-  parsePassportProfileRequest,
-  parsePassportTxRequest,
-  type PassportProfileField,
+  pairOfUnreadableMessage,
+  parsePassportProfileHello,
+  randomRequestId,
   type PassportProfileRequest,
+  readPassportIncentiveReport,
+  readPassportProfileRequest,
+  readPassportTxRequest,
+  type PassportProfileField,
   type PassportProfileResponse,
   type PassportTxRequest,
 } from '../backend.js'
@@ -63,6 +66,11 @@ export interface PassportProfileSummary {
   /** Address and the network it is deployed on — a localnet Passport must not
       be reported to an app as a preview one. */
   passportContract?: { address: string; network: string } | null
+  /**
+   * @deprecated Ignored, and removed from the wire on 2026/09/01. See
+   * `FIELD_LABELS` below for why. Still accepted so the host can drop it in
+   * its own change; nothing reads it.
+   */
   midnightAddresses?: {
     unshielded?: string | null
     shielded?: string | null
@@ -128,27 +136,20 @@ type TransferOutcome =
   | { kind: 'declined' }
   | { kind: 'failed'; message: string }
 
-/* Word for word `../../profileConsent.tsx`, and for the reason given there:
-   the wire field still carries all three addresses, but the three addresses
-   are kept out of Passport's primary UI, a consent sheet must not be where the
-   fee token first reaches a user, and — since the account-custody ruling — the
-   detail line must not read as an invitation to pay one of them. */
+/* Two fields, and both are things a person would recognise as their own. The
+   third — `midnightAddresses` — left the protocol with the account-custody
+   ruling: the transaction engine's addresses are a signing detail no app has a
+   legitimate use for, and a consent sheet offering them invites an app to pay
+   an address the account cannot see. See `@midnight-passport/connect`'s
+   profile module for the whole reasoning. */
 const FIELD_LABELS: Record<PassportProfileField, string> = {
   displayName: 'Passport display name',
   passportContract: 'Your Passport account — its address and network',
-  midnightAddresses: 'Midnight technical addresses',
 }
 
 const FIELD_DETAILS: Record<PassportProfileField, string> = {
   displayName: 'The public name attached to this Passport.',
   passportContract: 'The account this Passport IS — where its money lives and what its .night name resolves to.',
-  midnightAddresses:
-    'Technical Midnight addresses used by this Passport’s transaction engine — send funds to your account address, not to these.',
-}
-
-function randomNonce(bytes = 24): string {
-  const value = crypto.getRandomValues(new Uint8Array(bytes))
-  return [...value].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function hasField(
@@ -157,8 +158,7 @@ function hasField(
 ): boolean {
   if (!profile) return false
   if (field === 'displayName') return Boolean(profile.displayName)
-  if (field === 'passportContract') return Boolean(profile.passportContract)
-  return Boolean(profile.midnightAddresses?.unshielded)
+  return Boolean(profile.passportContract)
 }
 
 /** App icon with a letter-tile fallback when the registry icon fails to load. */
@@ -314,10 +314,10 @@ export default function AppBrowser(props: AppBrowserProps) {
 
   const post = useCallback(
     (
-      request: PassportProfileRequest,
+      request: { requestId: string; nonce: string },
       body: Omit<
         PassportProfileResponse,
-        'protocol' | 'type' | 'requestId' | 'nonce'
+        'protocol' | 'type' | 'version' | 'requestId' | 'nonce'
       >,
     ) => {
       const target = frameRef.current?.contentWindow
@@ -328,7 +328,7 @@ export default function AppBrowser(props: AppBrowserProps) {
   )
 
   const postTx = useCallback(
-    (request: PassportTxRequest, body: PassportTxResponseBody) => {
+    (request: { requestId: string; nonce: string }, body: PassportTxResponseBody) => {
       const target = frameRef.current?.contentWindow
       if (!target || !origin) return
       /* The app's own parser caps `detail` at 400 characters and rejects the
@@ -352,7 +352,43 @@ export default function AppBrowser(props: AppBrowserProps) {
       everSpoke.current = true
       setFrameSpoke(true)
 
-      const request = parsePassportProfileRequest(event.data)
+      /* The frame's acknowledgement, and its presence probe. A cold hello —
+         one carrying no pair — is a frame asking "are you there?", and it is
+         answered at once with the handshake rather than making the app wait
+         out an 800 ms broadcast interval. It used to be a magic string that
+         three apps had agreed on and no protocol module defined. */
+      const hello = parsePassportProfileHello(event.data)
+      if (hello) {
+        const issued = handshake.current
+        const target = frameRef.current?.contentWindow
+        if (issued && target) {
+          target.postMessage(createPassportProfileReady(issued.requestId, issued.nonce), origin)
+        }
+        return
+      }
+
+      const profileParse = readPassportProfileRequest(event.data)
+      if (profileParse.kind !== 'ok') {
+        /* NOT silence. A message that IS a profile request and that this
+           build cannot read used to be dropped, which the app experienced as
+           a three-minute hang indistinguishable from Passport being absent.
+           It is answered now, with the reason, bound to the pair the app
+           minted so the app can match it to what it was waiting on. */
+        if (profileParse.kind !== 'not-passport') {
+          const pair = pairOfUnreadableMessage(event.data)
+          if (pair) {
+            post(pair, {
+              approved: false,
+              error:
+                profileParse.kind === 'version-mismatch'
+                  ? 'version_mismatch'
+                  : 'invalid_request',
+            })
+          }
+          return
+        }
+      }
+      const request = profileParse.kind === 'ok' ? profileParse.value : null
       if (request) {
         /* A sheet is already up. A second request must never replace the one the
            user is reading — that would swap the origin, the field list, and the
@@ -376,13 +412,29 @@ export default function AppBrowser(props: AppBrowserProps) {
         return
       }
 
-      const txRequest = parsePassportTxRequest(event.data)
-      if (txRequest) {
-        handleTxRequest(txRequest, event.origin)
+      const txParse = readPassportTxRequest(event.data)
+      if (txParse.kind === 'ok') {
+        handleTxRequest(txParse.value, event.origin)
+        return
+      }
+      if (txParse.kind !== 'not-passport') {
+        /* Same rule on the transaction protocol: a refusal the app can read,
+           never a silence it cannot tell from absence. */
+        const pair = pairOfUnreadableMessage(event.data)
+        if (pair) {
+          postTx(pair, {
+            status: 'failed',
+            error: txParse.kind === 'version-mismatch' ? 'version-mismatch' : 'invalid-request',
+          })
+        }
         return
       }
 
-      const report = parsePassportIncentiveReport(event.data)
+      const reportParse = readPassportIncentiveReport(event.data)
+      /* An incentive report has no reply by construction — there is nothing to
+         answer, and inventing an error message for a message that expects
+         none would be noise. A malformed one is dropped. */
+      const report = reportParse.kind === 'ok' ? reportParse.value : null
       if (report) {
         /* Passport records what an app says it granted; it never invents an
            incentive on the app's behalf. Deduped by id, per app, per session. */
@@ -465,8 +517,8 @@ export default function AppBrowser(props: AppBrowserProps) {
     }
     const target = frameRef.current?.contentWindow
     if (!target || !origin) return
-    const requestId = crypto.randomUUID()
-    const nonce = randomNonce()
+    const requestId = randomRequestId()
+    const nonce = randomRequestId()
     handshake.current = { requestId, nonce }
     target.postMessage(createPassportProfileReady(requestId, nonce), origin)
   }, [origin])
@@ -535,19 +587,6 @@ export default function AppBrowser(props: AppBrowserProps) {
         }
         names.push('passportContract')
         continue
-      }
-      if (field === 'midnightAddresses') {
-        const unshielded = profile?.midnightAddresses?.unshielded
-        if (!unshielded) continue
-        const addresses: { unshielded: string; shielded?: string; dust?: string } = {
-          unshielded,
-        }
-        const shielded = profile?.midnightAddresses?.shielded
-        const dust = profile?.midnightAddresses?.dust
-        if (shielded) addresses.shielded = shielded
-        if (dust) addresses.dust = dust
-        shared.midnightAddresses = addresses
-        names.push('midnightAddresses')
       }
     }
 

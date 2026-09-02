@@ -41,14 +41,9 @@ const FIELD_OPTIONS: Array<{
     detail: 'The public name attached to this Passport session.',
   },
   {
-    field: 'midnightAddresses',
-    label: 'Midnight addresses',
-    detail: 'Unshielded, shielded, and DUST address surfaces.',
-  },
-  {
     field: 'passportContract',
-    label: 'Passport contract',
-    detail: 'The C1 address and network, when deployment is complete.',
+    label: 'Passport account',
+    detail: 'The account-custody contract address and its network — the identity a Passport IS.',
   },
 ];
 
@@ -65,7 +60,7 @@ function short(value: string): string {
 function App() {
   const [selected, setSelected] = useState<PassportProfileField[]>([
     'displayName',
-    'midnightAddresses',
+    'passportContract',
   ]);
   const [state, setState] = useState<ConnectionState>('idle');
   const [detail, setDetail] = useState('Passport has not been contacted.');
@@ -228,8 +223,6 @@ function App() {
     setDetail('Address copied.');
   };
 
-  const addresses = response?.profile?.midnightAddresses;
-
   return (
     <main className="client-shell">
       <header className="client-bar">
@@ -321,21 +314,18 @@ function App() {
               )}
               {response.profile?.passportContract && (
                 <div>
-                  <small>Passport C1</small>
+                  <small>Passport account</small>
                   <strong>{short(response.profile.passportContract.address)}</strong>
                   <code>{response.profile.passportContract.network}</code>
+                  <button
+                    type="button"
+                    onClick={() => void copy(response.profile!.passportContract!.address)}
+                    aria-label="Copy the Passport account address"
+                  >
+                    <Copy size={14} />
+                  </button>
                 </div>
               )}
-              {addresses &&
-                Object.entries(addresses).map(([kind, address]) => (
-                  <div key={kind}>
-                    <small>{kind}</small>
-                    <strong>{short(address)}</strong>
-                    <button type="button" onClick={() => void copy(address)} aria-label={`Copy ${kind} address`}>
-                      <Copy size={14} />
-                    </button>
-                  </div>
-                ))}
             </div>
           )}
         </section>

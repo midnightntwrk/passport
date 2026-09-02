@@ -3,7 +3,8 @@ import { Check, ExternalLink, ShieldCheck, X } from 'lucide-react';
 import {
   createPassportProfileReady,
   createPassportProfileResponse,
-  parsePassportProfileRequest,
+  pairOfUnreadableMessage,
+  readPassportProfileRequest,
   type PassportProfileField,
   type PassportProfileRequest,
   type PassportProfileResponse,
@@ -22,7 +23,15 @@ interface ProfileConsentProps {
     address: string;
     network: string;
   } | null;
-  midnightAddresses: {
+  /**
+   * @deprecated Ignored, and removed from the wire on 2026/09/01 with the
+   * account-custody ruling: the transaction engine's addresses are a signing
+   * detail no app has a legitimate use for, and offering them invited an app
+   * to pay an address the account cannot see. The prop is still accepted so
+   * the host can drop it in its own change rather than in this one; nothing
+   * reads it.
+   */
+  midnightAddresses?: {
     unshielded: string;
     shielded?: string;
     dust?: string;
@@ -35,30 +44,18 @@ interface PendingRequest {
   source: Window;
 }
 
-/* The `midnightAddresses` field still carries all three of the transaction
-   engine's addresses on the wire — the label simply does not name them.
-   Passport surfaces the .night name as the identity and keeps the three
-   addresses out of the primary UI, so a consent sheet must not be the one
-   place a user meets the fee token.
-
-   The in-Passport browser's own sheet (`screens/AppBrowser.tsx`) shows a detail
-   line under each label; its line for this field says outright that these are
-   engine addresses and that funds belong at the ACCOUNT address instead. This
-   sheet has no detail line, so its label carries the whole message and must
-   stay as neutral as it is — "technical", never "receiving".
-
-   FOLLOW-UP (2026/08/25): `midnightAddresses` should leave the profile protocol
-   altogether. A Passport user's identity is their account-custody contract —
-   `passportContract` — and that is what an app should key on; the raffle was
-   moved to it on this date. The three engine addresses are a signing detail no
-   dApp has a legitimate use for, and offering them here invites an app to pay
-   an address the account cannot see. Removing the field is a WIRE change, so it
-   waits for a version bump of `demo-backend/src/profileProtocol.ts` and its two
-   vendored copies, which must stay byte-identical. */
+/* DONE (2026/09/01): the follow-up recorded here on 2026/08/25 — that
+   `midnightAddresses` should leave the profile protocol altogether — has
+   happened. A Passport user's identity is their account-custody contract, and
+   `passportContract` is what an app keys on; the three engine addresses were a
+   signing detail no dApp had a legitimate use for, and offering them here
+   invited an app to pay an address the account cannot see. There is one copy
+   of the vocabulary now, in `@midnight-passport/connect`, so removing the
+   field was a single edit rather than a wire change replicated across three
+   files that were asked to stay byte-identical. */
 const FIELD_LABELS: Record<PassportProfileField, string> = {
   displayName: 'Passport display name',
   passportContract: 'Your Passport account — its address and network',
-  midnightAddresses: 'Midnight technical addresses',
 };
 
 /**
@@ -85,7 +82,6 @@ export function PassportProfileConsent({
   sessionActive,
   displayName,
   passportContract,
-  midnightAddresses,
 }: ProfileConsentProps) {
   const launch = useMemo(launchParameters, []);
   const [pending, setPending] = useState<PendingRequest | null>(null);
@@ -105,7 +101,7 @@ export function PassportProfileConsent({
    */
   function replyOnce(
     target: PendingRequest,
-    body: Omit<PassportProfileResponse, 'protocol' | 'type' | 'requestId' | 'nonce'>,
+    body: Omit<PassportProfileResponse, 'protocol' | 'type' | 'version' | 'requestId' | 'nonce'>,
   ): boolean {
     if (answered.current) return false;
     answered.current = true;
@@ -131,14 +127,30 @@ export function PassportProfileConsent({
 
     const onMessage = (event: MessageEvent) => {
       if (event.source !== opener) return;
-      const request = parsePassportProfileRequest(event.data);
-      if (
-        !request ||
-        request.requestId !== launch.requestId ||
-        request.nonce !== launch.nonce
-      ) {
+      const parsed = readPassportProfileRequest(event.data);
+      if (parsed.kind !== 'ok') {
+        /* NOT silence. A message that IS a profile request and that this build
+           cannot read used to be dropped, and the opener experienced that as
+           a three-minute hang it could not tell from Passport being absent.
+           It is answered now — but only when it is addressed to THIS window's
+           launch pair, so a stray message from another exchange cannot spend
+           the one reply this window is allowed. */
+        if (parsed.kind === 'not-passport') return;
+        const pair = pairOfUnreadableMessage(event.data);
+        if (!pair || pair.requestId !== launch.requestId || pair.nonce !== launch.nonce) return;
+        const error = parsed.kind === 'version-mismatch' ? 'version_mismatch' : 'invalid_request';
+        if (
+          replyOnce(
+            { request: { ...pair } as PassportProfileRequest, origin: event.origin, source: opener },
+            { approved: false, error },
+          )
+        ) {
+          setOutcome('unavailable');
+        }
         return;
       }
+      const request = parsed.value;
+      if (request.requestId !== launch.requestId || request.nonce !== launch.nonce) return;
       /* One exchange per launch. The launch pair already fixes WHICH request
          this window serves, but the opener can re-send it — and a later
          message could arrive while the user is reading the sheet, swapping
@@ -155,7 +167,6 @@ export function PassportProfileConsent({
     !pending ||
     pending.request.fields.every((field) => {
       if (field === 'displayName') return Boolean(displayName);
-      if (field === 'midnightAddresses') return Boolean(midnightAddresses);
       return true;
     });
 
@@ -181,7 +192,7 @@ export function PassportProfileConsent({
   const send = (
     response: Omit<
       PassportProfileResponse,
-      'protocol' | 'type' | 'requestId' | 'nonce'
+      'protocol' | 'type' | 'version' | 'requestId' | 'nonce'
     >,
   ) => replyOnce(pending, response);
 
@@ -192,12 +203,9 @@ export function PassportProfileConsent({
       if (field === 'passportContract' && passportContract) {
         profile.passportContract = passportContract;
       }
-      if (field === 'midnightAddresses' && midnightAddresses) {
-        profile.midnightAddresses = midnightAddresses;
-      }
     }
     /* An approval that carries nothing is not an approval. The grace timer
-       above only guards `displayName` and `midnightAddresses`, so a request
+       above only guards `displayName`, so a request
        for `passportContract` alone reaches this button on a Passport that has
        not deployed one — and `{ approved: true, profile: {} }` parses, leaving
        the app to read a yes and find no fields behind it. Answer with what is

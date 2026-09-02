@@ -65,7 +65,12 @@ interface CallbackConsentProps {
   sessionActive: boolean;
   displayName: string | null;
   passportContract: { address: string; network: string } | null;
-  midnightAddresses: { unshielded: string; shielded?: string; dust?: string } | null;
+  /**
+   * @deprecated Ignored, and removed from the wire on 2026/09/01 with the
+   * account-custody ruling. Still accepted so the host can drop it in its own
+   * change rather than in this one; nothing reads it.
+   */
+  midnightAddresses?: { unshielded: string; shielded?: string; dust?: string } | null;
   /**
    * The signing seam, read LAZILY at approve time rather than passed as a
    * value: the wallet lives in a ref in `App.tsx` and may open after this
@@ -112,14 +117,13 @@ function encodeTagged(material: TaggedKeyMaterial): string {
 }
 
 /* Word for word `../profileConsent.tsx`, and for the reason given there: the
-   wire field still carries all three of the transaction engine's addresses,
-   but they are kept out of Passport's primary UI and a consent sheet must not
-   be where the fee token first reaches a user. The two sheets are one object
-   in the user's mind, so the labels cannot drift apart. */
+   two sheets are one object in the user's mind, so the labels cannot drift
+   apart. The third field — `midnightAddresses` — left the vocabulary with the
+   account-custody ruling; see `@midnight-passport/connect`'s profile module
+   for why. */
 const FIELD_LABELS = {
   displayName: 'Passport display name',
   passportContract: 'Your Passport account — its address and network',
-  midnightAddresses: 'Midnight technical addresses',
 } as const;
 
 /**
@@ -191,7 +195,6 @@ export function PassportCallbackConsent({
   sessionActive,
   displayName,
   passportContract,
-  midnightAddresses,
   getSigningKeystore,
 }: CallbackConsentProps) {
   /**
@@ -226,15 +229,11 @@ export function PassportCallbackConsent({
     const missing: string[] = [];
     for (const field of pinned.fields) {
       const present =
-        field === 'displayName'
-          ? Boolean(displayName)
-          : field === 'passportContract'
-            ? Boolean(passportContract)
-            : Boolean(midnightAddresses);
+        field === 'displayName' ? Boolean(displayName) : Boolean(passportContract);
       (present ? resolved : missing).push(field);
     }
     return { resolved, missing };
-  }, [displayName, midnightAddresses, passportContract, pinned]);
+  }, [displayName, passportContract, pinned]);
 
   /* The grace timer starts only once a session exists — before that the user
      may still be mid-ceremony — and is cancelled the moment every requested
@@ -303,7 +302,6 @@ export function PassportCallbackConsent({
     const profile = selectPassportCallbackProfile(pinned.fields, {
       displayName,
       passportContract,
-      midnightAddresses,
     });
     const { bytes, encoded } = buildPassportCallbackPayload({ launch: pinned, profile });
 
