@@ -45,6 +45,31 @@ describe('classifyRecipientInput', () => {
     });
   });
 
+  it('reads a 32-byte account address as an account, with or without 0x', () => {
+    /* Added 2026/09/02: a Passport can be paid at its account address as well
+       as at its name, and the two go by exactly the same route. `0x` is
+       forgiven because the tools that copy these bytes out disagree about
+       writing it; the kept value is always the bare lowercase form a contract
+       call takes. */
+    const bare = 'a'.repeat(64);
+    expect(classifyRecipientInput(bare)).toEqual({ kind: 'account', address: bare });
+    expect(classifyRecipientInput(`0x${bare}`)).toEqual({ kind: 'account', address: bare });
+    expect(classifyRecipientInput(`  0X${'AB'.repeat(32)}  `)).toEqual({
+      kind: 'account',
+      address: 'ab'.repeat(32),
+    });
+  });
+
+  it('never reads an almost-account as an account', () => {
+    /* A truncated address accepted as an account is money paid at 32 bytes
+       nobody holds. One character short is not an account, and it earns the
+       name rule's own refusal about length rather than a send. */
+    expect(classifyRecipientInput('a'.repeat(63))).toMatchObject({ kind: 'name-invalid' });
+    expect(classifyRecipientInput('a'.repeat(65))).toMatchObject({ kind: 'name-invalid' });
+    // 64 characters, one of which is not hex.
+    expect(classifyRecipientInput(`${'a'.repeat(63)}z`)).toMatchObject({ kind: 'name-invalid' });
+  });
+
   it('sends every address, whole or half typed, to the codec', () => {
     // The refusals belong to the SDK, which knows why a bech32m string is bad.
     expect(classifyRecipientInput(ADDRESS)).toEqual({ kind: 'address', value: ADDRESS });

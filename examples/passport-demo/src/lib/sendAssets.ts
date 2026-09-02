@@ -226,18 +226,30 @@ export type SendRecipientKind =
   /** An address the SDK's codec has already placed on one of the two ledgers. */
   | { kind: 'address'; mode: SendAssetMode }
   /** A `.night` name the registry has been asked about. */
-  | { kind: 'name' };
+  | { kind: 'name' }
+  /**
+   * A Passport ACCOUNT, named directly rather than through a name (2026/09/02).
+   *
+   * It goes wherever a name goes and by exactly the same route — a name
+   * resolves to one of these and nothing else — so every rule below treats the
+   * two together. What differs is only the WORD: a sentence about a name said
+   * over a pasted account address is a sentence about a thing the reader did
+   * not type.
+   */
+  | { kind: 'account' };
 
 /** Where one chosen asset is allowed to go, and what to say about anywhere else. */
 export interface RecipientRule {
   /** The one kind of address this asset can be paid to. */
   accepts: SendAssetMode;
-  /** Whether a `.night` name may stand in for that address. */
+  /** Whether a Passport — named or addressed — may stand in for that address. */
   acceptsName: boolean;
   /** The sentence for an address on the other ledger. */
   addressRefusal: string;
   /** The sentence for a name, when a name cannot be paid in this asset. */
   nameRefusal: string | null;
+  /** The same refusal, about the thing the reader actually typed. */
+  accountRefusal: string | null;
 }
 
 /**
@@ -285,6 +297,7 @@ export function recipientRuleFor(
       acceptsName: true,
       addressRefusal: `${asset.symbol} goes to an unshielded (mn_addr…) address — this is a shielded one.`,
       nameRefusal: null,
+      accountRefusal: null,
     };
   }
   return {
@@ -294,6 +307,9 @@ export function recipientRuleFor(
     nameRefusal: capabilities.shieldedToName
       ? null
       : `This Passport cannot pay a name in ${asset.symbol}. Choose NIGHT above, or paste a shielded (mn_shield-addr…) address.`,
+    accountRefusal: capabilities.shieldedToName
+      ? null
+      : `This Passport cannot pay an account in ${asset.symbol}. Choose NIGHT above, or paste a shielded (mn_shield-addr…) address.`,
   };
 }
 
@@ -310,8 +326,11 @@ export function refusalFor(
   capabilities: SendCapabilities = NO_CAPABILITIES,
 ): string | null {
   const rule = recipientRuleFor(asset, capabilities);
-  if (recipient.kind === 'name') return rule.acceptsName ? null : rule.nameRefusal;
-  return recipient.mode === rule.accepts ? null : rule.addressRefusal;
+  if (recipient.kind === 'address') {
+    return recipient.mode === rule.accepts ? null : rule.addressRefusal;
+  }
+  if (rule.acceptsName) return null;
+  return recipient.kind === 'account' ? rule.accountRefusal : rule.nameRefusal;
 }
 
 /**
@@ -343,7 +362,11 @@ export function routeFor(
   capabilities: SendCapabilities = NO_CAPABILITIES,
 ): SendRoute | null {
   if (refusalFor(asset, recipient, capabilities) !== null) return null;
-  if (recipient.kind === 'name') {
+  if (recipient.kind !== 'address') {
+    /* An account and a name are ONE route. A name resolves to an account and to
+       nothing else, so a separate pair of routes for the pasted form would be
+       two names for the same two transactions — and two places for the
+       orchestration to drift. */
     return asset.mode === 'shielded' ? 'shielded-name' : 'night-name';
   }
   return asset.mode === 'shielded' ? 'shielded-address' : 'night-address';

@@ -23,6 +23,11 @@
  * vocabularies do not overlap and the split needs no cleverness:
  *
  *   `mn_…`            an address, however partial. Refusals stay the SDK's.
+ *   64 hex characters an ACCOUNT, with or without `0x` (added 2026/09/02). It
+ *                     is what a name resolves to, so it goes by the same route
+ *                     and needs no registry read at all. No label the registry
+ *                     could hold is 64 characters long, so this can never take
+ *                     a name from the rule below.
  *   `alice.night`     a name.
  *   `alice`           a name. A bare label is the form people say out loud,
  *                     and requiring the suffix would be Passport insisting on
@@ -49,6 +54,16 @@ export const NIGHT_SUFFIX = '.night';
  */
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 
+/**
+ * A Passport account, named directly by the 32 bytes it lives at.
+ *
+ * `0x` is forgiven because every tool that copies these bytes out disagrees
+ * about whether to write it, and the prefix carries no meaning either way. The
+ * kept value is always the bare 64 lowercase characters, which is the form
+ * every contract call takes.
+ */
+const ACCOUNT_HEX = /^(?:0x)?[0-9a-f]{64}$/i;
+
 export type RecipientInput =
   /** Nothing typed yet. */
   | { kind: 'empty' }
@@ -56,6 +71,13 @@ export type RecipientInput =
   | { kind: 'name'; label: string; domain: string }
   /** Meant as a name, but not a name the registry could hold. */
   | { kind: 'name-invalid'; typed: string; reason: string }
+  /**
+   * A Passport account address, which needs no registry read: it IS the answer
+   * a name would have resolved to. Added 2026/09/02 so somebody whose
+   * counterparty has no name yet — or who has been handed the account off a
+   * Receive screen — is not turned away by a sheet that can only take names.
+   */
+  | { kind: 'account'; address: string }
   /** Anything else. The address codec decides, and owns the refusal. */
   | { kind: 'address'; value: string };
 
@@ -71,6 +93,14 @@ export function classifyRecipientInput(raw: string): RecipientInput {
   const value = raw.trim();
   if (!value) return { kind: 'empty' };
   if (/^mn_/i.test(value)) return { kind: 'address', value };
+  /* Before the name rule, and it can never take anything from it: a label is at
+     most 32 characters, so no name the registry could hold is 64 hex ones. A
+     string that is ALMOST an account — 63 characters, or 65 — is not an account
+     and falls through to the name rule, which refuses it in words about length
+     rather than accepting a truncated address. */
+  if (ACCOUNT_HEX.test(value)) {
+    return { kind: 'account', address: value.replace(/^0x/i, '').toLowerCase() };
+  }
 
   const lowered = value.toLowerCase().replace(/\.+$/, '');
   const looksLikeName = lowered.endsWith(NIGHT_SUFFIX) || !lowered.includes('.');

@@ -220,6 +220,12 @@ describe('recipientRuleFor', () => {
     expect(rule.nameRefusal).toBe(
       'This Passport cannot pay a name in mUSD. Choose NIGHT above, or paste a shielded (mn_shield-addr…) address.',
     );
+    /* The same refusal, about the thing the reader actually typed. Somebody who
+       pasted 32 bytes did not type a name, and being told about names sends
+       them looking for a name they never used. */
+    expect(rule.accountRefusal).toBe(
+      'This Passport cannot pay an account in mUSD. Choose NIGHT above, or paste a shielded (mn_shield-addr…) address.',
+    );
   });
 
   it('lets a shielded asset go to a name once the Passport can pay one', () => {
@@ -227,12 +233,14 @@ describe('recipientRuleFor', () => {
     expect(rule.acceptsName).toBe(true);
     // Nothing to say about a recipient that is now accepted.
     expect(rule.nameRefusal).toBeNull();
+    expect(rule.accountRefusal).toBeNull();
   });
 
   it('names an item in its refusals exactly as the picker names it', () => {
     const rule = recipientRuleFor(item);
     expect(rule.addressRefusal).toContain('Item · abab…');
     expect(rule.nameRefusal).toContain('Item · abab…');
+    expect(rule.accountRefusal).toContain('Item · abab…');
   });
 
   it('never names any machinery in any sentence it can produce', () => {
@@ -245,6 +253,7 @@ describe('recipientRuleFor', () => {
         const rule = recipientRuleFor(asset, capabilities);
         expect(rule.addressRefusal).not.toMatch(forbidden);
         if (rule.nameRefusal !== null) expect(rule.nameRefusal).not.toMatch(forbidden);
+        if (rule.accountRefusal !== null) expect(rule.accountRefusal).not.toMatch(forbidden);
       }
     }
   });
@@ -284,6 +293,14 @@ describe('refusalFor', () => {
     );
     expect(refusalFor(musd, { kind: 'name' }, CAN_PAY_SHIELDED_NAMES)).toBeNull();
   });
+
+  it('treats a pasted account exactly as it treats a name, in the reader\u2019s own words', () => {
+    expect(refusalFor(night, { kind: 'account' })).toBeNull();
+    expect(refusalFor(musd, { kind: 'account' }, CAN_PAY_SHIELDED_NAMES)).toBeNull();
+    /* Same rule, different noun: the refusal names what was typed. */
+    expect(refusalFor(musd, { kind: 'account' })).toContain('cannot pay an account in mUSD');
+    expect(refusalFor(musd, { kind: 'account' })).not.toContain('a name');
+  });
 });
 
 describe('routeFor — the agreed model, as data', () => {
@@ -306,6 +323,15 @@ describe('routeFor — the agreed model, as data', () => {
     expect(routeFor(night, { kind: 'name' })).toBe('night-name');
     // And they do not change when the shielded capability appears.
     expect(routeFor(night, { kind: 'name' }, CAN_PAY_SHIELDED_NAMES)).toBe('night-name');
+  });
+
+  it('gives a pasted account the same two routes a name gets', () => {
+    /* A name resolves to an account and to nothing else, so the pasted form is
+       the SAME two transactions. A separate pair of routes for it would be two
+       places for the orchestration to drift apart. */
+    expect(routeFor(night, { kind: 'account' })).toBe('night-name');
+    expect(routeFor(musd, { kind: 'account' }, CAN_PAY_SHIELDED_NAMES)).toBe('shielded-name');
+    expect(routeFor(musd, { kind: 'account' })).toBeNull();
   });
 
   it('has no route at all for a pair the rules refused', () => {

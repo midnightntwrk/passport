@@ -213,6 +213,7 @@ export function unshieldedAddressBytes(address: string, expectedNetworkId?: stri
       'invalid-request',
       'That is not a Midnight address.',
       cause instanceof Error ? cause.message : String(cause),
+      { cause },
     );
   }
   const addressNetwork = parsedNetworkName(parsed.network);
@@ -230,6 +231,7 @@ export function unshieldedAddressBytes(address: string, expectedNetworkId?: stri
       'invalid-request',
       'That is a Midnight address, but not an unshielded (mn_addr…) one.',
       cause instanceof Error ? cause.message : String(cause),
+      { cause },
     );
   }
   const bytes = new Uint8Array(decoded.data);
@@ -263,6 +265,7 @@ export function coinPublicKeyBytes(coinPublicKeyHex: string): Uint8Array {
       'invalid-request',
       'That is not a Midnight shielded coin public key.',
       cause instanceof Error ? cause.message : String(cause),
+      { cause },
     );
   }
 }
@@ -501,12 +504,27 @@ export type AccountCustodyErrorCode =
   | 'call-rejected';
 
 export class AccountCustodyError extends Error {
+  /**
+   * The ORIGINAL failure is kept, not merely quoted (2026/09/02).
+   *
+   * `detail` is a string, and a string is where a cause chain used to end: the
+   * SDK's own error — a node refusal, a balancing failure the transaction
+   * runtime had already classified as retryable — was flattened into
+   * `cause.message` and thrown away. Everything downstream that has to decide
+   * whether to try again was then left reading English prose, and the sentence
+   * a user saw was "The account contract rejected withdraw_night", which names
+   * the machinery and says nothing about what happened.
+   *
+   * So the cause is CARRIED. `lib/sendLegs.ts` walks the chain, and `detail`
+   * stays exactly what it was for the surfaces that print it.
+   */
   constructor(
     readonly code: AccountCustodyErrorCode,
     message: string,
     readonly detail?: string,
+    options?: { cause?: unknown },
   ) {
-    super(message);
+    super(message, options);
     this.name = 'AccountCustodyError';
   }
 }
@@ -660,6 +678,7 @@ export async function readAccountState(
       'network-unreachable',
       'The indexer could not be reached, so this account’s balances are unknown.',
       cause instanceof Error ? cause.message : String(cause),
+      { cause },
     );
   }
   if (!state) {
@@ -683,6 +702,7 @@ export async function readAccountState(
       'contract-not-found',
       'The state at that address is not a Passport account-custody contract.',
       cause instanceof Error ? cause.message : String(cause),
+      { cause },
     );
   }
 }
@@ -708,6 +728,7 @@ export function decodeAccountState(decoded: AccountLedger): AccountState {
       'contract-not-found',
       'The state at that address is not a Passport account-custody contract.',
       cause instanceof Error ? cause.message : String(cause),
+      { cause },
     );
   }
 }
@@ -981,6 +1002,7 @@ async function callAccountCircuit(
       'call-rejected',
       `The account contract at ${address.slice(0, 10)}… could not be opened, so nothing was submitted.`,
       cause instanceof Error ? cause.message : String(cause),
+      { cause },
     );
   }
 
@@ -1021,6 +1043,7 @@ async function callAccountCircuit(
       'call-rejected',
       `The account contract rejected ${options.circuit}.`,
       cause instanceof Error ? cause.message : String(cause),
+      { cause },
     );
   }
 
@@ -1215,6 +1238,7 @@ async function decodeShieldedRecipient(
       'invalid-request',
       'That is not a Midnight address.',
       cause instanceof Error ? cause.message : String(cause),
+      { cause },
     );
   }
   const recipientNetwork = parsedNetworkName(parsed.network);
@@ -1235,6 +1259,7 @@ async function decodeShieldedRecipient(
       'invalid-request',
       'That is a Midnight address, but not a shielded (mn_shield-addr…) one.',
       cause instanceof Error ? cause.message : String(cause),
+      { cause },
     );
   }
   return {

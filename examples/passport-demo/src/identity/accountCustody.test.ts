@@ -498,3 +498,42 @@ describe('decodeAccountState, on state that is not an account contract', () => {
     );
   });
 });
+
+describe('the cause a refusal carries', () => {
+  /**
+   * WHY THIS IS DRILLED (2026/09/02)
+   * --------------------------------
+   * Every refusal this module raises used to flatten the SDK's own error into
+   * `detail` — a string — and drop the error itself. That made the chain end
+   * here, and everything downstream that has to decide whether a failed step is
+   * worth attempting again was left reading English prose. `lib/sendLegs.ts`
+   * walks `cause`, so the chain has to survive this wrapper.
+   */
+  it('keeps the original error as well as quoting it', () => {
+    const underneath = Object.assign(new Error('Invalid Transaction: Custom error: 239'), {
+      name: 'SubmissionError',
+    });
+    const wrapped = new AccountCustodyError(
+      'call-rejected',
+      'The account contract rejected withdraw_shielded.',
+      underneath.message,
+      { cause: underneath },
+    );
+    expect(wrapped.cause).toBe(underneath);
+    /* And the detail is unchanged, for the surfaces that log it. */
+    expect(wrapped.detail).toBe('Invalid Transaction: Custom error: 239');
+  });
+
+  it('survives the wrapper the address decoder puts on a bad address', () => {
+    try {
+      unshieldedAddressBytes('mn_addr_stagenet1nonsense');
+      expect.unreachable('the decoder must refuse');
+    } catch (cause) {
+      const error = cause as AccountCustodyError;
+      expect(error.code).toBe('invalid-request');
+      /* The codec's own error, not merely its sentence. */
+      expect(error.cause).toBeInstanceOf(Error);
+      expect(error.detail).toBe((error.cause as Error).message);
+    }
+  });
+});
