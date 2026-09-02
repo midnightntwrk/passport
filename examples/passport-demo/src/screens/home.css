@@ -1393,3 +1393,28 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
   line-height: 1.4;
   color: var(--mn-text-muted);
 }
+
+/* A payment that left this Passport and has not reached the recipient yet.
+   The existing card vocabulary — `mnhome-card` for the shell, `mnhome-card-head`
+   for the label, `mnhome-card-unit` for the line beneath — so it sits beside
+   the "Money outside your account" card as another statement about money in an
+   unusual place rather than as a new kind of thing. */
+.mnhome-pending-send-step {
+  margin: 0;
+  color: var(--mn-text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.mnhome-pending-send-reason {
+  margin: 0;
+  color: var(--mn-text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+/* One column when Continue stands alone, two when there is something to forget.
+   `auto-fit` rather than a count, so the card never has to know which it is. */
+.mnhome-pending-send-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}

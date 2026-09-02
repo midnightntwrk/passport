@@ -161,6 +161,35 @@ export interface HomeScreenProps {
     onMove: () => void
   } | null
   /**
+   * Payments that left this Passport and have not reached the recipient yet.
+   *
+   * Paying another Passport is two transactions, and until 2026/09/02 a run
+   * that stopped between them left nothing on screen at all: the amount was at
+   * the sender's own receiving address, the tab that knew about it had gone,
+   * and a shielded amount had no control anywhere that could see it. This is
+   * that control — one card per unfinished payment, each saying which step it
+   * reached and offering to carry it on.
+   *
+   * The host supplies only runs that are genuinely unfinished; an empty array
+   * or omission renders nothing.
+   */
+  pendingSends?: {
+    id: string
+    /** "Sending 10 mUSD to alice.night". */
+    label: string
+    /** Which step it reached, in the same two-step language the Send sheet uses. */
+    step: string
+    /** Why it stopped, when there is a reason worth reading. */
+    reason?: string | null
+    onContinue: () => void
+    /**
+     * Offered ONLY for a run that never spent anything — there is nothing to
+     * forget about a payment that has moved money, and a control that appeared
+     * to discard one would be the worst button on this screen.
+     */
+    onGiveUp?: () => void
+  }[]
+  /**
    * Live wallet sync progress, 0–100, as the on-device wallet reports it.
    * null = no figure known.
    */
@@ -220,6 +249,7 @@ export interface HomeScreenProps {
     phase?: 'checking' | 'connecting' | 'submitting' | 'confirming' | null
     /** Which of a name transfer's two legs is running. See the Send sheet. */
     nameLeg?: SendSheetProps['nameLeg']
+    nameLegAttempt?: SendSheetProps['nameLegAttempt']
   } | null
   /**
    * The activity trail, newest first — every row Passport has written for this
@@ -277,6 +307,7 @@ export default function HomeScreen(props: HomeScreenProps) {
     passportContract,
     account,
     legacyFunds,
+    pendingSends,
     syncPercent,
     network,
     onSelectNetwork,
@@ -782,6 +813,38 @@ export default function HomeScreen(props: HomeScreenProps) {
           </article>
         ) : null}
 
+        {/* Payments that left this Passport and have not arrived yet. Above
+            Identity and below the money cards, because it is about money that
+            is in motion — and because a person who has just watched a send stop
+            should not have to scroll to find the way to finish it. */}
+        {(pendingSends ?? []).map((pending) => (
+          <article className="mnhome-card mnhome-pending-send" key={pending.id}>
+            <p className="mnhome-card-head">
+              <SendHorizontal size={14} aria-hidden="true" />
+              <span className="mnhome-micro">Payment not finished</span>
+            </p>
+            <p className="mnhome-card-unit">{pending.label}</p>
+            <p className="mnhome-pending-send-step">{pending.step}</p>
+            {pending.reason ? (
+              <p className="mnhome-pending-send-reason">{pending.reason}</p>
+            ) : null}
+            <div className="mnhome-pending-send-actions">
+              <button type="button" className="mnhome-send-primary" onClick={pending.onContinue}>
+                <span>Continue</span>
+              </button>
+              {pending.onGiveUp ? (
+                <button
+                  type="button"
+                  className="mnhome-send-secondary"
+                  onClick={pending.onGiveUp}
+                >
+                  <span>Forget it</span>
+                </button>
+              ) : null}
+            </div>
+          </article>
+        ))}
+
         {/* Identity: the name held on this network, its real registration
             transactions or the reason it is only queued, and what has been
             redeemed across the ecosystem. */}
@@ -847,6 +910,7 @@ export default function HomeScreen(props: HomeScreenProps) {
             sponsoredToken={sponsoredToken}
             phase={send.phase ?? null}
             nameLeg={send.nameLeg ?? null}
+            nameLegAttempt={send.nameLegAttempt ?? null}
             /* The sheet's approval is a passkey assertion, so it can hit the
                same mid-session dead end the name step reported on 2026/08/31.
                Home already holds the sign-out; the sheet offers it only beside

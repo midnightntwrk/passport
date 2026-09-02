@@ -38,6 +38,18 @@ import {
 } from './lib/activityFeed.js';
 import type { ActivityFeedItem } from './screens/ActivityFeed.js';
 import type { NameLookup } from './lib/recipientName.js';
+/* The two-leg send's record and its retry rules. Pure — no React, no fetch, no
+   storage — see `lib/sendLegs.ts`, where every branch is drilled. */
+import {
+  classifyLegError,
+  pendingSendsStorageKey,
+  readPendingSends,
+  retryDelayMs,
+  SEND_LEG_ATTEMPTS,
+  serialisePendingSends,
+  type PendingSend,
+  type PendingSendKind,
+} from './lib/sendLegs.js';
 /* The note a shielded transfer's two legs are joined by. Type-only, so the rule
    itself is still loaded beside the account module at the moment of the send. */
 import type { WalletShieldedNote } from './lib/shieldedNote.js';
@@ -1036,6 +1048,55 @@ function formatNightUnits(units: bigint): string {
 }
 
 /**
+ * How long the wait between a send's two legs is given.
+ *
+ * Three minutes rather than the two the two paths used to allow separately.
+ * The wait is for the indexer to serve a transaction it has already accepted —
+ * measured at 13–14 s on stagenet — and every second past that is congestion
+ * rather than failure. Running out no longer ends the transfer either way: the
+ * record stays at `settle` and Home offers to look again.
+ */
+const SETTLE_DEADLINE_MS = 180_000;
+
+/**
+ * What one unfinished send is called, in the sender's own units.
+ *
+ * A shielded colour publishes no decimal scale on the ledger, so its amount is
+ * a whole count and the word beside it is `units` — the same words the Send
+ * sheet uses, so the card on Home and the sheet that opened it agree.
+ */
+function pendingSendAmountLabel(record: PendingSend): string {
+  return record.kind === 'night'
+    ? `${formatNightUnits(BigInt(record.amount))} NIGHT`
+    : `${record.amount} units`;
+}
+
+/** A run, as it is written down before anything is submitted. */
+function newPendingSend(input: {
+  kind: PendingSendKind;
+  recipient: { label: string; accountAddress: string };
+  amount: bigint;
+  tokenType?: string;
+  colourHex: string;
+  ownReceivingAddress: string;
+}): PendingSend {
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    kind: input.kind,
+    recipient: input.recipient,
+    amount: input.amount.toString(),
+    ...(input.tokenType ? { tokenType: input.tokenType } : {}),
+    colourHex: input.colourHex,
+    ownReceivingAddress: input.ownReceivingAddress,
+    leg: 'withdraw',
+    attempts: { withdraw: 0, deposit: 0 },
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
  * The addresses of a freshly opened local wallet, before its first balance
  * read. Every balance is `null` — unknown — and never a fabricated zero.
  */
@@ -1344,10 +1405,21 @@ export default function PassportDemo() {
    * by the sync-progress effect, which owns the same handle's stream.
    */
   const localWalletSynced = useRef(false);
+  /**
+   * This wallet's own receiving address, for the incoming-transfer watch.
+   *
+   * A ref rather than the state it mirrors: the watch subscribes to a balance
+   * stream and must not resubscribe every time an address is re-read.
+   */
+  const unshieldedAddressRef = useRef<string | null>(null);
 
   useEffect(() => {
     profileRef.current = profile;
   }, [profile]);
+
+  useEffect(() => {
+    unshieldedAddressRef.current = localSurfaces?.unshieldedAddress ?? null;
+  }, [localSurfaces]);
 
   /**
    * Records something that happened, for the trail Home renders.
@@ -2738,7 +2810,24 @@ export default function PassportDemo() {
       knownNight = next;
       if (previous === null || next <= previous) return;
       if (!localWalletSynced.current) return;
-      const amount = formatNightUnits(next - previous);
+      const arrived = next - previous;
+      /* NOT A RECEIPT — the sender's OWN first leg (2026/09/02). Paying a
+         Passport pays the amount to the sender's own receiving address before
+         paying it on, so the wallet really does see it arrive; announcing that
+         as "NIGHT received" reports somebody's outgoing payment back to them as
+         income, and the row then invites them to move into their account money
+         that is on its way to somebody else. */
+      if (
+        pendingSendsRef.current.some(
+          (record) =>
+            record.kind === 'night' &&
+            record.ownReceivingAddress === unshieldedAddressRef.current &&
+            BigInt(record.amount) === arrived,
+        )
+      ) {
+        return;
+      }
+      const amount = formatNightUnits(arrived);
       addActivity({
         label: 'NIGHT received',
         /* It arrived at the address the resolver leaf carries, which is the
@@ -4920,6 +5009,85 @@ export default function PassportDemo() {
   >(null);
 
   /**
+   * Which attempt at the running leg this is, for the sheet's progress line.
+   *
+   * `null` for a first attempt and for the wait between the legs. A retry is
+   * shown rather than hidden: a step that silently restarted would leave
+   * somebody watching a line that had said the same thing for a minute with no
+   * way to tell patience from a hang.
+   */
+  const [nameSendAttempt, setNameSendAttempt] = useState<number | null>(null);
+
+  /* ---------------------------------------------------------------------- */
+  /* Sends that have not finished                                            */
+  /*                                                                         */
+  /* Keyed by credential, exactly as the trail is, and for the same reason.   */
+  /* The two `localStorage` calls are here rather than in `lib/sendLegs.ts`   */
+  /* because storage cannot be drilled without a fake DOM; the parse that     */
+  /* refuses a record nothing could resume and the writer that drops a        */
+  /* finished one are the halves that CAN be, and both are.                   */
+  /* ---------------------------------------------------------------------- */
+  const [pendingSends, setPendingSends] = useState<PendingSend[]>([]);
+  /* Read by the orchestrator and by the incoming-transfer watch, both of which
+     need the current list without re-subscribing when it changes. */
+  const pendingSendsRef = useRef<PendingSend[]>([]);
+  const pendingSendsLoadedFor = useRef<string | null>(null);
+
+  const persistPendingSends = useCallback((next: PendingSend[]) => {
+    pendingSendsRef.current = next;
+    setPendingSends(next);
+    const credentialId = profileRef.current?.passkey?.credentialId ?? null;
+    if (!credentialId) return;
+    try {
+      window.localStorage.setItem(
+        pendingSendsStorageKey(credentialId),
+        serialisePendingSends(next),
+      );
+    } catch {
+      /* A browser that refuses storage is a browser that cannot resume after a
+         reload. Nothing else about the run depends on this write. */
+    }
+  }, []);
+
+  const writePendingSend = useCallback(
+    (record: PendingSend) => {
+      persistPendingSends([
+        record,
+        ...pendingSendsRef.current.filter((entry) => entry.id !== record.id),
+      ]);
+    },
+    [persistPendingSends],
+  );
+
+  const dropPendingSend = useCallback(
+    (id: string) => {
+      persistPendingSends(pendingSendsRef.current.filter((entry) => entry.id !== id));
+    },
+    [persistPendingSends],
+  );
+
+  const pendingSendsCredentialId = profile?.passkey?.credentialId ?? null;
+  useEffect(() => {
+    if (!pendingSendsCredentialId) {
+      pendingSendsRef.current = [];
+      setPendingSends([]);
+      pendingSendsLoadedFor.current = null;
+      return;
+    }
+    if (pendingSendsLoadedFor.current === pendingSendsCredentialId) return;
+    pendingSendsLoadedFor.current = pendingSendsCredentialId;
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(pendingSendsStorageKey(pendingSendsCredentialId));
+    } catch {
+      stored = null;
+    }
+    const records = readPendingSends(stored);
+    pendingSendsRef.current = records;
+    setPendingSends(records);
+  }, [pendingSendsCredentialId]);
+
+  /**
    * Paying a `.night` name — and why it is two transactions rather than one.
    *
    * A name resolves to that Passport's ACCOUNT, which is a contract. Two facts
@@ -4962,94 +5130,251 @@ export default function PassportDemo() {
    * one transaction. That is the honest failure, and it is why the first leg
    * pays the sender rather than anywhere cleverer.
    */
-  const executeSendToName = useCallback(
-    async (params: {
-      domain: string;
-      accountAddress: string;
-      amount: bigint;
-    }): Promise<void> => {
+  /**
+   * ONE RUN, WRITTEN DOWN — the orchestrator both name sends go through.
+   *
+   * Until 2026/09/02 there were two of these, one per asset, and every fact
+   * about a run in progress lived in the closure: `withdrawn`, `arrived`,
+   * `heldBefore`, the leg. A reload took all of it, and what was left was value
+   * parked at the sender's own receiving address with nothing on screen
+   * offering to finish the transfer or put it back. Neither path retried
+   * anything, so a fee sponsor whose change was settling — a state that clears
+   * in a block — ended the transfer, and the sheet then said "Nothing was sent"
+   * over a first leg that had landed.
+   *
+   * So the run is a RECORD (`lib/sendLegs.ts`), persisted before the first leg
+   * is submitted and again at every transition, and this walks it:
+   *
+   *   1. `withdraw` — out of the sender's account to their OWN receiving
+   *      address, inside a single passkey ceremony. Up to three attempts on a
+   *      retryable failure, and the secret stays in the closure, so a retry
+   *      costs no second prompt.
+   *   2. `settle` — the wait for the wallet to actually hold what it withdrew.
+   *      For NIGHT that is a RISE of at least the amount above what was held
+   *      before, not a total; for a shielded run it is the note whose nonce was
+   *      not held before (`lib/shieldedNote.ts`). A timeout leaves the record at
+   *      `settle` rather than failing it: the money has moved and the arrival is
+   *      still coming.
+   *   3. `deposit` — the permissionless call into the RECIPIENT's account. No
+   *      ceremony, because it spends nothing of theirs. Three attempts again,
+   *      and only after those does a shielded run put the note back.
+   *
+   * Every failure is classified before it is acted on, and the classification
+   * is the thing that decides whether the same step is attempted again — never
+   * a substring match written here. See `classifyLegError`.
+   */
+  const runNameSend = useCallback(
+    async (initial: PendingSend, options: { resumed?: boolean } = {}): Promise<void> => {
       const account = requireAccount();
-      const ownReceivingAddress = localSurfaces?.unshieldedAddress ?? null;
-      if (!ownReceivingAddress) {
-        throw Object.assign(
-          new Error(
-            'Passport cannot see its own receiving address yet, so it cannot route a payment to a name. Try again in a moment.',
-          ),
-          { code: 'wallet-closed' as const },
-        );
-      }
-      const amountText = formatNightUnits(params.amount);
-      try {
-        const { depositNight, nightColourHex, withdrawNight } = await import(
-          './identity/accountCustody.js'
-        );
-        const colourHex = nightColourHex();
-        await withAccountDeviceSecret(async (deviceSecret) => {
-          /* Raised only now the ceremony has answered: a cancelled approval
-             signed nothing, so it writes no activity row either. */
-          const entry = addActivity({
-            label: `Sending to ${params.domain}`,
-            detail: `${amountText} NIGHT, in two steps.`,
-            status: 'pending',
-            source: 'wallet',
-          });
-          let withdrawn = false;
+      const {
+        depositNight,
+        depositShielded,
+        shieldedCoinFromNote,
+        walletShieldedNotes,
+        withdrawNight,
+        withdrawShielded,
+      } = await import('./identity/accountCustody.js');
+      const { findArrivedNote, shieldedNoteIds } = await import('./lib/shieldedNote.js');
+
+      const amount = BigInt(initial.amount);
+      const amountText = pendingSendAmountLabel(initial);
+      let record = initial;
+      const save = (patch: Partial<PendingSend>): void => {
+        record = { ...record, ...patch, updatedAt: new Date().toISOString() };
+        writePendingSend(record);
+      };
+
+      /* The record and the feed row are raised TOGETHER, and both of them only
+         once the ceremony has answered on a first run: a cancelled approval
+         signed nothing, so it must leave neither a row in the trail nor a card
+         on Home offering to continue a transfer that never began.
+
+         A resumed run REUSES the row it opened, so a transfer that took three
+         sessions to finish reads as one thing that happened. */
+      const begin = (resumed: boolean): string => {
+        if (record.activityId) {
+          if (resumed) {
+            updateActivity(record.activityId, {
+              status: 'pending',
+              detail: `${amountText}. Carrying on from where it stopped.`,
+            });
+          }
+          return record.activityId;
+        }
+        const entry = addActivity({
+          label: `Sending to ${record.recipient.label}`,
+          detail: `${amountText}, in two steps.`,
+          status: 'pending',
+          source: 'wallet',
+        });
+        save({ activityId: entry.id });
+        return entry.id;
+      };
+
+      /* What the Send sheet is handed. `legLanded` is the one fact its copy
+         turns on: "nothing was sent" over a landed first leg is a false
+         statement about where somebody's money is. */
+      const failure = (cause: unknown, message: string, legLanded: boolean): Error =>
+        Object.assign(new Error(message, { cause }), {
+          code: 'name-send-failed' as const,
+          legLanded,
+        });
+
+      let activityId = record.activityId ?? '';
+      let settledNote: WalletShieldedNote | null = null;
+      /* A RESUME GETS A FRESH BUDGET. The counts are what the record remembers
+         about the run that stopped; carrying them into a new press would spend
+         a person's Continue on a single attempt. */
+      if (options.resumed) save({ attempts: { withdraw: 0, deposit: 0 } });
+
+      const runWithdraw = async (deviceSecret: Uint8Array): Promise<void> => {
+        activityId = begin(false);
+        /* WHAT THE WALLET ALREADY HELD, read before anything is submitted and
+           written down before it is used. Both halves matter: a shielded run
+           identifies its note by the nonce that was NOT here, and a NIGHT run
+           waits for a rise above this figure rather than for a total. */
+        const expectedNote =
+          record.kind === 'shielded'
+            ? { heldBeforeIds: [...shieldedNoteIds(await walletShieldedNotes(account.handle))] }
+            : {
+                unshieldedBefore: (
+                  atomicNightFromFormatted(
+                    (await account.handle.getBalances()).unshieldedBalance,
+                  ) ?? 0n
+                ).toString(),
+              };
+        save({ expectedNote });
+        for (let attempt = record.attempts.withdraw; ; attempt += 1) {
+          setNameSendLeg('withdrawing');
+          setNameSendAttempt(attempt + 1);
           try {
-            setNameSendLeg('withdrawing');
-            const out = await withdrawNight(
-              account.handle,
-              deviceSecret,
-              {
-                contractAddress: account.address,
-                colourHex,
-                amount: params.amount,
-                recipientAddress: ownReceivingAddress,
-              },
-              (progress) => setAccountPhase(progress.phase),
-            );
-            withdrawn = true;
-            updateActivity(entry.id, {
-              detail: `${amountText} NIGHT left your account. Paying it into ${params.domain}’s account next.`,
+            const out =
+              record.kind === 'night'
+                ? await withdrawNight(
+                    account.handle,
+                    deviceSecret,
+                    {
+                      contractAddress: account.address,
+                      colourHex: record.colourHex,
+                      amount,
+                      recipientAddress: record.ownReceivingAddress,
+                    },
+                    (progress) => setAccountPhase(progress.phase),
+                  )
+                : await withdrawShielded(
+                    account.handle,
+                    deviceSecret,
+                    {
+                      contractAddress: account.address,
+                      colourHex: record.tokenType ?? record.colourHex,
+                      amount,
+                      recipientShieldedAddress: record.ownReceivingAddress,
+                    },
+                    (progress) => setAccountPhase(progress.phase),
+                  );
+            save({
+              leg: 'settle',
+              withdrawTxHash: out.txId,
+              attempts: { ...record.attempts, withdraw: attempt + 1 },
+              lastError: undefined,
+            });
+            updateActivity(activityId, {
+              detail: `${amountText} left your account. Paying it into ${record.recipient.label}’s account next.`,
               source: 'chain',
               txHash: out.txId,
             });
-
-            /* The wait between the legs. `deposit_night` is balanced from what
-               the wallet really holds, so a deposit built before the arrival
-               has synced fails inside the SDK rather than against a check we
-               wrote — and that failure is unreadable. Two minutes is generous
-               against a transaction the indexer has already reported. */
-            setNameSendLeg('settling');
-            const settleBy = Date.now() + 120_000;
-            for (;;) {
-              const balances = await account.handle.getBalances();
-              const held = atomicNightFromFormatted(balances.unshieldedBalance);
-              if (held !== null && held >= params.amount) break;
-              if (Date.now() > settleBy) {
-                throw Object.assign(
-                  new Error(
-                    'The amount left your account but has not arrived at your receiving address yet, so the second step did not run.',
-                  ),
-                  { code: 'settling-timeout' as const },
-                );
-              }
-              await pause(4_000);
+            return;
+          } catch (cause) {
+            const verdict = classifyLegError(cause);
+            save({
+              attempts: { ...record.attempts, withdraw: attempt + 1 },
+              lastError: { message: verdict.message, retryable: verdict.retryable },
+            });
+            if (!verdict.retryable || attempt + 1 >= SEND_LEG_ATTEMPTS) {
+              throw failure(cause, verdict.message, false);
             }
+            await pause(retryDelayMs(attempt));
+          }
+        }
+      };
 
-            setNameSendLeg('depositing');
-            const paid = await depositNight(
-              account.handle,
-              {
-                contractAddress: params.accountAddress,
-                colourHex,
-                amount: params.amount,
-              },
-              (progress) => setAccountPhase(progress.phase),
+      const runSettle = async (): Promise<WalletShieldedNote | null> => {
+        setNameSendLeg('settling');
+        setNameSendAttempt(null);
+        const deadline = Date.now() + SETTLE_DEADLINE_MS;
+        for (;;) {
+          const expectation = record.expectedNote;
+          if (record.kind === 'shielded') {
+            const heldBefore = new Set(
+              expectation && 'heldBeforeIds' in expectation ? expectation.heldBeforeIds : [],
             );
-            updateActivity(entry.id, {
+            const arrived = findArrivedNote(await walletShieldedNotes(account.handle), {
+              tokenType: record.tokenType ?? record.colourHex,
+              amount,
+              heldBefore,
+            });
+            if (arrived !== null) return arrived;
+          } else {
+            /* THE ARRIVAL, NOT THE TOTAL. This compared the wallet's whole
+               unshielded balance against the amount until 2026/09/02, so a
+               wallet that already held enough went straight on to the paying
+               leg and built it against money that had not arrived — which
+               fails inside the SDK, unreadably. */
+            const before =
+              expectation && 'unshieldedBefore' in expectation
+                ? BigInt(expectation.unshieldedBefore)
+                : 0n;
+            const held = atomicNightFromFormatted(
+              (await account.handle.getBalances()).unshieldedBalance,
+            );
+            if (held !== null && held >= before + amount) return null;
+          }
+          if (Date.now() > deadline) {
+            /* Left at `settle`, not failed: the amount has moved and the
+               arrival is still coming. Home offers to look again. */
+            const message = `${amountText} left your account and has not reached your Passport yet.`;
+            save({ leg: 'settle', lastError: { message, retryable: true } });
+            throw failure(new Error(message), message, true);
+          }
+          await pause(record.kind === 'shielded' ? 2_000 : 3_000);
+        }
+      };
+
+      const runDeposit = async (note: WalletShieldedNote | null): Promise<void> => {
+        save({ leg: 'deposit' });
+        for (let attempt = record.attempts.deposit; ; attempt += 1) {
+          setNameSendLeg('depositing');
+          setNameSendAttempt(attempt + 1);
+          try {
+            const paid =
+              record.kind === 'night'
+                ? await depositNight(
+                    account.handle,
+                    {
+                      contractAddress: record.recipient.accountAddress,
+                      colourHex: record.colourHex,
+                      amount,
+                    },
+                    (progress) => setAccountPhase(progress.phase),
+                  )
+                : await depositShielded(
+                    account.handle,
+                    {
+                      contractAddress: record.recipient.accountAddress,
+                      coin: shieldedCoinFromNote(note as WalletShieldedNote),
+                    },
+                    (progress) => setAccountPhase(progress.phase),
+                  );
+            save({
+              leg: 'done',
+              attempts: { ...record.attempts, deposit: attempt + 1 },
+              lastError: undefined,
+            });
+            dropPendingSend(record.id);
+            updateActivity(activityId, {
               status: 'complete',
-              label: `Sent to ${params.domain}`,
-              detail: `${amountText} NIGHT is now in ${params.domain}’s account.`,
+              label: `Sent to ${record.recipient.label}`,
+              detail: `${amountText} is now in ${record.recipient.label}’s account.`,
               source: 'chain',
               txHash: paid.txId,
             });
@@ -5057,58 +5382,176 @@ export default function PassportDemo() {
               tone: 'success',
               /* Accepted, not yet included — the same claim every other
                  transfer on this surface makes. */
-              title: `${params.domain} paid — confirming`,
+              title: `${record.recipient.label} paid — confirming`,
               body: 'The fee sponsor covered both network fees.',
               link: explorerTxLink(paid.txId, paid.network),
             });
             void refreshLocalBalances();
+            return;
           } catch (cause) {
-            const message = cause instanceof Error ? cause.message : String(cause);
-            updateActivity(entry.id, {
-              status: 'error',
-              label: withdrawn ? `${params.domain} was not paid` : `Nothing was sent`,
-              /* WHERE THE MONEY IS. A half-finished transfer is the one state
-                 where saying only "it failed" would be a lie by omission. */
-              detail: withdrawn
-                ? `${message} The ${amountText} NIGHT left your account and is sitting at your receiving address — Home offers to move it back in.`
-                : message,
-              source: 'local',
+            const verdict = classifyLegError(cause);
+            save({
+              attempts: { ...record.attempts, deposit: attempt + 1 },
+              lastError: { message: verdict.message, retryable: verdict.retryable },
             });
-            if (withdrawn) {
-              pushToast({
-                tone: 'error',
-                title: `${params.domain} was not paid`,
-                body: `Your ${amountText} NIGHT is safe at your receiving address. Move it back into your account from Home.`,
-              });
-              void refreshLocalBalances();
+            if (!verdict.retryable || attempt + 1 >= SEND_LEG_ATTEMPTS) {
+              throw failure(cause, verdict.message, true);
             }
-            throw cause;
+            await pause(retryDelayMs(attempt));
           }
-        });
+        }
+      };
+
+      try {
+        if (!record.withdrawTxHash) {
+          await withAccountDeviceSecret((deviceSecret) => runWithdraw(deviceSecret));
+        } else {
+          activityId = begin(options.resumed ?? false);
+        }
+        /* A shielded run needs the note itself however far it had got: the
+           deposit consumes one specific note and only this can name it. A NIGHT
+           run past `settle` has already seen its arrival. */
+        if (record.kind === 'shielded' || record.leg === 'settle') {
+          settledNote = await runSettle();
+        }
+        await runDeposit(settledNote);
       } catch (cause) {
+        const legLanded = Boolean(record.withdrawTxHash);
         const message = cause instanceof Error ? cause.message : String(cause);
-        const code =
-          typeof cause === 'object' && cause !== null &&
-          typeof (cause as { code?: unknown }).code === 'string'
-            ? (cause as { code: string }).code
-            : null;
-        if (code === 'wallet-closed') {
-          pushToast({ tone: 'error', title: 'Nothing was sent', body: message });
+
+        /* THE LAST RESORT, and only now the paying leg has had its three
+           attempts: the note goes back into the sender's own account, where it
+           is spendable again. The NIGHT path needs no equivalent — Home's
+           "Money outside your account" card sweeps unshielded value in on one
+           press, and that card cannot see a note. */
+        let returned = false;
+        if (record.kind === 'shielded' && record.leg === 'deposit' && settledNote !== null) {
+          try {
+            setNameSendLeg('returning');
+            await depositShielded(
+              account.handle,
+              { contractAddress: account.address, coin: shieldedCoinFromNote(settledNote) },
+              (progress) => setAccountPhase(progress.phase),
+            );
+            returned = true;
+          } catch (returnCause) {
+            /* The ORIGINAL failure is what the reader is told about; this one
+               only changes which sentence says where the money is. The record
+               keeps the note's identity either way, so the run is still
+               resumable from Home. */
+            console.info(
+              '[send] the shielded amount could not be returned to the account',
+              returnCause,
+            );
+          }
+        }
+
+        if (returned || !legLanded) {
+          /* Nothing of theirs is anywhere it should not be: either the note is
+             back in the account, or the first leg never spent. Neither is a
+             thing to offer a Continue button over. */
+          dropPendingSend(record.id);
+        } else if (record.leg !== 'settle') {
+          save({ leg: 'failed' });
+        }
+
+        if (activityId) {
+          updateActivity(activityId, {
+            status: 'error',
+            label: legLanded ? `${record.recipient.label} was not paid yet` : 'Nothing was sent',
+            /* WHERE THE MONEY IS. A half-finished transfer is the one state
+               where saying only "it failed" would be a lie by omission. */
+            detail: returned
+              ? `${message} Nothing was paid to ${record.recipient.label}, and the ${amountText} is back in your account.`
+              : legLanded
+                ? `${message} The ${amountText} is waiting at your Passport — Home offers to carry the payment on.`
+                : message,
+            source: 'local',
+          });
+        }
+        if (legLanded) {
+          pushToast({
+            tone: 'error',
+            title: `${record.recipient.label} was not paid yet`,
+            body: returned
+              ? `Your ${amountText} is back in your account.`
+              : `Your ${amountText} is safe. Carry the payment on from Home.`,
+          });
+          void refreshLocalBalances();
         }
         throw cause;
       } finally {
         setNameSendLeg(null);
+        setNameSendAttempt(null);
         setAccountPhase(null);
       }
     },
     [
       addActivity,
-      localSurfaces,
+      dropPendingSend,
       refreshLocalBalances,
       requireAccount,
       updateActivity,
       withAccountDeviceSecret,
+      writePendingSend,
     ],
+  );
+
+  /**
+   * Carrying on a run that stopped — the Home card's Continue.
+   *
+   * A PRESENCE CEREMONY stands in front of it, because a resume moves money and
+   * nothing that moves money in Passport is promptless. Which ceremony depends
+   * on what is left to do: leg two is permissionless and needs only the
+   * confirmation, while a run that never spent has to raise the account's own
+   * assertion — and the orchestrator raises that one itself, so asking for a
+   * confirmation first would be two prompts for one press.
+   */
+  const continuePendingSend = useCallback(
+    async (id: string): Promise<void> => {
+      const record = pendingSendsRef.current.find((entry) => entry.id === id);
+      if (!record) return;
+      try {
+        if (record.withdrawTxHash) {
+          await confirmLocalApproval(`Continue sending to ${record.recipient.label}`);
+        }
+        await runNameSend(record, { resumed: true });
+      } catch (cause) {
+        /* The trail row and the toast are the orchestrator's, and a refused
+           ceremony has its own. Nothing here says any of it twice. */
+        console.info('[send] carrying the payment on did not finish', cause);
+      }
+    },
+    [confirmLocalApproval, runNameSend],
+  );
+
+  const executeSendToName = useCallback(
+    async (params: {
+      domain: string;
+      accountAddress: string;
+      amount: bigint;
+    }): Promise<void> => {
+      const ownReceivingAddress = localSurfaces?.unshieldedAddress ?? null;
+      if (!ownReceivingAddress) {
+        throw Object.assign(
+          new Error(
+            'Passport cannot see its own receiving address yet, so it cannot route a payment there. Try again in a moment.',
+          ),
+          { code: 'wallet-closed' as const },
+        );
+      }
+      const { nightColourHex } = await import('./identity/accountCustody.js');
+      await runNameSend(
+        newPendingSend({
+          kind: 'night',
+          recipient: { label: params.domain, accountAddress: params.accountAddress },
+          amount: params.amount,
+          colourHex: nightColourHex(),
+          ownReceivingAddress,
+        }),
+      );
+    },
+    [localSurfaces, runNameSend],
   );
 
   /**
@@ -5296,189 +5739,27 @@ export default function PassportDemo() {
       tokenType: string;
       amount: bigint;
     }): Promise<void> => {
-      const account = requireAccount();
       const ownShieldedAddress = localSurfaces?.shieldedAddress ?? null;
       if (!ownShieldedAddress) {
         throw Object.assign(
           new Error(
-            'Passport cannot see its own receiving address yet, so it cannot route a payment to a name. Try again in a moment.',
+            'Passport cannot see its own receiving address yet, so it cannot route a payment there. Try again in a moment.',
           ),
           { code: 'wallet-closed' as const },
         );
       }
-      const amountText = `${params.amount} units`;
-      try {
-        const { depositShielded, shieldedCoinFromNote, walletShieldedNotes, withdrawShielded } =
-          await import('./identity/accountCustody.js');
-        const { findArrivedNote, shieldedNoteIds } = await import('./lib/shieldedNote.js');
-        await withAccountDeviceSecret(async (deviceSecret) => {
-          /* Raised only now the ceremony has answered: a cancelled approval
-             signed nothing, so it writes no activity row either. */
-          const entry = addActivity({
-            label: `Sending to ${params.domain}`,
-            detail: `${amountText} of a shielded token, in two steps.`,
-            status: 'pending',
-            source: 'wallet',
-          });
-          let withdrawn = false;
-          /* The note the first leg produced, once it has arrived. Held out here
-             so the failure path can put it back. */
-          let arrived: WalletShieldedNote | null = null;
-          try {
-            /* WHAT THE WALLET ALREADY HELD, read before anything is submitted.
-               This is the whole of what makes step 2 exact: the note to deposit
-               is the one whose nonce was not in this set. */
-            const heldBefore = shieldedNoteIds(await walletShieldedNotes(account.handle));
-
-            setNameSendLeg('withdrawing');
-            const out = await withdrawShielded(
-              account.handle,
-              deviceSecret,
-              {
-                contractAddress: account.address,
-                colourHex: params.tokenType,
-                amount: params.amount,
-                recipientShieldedAddress: ownShieldedAddress,
-              },
-              (progress) => setAccountPhase(progress.phase),
-            );
-            withdrawn = true;
-            updateActivity(entry.id, {
-              detail: `${amountText} left your account. Paying it into ${params.domain}’s account next.`,
-              source: 'chain',
-              txHash: out.txId,
-            });
-
-            /* The wait between the legs. The deposit spends a note the wallet
-               has to actually hold, so one built before the arrival has synced
-               fails inside the SDK rather than against a check we wrote — and
-               that failure is unreadable. The same two-minute window the NIGHT
-               path allows, read more often: each poll is a value off a live
-               state stream and touches no network, so there is nothing to be
-               gained by waiting four seconds to look again. */
-            setNameSendLeg('settling');
-            const settleBy = Date.now() + 120_000;
-            for (;;) {
-              arrived = findArrivedNote(await walletShieldedNotes(account.handle), {
-                tokenType: params.tokenType,
-                amount: params.amount,
-                heldBefore,
-              });
-              if (arrived !== null) break;
-              if (Date.now() > settleBy) {
-                throw Object.assign(
-                  new Error(
-                    'The amount left your account but has not arrived at your receiving address yet, so the second step did not run.',
-                  ),
-                  { code: 'settling-timeout' as const },
-                );
-              }
-              await pause(1_000);
-            }
-
-            setNameSendLeg('depositing');
-            const paid = await depositShielded(
-              account.handle,
-              {
-                contractAddress: params.accountAddress,
-                coin: shieldedCoinFromNote(arrived),
-              },
-              (progress) => setAccountPhase(progress.phase),
-            );
-            updateActivity(entry.id, {
-              status: 'complete',
-              label: `Sent to ${params.domain}`,
-              detail: `${amountText} is now in ${params.domain}’s account.`,
-              source: 'chain',
-              txHash: paid.txId,
-            });
-            pushToast({
-              tone: 'success',
-              /* Accepted, not yet included — the same claim every other
-                 transfer on this surface makes. */
-              title: `${params.domain} paid — confirming`,
-              body: 'The fee sponsor covered both network fees.',
-              link: explorerTxLink(paid.txId, paid.network),
-            });
-            void refreshLocalBalances();
-          } catch (cause) {
-            const message = cause instanceof Error ? cause.message : String(cause);
-            /* PUTTING IT BACK. Only possible when the note genuinely arrived
-               and was therefore never paid to anybody: a deposit that failed
-               because it had in fact landed leaves nothing to return, and this
-               attempt then fails at balancing, which is the correct outcome. */
-            let returned = false;
-            if (arrived !== null) {
-              try {
-                setNameSendLeg('returning');
-                await depositShielded(
-                  account.handle,
-                  {
-                    contractAddress: account.address,
-                    coin: shieldedCoinFromNote(arrived),
-                  },
-                  (progress) => setAccountPhase(progress.phase),
-                );
-                returned = true;
-              } catch (returnCause) {
-                /* The ORIGINAL failure is what the reader is told about; this
-                   one only changes which sentence says where the money is. The
-                   diagnostic goes where diagnostics go. */
-                console.info(
-                  '[send] the shielded amount could not be returned to the account',
-                  returnCause,
-                );
-              }
-            }
-            updateActivity(entry.id, {
-              status: 'error',
-              label: withdrawn ? `${params.domain} was not paid` : 'Nothing was sent',
-              /* WHERE THE MONEY IS. A half-finished transfer is the one state
-                 where saying only "it failed" would be a lie by omission. */
-              detail: returned
-                ? `${message} Nothing was paid to ${params.domain}, and the ${amountText} is back in your account.`
-                : withdrawn
-                  ? `${message} The ${amountText} left your account and is at your own receiving address — nothing was paid to ${params.domain}.`
-                  : message,
-              source: 'local',
-            });
-            if (withdrawn) {
-              pushToast({
-                tone: 'error',
-                title: `${params.domain} was not paid`,
-                body: returned
-                  ? `Your ${amountText} is back in your account.`
-                  : `Your ${amountText} is safe at your own receiving address.`,
-              });
-              void refreshLocalBalances();
-            }
-            throw cause;
-          }
-        });
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        const code =
-          typeof cause === 'object' && cause !== null &&
-          typeof (cause as { code?: unknown }).code === 'string'
-            ? (cause as { code: string }).code
-            : null;
-        if (code === 'wallet-closed') {
-          pushToast({ tone: 'error', title: 'Nothing was sent', body: message });
-        }
-        throw cause;
-      } finally {
-        setNameSendLeg(null);
-        setAccountPhase(null);
-      }
+      await runNameSend(
+        newPendingSend({
+          kind: 'shielded',
+          recipient: { label: params.domain, accountAddress: params.accountAddress },
+          amount: params.amount,
+          tokenType: params.tokenType,
+          colourHex: params.tokenType,
+          ownReceivingAddress: ownShieldedAddress,
+        }),
+      );
     },
-    [
-      addActivity,
-      localSurfaces,
-      refreshLocalBalances,
-      requireAccount,
-      updateActivity,
-      withAccountDeviceSecret,
-    ],
+    [localSurfaces, runNameSend],
   );
 
   /**
@@ -5581,6 +5862,7 @@ export default function PassportDemo() {
           onSendShieldedToName: executeShieldedSendToName,
           phase: accountPhase,
           nameLeg: nameSendLeg,
+          nameLegAttempt: nameSendAttempt,
         }
       : null;
 
@@ -5671,6 +5953,36 @@ export default function PassportDemo() {
         };
       }),
     [activity, selectedNetwork],
+  );
+
+  /**
+   * The unfinished payments Home offers to carry on.
+   *
+   * Every record that is not `done` earns a card: a run at `settle` is waiting
+   * for the amount to reach this Passport, one at `deposit` or `failed` has
+   * money here that has not been paid on, and one still at `withdraw` never
+   * spent — which is the only one there is anything to forget about.
+   *
+   * NO MACHINERY IN ANY OF THESE SENTENCES. The step lines say what happened to
+   * the money, in the same two-step language the Send sheet uses.
+   */
+  const homePendingSends = useMemo(
+    () =>
+      pendingSends.map((record) => ({
+        id: record.id,
+        label: `Sending ${pendingSendAmountLabel(record)} to ${record.recipient.label}`,
+        step: !record.withdrawTxHash
+          ? 'Nothing has left your account yet.'
+          : record.leg === 'settle'
+            ? 'Step 1 done. Waiting for the amount to reach your Passport.'
+            : `Step 1 done. Step 2 — paying it into ${record.recipient.label}’s account — has not finished.`,
+        reason: record.lastError?.message ?? null,
+        onContinue: () => void continuePendingSend(record.id),
+        ...(record.withdrawTxHash
+          ? {}
+          : { onGiveUp: () => dropPendingSend(record.id) }),
+      })),
+    [continuePendingSend, dropPendingSend, pendingSends],
   );
 
   const homeLegacyFunds =
@@ -6215,6 +6527,9 @@ export default function PassportDemo() {
                  itself. */
               account={homeAccount}
               legacyFunds={homeLegacyFunds}
+              /* Payments that left this Passport and have not arrived. See
+                 `runNameSend` for why a two-leg send is written down. */
+              pendingSends={homePendingSends}
               error={error}
               onDismissError={() => setError(null)}
               onRefresh={refreshMobile}

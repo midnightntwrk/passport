@@ -39,7 +39,12 @@
 
 import { expect, test, type Page } from '@playwright/test';
 
-import { installNetworkBoundary, PASSPORT_ACCOUNT_ADDRESS, RESOLVABLE_NAME } from './mocks.js';
+import {
+  installNetworkBoundary,
+  PASSPORT_ACCOUNT_ADDRESS,
+  RECIPIENT_ACCOUNT_ADDRESS,
+  RESOLVABLE_NAME,
+} from './mocks.js';
 import { installVirtualAuthenticator } from './passkey.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -333,4 +338,61 @@ test('nothing on the sheet is a colour, an address of ours, or a piece of machin
   expect(sheet).not.toMatch(/\bDUST\b/i);
   expect(sheet).not.toMatch(/wallet|registry|indexer|resolver/i);
   expect(sheet).not.toContain(PASSPORT_ACCOUNT_ADDRESS);
+});
+
+test('a Passport account can be paid by its address, in either asset', async () => {
+  /* ADDED 2026/09/02. A Passport whose owner has not claimed a name yet is
+     still a Passport that can be paid — Receive shows the account address — and
+     until this date the sheet turned those 32 bytes away as a malformed name.
+     It is the same two-step send a name gets, because a name resolves to one of
+     these and nothing else. */
+  await picker().selectOption('night');
+  await recipient().fill('');
+  await recipient().fill(RECIPIENT_ACCOUNT_ADDRESS);
+
+  const chip = page.locator('.mnhome-send-resolved');
+  await expect(chip).toBeVisible();
+  /* NOTHING WAS LOOKED UP, so nothing claims it was: the chip confirms that
+     Passport read an account, and the tail says which. */
+  await expect(chip).toContainText('A Passport account, ending');
+  await expect(chip).not.toContainText('.night');
+  await expect(refusal()).toHaveCount(0);
+
+  await page.getByPlaceholder('0.0').fill('0.000001');
+  await page.getByRole('button', { name: /^Review$/ }).click();
+  let review = await page.locator('.mnhome-send-rows').innerText();
+  expect(review).toContain('0.000001 NIGHT');
+  /* Still the two steps a Passport payment is, and still no address on the
+     step that confirms — the tail on the chip above is all that is shown. */
+  expect(review).toContain('Two steps');
+  expect(review).not.toContain(RECIPIENT_ACCOUNT_ADDRESS);
+  await page.getByRole('button', { name: /^Back$/ }).click();
+
+  // And the same address in the other asset, which routes the same way.
+  await chooseShielded();
+  await expect(refusal()).toHaveCount(0);
+  await page.getByPlaceholder('0', { exact: true }).fill('1');
+  await page.getByRole('button', { name: /^Review$/ }).click();
+  review = await page.locator('.mnhome-send-rows').innerText();
+  expect(review).toContain('1 mUSD');
+  expect(review).toContain('Two steps');
+  expect(review).not.toContain(RECIPIENT_ACCOUNT_ADDRESS);
+  await page.getByRole('button', { name: /^Back$/ }).click();
+
+  /* Left as it was found, so the serial file after this one is not reading a
+     recipient this test typed. */
+  await recipient().fill('');
+  await recipient().fill(`${RESOLVABLE_NAME}.night`);
+  await expect(chip).toBeVisible({ timeout: 30_000 });
+});
+
+test('an almost-account is refused as the name it is not, never sent', async () => {
+  /* A truncated address accepted as an account would be money paid at 32 bytes
+     nobody holds. One character short is not an account, and it earns the
+     name rule's own sentence rather than a Review button. */
+  await recipient().fill('');
+  await recipient().fill(RECIPIENT_ACCOUNT_ADDRESS.slice(0, 63));
+  await expect(refusal()).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Review$/ })).toBeDisabled();
+  expect(await refusal().innerText()).not.toContain(PASSPORT_ACCOUNT_ADDRESS);
 });

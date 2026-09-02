@@ -65,6 +65,11 @@ import {
   type SendCapabilities,
 } from '../lib/sendAssets.js'
 
+/* The sentence a refused send earns, and how many attempts a leg gets. Both
+   are decisions rather than renderings, so both are drilled directly — see
+   `lib/sendLegs.ts`. */
+import { SEND_LEG_ATTEMPTS, sendFailureNotice } from '../lib/sendLegs.js'
+
 import './home.css'
 
 /**
@@ -359,6 +364,17 @@ export interface SendSheetProps {
    */
   nameLeg?: 'withdrawing' | 'settling' | 'depositing' | 'returning' | null
   /**
+   * Which attempt at the running leg this is, 1-based, or `null`.
+   *
+   * A leg is now attempted up to three times on a failure that retrying could
+   * fix — a fee sponsor whose change is settling, a node refusing a
+   * transaction proved against a state that has moved — and a retry is SHOWN.
+   * A step that silently restarted would leave somebody watching a line that
+   * had said the same thing for a minute with no way to tell patience from a
+   * hang.
+   */
+  nameLegAttempt?: number | null
+  /**
    * Leaves the session for the landing screen — offered ONLY beside a failure
    * the host marked as a passkey ceremony that could not be completed.
    *
@@ -579,6 +595,7 @@ export default function SendSheet(props: SendSheetProps) {
     sponsoredToken,
     phase,
     nameLeg,
+    nameLegAttempt,
     onSignOut,
     onClose,
   } = props
@@ -593,7 +610,7 @@ export default function SendSheet(props: SendSheetProps) {
      failure rather than in a state of its own so it can never outlive the
      failure it describes. */
   const [failure, setFailure] = useState<
-    { message: string; detail: string | null; wayOut: boolean } | null
+    { message: string; detail: string | null; wayOut: boolean; legLanded: boolean } | null
   >(null)
   const [showFullRecipient, setShowFullRecipient] = useState(false)
   const [fee, setFee] = useState<FeeReadiness | null>(null)
@@ -694,6 +711,14 @@ export default function SendSheet(props: SendSheetProps) {
     [nameSupported, recipient],
   )
   const nameMode = typed?.kind === 'name' || typed?.kind === 'name-invalid'
+  /* A PASSPORT ACCOUNT, TYPED OUT (2026/09/02). It is what a name resolves to,
+     so it goes by exactly the same route and needs no registry read at all —
+     which is also why nothing about it is debounced or awaited. Somebody whose
+     counterparty has not claimed a name yet, or who has been handed the account
+     off a Receive screen, is no longer turned away by a sheet that could only
+     take names. */
+  const accountMode = typed?.kind === 'account'
+  const typedAccount = typed?.kind === 'account' ? typed.address : null
   const typedDomain = typed?.kind === 'name' ? typed.domain : null
 
   /**
@@ -798,8 +823,11 @@ export default function SendSheet(props: SendSheetProps) {
   const mode: Mode = asset.mode
 
   const verdict = useMemo(
-    () => (nameMode ? null : classifyRecipient(recipient, networkId, shieldedSupported)),
-    [nameMode, networkId, recipient, shieldedSupported],
+    () =>
+      nameMode || accountMode
+        ? null
+        : classifyRecipient(recipient, networkId, shieldedSupported),
+    [accountMode, nameMode, networkId, recipient, shieldedSupported],
   )
   /* A name earns the NAME's refusals; an address earns the codec's. Mixing the
      two is how somebody gets told "that is not a Midnight address" about a
@@ -832,11 +860,13 @@ export default function SendSheet(props: SendSheetProps) {
      asset's own name — never answered by switching the asset to suit the
      address, which is the silent wrong-send the picker exists to replace. See
      `lib/sendAssets.ts` for both sentences. */
-  const assetRefusal = nameMode
-    ? refusalFor(asset, { kind: 'name' }, capabilities)
-    : verdict && 'mode' in verdict
-      ? refusalFor(asset, { kind: 'address', mode: verdict.mode }, capabilities)
-      : null
+  const assetRefusal = accountMode
+    ? refusalFor(asset, { kind: 'account' }, capabilities)
+    : nameMode
+      ? refusalFor(asset, { kind: 'name' }, capabilities)
+      : verdict && 'mode' in verdict
+        ? refusalFor(asset, { kind: 'address', mode: verdict.mode }, capabilities)
+        : null
   /* The asset's refusal LEADS on the name path: told that mUSD cannot go to a
      name at all, "no Passport has this name" is an answer to a question they
      are no longer asking. On the address path the codec speaks first, because
@@ -844,10 +874,23 @@ export default function SendSheet(props: SendSheetProps) {
      before anything can be said about where it would have gone. */
   const recipientError = nameMode
     ? (assetRefusal ?? nameError)
-    : verdict && 'error' in verdict
-      ? verdict.error
-      : assetRefusal
-  const resolvedName = nameState.status === 'found' ? nameState : null
+    : accountMode
+      ? assetRefusal
+      : verdict && 'error' in verdict
+        ? verdict.error
+        : assetRefusal
+  /* THE RECIPIENT, once it is known — a name the registry answered for, or an
+     account that needed no asking. The two are one shape from here on: the
+     dispatch, the review rows, and the progress lines all read off it, and a
+     second shape for the pasted form would be a second place for them to
+     drift. `domain` is what the reader is CALLED here, so it is the account's
+     own tail rather than a name they never typed. */
+  const resolvedName =
+    typedAccount !== null
+      ? { domain: `Passport ${accountTail(typedAccount)}`, accountAddress: typedAccount }
+      : nameState.status === 'found'
+        ? { domain: nameState.domain, accountAddress: nameState.accountAddress }
+        : null
 
   /* WHICH OF THE FOUR SENDS THIS IS — decided by the PAIR, not by the recipient
      alone. Until 2026/08/31 `handleSend` tested `resolvedName` first and the
@@ -858,7 +901,7 @@ export default function SendSheet(props: SendSheetProps) {
      the two do not go together — the sentence for that is the refusal's. */
   const sendRoute =
     resolvedName !== null
-      ? routeFor(asset, { kind: 'name' }, capabilities)
+      ? routeFor(asset, { kind: accountMode ? 'account' : 'name' }, capabilities)
       : verdict && 'mode' in verdict
         ? routeFor(asset, { kind: 'address', mode: verdict.mode }, capabilities)
         : null
@@ -928,7 +971,15 @@ export default function SendSheet(props: SendSheetProps) {
     fee === null
       ? feeUnknown
         ? `Passport could not check the fee sponsor: ${feeUnknown}`
-        : 'Checking with the fee sponsor…'
+        : /* NOT "Checking with the fee sponsor…" BESIDE A FAILURE. The poll is
+             paused while a send is in flight and restarts when one stops, so a
+             refused transfer used to sit under a line claiming Passport was
+             still asking about a fee for it. Nothing is being checked for this
+             transfer any more, and the row says nothing rather than something
+             untrue. */
+          failure !== null
+          ? '—'
+          : 'Checking with the fee sponsor…'
       : fee.mode === 'sponsored'
         ? 'Network fee expected to be covered by the fee sponsor.'
         : /* The sponsor's own refusal SENTENCE, verbatim — which since
@@ -990,15 +1041,21 @@ export default function SendSheet(props: SendSheetProps) {
    * then carries on for another minute. It says which of the two is running
    * and never claims the money has arrived until the second has.
    */
+  /* "(retry 2 of 3)", or nothing at all on a first attempt. A count that
+     appeared on every step would make an ordinary send look like a struggle. */
+  const attemptSuffix =
+    typeof nameLegAttempt === 'number' && nameLegAttempt > 1
+      ? ` (retry ${nameLegAttempt - 1} of ${SEND_LEG_ATTEMPTS - 1})`
+      : ''
   const nameLegLine =
     resolvedName === null
       ? null
       : nameLeg === 'withdrawing'
-        ? `Step 1 of 2 — taking the amount out of your account.`
+        ? `Step 1 of 2 — taking the amount out of your account${attemptSuffix}.`
         : nameLeg === 'settling'
           ? 'Step 1 of 2 done. Waiting for the amount to clear before it goes on.'
           : nameLeg === 'depositing'
-            ? `Step 2 of 2 — paying it into ${resolvedName.domain}’s account.`
+            ? `Step 2 of 2 — paying it into ${resolvedName.domain}’s account${attemptSuffix}.`
             : nameLeg === 'returning'
               ? /* Not a step of the transfer: the paying leg refused, and the
                    amount is being put back. Said plainly and immediately,
@@ -1111,6 +1168,14 @@ export default function SendSheet(props: SendSheetProps) {
         /* The host's own reading of the failure, never this sheet's: only the
            host saw the ceremony. See `lib/passkeyRecovery.ts`. */
         wayOut: isMidSessionWayOut(cause),
+        /* THE ONE FACT THE COPY BELOW TURNS ON, and the host is the only place
+           it is known: whether the first of the two transactions was accepted
+           before the run stopped. Absent — every send that is not a two-leg one
+           — is `false`, which is what "nothing was sent" needs to be true. */
+        legLanded:
+          typeof cause === 'object' &&
+          cause !== null &&
+          (cause as { legLanded?: unknown }).legLanded === true,
       })
     }
   }, [
@@ -1326,8 +1391,20 @@ export default function SendSheet(props: SendSheetProps) {
                 <span className="mnhome-send-resolved" role="status">
                   <Check size={12} aria-hidden="true" />
                   <span>
-                    {resolvedName.domain} → account{' '}
-                    <code>{accountTail(resolvedName.accountAddress)}</code>
+                    {accountMode ? (
+                      /* Nothing was looked up and nothing is being confirmed
+                         against a registry: what is confirmed is that Passport
+                         read the account, and the tail says which one. */
+                      <>
+                        A Passport account, ending{' '}
+                        <code>{accountTail(resolvedName.accountAddress)}</code>
+                      </>
+                    ) : (
+                      <>
+                        {resolvedName.domain} → account{' '}
+                        <code>{accountTail(resolvedName.accountAddress)}</code>
+                      </>
+                    )}
                   </span>
                 </span>
               ) : nameMode ? (
@@ -1525,11 +1602,19 @@ export default function SendSheet(props: SendSheetProps) {
                         {/* The tail is held together on one line. An ellipsis
                             is a break opportunity in CSS, so "ending …" and
                             "5263" would otherwise land on separate lines and
-                            read as two different things. */}
-                        Their Passport account, ending{' '}
-                        <span className="mnhome-send-tail">
-                          {accountTail(resolvedName.accountAddress)}
-                        </span>
+                            read as two different things. An account typed out
+                            has already SAID its tail above, so it is not said
+                            twice. */}
+                        {accountMode ? (
+                          'The account you typed, paid directly.'
+                        ) : (
+                          <>
+                            Their Passport account, ending{' '}
+                            <span className="mnhome-send-tail">
+                              {accountTail(resolvedName.accountAddress)}
+                            </span>
+                          </>
+                        )}
                       </small>
                     </>
                   ) : (
@@ -1598,11 +1683,26 @@ export default function SendSheet(props: SendSheetProps) {
               >
                 <AlertTriangle size={14} aria-hidden="true" />
                 <span>
-                  Nothing was sent —{' '}
-                  {asset.kind === 'nft'
-                    ? 'the item is still in your account'
-                    : `no ${asset.symbol} moved from your account`}
-                  . {failure.message}
+                  {/* TWO SENTENCES, BECAUSE THERE ARE TWO OUTCOMES (2026/09/02).
+                      "Nothing was sent" was prefixed to every failure until this
+                      date, including the ones where the first of the two
+                      transactions had landed and the amount was sitting at the
+                      sender's own Passport — which is not a simplification but
+                      a false statement about where somebody's money is, and it
+                      left them with no reason to look for the card that would
+                      have finished the transfer. See `lib/sendLegs.ts`. */}
+                  {sendFailureNotice({
+                    legLanded: failure.legLanded,
+                    message: failure.message,
+                    amountLabel:
+                      amount === null
+                        ? asset.symbol
+                        : `${mode === 'shielded' ? amount.toString() : formatNight(amount)} ${
+                            asset.symbol
+                          }`,
+                    assetSymbol: asset.symbol,
+                    item: asset.kind === 'nft',
+                  })}
                   {failure.detail ? ` ${failure.detail}` : ''}
                 </span>
                 {/* The passkey could not be used, and this sheet's own Send

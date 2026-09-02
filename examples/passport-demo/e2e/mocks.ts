@@ -108,6 +108,20 @@ export const PASSPORT_ACCOUNT_ADDRESS =
   '8054fcaccc83b5e1ad8e4f8c5d555010b61dbecd838d412a85635dc2b5bf5263';
 
 /**
+ * SOMEBODY ELSE'S account, addressed directly rather than through a name.
+ *
+ * From 2026/09/02 the recipient field takes 32 bytes of hex as well as a
+ * `.night` name — a Passport whose owner has not claimed a name yet is still a
+ * Passport that can be paid, and Receive already shows the account address. A
+ * spec needs an address that is not the SENDER's own, so this is a distinct
+ * 32 bytes answered with the same recorded account state: nothing about the
+ * recipient's ledger decides anything on the Send sheet, and inventing a second
+ * recording would only be a second thing to keep true.
+ */
+export const RECIPIENT_ACCOUNT_ADDRESS =
+  '4b1d0f2a6c8e3157a90d4e6b8c2f10935ad7e46b1c8f025ea3d97b604c1e8a37';
+
+/**
  * A chain shallow enough for `localWallet.ts` to allow a cold start.
  *
  * The guard refuses a from-genesis walk above a million blocks because the tab
@@ -236,7 +250,7 @@ export async function installNetworkBoundary(page: Page): Promise<NetworkBoundar
       if (address === RESOLVER_ADDRESS) {
         return route.fulfill({ contentType: 'application/json', body: NIGHT_RESOLVER_STATE });
       }
-      if (address === PASSPORT_ACCOUNT_ADDRESS) {
+      if (address === PASSPORT_ACCOUNT_ADDRESS || address === RECIPIENT_ACCOUNT_ADDRESS) {
         return route.fulfill({ contentType: 'application/json', body: PASSPORT_ACCOUNT_STATE });
       }
       return route.fulfill({ json: { data: { contract: null } } });
