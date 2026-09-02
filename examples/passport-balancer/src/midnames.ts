@@ -632,16 +632,6 @@ export async function createMidnamesSponsor(
    */
   const sponsorOwnerKey = deriveMidnamesOwnerKey(callerSecret);
 
-  /**
-   * The catch-up wait inside `withNodeRejectionRetry`, spent off the lane.
-   *
-   * Re-entered at `Registration`, because that is what every leg here is a leg
-   * of: a job that gave its lane back to a poll must not then queue behind the
-   * grants it let past. See `yieldLane` in `./reservation.ts`.
-   */
-  const yieldSpendLane = <T>(work: () => Promise<T>): Promise<T> =>
-    wallet.yieldLane(work, SpendPriority.Registration);
-
   const zeroBytes = (): Uint8Array => new Uint8Array(32);
 
   /**
@@ -769,7 +759,7 @@ export async function createMidnamesSponsor(
             initialPrivateState: { secretKey: callerSecretHex },
             args: leafArgs({ targetBytes: zeroBytes(), ownerKey: sponsorOwnerKey }),
           } as never),
-        { label: 'resolver leaf for the pool', synced: caughtUp, outsideLane: yieldSpendLane },
+        { label: 'resolver leaf for the pool', synced: caughtUp },
       );
       const deployTxData = (deployed as { deployTxData: unknown }).deployTxData as {
         public: { contractAddress: string };
@@ -842,7 +832,7 @@ export async function createMidnamesSponsor(
                it is the FIRST of the name path's two dependent proofs, and the
                client's answer to a 502 here is to start the whole registration
                again. Rebuilt once the wallet is current instead. */
-            { label: `resolver deploy for ${aliasDomain(label)}`, synced: caughtUp, outsideLane: yieldSpendLane },
+            { label: `resolver deploy for ${aliasDomain(label)}`, synced: caughtUp },
           );
           const deployTxData = (deployed as { deployTxData: unknown }).deployTxData as {
             public: { contractAddress: string };
@@ -920,7 +910,7 @@ export async function createMidnamesSponsor(
             });
             return transactionIdentifier(registration);
           },
-          { label: `register_domain_for ${aliasDomain(label)}`, synced: caughtUp, outsideLane: yieldSpendLane },
+          { label: `register_domain_for ${aliasDomain(label)}`, synced: caughtUp },
         );
 
       /**
@@ -958,7 +948,7 @@ export async function createMidnamesSponsor(
             const update = await callTx.update_domain_target(contractTargetEither(targetBytes));
             return transactionIdentifier(update);
           },
-          { label: `update_domain_target for ${aliasDomain(label)}`, synced: caughtUp, outsideLane: yieldSpendLane },
+          { label: `update_domain_target for ${aliasDomain(label)}`, synced: caughtUp },
         );
       };
 
@@ -1086,7 +1076,7 @@ export async function createMidnamesSponsor(
                 });
                 return transactionIdentifier(handover);
               },
-              { label: `change_owner for ${aliasDomain(label)}`, synced: caughtUp, outsideLane: yieldSpendLane },
+              { label: `change_owner for ${aliasDomain(label)}`, synced: caughtUp },
             ),
           )
           .then((handoverTx) =>

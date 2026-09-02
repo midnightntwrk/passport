@@ -240,20 +240,6 @@ export interface NodeRejectionRetryOptions {
   pollMs?: number;
   wait?: (ms: number) => Promise<void>;
   log?: (line: string) => void;
-  /**
-   * Runs the catch-up wait with this job's spend LANE given back.
-   *
-   * Normally `wallet.yieldLane`. Without it the wait is spent holding a lane
-   * and doing nothing but polling: on 2026/09/02 at 21:54:07 a refused
-   * `deposit_night` polled until 21:55:50 on a wallet with one fee-capable
-   * coin, and the name claim behind it reached Home in 151.3 s against a bar of
-   * 120. The same rule the DUST wait already follows — a wait that occupies
-   * nothing should occupy nothing.
-   *
-   * Absent means "run it where you are", which is what a caller outside the
-   * queue wants and what every test uses.
-   */
-  outsideLane?: <T>(work: () => Promise<T>) => Promise<T>;
 }
 
 /**
@@ -303,28 +289,22 @@ export async function withNodeRejectionRetry<T>(
         `[retry] the node refused ${options.label} (${cause instanceof Error ? cause.message : String(cause)}) — waiting for this wallet to catch up with the block that refused it, then rebuilding (attempt ${attempt + 1} of ${attempts})`,
       );
       const deadline = Date.now() + budgetMs;
-      const catchUp = async (): Promise<void> => {
-        for (;;) {
-          let caught = false;
-          try {
-            caught = await options.synced();
-          } catch {
-            // An unreadable wallet is not a synced one; asked again below.
-          }
-          if (caught) return;
-          if (Date.now() >= deadline) {
-            log(
-              `[retry] ${options.label}: this wallet has not caught up within ${Math.round(budgetMs / 1_000)} s — reporting the rejection rather than rebuilding against a view that is still stale`,
-            );
-            throw last;
-          }
-          await pause(pollMs);
+      for (;;) {
+        let caught = false;
+        try {
+          caught = await options.synced();
+        } catch {
+          // An unreadable wallet is not a synced one; asked again below.
         }
-      };
-      /* Outside the lane, because this is a poll and nothing else. The rebuild
-         below re-enters the queue through `outsideLane`'s own return, so the
-         attempt after the wait runs on a lane exactly as the first one did. */
-      await (options.outsideLane ? options.outsideLane(catchUp) : catchUp());
+        if (caught) break;
+        if (Date.now() >= deadline) {
+          log(
+            `[retry] ${options.label}: this wallet has not caught up within ${Math.round(budgetMs / 1_000)} s — reporting the rejection rather than rebuilding against a view that is still stale`,
+          );
+          throw last;
+        }
+        await pause(pollMs);
+      }
     }
   }
   /* Unreachable: the loop either returns or throws. */
@@ -929,7 +909,7 @@ export async function createAccountFunder(
             const deposit = await callTx.deposit_night(colour, config.accountGrantAtomic);
             return transactionIdentifier(deposit);
           },
-          { label: `deposit_night into ${address}`, synced: caughtUp, outsideLane: wallet.yieldLane },
+          { label: `deposit_night into ${address}`, synced: caughtUp },
         );
       } catch (cause) {
         /* A DUST shortfall is not a failed deposit — nothing was built, nothing
@@ -1046,7 +1026,7 @@ export async function createAccountFunder(
           });
           return transactionIdentifier(deposit);
           }),
-          { label: `deposit_shielded into ${address}`, synced: caughtUp, outsideLane: wallet.yieldLane },
+          { label: `deposit_shielded into ${address}`, synced: caughtUp },
         );
       } catch (cause) {
         throw new AccountFundingError(
