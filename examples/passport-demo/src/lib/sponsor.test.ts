@@ -22,6 +22,7 @@ import {
   normaliseSponsorHex,
   parseSponsorWalletStatus,
   resetSponsorReadinessCache,
+  sponsorAbandonBalance,
   sponsorBalanceOnly,
   sponsorCanPay,
   sponsorConfig,
@@ -31,6 +32,7 @@ import {
   sponsorHexToBytes,
   sponsorReadiness,
   sponsorRetryDelayMs,
+  sponsorSupportsAbandon,
   sponsorWalletIsAvailable,
   validateSponsorBalanceResult,
   SPONSOR_PROBE_RETRY_DELAY_MS,
@@ -1335,5 +1337,98 @@ describe('failover, end to end through the client', () => {
       'Network fees on this Passport are covered by the fee sponsor, and the sponsor cannot cover this one right now.',
     );
     expect(refusal.message).not.toContain(GATEWAY);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Handing a balanced transaction back                                        */
+/* -------------------------------------------------------------------------- */
+
+describe('sponsorSupportsAbandon', () => {
+  it('is true for our own balancer and false for every 1AM gateway', () => {
+    expect(sponsorSupportsAbandon('https://67-205-177-162.sslip.io/balancer')).toBe(true);
+    expect(sponsorSupportsAbandon('http://localhost:8807')).toBe(true);
+    expect(sponsorSupportsAbandon('https://api-stagenet.1am.xyz')).toBe(false);
+    expect(sponsorSupportsAbandon('https://api-preview.1am.xyz')).toBe(false);
+    expect(sponsorSupportsAbandon('https://1am.xyz')).toBe(false);
+  });
+
+  it('is false for something that is not a URL at all', () => {
+    expect(sponsorSupportsAbandon('not a url')).toBe(false);
+  });
+});
+
+/**
+ * A COURTESY, never a step. The sponsor books a whole DUST coin per balanced
+ * transaction and only recovers it when that transaction lands; a node-rejected
+ * one never does, and on 2026/09/02 the coin sat spoken-for until a sweeper
+ * found it two minutes later, with every registration behind it waiting. This
+ * says so at once — and, being fired from a failure path, must never turn a
+ * failure into a second one.
+ */
+describe('sponsorAbandonBalance', () => {
+  const BALANCER = 'https://balancer.example';
+  const HASH = 'ab'.repeat(32);
+
+  it('posts the hash to the endpoint that balanced it', async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    const fetchStub = (async (input: unknown, init?: RequestInit) => {
+      calls.push([String(input), init]);
+      return new Response(JSON.stringify({ txHash: HASH, released: true }), { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    await sponsorAbandonBalance(HASH, BALANCER, {
+      config: { url: BALANCER, apiKey: 'k', clientId: 'c' },
+      fetch: fetchStub,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.[0]).toBe(`${BALANCER}/balance-only/abandon`);
+    expect(calls[0]?.[1]?.method).toBe('POST');
+    expect(calls[0]?.[1]?.body).toBe(JSON.stringify({ txHash: HASH }));
+    // The credentials of the endpoint that balanced it travel with the notice.
+    expect(calls[0]?.[1]?.headers).toMatchObject({ 'X-API-Key': 'k', 'X-Client-ID': 'c' });
+  });
+
+  it('carries no credentials when the endpoint is not one we know', async () => {
+    const calls: Array<RequestInit | undefined> = [];
+    const fetchStub = (async (_input: unknown, init?: RequestInit) => {
+      calls.push(init);
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    await sponsorAbandonBalance(HASH, BALANCER, {
+      config: { url: 'https://other.example', apiKey: 'k' },
+      fetch: fetchStub,
+    });
+    expect(calls[0]?.headers).toEqual({ 'Content-Type': 'application/json' });
+  });
+
+  it.each([
+    ['a refusal', 400],
+    ['an outage', 503],
+  ])('resolves without throwing on %s', async (_name, status) => {
+    const fetchStub = (async () =>
+      new Response('{}', { status })) as unknown as typeof globalThis.fetch;
+    await expect(
+      sponsorAbandonBalance(HASH, BALANCER, { config: { url: BALANCER }, fetch: fetchStub }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('resolves without throwing when nothing reaches the sponsor at all', async () => {
+    const fetchStub = (async () => {
+      throw new TypeError('Failed to fetch');
+    }) as unknown as typeof globalThis.fetch;
+    await expect(
+      sponsorAbandonBalance(HASH, BALANCER, { config: { url: BALANCER }, fetch: fetchStub }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('says nothing at all to a 1AM gateway, which has no such route', async () => {
+    const fetchStub = vi.fn();
+    await sponsorAbandonBalance(HASH, 'https://api-stagenet.1am.xyz', {
+      fetch: fetchStub as unknown as typeof globalThis.fetch,
+    });
+    expect(fetchStub).not.toHaveBeenCalled();
   });
 });

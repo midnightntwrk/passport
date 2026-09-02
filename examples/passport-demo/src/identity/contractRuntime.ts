@@ -53,6 +53,7 @@ import { describeEndpointRefusals, firstEndpointThatServes } from '../lib/endpoi
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
 import {
   SponsorError,
+  sponsorAbandonBalance,
   sponsorBalanceOnly,
   sponsorHexToBytes,
   sponsorFeeRefusal,
@@ -506,6 +507,13 @@ export async function awaitSponsorReadiness(options: {
   );
 }
 
+/**
+ * What a node saying "I will not accept this" looks like coming back through
+ * the RPC client. Observed on stagenet 2026/09/02:
+ * `RpcError: 1010: Invalid Transaction: Custom error: 231`.
+ */
+const NODE_REJECTION_PATTERN = /Invalid Transaction|\b1010\b/;
+
 export function walletProviderFor(wallet: LocalMidnightWallet) {
   const facade = wallet.facade as unknown as {
     balanceUnboundTransaction(
@@ -528,6 +536,12 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
       console.debug('[contract] could not revert an abandoned balancing recipe', cause);
     }
   };
+
+  /* WHICH sponsor booked a fee for WHICH transaction, so that a submit which
+     the node rejects can hand that booking straight back — see `submitTx`.
+     One slot, not a map: this provider balances one transaction at a time, and
+     the only thing `submitTx` can be submitting is the one just balanced. */
+  let lastBalance: { txHash: string; servedBy: string } | null = null;
 
   const balanceWithSponsor = async (
     tx: unknown,
@@ -577,6 +591,7 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
       console.info(
         `[contract] transaction ${balanced.txHash} balanced by ${balanced.servedBy}`,
       );
+      lastBalance = { txHash: balanced.txHash, servedBy: balanced.servedBy };
       stage = 'expired';
       const expiresAtMs = Date.parse(balanced.expiresAt);
       if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
@@ -623,7 +638,35 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
       return balanceWithSponsor(tx, deadline);
     },
 
-    submitTx: (tx: unknown) => facade.submitTransaction(tx),
+    /**
+     * Submits, and on a NODE REJECTION gives the sponsor its fee back at once.
+     *
+     * A rejected transaction is never going to land, so the whole DUST coin the
+     * sponsor booked for it would otherwise sit spoken-for until the sweeper
+     * noticed — two minutes on 2026/09/02, during which every registration and
+     * grant behind it waited. The rejection is recognised by the node's own
+     * words (`Invalid Transaction`, or the `1010` JSON-RPC code that carries
+     * it); anything else — a dropped connection, a timeout — is NOT a
+     * rejection, because the transaction may still be in flight and handing
+     * back a fee that is about to be spent would be worse than waiting.
+     *
+     * The notice is a courtesy fired alongside the failure, never in front of
+     * it: `sponsorAbandonBalance` throws nothing, and the original error is
+     * rethrown unchanged so every caller above sees exactly what it saw before.
+     */
+    async submitTx(tx: unknown): Promise<unknown> {
+      const booked = lastBalance;
+      try {
+        return await facade.submitTransaction(tx);
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        if (booked && NODE_REJECTION_PATTERN.test(message)) {
+          lastBalance = null;
+          void sponsorAbandonBalance(booked.txHash, booked.servedBy);
+        }
+        throw cause;
+      }
+    },
   };
 
   return walletProvider;

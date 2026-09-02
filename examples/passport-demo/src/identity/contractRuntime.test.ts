@@ -292,3 +292,121 @@ describe('awaitSponsorReadiness', () => {
     expect(failure.retryable).toBe(false);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* submitTx: handing a rejected transaction's fee straight back               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A node rejection is the one failure that makes the sponsor's booked DUST
+ * certainly dead, and on 2026/09/02 nobody told the sponsor so: the coin stayed
+ * spoken-for until a sweeper found it two minutes later, and every registration
+ * and grant behind it waited out those two minutes. `submitTx` now says so on
+ * the spot — as a courtesy fired beside the failure, never in front of it.
+ */
+describe('submitTx, after the node refuses a sponsored transaction', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetSponsorReadinessCache();
+  });
+
+  /**
+   * A wallet whose balancing gets all the way past the sponsor and then dies on
+   * the sponsor's bytes, which is the cheapest way to reach `submitTx` with a
+   * sponsor's booking remembered: the booking is recorded before deserialising.
+   */
+  function walletThatSubmitFails(cause: unknown): LocalMidnightWallet {
+    return {
+      facade: {
+        balanceUnboundTransaction: async () => ({ recipe: true }),
+        signRecipe: async () => ({ signed: true }),
+        finalizeRecipe: async () => ({ serialize: () => Uint8Array.from([1, 2]) }),
+        submitTransaction: async () => {
+          throw cause;
+        },
+        revert: async () => ({}),
+      },
+      keys: {
+        shieldedSecretKeys: { coinPublicKey: '00', encryptionPublicKey: '00' },
+        unshieldedKeystore: { signDataAsync: async () => ({}) },
+      },
+    } as unknown as LocalMidnightWallet;
+  }
+
+  const BALANCED = JSON.stringify({
+    txHash: 'ab'.repeat(32),
+    txBytes: '00ff',
+    expiresAt: '',
+  });
+
+  /** Balances once (which fails on the bytes), then submits. */
+  async function balanceThenSubmit(cause: unknown): Promise<{
+    thrown: unknown;
+    abandons: string[];
+  }> {
+    const abandons: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown, init?: { body?: string }) => {
+        const url = String(input);
+        if (url.includes('/wallet-status')) {
+          return new Response(JSON.stringify(READY_WALLET_STATUS), { status: 200 });
+        }
+        if (url.includes('/balance-only/abandon')) {
+          abandons.push(init?.body ?? '');
+          return new Response('{}', { status: 200 });
+        }
+        return new Response(BALANCED, { status: 200 });
+      }),
+    );
+    const provider = walletProviderFor(walletThatSubmitFails(cause));
+    // The sponsor's bytes are not a transaction, so this throws AFTER the
+    // booking has been remembered — which is exactly the state under test.
+    await provider.balanceTx({}).catch(() => undefined);
+    let thrown: unknown;
+    await provider.submitTx({}).catch((error: unknown) => {
+      thrown = error;
+    });
+    // The abandon is fired, not awaited: let its microtasks run.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return { thrown, abandons };
+  }
+
+  it('tells the sponsor to release the fee, and rethrows the node’s own error', async () => {
+    const cause = new Error('RpcError: 1010: Invalid Transaction: Custom error: 231');
+    const { thrown, abandons } = await balanceThenSubmit(cause);
+    expect(thrown).toBe(cause);
+    expect(abandons).toEqual([JSON.stringify({ txHash: 'ab'.repeat(32) })]);
+  });
+
+  it('says nothing to the sponsor when the submit merely failed to reach the node', async () => {
+    /* A dropped connection is NOT a rejection: the transaction may still be in
+       flight, and releasing a fee that is about to be spent is worse than
+       waiting for the sweeper. */
+    const cause = new TypeError('Failed to fetch');
+    const { thrown, abandons } = await balanceThenSubmit(cause);
+    expect(thrown).toBe(cause);
+    expect(abandons).toEqual([]);
+  });
+
+  it('says nothing when no sponsor balanced anything', async () => {
+    const abandons: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        if (String(input).includes('/balance-only/abandon')) abandons.push('x');
+        return new Response('{}', { status: 200 });
+      }),
+    );
+    const cause = new Error('1010: Invalid Transaction');
+    let thrown: unknown;
+    await walletProviderFor(walletThatSubmitFails(cause))
+      .submitTx({})
+      .catch((error: unknown) => {
+        thrown = error;
+      });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(thrown).toBe(cause);
+    expect(abandons).toEqual([]);
+  });
+});

@@ -1126,3 +1126,73 @@ export async function sponsorBalanceOnly(
     );
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Giving a balanced transaction back                                          */
+/* -------------------------------------------------------------------------- */
+
+/** How long the abandon notice is worth waiting on. It is a courtesy, not a step. */
+const SPONSOR_ABANDON_TIMEOUT_MS = 5_000;
+
+/**
+ * Whether an endpoint has a `/balance-only/abandon` route at all.
+ *
+ * Our own balancer does; the 1AM gateway does not, and posting to it would only
+ * earn a 404 in somebody's console. The gateways are the `*.1am.xyz` hosts, so
+ * that is the test — a hostname rather than an allowlist, because the preview
+ * and preprod gateways are the same software under different names.
+ */
+export function sponsorSupportsAbandon(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  return parsed.hostname !== '1am.xyz' && !parsed.hostname.endsWith('.1am.xyz');
+}
+
+/**
+ * Tells the sponsor that a transaction it balanced will never be submitted.
+ *
+ * The sponsor books a whole DUST coin per balanced transaction and only gets
+ * the change back when the transaction LANDS — 50-95 s observed, and never at
+ * all when the node rejects it. On 2026/09/02 a node-rejected leg left that
+ * coin booked until a sweeper found it two minutes later, and during those two
+ * minutes every registration and grant behind it waited. This is the client
+ * saying so at once instead.
+ *
+ * A COURTESY, never a step: it is fired and forgotten by the failure path of a
+ * submit that has already failed, so it resolves on every answer — 200, 4xx,
+ * 5xx, a transport failure, a timeout — and throws nothing at anybody. The
+ * sweeper is still the thing that guarantees the release; this only shortens
+ * the common case. Nothing it does reaches a screen: `console.info` names the
+ * endpoint, and constraint (b) keeps a gateway hostname out of the UI.
+ */
+export async function sponsorAbandonBalance(
+  txHash: string,
+  servedBy: string,
+  options: SponsorClientOptions = {},
+): Promise<void> {
+  if (!sponsorSupportsAbandon(servedBy)) return;
+  const config =
+    resolveConfigs(options).find((candidate) => candidate.url === servedBy) ?? { url: servedBy };
+  const fetchRequest = options.fetch ?? globalThis.fetch;
+  try {
+    const response = await fetchRequest(`${servedBy}/balance-only/abandon`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(config) },
+      body: JSON.stringify({ txHash }),
+      signal: AbortSignal.timeout(SPONSOR_ABANDON_TIMEOUT_MS),
+    });
+    console.info(
+      response.ok
+        ? `[sponsor] ${servedBy} released the fee it booked for ${txHash}`
+        : `[sponsor] ${servedBy} would not release the fee booked for ${txHash} (${response.status})`,
+    );
+  } catch (cause) {
+    /* The sweeper releases it anyway. Saying so at debug level keeps an
+       operator's trail without turning a courtesy into a visible failure. */
+    console.debug(`[sponsor] could not tell ${servedBy} to release ${txHash}`, cause);
+  }
+}
