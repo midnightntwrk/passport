@@ -137,7 +137,7 @@ type TransferOutcome =
   | { kind: 'failed'; message: string }
 
 /* Two fields, and both are things a person would recognise as their own. The
-   third — `midnightAddresses` — left the protocol with the account-custody
+   third — the engine-address field — left the protocol with the account-custody
    ruling: the transaction engine's addresses are a signing detail no app has a
    legitimate use for, and a consent sheet offering them invites an app to pay
    an address the account cannot see. See `@midnight-passport/connect`'s

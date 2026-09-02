@@ -43,7 +43,7 @@ const FIELD_OPTIONS: Array<{
   {
     field: 'passportContract',
     label: 'Passport account',
-    detail: 'The account-custody contract address and its network — the identity a Passport IS.',
+    detail: 'The account a Passport is, and the network it lives on.',
   },
 ];
 

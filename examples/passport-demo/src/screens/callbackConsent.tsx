@@ -118,7 +118,7 @@ function encodeTagged(material: TaggedKeyMaterial): string {
 
 /* Word for word `../profileConsent.tsx`, and for the reason given there: the
    two sheets are one object in the user's mind, so the labels cannot drift
-   apart. The third field — `midnightAddresses` — left the vocabulary with the
+   apart. The third field — the engine addresses — left the vocabulary with the
    account-custody ruling; see `@midnight-passport/connect`'s profile module
    for why. */
 const FIELD_LABELS = {

@@ -14,11 +14,11 @@
  * along on a reply.
  *
  * ---------------------------------------------------------------------------
- * WHAT CHANGED, AND WHY — `midnightAddresses` is gone
+ * WHAT CHANGED, AND WHY — the engine-address field is gone
  * ---------------------------------------------------------------------------
  *
  * The field vocabulary used to be `displayName`, `passportContract`, and
- * `midnightAddresses` — the last carrying the transaction engine's unshielded,
+ * the engine-address field — the last carrying the transaction engine's unshielded,
  * shielded, and dust addresses. It is removed, and the reason was written down
  * inside Passport itself long before this package existed
  * (`examples/passport-demo/src/profileConsent.tsx`, 2026/08/25):

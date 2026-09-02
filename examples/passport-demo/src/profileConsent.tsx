@@ -45,7 +45,7 @@ interface PendingRequest {
 }
 
 /* DONE (2026/09/01): the follow-up recorded here on 2026/08/25 — that
-   `midnightAddresses` should leave the profile protocol altogether — has
+   the engine-address field should leave the profile protocol altogether — has
    happened. A Passport user's identity is their account-custody contract, and
    `passportContract` is what an app keys on; the three engine addresses were a
    signing detail no dApp had a legitimate use for, and offering them here
