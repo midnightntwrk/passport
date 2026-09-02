@@ -154,6 +154,23 @@ export interface HealthFacts {
    */
   nightAtomic: bigint;
   /**
+   * Every NIGHT UTxO this wallet holds is registered for DUST generation.
+   *
+   * The fact that lets a wedge be recognised INSIDE the start-up grace, which
+   * is precisely when it must be: the snapshot carries the pending flags across
+   * a restart, so the first fifteen minutes of a restarted process is exactly
+   * where an inherited wedge lives. Without this the grace hides it — observed
+   * live at 17:21:01 on 2026/09/02, where a revert reported the wedge and the
+   * verdict came back 'still starting up (271 s in)'.
+   *
+   * A cold start whose NIGHT is not yet registered genuinely has no DUST and
+   * genuinely must wait, so it keeps the grace. A wallet whose NIGHT IS
+   * registered generates continuously, so reaching zero spendable coins can
+   * only be a spend — and if nothing is pending, that spend's coins are being
+   * withheld.
+   */
+  dustGenerating: boolean;
+  /**
    * Transactions the wallet itself has booked as pending and not yet seen
    * resolved — its OWN submissions, as distinct from {@link orphans}, which are
    * transactions it balanced for somebody else.
@@ -315,25 +332,20 @@ export function assessHealth(
     };
   }
 
-  /* 3. Still starting. A cold start walks the chain and then waits for the DUST
-        registration to be affordable; both are minutes and neither is a fault. */
-  if (facts.uptimeMs < policy.startupGraceMs && (!facts.synced || noDust)) {
-    return {
-      verdict: 'settling',
-      reason: `still starting up (${seconds(facts.uptimeMs)} in): ${facts.synced ? 'synced, DUST not yet accrued' : 'walking the chain'}`,
-      act: false,
-      restartEligible: false,
-    };
-  }
+  /* 3. THE WEDGE, and the one DUST reading that is neither settling nor a
+        funding problem.
 
-  /* 3b. THE WEDGE, and the one DUST reading that is neither settling nor a
-         funding problem.
-
-         Everything in the conjunction is here to rule an innocent explanation
+        Everything in the conjunction is here to rule an innocent explanation
          out, and between them they rule out all of them:
 
-           - `noDust` with `nightAtomic > 0`: the wallet is not empty, so its
-             NIGHT is generating DUST that it is not reporting.
+           - `noDust` with `nightAtomic > 0` and `dustGenerating`: the wallet
+             is not empty AND its NIGHT is registered, so it is generating DUST
+             that it is not reporting. A cold start whose NIGHT is not yet
+             registered has no DUST for an honest reason and keeps the grace
+             below — which is why this may safely precede it, and it MUST
+             precede it: the snapshot carries the pending flags across a
+             restart, so a restarted process's first fifteen minutes is exactly
+             where an inherited wedge lives.
            - `synced`: it is not merely behind the chain.
            - `pendingTransactions === 0`: no submission of its own is holding a
              coin — that reading is correct and ends by itself.
@@ -344,15 +356,16 @@ export function assessHealth(
 
          What is left is the ledger holding coins behind a `pending_until` that
          no revert will now clear — see `./dustRollback.ts` for the mechanism.
-         It is decided BEFORE the settling branches because it is provable
-         rather than inferred, and it earns a remedy of its own rather than the
-         `degraded` ladder, whose rungs cannot reach it: a refresh re-reads the
-         same hidden coins, a re-warm touches the prover, and a restart resumes
-         from a snapshot that carries the pending flags forward. */
+        It is decided BEFORE the start-up grace and the settling branches
+        because it is provable rather than inferred, and it earns a remedy of
+        its own rather than the `degraded` ladder, whose rungs cannot reach it:
+        a refresh re-reads the same hidden coins, a re-warm touches the prover,
+        and a restart resumes from a snapshot that carries the flags forward. */
   if (
     noDust &&
     facts.synced &&
     facts.nightAtomic > 0n &&
+    facts.dustGenerating &&
     facts.pendingTransactions === 0 &&
     facts.orphans === 0 &&
     (facts.lastSponsorshipAt === null || facts.now - facts.lastSponsorshipAt > policy.orphanMs)
@@ -369,7 +382,18 @@ export function assessHealth(
     };
   }
 
-  /* 4. The DUST case, and the reason this whole module leans towards inaction.
+  /* 4. Still starting. A cold start walks the chain and then waits for the DUST
+        registration to be affordable; both are minutes and neither is a fault. */
+  if (facts.uptimeMs < policy.startupGraceMs && (!facts.synced || noDust)) {
+    return {
+      verdict: 'settling',
+      reason: `still starting up (${seconds(facts.uptimeMs)} in): ${facts.synced ? 'synced, DUST not yet accrued' : 'walking the chain'}`,
+      act: false,
+      restartEligible: false,
+    };
+  }
+
+  /* 5. The DUST case, and the reason this whole module leans towards inaction.
         Deliberately NOT gated on `synced`: a spend puts the wallet through a
         syncing flap of up to about two minutes as well as nullifying its DUST,
         and both halves of that are the same expected event. */
@@ -398,7 +422,7 @@ export function assessHealth(
     }
   }
 
-  /* 5. Genuinely degraded, in the order the causes are worth reporting. */
+  /* 6. Genuinely degraded, in the order the causes are worth reporting. */
   if (!facts.synced) {
     return {
       verdict: 'degraded',
@@ -813,6 +837,7 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
           dustSpecks: 0n,
           utxoCount: 0,
           nightAtomic: 0n,
+          dustGenerating: false,
           pendingTransactions: 0,
           proving: 'failed',
           reserved: false,

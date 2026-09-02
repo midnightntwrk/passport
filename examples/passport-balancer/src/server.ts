@@ -958,6 +958,11 @@ async function main(): Promise<void> {
       dustSpecks,
       utxoCount,
       nightAtomic,
+      /* The minute loop's own verdict on this wallet's NIGHT. `registered` is
+         included as well as `already-generating`: a registration that has been
+         submitted is generating from the moment it lands, and the loop only
+         moves off `registered` on its next pass. */
+      dustGenerating: registration === 'already-generating' || registration === 'registered',
       pendingTransactions,
       proving: wallet.provingReadiness().state,
       reserved: wallet.isReserved(),

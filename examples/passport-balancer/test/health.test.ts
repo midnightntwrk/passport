@@ -56,6 +56,7 @@ const healthy = (overrides: Partial<HealthFacts> = {}): HealthFacts => ({
   /* 4,998.916 NIGHT — what the balancer actually holds, so a wedge case can be
      written by removing the DUST and changing nothing else. */
   nightAtomic: 4_998_916_000n,
+  dustGenerating: true,
   pendingTransactions: 0,
   proving: 'server',
   reserved: false,
@@ -349,6 +350,24 @@ describe('the health verdict', () => {
     const verdict = assessHealth(wedgedDust({ nightAtomic: 0n, lastSponsorshipAt: null }));
     assert.equal(verdict.verdict, 'degraded');
     assert.equal(verdict.restartEligible, true);
+  });
+
+  it('sees a wedge INSIDE the start-up grace, because that is where an inherited one lives', () => {
+    /* The snapshot carries the pending flags across a restart, so a restarted
+       process's first minutes are exactly where a wedge survives. Observed live
+       at 17:21:01 on 2026/09/02: a revert reported the wedge and the verdict
+       came back 'still starting up (271 s in)'. */
+    assert.equal(assessHealth(wedgedDust({ uptimeMs: 271_000 })).verdict, 'dust-wedged');
+  });
+
+  it('still lets a cold start whose NIGHT is not yet registered wait', () => {
+    /* A wallet whose NIGHT is not registered has no DUST for an honest reason
+       and no amount of resyncing would give it any. This is the term that keeps
+       the wedge branch safe in front of the grace. */
+    assert.equal(
+      assessHealth(wedgedDust({ uptimeMs: 271_000, dustGenerating: false })).verdict,
+      'settling',
+    );
   });
 
   it('waits out the orphan window before calling a fresh spend a wedge', () => {
