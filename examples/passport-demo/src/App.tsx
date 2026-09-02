@@ -3811,14 +3811,11 @@ export default function PassportDemo() {
           );
         }
 
-        /* (5) The opening balance, into the ACCOUNT rather than into the
-           wallet. Fired here because this is the moment the Passport is whole
-           — a deployed contract with a name pointing at it — and deliberately
-           NOT awaited: the sponsor proves two deposits before it answers, it
-           may well answer "syncing" for the first minute or two, and the name's
-           success depends on none of that. `fundAccountOnce` owns the patience
-           (see its own comment); here it is fired and forgotten. */
-        void fundAccountOnce(contractAddress);
+        /* (5) The opening balance is NOT fired here. It was started the moment
+           the account landed (see the `void fundAccountOnce(deployment.address)`
+           above), and a reused account that never passes through that landing
+           is covered by the wallet-ready effect. Firing it again here bought
+           nothing but a second schedule to reason about. */
 
         /* (6) REMEMBER the account, so a device that has never seen this
            Passport can find the contract again — and remember it WITHOUT
