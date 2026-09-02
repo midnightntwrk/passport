@@ -1383,3 +1383,13 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
   outline: 2px solid var(--mn-accent);
   outline-offset: 2px;
 }
+
+/* ON THE WAY. A quiet line under the balance strip, not a card and not a
+   second trail: it says only that something is still arriving, and it is gone
+   the moment the figures above it say the same thing. */
+.mnhome-onway {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mn-text-muted);
+}

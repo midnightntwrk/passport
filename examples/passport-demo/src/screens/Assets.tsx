@@ -15,6 +15,11 @@ import {
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
 import ThemeToggle from './ThemeToggle.js'
 import type { HomeScreenProps } from './Home.js'
+import {
+  assetsOnTheWay,
+  assetsOnTheWayLine,
+  type OnTheWayCandidate,
+} from './assetsOnTheWay.js'
 import './assets.css'
 
 /**
@@ -68,6 +73,11 @@ export interface AssetsScreenProps {
    * person opens to check what arrived; omit it and no control appears.
    */
   onRefresh?: () => void
+  /**
+   * The activity trail, so this screen can say what is on its way but has not
+   * landed. Optional: omit it and no such line appears.
+   */
+  activity?: readonly OnTheWayCandidate[]
 }
 
 /** One row on either shelf, already named and already classified. */
@@ -87,7 +97,11 @@ interface AssetRow {
 }
 
 export default function AssetsScreen(props: AssetsScreenProps) {
-  const { account, network, onSelectNetwork, onRefresh } = props
+  const { account, network, onSelectNetwork, onRefresh, activity } = props
+
+  /* What has been announced and has not landed. One line under the token
+     shelf, from the trail, gone the moment the balances themselves say it. */
+  const onTheWayLine = assetsOnTheWayLine(assetsOnTheWay(activity))
 
   /* Collapsed by default and never remembered, on the same rule Home keeps:
      the list is short for almost every Passport, and a preference that
@@ -285,6 +299,12 @@ export default function AssetsScreen(props: AssetsScreenProps) {
                 request and in place. A shelf that grew without bound would
                 push the second shelf off the bottom of a phone, and the
                 second shelf is half of what this screen is for. */}
+            {/* Money that is on its way. Until now this shelf showed only what
+                the network had already reported, so the gap between a grant or
+                an incoming transfer being announced and the figure changing
+                read as nothing happening. */}
+            {onTheWayLine ? <p className="mnassets-notice">{onTheWayLine}</p> : null}
+
             {tokens.length > TOKENS_VISIBLE ? (
               <button
                 type="button"

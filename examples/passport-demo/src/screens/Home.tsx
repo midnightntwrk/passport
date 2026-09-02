@@ -20,6 +20,9 @@ import { createPortal } from 'react-dom'
 import type { AliasRecord } from '../identity/aliasStore.js'
 import type { PassportIncentiveRecord } from '../identity/incentiveStore.js'
 import ActivityFeed, { type ActivityFeedItem } from './ActivityFeed.js'
+/* What has been announced but has not landed yet, derived from the same trail
+   this screen already renders below. Pure — see `assetsOnTheWay.ts`. */
+import { assetsOnTheWay, assetsOnTheWayLine } from './assetsOnTheWay.js'
 /* Naming a colour, and the order a balance list puts colours in. Pure, drilled,
    and free of the wallet SDK — see `lib/colour.ts`. */
 import {
@@ -396,6 +399,10 @@ export default function HomeScreen(props: HomeScreenProps) {
 
   const visibleTokens = showAllTokens ? tokenRows : tokenRows.slice(0, TOKENS_VISIBLE)
 
+  /* One line under the balances for whatever has been announced and has not
+     landed. Absent when there is nothing in flight. */
+  const onTheWayLine = assetsOnTheWayLine(assetsOnTheWay(activity))
+
   /**
    * The shielded colours this screen is already showing, handed to the Send
    * sheet so its asset picker can be drawn on the first frame.
@@ -715,6 +722,15 @@ export default function HomeScreen(props: HomeScreenProps) {
                 bottom of a phone — "that's not a scalable way to display them",
                 2026/08/26. Five, then the rest ON REQUEST and in place: a
                 separate screen for the remainder would be a place nobody goes. */}
+            {/* MONEY THAT IS ANNOUNCED BUT HAS NOT LANDED. Between a grant or
+                an incoming transfer being reported and the figure above
+                changing, this strip said nothing, and a person reading it
+                fairly concluded nothing was happening. One quiet line, from
+                the trail already on this screen, and it is gone the moment the
+                balance itself says it. */}
+            {onTheWayLine ? (
+              <p className="mnhome-onway">{onTheWayLine}</p>
+            ) : null}
             {tokenRows.length > TOKENS_VISIBLE ? (
               <button
                 type="button"
