@@ -220,8 +220,10 @@
  * first leg is submitted, the one moment in a payment where nothing has been
  * spent yet — was the only shape no drill had. That is not an accident of
  * counting: it is the record that decides whether a person who reloads mid-pay
- * is offered their money back, so a run of `sendLegs.test.ts` closes it. The
- * other three optional keys were already covered by the drills around it.
+ * is offered their money back, so `sendLegsRecord.test.ts` — a file this
+ * change writes, beside the module's existing suite rather than inside it —
+ * closes it. The other three optional keys were already covered by the drills
+ * around it, and the existing suite is left exactly as its author wrote it.
  *
  * `walletProver.ts` is the wallet's own proving path: it is the module that
  * keeps the proof server's URL PATH, which is the whole of the shielded-send

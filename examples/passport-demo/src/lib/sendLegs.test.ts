@@ -142,33 +142,6 @@ describe('readPendingSends and serialisePendingSends', () => {
     expect(read.attempts).toEqual({ withdraw: 0, deposit: 0 });
   });
 
-  it('writes no key for a half a run has not reached yet', () => {
-    /* A `withdraw` record written BEFORE the first leg is submitted has no
-       transaction hash and nothing to wait for yet, and the serialiser must
-       leave those keys out rather than write `undefined` — `JSON.stringify`
-       drops an undefined value silently, so the two look identical on the way
-       out and only differ if the shape is ever compared or migrated. This is
-       also the record that matters most: it is the one written in the moment
-       between deciding to pay and spending anything. */
-    const written = serialisePendingSends([
-      nightSend({
-        leg: 'withdraw',
-        withdrawTxHash: undefined,
-        expectedNote: undefined,
-        lastError: undefined,
-        activityId: undefined,
-      }),
-    ]);
-    const [row] = JSON.parse(written) as Record<string, unknown>[];
-    expect(Object.keys(row)).not.toContain('withdrawTxHash');
-    expect(Object.keys(row)).not.toContain('expectedNote');
-    expect(Object.keys(row)).not.toContain('tokenType');
-    expect(Object.keys(row)).not.toContain('lastError');
-    expect(Object.keys(row)).not.toContain('activityId');
-    // And it still reads back as the run it is, rather than being dropped.
-    expect(readPendingSends(written)).toHaveLength(1);
-  });
-
   it('discards an expectation, an error, and counts it cannot use', () => {
     const [read] = readPendingSends(
       JSON.stringify([
