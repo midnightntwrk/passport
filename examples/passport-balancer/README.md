@@ -231,6 +231,7 @@ Refusals are typed, and carry the HTTP status `sponsor.ts` branches on:
 | --- | --- | --- |
 | 400 | `INVALID_TRANSACTION` | The body is not a serialised finalized transaction. |
 | 429 | `PENDING_TRANSACTION` | Another caller is claiming this wallet's coins right now — balancing, signing, or submitting, which is seconds. Carries `retryAfterMs`; the client retries inside a bounded window. A job that is merely *proving* is not a reason to refuse. |
+| 429 | `PENDING_TRANSACTION` | …or this service has caught its own DUST bookkeeping wedged and is repairing it. `retryAfterMs` is 5,000, and the repair is a snapshot rewrite plus a restart. See [The DUST wedge](#the-dust-wedge). |
 | 429 | `PENDING_TRANSACTION` | …or the wallet is unsynced or out of DUST **inside** the settle window: its own last spend's change is still in flight, or a transaction it balanced is still outstanding. `cause` carries which of the two it really was, and `retryAfterMs` is 3,000. |
 | 503 | `WALLET_SYNCING` | Not synced, with nothing in flight to explain it. |
 | 503 | `INSUFFICIENT_DUST` | No spendable DUST, with nothing in flight to explain it. |
@@ -604,10 +605,15 @@ DUST is on its way back:
    funded, **or** DUST-less within 5 minutes of a sponsorship. Deliberately not
    gated on `synced`, because the post-spend flap and the nullified DUST are one
    event.
-4. `degraded` — unsynced; a dropped subscription; `proving: failed`;
-   `proving: warming` long past a cold start; no DUST with nothing to explain
-   it; sync indices that have not moved in half an hour.
-5. `healthy`.
+4. `dust-wedged` — the wallet holds NIGHT, reports no spendable DUST, is
+   synced, has nothing of its own pending, nothing it balanced outstanding, and
+   is past the orphan window since its last sponsorship. Decided **before** the
+   settling branches, because it is proved rather than inferred. See
+   [The DUST wedge](#the-dust-wedge).
+5. `degraded` — unsynced; a dropped subscription; `proving: failed`;
+   `proving: warming` long past a cold start; no DUST *and no NIGHT*, so nothing
+   to explain it; sync indices that have not moved in half an hour.
+6. `healthy`.
 
 Only `healthy` clears the unhealthy streak. `busy` and `settling` **hold** it: a
 wallet that was degraded and is now merely mid-spend has not been shown to be
@@ -621,7 +627,19 @@ prefix:**
 | --- | --- | --- | --- |
 | `refresh` | every acting tick | `wallet.currentState()` then `wallet.progress()` — a fresh read off the facade's state observable, which carries its own 30 s timeout | one per tick |
 | `rewarm` | 2 consecutive unhealthy ticks | `wallet.warmProvingKeys()` then `wallet.saveSnapshot()` | once per 5 min |
+| `resyncDust` | the **first** tick of a `dust-wedged` verdict | `wallet.saveSnapshot()`, then `rollbackDustSnapshot` on the stored snapshot (falling back to a `dust-cold-start-<network>` marker), then `process.exit(1)` | once per 2 min |
 | `restart` | 3 consecutive unhealthy ticks (immediately for `wedged`) | `wallet.saveSnapshot()` then `process.exit(1)`; `Restart=always` brings the unit back | once per 30 min, **persisted** |
+
+`resyncDust` deliberately bypasses `restartAfterTicks`, the restart cooldown,
+and `awaitingHealthyTick`. Those limits exist to stop a soft, possibly transient
+signal from bouncing a live sponsor, and a wedge is neither soft nor transient —
+its conjunction admits one explanation. It does **not** bypass the in-use gate:
+the remedy exits the process, and doing that mid-spend would abandon a proof
+somebody is waiting on. While a repair is pending, `/balance-only`,
+`/register-alias`, and `/fund-account` answer `429 PENDING_TRANSACTION` with
+`retryAfterMs: 5000`; `/balance-only/abandon` still passes, because it spends
+nothing and telling this service a balancing is dead is exactly what should get
+through.
 
 `rewarm` is the rung that repairs something in place rather than merely looking:
 `warmProvingKeys()` re-attempts the key-material fetch whenever readiness is
@@ -660,6 +678,95 @@ restart, which is the only reopen the SDK actually supports.
 - Never twice without an intervening healthy tick — likewise persisted, and
   reported on `/status` as `awaitingHealthyTick`.
 
+### The DUST wedge
+
+**What happens.** Every balancing runs `CoreWallet.spendCoins` →
+`DustLocalState.spend()`, which does *not* remove the spent coin: it sets
+`pending_until = ctime + dust_grace_period` (3 hours) on the entry, and
+`utxos()` and `wallet_balance()` skip entries carrying that flag. So a DUST
+balance of zero immediately after a spend is correct and expected.
+
+**Why it can stick.** The SDK also pushes the spent coins onto an in-memory
+`pendingDust` array, and `applyEventsWithChanges` filters that array against the
+*pending-excluding* `utxos` getter. The first replayed dust event batch after a
+spend — every block with dust activity, so within about six seconds — therefore
+empties `pendingDust` while the ledger entries keep their flags.
+`facade.revert(tx)` un-pends only spends still listed in `pendingDust`, so after
+that window it is a no-op. The coins stay hidden for the full three hours.
+
+**Why a restart does not fix it.** The snapshot serialises the ledger state,
+`pending_until` included, but not `pendingDust`. A process that resumes from the
+snapshot inherits the flags *and* the disabled revert.
+
+Observed twice on 2026/09/02: 4,998 NIGHT held, `dust 0 / utxoCount 0 /
+INSUFFICIENT_DUST` for an hour, with `dust.complete` true throughout. The health
+ladder — refresh, rewarm, restart-from-snapshot — cleared none of it.
+
+**The repair.** `src/dustRollback.ts` deserialises the stored DUST state and
+calls `processTtls(now + 4 h)` — exactly the call `applyFailed` should have made
+— which un-pends every entry whose grace period has expired and drops any that
+decayed to zero. It refuses (`NothingToRepair`) when the count of spendable
+UTxOs does not change, so it can never be mistaken for a repair that did
+nothing.
+
+```
+node dist/dust-rollback.mjs --check           # say what is wrong, write nothing
+node dist/dust-rollback.mjs                   # repair in place, with the service STOPPED
+node dist/dust-rollback.mjs --path <snapshot> # against a named file
+```
+
+Exit codes are an interface: `0` repaired (or, under `--check`, a repair is
+available), `3` nothing to repair, `1` the snapshot could not be read, parsed, or
+written. Three is separate from one because the watchdog's fallback — moving the
+snapshot aside for a ~90 s cold walk — is the right answer to a snapshot it could
+not repair and the wrong answer to one that needed no repair. Every repair keeps
+the bytes it was made from at `<snapshot>.pre-rollback-<timestamp>`.
+
+**The narrower fallback.** When the rollback itself fails, the service writes
+`dust-cold-start-<network>` in the state directory. The next start restores the
+shielded and unshielded wallets from the snapshot — the wedge never touches
+those — and walks only the DUST wallet from chain. The marker is consumed and
+deleted on the start that honours it, so a cold DUST start can never become
+permanent.
+
+### Spend lanes
+
+Spends used to run strictly one at a time, which made an activation five
+sequential sponsored transactions: two minutes to a name and five more to
+assets, with a second Passport's registration queued 280 s behind the first's.
+
+`BALANCER_SPEND_LANES` (default **3**) is the ceiling on concurrent spend jobs.
+The real limit is the number of free DUST coins, and the service takes the
+smaller of the two, re-read before every start: every sponsored spend consumes a
+whole DUST coin, and the SDK selects the smallest coin with a value above zero
+until the fee is covered, so a job started with no free coin does not wait
+politely — it fails to balance, or sweeps a coin a running job was about to
+spend. Lanes therefore close as coins are taken and reopen as change lands, with
+nothing having to notify the queue. `/status` publishes `lanes`,
+`lanesConfigured`, and `jobsRunning`.
+
+Set it to `1` to restore the strictly-serial behaviour.
+
+An activation's two grants — NIGHT into `night_balances`, mUSD into `coins` —
+now run together, since they contend for nothing. Priorities are unchanged: they
+order what is *waiting*, and a registration still overtakes a queued grant.
+
+### Rebuilding a transaction the node refused
+
+A transaction balanced one block behind the chain is refused with
+`RpcError: 1010: Invalid Transaction: Custom error: 231` (or `239`). Seen at
+15:35:43 on 2026/09/02, five seconds after the registration in front of it
+landed. `withNodeRejectionRetry` (in `src/account.ts`, used by both
+`src/account.ts` and `src/midnames.ts`) waits for `isSynced` **and**
+`dust.complete` — the rejection is about the DUST the balancing selected — then
+**rebuilds** from a fresh `findDeployedContract`/`callTx`, because the bytes are
+what the node refused and resending them would fail identically for ever. Three
+attempts, a two-minute wait each. Anything that is not a node rejection is
+rethrown untouched on the first attempt.
+
+It wraps `deposit_night`, `deposit_shielded`, the resolver deploy, and
+`register_domain_for`.
+
 ### Leg B — the external timer, for the wedged case
 
 A process that is alive but no longer answering HTTP cannot notice itself: the
@@ -681,6 +788,31 @@ all three hold:
    the wedged case this exists for;
 3. the last watchdog restart was more than 30 minutes ago. That clock is a file
    in the state directory, so it survives the restart it bounds.
+
+**And it repairs a DUST wedge on the FIRST strike.** A wedged wallet is a synced
+one, so `/wallet-status` answers `ready: true` and rule 1 above exits happily
+while nothing can be sponsored — which is exactly how the sponsor stayed down
+for an hour twice on 2026/09/02 with this timer running throughout. The wedge is
+matched on its own signature, taken from both endpoints at once and every term
+required:
+
+| Endpoint | Required |
+| --- | --- |
+| `/wallet-status` | `dust.balance` `"0"` and `dust.utxoCount` `0` |
+| `/status` | `synced: true`, `balanceAtomic` non-zero, `pendingTransactions: 0`, `balancesWatched: 0`, `balancing: false`, `busy: false`, `settling: false` |
+
+Each term rules out one innocent explanation — a syncing wallet, an empty one, a
+spend of its own in flight, a balancing handed to somebody else, a claim on the
+coins, or change still settling. It acts on the first strike because that
+conjunction is *proved*, not inferred, and six minutes of a demo is the demo. It
+stops the unit first (a running service rewrites the snapshot every minute and
+would overwrite the repair), runs `dist/dust-rollback.mjs`, falls back to moving
+the snapshot aside for a cold walk, and starts the unit again. Its own cooldown,
+`BALANCER_WATCHDOG_DUST_COOLDOWN`, defaults to **300 s**.
+
+`bash test/watchdog.test.sh` drives the whole script against a stub HTTP server,
+with recorders standing in for `systemctl` and `node`, and checks each term of
+the signature removed in turn. It needs no droplet and no root.
 
 Everything it decides goes to `journalctl -u passport-balancer-watchdog`.
 
@@ -786,6 +918,7 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_ACCOUNT_MAX_PER_MIN` | `3` | Per-client ceiling on `/fund-account`. |
 | `BALANCER_ACCOUNT_BURST` | `3` | Burst allowance on `/fund-account`. |
 | `BALANCER_SPEND_QUEUE_MAX` | `8` | Spend requests in flight at once, across every client. **`0` is unbounded.** |
+| `BALANCER_SPEND_LANES` | `3` | Ceiling on concurrent spend jobs. The effective limit is `min(this, free DUST coins)`. `1` runs spends strictly one at a time. |
 | `BALANCER_TRUSTED_PROXIES` | `127.0.0.1,::1` | The peers whose `X-Forwarded-For` is believed. Everything else is keyed on its socket address. |
 | `BALANCER_CLIENT_KEY` | — | When set, the three spend endpoints require it in an `X-Passport-Key` header. Unset leaves them open. |
 | `BALANCER_MIDNAMES_ASSETS` | `contracts-stagenet/managed/midnames` | Overrides where the compiled Midnames ZK artefacts are read from. |
