@@ -16,11 +16,17 @@
     },
     {
       "source": "/zk-params/(.*)",
-      "headers": [{ "key": "content-type", "value": "application/octet-stream" }]
+      "headers": [
+        { "key": "content-type", "value": "application/octet-stream" },
+        { "key": "cache-control", "value": "public, max-age=31536000, immutable" }
+      ]
     },
     {
       "source": "/zk/(.*)",
-      "headers": [{ "key": "content-type", "value": "application/octet-stream" }]
+      "headers": [
+        { "key": "content-type", "value": "application/octet-stream" },
+        { "key": "cache-control", "value": "public, max-age=31536000, immutable" }
+      ]
     },
     {
       "source": "/zk/(.*).json",

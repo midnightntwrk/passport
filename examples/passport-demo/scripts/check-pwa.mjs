@@ -192,6 +192,21 @@ const headerValue = (source, key) =>
   headerRule(source)?.headers.find((header) => header.key === key)?.value;
 assert.equal(headerValue('/assets/(.*)', 'cache-control'), 'public, max-age=31536000, immutable');
 pass('content-hashed assets are declared immutable');
+/* The proving keys and the shared proving parameters are content-addressed the
+   same way, by the contract manifest a build is compiled against: a given url's
+   bytes cannot change, and a new build asks for new urls. They were inheriting
+   Vercel's `max-age=0, must-revalidate` default, which put a conditional
+   request in front of 144 MB on every cold session that the service worker
+   could not answer from its own cache — the CDN was being re-asked for files
+   that are, by construction, already final. */
+for (const source of ['/zk/(.*)', '/zk-params/(.*)']) {
+  assert.equal(
+    headerValue(source, 'cache-control'),
+    'public, max-age=31536000, immutable',
+    `${source} must be declared immutable alongside /assets/(.*)`,
+  );
+}
+pass('content-addressed proving keys and parameters are declared immutable');
 assert.equal(headerValue('/((?!zk/|zk-params/|assets/).*)', 'cache-control'), 'no-cache');
 pass('every stable-url file, both HTML shells included, must be revalidated');
 assert.equal(headerValue('/sw.js', 'cache-control'), 'no-cache');
