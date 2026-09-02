@@ -160,6 +160,7 @@ import {
   createMidnamesSponsor,
   normalisePassportAlias,
   ownerKeyBytes,
+  type AliasRegistration,
   type MidnamesSponsor,
 } from './midnames.js';
 import { SpendPriority } from './reservation.js';
@@ -1965,24 +1966,36 @@ async function main(): Promise<void> {
       const pooledResolver = resolverPool ? await resolverPool.take(contractAddress) : null;
 
       try {
-        /* Both transactions run under the wallet's spend lock, so a fee
-           sponsorship cannot reserve the coins this registration is balancing
-           against. */
-        /* Waits for a fee-capable coin instead of refusing, and re-enters the
-           queue with a freshly built transaction when one arrives — which is
-           what carries `withNodeRejectionRetry` into the attempt after the
-           wait: `midnames.register` rebuilds every leg it makes. A pooled leaf
-           already taken off the shelf is reused across the retry, so a wait
-           costs the shelf nothing. */
-        const result = await spendWaitingForDust(`the registration of ${aliasDomain(label)}`, () =>
-          wallet.exclusive(
-          () =>
-            midnames.register({
+        /* Every leg runs under the wallet's spend lock, so a fee sponsorship
+           cannot reserve the coins this registration is balancing against.
+
+           And when no coin is free, this WAITS rather than refusing, then
+           re-enters the queue with a freshly built transaction — which is what
+           carries `withNodeRejectionRetry` into the attempt after the wait,
+           because `midnames.register` rebuilds every leg it makes. A pooled
+           leaf already taken off the shelf is reused across the retry, and so
+           is a leaf this registration deployed for itself: without that the
+           retry deploys a SECOND leaf and needs a second fee-capable coin,
+           which on the live run at 20:39 on 2026/09/02 was 132 s of the user's
+           207. */
+        let ownDeployedResolver: { address: string; deployTx: string } | null = null;
+        const registerOnce = (): Promise<AliasRegistration> => {
+          /* Read afresh on every attempt, which is the point: the first pass
+             leaves the leaf here and the second one registers it. */
+          const carried = ownDeployedResolver;
+          return midnames.register({
               label,
               ownerKey,
               contractAddress,
               ownerAddressBytes,
               awaitTarget: !targetExists,
+              onResolverDeployed: (leaf) => {
+                ownDeployedResolver = leaf;
+                console.log(
+                  `[alias] leaf ${leaf.address} is on chain for ${aliasDomain(label)} — a retry will register it rather than deploy another`,
+                );
+              },
+              ...(carried !== null ? { deployedResolver: carried } : {}),
               ...(pooledResolver
                 ? {
                     pooledResolver: {
@@ -1992,12 +2005,14 @@ async function main(): Promise<void> {
                     },
                   }
                 : {}),
-            }),
-          /* Ahead of any activation grant that is merely waiting. Somebody is
-             watching a screen for this one and nobody is watching for a grant;
-             see `SpendPriority`. */
-          { priority: SpendPriority.Registration },
-          ),
+          });
+        };
+        /* `Registration` priority puts a waiting registration ahead of any
+           activation grant that is merely waiting: somebody is watching a
+           screen for this one and nobody is watching for a grant. See
+           `SpendPriority`. */
+        const result = await spendWaitingForDust(`the registration of ${aliasDomain(label)}`, () =>
+          wallet.exclusive(registerOnce, { priority: SpendPriority.Registration }),
         );
         aliasesSponsored += 1;
         lastSpendAt = Date.now();

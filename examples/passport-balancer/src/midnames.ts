@@ -364,6 +364,32 @@ export interface AliasRegistrationRequest {
    */
   awaitTarget?: boolean;
   /**
+   * A leaf THIS registration already deployed on an earlier attempt.
+   *
+   * Not the same thing as {@link pooledResolver}, and the difference is
+   * ownership. A pooled leaf is unbound and owned by this SERVICE, so binding
+   * it takes `update_domain_target` and hands it over with `change_owner`. A
+   * leaf deployed for this request is already built with this name's key, this
+   * account as its target, and the USER as its owner — this service could not
+   * call `update_domain_target` on it if it wanted to. All that is left for it
+   * is `register_domain_for`.
+   *
+   * It exists because a registration that ran out of DUST between its two legs
+   * used to throw the leaf away: the wait outside would rebuild from the top,
+   * deploy a SECOND leaf, and so need two fee-capable coins where it needed
+   * one. Measured on the live run at 20:39 on 2026/09/02 — two waits, 55 s then
+   * 132 s, and a wasted leaf between them. See
+   * {@link AliasRegistrationRequest.onResolverDeployed}, which is how a caller
+   * gets hold of the address to send back.
+   */
+  deployedResolver?: { address: string; deployTx: string };
+  /**
+   * Called the moment a fresh leaf is on chain, before anything that could
+   * fail after it. A caller that retries passes what it is given here back as
+   * {@link deployedResolver}.
+   */
+  onResolverDeployed?: (leaf: { address: string; deployTx: string }) => void;
+  /**
    * A leaf the sponsor deployed earlier and is holding for whoever asks next.
    *
    * When present the registration SKIPS its own deploy and binds this one
@@ -696,7 +722,16 @@ export async function createMidnamesSponsor(
 
       let resolverAddress: string;
       let resolverDeployTx: string;
-      if (pooled) {
+      const alreadyDeployed = request.deployedResolver;
+      if (alreadyDeployed) {
+        /* This registration's OWN leaf, from an attempt that ran out of DUST
+           before it could register. It already carries this name's key, this
+           target, and the user as its owner, so the deploy below is skipped and
+           the binding legs are skipped with it — `register_domain_for` is all
+           that was ever left. */
+        resolverAddress = rawContractAddress(alreadyDeployed.address);
+        resolverDeployTx = alreadyDeployed.deployTx;
+      } else if (pooled) {
         /* Already on chain, already paid for, already owned by this service.
            The whole of the deploy below happened minutes or hours ago in a
            quiet gap — see `./resolverPool.ts` for the gate that found one. */
@@ -731,6 +766,9 @@ export async function createMidnamesSponsor(
           };
           resolverAddress = rawContractAddress(deployTxData.public.contractAddress);
           resolverDeployTx = transactionIdentifier(deployTxData);
+          /* Announced before anything downstream can fail, so a caller that
+             waits for a coin and asks again does not pay for a second leaf. */
+          request.onResolverDeployed?.({ address: resolverAddress, deployTx: resolverDeployTx });
         } catch (cause) {
           /* A DUST shortfall is NOT the registry refusing anything, and must
              not be dressed up as one. It travels out untouched so `./server.ts`
