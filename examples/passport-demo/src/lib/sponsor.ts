@@ -120,8 +120,24 @@ export const SPONSOR_PENDING_RETRY_WINDOW_MS = 20_000;
  * that waits the full window never submits something already expired.
  */
 export const SPONSOR_CONTRACT_RETRY_WINDOW_MS = 600_000;
-/** Floor on a retry delay, so a zero `retryAfterMs` cannot spin. */
-const SPONSOR_PENDING_RETRY_MIN_DELAY_MS = 250;
+/**
+ * Floor on a retry delay, so a zero `retryAfterMs` cannot spin.
+ *
+ * Two seconds since 2026/09/02, up from 250 ms, because the window this
+ * measures is no longer only a `429 PENDING_TRANSACTION`. The refusals that
+ * now repeat a round — `INSUFFICIENT_DUST`, `WALLET_SYNCING` — clear when the
+ * balancer's own change settles, and that takes 20 to 60 seconds after each
+ * spend it makes. A quarter-second poll against a condition with that shape is
+ * two hundred pointless POSTs and a rate limit; two seconds is ten.
+ */
+const SPONSOR_PENDING_RETRY_MIN_DELAY_MS = 2_000;
+/**
+ * Ceiling on a retry delay. A service that asks for a longer wait than this is
+ * asked again sooner: the window as a whole is what bounds the waiting, and a
+ * single `retryAfterMs: 120000` would otherwise spend the user's entire budget
+ * in one sleep and never re-probe a sponsor that recovered in five seconds.
+ */
+const SPONSOR_PENDING_RETRY_MAX_DELAY_MS = 10_000;
 /** Fallback delay when the service names no `retryAfterMs`. */
 const SPONSOR_PENDING_RETRY_DEFAULT_DELAY_MS = 2_000;
 /** A readiness probe must not hold a send hostage. */
@@ -472,9 +488,43 @@ export class SponsorError extends Error {
     if (retryAfterMs !== undefined) this.retryAfterMs = retryAfterMs;
   }
 
-  /** 503 — the service is up but has no wallet that can pay right now. */
+  /**
+   * Worth asking again, on this endpoint, inside the caller's window.
+   *
+   * WHAT THIS COVERS, AND WHY EACH ONE IS TRANSIENT. Every code here names a
+   * condition the balancer clears without anybody doing anything, and each one
+   * was observed refusing a real send on 2026/09/02:
+   *
+   *   503 `INSUFFICIENT_DUST`      the sponsor's own change is nullified for
+   *   503 `WALLET_SYNCING`         20-60 s after each spend it makes, and it
+   *   503 `WALLETS_UNAVAILABLE`    makes five during an activation.
+   *   503 `PROVER_UNAVAILABLE`     the proof server is mid-restart.
+   *   502 `BALANCE_FAILED`         the dust leg's proof failed once.
+   *   429 `PENDING_TRANSACTION`    balancing is serialised; somebody is ahead.
+   *   429 anything else            the per-client rate limit, added the same
+   *                                day, which answers with `retryAfterMs`.
+   *
+   * Everything else is NOT retryable and must not be, which is the half that
+   * matters more: a `400 INVALID_TRANSACTION` is a transaction the service will
+   * refuse identically forever, and re-posting it is a slower way of telling
+   * the user the same thing while holding their sheet open.
+   *
+   * This used to be `status === 503` alone, and that is what made the NIGHT
+   * send fail at step one: the client retried only `429 PENDING_TRANSACTION`,
+   * fell through to the gateway on a 503 the balancer would have cleared in
+   * twenty seconds, and the leg it built there was proved against a contract
+   * state that had already moved.
+   */
   get isRetryable(): boolean {
-    return this.status === 503;
+    if (this.status === 429) return true;
+    if (this.status === 502) return this.code === 'BALANCE_FAILED';
+    if (this.status !== 503) return false;
+    return (
+      this.code === 'INSUFFICIENT_DUST' ||
+      this.code === 'WALLET_SYNCING' ||
+      this.code === 'WALLETS_UNAVAILABLE' ||
+      this.code === 'PROVER_UNAVAILABLE'
+    );
   }
 
   get isWalletSyncing(): boolean {
@@ -502,7 +552,13 @@ export function createSponsorError(status: number, body: unknown): SponsorError 
   const rawCode = typeof record.error === 'string' ? record.error : undefined;
   const message = typeof record.message === 'string' ? record.message : undefined;
   const cause = typeof record.cause === 'string' ? record.cause : undefined;
-  const detail = message ?? cause ?? rawCode ?? `HTTP ${status}`;
+  /* BOTH, when both are given. The balancer puts the sentence in `message`
+     and the underlying reason in `cause` — `{"error":"BALANCE_FAILED",
+     "message":"Failed to prove transaction","cause":"Invalid Transaction:
+     Custom error: 239"}` — and keeping only the first threw away the only
+     thing in the body that says WHAT the node objected to. */
+  const detail =
+    message && cause ? `${message} (${cause})` : (message ?? cause ?? rawCode ?? `HTTP ${status}`);
   const retryAfterMs =
     typeof record.retryAfterMs === 'number' && Number.isFinite(record.retryAfterMs)
       ? record.retryAfterMs
@@ -513,7 +569,15 @@ export function createSponsorError(status: number, body: unknown): SponsorError 
 /** How long to wait before a `PENDING_TRANSACTION` retry, given the budget. */
 export function sponsorRetryDelayMs(retryAfterMs: number | undefined, remainingMs: number): number {
   const requested = retryAfterMs ?? SPONSOR_PENDING_RETRY_DEFAULT_DELAY_MS;
-  return Math.max(SPONSOR_PENDING_RETRY_MIN_DELAY_MS, Math.min(requested, remainingMs));
+  /* Clamp what was ASKED FOR into [min, max] first, and only then cap it by
+     what is left of the window. The two must happen in that order: capping
+     first would let the floor push a sleep past a budget of 900 ms, and the
+     budget is the one bound that exists to be honoured exactly. */
+  const clamped = Math.max(
+    SPONSOR_PENDING_RETRY_MIN_DELAY_MS,
+    Math.min(requested, SPONSOR_PENDING_RETRY_MAX_DELAY_MS),
+  );
+  return Math.min(clamped, remainingMs);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -896,6 +960,21 @@ export async function sponsorCanPay(options: SponsorClientOptions = {}): Promise
 }
 
 /**
+ * Whether one endpoint's refusal is worth asking the SAME endpoint about again.
+ *
+ * A {@link SponsorError} answers for itself. Anything else that was thrown is
+ * a transport failure — a `TypeError` from `fetch`, an `AbortError` from the
+ * timeout — which is retryable by definition: nothing reached the service, so
+ * nothing has been learned except that the network was unhappy once. A refusal
+ * that carried no thrown cause at all is not retried, because there is nothing
+ * there to say it would go differently.
+ */
+function refusalIsRetryable(cause: unknown): boolean {
+  if (cause instanceof SponsorError) return cause.isRetryable;
+  return cause instanceof Error;
+}
+
+/**
  * `POST /balance-only` with a raw serialised PROVEN transaction, against the
  * first sponsor in the list that will take it.
  *
@@ -905,8 +984,9 @@ export async function sponsorCanPay(options: SponsorClientOptions = {}): Promise
  * WHAT A LIST CHANGED, AND WHAT IT DELIBERATELY DID NOT. The unit of work is
  * now a ROUND — one POST to each endpoint, in order, stopping the moment one
  * answers with a balanced transaction. A round in which every endpoint refused
- * is what the 429 `PENDING_TRANSACTION` retry window now measures, and only a
- * round containing at least one pending-transaction refusal is worth repeating.
+ * is what the retry window measures, and only a round containing at least one
+ * RETRYABLE refusal is worth repeating — see {@link SponsorError.isRetryable}
+ * for which those are and, more importantly, which are not.
  *
  * That ordering matters more than it looks. Waiting out a busy sponsor is the
  * right thing when it is the ONLY sponsor — a contract deploy has nothing to
@@ -916,10 +996,12 @@ export async function sponsorCanPay(options: SponsorClientOptions = {}): Promise
  * immediately, and a single provider still gets waited out exactly as long as
  * it did before.
  *
- * With ONE endpoint this is the loop it has always been, down to the number of
- * POSTs and the sleeps between them: one POST per round, one retry for a
- * thrown fetch, no retry for anything that answered, and the endpoint's own
- * error rethrown verbatim when the window closes.
+ * With ONE endpoint the shape is unchanged — one POST per round, one immediate
+ * retry for a thrown fetch, and the endpoint's own error rethrown VERBATIM when
+ * the window closes, so a caller that catches a typed `SponsorError` still
+ * catches one. What changed on 2026/09/02 is which answers buy another round:
+ * a `503 INSUFFICIENT_DUST` from the only sponsor there is used to end the send
+ * on the spot, and it is now waited out exactly as a `429` always was.
  */
 export async function sponsorBalanceOnly(
   provenTxBytes: Uint8Array,
@@ -935,7 +1017,21 @@ export async function sponsorBalanceOnly(
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? defaultSleep;
   const retryWindowMs = options.pendingRetryWindowMs ?? SPONSOR_PENDING_RETRY_WINDOW_MS;
-  const deadline = now() + retryWindowMs;
+  const startedAt = now();
+  /* Time SPENT WAITING, counted independently of the clock.
+
+     The window is a wall-clock budget, and the clock is the honest measure of
+     it — but it is the only measure that a caller can make stand still, and a
+     retry loop that trusts a clock which never advances never ends. Since
+     2026/09/02 far more refusals buy another round than the one `429` that
+     used to, so the guard stopped being theoretical: an injected no-op sleep
+     turns a repeating round into a spin. The budget is therefore whichever has
+     gone further, elapsed time or the sleeps this loop asked for, which bounds
+     the round count at `retryWindowMs / SPONSOR_PENDING_RETRY_MIN_DELAY_MS`
+     however the clock behaves. */
+  let sleptMs = 0;
+  const remainingBudgetMs = (): number =>
+    retryWindowMs - Math.max(now() - startedAt, sleptMs);
   const byUrl = new Map(configs.map((config) => [config.url, config]));
   const urls = configs.map((config) => config.url);
 
@@ -992,16 +1088,30 @@ export async function sponsorBalanceOnly(
       return { ...outcome.value, servedBy: outcome.url };
     }
 
-    /* Every endpoint refused this round. A `429 PENDING_TRANSACTION` anywhere
-       in it means DUST that is spoken for rather than absent, and that clears
-       on its own — so the round is worth repeating while the window lasts. */
-    const errors = outcome.refusals
-      .map((refusal) => refusal.cause)
-      .filter((cause): cause is SponsorError => cause instanceof SponsorError);
-    const pending = errors.find((error) => error.isPendingTransaction);
-    const remainingMs = deadline - now();
-    if (pending && retryWindowMs > 0 && remainingMs > 0) {
-      await sleep(sponsorRetryDelayMs(pending.retryAfterMs, remainingMs));
+    /* Every endpoint refused this round. If ANY of those refusals was one the
+       service clears on its own — DUST that is spoken for rather than absent,
+       a wallet mid-sync, a rate limit, a transport failure — the round is
+       worth repeating while the window lasts.
+
+       This used to be `429 PENDING_TRANSACTION` alone, and the day it was
+       widened is the day a NIGHT send stopped failing at step one. The
+       balancer nullifies its own DUST change for 20-60 s after each spend it
+       makes, and it makes five during an activation; `/wallet-status` answers
+       `503 INSUFFICIENT_DUST` instantly through that whole window while
+       `/fund-account` waits it out server-side. The client gave up on the
+       first 503, fell through to the other gateway, and built a leg there
+       against a contract state the balancer was already moving. Waiting is
+       both the faster answer and the correct one. */
+    const retryable = outcome.refusals.find((refusal) =>
+      refusalIsRetryable(refusal.cause),
+    );
+    const retryAfterMs =
+      retryable?.cause instanceof SponsorError ? retryable.cause.retryAfterMs : undefined;
+    const remainingMs = remainingBudgetMs();
+    if (retryable && retryWindowMs > 0 && remainingMs > 0) {
+      const delayMs = sponsorRetryDelayMs(retryAfterMs, remainingMs);
+      sleptMs += delayMs;
+      await sleep(delayMs);
       continue;
     }
 

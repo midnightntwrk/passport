@@ -219,14 +219,39 @@ describe('createSponsorError', () => {
     expect(unknown.detail).toBe('HTTP 500');
     expect(unknown.retryAfterMs).toBeUndefined();
   });
+
+  it('keeps BOTH the sentence and the underlying cause in detail', () => {
+    /* The balancer puts its own sentence in `message` and the node's objection
+       in `cause`. Keeping only the first threw away the only part of the body
+       that said WHAT was rejected — which is how `Custom error: 239` reached a
+       console as `Failed to prove transaction` and nothing else. */
+    const error = createSponsorError(502, {
+      error: 'BALANCE_FAILED',
+      message: 'm',
+      cause: 'c',
+    });
+    expect(error.detail).toContain('m');
+    expect(error.detail).toContain('c');
+    expect(error.isRetryable).toBe(true);
+  });
 });
 
 describe('sponsorRetryDelayMs', () => {
-  it('honours retryAfterMs, floors it, and never overruns the budget', () => {
+  it('honours retryAfterMs, clamps it, and never overruns the budget', () => {
     expect(sponsorRetryDelayMs(5_000, 20_000)).toBe(5_000);
-    expect(sponsorRetryDelayMs(0, 20_000)).toBe(250);
+    /* The floor is two seconds since 2026/09/02, because the conditions this
+       waits out — the balancer's own DUST change settling — take 20 to 60 s,
+       and a quarter-second poll against those is two hundred POSTs and a rate
+       limit. */
+    expect(sponsorRetryDelayMs(0, 20_000)).toBe(2_000);
     expect(sponsorRetryDelayMs(undefined, 20_000)).toBe(2_000);
+    /* And a ceiling, so one enormous `retryAfterMs` cannot spend the whole
+       window in a single sleep and miss a sponsor that recovered in five
+       seconds. */
+    expect(sponsorRetryDelayMs(120_000, 600_000)).toBe(10_000);
+    /* The budget still wins over both, in either direction. */
     expect(sponsorRetryDelayMs(5_000, 900)).toBe(900);
+    expect(sponsorRetryDelayMs(0, 900)).toBe(900);
   });
 });
 
@@ -442,21 +467,102 @@ describe('sponsorBalanceOnly', () => {
     expect(headers['X-Client-ID']).toBe('client');
   });
 
-  it('throws a typed terminal error on 503 without retrying', async () => {
+  it('throws a typed terminal error on a 400 the service will never take', async () => {
+    /* The half of the classification that matters most. A transaction the
+       service refuses as malformed is one it will refuse identically forever,
+       so re-posting it is a slower way of telling the user the same thing
+       while holding their sheet open. */
     const fetchSpy = vi.fn(async () =>
       new Response(
-        JSON.stringify({
-          error: 'WALLETS_UNAVAILABLE',
-          cause: 'INSUFFICIENT_DUST',
-          retryAfterMs: 5000,
-        }),
-        { status: 503 },
+        JSON.stringify({ error: 'INVALID_TRANSACTION', message: 'could not deserialise' }),
+        { status: 400 },
       ),
     );
-    await expect(sponsorBalanceOnly(bytes, { config, fetch: fetchSpy as never })).rejects.toThrow(
-      /WALLETS_UNAVAILABLE/,
-    );
+    /* VERBATIM, for a list of one: the typed error the endpoint produced, not
+       a wrapper around it. A caller that catches a `SponsorError` today must
+       still catch one. */
+    const failure = await sponsorBalanceOnly(bytes, {
+      config,
+      fetch: fetchSpy as never,
+    }).catch((cause: unknown) => cause);
+    expect(failure).toBeInstanceOf(SponsorError);
+    expect((failure as SponsorError).code).toBe('INVALID_TRANSACTION');
+    expect((failure as SponsorError).status).toBe(400);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits out a round of transient 503s and is served on the next one', async () => {
+    /* The refusal that used to end a send on the spot. The balancer nullifies
+       its own DUST change for 20-60 s after each spend it makes, and it makes
+       five during an activation; `/wallet-status` answers instantly through
+       that whole window while the balancer itself is waiting the same
+       condition out server-side. */
+    let clock = 0;
+    const slept: number[] = [];
+    const refusals = ['INSUFFICIENT_DUST', 'WALLET_SYNCING'];
+    const fetchSpy = vi.fn(async () => {
+      const code = refusals.shift();
+      return code
+        ? new Response(JSON.stringify({ error: code }), { status: 503 })
+        : new Response(JSON.stringify({ txHash: 'aa', txBytes: 'bbcc' }), { status: 200 });
+    });
+    const result = await sponsorBalanceOnly(bytes, {
+      config,
+      fetch: fetchSpy as never,
+      now: () => clock,
+      sleep: async (ms) => {
+        slept.push(ms);
+        clock += ms;
+      },
+    });
+    expect(result.txBytes).toBe('bbcc');
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(slept).toEqual([2_000, 2_000]);
+  });
+
+  it('honours retryAfterMs when the per-client rate limit refuses', async () => {
+    let clock = 0;
+    const slept: number[] = [];
+    let calls = 0;
+    const fetchSpy = vi.fn(async () => {
+      calls += 1;
+      return calls === 1
+        ? new Response(JSON.stringify({ error: 'RATE_LIMITED', retryAfterMs: 7_500 }), {
+            status: 429,
+          })
+        : new Response(JSON.stringify({ txHash: 'aa', txBytes: 'bbcc' }), { status: 200 });
+    });
+    const result = await sponsorBalanceOnly(bytes, {
+      config,
+      fetch: fetchSpy as never,
+      now: () => clock,
+      sleep: async (ms) => {
+        slept.push(ms);
+        clock += ms;
+      },
+    });
+    expect(result.txBytes).toBe('bbcc');
+    expect(slept).toEqual([7_500]);
+  });
+
+  it('stops repeating a round once the window is spent, however the clock behaves', async () => {
+    /* The window is a wall-clock budget, and a caller can make a clock stand
+       still. The sleeps this loop asks for are counted too, so the rounds are
+       bounded either way — without that, a retryable refusal and a no-op sleep
+       are an unbounded loop. */
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({ error: 'INSUFFICIENT_DUST' }), { status: 503 }),
+    );
+    await expect(
+      sponsorBalanceOnly(bytes, {
+        config,
+        fetch: fetchSpy as never,
+        now: () => 0,
+        sleep: async () => {},
+      }),
+    ).rejects.toThrow(/INSUFFICIENT_DUST/);
+    // 20 s of budget at the 2 s floor: ten waits, eleven rounds.
+    expect(fetchSpy).toHaveBeenCalledTimes(11);
   });
 
   it('retries a 429 inside the window and gives up at the deadline', async () => {
@@ -508,7 +614,13 @@ describe('sponsorBalanceOnly', () => {
       throw new TypeError('fetch failed');
     });
     await expect(
-      sponsorBalanceOnly(bytes, { config, fetch: fetchSpy as never, sleep: async () => {} }),
+      sponsorBalanceOnly(bytes, {
+        config,
+        fetch: fetchSpy as never,
+        sleep: async () => {},
+        // One round only, which is what this drills: the two POSTs inside it.
+        pendingRetryWindowMs: 0,
+      }),
     ).rejects.toThrow(/fetch failed/);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
@@ -525,6 +637,10 @@ describe('sponsorBalanceOnly', () => {
         sleep: async (ms) => {
           slept.push(ms);
         },
+        // One round only. A later round is a fresh POST after a deliberate
+        // wait, which is a different thing from the immediate re-post drilled
+        // here.
+        pendingRetryWindowMs: 0,
       }),
     ).rejects.toThrow(/WALLETS_UNAVAILABLE/);
     // A body that arrived is a body to act on — re-posting it could balance
@@ -772,6 +888,29 @@ describe('SponsorError classification', () => {
     expect(dry.isWalletSyncing).toBe(false);
     expect(dry.isRetryable).toBe(true);
     expect(createSponsorError(400, { error: 'BAD_REQUEST' }).isRetryable).toBe(false);
+  });
+
+  it('retries only what the service clears on its own', () => {
+    /* Each of these refused a real send on 2026/09/02, and each clears without
+       anybody doing anything. */
+    for (const code of [
+      'INSUFFICIENT_DUST',
+      'WALLET_SYNCING',
+      'WALLETS_UNAVAILABLE',
+      'PROVER_UNAVAILABLE',
+    ]) {
+      expect(createSponsorError(503, { error: code }).isRetryable).toBe(true);
+    }
+    expect(createSponsorError(503, { error: 'UNSUPPORTED' }).isRetryable).toBe(false);
+    // Every 429 — the serialised balancer AND the per-client rate limit.
+    expect(createSponsorError(429, { error: 'PENDING_TRANSACTION' }).isRetryable).toBe(true);
+    expect(createSponsorError(429, { error: 'RATE_LIMITED' }).isRetryable).toBe(true);
+    // A 502 only when the dust leg's proof is what failed.
+    expect(createSponsorError(502, { error: 'BALANCE_FAILED' }).isRetryable).toBe(true);
+    expect(createSponsorError(502, { error: 'BAD_GATEWAY' }).isRetryable).toBe(false);
+    // And nothing else, which is the half that keeps a doomed send short.
+    expect(createSponsorError(400, { error: 'INVALID_TRANSACTION' }).isRetryable).toBe(false);
+    expect(createSponsorError(500, { error: 'INTERNAL' }).isRetryable).toBe(false);
   });
 
   it('recognises a pending transaction named only in the assembled message', () => {
@@ -1164,8 +1303,10 @@ describe('failover, end to end through the client', () => {
       },
     });
     expect(result.servedBy).toBe(GATEWAY);
-    // Round one: both refused. One wait. Round two: the first sponsor served.
-    expect(slept).toEqual([1_000]);
+    /* Round one: both refused. One wait — floored to the 2 s minimum, since
+       the service asked for less than the balancer's own change takes to
+       settle. Round two: the first sponsor served. */
+    expect(slept).toEqual([2_000]);
     expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
 
@@ -1175,7 +1316,12 @@ describe('failover, end to end through the client', () => {
     );
     let failure = '';
     try {
-      await sponsorBalanceOnly(bytes, { configs, fetch: fetchSpy as never });
+      // One round: the sentence is what this drills, not the waiting.
+      await sponsorBalanceOnly(bytes, {
+        configs,
+        fetch: fetchSpy as never,
+        pendingRetryWindowMs: 0,
+      });
     } catch (cause) {
       failure = cause instanceof Error ? cause.message : String(cause);
     }
