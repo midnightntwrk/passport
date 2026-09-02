@@ -60,6 +60,7 @@
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 
+import { withNodeRejectionRetry } from './account.js';
 import type { BalancerConfig } from './config.js';
 import {
   CONFIRM_INTERVAL_MS,
@@ -544,6 +545,17 @@ export async function createMidnamesSponsor(
          already refused. */
       const targetBytes = contractAddressBytes(contractAddress);
 
+      /**
+       * Has this wallet caught up with the chain that refused a transaction?
+       * `isSynced` and `dust.complete` together, for the reason
+       * `withNodeRejectionRetry` sets out: the rejection is about the DUST the
+       * balancing selected.
+       */
+      const caughtUp = async (): Promise<boolean> => {
+        const walked = await wallet.progress();
+        return walked.isSynced && walked.dust.complete;
+      };
+
       let resolverAddress: string;
       let resolverDeployTx: string;
       try {
@@ -551,7 +563,8 @@ export async function createMidnamesSponsor(
            backs `passport-771a3f.night` was deployed with. `cost_*` are zero and
            `buy_enabled` is false because a LEAF sells nothing; only the TLD
            does. */
-        const deployed = await deployContract(providers as never, {
+        const deployed = await withNodeRejectionRetry(
+          () => deployContract(providers as never, {
           compiledContract,
           privateStateId,
           initialPrivateState: { secretKey: callerSecretHex },
@@ -570,7 +583,13 @@ export async function createMidnamesSponsor(
             { bytes: request.ownerAddressBytes ?? new Uint8Array(32) },
             emptyKvs(),
           ],
-        } as never);
+          } as never),
+          /* A refused leaf deploy is the worst of the rejections to give up on:
+             it is the FIRST of the name path's two dependent proofs, and the
+             client's answer to a 502 here is to start the whole registration
+             again. Rebuilt once the wallet is current instead. */
+          { label: `resolver deploy for ${aliasDomain(label)}`, synced: caughtUp },
+        );
         const deployTxData = (deployed as { deployTxData: unknown }).deployTxData as {
           public: { contractAddress: string };
         };
@@ -613,21 +632,32 @@ export async function createMidnamesSponsor(
 
       let registerTx: string;
       try {
-        const tld = await findDeployedContract(providers as never, {
-          compiledContract,
-          contractAddress: tldAddress,
-          privateStateId,
-          initialPrivateState: { secretKey: callerSecretHex },
-        } as never);
-        const callTx = (tld as { callTx: Record<string, (...args: unknown[]) => Promise<unknown>> })
-          .callTx;
-        /* The paid call. `request.ownerKey` — the USER's key — is argument one,
-           so the registry records the user as owner while the balancer's own
-           NIGHT covers COST and the balancer's own DUST covers the fee. */
-        const registration = await callTx.register_domain_for(request.ownerKey, labelKey, len, {
-          bytes: contractAddressBytes(resolverAddress),
-        });
-        registerTx = transactionIdentifier(registration);
+        /* And the second of the two. A rejection here leaves a deployed,
+           unregistered resolver behind, so it is worth a rebuild rather than a
+           refusal — the alternative costs the user their name and this service
+           the fee it already paid for the leaf. */
+        registerTx = await withNodeRejectionRetry(
+          async () => {
+            const tld = await findDeployedContract(providers as never, {
+              compiledContract,
+              contractAddress: tldAddress,
+              privateStateId,
+              initialPrivateState: { secretKey: callerSecretHex },
+            } as never);
+            const callTx = (
+              tld as { callTx: Record<string, (...args: unknown[]) => Promise<unknown>> }
+            ).callTx;
+            /* The paid call. `request.ownerKey` — the USER's key — is argument
+               one, so the registry records the user as owner while the
+               balancer's own NIGHT covers COST and the balancer's own DUST
+               covers the fee. */
+            const registration = await callTx.register_domain_for(request.ownerKey, labelKey, len, {
+              bytes: contractAddressBytes(resolverAddress),
+            });
+            return transactionIdentifier(registration);
+          },
+          { label: `register_domain_for ${aliasDomain(label)}`, synced: caughtUp },
+        );
       } catch (cause) {
         throw new AliasSponsorError(
           'register-rejected',

@@ -203,6 +203,126 @@ export type AccountFundingErrorCode =
   /** The deposit landed, but the account's `coins` map never showed the credit. */
   | 'asset-confirmation-failed';
 
+/* -------------------------------------------------------------------------- */
+/* Rebuilding a transaction the node refused                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The two shapes a node rejection arrives in.
+ *
+ * On 2026/09/02 at 15:35:43 a `deposit_night` came back as
+ * `RpcError: 1010: Invalid Transaction: Custom error: 231`, five seconds after
+ * the registration in front of it had landed. The wallet had balanced against
+ * the dust state as it stood BEFORE that block, so the transaction it built was
+ * one event behind the chain and the node was right to refuse it.
+ */
+const NODE_REJECTION = /invalid transaction|rpcerror:\s*1010|\b1010:/i;
+
+/** Walks the whole `cause` chain — the SDK wraps its rejections several deep. */
+export function isNodeRejection(cause: unknown): boolean {
+  let current: unknown = cause;
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    const message = current instanceof Error ? `${current.name}: ${current.message}` : String(current);
+    if (NODE_REJECTION.test(message)) return true;
+    current = current instanceof Error ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return false;
+}
+
+export interface NodeRejectionRetryOptions {
+  /** Builds and submits the transaction. Called afresh on every attempt. */
+  label: string;
+  /** `true` once the wallet has caught up with the block that refused it. */
+  synced: () => Promise<boolean>;
+  attempts?: number;
+  /** How long to wait for that, before giving up and reporting the rejection. */
+  budgetMs?: number;
+  pollMs?: number;
+  wait?: (ms: number) => Promise<void>;
+  log?: (line: string) => void;
+}
+
+/**
+ * Rebuilds and retries a transaction the NODE refused, once the wallet has
+ * caught up with the chain that refused it.
+ *
+ * TWO THINGS THIS DOES THAT A PLAIN RETRY WOULD NOT, and both are the whole
+ * point:
+ *
+ *   1. It WAITS FOR THE WALLET TO RE-SYNC first. The rejection means the coins
+ *      the transaction spends were selected against a stale view, so retrying
+ *      immediately produces the same refusal. The wallet flapped
+ *      `WALLET_SYNCING` at 15:35:50 and 15:36:50 and the client's own retry
+ *      landed at 15:39:26, once it had caught up — this does that deliberately
+ *      instead of by luck.
+ *   2. It REBUILDS rather than resubmits. The bytes are what the node refused;
+ *      a fresh `findDeployedContract` and `callTx` selects coins against the
+ *      state as it now stands. Resending the same transaction would fail
+ *      identically for ever.
+ *
+ * Anything that is not a node rejection is rethrown untouched on the first
+ * attempt: a missing contract, a refused circuit, or an unreachable prover are
+ * not made better by waiting.
+ *
+ * Before this, a rejected first deposit answered the client 502 `deposit-failed`
+ * and the client's own ladder carried the wait — 229 s to NIGHT and 519 s to
+ * mUSD on 2026/09/02. The wait belongs here, where the rebuild is possible.
+ */
+export async function withNodeRejectionRetry<T>(
+  build: () => Promise<T>,
+  options: NodeRejectionRetryOptions,
+): Promise<T> {
+  const attempts = options.attempts ?? 3;
+  const budgetMs = options.budgetMs ?? 120_000;
+  const pollMs = options.pollMs ?? 1_000;
+  const pause = options.wait ?? wait;
+  const log = options.log ?? ((line: string) => console.warn(line));
+
+  let last: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await build();
+    } catch (cause) {
+      last = cause;
+      if (!isNodeRejection(cause) || attempt === attempts) throw cause;
+      log(
+        `[retry] the node refused ${options.label} (${cause instanceof Error ? cause.message : String(cause)}) — waiting for this wallet to catch up with the block that refused it, then rebuilding (attempt ${attempt + 1} of ${attempts})`,
+      );
+      const deadline = Date.now() + budgetMs;
+      for (;;) {
+        let caught = false;
+        try {
+          caught = await options.synced();
+        } catch {
+          // An unreadable wallet is not a synced one; asked again below.
+        }
+        if (caught) break;
+        if (Date.now() >= deadline) {
+          log(
+            `[retry] ${options.label}: this wallet has not caught up within ${Math.round(budgetMs / 1_000)} s — reporting the rejection rather than rebuilding against a view that is still stale`,
+          );
+          throw last;
+        }
+        await pause(pollMs);
+      }
+    }
+  }
+  /* Unreachable: the loop either returns or throws. */
+  throw last;
+}
+
+export interface EnsureSpareCoinOptions {
+  /**
+   * Whether the spend queue has nothing waiting on it.
+   *
+   * Passed in rather than read, because the queue's depth belongs to
+   * `./server.ts` and this module has no business knowing about HTTP
+   * admission. Absent means "do not ask", which is what the tests and the
+   * start-up call use.
+   */
+  queueIdle?: () => boolean;
+}
+
 export class AccountFundingError extends Error {
   constructor(
     readonly code: AccountFundingErrorCode,
@@ -323,7 +443,7 @@ export interface AccountFunder {
    * grant; never throws. Resolves `true` when it really attempted a mint, which
    * spends this wallet's DUST and so has to be recorded as a spend.
    */
-  ensureSpareCoin(): Promise<boolean>;
+  ensureSpareCoin(options?: EnsureSpareCoinOptions): Promise<boolean>;
   /** What the spare is doing, for the start-up log and `/status`. */
   spareState(): 'ready' | 'minting' | 'none' | 'unsupported';
 }
@@ -363,6 +483,19 @@ export async function createAccountFunder(
   );
   const reader = await publicDataProviderFor(config);
   const colour = nativeColourBytes();
+
+  /**
+   * Has this wallet caught up with the chain that refused a transaction?
+   *
+   * `isSynced` AND `dust.complete`, not either alone: the rejection is about
+   * the DUST coins the balancing selected, so a wallet whose shielded and
+   * unshielded halves are current but whose dust wallet is still replaying
+   * would rebuild against exactly the stale view that was refused.
+   */
+  const caughtUp = async (): Promise<boolean> => {
+    const progress = await wallet.progress();
+    return progress.isSynced && progress.dust.complete;
+  };
 
   /* ------------------------------------------------------------------------ */
   /* The asset side                                                           */
@@ -585,7 +718,11 @@ export async function createAccountFunder(
       initialPrivateState: {},
       zkConfigProvider: faucetZkConfigProvider as never,
       proofProvider: faucetProofProvider,
-      walletProvider: wallet.contractWalletProvider(),
+      /* Explicitly zero, though zero is now the default: this job must never
+         be the one that holds a lane waiting for a coin. If there is no DUST
+         free when the mint reaches its fee estimate, it gives the lane back
+         within a second and the next minute tick asks again. */
+      walletProvider: wallet.contractWalletProvider({ waitForDustMs: 0 }),
     });
 
     let mintTx: string;
@@ -641,18 +778,25 @@ export async function createAccountFunder(
    * activation the three minutes it used to cost anyway, and a start-up or a
    * post-grant housekeeping task is no place to fail a request from.
    */
-  const ensureSpareCoin = async (): Promise<boolean> => {
+  const ensureSpareCoin = async (options: EnsureSpareCoinOptions = {}): Promise<boolean> => {
     if (!assetAvailable || spareCoin || spareInFlight) return false;
     /* Never in front of somebody's fee or somebody's grant. There is always a
        next call — the next minute tick, or the end of the next activation. */
     if (wallet.isBusy()) return false;
-    /* And never into an empty wallet. The fee estimate inside a contract call
-       waits up to ten minutes for DUST to accrue, holding the spend queue the
-       whole time — which is the right patience for a caller's grant and quite
-       the wrong patience for housekeeping. The registration loop asks again
-       every minute. */
+    /* Nor while anybody is so much as WAITING to be served. On 2026/09/02 this
+       job entered the queue at 15:49:03 with a request behind it and held it
+       until 15:59:07: a `/balance-only`, which bypasses the queue, had taken
+       the coins in between and the fee estimate then sat out its whole budget
+       inside the job. The budget is gone — see `waitForDustMs` below — and so
+       is the reason to start at all with a queue that is not empty. */
+    if (options.queueIdle && !options.queueIdle()) return false;
+    /* And never on the LAST free coin. A mint is housekeeping; taking the only
+       coin a caller's registration could have used, to save a future caller
+       three minutes, is the wrong trade in every case. Two is the floor rather
+       than one because this wallet's coin selection sweeps the small coin plus
+       a large one for a single fee. */
     try {
-      if ((await wallet.dustBalance()) <= 0n) return false;
+      if ((await wallet.dustUtxoCount()) < 2) return false;
     } catch {
       return false;
     }
@@ -738,20 +882,35 @@ export async function createAccountFunder(
 
       let depositTx: string;
       try {
-        const found = await findDeployedContract(providers as never, {
-          compiledContract,
-          contractAddress: address,
-          privateStateId,
-          initialPrivateState: {},
-        } as never);
-        const callTx = (found as { callTx: Record<string, (...args: unknown[]) => Promise<unknown>> })
-          .callTx;
-        /* The paid call. `receiveUnshielded` inside the circuit makes the
-           transaction owe the contract `grantAtomic` of the native colour, and
-           the balancer's own wallet provider balances that from the balancer's
-           own NIGHT — the same mechanism that pays Midnames its COST. */
-        const deposit = await callTx.deposit_night(colour, config.accountGrantAtomic);
-        depositTx = transactionIdentifier(deposit);
+        /* Rebuilt and retried if the NODE refuses it, which is the failure this
+           leg actually has: a deposit balanced one block behind the
+           registration in front of it was refused with `Custom error: 231` on
+           2026/09/02, answered the client 502, and cost 229 s of the client's
+           own retry ladder to land. Everything inside is rebuilt each attempt —
+           a fresh `findDeployedContract` selects coins against the state as it
+           now stands, where resending the refused bytes would fail identically
+           for ever. */
+        depositTx = await withNodeRejectionRetry(
+          async () => {
+            const found = await findDeployedContract(providers as never, {
+              compiledContract,
+              contractAddress: address,
+              privateStateId,
+              initialPrivateState: {},
+            } as never);
+            const callTx = (
+              found as { callTx: Record<string, (...args: unknown[]) => Promise<unknown>> }
+            ).callTx;
+            /* The paid call. `receiveUnshielded` inside the circuit makes the
+               transaction owe the contract `grantAtomic` of the native colour,
+               and the balancer's own wallet provider balances that from the
+               balancer's own NIGHT — the same mechanism that pays Midnames its
+               COST. */
+            const deposit = await callTx.deposit_night(colour, config.accountGrantAtomic);
+            return transactionIdentifier(deposit);
+          },
+          { label: `deposit_night into ${address}`, synced: caughtUp },
+        );
       } catch (cause) {
         throw new AccountFundingError(
           'deposit-failed',
@@ -840,7 +999,8 @@ export async function createAccountFunder(
 
       let depositTx: string;
       try {
-        depositTx = await wallet.exclusive(async () => {
+        depositTx = await withNodeRejectionRetry(
+          () => wallet.exclusive(async () => {
           const found = await findDeployedContract(accountProviders as never, {
             compiledContract,
             contractAddress: address,
@@ -860,7 +1020,9 @@ export async function createAccountFunder(
             value: coin.value,
           });
           return transactionIdentifier(deposit);
-        });
+          }),
+          { label: `deposit_shielded into ${address}`, synced: caughtUp },
+        );
       } catch (cause) {
         throw new AccountFundingError(
           'asset-deposit-failed',

@@ -669,7 +669,11 @@ async function main(): Promise<void> {
              Recorded only when a mint was really attempted — marking a spend
              that never happened would make a genuinely empty wallet claim to be
              recovering, minute after minute. */
-          if (await accountFunder.ensureSpareCoin()) lastSpendAt = Date.now();
+          if (
+            await accountFunder.ensureSpareCoin({ queueIdle: () => spendAdmission.depth === 0 })
+          ) {
+            lastSpendAt = Date.now();
+          }
         }
 
         await new Promise((resolve) => setTimeout(resolve, REGISTRATION_RETRY_MS));
