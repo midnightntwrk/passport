@@ -15,15 +15,21 @@
  * measured one whatever the estimate said.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   CLAIM_STEPS,
+  beginFeeWait,
   claimSteps,
   claimSubStages,
+  endFeeWait,
+  feeWaitLine,
+  feeWaitState,
   formatElapsed,
   stepTimingLine,
+  subscribeFeeWait,
   type ClaimPhase,
+  type FeeWait,
 } from './claimSteps.js';
 
 /** Every phase the claim path reports, in the order it reports them. */
@@ -236,5 +242,73 @@ describe('stepTimingLine', () => {
         expect(line).not.toMatch(/contract|resolver|registry|indexer|wallet|DUST/i);
       }
     }
+  });
+});
+
+describe('the sponsor wait', () => {
+  afterEach(() => {
+    endFeeWait();
+  });
+
+  it('starts at rest, and says so to anyone who asks or subscribes', () => {
+    expect(feeWaitState()).toEqual({ waiting: false, since: null });
+    const seen: FeeWait[] = [];
+    const stop = subscribeFeeWait((wait) => seen.push(wait));
+    /* The immediate call is the whole point: a screen that mounted mid-wait and
+       heard nothing until the NEXT change would paint a blank row through the
+       part of the wait a reader most needs told about. */
+    expect(seen).toEqual([{ waiting: false, since: null }]);
+    stop();
+  });
+
+  it('publishes a wait and its end to every subscriber', () => {
+    const seen: FeeWait[] = [];
+    const stop = subscribeFeeWait((wait) => seen.push(wait));
+    beginFeeWait(1_000);
+    endFeeWait();
+    expect(seen).toEqual([
+      { waiting: false, since: null },
+      { waiting: true, since: 1_000 },
+      { waiting: false, since: null },
+    ]);
+    stop();
+  });
+
+  it('joins a wait already running rather than resetting its clock', () => {
+    /* Two claims can be in flight in one tab — the pair of Passports the demo
+       is — and the second one starting the clock again would tell somebody who
+       had waited ninety seconds that they had waited none. */
+    beginFeeWait(1_000);
+    beginFeeWait(90_000);
+    expect(feeWaitState()).toEqual({ waiting: true, since: 1_000 });
+  });
+
+  it('ends a wait once, and says nothing when there is none to end', () => {
+    const seen: FeeWait[] = [];
+    beginFeeWait(1_000);
+    const stop = subscribeFeeWait((wait) => seen.push(wait));
+    endFeeWait();
+    endFeeWait();
+    expect(seen).toHaveLength(2);
+    expect(feeWaitState()).toEqual({ waiting: false, since: null });
+    stop();
+  });
+
+  it('stops telling a subscriber that has unsubscribed', () => {
+    const seen: FeeWait[] = [];
+    const stop = subscribeFeeWait((wait) => seen.push(wait));
+    stop();
+    beginFeeWait(1_000);
+    expect(seen).toHaveLength(1);
+  });
+
+  it('says what is being waited on and for how long, and never the machinery', () => {
+    expect(feeWaitLine(0)).toBe('Waiting for the fee sponsor — 0:00');
+    expect(feeWaitLine(74_000)).toBe('Waiting for the fee sponsor — 1:14');
+    /* The house rule the timing lines are held to, held here too: a reader is
+       never shown a word about DUST, a wallet, or a contract. */
+    expect(feeWaitLine(74_000)).not.toMatch(
+      /contract|resolver|registry|indexer|wallet|DUST|%/i,
+    );
   });
 });

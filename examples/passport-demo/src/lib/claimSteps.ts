@@ -252,3 +252,104 @@ export function stepTimingLine(step: Pick<ClaimStep, 'expectedSeconds'>, elapsed
   }
   return `Usually ${expectedPhrase(step.expectedSeconds)} — ${elapsed} so far`
 }
+
+/* ------------------------------------------------------------------ */
+/* The sponsor wait                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The sponsor's fee cover, as the STEPPER sees it — a wait, not a refusal.
+ *
+ * WHY A RULE MODULE HOLDS A LIVE VALUE
+ * ------------------------------------
+ * Everything else in this file is a phase in and words out. This is a small
+ * published value, and it is here for two reasons rather than one.
+ *
+ * The first is what it describes. The fee sponsor reserves its DUST against
+ * each transaction it is balancing, so `available: 0` is a statement about the
+ * next minute and not about the day — `lib/sponsor.ts` has called that the
+ * transient state since 2026/08/25. Measured on the deployed balancer on
+ * 2026/09/02: a Passport claimed twenty seconds after another one was refused
+ * in two seconds, three times out of three, because the fee gate read the
+ * sponsor ONCE and believed a number that stopped being true while the refusal
+ * was being painted. The honest thing to show a person in that moment is the
+ * wait they are actually in, with the seconds counting, which is precisely what
+ * the rest of this file exists to do — so the fact belongs beside the other
+ * things the stepper is allowed to say.
+ *
+ * The second is where it can be imported from. This screen is on the first
+ * render path and `identity/passportContract.ts` reaches the ledger WASM
+ * through `identity/contractRuntime.ts`; a component that imported the fee gate
+ * to subscribe to it would hold React's mount behind 9.84 MB — the exact
+ * mistake this file's own header warns about. This module imports nothing at
+ * all at run time, so both sides can have it.
+ *
+ * It is NOT a gate. Nothing here decides whether a transaction may be built;
+ * the fee gate in `identity/passportContract.ts` does that, and this is the
+ * part of it a reader is shown.
+ */
+export const FEE_WAIT_LABEL = 'Waiting for the fee sponsor'
+
+export interface FeeWait {
+  /** True while a claim is holding for the sponsor's fee cover. */
+  waiting: boolean
+  /** `Date.now()` at the moment the wait began, or `null` when none is on. */
+  since: number | null
+}
+
+let feeWait: FeeWait = { waiting: false, since: null }
+const feeWaitListeners = new Set<(wait: FeeWait) => void>()
+
+/** The wait as it stands right now — for a first render, before any change. */
+export function feeWaitState(): FeeWait {
+  return feeWait
+}
+
+/**
+ * Watches the wait. The listener is called IMMEDIATELY with the current value,
+ * so a subscriber mounting mid-wait paints the wait rather than an empty row
+ * that fills in only when something changes.
+ */
+export function subscribeFeeWait(listener: (wait: FeeWait) => void): () => void {
+  feeWaitListeners.add(listener)
+  listener(feeWait)
+  return (): void => {
+    feeWaitListeners.delete(listener)
+  }
+}
+
+function publishFeeWait(next: FeeWait): void {
+  feeWait = next
+  for (const listener of feeWaitListeners) listener(next)
+}
+
+/**
+ * Says a wait has begun, at `since`.
+ *
+ * A wait already running is JOINED rather than restarted: two claims can be in
+ * flight in one tab, and the second one resetting the clock would tell somebody
+ * who had been waiting ninety seconds that they had been waiting none.
+ */
+export function beginFeeWait(since: number): void {
+  if (feeWait.waiting) return
+  publishFeeWait({ waiting: true, since })
+}
+
+/** Says the wait is over — the sponsor answered, or the window ran out. */
+export function endFeeWait(): void {
+  if (!feeWait.waiting) return
+  publishFeeWait({ waiting: false, since: null })
+}
+
+/**
+ * The one line a waiting reader is shown: what is being waited on, and for how
+ * long so far.
+ *
+ * The same shape as {@link stepTimingLine}, and deliberately: it sits among
+ * those lines, and a wait that announced itself in a different grammar would
+ * read as a different kind of event. No estimate, because there is no honest
+ * one — the sponsor's DUST comes back when its own transactions settle.
+ */
+export function feeWaitLine(elapsedMs: number): string {
+  return `${FEE_WAIT_LABEL} — ${formatElapsed(elapsedMs)}`
+}

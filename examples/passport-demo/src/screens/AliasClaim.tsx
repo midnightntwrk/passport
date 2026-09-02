@@ -22,9 +22,13 @@ import {
 import {
   claimSteps,
   claimSubStages,
+  feeWaitLine,
+  feeWaitState,
   formatElapsed,
   stepTimingLine,
+  subscribeFeeWait,
   type ClaimStep,
+  type FeeWait,
 } from '../lib/claimSteps.js'
 import { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
 import { PasskeyWayOutActions } from './PasskeyWayOut.js'
@@ -356,6 +360,42 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     return () => window.clearInterval(timer)
   }, [activeStepId])
 
+  /* ---------------------------------------------------------------- */
+  /* THE SPONSOR WAIT (2026/09/02)                                      */
+  /*                                                                    */
+  /* The fee gate no longer refuses a claim because the sponsor said    */
+  /* `available: 0` at one instant — it waits up to three minutes for   */
+  /* the sponsor's own DUST to come back, which on the deployed         */
+  /* balancer takes two to four. See                                    */
+  /* `../identity/passportContract.ts#checkPassportContractFunds` for   */
+  /* the measurement and the rule.                                      */
+  /*                                                                    */
+  /* A wait nobody is told about is a hang, and this one lands inside   */
+  /* the longest step of the claim — so it says what it is waiting on   */
+  /* and counts, in the same grammar as every other line in the         */
+  /* stepper. The value is published by `../lib/claimSteps.ts` rather   */
+  /* than by the fee gate itself, because importing the fee gate here   */
+  /* would put the 9.84 MB ledger WASM in front of React's mount.       */
+  /* ---------------------------------------------------------------- */
+  const [feeWait, setFeeWait] = useState<FeeWait>(feeWaitState)
+  useEffect(() => subscribeFeeWait(setFeeWait), [])
+
+  const [feeWaitNow, setFeeWaitNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!feeWait.waiting) return undefined
+    setFeeWaitNow(Date.now())
+    const timer = window.setInterval(() => setFeeWaitNow(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [feeWait.waiting])
+
+  /* Shown only while a claim is on screen: the same wait can be entered by
+     the Home card's own retry, which this screen is not mounted for, and a
+     line about a claim that is not running would have nothing to sit under. */
+  const feeWaitText =
+    busy && feeWait.waiting && feeWait.since !== null
+      ? feeWaitLine(feeWaitNow - feeWait.since)
+      : null
+
   /** How long the step being timed has been running, in milliseconds. */
   const elapsedFor = (step: ClaimStep): number | null => {
     if (clock === null) return null
@@ -516,6 +556,17 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
                       {timing !== null ? (
                         <span className="mnid-stepper-timing" aria-live="off">
                           {timing}
+                        </span>
+                      ) : null}
+                      {/* WHAT THE CLAIM IS ACTUALLY HELD ON, when it is held
+                          on the fee sponsor. It carries the same class as the
+                          note below it — it is the same kind of quiet line —
+                          and its own, so a test can name it without also
+                          naming the timer, whose text `claim-progress.spec.ts`
+                          asserts one of per step. */}
+                      {feeWaitText !== null && step.state === 'active' ? (
+                        <span className="mnid-stepper-note mnid-stepper-wait" aria-live="off">
+                          {feeWaitText}
                         </span>
                       ) : null}
                       {/* The four states of the long wait, on screen from the

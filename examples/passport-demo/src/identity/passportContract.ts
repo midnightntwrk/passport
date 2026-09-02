@@ -61,6 +61,8 @@
 
 
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
+import { beginFeeWait, endFeeWait } from '../lib/claimSteps.js';
+import type { SponsorReadiness } from '../lib/sponsor.js';
 import { sponsorFeeRefusal, sponsorReadiness } from '../lib/sponsor.js';
 import {
   bytesToHex,
@@ -428,8 +430,8 @@ export async function confirmPassportContractOnLedger(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Re-checks, WITHOUT any passkey prompt, whether the deployment's fee can be
- * covered right now.
+ * Waits, WITHOUT any passkey prompt, until the deployment's fee can be covered
+ * — and refuses only when it genuinely cannot be.
  *
  * The deployment moves no NIGHT of its own — it is a fee question only — and a
  * Passport has exactly one fee payer, so this is a question about the SPONSOR
@@ -437,16 +439,113 @@ export async function confirmPassportContractOnLedger(
  * here could be about: the holder is never asked to fund a fee, so telling
  * them what they hold would only invite a step that does not exist.
  *
+ * WHY IT WAITS, AND WHAT IT COST NOT TO
+ * -------------------------------------
+ * Until 2026/09/02 this asked the sponsor ONCE and refused on the answer. That
+ * is wrong about what the answer means. The sponsor reserves its DUST against
+ * every transaction it is balancing, so `available: 0` is a statement about the
+ * next minute rather than about the day — `lib/sponsor.ts` has called `busy`
+ * the transient state since 2026/08/25, and the deployed balancer sits in it
+ * for two to four minutes after each spend while its wallet catches up.
+ *
+ * Measured on the deployed balancer that day: a second Passport claimed twenty
+ * seconds after a first was refused HERE, in about two seconds, three times out
+ * of three — before a prover ran, before an authenticator was touched, and
+ * while the sponsor was perfectly capable of paying by the time the refusal
+ * finished painting. A pair of Passports is the demo, so a gate that cannot
+ * survive one is not a gate, it is the bug.
+ *
+ * So the sponsor is WATCHED for {@link FEE_WAIT_WINDOW_MS} rather than sampled,
+ * every {@link FEE_WAIT_POLL_INTERVAL_MS}, and the wait is published to the
+ * stepper (`lib/claimSteps.ts`) so the reader sees "Waiting for the fee
+ * sponsor" with the seconds counting instead of a refusal about a number that
+ * had already stopped being true. The window is three minutes because the
+ * measured wedge is two to four and self-repairs in about ten seconds once the
+ * sponsor's own sync lands; a window shorter than the fault it is for would
+ * only refuse more slowly.
+ *
+ * WHAT IT STILL REFUSES, AND IMMEDIATELY
+ * --------------------------------------
+ * A build with no sponsor configured at all. Nothing about that clears with
+ * time, and three minutes of a counting timer before saying so would be a lie
+ * told slowly. Every other non-ready answer — `busy`, and `unreachable`, which
+ * `lib/sponsor.ts` only reports after two failed probes of its own — is waited
+ * out, because both are states the deployed service demonstrably comes back
+ * from and neither is something the user could act on if they were told.
+ *
+ * Every probe after the first passes `force`, so the answer is the sponsor's
+ * and not `sponsorReadiness`'s thirty-second cache: a watcher reading a cache
+ * would tell somebody to keep waiting for half the time they were already free.
+ *
  * Exposed separately from {@link deployPassportContract} so a re-run can fail
  * closed with the honest reason before asking the user to touch their
  * authenticator.
  */
-export async function checkPassportContractFunds(): Promise<
-  { ok: true } | { ok: false; reason: string }
-> {
-  const readiness = await sponsorReadiness();
+export interface PassportContractFundsOptions {
+  /** Asks the sponsor. `force` bypasses the readiness cache. */
+  readiness?: (force: boolean) => Promise<SponsorReadiness>;
+  /** Total patience. Defaults to {@link FEE_WAIT_WINDOW_MS}; 0 never waits. */
+  windowMs?: number;
+  /** Gap between probes. Defaults to {@link FEE_WAIT_POLL_INTERVAL_MS}. */
+  intervalMs?: number;
+  /** The clock the window is measured on. */
+  now?: () => number;
+  /** How the gap is waited out. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/**
+ * How long a claim holds for the sponsor before it gives up.
+ *
+ * Three minutes, from the measured fault rather than from taste: after a spend
+ * the balancer's wallet reports itself syncing for two to four and a half
+ * minutes, and answers `available: 0` throughout.
+ */
+export const FEE_WAIT_WINDOW_MS = 180_000;
+
+/**
+ * How often the sponsor is asked again while a claim waits.
+ *
+ * Four seconds against a window measured in minutes: short enough that "it
+ * cleared" and "the claim carried on" look like one event to a reader watching
+ * a timer tick, long enough that a wait is not a load generator. Each probe is
+ * a single `GET /wallet-status`.
+ */
+export const FEE_WAIT_POLL_INTERVAL_MS = 4_000;
+
+export async function checkPassportContractFunds(
+  options: PassportContractFundsOptions = {},
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const probe =
+    options.readiness ?? ((force: boolean) => sponsorReadiness(force ? { force: true } : {}));
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  const windowMs = options.windowMs ?? FEE_WAIT_WINDOW_MS;
+  const intervalMs = options.intervalMs ?? FEE_WAIT_POLL_INTERVAL_MS;
+
+  let readiness = await probe(false);
   if (readiness.state === 'ready') return { ok: true };
-  return { ok: false, reason: sponsorFeeRefusal(readiness) };
+  /* The one refusal time cannot fix: there is no sponsor to come back. */
+  if (readiness.state === 'disabled') return { ok: false, reason: sponsorFeeRefusal(readiness) };
+
+  const startedAt = now();
+  beginFeeWait(startedAt);
+  try {
+    while (now() - startedAt < windowMs) {
+      await sleep(intervalMs);
+      readiness = await probe(true);
+      if (readiness.state === 'ready') return { ok: true };
+      if (readiness.state === 'disabled') {
+        return { ok: false, reason: sponsorFeeRefusal(readiness) };
+      }
+    }
+    /* The window is out. The reason is the sponsor's last word, unchanged: it
+       is still true, and a sentence about how long we waited would be about
+       Passport rather than about what the reader can do next. */
+    return { ok: false, reason: sponsorFeeRefusal(readiness) };
+  } finally {
+    endFeeWait();
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -498,8 +597,10 @@ export async function submitPassportContract(
 ): Promise<PassportContractSubmission> {
   onProgress?.({ phase: 'deriving' });
 
-  // Fees before secrets: refuse early, with the honest reason, rather than
-  // after the user has watched a prover run.
+  /* Fees before secrets: settle the fee question with the honest answer before
+     the user has watched a prover run — which since 2026/09/02 means WAITING
+     for a sponsor that is merely busy rather than refusing on its first word.
+     The wait is published to the stepper, so nothing about it is silent. */
   const funds = await checkPassportContractFunds();
   if (!funds.ok) throw new PassportContractError('fee-unavailable', funds.reason);
 
