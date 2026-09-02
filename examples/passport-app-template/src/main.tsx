@@ -90,7 +90,7 @@ const PASSPORT_ORIGIN =
 const EMBEDDED = window.parent !== window;
 
 /** The fields this app asks for. Ask for the least you can actually use. */
-const REQUESTED_FIELDS: PassportProfileField[] = ['displayName', 'midnightAddresses'];
+const REQUESTED_FIELDS: PassportProfileField[] = ['displayName', 'passportContract'];
 
 /* --- Act three, the optional payment ------------------------------------ */
 
@@ -182,6 +182,8 @@ const PROFILE_REFUSALS: Record<string, string> = {
     'Passport has no profile to share yet — it has not finished setting one up.',
   invalid_request:
     'Passport rejected the request as malformed. That is this app’s bug, not yours.',
+  version_mismatch:
+    'This Passport speaks an older revision of the profile protocol than this app does. Update one of them.',
 };
 
 const TX_REFUSALS: Record<PassportTxErrorCode, string> = {
@@ -194,6 +196,8 @@ const TX_REFUSALS: Record<PassportTxErrorCode, string> = {
   'network-mismatch':
     'The recipient address belongs to a different network from the Passport wallet.',
   'submit-failed': 'It was signed, but the node rejected it or could not be reached.',
+  'version-mismatch':
+    'This Passport speaks an older revision of the transaction protocol than this app does. Update one of them.',
 };
 
 /* ---------------------------------------------------------------------------
@@ -723,7 +727,7 @@ function App() {
   const busy = phase === 'opening' || phase === 'awaiting-consent';
   const approvedProfile = phase === 'connected' ? profile?.profile : undefined;
   const displayName = approvedProfile?.displayName;
-  const addresses = approvedProfile?.midnightAddresses;
+  const account = approvedProfile?.passportContract;
   const txHref = txId ? explorerTxHref(txId) : null;
 
   return (
@@ -822,10 +826,10 @@ function App() {
                     <em>not shared — you did not approve this field</em>
                   )}
                 </li>
-                <li className={addresses ? 'shared' : 'withheld'}>
-                  <span className="pt-field-name">midnightAddresses.unshielded</span>
-                  {addresses?.unshielded ? (
-                    <code title={addresses.unshielded}>{shorten(addresses.unshielded)}</code>
+                <li className={account ? 'shared' : 'withheld'}>
+                  <span className="pt-field-name">passportContract.address</span>
+                  {account?.address ? (
+                    <code title={account.address}>{shorten(account.address)}</code>
                   ) : (
                     <em>not shared — you did not approve this field</em>
                   )}

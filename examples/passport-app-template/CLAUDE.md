@@ -68,7 +68,7 @@ examples, and validation rules: `docs/PROTOCOL.md`.
 | Message | Direction | Purpose |
 | --- | --- | --- |
 | `passport.profile.ready` | Passport → app | Handshake: carries/echoes `{requestId, nonce}`. |
-| `passport.profile.request` | app → Passport | `fields`: non-empty, duplicate-free subset of `displayName`, `passportContract`, `midnightAddresses`. |
+| `passport.profile.request` | app → Passport | `fields`: non-empty, duplicate-free subset of `displayName` and `passportContract`. Anything else is answered `invalid_request`. |
 | `passport.profile.response` | Passport → app | `approved: true` + `profile` (only approved fields), or `approved: false` + `error`: `denied` \| `profile_unavailable` \| `invalid_request`. |
 | `passport.tx.request` | app → Passport | `intent`: `{ kind: 'unshielded-transfer', recipientAddress (≤200), amount (base-10 string, 1–20 digits, > 0), purpose (≤140) }`. Both channels. |
 | `passport.tx.response` | Passport → app | `status`: `submitted` (always with `txId`) \| `declined` \| `failed` (with `error`); optional `detail` (≤400), `sponsored`, `feeNote` (≤140). |

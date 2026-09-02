@@ -101,7 +101,7 @@ which exchange is being answered. Match on it — see
   "type": "passport.profile.request",
   "requestId": "9f4c2f6a-6f0e-4d0f-9b1e-2a7c8f0d3b41",
   "nonce": "b1946ac92492d2347c6235b4d2611184c0e1a2b3",
-  "fields": ["displayName", "midnightAddresses"]
+  "fields": ["displayName", "passportContract"]
 }
 ```
 
@@ -113,10 +113,13 @@ Validation (`parsePassportProfileRequest`, `profileProtocol.ts:92`):
   echoed pair is recognised as bound to the handshake it issued. This
   template always echoes.
 - `fields` — a non-empty array drawn from `PASSPORT_PROFILE_FIELDS`
-  (`profileProtocol.ts:19`): `displayName`, `passportContract`,
-  `midnightAddresses`. Duplicates and unknown field names reject the **whole
-  request** — the parser deduplicates and compares lengths
-  (`profileProtocol.ts:103–104`).
+  (`profileProtocol.ts:19`): `displayName` and `passportContract`. Those two
+  are the whole vocabulary — the engine's own unshielded, shielded, and dust
+  addresses are not offerable, because a user's identity is their
+  account-custody contract and money belongs at the account, not at whatever
+  address the wallet happens to sign from. Duplicates and unknown field names
+  reject the **whole request**, and the rejection is answered with
+  `invalid_request` rather than dropped.
 
 ### `passport.profile.response` — Passport → app
 
@@ -131,8 +134,9 @@ Approved:
   "approved": true,
   "profile": {
     "displayName": "alice.midnight",
-    "midnightAddresses": {
-      "unshielded": "mn_addr_preview1…"
+    "passportContract": {
+      "address": "mn_shield-addr_preview1…",
+      "network": "preview"
     }
   }
 }
@@ -159,7 +163,7 @@ Validation (`parsePassportProfileResponse`, `profileProtocol.ts:186`):
   present but malformed rejects the **whole profile**
   (`parsePassportProfile`, `profileProtocol.ts:140`). The parsed object is
   freshly constructed, so nothing undeclared can ride along.
-- `approved: false` requires `error` to be exactly one of the three codes
+- `approved: false` requires `error` to be exactly one of the codes
   below; anything else parses to `null`.
 
 Field shapes when approved:
@@ -168,7 +172,6 @@ Field shapes when approved:
 | --- | --- |
 | `displayName` | `string` (≤ 256) |
 | `passportContract` | `{ address: string (≤ 512), network: string (≤ 256) }` |
-| `midnightAddresses` | `{ unshielded: string (≤ 512), shielded?: string (≤ 512), dust?: string (≤ 512) }` |
 
 Profile error vocabulary (`profileProtocol.ts:60`):
 

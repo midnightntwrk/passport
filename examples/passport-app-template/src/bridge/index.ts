@@ -1,8 +1,8 @@
 /**
  * The Passport bridge, as this template speaks it.
  *
- * The two modules beside this one are complete, unmodified copies of
- * Passport's own protocol definitions — see their provenance headers. They are
+ * The modules beside this one are complete, unmodified copies of Passport's
+ * own protocol definitions — see their provenance headers. They are
  * dependency-free on purpose, so you can copy the whole `src/bridge/` folder
  * into any project, of any framework, and it will build.
  *
@@ -20,6 +20,7 @@ export {
   parsePassportProfileResponse,
 } from './profileProtocol.js';
 export type {
+  PassportProfile,
   PassportProfileField,
   PassportProfileReady,
   PassportProfileRequest,
@@ -29,8 +30,13 @@ export type {
 /* ---- Transactions: org.midnight.passport.tx/v1 -------------------------- */
 export { PASSPORT_TX_PROTOCOL, parsePassportTxResponse } from './txProtocol.js';
 export type {
-  PassportTxErrorCode,
   PassportTxIntent,
   PassportTxRequest,
   PassportTxResponse,
 } from './txProtocol.js';
+
+/* ---- Error codes, shared by both channels ------------------------------- */
+export type { PassportProfileErrorCode, PassportTxErrorCode } from './errors.js';
+
+/* ---- Wire revision ------------------------------------------------------ */
+export { PASSPORT_PROTOCOL_VERSION } from './version.js';
