@@ -59,7 +59,12 @@
  * than a promise made to them.
  */
 
-import type { AliasClaimProgress } from '../identity/midnames.js'
+/* The leaf, not `../identity/midnames.js`. This is a type-only import and so is
+   erased either way, but naming the leaf means nothing on the first render path
+   even MENTIONS the module that top-level awaits the ledger WASM — one keyword
+   deleted by a future editor can no longer put 9.84 MB in front of the welcome
+   screen. */
+import type { AliasClaimProgress } from '../identity/midnamesText.js'
 
 /** A claim phase, as the claim path reports it. */
 export type ClaimPhase = AliasClaimProgress['phase']

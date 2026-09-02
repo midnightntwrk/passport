@@ -2,12 +2,16 @@ import { AlertTriangle, ArrowRight, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
+/* The naming-rules leaf, not `../identity/midnames.js` — see the note in
+   `AliasClaim.tsx`. This modal is constructed on the first render path too, and
+   importing a value from `midnames.ts` puts the ledger WASM in front of the
+   welcome screen. */
 import {
   aliasDomain,
   normalizePassportAlias,
   suggestAliasAlternatives,
   type AliasAvailability,
-} from '../identity/midnames.js'
+} from '../identity/midnamesText.js'
 import { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
 import './identity.css'
 

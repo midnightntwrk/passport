@@ -230,12 +230,28 @@
  *                       either make the gate unmeetable or make it meaningless.
  *                       The moving half is drilled against stagenet by
  *                       `e2e/stagenet.live.spec.ts`.
- *   midnames.ts         MIXED, on the same rule. The read-side helpers —
+ *   midnames.ts         MIXED, on the same rule. The naming rules it used to
+ *                       hold are now `./midnamesText.ts`, which IS in the
+ *                       denominator above. The read-side helpers —
  *                       `normalizePassportAlias`, `aliasCostAtomicNight`,
  *                       `decodeDomainTarget`, `formatNight`,
  *                       `deriveMidnamesOwnerKey`, `suggestAliasAlternatives` —
  *                       are drilled in `src/identity/midnames.test.ts`. The
  *                       rest is registry reads against a network's own indexer.
+ * `src/identity/midnamesText.ts` went IN on 2026/09/01, the day it was split
+ * out of `midnames.ts`, and it is in the denominator because it is now the ONLY
+ * definition of what a Passport name may be: the label grammar, the reserved
+ * list, the `.night` suffix, and the alternatives offered when a name is taken.
+ * Every way it can be wrong is permanent — a label that normalises to something
+ * other than what the registry will store is a name registered, publicly and
+ * irreversibly, to a string the user did not type, and a reserved name that
+ * slips through is `midnight.night` reading as an official account. It exists
+ * as a separate file precisely so it can be imported without a ledger, so it
+ * holds no DOM, no React, no network, no clock, and — by construction — no
+ * imports at all. The drills did not move either: `midnames.test.ts` exercises
+ * every one of these through `midnames.ts`'s re-export, which is where the rest
+ * of the app still reads them from.
+ *
  * `src/identity/timestamps.ts` went IN on 2026/08/26 with the module itself: it
  * is the ISO-8601 reader `backup.ts` and `incentiveStore.ts` now share, it is
  * four lines of pure decision, and both of its answers are drilled by
@@ -308,6 +324,7 @@ export default mergeConfig(
           'src/lib/sponsor.ts',
           'src/identity/backup.ts',
           'src/identity/claimWarmup.ts',
+          'src/identity/midnamesText.ts',
           'src/identity/sponsoredAlias.ts',
           'src/identity/timestamps.ts',
         ],

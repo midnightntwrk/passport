@@ -8,12 +8,17 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+/* `../identity/midnamesText.js`, NOT `../identity/midnames.js`. This screen is
+   on the first render path, and `midnames.ts` top-level awaits a 9.84 MB ledger
+   WASM through `contractRuntime.ts` — importing a value from it here held
+   React's mount behind that fetch. The registry itself is reached the way
+   `App.tsx` has always reached it: a dynamic import at the moment of the claim. */
 import {
   aliasDomain,
   normalizePassportAlias,
   type AliasAvailability,
   type AliasClaimProgress,
-} from '../identity/midnames.js'
+} from '../identity/midnamesText.js'
 import {
   claimSteps,
   claimSubStages,

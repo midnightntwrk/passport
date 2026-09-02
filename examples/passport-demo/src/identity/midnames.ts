@@ -61,6 +61,12 @@ import {
   loadContractModule,
   rawContractAddress,
 } from './contractRuntime.js';
+/* The naming rules themselves are a LEAF (`./midnamesText.ts`) rather than part
+   of this module, because this module's own import of `./contractRuntime.ts`
+   top-level awaits a 9.84 MB ledger WASM and the screens that validate a typed
+   name render before anybody has asked for a chain. Everything the leaf holds
+   is re-exported below, so this module's surface is unchanged. */
+import { normalizePassportAlias, type AliasAvailability } from './midnamesText.js';
 
 /** Re-exported: every caller that stores an address normalises through this. */
 export { rawContractAddress };
@@ -71,8 +77,8 @@ export { rawContractAddress };
 
 export type MidnamesNetwork = 'stagenet' | 'preview' | 'preprod' | 'mainnet';
 
-/** The `.night` top-level domain. Every Passport alias is a label under it. */
-export const MIDNAMES_TLD = 'night';
+/* `MIDNAMES_TLD` and the rest of the naming rules are re-exported from
+   `./midnamesText.js` further down. */
 
 /**
  * Midnames TLD addresses, by network.
@@ -127,21 +133,20 @@ export const MIDNAMES_INDEXER_URLS: Record<MidnamesNetwork, string> = {
 export { CLAIMABLE_NETWORKS, aliasRegistrationSupported };
 
 /**
- * Names Passport will not let a user claim, whatever the registry says. These
- * are infrastructure and impersonation risks — `midnight.night` reading as an
- * official account is exactly the confusion this list prevents.
+ * The naming rules — the label grammar, the reserved list, the `.night` suffix,
+ * the alternatives offered when a name is taken, and the two shapes the UI
+ * renders an answer in. They live in a leaf so a screen can validate what
+ * somebody typed without loading a ledger; see `./midnamesText.ts`. Re-exported
+ * here because this module is where every existing caller looks for them.
  */
-export const RESERVED_ALIASES: readonly string[] = [
-  'admin',
-  'faucet',
-  'foundation',
-  'midnight',
-  'night',
-  'passport',
-  'root',
-  'wallet',
-  'www',
-];
+export {
+  MIDNAMES_TLD,
+  RESERVED_ALIASES,
+  aliasDomain,
+  normalizePassportAlias,
+  suggestAliasAlternatives,
+} from './midnamesText.js';
+export type { AliasAvailability, AliasClaimProgress } from './midnamesText.js';
 
 /** NIGHT is quoted with 6 decimals, matching `lib/localWallet.ts`. */
 const NIGHT_DECIMALS = 6;
@@ -159,11 +164,6 @@ export function formatNight(atomic: bigint): string {
   const whole = digits.slice(0, digits.length - NIGHT_DECIMALS);
   const fraction = digits.slice(digits.length - NIGHT_DECIMALS).replace(/0+$/, '');
   return `${negative ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`;
-}
-
-/** `alice` → `alice.night`. */
-export function aliasDomain(alias: string): string {
-  return `${alias}.${MIDNAMES_TLD}`;
 }
 
 /**
@@ -198,35 +198,6 @@ export async function deriveMidnamesOwnerKey(secret: Uint8Array): Promise<Uint8A
 /* -------------------------------------------------------------------------- */
 /* Alias normalisation                                                        */
 /* -------------------------------------------------------------------------- */
-
-/**
- * Normalises a typed alias to its registry label, throwing a sentence the UI
- * can show verbatim.
- *
- * The accepted shape is exactly the Node integration's:
- * `/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/` — 1–32 characters, lowercase
- * letters and digits, hyphens only in the interior. Passport adds one rule on
- * top: {@link RESERVED_ALIASES} are refused before any network call.
- */
-export function normalizePassportAlias(value: string): string {
-  const normalized = value.trim().toLowerCase().replace(/\.+$/, '');
-  const alias = normalized.endsWith(`.${MIDNAMES_TLD}`)
-    ? normalized.slice(0, -(MIDNAMES_TLD.length + 1))
-    : normalized;
-  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(alias)) {
-    /* The wording is the name step's own footnote, verbatim. This sentence is
-       shown to the user, so it says "name" — the word the whole screen uses —
-       rather than "alias", which is only what this module happens to call the
-       label internally. */
-    throw new Error(
-      'Names are 1–32 characters: lowercase letters, numbers, and hyphens inside.',
-    );
-  }
-  if (RESERVED_ALIASES.includes(alias)) {
-    throw new Error(`"${alias}" is reserved by the Midnight network and cannot be claimed.`);
-  }
-  return alias;
-}
 
 /**
  * The registration cost in atomic NIGHT, read from the deployed TLD's own
@@ -293,11 +264,6 @@ async function loadMidnames(): Promise<MidnamesModule> {
 /* -------------------------------------------------------------------------- */
 /* Availability — real registry state, never a guess                          */
 /* -------------------------------------------------------------------------- */
-
-export type AliasAvailability =
-  | { status: 'available' }
-  | { status: 'taken'; resolverAddress: string }
-  | { status: 'unreachable'; detail: string };
 
 interface RegistrySnapshot {
   readonly ledger: MidnamesLedger;
@@ -465,38 +431,6 @@ export class AliasClaimError extends Error {
   }
 }
 
-export interface AliasClaimProgress {
-  /**
-   * The phases a claim really has, in the order they happen.
-   *
-   * `attaching-account` belongs to the CALLER rather than to this module: it
-   * covers deploying this Passport's account-custody contract so the name has a
-   * contract to bind to. It is named here because the button that narrates a
-   * claim narrates all of it — a user watching one action should not be shown a
-   * vocabulary that skips its longest step.
-   *
-   * There is no `activating` phase. It described a NIGHT grant sent to the
-   * wallet address before a claim, and the wallet neither receives nor spends
-   * anything for a name; the service registers it and, once the account exists,
-   * funds the ACCOUNT (ruled 2026/08/25).
-   *
-   * `checking`, `preparing`, and `confirm-passkey` were added on 2026/08/26,
-   * and they are the three that happen BEFORE the passkey prompt: re-reading
-   * the registry, waiting on the sponsor's answer, and the ceremony itself.
-   * They exist because a reviewer watched a claim sit on one unchanging label
-   * for the whole of that stretch and could not tell a slow network from a
-   * hung app. A phase vocabulary that starts at the account deploy describes
-   * the part of a claim the user was never confused by.
-   */
-  phase:
-    | 'checking'
-    | 'preparing'
-    | 'confirm-passkey'
-    | 'attaching-account'
-    | 'deploying-resolver'
-    | 'registering'
-    | 'confirming';
-}
 
 /**
  * What a resolver leaf points at.
@@ -547,19 +481,3 @@ export interface AliasClaimResult {
   registryConfirmed: boolean;
 }
 
-/**
- * Alternative labels to offer when a name is taken on the target network.
- * Suggestions are candidates only — the modal probes each one for real before
- * presenting it as free.
- */
-export function suggestAliasAlternatives(alias: string): string[] {
-  const base = alias.replace(/-+$/, '');
-  const candidates = [`${base}2`, `${base}-mn`, `${base}-night`, `my${base}`, `${base}01`];
-  return candidates.filter((candidate) => {
-    try {
-      return normalizePassportAlias(candidate) === candidate;
-    } catch {
-      return false;
-    }
-  });
-}
