@@ -52,6 +52,7 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { describeEndpointRefusals, firstEndpointThatServes } from '../lib/endpoints.js';
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
 import {
+  SponsorError,
   sponsorBalanceOnly,
   sponsorHexToBytes,
   sponsorFeeRefusal,
@@ -59,13 +60,32 @@ import {
   BALANCE_WITHOUT_DUST,
   SPONSOR_CONTRACT_RETRY_WINDOW_MS,
 } from '../lib/sponsor.js';
+import type { SponsorReadiness } from '../lib/sponsor.js';
 
 /* -------------------------------------------------------------------------- */
 /* Small shared helpers                                                       */
 /* -------------------------------------------------------------------------- */
 
 /** How long a proof server gets for one contract circuit. PLONK is not quick. */
-const PROOF_TIMEOUT_MS = 600_000;
+export const PROOF_TIMEOUT_MS = 600_000;
+/**
+ * How long a `busy` sponsor is waited out before balancing is refused.
+ *
+ * `busy` means the service answered and has no DUST free right now, and on our
+ * own balancer that is a condition with a KNOWN shape: each spend it makes
+ * nullifies its change for 20 to 60 seconds, and an activation makes five. A
+ * gate that read one `busy` and refused was reporting a sponsor outage for a
+ * sponsor that was working — measured against the live balancer on
+ * 2026/09/02, where `/wallet-status` said `INSUFFICIENT_DUST` at 14:13:00Z for
+ * a condition its own `/fund-account` waits up to 300 s for.
+ *
+ * Ninety seconds covers the longest observed post-spend window with room over,
+ * and it is spent BEFORE anything is balanced, signed, or proved — so waiting
+ * it out costs a slow screen, while refusing costs the whole transfer.
+ */
+const SPONSOR_BUSY_WAIT_MS = 90_000;
+/** How often the `busy` wait re-probes. The cached verdict is bypassed. */
+const SPONSOR_BUSY_PROBE_INTERVAL_MS = 2_000;
 /** Default life of a balanced transaction, matching the deployment harness. */
 const DEFAULT_TTL_MS = 30 * 60 * 1_000;
 
@@ -302,6 +322,190 @@ export type ContractFeePayer = 'sponsored';
  * it must to build a transaction at all, but no code path in this app can make
  * it pay one.
  */
+/* -------------------------------------------------------------------------- */
+/* Balancing failures, by the step that failed                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * WHICH step of a sponsored balance failed.
+ *
+ * There are seven, they fail for unrelated reasons, and until 2026/09/02 every
+ * one of them reached the user as the same sentence — "the sponsor cannot cover
+ * this one right now" — because `balanceWithSponsor` wrapped its whole body in
+ * one `catch` and threw {@link sponsorFeeRefusal} out of it. That is how a
+ * blocked CORS preflight on the wallet's own proof server was reported, for
+ * weeks, as a fee-sponsorship outage: the sponsor was never asked.
+ *
+ *   `readiness`     the fee gate before anything is built.
+ *   `balance`       the SDK selecting this wallet's coins.
+ *   `sign`          the unshielded keystore signing the recipe.
+ *   `prove`         the WALLET's own Zswap proof, which `finalizeRecipe`
+ *                   computes. This is the one that needs a proof server the
+ *                   browser can actually reach.
+ *   `sponsor`       `POST /balance-only`.
+ *   `expired`       the sponsor's balanced transaction came back already past
+ *                   its own stamp.
+ *   `deserialise`   the bytes it came back with could not be read.
+ */
+export type BalancingStage =
+  | 'readiness'
+  | 'balance'
+  | 'sign'
+  | 'prove'
+  | 'sponsor'
+  | 'expired'
+  | 'deserialise';
+
+/**
+ * A balancing failure that says WHAT failed, whether it is worth trying again,
+ * and what the person in front of the screen should be told — three questions
+ * the single wrapped `Error` this replaces could answer for none of them.
+ *
+ * The shape is a contract with the two-leg send in `App.tsx`, which cannot
+ * import this module and duck-types it instead: `name === 'BalancingFailure'`,
+ * plus {@link stage}, {@link retryable}, {@link userMessage}, and `cause`.
+ * Nothing else about what leaves `balanceTx` changed.
+ */
+export class BalancingFailure extends Error {
+  readonly stage: BalancingStage;
+  /**
+   * Worth attempting the SAME leg again, unchanged.
+   *
+   * True for the transient half — a sponsor refusal it clears by itself, a
+   * transport failure, a proof server that was not there, a stamp that expired
+   * while we waited. False for anything a repeat would meet identically: the
+   * SDK reporting insufficient funds, a signature that could not be made,
+   * bytes that could not be read.
+   */
+  readonly retryable: boolean;
+  /** The sentence a user may be shown. Names no host and reads no balance. */
+  readonly userMessage: string;
+
+  constructor(
+    stage: BalancingStage,
+    options: { retryable: boolean; userMessage: string; cause: unknown },
+  ) {
+    super(options.userMessage, { cause: options.cause });
+    this.name = 'BalancingFailure';
+    this.stage = stage;
+    this.retryable = options.retryable;
+    this.userMessage = options.userMessage;
+  }
+}
+
+/**
+ * The sentence for a step the WALLET could not prove.
+ *
+ * It names no host, because constraint (b) keeps proof servers, wallets, DUST,
+ * and gateways out of everything a user reads — and because the honest content
+ * of this failure is "not now, try again", which needs no host to say.
+ */
+const PROVE_FAILURE_MESSAGE =
+  'Passport could not prove this step. Nothing has been sent — try again in a moment.';
+
+/** Whether a failure at {@link BalancingStage} `sponsor` clears by itself. */
+function sponsorFailureIsRetryable(cause: unknown): boolean {
+  if (cause instanceof SponsorError) return cause.isRetryable;
+  /* Anything else thrown out of `sponsorBalanceOnly` is a transport failure or
+     the "no sponsor would balance this" summary of a list that all refused;
+     both are conditions that clear. */
+  return true;
+}
+
+/**
+ * Builds the typed failure for a stage, and logs the ORIGINAL cause once.
+ *
+ * The log line is the other half of the fix: `cause` was never printed
+ * anywhere, so an operator reading a console after a failed send saw the
+ * refusal sentence and nothing about the CORS error, the 503, or the node
+ * rejection that produced it.
+ */
+export function balancingFailure(stage: BalancingStage, cause: unknown): BalancingFailure {
+  const reason = cause instanceof Error ? cause.message : String(cause);
+  const retryable =
+    stage === 'sponsor'
+      ? sponsorFailureIsRetryable(cause)
+      : stage === 'prove' || stage === 'expired' || stage === 'readiness';
+  const userMessage =
+    stage === 'prove'
+      ? PROVE_FAILURE_MESSAGE
+      : sponsorFeeRefusal({ state: 'unavailable', reason });
+  console.warn(`[contract] balancing failed at ${stage}:`, cause);
+  return new BalancingFailure(stage, { retryable, userMessage, cause });
+}
+
+/**
+ * The fee gate, with the waiting a `busy` sponsor deserves.
+ *
+ * `busy` is not an outage: the service answered, and has no DUST free at this
+ * instant because it has DUST reserved against work it is doing. On our own
+ * balancer that lasts 20 to 60 seconds per spend, and an activation makes
+ * five — so the gate met it constantly, and refused every time, for a sponsor
+ * that would have paid a minute later. It is now re-probed every
+ * {@link SPONSOR_BUSY_PROBE_INTERVAL_MS} for up to {@link SPONSOR_BUSY_WAIT_MS},
+ * bypassing the 30-second readiness cache each time so the wait ends the moment
+ * the sponsor is free rather than up to half a minute later.
+ *
+ * `unreachable` gets exactly ONE forced re-probe. Nothing has been learned
+ * about DUST there — a transport failure or an unparseable body — so a single
+ * retry covers the fast unparseable `200` that motivated retrying at all,
+ * without holding a send open for ninety seconds against a host that is down.
+ *
+ * The probe, the sleep, and the clock are injected so this is drillable
+ * without a network; production passes none of them.
+ */
+export async function awaitSponsorReadiness(options: {
+  probe?: (force: boolean) => Promise<SponsorReadiness>;
+  sleep?: (milliseconds: number) => Promise<void>;
+  now?: () => number;
+  windowMs?: number;
+} = {}): Promise<SponsorReadiness> {
+  const probe = options.probe ?? ((force: boolean) => sponsorReadiness(force ? { force } : {}));
+  const sleep =
+    options.sleep ??
+    ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  const now = options.now ?? Date.now;
+  const windowMs = options.windowMs ?? SPONSOR_BUSY_WAIT_MS;
+
+  let readiness = await probe(false);
+  if (readiness.state === 'ready') return readiness;
+  if (readiness.state === 'disabled') {
+    /* Not configured is not transient, and no amount of waiting configures it. */
+    throw new BalancingFailure('readiness', {
+      retryable: false,
+      userMessage: sponsorFeeRefusal(readiness),
+      cause: new Error('sponsorship is not configured for this build'),
+    });
+  }
+
+  if (readiness.cause === 'unreachable') {
+    readiness = await probe(true);
+    if (readiness.state === 'ready') return readiness;
+  } else {
+    /* Sleeps are counted alongside the clock for the same reason
+       `sponsorBalanceOnly` counts its own: a caller can inject a clock that
+       stands still, and a wait that trusts one never ends. */
+    let sleptMs = 0;
+    const startedAt = now();
+    while (Math.max(now() - startedAt, sleptMs) < windowMs) {
+      await sleep(SPONSOR_BUSY_PROBE_INTERVAL_MS);
+      sleptMs += SPONSOR_BUSY_PROBE_INTERVAL_MS;
+      readiness = await probe(true);
+      if (readiness.state === 'ready') return readiness;
+      if (readiness.state === 'disabled' || readiness.cause === 'unreachable') break;
+    }
+  }
+
+  throw balancingFailure(
+    'readiness',
+    new Error(
+      readiness.state === 'unavailable'
+        ? `the fee sponsor was ${readiness.cause} — ${readiness.reason}`
+        : 'the fee sponsor is not configured',
+    ),
+  );
+}
+
 export function walletProviderFor(wallet: LocalMidnightWallet) {
   const facade = wallet.facade as unknown as {
     balanceUnboundTransaction(
@@ -330,11 +534,15 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
     ttl: Date,
   ): Promise<ledger.FinalizedTransaction> => {
     let recipe: unknown;
+    /* The step being attempted, so the `catch` can say which one failed rather
+       than calling every one of them a sponsor refusal. */
+    let stage: BalancingStage = 'balance';
     try {
       recipe = await facade.balanceUnboundTransaction(tx, wallet.keys, {
         ttl,
         tokenKindsToBalance: BALANCE_WITHOUT_DUST,
       });
+      stage = 'sign';
       const signed = await facade.signRecipe(
         recipe,
         wallet.keys.unshieldedKeystore.signDataAsync,
@@ -346,11 +554,16 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
          a transaction nobody will submit — and fail for a reason that looks
          nothing like "the sponsor was unavailable". */
       recipe = signed;
+      /* `finalizeRecipe` is where the WALLET's own Zswap proof is computed —
+         the leg `deposit_shielded` needs and NIGHT does not, which is why
+         shielded sends failed at step two and unshielded ones did not. */
+      stage = 'prove';
       const finalized = await facade.finalizeRecipe(signed);
       /* A longer 429 window than a transfer gets, because the stakes differ:
          there is nothing to fall back TO here — a busy sponsor is worth
          waiting out rather than turning into a refusal. See
          SPONSOR_CONTRACT_RETRY_WINDOW_MS. */
+      stage = 'sponsor';
       const balanced = await sponsorBalanceOnly(finalized.serialize(), {
         pendingRetryWindowMs: SPONSOR_CONTRACT_RETRY_WINDOW_MS,
       });
@@ -364,12 +577,14 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
       console.info(
         `[contract] transaction ${balanced.txHash} balanced by ${balanced.servedBy}`,
       );
+      stage = 'expired';
       const expiresAtMs = Date.parse(balanced.expiresAt);
       if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
         throw new Error(
           `the sponsor's balanced transaction expired at ${balanced.expiresAt} before it could be submitted`,
         );
       }
+      stage = 'deserialise';
       return ledger.Transaction.deserialize<
         ledger.SignatureEnabled,
         ledger.Proof,
@@ -381,13 +596,10 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
          standing would strand shielded or unshielded inputs against a
          transaction nobody will ever submit. */
       await revertQuietly(recipe);
-      throw new Error(
-        sponsorFeeRefusal({
-          state: 'unavailable',
-          reason: cause instanceof Error ? cause.message : String(cause),
-        }),
-        { cause },
-      );
+      /* A failure that already knows which step it was keeps its own answer —
+         `awaitSponsorReadiness` throws one of these. */
+      if (cause instanceof BalancingFailure) throw cause;
+      throw balancingFailure(stage, cause);
     }
   };
 
@@ -402,9 +614,12 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
       /* The gate, and the last one: nothing is balanced, signed, or proved
          until the sponsor has said it can pay. A refusal here costs the user a
          sentence; the alternative would cost them a fee they were promised
-         they would never be asked for. */
-      const readiness = await sponsorReadiness();
-      if (readiness.state !== 'ready') throw new Error(sponsorFeeRefusal(readiness));
+         they would never be asked for.
+
+         It WAITS on a busy sponsor rather than refusing — see
+         {@link awaitSponsorReadiness} for why a single `busy` was never an
+         outage and what refusing on one cost. */
+      await awaitSponsorReadiness();
       return balanceWithSponsor(tx, deadline);
     },
 
@@ -538,14 +753,14 @@ async function createContractProofProvider(
 /* -------------------------------------------------------------------------- */
 
 /** The ledger's circuit-level proving contract, as midnight-js 5 calls it. */
-interface ProvingProviderLike {
+export interface ProvingProviderLike {
   check(preimage: Uint8Array, keyLocation: string): Promise<unknown>;
   prove(preimage: Uint8Array, keyLocation: string, obi?: bigint): Promise<Uint8Array>;
   lookupKey(keyLocation: string): Promise<unknown>;
 }
 
 /** One proof server, named so a log can say which one served. */
-interface NamedProvingProvider {
+export interface NamedProvingProvider {
   url: string;
   provider: ProvingProviderLike;
 }
@@ -571,7 +786,9 @@ interface NamedProvingProvider {
  * operator can tell "both provers are down" from "this circuit cannot be
  * proved anywhere", which are the same message today and different problems.
  */
-function failoverProvingProvider(provers: readonly NamedProvingProvider[]): ProvingProviderLike {
+export function failoverProvingProvider(
+  provers: readonly NamedProvingProvider[],
+): ProvingProviderLike {
   const urls = provers.map((prover) => prover.url);
   const byUrl = new Map(provers.map((prover) => [prover.url, prover.provider]));
 
