@@ -79,7 +79,7 @@ import {
   type ContractProvingMode,
 } from './contractRuntime.js';
 import { deployTransactionReference, type PooledResolver } from './resolverPool.js';
-import { DustUnavailable, type BalancerWallet } from './wallet.js';
+import { isDustShortfall, type BalancerWallet } from './wallet.js';
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
@@ -738,7 +738,7 @@ export async function createMidnamesSponsor(
              shown stops saying the registry rejected their name when what
              happened is that this service had no coin free. Nothing has landed
              at this point, so the rebuild is clean. */
-          if (cause instanceof DustUnavailable) throw cause;
+          if (isDustShortfall(cause)) throw cause;
           throw new AliasSponsorError(
             'deploy-failed',
             `The resolver contract for ${aliasDomain(label)} could not be deployed, so nothing was registered.`,
@@ -858,7 +858,7 @@ export async function createMidnamesSponsor(
           /* Same passthrough as the deploy leg above: no coin was free, the
              registry never saw the call, and the name is still unregistered —
              so this is a wait, not a refusal. */
-          if (registration.reason instanceof DustUnavailable) throw registration.reason;
+          if (isDustShortfall(registration.reason)) throw registration.reason;
           throw new AliasSponsorError(
             'register-rejected',
             `The .night registry rejected the registration of ${aliasDomain(label)}.`,
@@ -881,7 +881,7 @@ export async function createMidnamesSponsor(
         try {
           registerTx = await registerLeg();
         } catch (cause) {
-          if (cause instanceof DustUnavailable) throw cause;
+          if (isDustShortfall(cause)) throw cause;
           throw new AliasSponsorError(
             'register-rejected',
             `The .night registry rejected the registration of ${aliasDomain(label)}.`,

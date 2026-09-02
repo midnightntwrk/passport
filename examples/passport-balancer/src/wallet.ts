@@ -575,6 +575,33 @@ export class DustWaitExhausted extends Error {
   }
 }
 
+/**
+ * Is this failure OUR DUST shortfall, however deeply it has been re-wrapped?
+ *
+ * It has to be asked this way rather than with `instanceof`, and the live run
+ * on 2026/09/02 20:36 is why: midnight-js catches whatever a wallet provider
+ * throws and re-raises it as its own `Error`, so the registration's register
+ * leg came back as
+ *
+ *   Unexpected error submitting scoped transaction '<unnamed>':
+ *   DustUnavailable: no DUST coin was free to pay this transaction's fee:
+ *   Insufficient Funds: could not balance dust
+ *
+ * — a plain `Error` carrying our class's NAME in its text and nothing else of
+ * it. So the `cause` chain is walked first, and the text is the fallback. It
+ * matches on `DustUnavailable`, which only this module produces, rather than on
+ * the SDK's own "insufficient funds": somebody else's shortfall is not a reason
+ * for this service to sit and wait for its own coin.
+ */
+export function isDustShortfall(cause: unknown): boolean {
+  let seen: unknown = cause;
+  for (let depth = 0; seen !== null && seen !== undefined && depth < 8; depth += 1) {
+    if (seen instanceof DustUnavailable) return true;
+    seen = (seen as { cause?: unknown }).cause;
+  }
+  return /DustUnavailable/.test(cause instanceof Error ? cause.message : String(cause));
+}
+
 export interface DustWaitOptions {
   /** What is waiting, for the journal and for the refusal. */
   label: string;
@@ -621,7 +648,7 @@ export async function withDustWait<T>(
     try {
       return await spend();
     } catch (cause) {
-      if (!(cause instanceof DustUnavailable)) throw cause;
+      if (!isDustShortfall(cause)) throw cause;
       const remaining = deadline - now();
       if (remaining <= 0) throw new DustWaitExhausted(options.label, now() - startedAt, retryAfterMs);
       log(

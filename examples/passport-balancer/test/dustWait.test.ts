@@ -20,7 +20,44 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { withNodeRejectionRetry } from '../src/account.js';
-import { DustUnavailable, DustWaitExhausted, withDustWait } from '../src/wallet.js';
+import {
+  DustUnavailable,
+  DustWaitExhausted,
+  isDustShortfall,
+  withDustWait,
+} from '../src/wallet.js';
+
+/** Exactly what midnight-js handed back on the live run at 20:36 on 2026/09/02. */
+const AS_MIDNIGHT_JS_REWRAPS_IT = new Error(
+  "Unexpected error submitting scoped transaction '<unnamed>': DustUnavailable: no DUST coin was free to pay this transaction's fee: Insufficient Funds: could not balance dust",
+);
+
+describe('recognising our own DUST shortfall through a re-wrap', () => {
+  it('sees the class itself', () => {
+    assert.equal(isDustShortfall(new DustUnavailable('could not balance dust')), true);
+  });
+
+  it('sees it through a `cause` chain', () => {
+    assert.equal(
+      isDustShortfall(new Error('deploy failed', { cause: new DustUnavailable('x') })),
+      true,
+    );
+  });
+
+  it('sees it in the text midnight-js re-raises, which carries no cause at all', () => {
+    assert.equal(isDustShortfall(AS_MIDNIGHT_JS_REWRAPS_IT), true);
+  });
+
+  it('does NOT claim somebody else’s insufficient funds', () => {
+    /* The SDK's own phrase, without our class name: a caller's transaction
+       being short is not this service waiting for its own coin. */
+    assert.equal(isDustShortfall(new Error('Insufficient Funds: could not balance dust')), false);
+  });
+
+  it('does not claim an unrelated failure', () => {
+    assert.equal(isDustShortfall(new Error('call to a circuit that does not exist')), false);
+  });
+});
 
 /** A clock a test can move, so a thirty-second wait costs no wall-clock time. */
 const clockFrom = (start = 0): { now: () => number; advance: (ms: number) => void } => {
@@ -178,7 +215,7 @@ describe('waiting for a fee-capable coin', () => {
       withNodeRejectionRetry(
         async () => {
           attempt += 1;
-          if (attempt === 1) throw new DustUnavailable('insufficient funds');
+          if (attempt === 1) throw AS_MIDNIGHT_JS_REWRAPS_IT;
           if (attempt === 2) {
             throw new Error('RpcError: 1010: Invalid Transaction: Custom error: 231');
           }

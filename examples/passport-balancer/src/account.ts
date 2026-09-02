@@ -89,7 +89,7 @@ import {
   wait,
   type ContractProvingMode,
 } from './contractRuntime.js';
-import { DustUnavailable, type BalancerWallet } from './wallet.js';
+import { isDustShortfall, type BalancerWallet } from './wallet.js';
 
 /** Attempts, {@link CONFIRM_INTERVAL_MS} apart, to watch the credit appear. */
 const CONFIRM_ATTEMPTS = 180;
@@ -916,7 +916,7 @@ export async function createAccountFunder(
            was submitted, and nothing was credited. It travels out untouched so
            `./server.ts` can wait for a coin and rebuild this leg rather than
            telling the caller its grant failed. */
-        if (cause instanceof DustUnavailable) throw cause;
+        if (isDustShortfall(cause)) throw cause;
         throw new AccountFundingError(
           'deposit-failed',
           `The activation grant could not be deposited into ${address}; nothing was credited.`,
