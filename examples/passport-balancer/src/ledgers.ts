@@ -107,6 +107,8 @@ export interface ResolverEntry {
   address: string;
   /** The deploy transaction, as the indexer's hash where it knew one. */
   deployTx: string;
+  /** The block the deploy landed in, resolved at deploy so binding need not. */
+  deployBlock?: number | null;
   deployedAt: string;
   /** The account-custody contract this leaf was handed to, once it was. */
   consumedBy?: string;

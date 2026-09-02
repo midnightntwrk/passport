@@ -185,6 +185,41 @@ export function assessResolverPool(facts: ResolverPoolFacts): ResolverPoolVerdic
 }
 
 /* -------------------------------------------------------------------------- */
+/* Binding a leaf that already exists                                         */
+/* -------------------------------------------------------------------------- */
+
+/** A leaf off the shelf, as a registration is handed it. */
+export interface PooledResolver {
+  address: string;
+  /** The indexer's ledger HASH for the deploy — already resolved, at deploy. */
+  deployTx: string;
+  /** The block it landed in, where the indexer knew one at the time. */
+  deployBlock?: number | null;
+}
+
+/**
+ * The deploy transaction a finished registration reports, resolved for a fresh
+ * deploy and simply READ for a pooled one.
+ *
+ * The difference matters more than it looks. `resolveTransactionHash` maps a
+ * midnight-js transaction IDENTIFIER to the indexer's ledger hash, and the
+ * indexer's `transactions(offset: { identifier })` returns an empty list for
+ * anything that is not an identifier. A pooled leaf's `deployTx` is ALREADY the
+ * hash — the filler resolved it when it deployed the leaf, minutes or hours ago
+ * — so passing it back through the lookup finds nothing and spends the full
+ * retry budget, thirty seconds, at the very end of the request the pool exists
+ * to make quick. So the pooled branch never asks.
+ */
+export async function deployTransactionReference(
+  pooled: PooledResolver | undefined,
+  identifier: string,
+  lookup: (identifier: string) => Promise<{ hash: string; block: number | null }>,
+): Promise<{ hash: string; block: number | null }> {
+  if (pooled) return { hash: pooled.deployTx, block: pooled.deployBlock ?? null };
+  return lookup(identifier);
+}
+
+/* -------------------------------------------------------------------------- */
 /* The pool                                                                   */
 /* -------------------------------------------------------------------------- */
 
@@ -229,7 +264,7 @@ export interface ResolverPoolOptions {
     Omit<ResolverPoolFacts, 'now' | 'depth' | 'target' | 'floor' | 'deploying' | 'lastDeployAt'>
   >;
   /** Deploys one unbound leaf. Called at most once at a time, once a minute. */
-  deploy: () => Promise<{ address: string; deployTx: string }>;
+  deploy: () => Promise<{ address: string; deployTx: string; deployBlock?: number | null }>;
   intervalMs?: number;
   now?: () => number;
   log?: (line: string) => void;
@@ -294,6 +329,9 @@ export function startResolverPool(options: ResolverPoolOptions): ResolverPool {
         address: leaf.address,
         deployTx: leaf.deployTx,
         deployedAt: new Date(lastDeployAt).toISOString(),
+        /* Resolved once here, at a moment nobody is waiting, so that binding
+           this leaf later never has to ask the indexer anything. */
+        ...(leaf.deployBlock === undefined ? {} : { deployBlock: leaf.deployBlock }),
       });
       log(
         `[pool] deployed resolver leaf ${leaf.address} (${leaf.deployTx}); the shelf now holds ${options.ledger.depth()} of ${options.target}`,

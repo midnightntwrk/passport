@@ -1891,6 +1891,7 @@ async function main(): Promise<void> {
                     pooledResolver: {
                       address: pooledResolver.address,
                       deployTx: pooledResolver.deployTx,
+                      deployBlock: pooledResolver.deployBlock ?? null,
                     },
                   }
                 : {}),

@@ -78,6 +78,7 @@ import {
   wait,
   type ContractProvingMode,
 } from './contractRuntime.js';
+import { deployTransactionReference, type PooledResolver } from './resolverPool.js';
 import type { BalancerWallet } from './wallet.js';
 
 /* -------------------------------------------------------------------------- */
@@ -373,7 +374,7 @@ export interface AliasRegistrationRequest {
    * register — so an empty shelf costs a user nothing but the wait they would
    * have had anyway. See `./resolverPool.ts`.
    */
-  pooledResolver?: { address: string; deployTx: string };
+  pooledResolver?: PooledResolver;
 }
 
 export interface AliasRegistration {
@@ -435,7 +436,7 @@ export interface MidnamesSponsor {
    * gate in `./resolverPool.ts` says every one of its preconditions holds —
    * this spends a fee-capable DUST coin and it is never a user's turn.
    */
-  deployPoolLeaf(): Promise<{ address: string; deployTx: string }>;
+  deployPoolLeaf(): Promise<{ address: string; deployTx: string; deployBlock: number | null }>;
 }
 
 /**
@@ -634,7 +635,7 @@ export async function createMidnamesSponsor(
 
     poolOwnerKey: sponsorOwnerKey,
 
-    async deployPoolLeaf(): Promise<{ address: string; deployTx: string }> {
+    async deployPoolLeaf(): Promise<{ address: string; deployTx: string; deployBlock: number | null }> {
       /* ONE private-state id for every pooled leaf, not one per leaf. The
          private state here is a single constant — the caller secret — so a
          fresh id per deploy would grow the store without ever holding anything
@@ -667,7 +668,7 @@ export async function createMidnamesSponsor(
       const address = rawContractAddress(deployTxData.public.contractAddress);
       const identifier = transactionIdentifier(deployTxData);
       const resolved = await resolveTransactionHash(config.indexerHttpUrl, identifier);
-      return { address, deployTx: resolved.hash };
+      return { address, deployTx: resolved.hash, deployBlock: resolved.block };
     },
 
     async register(request: AliasRegistrationRequest): Promise<AliasRegistration> {
@@ -957,8 +958,14 @@ export async function createMidnamesSponsor(
           );
       }
 
+      /* A pooled leaf's deploy transaction was resolved to the indexer's hash
+         when the filler deployed it, so it is read rather than looked up: the
+         lookup takes an IDENTIFIER, finds nothing for a hash, and would spend
+         its whole retry budget doing it. See `deployTransactionReference`. */
       const [deploy, register] = await Promise.all([
-        resolveTransactionHash(config.indexerHttpUrl, resolverDeployTx),
+        deployTransactionReference(pooled, resolverDeployTx, (identifier) =>
+          resolveTransactionHash(config.indexerHttpUrl, identifier),
+        ),
         resolveTransactionHash(config.indexerHttpUrl, registerTx),
       ]);
 

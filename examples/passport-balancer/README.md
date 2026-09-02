@@ -615,11 +615,21 @@ depth below which `/status` calls the shelf low. The shelf lives in
 {
   "<leaf contract address>": {
     "address": "<64 hex>", "deployTx": "<64-hex ledger hash>",
-    "deployedAt": "<ISO 8601>",
+    "deployBlock": 164800, "deployedAt": "<ISO 8601>",
     "consumedBy": "<account contract, once taken>", "consumedAt": "<ISO 8601>"
   }
 }
 ```
+
+`deployTx` is the indexer's ledger **hash**, and `deployBlock` the block it
+landed in, both resolved by the filler at deploy time — at a moment nobody is
+waiting. That is deliberate: `resolveTransactionHash` maps a midnight-js
+transaction *identifier* to a hash, and the indexer answers an empty list for a
+hash offered as an identifier, so a registration that put a pooled leaf's
+`deployTx` back through the lookup would find nothing and spend the full retry
+budget — about thirty seconds — at the end of the very request the shelf exists
+to shorten. The pooled path therefore reads both fields and asks the indexer
+only about the registration transaction.
 
 A leaf is marked consumed **the instant it is taken** — before a single proof is
 attempted — because the failure that guards against is two registrations racing

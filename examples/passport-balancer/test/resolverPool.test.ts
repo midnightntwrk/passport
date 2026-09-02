@@ -35,6 +35,7 @@ import {
   MIN_FEE_CAPABLE_COINS,
   QUIET_MS,
   assessResolverPool,
+  deployTransactionReference,
   resolverLedgerFrom,
   startResolverPool,
   type ResolverLedger,
@@ -311,7 +312,11 @@ describe('the filler', () => {
       }),
       deploy: async () => {
         deploys.push(clock);
-        return { address: `leaf-${deploys.length}`, deployTx: `tx-${deploys.length}` };
+        return {
+          address: `leaf-${deploys.length}`,
+          deployTx: `tx-${deploys.length}`,
+          deployBlock: 164_800 + deploys.length,
+        };
       },
       log: () => undefined,
       warn: () => undefined,
@@ -320,6 +325,9 @@ describe('the filler', () => {
     assert.equal((await pool.tick()).deploy, true);
     assert.equal(ledger.depth(), 1);
     assert.equal(ledger.all[0]?.deployTx, 'tx-1');
+    /* Resolved now, while nobody is waiting, so that binding it later can read
+       the block instead of asking the indexer for it. */
+    assert.equal(ledger.all[0]?.deployBlock, 164_801);
 
     /* The very next tick, on the same clock: refused by the one-a-minute floor
        rather than by anything about the shelf. */
@@ -437,6 +445,63 @@ describe('the filler', () => {
       lastDeployAt: null,
     });
     pool.stop();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The deploy transaction a bound leaf reports                                */
+/* -------------------------------------------------------------------------- */
+
+describe('the deploy transaction a registration reports', () => {
+  /**
+   * The pooled path must not look the deploy up. `resolveTransactionHash`
+   * queries `transactions(offset: { identifier })`, and a pooled leaf's
+   * `deployTx` is already the indexer's HASH — resolved by the filler when it
+   * deployed the leaf. The indexer answers an empty list for a hash passed as
+   * an identifier, so the lookup would spend its whole retry budget, about
+   * thirty seconds, at the end of the very request the shelf exists to
+   * shorten. A shelf at depth 0 hides this, which is why it is asserted here.
+   */
+  it('performs no identifier lookup for a pooled leaf', async () => {
+    let lookups = 0;
+    const reference = await deployTransactionReference(
+      { address: 'leaf-aa', deployTx: 'hash-aa', deployBlock: 164_800 },
+      'identifier-that-must-not-be-looked-up',
+      async (identifier) => {
+        lookups += 1;
+        return { hash: identifier, block: null };
+      },
+    );
+    assert.equal(lookups, 0, 'the pooled path asked the indexer and must not have');
+    assert.deepEqual(reference, { hash: 'hash-aa', block: 164_800 });
+  });
+
+  it('reports a pooled leaf with no known block rather than hunting for one', async () => {
+    let lookups = 0;
+    const reference = await deployTransactionReference(
+      { address: 'leaf-bb', deployTx: 'hash-bb' },
+      'identifier-bb',
+      async () => {
+        lookups += 1;
+        return { hash: 'never', block: 1 };
+      },
+    );
+    assert.equal(lookups, 0);
+    assert.deepEqual(reference, { hash: 'hash-bb', block: null });
+  });
+
+  it('still resolves the identifier when the leaf was deployed for this request', async () => {
+    const asked: string[] = [];
+    const reference = await deployTransactionReference(
+      undefined,
+      'identifier-cc',
+      async (identifier) => {
+        asked.push(identifier);
+        return { hash: 'hash-cc', block: 164_801 };
+      },
+    );
+    assert.deepEqual(asked, ['identifier-cc']);
+    assert.deepEqual(reference, { hash: 'hash-cc', block: 164_801 });
   });
 });
 
