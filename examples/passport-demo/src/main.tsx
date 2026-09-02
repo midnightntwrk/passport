@@ -13,6 +13,8 @@ import '@fontsource/space-grotesk/700.css';
 import { initTheme } from './lib/theme.js';
 import PassportDemo from './App.js';
 import { PassportPwaShell } from './pwa.js';
+// Outside the shell, so a throw inside the shell itself still lands somewhere.
+import { ErrorBoundary } from './lib/errorBoundary.js';
 // The mobile screens' token contract. Each screen sheet imports it too; the
 // bundler emits it once. Importing it here keeps the tokens present even when
 // no screen sheet has been reached yet.
@@ -35,9 +37,11 @@ if (!import.meta.env.DEV || window.location.origin === requiredDevelopmentOrigin
       {/* Nothing wraps the app but the PWA shell: onboarding is a passkey
           ceremony in this tab, so there is no vendor context to provision and
           no environment id the boot can be held hostage to. */}
-      <PassportPwaShell>
-        <PassportDemo />
-      </PassportPwaShell>
+      <ErrorBoundary>
+        <PassportPwaShell>
+          <PassportDemo />
+        </PassportPwaShell>
+      </ErrorBoundary>
     </React.StrictMode>,
   );
 
