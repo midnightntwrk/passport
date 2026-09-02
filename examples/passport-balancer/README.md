@@ -311,10 +311,24 @@ curl -X POST http://127.0.0.1:8807/register-alias \
 | `ownerAddress` | no | An `mn_addr…` unshielded address for the leaf's `owner_address` half. Absent means 32 zero bytes — the balancer will not substitute its own, or a payment meant for the user would land here. |
 | `network` | no | Must be `stagenet` when given. |
 
-Two transactions happen, in order: a **resolver leaf** is deployed with
-`DOMAIN_TARGET = [contractAddress, ContractAddr]` and `DOMAIN_OWNER` set to the
-supplied key, then `register_domain_for(owner, domain, len, resolver)` is called
-on the TLD. Success is returned **only** after the registry has been read back
+There are two paths, and which one runs depends only on whether the sponsor has
+a pre-deployed leaf on the shelf. See [the resolver-leaf
+pool](#the-resolver-leaf-pool).
+
+**Off the shelf.** A leaf deployed earlier is taken and marked consumed, then
+`update_domain_target(contractAddress)` on that leaf and
+`register_domain_for(owner, domain, len, resolver)` on the TLD run
+**concurrently**, on two DUST coins — neither reads the other's result.
+`change_owner(ownerKey, ownerAddress)` follows in the background once the name
+is confirmed, unwaited and logged: the name already resolves, and nobody is
+watching a screen for the hand-over.
+
+**Empty shelf.** Exactly the path this service has always taken, unchanged: a
+**resolver leaf** is deployed with `DOMAIN_TARGET = [contractAddress,
+ContractAddr]` and `DOMAIN_OWNER` set to the supplied key, then
+`register_domain_for` is called on the TLD.
+
+Either way success is returned **only** after the registry has been read back
 and seen resolving the name to that contract — not merely after the transactions
 land:
 
@@ -325,7 +339,8 @@ land:
   "resolverDeployTx": "<64-hex ledger hash>", "registerTx": "<64-hex ledger hash>",
   "resolverDeployBlock": 159260, "registerBlock": 159274,
   "target": { "kind": "contract", "address": "<64 hex>" },
-  "ownerKey": "<64 hex>", "costAtomic": "10", "registeredAt": "<ISO 8601>"
+  "ownerKey": "<64 hex>", "costAtomic": "10", "registeredAt": "<ISO 8601>",
+  "fromPool": true
 }
 ```
 
@@ -560,6 +575,88 @@ failed is a real, recorded NIGHT credit with no asset entry, and the gap is
 precisely the set of accounts a retried `/fund-account` would top up.
 
 None of these is key material and none of them names a user.
+
+`resolverPool` is the shelf of pre-deployed resolver leaves, or `null` when
+there is no `.night` sponsor to deploy through:
+
+```
+depth         unconsumed leaves on the shelf
+target        RESOLVER_POOL_TARGET
+floor         RESOLVER_POOL_FLOOR
+state         idle | filling | paused
+reason        the one sentence behind that state
+lastDeployAt  when this process last put a leaf on the shelf, or null
+```
+
+---
+
+## The resolver-leaf pool
+
+Registering a name is two dependent proofs, and the first is the expensive one:
+deploying the resolver leaf costs **1.37e16 Specks** against 8.5e14 for the
+registration itself, plus a block of waiting, all of it spent while somebody is
+watching a screen.
+
+None of that deploy depends on the user. `DOMAIN` is sealed at construction, but
+`DOMAIN_TARGET` is settable afterwards by `update_domain_target` and
+`DOMAIN_OWNER` by `change_owner`, both gated on the caller's derived key
+matching the leaf's current owner — and `register_domain_for` on the TLD writes
+only `{ owner, resolver }`, never looking inside the leaf. So a leaf can be
+built ahead of time with no domain, a zero target, and the **sponsor's** own key
+as owner, and bound to a person later.
+
+The sponsor therefore keeps a shelf of them. `RESOLVER_POOL_TARGET` (default
+**100**) is what it fills to; `RESOLVER_POOL_FLOOR` (default **50**) is the
+depth below which `/status` calls the shelf low. The shelf lives in
+`resolvers-<network>.json`, beside `accounts-<network>.json` and
+`aliases-<network>.json`, on the same atomic write-and-rename:
+
+```json
+{
+  "<leaf contract address>": {
+    "address": "<64 hex>", "deployTx": "<64-hex ledger hash>",
+    "deployedAt": "<ISO 8601>",
+    "consumedBy": "<account contract, once taken>", "consumedAt": "<ISO 8601>"
+  }
+}
+```
+
+A leaf is marked consumed **the instant it is taken** — before a single proof is
+attempted — because the failure that guards against is two registrations racing
+onto one leaf, and a leaf marked only on success would be free for the whole
+minute the first binding spends proving. A leaf whose binding then fails stays
+spent: it cost one deploy, the filler replaces it, and reusing a half-bound leaf
+under somebody else's name is not a trade worth making.
+
+### The filler is the lowest-priority thing this service does
+
+Not a queue priority — a priority still competes. It is a set of preconditions
+that make the filler simply not ask. It deploys **one** leaf at a time, **at
+most one a minute**, and only when *all* of these hold:
+
+| Precondition | Why |
+| --- | --- |
+| the health verdict is `healthy` | it pauses on `busy`, `settling`, `degraded`, `wedged`, and `dust-wedged` |
+| the reservation shows nothing waiting, running, or booked | a leaf deploy must never join a queue somebody is waiting in |
+| at least **two** fee-capable DUST coins (≥ 1.5e16 Specks) exist | it spends the second coin and never the last, so fee sponsorship stays up |
+| no proof is in flight at the prover | one proof server, two vCPUs: the proof that would suffer is a person's |
+| ≥ 60 s since the last user-facing request | `/status` and `/wallet-status` do not count, or watchdog polling would pause it for ever |
+| ≥ 60 s since the last leaf deploy, **failed ones included** | a failed deploy still cost a proof; retrying it at once is how a broken artefact becomes a spend loop |
+
+Any of these failing is a **pause**, not a fault. On the deployed sponsor today
+— two DUST coins, one of them fee-capable — the filler sits at:
+
+```json
+"resolverPool": { "depth": 0, "target": 100, "floor": 50,
+                  "state": "paused", "reason": "one fee-capable coin",
+                  "lastDeployAt": null }
+```
+
+and that is the system working. The shelf fills when the sponsor's NIGHT is
+spread across more coins; until then every registration takes the unchanged
+deploy-then-register path and nothing about the service is worse than it was.
+
+`RESOLVER_POOL_TARGET=0` switches the pool off entirely.
 
 ---
 
@@ -907,6 +1004,8 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_HEALTH_INTERVAL_MS` | `600000` | How often the in-process watchdog evaluates the wallet. Minimum `5000`; **`0` turns it off**, and the external timer is unaffected. |
 | `BALANCER_MIDNAMES_TLD_ADDRESS` | our stagenet TLD | The `.night` registry names go to. Unset **and** no known default disables `/register-alias`. |
 | `BALANCER_ALIAS_MAX_PER_HOUR` | `20` | Sponsored registrations per rolling hour. |
+| `RESOLVER_POOL_TARGET` | `100` | Pre-deployed resolver leaves to hold. **`0` turns the pool off**, and every name deploys its own leaf. |
+| `RESOLVER_POOL_FLOOR` | `50` | The depth below which `/status` calls the shelf low. Changes nothing about the filler, which is always at the lowest priority. Must not exceed the target. |
 | `BALANCER_ACCOUNT_GRANT_ATOMIC` | `2000` | The activation grant, in atomic NIGHT (0.002 NIGHT). |
 | `BALANCER_ACCOUNT_MAX_PER_HOUR` | `30` | Funded accounts per rolling hour. Counts activations, not legs. |
 | `BALANCER_ASSET_GRANT` | `100` | The opening balance, in whole mUSD. **`0` turns the asset leg off.** |

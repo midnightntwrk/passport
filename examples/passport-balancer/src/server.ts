@@ -150,6 +150,7 @@ import {
   type AccountAssetEntry,
   type AccountEntry,
   type AliasEntry,
+  type ResolverEntry,
 } from './ledgers.js';
 import { SpendAdmission, TokenBucket, clientAddress, clientKeyAccepted } from './limits.js';
 import {
@@ -162,6 +163,12 @@ import {
   type MidnamesSponsor,
 } from './midnames.js';
 import { SpendPriority } from './reservation.js';
+import {
+  FEE_CAPABLE_SPECKS,
+  resolverLedgerFrom,
+  startResolverPool,
+  type ResolverPool,
+} from './resolverPool.js';
 import {
   BalanceRefusal,
   formatNight,
@@ -261,6 +268,18 @@ async function main(): Promise<void> {
     config.stateDir,
     config.networkId,
     'accounts',
+  );
+  /**
+   * The shelf of pre-deployed resolver leaves, beside the other once-only
+   * ledgers. Not once-only itself — a leaf is written when it is deployed and
+   * rewritten when it is consumed — but the same atomic write-and-rename, and
+   * for the same reason: a restart that forgot the shelf would deploy a hundred
+   * more leaves and abandon the ones it already paid for.
+   */
+  const resolverLedger = await JsonLedger.open<ResolverEntry>(
+    config.stateDir,
+    config.networkId,
+    'resolvers',
   );
   /**
    * The health watchdog's restart bookkeeping, on the same atomic
@@ -379,6 +398,29 @@ async function main(): Promise<void> {
    */
   let dustRepairPending = false;
 
+  /**
+   * When a PERSON last asked this service for something — any route but the two
+   * read-only probes, which are polled by watchdogs around the clock and would
+   * otherwise keep the resolver pool permanently paused.
+   *
+   * The pool's quiet-period gate reads it. Nothing else does: this is not a
+   * rate limit and not a health signal, it is the filler's answer to "is anyone
+   * about?".
+   */
+  let lastRequestAt = 0;
+
+  /**
+   * Proofs this service has outstanding at the prover that are NOT inside a
+   * spend job — which today means `/balance-only`, whose proving deliberately
+   * happens outside the queue so a fee leg never waits behind a grant.
+   *
+   * The resolver pool needs it because `wallet.isBusy()` cannot see it: a leaf
+   * deploy started while somebody's Send is being proved would put two proofs
+   * on a two-vCPU droplet's single prover, and the one that suffers is the one
+   * a person is waiting for.
+   */
+  let proofsInFlight = 0;
+
   process.stdout.write('opening the balancer wallet\n');
   const wallet: BalancerWallet = await openBalancerWallet(config, {
     lastSpendAt: () => lastSpendAt,
@@ -409,6 +451,11 @@ async function main(): Promise<void> {
    * `BALANCER_HEALTH_INTERVAL_MS=0` turns the in-process leg off.
    */
   let healthMonitor: HealthMonitor | null = null;
+  /**
+   * The shelf of pre-deployed resolver leaves and the filler that stocks it.
+   * `null` when there is no sponsor to deploy through or the target is zero.
+   */
+  let resolverPool: ResolverPool | null = null;
   let aliasesSponsored = 0;
   let accountsFunded = 0;
   /**
@@ -894,6 +941,12 @@ async function main(): Promise<void> {
          can be watched working — and, more to the point, watched NOT firing —
          without an SSH session. `null` only when it is switched off. */
       health: healthMonitor ? healthMonitor.snapshot() : null,
+      /* The shelf of pre-deployed resolver leaves: how many are on it, what it
+         is aiming at, and — when it is not filling — the one reason it is not.
+         `paused` is the normal reading on a sponsor with two DUST coins, and
+         the reason says so: the filler spends the second coin and never the
+         last. See `./resolverPool.ts`. */
+      resolverPool: resolverPool ? resolverPool.snapshot() : null,
       ready,
     };
   };
@@ -1070,6 +1123,63 @@ async function main(): Promise<void> {
     );
   } else {
     console.warn('[health] watchdog OFF — BALANCER_HEALTH_INTERVAL_MS is 0');
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* The resolver-leaf pool                                                     */
+  /* -------------------------------------------------------------------------- */
+
+  /**
+   * How many DUST coins could pay for a contract deploy RIGHT NOW.
+   *
+   * Coins and not the balance, because the SDK selects per coin: 3e16 Specks
+   * spread over four small coins pays for no deploy at all. `generatedNow` is
+   * the SDK's own per-coin figure — DUST accrues against its backing NIGHT, so
+   * a coin's value is a function of time and not a stored number.
+   *
+   * Zero on any failure, which pauses the filler. A coin count that cannot be
+   * read is not a coin.
+   */
+  const feeCapableDustCoins = async (): Promise<number> => {
+    try {
+      const state = await wallet.currentState();
+      return state.dust.availableCoins.filter((coin) => coin.generatedNow >= FEE_CAPABLE_SPECKS)
+        .length;
+    } catch {
+      return 0;
+    }
+  };
+
+  if (sponsor && config.resolverPoolTarget > 0) {
+    const leafSponsor = sponsor;
+    resolverPool = startResolverPool({
+      ledger: resolverLedgerFrom(resolverLedger),
+      target: config.resolverPoolTarget,
+      floor: config.resolverPoolFloor,
+      facts: async () => ({
+        verdict: healthMonitor?.snapshot().verdict ?? null,
+        /* Booked OR queued OR claimed. See the field's own note in
+           `./resolverPool.ts`: a leaf deploy must never join a queue somebody
+           is waiting in. */
+        reservationBooked:
+          wallet.isBusy() || wallet.isReserved() || spendAdmission.depth > 0 || dustRepairPending,
+        feeCapableCoins: await feeCapableDustCoins(),
+        proofInFlight: proofsInFlight > 0,
+        lastRequestAt,
+      }),
+      /* Through the spend queue like every other spend, at Normal priority —
+         the gate is what keeps it out of a user's way, not a priority, and a
+         deploy that skipped the queue would contend for coins with the very
+         registration it exists to make faster. */
+      deploy: () => wallet.exclusive(() => leafSponsor.deployPoolLeaf()),
+    });
+    console.log(
+      `[pool] holding ${resolverLedger.countWhere((entry) => entry.consumedAt === undefined)} pre-deployed resolver leaves, target ${config.resolverPoolTarget}, floor ${config.resolverPoolFloor} — the filler deploys one at a time, at most one a minute, and only when nothing else wants this wallet`,
+    );
+  } else if (config.resolverPoolTarget > 0) {
+    console.warn('[pool] OFF — there is no .night sponsor to deploy resolver leaves through');
+  } else {
+    console.warn('[pool] OFF — RESOLVER_POOL_TARGET is 0, so every name deploys its own leaf');
   }
 
   /* -------------------------------------------------------------------------- */
@@ -1753,6 +1863,17 @@ async function main(): Promise<void> {
         );
       }
 
+      /* A leaf off the shelf, if there is one. Marked consumed the instant it
+         is taken — before a single proof is attempted — so a second
+         registration arriving mid-binding cannot be handed the same leaf. A
+         leaf whose binding then fails stays spent: it cost one deploy, the
+         filler replaces it in its own time, and reusing a half-bound leaf under
+         somebody else's name is not a trade worth making.
+
+         `null` means the shelf is bare, and the registration below takes the
+         path this service has always taken. */
+      const pooledResolver = resolverPool ? await resolverPool.take(contractAddress) : null;
+
       try {
         /* Both transactions run under the wallet's spend lock, so a fee
            sponsorship cannot reserve the coins this registration is balancing
@@ -1765,6 +1886,14 @@ async function main(): Promise<void> {
               contractAddress,
               ownerAddressBytes,
               awaitTarget: !targetExists,
+              ...(pooledResolver
+                ? {
+                    pooledResolver: {
+                      address: pooledResolver.address,
+                      deployTx: pooledResolver.deployTx,
+                    },
+                  }
+                : {}),
             }),
           /* Ahead of any activation grant that is merely waiting. Somebody is
              watching a screen for this one and nobody is watching for a grant;
@@ -1782,7 +1911,7 @@ async function main(): Promise<void> {
           at: result.registeredAt,
         });
         console.log(
-          `[alias] ${result.domain} → ${contractAddress} (resolver ${result.resolverAddress}, deploy ${result.resolverDeployTx}, register ${result.registerTx}${result.registerBlock ? `, block ${result.registerBlock}` : ''})`,
+          `[alias] ${result.domain} → ${contractAddress} (resolver ${result.resolverAddress}${result.fromPool ? ', off the shelf' : ''}, deploy ${result.resolverDeployTx}, register ${result.registerTx}${result.registerBlock ? `, block ${result.registerBlock}` : ''})`,
         );
         return {
           status: 200,
@@ -1800,6 +1929,7 @@ async function main(): Promise<void> {
             ownerKey: result.ownerKey,
             costAtomic: result.costAtomic.toString(),
             registeredAt: result.registeredAt,
+            fromPool: result.fromPool,
           },
         };
       } catch (cause) {
@@ -2046,6 +2176,12 @@ async function main(): Promise<void> {
     void (async () => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname;
 
+      /* Everything but the two read-only probes counts as somebody being about.
+         `/status` and `/wallet-status` are polled by the client before every
+         send and by two watchdogs around the clock, so counting them would hold
+         the resolver pool at paused for the life of the process. */
+      if (path !== '/status' && path !== '/wallet-status') lastRequestAt = Date.now();
+
       if (request.method === 'OPTIONS') {
         response.writeHead(204, corsHeaders(request));
         response.end();
@@ -2114,6 +2250,7 @@ async function main(): Promise<void> {
           return;
         }
 
+        proofsInFlight += 1;
         try {
           const result = await wallet.balanceOnly(bytes);
           balancesServed += 1;
@@ -2137,6 +2274,8 @@ async function main(): Promise<void> {
           const message = cause instanceof Error ? cause.message : String(cause);
           console.error('[balance] failed', cause);
           respond(request, response, 500, { error: 'BALANCE_FAILED', message });
+        } finally {
+          proofsInFlight -= 1;
         }
         return;
       }
@@ -2245,6 +2384,7 @@ async function main(): Promise<void> {
     /* Stopped first, so a tick cannot start while the wallet is closing and
        read a half-shut facade as a fault. */
     healthMonitor?.stop();
+    resolverPool?.stop();
     server.close();
     void wallet
       .close()
