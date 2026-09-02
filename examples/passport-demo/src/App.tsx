@@ -266,14 +266,20 @@ const FUND_ACCOUNT_TIMEOUT_MS = 600_000;
  * SYNCING — a 503 — for a minute or two afterwards while its wallet catches up.
  * Observed live on 2026/08/24, and the account sat at zero because a single
  * attempt was all it got. So a refusal that time can fix is retried rather than
- * recorded as the end of the story: five retries, ~10 minutes of patience in
+ * recorded as the end of the story: seven retries, ~10 minutes of patience in
  * total, all of it in the background and none of it able to touch the name.
+ *
+ * THE FIRST WAIT IS FIVE SECONDS, not twenty (2026/09/02). The grant is now
+ * fired the moment the account lands rather than after the name is registered,
+ * and the commonest refusal at that instant is `indexer-unreachable` for a
+ * contract the indexer has not served yet — a state that clears in a block. A
+ * twenty-second first wait spent the whole of that gap doing nothing.
  *
  * Separate from {@link FUND_ACCOUNT_TIMEOUT_MS}, which bounds one request. A
  * slow answer is the sponsor doing chain work and is waited out; a fast refusal
  * is what this schedule exists for.
  */
-const FUND_ACCOUNT_RETRY_DELAYS_MS = [20_000, 40_000, 80_000, 160_000, 320_000];
+const FUND_ACCOUNT_RETRY_DELAYS_MS = [5_000, 10_000, 20_000, 40_000, 80_000, 160_000, 320_000];
 /**
  * Which account contracts this browser has already asked the sponsor to
  * activate. Keyed by contract address because that is what a Passport has
@@ -1321,14 +1327,6 @@ export default function PassportDemo() {
    * slower one by default.
    */
   const contractDeploysInFlight = useRef(new Map<string, PassportContractRun>());
-  /**
-   * True while a name claim owns this Passport's critical path.
-   *
-   * It gates ONE thing — the pending-activation pickup below — and it exists
-   * because the two were racing for the sponsor's single spend queue. See that
-   * effect for the measurement.
-   */
-  const [claimHoldsThePath, setClaimHoldsThePath] = useState(false);
   /** The pending per-network reclaim conflict, when the target says "taken". */
   const [reclaim, setReclaim] = useState<{ target: PassportNetwork; alias: string } | null>(null);
   const [reclaimBusy, setReclaimBusy] = useState(false);
@@ -3348,37 +3346,30 @@ export default function PassportDemo() {
    * immediately on a marked contract and on one already in flight, so the
    * claim's own call and this effect can never both run a schedule.
    *
-   * NOT WHILE A CLAIM IS RUNNING (2026/08/31), and this is the single largest
-   * saving in the whole claim.
+   * IT NO LONGER WAITS FOR THE CLAIM (2026/09/02).
    * ------------------------------------------------------------------------
-   * This effect used to fire the moment `accountContractAddress` became
-   * non-null, which is the moment the deployed record is written — before the
-   * claim had posted `/register-alias`. The sponsor runs ONE spend job at a
-   * time (`exclusive`, `examples/passport-balancer/src/wallet.ts`), so the
-   * grant did not merely run alongside the registration: it ran IN FRONT of it,
-   * and held the queue through its own confirmation loop.
+   * From 2026/08/31 this effect stood down while a claim was running, because
+   * the sponsor ran one spend job at a time and the grant took the queue in
+   * front of the name — three consecutive claims reconstructed block by block
+   * from the stagenet indexer that day (register blocks 257787, 257685,
+   * 257522) all showed the same shape: account deploy at +0 s, `deposit_night`
+   * at +24 s, resolver deploy at +48 s, `register_domain_for` at +84 s. Those
+   * two middle blocks were this effect, sitting between the account and the
+   * name.
    *
-   * The cost was measurable on chain and was measured. Three consecutive real
-   * claims reconstructed block by block from the stagenet indexer on
-   * 2026/08/31 (register blocks 257787, 257685, 257522) each show the identical
-   * shape: account deploy at +0 s, `deposit_night` at +24 s, resolver deploy at
-   * +48 s, `register_domain_for` at +84 s. Those two middle blocks are this
-   * effect, sitting between the account and the name.
-   *
-   * So the pickup waits its turn. Nothing about the name depends on the grant —
-   * step (5) of the claim fires the same call the moment the Passport is whole,
-   * which is what the code always intended — and nothing is lost by deferring:
-   * `claimHoldsThePath` is a dependency, so the moment the claim lets go this
-   * effect runs again and finishes any grant the claim did not. That covers the
-   * claim that FAILED at the registration, too, which never reaches step (5)
-   * and would otherwise leave a deployed account unfunded until the next
-   * launch.
+   * The sponsor now puts a registration ahead of a waiting grant itself, so the
+   * deferral no longer buys the name anything and costs the account the whole
+   * registration — a minute and a half — before it starts filling. The claim
+   * fires the grant the moment the account LANDS, and this effect is the
+   * safety net for everything that never gets there: a claim that failed at the
+   * registration, a reload during the backoff, a laptop closed mid-claim.
+   * `fundAccountOnce` is once per contract across all of them, so nothing here
+   * can run a second schedule.
    */
   useEffect(() => {
     if (localWalletStatus !== 'ready' || !accountContractAddress) return;
-    if (claimHoldsThePath) return;
     void fundAccountOnce(accountContractAddress);
-  }, [accountContractAddress, claimHoldsThePath, fundAccountOnce, localWalletStatus]);
+  }, [accountContractAddress, fundAccountOnce, localWalletStatus]);
 
   /**
    * ONE user action, from the passkey prompt to the registered name.
@@ -3640,6 +3631,24 @@ export default function PassportDemo() {
             void landed.then(
               (deployment) => {
                 setContractBusy(false);
+                /* THE OPENING BALANCE, THE MOMENT THERE IS AN ACCOUNT TO PUT IT
+                   IN (2026/09/02).
+                   ------------------------------------------------------------
+                   It used to be fired at step (5), after the registration had
+                   come back, and it was deferred there on 2026/08/31 because
+                   the sponsor ran one spend job at a time and the grant took
+                   the queue in front of the name. The sponsor now puts a
+                   registration ahead of a waiting grant itself, so the deferral
+                   buys nothing and costs the whole registration — a minute and
+                   a half — before the account starts filling. An activation is
+                   ~250 s of the sponsor's own work; started here it overlaps
+                   the name instead of following it.
+
+                   Fired for a JOINED deploy too, and before the `ownsDeploy`
+                   return: the grant is once per contract, not once per claim,
+                   and `fundAccountOnce` owns that. Never awaited — nothing
+                   about the name depends on it. */
+                void fundAccountOnce(deployment.address);
                 if (!ownsDeploy) return;
                 // The deployed record was written by the gate; this is the
                 // claim's own account of it, which a joining claim must not
@@ -3839,31 +3848,14 @@ export default function PassportDemo() {
   );
 
   /**
-   * {@link runClaimBoundToAccount}, with the flag that keeps the activation
-   * grant out of its way raised for as long as it runs.
+   * {@link runClaimBoundToAccount}, under the name the rest of the app calls.
    *
-   * A thin wrapper rather than two lines inside the claim, because the flag has
-   * to fall on EVERY exit — a refused name, a failed deploy, a passkey the
-   * platform would not use — and a `finally` around a hundred-line body that
-   * already has one of its own reads as though the two were related. They are
-   * not: that one zeroes secrets, this one lets the sponsor's queue go.
+   * It used to raise a flag that kept the activation grant out of the claim's
+   * way, and the flag went with the deferral on 2026/09/02: the grant is now
+   * fired the moment the account lands, deliberately alongside the name, and
+   * there is nothing left to hold back.
    */
-  const claimAliasBoundToAccount = useCallback(
-    async (
-      handle: LocalMidnightWallet,
-      activeProfile: DemoPassportProfile,
-      alias: string,
-      onPhase: (phase: AliasClaimProgress['phase']) => void,
-    ): Promise<AliasClaimResult> => {
-      setClaimHoldsThePath(true);
-      try {
-        return await runClaimBoundToAccount(handle, activeProfile, alias, onPhase);
-      } finally {
-        setClaimHoldsThePath(false);
-      }
-    },
-    [runClaimBoundToAccount],
-  );
+  const claimAliasBoundToAccount = runClaimBoundToAccount;
 
   /**
    * The real claim, as ONE user action: the account-custody contract is
