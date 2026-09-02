@@ -105,9 +105,9 @@ const ENTRY_PURPOSE = 'F1 Grand Prix raffle entry';
  * name resolves to it, the money the entry payment comes out of lives in it,
  * and the wallet behind it exists to sign, not to be known. So the raffle keys
  * a ticket on `passportContract.address` — one account, one entry, stable
- * across every device that passkey opens — and never asks for
- * `midnightAddresses` at all. It has no use for a receiving address: entries
- * are PAID to the collection address below, not to the entrant.
+ * across every device that passkey opens. It has no use for a receiving
+ * address at all: entries are PAID to the collection address below, not to
+ * the entrant.
  */
 const REQUEST_FIELDS: PassportProfileField[] = ['displayName', 'passportContract'];
 
