@@ -106,25 +106,30 @@ all**, and accrue linearly.
 - Only after **≈5,305 s (≈88 min)** does each coin hold two fees, which is when
   the lanes are comfortably independent.
 
-**The old coin, and why the plan still assumes the worst.** Spending a NIGHT
-UTxO does not destroy the DUST coin it backed: the coin keeps its value and
-enters linear decay at the same 8,267 Specks per atomic NIGHT per second,
-reaching zero in ≈603,650 s (≈7 days) and **staying spendable the whole way
-down**. At 2.4946e19 Specks that is roughly 1,800 maximum fees — more than
-enough to cover the entire gap above.
+**The old coin, and why the plan still assumes the worst.** A split rotates the
+4,998 NIGHT lineage for the **first time**. What the ledger code says should
+happen is that the DUST coin it backed keeps its accrued value, sits in a
+3-hour `dust_grace_period` (10,800 s, `dust.rs:1735`), and then decays linearly
+at the same 8,267 Specks per atomic NIGHT per second; at 2.4946e19 Specks that
+would be roughly 1,800 maximum fees, more than enough to cover the entire gap
+above. **None of that has been observed.** Every rotation on 2026/09/02 spent
+only the 0.916 NIGHT UTxO — the 16:36:18 registration included — so the big
+lineage's behaviour through its grace period and decay is unobserved, and the
+first split will be the first observation.
 
-An apparent counter-example on 2026/09/02 (a cold resync reporting
-`dustSpecks 0` / `utxoCount 0` right after a NIGHT rotation) was **retracted**:
-two minutes later the same wallet reported its full 2.4976e19 Specks and funded
-a Passport in 24 s, and the zero was simply every coin being in flight as
-pending change. A zero that is explained by the wallet's own spend is
-*settling*, not *lost* — see the note below.
+There is equally no evidence the other way. An apparent counter-example — a
+genesis replay at 16:47Z that seemed to end holding zero DUST after the
+16:36:18 rotation — was a misread: the zero was taken while the last dust
+events were still applying, and two minutes after `synced` the same wallet
+held 24,975,578,614,363,272,524 Specks and funded a Passport in 24 s. A zero
+that the wallet's own spend explains is *settling*, not *lost* — see the note
+below.
 
-The plan nevertheless quotes `worstCaseBlackoutSeconds` (≈332 s) on the
-assumption that the old coin does **not** carry the wallet through, because the
-cost of that assumption being wrong is a sponsor that cannot pay a fee during a
-maintenance window. Size the window against the worst case; treat the old coin
-as a bonus, not as the plan.
+So the plan quotes `worstCaseBlackoutSeconds` (≈332 s) as **prudence, not
+prediction**: the window is sized as though the old coin carries nothing,
+because a window sized on an unobserved behaviour has no fallback if the
+behaviour turns out otherwise. Treat the old coin as a bonus, and record what
+it actually does the first time.
 
 ## The registration-loop guard — read this before running anything
 
@@ -134,16 +139,19 @@ unregistered NIGHT UTxOs.** When the service comes back up it will therefore
 register them, and that registration is itself a transaction that pays a fee
 out of the DUST those very UTxOs are projected to generate.
 
-This is exactly the path the 16:36:18 rotation went through. So, on the first
-start after a split:
+The 16:36:18 rotation went through this path for the 0.916 NIGHT coin alone;
+the big lineage has never been through it. So, on the first start after a
+split:
 
 - If the log says **`already-generating`**, the new UTxOs carried their
   registration through the split. Good.
-- If the log says **`registered`**, the split rotated the UTxOs, their DUST was
-  reset, and the wallet is now paying a registration fee out of freshly zeroed
-  coins. **Stop and investigate before letting the service sponsor anything.**
-  Repeating the cycle — spend NIGHT, re-register, reset DUST — is a loop that
-  never lets the balancer accumulate a fee.
+- If the log says **`registered`**, the new UTxOs did not carry a registration
+  through the split, and the wallet is paying a registration fee out of coins
+  that have only just started generating — with the old coin's contribution,
+  if any, unobserved. **Stop and investigate before letting the service
+  sponsor anything.** If each registration itself rotates the UTxOs it
+  registers, the cycle — spend NIGHT, re-register, start from zero — is a loop
+  that never lets the balancer accumulate a fee.
 - If it says **`waiting-for-dust`**, that is the ≈332 s blackout above, and it
   is expected. It becomes a problem only if it persists past ≈10 min.
 
