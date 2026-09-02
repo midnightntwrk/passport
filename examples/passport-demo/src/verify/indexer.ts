@@ -308,6 +308,10 @@ export function normaliseContractAddress(value: string): string {
 export function hexToBytes(value: string): Uint8Array {
   const normalised = value.replace(/^0x/, '');
   if (normalised.length % 2 !== 0) throw new Error(`Odd-length hex string: ${value}`);
+  /* `parseInt` is not a hex validator: it reads `zz` as NaN (stored as byte 0)
+     and `1g` as 1, so a corrupt identifier would pass as bytes and be used as
+     one. Refuse it here, naming the input. */
+  if (!/^[0-9a-f]*$/i.test(normalised)) throw new Error(`Not a hex string: ${value}`);
   const bytes = new Uint8Array(normalised.length / 2);
   for (let index = 0; index < bytes.length; index += 1) {
     bytes[index] = Number.parseInt(normalised.slice(index * 2, index * 2 + 2), 16);
