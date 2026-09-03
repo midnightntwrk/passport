@@ -136,11 +136,17 @@ body {
   white-space: nowrap;
 }
 .pill.accent { background: var(--violet); border-color: transparent; color: #fff; }
-.coin {
-  width: 24px; height: 24px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff 0, rgba(255,255,255,0.2) 22%, transparent 24%), linear-gradient(135deg, #e52321, #ec641d);
+.coin { width: 26px; height: 26px; border-radius: 50%; display: block; background: #fff; padding: 2px; }
+.pill.accent { background: var(--pill); border-color: var(--line); color: var(--paper); }
+.powered {
+  margin: 0.5rem 0 0; align-self: center;
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  color: var(--muted); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase;
 }
-.coin.susd { background: radial-gradient(circle at 35% 30%, #fff 0, rgba(255,255,255,0.25) 22%, transparent 24%), linear-gradient(135deg, #ffffff, #d9a3ff); }
+.powered img { height: 18px; width: auto; display: block; opacity: 0.9; }
+:root[data-theme='dark'] .powered img, :root:not([data-theme='light']) .powered img { filter: invert(1); }
+@media (prefers-color-scheme: light) { :root:not([data-theme='dark']) .powered img { filter: none; } }
+:root[data-theme='light'] .powered img { filter: none; }
 
 /* The flip arrow between the panels. */
 .flip {

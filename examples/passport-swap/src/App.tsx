@@ -211,7 +211,7 @@ export function App() {
     <main className="swap">
       <ThemeToggle />
       <header className="hero">
-        <h1>Swap anytime, anywhere.</h1>
+        <h1>Swap anytime, anywhere, privately.</h1>
         <p className="lede">Your Passport pays, the desk delivers, and both sides are on chain.</p>
       </header>
 
@@ -224,7 +224,7 @@ export function App() {
           <div className="panel-row">
             <div className="amount">{quote ? quote.pay : '0'}</div>
             <div className="token pill">
-              <span className="coin night" aria-hidden="true" />
+              <img className="coin" src="/midnight-symbol.svg" alt="" />
               NIGHT
             </div>
           </div>
@@ -242,7 +242,7 @@ export function App() {
           <div className="panel-row">
             <div className="amount">{quote ? quote.receive : '0'}</div>
             <div className="token pill accent">
-              <span className="coin susd" aria-hidden="true" />
+              <img className="coin" src="/usd.svg" alt="" />
               {quote ? quote.to : 'sUSD'}
             </div>
           </div>
@@ -280,6 +280,10 @@ export function App() {
       <p className="foot">
         Passport asks before anything is sent. The desk pays out only once your payment is on chain.
         {presence?.present === false ? ' No Passport answered from this page.' : ''}
+      </p>
+      <p className="powered">
+        <span>Powered by</span>
+        <img src="/midnight-wordmark.svg" alt="Midnight" />
       </p>
 
       {settlement ? (
