@@ -1,0 +1,27 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Test-scaffolding faucet — NOT part of the custody design.
+//
+// Shielded tokens on a fresh localnet can only originate from a contract
+// mint (`mintShieldedToken`), so the integration tests and the demo app use
+// this faucet to hand the user a shielded note that can then be deposited
+// into the account-custody contract. Mirrors the S2 mint_and_send recipe
+// from contract-custody-feasibility.
+// ---------------------------------------------------------------------------
+
+export circuit mint_shielded(
+  color:     Bytes<32>,
+  amount:    Uint<64>,
+  nonce:     Bytes<32>,
+  recipient: ZswapCoinPublicKey,
+): [] {
+  mintShieldedToken(
+    disclose(color),
+    disclose(amount),
+    disclose(nonce),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+  );
+}
