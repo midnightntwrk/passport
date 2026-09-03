@@ -15,8 +15,11 @@ import {
   coinKey,
   createCoinReservation,
   describeCoin,
+  LARGE_NIGHT_ATOMIC,
+  nightPayloadFirst,
   smallestDust,
   smallestOfType,
+  unshieldedInputsOf,
   type SelectableCoin,
 } from '../src/coinReservation.js';
 
@@ -179,5 +182,71 @@ describe('naming a coin for the journal', () => {
       describeCoin({ type: 'ab'.repeat(32), value: 5n, nonce: 'n' }, { [`${'ab'.repeat(32)}`]: 'mUSD' }),
       'mUSD n:n value 5',
     );
+  });
+});
+
+describe('the NIGHT payload selector', () => {
+  const lineage = night('d'.repeat(64), 0, LARGE_NIGHT_ATOMIC);
+  const bigger = night('e'.repeat(64), 0, LARGE_NIGHT_ATOMIC * 30n);
+
+  it('never picks a 1,000-NIGHT lineage for a 2,000-atomic grant while change exists', () => {
+    assert.equal(nightPayloadFirst([bigger, lineage, n2, n1], NIGHT, 2_000n, {}), n1);
+    assert.equal(nightPayloadFirst([lineage, n2], NIGHT, 2_000n, {}), n2);
+  });
+
+  it('spends a lineage only when nothing smaller is left, smallest lineage first', () => {
+    assert.equal(nightPayloadFirst([bigger, lineage], NIGHT, 2_000n, {}), lineage);
+  });
+
+  it('is the plain smallest-first rule for any other token', () => {
+    const a = { type: 'ff', value: 5n, nonce: 'a' };
+    const b = { type: 'ff', value: 1n, nonce: 'b' };
+    assert.equal(nightPayloadFirst([a, b], 'ff', 1n, {}), b);
+  });
+
+  it('composes with the guard: a held change coin is skipped for the next change coin, not a lineage', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(nightPayloadFirst);
+    coins.open('grant A').hold([coinKey(n1)]);
+    assert.equal(select([lineage, n1, n2], NIGHT, 2_000n, {}), n2);
+  });
+});
+
+describe('reading the unshielded inputs from a balanced recipe', () => {
+  const input = (intentHash: string, outputNo: number, value: bigint) => ({
+    value,
+    owner: 'owner',
+    type: NIGHT,
+    intentHash,
+    outputNo,
+  });
+
+  it("walks every intent's guaranteed and fallible offers of an unbound recipe", () => {
+    const recipe = {
+      type: 'UNBOUND_TRANSACTION',
+      baseTransaction: {
+        intents: new Map([
+          [1, { guaranteedUnshieldedOffer: { inputs: [input('A'.repeat(64), 0, 10n)] } }],
+          [61517, { fallibleUnshieldedOffer: { inputs: [input('b'.repeat(64), 1, 2_000n)] } }],
+        ]),
+      },
+    };
+    const found = unshieldedInputsOf(recipe);
+    assert.deepEqual(
+      found.map(coinKey),
+      [`u:${'a'.repeat(64)}:0`, `u:${'b'.repeat(64)}:1`],
+      'keys are lowercased, so the recipe and the wallet state agree',
+    );
+    assert.equal(found[1]!.value, 2_000n);
+  });
+
+  it('reads an unproven recipe and a finalized one too, and nothing from a recipe with no intents', () => {
+    const one = unshieldedInputsOf({
+      type: 'UNPROVEN_TRANSACTION',
+      transaction: { intents: new Map([[1, { guaranteedUnshieldedOffer: { inputs: [input('c'.repeat(64), 2, 5n)] } }]]) },
+    });
+    assert.equal(one.length, 1);
+    assert.deepEqual(unshieldedInputsOf({ type: 'UNBOUND_TRANSACTION', baseTransaction: {} }), []);
+    assert.deepEqual(unshieldedInputsOf(undefined), []);
   });
 });

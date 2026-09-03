@@ -95,8 +95,79 @@ export const smallestDust: CoinSelector = (coins) =>
  */
 export function coinKey(coin: SelectableCoin): string {
   const nonce = coin.nonce ?? coin.token?.nonce;
-  if (nonce !== undefined) return `n:${String(nonce)}`;
-  return `u:${coin.intentHash ?? '?'}:${coin.outputNo ?? '?'}`;
+  if (nonce !== undefined) return `n:${String(nonce).toLowerCase()}`;
+  return `u:${String(coin.intentHash ?? '?').toLowerCase()}:${coin.outputNo ?? '?'}`;
+}
+
+/** The native token's raw type: sixty-four zeros. */
+export const NATIVE_TOKEN_TYPE = '0'.repeat(64);
+
+/**
+ * A NIGHT UTxO at or above this is a DUST LINEAGE, not change. NIGHT has six
+ * decimals, so this is 1,000 NIGHT in atomic units. Spending such a coin
+ * rotates it — the ledger re-creates it as a new UTxO — and a rotation resets
+ * the DUST generation that coin was backing to zero, which on 2026/09/03 is
+ * what left the sponsor without a fee-capable coin for minutes after a
+ * 2,000-atomic grant had been paid from a 1,000-NIGHT input.
+ */
+export const LARGE_NIGHT_ATOMIC = 1_000n * 10n ** 6n;
+
+/**
+ * The unshielded selector: smallest first, as the SDK does, but for the
+ * native token NEVER a lineage coin while any smaller coin of the type is
+ * selectable. Only when every remaining NIGHT coin is a lineage does one get
+ * spent, because the alternative is no transaction at all.
+ */
+export const nightPayloadFirst: CoinSelector = (coins, tokenType, amount, costModel) => {
+  if (tokenType !== NATIVE_TOKEN_TYPE) return smallestOfType(coins, tokenType, amount, costModel);
+  const candidates = coins.filter((coin) => coin.type === tokenType);
+  const change = candidates.filter((coin) => coin.value < LARGE_NIGHT_ATOMIC);
+  return smallestOfType(change.length > 0 ? change : candidates, tokenType, amount, costModel);
+};
+
+/**
+ * The unshielded inputs a balanced recipe will spend, read from the built
+ * transaction's intents rather than from the wallet.
+ *
+ * NECESSARY, NOT BELT AND BRACES. For an unbound transaction — every contract
+ * call this service makes — the unshielded wallet's
+ * `#balanceUnboundishTransaction` (wallet-sdk-unshielded-wallet, dist/v1/
+ * Transacting.js) destructures only `{ offer }` from `#prepareOffer` and
+ * returns `[transaction, wallet]`: the ORIGINAL wallet state, with the
+ * selected NIGHT inputs still in `availableUtxos`. Read from the dist on
+ * 2026/09/03, after sixteen `consumes` lines named DUST and mUSD and never a
+ * NIGHT coin, while the indexer showed registrations and grants spending the
+ * same 10-atomic UTxOs and eleven `1010: Custom error: 231` refusals behind
+ * them. The shielded and dust wallets commit their spends; the unshielded
+ * wallet, for this transaction shape, does not — so its inputs are held here
+ * from the transaction itself.
+ */
+export function unshieldedInputsOf(recipe: unknown): SelectableCoin[] {
+  const out: SelectableCoin[] = [];
+  if (!recipe || typeof recipe !== 'object') return out;
+  const r = recipe as Record<string, unknown>;
+  const transactions = [r.baseTransaction, r.transaction, r.originalTransaction, r.balancingTransaction];
+  for (const tx of transactions) {
+    const intents = (tx as { intents?: unknown } | undefined)?.intents;
+    if (!intents || typeof (intents as { values?: unknown }).values !== 'function') continue;
+    for (const intent of (intents as Map<unknown, Record<string, unknown>>).values()) {
+      for (const offer of [intent?.guaranteedUnshieldedOffer, intent?.fallibleUnshieldedOffer]) {
+        const inputs = (offer as { inputs?: unknown[] } | undefined)?.inputs;
+        if (!Array.isArray(inputs)) continue;
+        for (const input of inputs) {
+          const u = input as { type?: unknown; value?: unknown; intentHash?: unknown; outputNo?: unknown };
+          if (u.intentHash === undefined || u.outputNo === undefined) continue;
+          out.push({
+            type: String(u.type ?? ''),
+            value: typeof u.value === 'bigint' ? u.value : BigInt(String(u.value ?? 0)),
+            intentHash: String(u.intentHash),
+            outputNo: Number(u.outputNo),
+          });
+        }
+      }
+    }
+  }
+  return out;
 }
 
 /**

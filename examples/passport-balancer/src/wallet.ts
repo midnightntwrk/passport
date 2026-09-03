@@ -102,8 +102,10 @@ import {
   coinKey,
   createCoinReservation,
   describeCoin,
+  nightPayloadFirst,
   smallestDust,
   smallestOfType,
+  unshieldedInputsOf,
   type CoinTicket,
   type SelectableCoin,
 } from './coinReservation.js';
@@ -1234,7 +1236,7 @@ export async function openBalancerWallet(
       cfg,
       new UnshieldedV1Builder()
         .withDefaults()
-        .withCoinSelection((() => coins.guard(smallestOfType)) as never) as never,
+        .withCoinSelection((() => coins.guard(nightPayloadFirst)) as never) as never,
     );
   const guardedDust = (cfg: Parameters<typeof DustWallet>[0]) =>
     CustomDustWallet(
@@ -1991,9 +1993,23 @@ export async function openBalancerWallet(
                   (waitedMs) => new WalletCallTimeout('balancing the transaction', waitedMs),
                 );
                 try {
-                  const taken = walletCoins(await currentState(), 'pending').filter(
+                  /* The shielded and dust legs from the wallet's pending list;
+                     the UNSHIELDED leg from the transaction itself, because
+                     the unshielded wallet does not commit an unbound
+                     transaction's inputs — see `unshieldedInputsOf`. */
+                  const fromPending = walletCoins(await currentState(), 'pending').filter(
                     (coin) => !pendingBefore.has(coinKey(coin)),
                   );
+                  const seen = new Set(fromPending.map(coinKey));
+                  const taken = [
+                    ...fromPending,
+                    ...unshieldedInputsOf(result).filter((coin) => {
+                      const key = coinKey(coin);
+                      if (seen.has(key)) return false;
+                      seen.add(key);
+                      return true;
+                    }),
+                  ];
                   ticket?.hold(taken.map(coinKey));
                   console.log(
                     `[job] ${label} consumes ${taken.length === 0 ? 'no coin of this wallet' : taken.map((coin) => describeCoin(coin)).join(', ')}`,
