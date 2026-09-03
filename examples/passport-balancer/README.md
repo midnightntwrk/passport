@@ -866,29 +866,40 @@ did, twice: a spend job held a lane for 37 minutes and another for 23, with the
 proof server idle and not one journal line, until an operator restarted the
 service. Both transactions had landed on chain the whole time.
 
-Ordering the submissions was the first answer and it was not enough.
-`WsProvider.disconnect()` calls `websocket.close(1000)` and resolves without
-waiting for the socket's close event, so the event arrives after the submission
-that caused it is over — by which time the next submission has reconnected the
-same provider and registered its own handler, and `#onSocketClose` errors the
-whole provider-wide handler map. On 2026/09/03 at 02:28 UTC that killed a
-registration 39.7 s in with `disconnected from
-wss://rpc.stagenet.shielded.tools/: 1000:: Normal Closure`, and the user saw a
-refused claim. The property that actually holds is isolation, not order.
+Two narrower answers were tried and both were measured failing on the deployed
+service. **Ordering** the submissions does not help: `WsProvider.disconnect()`
+calls `websocket.close(1000)` and resolves without waiting for the socket's
+close event, so the event arrives after the submission that caused it is over —
+by which time the next submission has reconnected the same provider and
+registered its own handler, and `#onSocketClose` errors the whole provider-wide
+handler map. On 2026/09/03 at 02:28 UTC that killed a registration 39.7 s in
+with `disconnected from wss://rpc.stagenet.shielded.tools/: 1000:: Normal
+Closure`, and the user saw a refused claim. **A connection per submission** does
+not help either, and fails harder: `PolkadotNodeClient.make` disconnects as soon
+as it has loaded its metadata, so a client built moments before its own
+submission kills that submission with its own start-up close — every spare-mint
+attempt at 02:40 and 02:41 UTC on 2026/09/03 failed in exactly that way, 12.9 s
+in.
+
+What holds is owning the connection: one socket, opened once, never
+disconnected while the service is running.
 
 Four things close it, and the fourth is the one that matters most:
 
-1. **Every submission gets its own connection**, and its own ceiling
-   (`BALANCER_SUBMIT_TIMEOUT_MS`). One submission service per submission means
-   one `ApiPromise`, one `WsProvider`, and one handler map per submission, so a
-   disconnect can only ever reach the submission that is already finished; the
-   service is opened before the queue is joined, so the connect overlaps a wait
-   the submission already had. Submissions are still taken one at a time —
-   cheap at `Submitted`, and it keeps the node from seeing several of this
-   wallet's transactions built against one view of its coins at once. And they
-   ask the node for `Submitted` rather than `Finalized` — 15–25 s of stagenet
-   finality per transaction that no longer sits on a user's click, since every
-   job confirms against the indexer anyway.
+1. **This service owns the node connection**, and bounds every submission on it
+   (`BALANCER_SUBMIT_TIMEOUT_MS`). `src/submission.ts` submits through
+   polkadot-js directly, over one connection that is opened once and
+   disconnected only when the service stops, so no submission ever closes
+   anything and there is no close event for a watch to be lost to. Submissions
+   are still taken one at a time — the window is well under a second now, and it
+   keeps the node from seeing several of this wallet's transactions built
+   against one view of its coins at once. And a submission resolves on the
+   node's first accepting status rather than on `Finalized` — 15–25 s of
+   stagenet finality per transaction that no longer sits on a user's click,
+   since every job confirms against the indexer anyway. A socket that drops on
+   its own is the one case left: the provider reconnects by itself, the ceiling
+   catches the submission that was in flight, and the caller asks the indexer
+   whether it landed.
 2. **Indexer watches are bounded** (`BALANCER_CONFIRM_TIMEOUT_MS`). midnight-js
    waits on `watchForTxData` and `watchForDeployTxData` with no deadline at all.
 3. **A stalled job loses its lane** (`BALANCER_JOB_STALL_MS`), but only while
