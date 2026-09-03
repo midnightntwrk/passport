@@ -30,6 +30,10 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyLegError,
   pendingSendsStorageKey,
+  pendingSendStepLine,
+  planOfRecord,
+  planShieldedSend,
+  sendStepLine,
   SEND_REFUSED_TEXT,
   sendRefusalText,
   readPendingSends,
@@ -57,7 +61,7 @@ function nightSend(overrides: Partial<PendingSend> = {}): PendingSend {
     leg: 'settle',
     withdrawTxHash: 'cc'.repeat(32),
     expectedNote: { unshieldedBefore: '5' },
-    attempts: { withdraw: 1, deposit: 0 },
+    attempts: { withdraw: 1, deposit: 0, change: 0 },
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -151,7 +155,7 @@ describe('readPendingSends and serialisePendingSends', () => {
     expect(read.activityId).toBeUndefined();
     /* A record with no attempt counts has made no attempts, not an unknown
        number of them: a resume that started at attempt NaN would never stop. */
-    expect(read.attempts).toEqual({ withdraw: 0, deposit: 0 });
+    expect(read.attempts).toEqual({ withdraw: 0, deposit: 0, change: 0 });
   });
 
   it('discards an expectation, an error, and counts it cannot use', () => {
@@ -168,7 +172,7 @@ describe('readPendingSends and serialisePendingSends', () => {
     );
     expect(read.expectedNote).toBeUndefined();
     expect(read.lastError).toBeUndefined();
-    expect(read.attempts).toEqual({ withdraw: 0, deposit: 0 });
+    expect(read.attempts).toEqual({ withdraw: 0, deposit: 0, change: 0 });
     expect(read.activityId).toBeUndefined();
   });
 
@@ -684,5 +688,218 @@ describe('sendRefusalText', () => {
     });
     expect(classifyLegError(refused).rebuild).toBe(true);
     expect(sendRefusalText(refused)).toBe(SEND_REFUSED_TEXT);
+  });
+});
+
+/**
+ * THE THIRD LEG (2026/09/03).
+ *
+ * A shielded payment is three transactions rather than two whenever the account
+ * holds more of a colour than is being paid away, and the reason is the
+ * deployed contract's: a partial `withdraw_shielded` re-registers its own
+ * change, and the node then refuses every later withdrawal against what it left
+ * behind. The client stopped asking for partial withdrawals, and the rules that
+ * decide how many transactions a payment is, what each of them moves, and what
+ * the person watching is told about them are drilled here.
+ *
+ * The wrong answers are the point. A plan that paid the recipient the WHOLE
+ * coin, or one that counted to two through a three-step run, or a card on Home
+ * that told somebody their finished payment had not happened, are all failures
+ * of arithmetic or of copy that this file exists to catch.
+ */
+describe('planShieldedSend', () => {
+  it('takes the whole coin and leaves change when the account holds more', () => {
+    expect(planShieldedSend({ held: 100n, amount: 2n })).toEqual({
+      withdraw: 100n,
+      pay: 2n,
+      change: 98n,
+      steps: 3,
+    });
+  });
+
+  it('is the two-step send it has always been when the payment IS the coin', () => {
+    expect(planShieldedSend({ held: 7n, amount: 7n })).toEqual({
+      withdraw: 7n,
+      pay: 7n,
+      change: null,
+      steps: 2,
+    });
+  });
+
+  it('refuses rather than paying less than was asked for', () => {
+    expect(planShieldedSend({ held: 1n, amount: 2n })).toBeNull();
+  });
+
+  it('refuses an amount that is not a payment at all', () => {
+    expect(planShieldedSend({ held: 100n, amount: 0n })).toBeNull();
+    expect(planShieldedSend({ held: 100n, amount: -1n })).toBeNull();
+  });
+});
+
+describe('planOfRecord', () => {
+  it('reads three legs out of a record that took the whole coin', () => {
+    const plan = planOfRecord(shieldedSend({ amount: '2', withdrawAmount: '100' }));
+    expect(plan).toEqual({ withdraw: 100n, pay: 2n, change: 98n, steps: 3 });
+  });
+
+  it('reads two legs out of a record with no withdrawn figure', () => {
+    const plan = planOfRecord(nightSend({ amount: '1000000' }));
+    expect(plan).toEqual({ withdraw: 1_000_000n, pay: 1_000_000n, change: null, steps: 2 });
+  });
+
+  it('reads two legs where the whole coin WAS the payment', () => {
+    const plan = planOfRecord(shieldedSend({ amount: '5', withdrawAmount: '5' }));
+    expect(plan.change).toBeNull();
+    expect(plan.steps).toBe(2);
+  });
+});
+
+describe('readPendingSends, on a three-leg record', () => {
+  it('keeps the withdrawn figure, the paying hash, and the third count', () => {
+    const stored = serialisePendingSends([
+      shieldedSend({
+        amount: '2',
+        withdrawAmount: '100',
+        depositTxHash: 'ff'.repeat(32),
+        leg: 'change',
+        attempts: { withdraw: 1, deposit: 1, change: 2 },
+      }),
+    ]);
+    const [read] = readPendingSends(stored);
+    expect(read.withdrawAmount).toBe('100');
+    expect(read.depositTxHash).toBe('ff'.repeat(32));
+    expect(read.leg).toBe('change');
+    expect(read.attempts).toEqual({ withdraw: 1, deposit: 1, change: 2 });
+  });
+
+  it('discards a withdrawn figure smaller than the payment, and an empty hash', () => {
+    /* Never a record this app wrote: leg one takes the whole coin, so it is at
+       least what is being paid. Read back as absent, which leaves the run
+       behaving as the two-leg one it looks like rather than as a run owed
+       change nobody has. */
+    const stored = JSON.stringify([
+      { ...shieldedSend({ amount: '10' }), withdrawAmount: '4', depositTxHash: '' },
+    ]);
+    const [read] = readPendingSends(stored);
+    expect(read.withdrawAmount).toBeUndefined();
+    expect(read.depositTxHash).toBeUndefined();
+    expect(planOfRecord(read).steps).toBe(2);
+  });
+
+  it('accepts `change` as a leg a run can be carried on from', () => {
+    const [read] = readPendingSends(JSON.stringify([shieldedSend({ leg: 'change' })]));
+    expect(read).toBeDefined();
+    expect(read.leg).toBe('change');
+  });
+});
+
+describe('sendStepLine', () => {
+  const three = { steps: 3 as const, recipient: 'alice.night' };
+  const two = { steps: 2 as const, recipient: 'alice.night' };
+
+  it('counts a three-step payment in plain words', () => {
+    expect(sendStepLine({ ...three, step: 'withdrawing' })).toBe(
+      'Step 1 of 3 · Taking the coin out.',
+    );
+    expect(sendStepLine({ ...three, step: 'settling' })).toBe(
+      'Step 1 done. Waiting for it to clear before it goes on.',
+    );
+    expect(sendStepLine({ ...three, step: 'depositing' })).toBe(
+      'Step 2 of 3 · Paying alice.night.',
+    );
+    expect(sendStepLine({ ...three, step: 'changing' })).toBe(
+      'Step 3 of 3 · Returning the change.',
+    );
+  });
+
+  it('still counts a two-step payment to two', () => {
+    expect(sendStepLine({ ...two, step: 'withdrawing' })).toBe(
+      'Step 1 of 2 — taking the amount out of your account.',
+    );
+    expect(sendStepLine({ ...two, step: 'settling' })).toBe(
+      'Step 1 of 2 done. Waiting for the amount to clear before it goes on.',
+    );
+    expect(sendStepLine({ ...two, step: 'depositing' })).toBe(
+      'Step 2 of 2 — paying it into alice.night’s account.',
+    );
+  });
+
+  it('shows a retry on the step that is being attempted again', () => {
+    expect(sendStepLine({ ...three, step: 'withdrawing', attemptSuffix: ' (retry 1 of 2)' })).toBe(
+      'Step 1 of 3 · Taking the coin out (retry 1 of 2).',
+    );
+    expect(sendStepLine({ ...three, step: 'depositing', attemptSuffix: ' (retry 1 of 2)' })).toBe(
+      'Step 2 of 3 · Paying alice.night (retry 1 of 2).',
+    );
+    expect(sendStepLine({ ...three, step: 'changing', attemptSuffix: ' (retry 1 of 2)' })).toBe(
+      'Step 3 of 3 · Returning the change (retry 1 of 2).',
+    );
+    expect(sendStepLine({ ...two, step: 'depositing', attemptSuffix: ' (retry 1 of 2)' })).toBe(
+      'Step 2 of 2 — paying it into alice.night’s account (retry 1 of 2).',
+    );
+  });
+
+  it('never numbers the amount going back after a refusal', () => {
+    const said = sendStepLine({ ...three, step: 'returning' });
+    expect(said).toBe('alice.night was not paid. Putting the amount back into your account.');
+    expect(said).not.toMatch(/Step/);
+  });
+
+  it('says none of it in machinery', () => {
+    const machinery = /contract|circuit|withdraw_|deposit_|nonce|note|coin ledger|token type/i;
+    for (const step of ['withdrawing', 'settling', 'depositing', 'changing', 'returning'] as const) {
+      for (const steps of [2, 3] as const) {
+        expect(sendStepLine({ step, steps, recipient: 'alice.night' })).not.toMatch(machinery);
+      }
+    }
+  });
+});
+
+describe('pendingSendStepLine', () => {
+  it('says nothing has moved when the first leg never went', () => {
+    expect(pendingSendStepLine(shieldedSend({ leg: 'withdraw', withdrawTxHash: undefined }))).toBe(
+      'Nothing has left your account yet.',
+    );
+  });
+
+  it('says the arrival is still coming while the run waits', () => {
+    expect(pendingSendStepLine(shieldedSend({ leg: 'settle' }))).toBe(
+      'Step 1 done. Waiting for the amount to reach your Passport.',
+    );
+  });
+
+  it('says the recipient HAS been paid when only the change is outstanding', () => {
+    const said = pendingSendStepLine(
+      shieldedSend({ leg: 'change', amount: '2', withdrawAmount: '100' }),
+    );
+    expect(said).toBe(
+      'alice.night has been paid. Your change has not come back to your account yet.',
+    );
+  });
+
+  it('names the paying leg differently for a two-step and a three-step run', () => {
+    expect(
+      pendingSendStepLine(shieldedSend({ leg: 'deposit', amount: '2', withdrawAmount: '100' })),
+    ).toBe('Step 1 done. Paying alice.night has not finished.');
+    expect(pendingSendStepLine(shieldedSend({ leg: 'deposit' }))).toBe(
+      'Step 1 done. Step 2 — paying it into alice.night’s account — has not finished.',
+    );
+  });
+});
+
+describe('sendFailureNotice, on a payment that worked', () => {
+  it('never tells somebody to chase a payment that has already happened', () => {
+    const said = sendFailureNotice({
+      legLanded: true,
+      recipientPaid: true,
+      message: 'The network turned this step down.',
+      amountLabel: '2 units',
+      assetSymbol: 'mUSD',
+    });
+    expect(said).toBe(
+      'Your payment went through. Your change has not come back to your account yet — ' +
+        'finish that from Home.',
+    );
+    expect(said).not.toMatch(/not paid|nothing was sent/i);
   });
 });

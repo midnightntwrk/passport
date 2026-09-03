@@ -38,7 +38,7 @@ function unstartedNightSend(): PendingSend {
     expectedNote: undefined,
     lastError: undefined,
     activityId: undefined,
-    attempts: { withdraw: 0, deposit: 0 },
+    attempts: { withdraw: 0, deposit: 0, change: 0 },
     createdAt: NOW,
     updatedAt: NOW,
   };

@@ -40,11 +40,18 @@ export type PendingSendKind = 'night' | 'shielded';
  * wait for the wallet to hold what it withdrew, `deposit` is the paying leg,
  * `done` is paid, and `failed` is a run that stopped with a reason on it.
  *
+ * `change` is the third leg, and it exists only for a shielded run that took a
+ * WHOLE coin out to pay part of it away — see {@link planShieldedSend}. The
+ * recipient has been paid by the time a record reaches it; what is outstanding
+ * is the sender's own change, sitting in their wallet rather than their
+ * account.
+ *
  * None of these is a state a record may be silently dropped from: a `settle`,
- * `deposit`, or `failed` record is value the sender has moved and not yet
- * given to anybody, and Home offers to carry each of them on.
+ * `deposit`, `change`, or `failed` record is value the sender has moved and not
+ * yet given to anybody — or, at `change`, not yet put back — and Home offers to
+ * carry each of them on.
  */
-export type PendingSendLeg = 'withdraw' | 'settle' | 'deposit' | 'done' | 'failed';
+export type PendingSendLeg = 'withdraw' | 'settle' | 'deposit' | 'change' | 'done' | 'failed';
 
 /** Who is being paid — the words on screen, and the account that receives. */
 export interface PendingSendRecipient {
@@ -88,8 +95,21 @@ export interface PendingSend {
   leg: PendingSendLeg;
   /** Set the moment the first leg is accepted. Its presence is what says so. */
   withdrawTxHash?: string;
+  /**
+   * WHAT LEG ONE REALLY TOOK OUT, which is not always {@link amount}.
+   *
+   * A shielded run takes the WHOLE coin the account holds of that colour and
+   * pays only part of it away — see {@link planShieldedSend} for why a partial
+   * withdrawal is not an option on the deployed contract. So the note leg two
+   * waits for is worth this, the recipient is paid {@link amount}, and the
+   * difference comes back in leg three. Absent on a NIGHT run and on a record
+   * written before the third leg existed, where it is simply the amount.
+   */
+  withdrawAmount?: string;
+  /** Set the moment the paying leg is accepted. Its presence is what says so. */
+  depositTxHash?: string;
   expectedNote?: PendingSendExpectation;
-  attempts: { withdraw: number; deposit: number };
+  attempts: { withdraw: number; deposit: number; change: number };
   lastError?: { message: string; retryable: boolean };
   createdAt: string;
   updatedAt: string;
@@ -113,6 +133,7 @@ function isLeg(value: unknown): value is PendingSendLeg {
     value === 'withdraw' ||
     value === 'settle' ||
     value === 'deposit' ||
+    value === 'change' ||
     value === 'done' ||
     value === 'failed'
   );
@@ -136,12 +157,20 @@ function readExpectation(value: unknown): PendingSendExpectation | undefined {
   return undefined;
 }
 
-function readAttempts(value: unknown): { withdraw: number; deposit: number } {
-  if (typeof value !== 'object' || value === null) return { withdraw: 0, deposit: 0 };
+function readAttempts(value: unknown): { withdraw: number; deposit: number; change: number } {
+  if (typeof value !== 'object' || value === null) {
+    return { withdraw: 0, deposit: 0, change: 0 };
+  }
   const row = value as Record<string, unknown>;
   const count = (raw: unknown) =>
     typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 ? raw : 0;
-  return { withdraw: count(row.withdraw), deposit: count(row.deposit) };
+  return {
+    withdraw: count(row.withdraw),
+    deposit: count(row.deposit),
+    /* Absent in every record written before the third leg existed, and zero is
+       the honest reading: nothing had ever been attempted at it. */
+    change: count(row.change),
+  };
 }
 
 /**
@@ -200,6 +229,16 @@ export function readPendingSends(raw: string | null | undefined): PendingSend[] 
     if (typeof row.withdrawTxHash === 'string' && row.withdrawTxHash) {
       record.withdrawTxHash = row.withdrawTxHash;
     }
+    /* A withdrawn figure SMALLER than the amount is not a record this app ever
+       wrote: leg one takes the whole coin, so it is at least what is being
+       paid. Read back as absent rather than kept, which leaves the run behaving
+       as the two-leg one it looks like. */
+    if (isAmount(row.withdrawAmount) && BigInt(row.withdrawAmount) >= BigInt(row.amount)) {
+      record.withdrawAmount = row.withdrawAmount;
+    }
+    if (typeof row.depositTxHash === 'string' && row.depositTxHash) {
+      record.depositTxHash = row.depositTxHash;
+    }
     const expectation = readExpectation(row.expectedNote);
     if (expectation) record.expectedNote = expectation;
     const lastError = row.lastError as Record<string, unknown> | undefined;
@@ -240,16 +279,178 @@ export function serialisePendingSends(records: readonly PendingSend[]): string {
       colourHex: record.colourHex,
       ownReceivingAddress: record.ownReceivingAddress,
       leg: record.leg,
-      attempts: { withdraw: record.attempts.withdraw, deposit: record.attempts.deposit },
+      attempts: {
+        withdraw: record.attempts.withdraw,
+        deposit: record.attempts.deposit,
+        change: record.attempts.change,
+      },
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       ...(record.tokenType ? { tokenType: record.tokenType } : {}),
       ...(record.withdrawTxHash ? { withdrawTxHash: record.withdrawTxHash } : {}),
+      ...(record.withdrawAmount ? { withdrawAmount: record.withdrawAmount } : {}),
+      ...(record.depositTxHash ? { depositTxHash: record.depositTxHash } : {}),
       ...(record.expectedNote ? { expectedNote: record.expectedNote } : {}),
       ...(record.lastError ? { lastError: record.lastError } : {}),
       ...(record.activityId ? { activityId: record.activityId } : {}),
     }));
   return JSON.stringify(kept);
+}
+
+/* -------------------------------------------------------------------------- */
+/* How many transactions a shielded payment really is                          */
+/* -------------------------------------------------------------------------- */
+
+/** What the three legs of one shielded payment move. */
+export interface ShieldedSendPlan {
+  /** What leg one takes out of the account: the WHOLE coin, never a part. */
+  withdraw: bigint;
+  /** What leg two pays the recipient. */
+  pay: bigint;
+  /** What leg three puts back into the sender's own account, or `null`. */
+  change: bigint | null;
+  /** How many steps the person watching is told about. */
+  steps: 2 | 3;
+}
+
+/**
+ * WHY A SHIELDED PAYMENT TAKES THE WHOLE COIN OUT (2026/09/03).
+ *
+ * The deployed account contract holds at most one shielded coin per colour, and
+ * `withdraw_shielded` has two branches. Asked for the WHOLE coin it takes the
+ * `coins.remove` branch and the entry goes; asked for PART of it, it splits —
+ * `sendShielded`, then `sendImmediateShielded` for the remainder and
+ * `coins.insertCoin` to re-register it — and the coin that lands back in the
+ * account is one the node then refuses every later withdrawal against
+ * (`1010 Invalid Transaction: Custom error: 239`, hit live on stagenet). One
+ * partial withdrawal therefore costs the account every shielded withdrawal
+ * after it, for as long as the account exists.
+ *
+ * The contract cannot be changed: adding or altering a circuit changes the
+ * verifier keys, and opening a contract verifies every local circuit's key
+ * against the deployed state, so it would strand every Passport already
+ * deployed. So the CLIENT stops asking for partial withdrawals:
+ *
+ *   1. take the whole coin out to the sender's own wallet — the safe branch;
+ *   2. pay the recipient what they are owed out of it;
+ *   3. put the rest back into the sender's own account.
+ *
+ * Leg three is what makes the account whole again, and it is skipped entirely
+ * when the payment happens to be the whole coin, which is the two-leg send this
+ * app has always made.
+ *
+ * Refuses, rather than rounding, when the account does not hold enough: a plan
+ * that quietly paid less than was asked for is the one failure mode worse than
+ * saying no.
+ */
+export function planShieldedSend(input: { held: bigint; amount: bigint }): ShieldedSendPlan | null {
+  if (input.amount <= 0n) return null;
+  if (input.held < input.amount) return null;
+  const change = input.held - input.amount;
+  return {
+    withdraw: input.held,
+    pay: input.amount,
+    change: change > 0n ? change : null,
+    steps: change > 0n ? 3 : 2,
+  };
+}
+
+/**
+ * The record's own reading of its plan, for a run being carried on.
+ *
+ * A record with no {@link PendingSend.withdrawAmount} is a two-leg run —
+ * either a NIGHT one, or a shielded one written before the third leg existed,
+ * or one whose payment was the whole coin — and the plan says so.
+ */
+export function planOfRecord(record: PendingSend): ShieldedSendPlan {
+  const pay = BigInt(record.amount);
+  const withdraw = record.withdrawAmount === undefined ? pay : BigInt(record.withdrawAmount);
+  const change = withdraw - pay;
+  return {
+    withdraw,
+    pay,
+    change: change > 0n ? change : null,
+    steps: change > 0n ? 3 : 2,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* What the sheet says while it runs                                           */
+/* -------------------------------------------------------------------------- */
+
+/** Which of the legs is running, as the sheet is told about it. */
+export type SendStep = 'withdrawing' | 'settling' | 'depositing' | 'changing' | 'returning';
+
+/** What the progress line is built out of. */
+export interface SendStepLineInput {
+  step: SendStep;
+  /** How many steps this run has: two, or three when there is change to put back. */
+  steps: 2 | 3;
+  /** Who is being paid, in the sender's own words. */
+  recipient: string;
+  /** "(retry 1 of 2)", or an empty string on a first attempt. */
+  attemptSuffix?: string;
+}
+
+/**
+ * ONE LINE, SAYING WHICH STEP IS RUNNING — in plain words, and counted honestly.
+ *
+ * A three-leg run that narrated itself as two would leave somebody watching an
+ * apparently finished payment carry on for another minute, which is the exact
+ * complaint the two-step line was written to answer in the first place. So the
+ * count is the plan's, not a constant.
+ *
+ * NO MACHINERY. "Taking the coin out" is what leg one does, said the way a
+ * person would say it; the words coin, note, contract, circuit, and nonce are
+ * deliberately not on this surface. `returning` is not a step of the payment at
+ * all — it is the amount going back after the paying leg refused — so it is
+ * never numbered.
+ */
+export function sendStepLine(input: SendStepLineInput): string {
+  const suffix = input.attemptSuffix ?? '';
+  const of = `of ${input.steps}`;
+  switch (input.step) {
+    case 'withdrawing':
+      return input.steps === 3
+        ? `Step 1 ${of} · Taking the coin out${suffix}.`
+        : `Step 1 ${of} — taking the amount out of your account${suffix}.`;
+    case 'settling':
+      return input.steps === 3
+        ? 'Step 1 done. Waiting for it to clear before it goes on.'
+        : 'Step 1 of 2 done. Waiting for the amount to clear before it goes on.';
+    case 'depositing':
+      return input.steps === 3
+        ? `Step 2 ${of} · Paying ${input.recipient}${suffix}.`
+        : `Step 2 ${of} — paying it into ${input.recipient}’s account${suffix}.`;
+    case 'changing':
+      return `Step 3 of 3 · Returning the change${suffix}.`;
+    default:
+      /* Not a step of the payment: the paying leg refused, and the amount is
+         being put back. Said plainly and immediately, because the alternative
+         is a spinner still claiming a step that has already failed. */
+      return `${input.recipient} was not paid. Putting the amount back into your account.`;
+  }
+}
+
+/**
+ * What Home says about one unfinished payment, in the same plain words.
+ *
+ * The three-leg case earns its own sentence and it is the one that matters
+ * most: the recipient HAS been paid, and what is outstanding is the sender's
+ * own change sitting in their wallet. A card that said "they have not been
+ * paid" over that would send somebody looking for a payment that already
+ * happened.
+ */
+export function pendingSendStepLine(record: PendingSend): string {
+  if (!record.withdrawTxHash) return 'Nothing has left your account yet.';
+  const steps = planOfRecord(record).steps;
+  if (record.leg === 'change') {
+    return `${record.recipient.label} has been paid. Your change has not come back to your account yet.`;
+  }
+  if (record.leg === 'settle') return 'Step 1 done. Waiting for the amount to reach your Passport.';
+  return steps === 3
+    ? `Step 1 done. Paying ${record.recipient.label} has not finished.`
+    : `Step 1 done. Step 2 — paying it into ${record.recipient.label}’s account — has not finished.`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -609,6 +810,12 @@ export interface SendFailureNotice {
   assetSymbol: string;
   /** Whether the thing being sent is a one-of-a-kind item rather than a balance. */
   item?: boolean;
+  /**
+   * Whether the RECIPIENT was paid before the run stopped — true only of a
+   * three-leg run that fell over on the change coming back. Saying "they were
+   * not paid" over that would send somebody chasing a payment that happened.
+   */
+  recipientPaid?: boolean;
 }
 
 /**
@@ -626,6 +833,14 @@ export interface SendFailureNotice {
  * instead: what landed, where it is, what did not, and where to carry on.
  */
 export function sendFailureNotice(notice: SendFailureNotice): string {
+  if (notice.recipientPaid) {
+    /* The payment WORKED. What is outstanding is the sender's own change, and
+       the card on Home is where it comes back from. */
+    return (
+      'Your payment went through. Your change has not come back to your account yet — ' +
+      'finish that from Home.'
+    );
+  }
   if (notice.legLanded) {
     return (
       `Step 1 landed: ${notice.amountLabel} left your account and is waiting at your Passport. ` +

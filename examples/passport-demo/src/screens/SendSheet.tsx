@@ -68,7 +68,7 @@ import {
 /* The sentence a refused send earns, and how many attempts a leg gets. Both
    are decisions rather than renderings, so both are drilled directly — see
    `lib/sendLegs.ts`. */
-import { SEND_LEG_ATTEMPTS, sendFailureNotice } from '../lib/sendLegs.js'
+import { SEND_LEG_ATTEMPTS, sendFailureNotice, sendStepLine } from '../lib/sendLegs.js'
 
 import './home.css'
 
@@ -362,7 +362,17 @@ export interface SendSheetProps {
    * happening, and a spinner that said "Step 2 of 2" through it would be
    * describing a step that has already failed.
    */
-  nameLeg?: 'withdrawing' | 'settling' | 'depositing' | 'returning' | null
+  nameLeg?: 'withdrawing' | 'settling' | 'depositing' | 'changing' | 'returning' | null
+  /**
+   * How many steps the running payment has: two, or three when the account's
+   * coin is bigger than the payment and the change has to come back.
+   *
+   * The host is the only place this is known — see `planShieldedSend` in
+   * `lib/sendLegs.ts` for why a shielded payment takes the whole coin out —
+   * and a line that counted to two through a three-step run would leave
+   * somebody watching an apparently finished payment carry on.
+   */
+  nameLegSteps?: 2 | 3
   /**
    * Which attempt at the running leg this is, 1-based, or `null`.
    *
@@ -596,6 +606,7 @@ export default function SendSheet(props: SendSheetProps) {
     phase,
     nameLeg,
     nameLegAttempt,
+    nameLegSteps,
     onSignOut,
     onClose,
   } = props
@@ -610,7 +621,14 @@ export default function SendSheet(props: SendSheetProps) {
      failure rather than in a state of its own so it can never outlive the
      failure it describes. */
   const [failure, setFailure] = useState<
-    { message: string; detail: string | null; wayOut: boolean; legLanded: boolean } | null
+    | {
+        message: string
+        detail: string | null
+        wayOut: boolean
+        legLanded: boolean
+        recipientPaid: boolean
+      }
+    | null
   >(null)
   const [showFullRecipient, setShowFullRecipient] = useState(false)
   const [fee, setFee] = useState<FeeReadiness | null>(null)
@@ -1047,22 +1065,18 @@ export default function SendSheet(props: SendSheetProps) {
     typeof nameLegAttempt === 'number' && nameLegAttempt > 1
       ? ` (retry ${nameLegAttempt - 1} of ${SEND_LEG_ATTEMPTS - 1})`
       : ''
+  /* The sentences themselves live in `lib/sendLegs.ts`, beside the plan that
+     decides how many steps there are — see `sendStepLine`. This screen chooses
+     WHEN to show one; it does not own the words. */
   const nameLegLine =
-    resolvedName === null
+    resolvedName === null || nameLeg == null || nameLeg === undefined
       ? null
-      : nameLeg === 'withdrawing'
-        ? `Step 1 of 2 — taking the amount out of your account${attemptSuffix}.`
-        : nameLeg === 'settling'
-          ? 'Step 1 of 2 done. Waiting for the amount to clear before it goes on.'
-          : nameLeg === 'depositing'
-            ? `Step 2 of 2 — paying it into ${resolvedName.domain}’s account${attemptSuffix}.`
-            : nameLeg === 'returning'
-              ? /* Not a step of the transfer: the paying leg refused, and the
-                   amount is being put back. Said plainly and immediately,
-                   because the alternative is a spinner still claiming "Step 2
-                   of 2" over a step that has already failed. */
-                `${resolvedName.domain} was not paid. Putting the amount back into your account.`
-              : null
+      : sendStepLine({
+          step: nameLeg,
+          steps: nameLegSteps ?? 2,
+          recipient: resolvedName.domain,
+          attemptSuffix,
+        })
 
   const handleMax = useCallback(() => {
     if (mode === 'shielded') {
@@ -1176,6 +1190,13 @@ export default function SendSheet(props: SendSheetProps) {
           typeof cause === 'object' &&
           cause !== null &&
           (cause as { legLanded?: unknown }).legLanded === true,
+        /* The other fact only the host holds: a three-step payment that fell
+           over on the change is a payment that WORKED, and the copy must not
+           tell somebody to chase it. */
+        recipientPaid:
+          typeof cause === 'object' &&
+          cause !== null &&
+          (cause as { recipientPaid?: unknown }).recipientPaid === true,
       })
     }
   }, [
@@ -1693,6 +1714,7 @@ export default function SendSheet(props: SendSheetProps) {
                       have finished the transfer. See `lib/sendLegs.ts`. */}
                   {sendFailureNotice({
                     legLanded: failure.legLanded,
+                    recipientPaid: failure.recipientPaid,
                     message: failure.message,
                     amountLabel:
                       amount === null

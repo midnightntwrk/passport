@@ -324,6 +324,29 @@ export function shieldedCoinFromNote(note: {
 }
 
 /**
+ * A coin for PART of what the wallet holds — the deposit that pays a recipient
+ * out of a larger note.
+ *
+ * The nonce is fresh randomness rather than a note's own, and that is the whole
+ * difference from {@link shieldedCoinFromNote}. A deposit's coin is not a note
+ * being handed over intact: `receiveShielded` states a commitment the
+ * transaction must CONTAIN, midnight-js builds that contract-owned output, and
+ * the wallet's balancing funds it out of whatever notes it holds and returns
+ * the difference to itself as change. So the nonce is simply the identity the
+ * new coin will have inside the contract, and it must not collide with one
+ * already used for the same colour and value — which random 32 bytes will not.
+ *
+ * This is what lets a shielded payment take the WHOLE coin out of the account
+ * (the only safe branch of `withdraw_shielded` — see {@link withdrawShielded})
+ * and still pay the recipient exactly what they are owed.
+ */
+export function shieldedCoinOfValue(tokenType: string, value: bigint): AccountShieldedCoin {
+  const nonce = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(nonce);
+  return shieldedCoinFromWalletCoin({ type: tokenType, nonce: bytesToHex(nonce), value });
+}
+
+/**
  * Every shielded note the CALLING WALLET holds and could deposit, with each
  * note's own nonce.
  *
@@ -1268,24 +1291,53 @@ export interface WithdrawShieldedRequest {
    * and refuses anything less.
    */
   recipientShieldedAddress: string;
+  /**
+   * Take the WHOLE coin the account holds of this colour, whatever it is worth
+   * right now, rather than {@link amount}.
+   *
+   * The one branch of `withdraw_shielded` that leaves the account in a state it
+   * can be withdrawn from again — see {@link withdrawShielded}. `amount` is
+   * still required and still checked, because it is what the caller means to
+   * move on; `whole` only widens what leaves the account in this one
+   * transaction, and the caller puts the difference back.
+   */
+  whole?: boolean;
+}
+
+/**
+ * What a shielded withdrawal did, including how much of the account's coin it
+ * actually took — which is not {@link WithdrawShieldedRequest.amount} when the
+ * caller asked for the whole coin.
+ */
+export interface WithdrawShieldedResult extends AccountCustodyTxResult {
+  /** Atomic units of the colour that left the account. */
+  amount: bigint;
 }
 
 /**
  * Moves shielded value out of the account contract to a shielded address.
  *
  * Device-authorised, exactly as {@link withdrawNight} is. The contract holds at
- * most one qualified coin per colour, so a partial withdrawal takes the change
- * path — `sendShielded` splits, `sendImmediateShielded` returns the change to
- * the contract, and `insertCoin` re-registers it — and a full one removes the
- * entry. Both are the circuit's business; what this function owes the caller is
- * a refusal, before proving, when the contract does not hold that much.
+ * most one qualified coin per colour, and the circuit has two branches: asked
+ * for the WHOLE coin it takes `coins.remove`, asked for part of it it splits
+ * and re-registers the remainder with `sendImmediateShielded` +
+ * `insertCoin` — and the coin THAT leaves behind is one the node refuses every
+ * later withdrawal against (`Custom error: 239`, live on stagenet 2026/09/03).
+ *
+ * So {@link WithdrawShieldedRequest.whole} exists, and every send path in this
+ * app uses it: the amount is read from the account at build time and the whole
+ * of it comes out, with the client putting the change back afterwards. Reading
+ * the figure HERE rather than at the call site is the point — a caller that
+ * read the balance, then built, would be asking for a figure that a deposit
+ * arriving in between had already moved, and the split branch is exactly what
+ * that race lands on.
  */
 export async function withdrawShielded(
   handle: LocalMidnightWallet,
   deviceSecret: Uint8Array,
   request: WithdrawShieldedRequest,
   onPhase?: (progress: AccountCustodyProgress) => void,
-): Promise<AccountCustodyTxResult> {
+): Promise<WithdrawShieldedResult> {
   onPhase?.({ phase: 'checking' });
   const colour = colourHexToBytes(request.colourHex);
   requirePositiveAmount(request.amount, 'A withdrawal');
@@ -1303,13 +1355,15 @@ export async function withdrawShielded(
       `This account holds ${held} shielded of that colour, and the withdrawal would move ${request.amount}.`,
     );
   }
+  /* THE WHOLE COIN, read from the state this call is built against. */
+  const amount = request.whole === true ? held : request.amount;
 
-  return callAccountCircuit(
+  const result = await callAccountCircuit(
     handle,
     {
       contractAddress: request.contractAddress,
       circuit: 'withdraw_shielded',
-      args: [{ bytes: recipient.coinPublicKey }, colour, request.amount],
+      args: [{ bytes: recipient.coinPublicKey }, colour, amount],
       secrets: { deviceSecret },
       /* The coin-pk → encryption-pk mapping that lets midnight-js build the
          recipient's note ciphertext — see {@link WithdrawShieldedRequest}. */
@@ -1319,6 +1373,7 @@ export async function withdrawShielded(
     },
     onPhase,
   );
+  return { ...result, amount };
 }
 
 /**

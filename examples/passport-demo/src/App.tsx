@@ -51,6 +51,9 @@ import type { NameLookup } from './lib/recipientName.js';
 import {
   classifyLegError,
   pendingSendsStorageKey,
+  pendingSendStepLine,
+  planOfRecord,
+  planShieldedSend,
   readPendingSends,
   retryDelayMs,
   SEND_LEG_ATTEMPTS,
@@ -1127,6 +1130,8 @@ function newPendingSend(input: {
   tokenType?: string;
   colourHex: string;
   ownReceivingAddress: string;
+  /** What leg one will take out — the whole coin. See `planShieldedSend`. */
+  withdrawAmount?: bigint;
 }): PendingSend {
   const now = new Date().toISOString();
   return {
@@ -1135,10 +1140,13 @@ function newPendingSend(input: {
     recipient: input.recipient,
     amount: input.amount.toString(),
     ...(input.tokenType ? { tokenType: input.tokenType } : {}),
+    ...(input.withdrawAmount !== undefined && input.withdrawAmount > input.amount
+      ? { withdrawAmount: input.withdrawAmount.toString() }
+      : {}),
     colourHex: input.colourHex,
     ownReceivingAddress: input.ownReceivingAddress,
     leg: 'withdraw',
-    attempts: { withdraw: 0, deposit: 0 },
+    attempts: { withdraw: 0, deposit: 0, change: 0 },
     createdAt: now,
     updatedAt: now,
   };
@@ -5267,8 +5275,18 @@ export default function PassportDemo() {
    * the NIGHT path leaves it at the receiving address for Home to sweep in.
    */
   const [nameSendLeg, setNameSendLeg] = useState<
-    'withdrawing' | 'settling' | 'depositing' | 'returning' | null
+    'withdrawing' | 'settling' | 'depositing' | 'changing' | 'returning' | null
   >(null);
+
+  /**
+   * How many steps the running send has — two, or three when the account's coin
+   * is bigger than the payment and the change has to be put back.
+   *
+   * See `planShieldedSend` in `lib/sendLegs.ts` for why a shielded payment
+   * takes the whole coin out. The count is held here rather than derived in the
+   * sheet because only the orchestrator knows what leg one really withdrew.
+   */
+  const [nameSendSteps, setNameSendSteps] = useState<2 | 3>(2);
 
   /**
    * Which attempt at the running leg this is, for the sheet's progress line.
@@ -5433,6 +5451,7 @@ export default function PassportDemo() {
         depositShielded,
         prepareAccountDeposit,
         shieldedCoinFromNote,
+        shieldedCoinOfValue,
         walletShieldedNotes,
         withdrawNight,
         withdrawShielded,
@@ -5442,8 +5461,15 @@ export default function PassportDemo() {
       const amount = BigInt(initial.amount);
       const amountText = pendingSendAmountLabel(initial);
       let record = initial;
+      /* THE PLAN, re-read from the record after every save, because leg one is
+         what settles it: a shielded run asks for the whole coin and only then
+         knows how big it was. See `planOfRecord` in `lib/sendLegs.ts`. */
+      let plan = planOfRecord(initial);
+      setNameSendSteps(plan.steps);
       const save = (patch: Partial<PendingSend>): void => {
         record = { ...record, ...patch, updatedAt: new Date().toISOString() };
+        plan = planOfRecord(record);
+        setNameSendSteps(plan.steps);
         writePendingSend(record);
       };
 
@@ -5466,7 +5492,7 @@ export default function PassportDemo() {
         }
         const entry = addActivity({
           label: `Sending to ${record.recipient.label}`,
-          detail: `${amountText}, in two steps.`,
+          detail: `${amountText}, in ${plan.steps === 3 ? 'three' : 'two'} steps.`,
           status: 'pending',
           source: 'wallet',
         });
@@ -5476,11 +5502,13 @@ export default function PassportDemo() {
 
       /* What the Send sheet is handed. `legLanded` is the one fact its copy
          turns on: "nothing was sent" over a landed first leg is a false
-         statement about where somebody's money is. */
+         statement about where somebody's money is — and `recipientPaid` is the
+         second, for a three-step run that only fell over on the change. */
       const failure = (cause: unknown, message: string, legLanded: boolean): Error =>
         Object.assign(new Error(message, { cause }), {
           code: 'name-send-failed' as const,
           legLanded,
+          recipientPaid: Boolean(record.depositTxHash),
         });
 
       let activityId = record.activityId ?? '';
@@ -5517,10 +5545,28 @@ export default function PassportDemo() {
           return null;
         });
       };
+      /* LEG THREE'S CONNECTION, OPENED WHILE LEG TWO PROVES. Same argument as
+         above and the same absorbed failure — the difference is only which
+         contract: leg three pays the change back into the SENDER's own
+         account, so this one is opened against `account.address`. It is
+         started when leg two starts, because the two cannot overlap: the
+         wallet holds ONE note at that point and its coin selection cannot
+         fund two spends out of it, so leg three's own transaction has to wait
+         for leg two's change. Its connection does not. */
+      let changeConnection: Promise<PreparedAccountCall | null> | null = null;
+      const prepareChange = (): void => {
+        if (changeConnection !== null) return;
+        changeConnection = prepareAccountDeposit(account.handle, account.address).catch(
+          (cause) => {
+            console.info('[send] leg three could not be opened ahead of time', cause);
+            return null;
+          },
+        );
+      };
       /* A RESUME GETS A FRESH BUDGET. The counts are what the record remembers
          about the run that stopped; carrying them into a new press would spend
          a person's Continue on a single attempt. */
-      if (options.resumed) save({ attempts: { withdraw: 0, deposit: 0 } });
+      if (options.resumed) save({ attempts: { withdraw: 0, deposit: 0, change: 0 } });
 
       const runWithdraw = async (deviceSecret: Uint8Array): Promise<void> => {
         activityId = begin(false);
@@ -5564,14 +5610,26 @@ export default function PassportDemo() {
                       colourHex: record.tokenType ?? record.colourHex,
                       amount,
                       recipientShieldedAddress: record.ownReceivingAddress,
+                      /* THE WHOLE COIN, and the reason is the deployed
+                         contract's: a partial `withdraw_shielded` re-registers
+                         its change, and the node refuses every later
+                         withdrawal against what it leaves behind. See
+                         `planShieldedSend` in `lib/sendLegs.ts`. */
+                      whole: true,
                     },
                     (progress) => setAccountPhase(progress.phase),
                   );
             withdrawLanded = out.txIdResolved;
             withdrawIdentifier = out.txIdResolved ? null : out.txId;
+            /* WHAT REALLY CAME OUT, which the account decided and not this
+               client: the plan's third leg is sized from it. Absent on the
+               NIGHT path, which withdraws exactly what it was asked for. */
+            const withdrawn =
+              'amount' in out && typeof out.amount === 'bigint' ? out.amount : null;
             save({
               leg: 'settle',
               withdrawTxHash: out.txId,
+              ...(withdrawn === null ? {} : { withdrawAmount: withdrawn.toString() }),
               attempts: { ...record.attempts, withdraw: attempt + 1 },
               lastError: undefined,
             });
@@ -5588,11 +5646,45 @@ export default function PassportDemo() {
               lastError: { message: verdict.message, retryable: verdict.retryable },
             });
             if (!verdict.retryable || attempt + 1 >= SEND_LEG_ATTEMPTS) {
-              throw failure(cause, verdict.message, false);
+              /* THE PANEL GETS A SENTENCE, THE CONSOLE GETS THE CAUSE. This is
+                 the refusal a user was shown as "The account contract rejected
+                 withdraw_shielded — SubmissionError: 1010: Invalid
+                 Transaction: Custom error: 239": three machinery words, a
+                 circuit name, and a number, none of it theirs to act on.
+                 Nothing has left the account when leg one refuses, which is
+                 what makes `sendRefusalText`'s claim a true one here. */
+              console.debug('[send] the first step was refused', cause);
+              throw failure(cause, sendRefusalText(cause), false);
             }
             await pause(retryDelayMs(attempt));
           }
         }
+      };
+
+      /**
+       * ONE LOOK at the sender's own wallet for a shielded note of exactly
+       * `wanted` that was not there before the run began. No network: this
+       * reads the state the wallet's live sync has applied.
+       *
+       * `wanted` is a parameter because the run looks TWICE. Leg one pays in
+       * the whole coin, so the first look is for that figure; leg two spends
+       * it and the wallet's own balancing returns the difference, so the third
+       * leg's look is for the CHANGE. Both are notes that were not held before
+       * leg one, and the amount is what tells them apart.
+       */
+      const lookForNote = async (
+        wanted: bigint,
+      ): Promise<{ arrived: false } | { arrived: true; note: WalletShieldedNote }> => {
+        const expectation = record.expectedNote;
+        const heldBefore = new Set(
+          expectation && 'heldBeforeIds' in expectation ? expectation.heldBeforeIds : [],
+        );
+        const arrived = findArrivedNote(await walletShieldedNotes(account.handle), {
+          tokenType: record.tokenType ?? record.colourHex,
+          amount: wanted,
+          heldBefore,
+        });
+        return arrived === null ? { arrived: false } : { arrived: true, note: arrived };
       };
 
       /**
@@ -5603,17 +5695,7 @@ export default function PassportDemo() {
         { arrived: false } | { arrived: true; note: WalletShieldedNote | null }
       > => {
         const expectation = record.expectedNote;
-        if (record.kind === 'shielded') {
-          const heldBefore = new Set(
-            expectation && 'heldBeforeIds' in expectation ? expectation.heldBeforeIds : [],
-          );
-          const arrived = findArrivedNote(await walletShieldedNotes(account.handle), {
-            tokenType: record.tokenType ?? record.colourHex,
-            amount,
-            heldBefore,
-          });
-          return arrived === null ? { arrived: false } : { arrived: true, note: arrived };
-        }
+        if (record.kind === 'shielded') return lookForNote(plan.withdraw);
         /* THE ARRIVAL, NOT THE TOTAL. This compared the wallet's whole
            unshielded balance against the amount until 2026/09/02, so a wallet
            that already held enough went straight on to the paying leg and
@@ -5700,6 +5782,10 @@ export default function PassportDemo() {
            connection made before the failure. The prewarm's whole value is on
            the attempt that follows the wait, which is the one that succeeds. */
         let prepared = depositConnection === null ? null : await depositConnection;
+        /* Leg three's connection, opened while leg two proves. Only for a run
+           that HAS a third leg — a whole-coin payment has nothing to put back
+           and would be opening a contract for no reason. */
+        if (plan.change !== null) prepareChange();
         for (let attempt = record.attempts.deposit; ; attempt += 1) {
           setNameSendLeg('depositing');
           setNameSendAttempt(attempt + 1);
@@ -5720,21 +5806,38 @@ export default function PassportDemo() {
                     account.handle,
                     {
                       contractAddress: record.recipient.accountAddress,
-                      coin: shieldedCoinFromNote(note as WalletShieldedNote),
+                      /* THE WHOLE NOTE where the payment is the whole coin, and
+                         a coin of exactly what is owed where it is not. The
+                         second is a new coin rather than a note handed over
+                         intact: the wallet's own balancing spends the note leg
+                         one paid in, funds this, and returns the difference —
+                         which leg three puts back. */
+                      coin:
+                        plan.change === null
+                          ? shieldedCoinFromNote(note as WalletShieldedNote)
+                          : shieldedCoinOfValue(record.tokenType ?? record.colourHex, plan.pay),
                       prepared,
                     },
                     (progress) => setAccountPhase(progress.phase),
                   );
             save({
-              leg: 'done',
+              /* PAID. A run with change still owes the sender their own money
+                 back, so it is not `done` until leg three has run — and the
+                 hash is written down, so a reload knows the recipient has been
+                 paid and never pays them twice. */
+              leg: plan.change === null ? 'done' : 'change',
+              depositTxHash: paid.txId,
               attempts: { ...record.attempts, deposit: attempt + 1 },
               lastError: undefined,
             });
-            dropPendingSend(record.id);
+            if (plan.change === null) dropPendingSend(record.id);
             updateActivity(activityId, {
-              status: 'complete',
+              status: plan.change === null ? 'complete' : 'pending',
               label: `Sent to ${record.recipient.label}`,
-              detail: `${amountText} is now in ${record.recipient.label}’s account.`,
+              detail:
+                plan.change === null
+                  ? `${amountText} is now in ${record.recipient.label}’s account.`
+                  : `${amountText} is now in ${record.recipient.label}’s account. Putting your change back next.`,
               source: 'chain',
               txHash: paid.txId,
             });
@@ -5743,7 +5846,7 @@ export default function PassportDemo() {
               /* Accepted, not yet included — the same claim every other
                  transfer on this surface makes. */
               title: `${record.recipient.label} paid — confirming`,
-              body: 'The fee sponsor covered both network fees.',
+              body: 'The fee sponsor covered every network fee.',
               link: explorerTxLink(paid.txId, paid.network),
             });
             void refreshLocalBalances();
@@ -5753,6 +5856,93 @@ export default function PassportDemo() {
             prepared = null;
             save({
               attempts: { ...record.attempts, deposit: attempt + 1 },
+              lastError: { message: verdict.message, retryable: verdict.retryable },
+            });
+            if (!verdict.retryable || attempt + 1 >= SEND_LEG_ATTEMPTS) {
+              throw failure(cause, verdict.message, true);
+            }
+            await pause(retryDelayMs(attempt));
+          }
+        }
+      };
+
+      /**
+       * LEG THREE — the sender's own change, going back into their account.
+       *
+       * It exists because the deployed contract cannot be asked for part of a
+       * coin without poisoning the account (see `planShieldedSend`), so leg one
+       * takes the whole thing and this is the half that was never the
+       * recipient's. The recipient HAS been paid by the time this runs, which
+       * is what makes every failure here a smaller thing than it looks: the
+       * payment is finished, the change is in the sender's own wallet, and the
+       * record left at `change` is what Home offers to carry on.
+       *
+       * The change note is found the same way leg one's was — a note of exactly
+       * this size that the wallet did not hold before the run began — and it
+       * exists at all because the wallet's own balancing produced it when leg
+       * two spent the bigger note. It cannot be built before leg two lands, so
+       * this waits; only the CONNECTION was opened early.
+       */
+      const runChange = async (): Promise<void> => {
+        const owed = plan.change;
+        /* Never reached with no change: the caller checks the plan first. This
+           is the type narrowing, not a second decision. */
+        if (owed === null) return;
+        save({ leg: 'change' });
+        setNameSendLeg('changing');
+        setNameSendAttempt(null);
+        const identifier = record.depositTxHash;
+        const outcome = await watchForSettlement<WalletShieldedNote>({
+          readWallet: () => lookForNote(owed),
+          /* Leg two's transaction is the one the change comes out of, so the
+             indexer is asked about that and not about leg one. A resolved hash
+             is already an indexer answer, so the record's hash starts this
+             landed either way — the wallet is simply re-read until the change
+             appears. */
+          landed: true,
+          now: () => Date.now(),
+          sleep: pause,
+          deadlineMs: SETTLE_DEADLINE_MS,
+        });
+        if (!outcome.settled) {
+          const waiting = 'Your change has not come back to your wallet yet.';
+          save({ leg: 'change', lastError: { message: waiting, retryable: true } });
+          throw failure(new Error(waiting), waiting, true);
+        }
+        let prepared = changeConnection === null ? null : await changeConnection;
+        for (let attempt = record.attempts.change; ; attempt += 1) {
+          setNameSendLeg('changing');
+          setNameSendAttempt(attempt + 1);
+          try {
+            const back = await depositShielded(
+              account.handle,
+              {
+                contractAddress: account.address,
+                coin: shieldedCoinFromNote(outcome.note),
+                prepared,
+              },
+              (progress) => setAccountPhase(progress.phase),
+            );
+            save({
+              leg: 'done',
+              attempts: { ...record.attempts, change: attempt + 1 },
+              lastError: undefined,
+            });
+            dropPendingSend(record.id);
+            updateActivity(activityId, {
+              status: 'complete',
+              label: `Sent to ${record.recipient.label}`,
+              detail: `${amountText} is now in ${record.recipient.label}’s account, and your change is back in yours.`,
+              source: 'chain',
+              txHash: back.txId,
+            });
+            void refreshLocalBalances();
+            return;
+          } catch (cause) {
+            const verdict = classifyLegError(cause);
+            prepared = null;
+            save({
+              attempts: { ...record.attempts, change: attempt + 1 },
               lastError: { message: verdict.message, retryable: verdict.retryable },
             });
             if (!verdict.retryable || attempt + 1 >= SEND_LEG_ATTEMPTS) {
@@ -5775,15 +5965,29 @@ export default function PassportDemo() {
              keeps the resolved HASH rather than the identifier the lookup takes. */
           withdrawLanded = true;
         }
-        /* A shielded run needs the note itself however far it had got: the
-           deposit consumes one specific note and only this can name it. A NIGHT
-           run past `settle` has already seen its arrival. */
-        if (record.kind === 'shielded' || record.leg === 'settle') {
-          settledNote = await runSettle();
+        /* A RUN CARRIED ON FROM THE THIRD LEG has already paid the recipient,
+           and there is exactly one thing left to do. Running the first two
+           again would pay them a second time. */
+        if (record.leg === 'change') {
+          await runChange();
+        } else {
+          /* A shielded run needs the note itself however far it had got: the
+             deposit consumes one specific note and only this can name it. A
+             NIGHT run past `settle` has already seen its arrival. */
+          if (record.kind === 'shielded' || record.leg === 'settle') {
+            settledNote = await runSettle();
+          }
+          await runDeposit(settledNote);
+          if (plan.change !== null) await runChange();
         }
-        await runDeposit(settledNote);
       } catch (cause) {
         const legLanded = Boolean(record.withdrawTxHash);
+        /* THE RECIPIENT HAS THEIR MONEY. A three-step run that stopped on the
+           change is a FINISHED payment with the sender's own remainder still
+           in their wallet, and every sentence below has to say so — "they were
+           not paid" over that would send somebody chasing a payment that
+           happened. */
+        const recipientPaid = Boolean(record.depositTxHash);
         const message = cause instanceof Error ? cause.message : String(cause);
 
         /* THE LAST RESORT, and only now the paying leg has had its three
@@ -5818,31 +6022,41 @@ export default function PassportDemo() {
              back in the account, or the first leg never spent. Neither is a
              thing to offer a Continue button over. */
           dropPendingSend(record.id);
-        } else if (record.leg !== 'settle') {
+        } else if (record.leg !== 'settle' && record.leg !== 'change') {
           save({ leg: 'failed' });
         }
 
         if (activityId) {
           updateActivity(activityId, {
             status: 'error',
-            label: legLanded ? `${record.recipient.label} was not paid yet` : 'Nothing was sent',
+            label: recipientPaid
+              ? `Sent to ${record.recipient.label}`
+              : legLanded
+                ? `${record.recipient.label} was not paid yet`
+                : 'Nothing was sent',
             /* WHERE THE MONEY IS. A half-finished transfer is the one state
                where saying only "it failed" would be a lie by omission. */
-            detail: returned
-              ? `${message} Nothing was paid to ${record.recipient.label}, and the ${amountText} is back in your account.`
-              : legLanded
-                ? `${message} The ${amountText} is waiting at your Passport — Home offers to carry the payment on.`
-                : message,
+            detail: recipientPaid
+              ? `${amountText} reached ${record.recipient.label}. Your change has not come back to your account yet — Home offers to finish that.`
+              : returned
+                ? `${message} Nothing was paid to ${record.recipient.label}, and the ${amountText} is back in your account.`
+                : legLanded
+                  ? `${message} The ${amountText} is waiting at your Passport — Home offers to carry the payment on.`
+                  : message,
             source: 'local',
           });
         }
         if (legLanded) {
           pushToast({
-            tone: 'error',
-            title: `${record.recipient.label} was not paid yet`,
-            body: returned
-              ? `Your ${amountText} is back in your account.`
-              : `Your ${amountText} is safe. Carry the payment on from Home.`,
+            tone: recipientPaid ? 'success' : 'error',
+            title: recipientPaid
+              ? `${record.recipient.label} paid`
+              : `${record.recipient.label} was not paid yet`,
+            body: recipientPaid
+              ? 'Your change has not come back to your account yet. Finish that from Home.'
+              : returned
+                ? `Your ${amountText} is back in your account.`
+                : `Your ${amountText} is safe. Carry the payment on from Home.`,
           });
           void refreshLocalBalances();
         }
@@ -6157,6 +6371,23 @@ export default function PassportDemo() {
           { code: 'wallet-closed' as const },
         );
       }
+      /* WHAT THE ACCOUNT HOLDS OF THIS COLOUR, so the sheet can say "of 3"
+         from its first line rather than switching the count under somebody
+         mid-send. It is an estimate and it is treated as one: leg one reads
+         the figure again as it builds, and the record is corrected to whatever
+         really came out. A read that fails costs the count and nothing else —
+         the run then starts as a two-step one and leg one corrects it. */
+      const account = requireAccount();
+      let held: bigint | undefined;
+      try {
+        const { readAccountState } = await import('./identity/accountCustody.js');
+        const state = await readAccountState(account.handle.network, account.address);
+        held = state.shieldedCoins.get(params.tokenType) ?? undefined;
+      } catch (cause) {
+        console.info('[send] the account balance could not be read before the send', cause);
+      }
+      const plan =
+        held === undefined ? null : planShieldedSend({ held, amount: params.amount });
       await runNameSend(
         newPendingSend({
           kind: 'shielded',
@@ -6165,10 +6396,11 @@ export default function PassportDemo() {
           tokenType: params.tokenType,
           colourHex: params.tokenType,
           ownReceivingAddress: ownShieldedAddress,
+          ...(plan === null ? {} : { withdrawAmount: plan.withdraw }),
         }),
       );
     },
-    [localSurfaces, runNameSend],
+    [localSurfaces, requireAccount, runNameSend],
   );
 
   /**
@@ -6272,6 +6504,7 @@ export default function PassportDemo() {
           phase: accountPhase,
           nameLeg: nameSendLeg,
           nameLegAttempt: nameSendAttempt,
+          nameLegSteps: nameSendSteps,
         }
       : null;
 
@@ -6398,12 +6631,10 @@ export default function PassportDemo() {
     () =>
       pendingSends.map((record) => ({
         id: record.id,
-        label: `Sending ${pendingSendAmountLabel(record)} to ${record.recipient.label}`,
-        step: !record.withdrawTxHash
-          ? 'Nothing has left your account yet.'
-          : record.leg === 'settle'
-            ? 'Step 1 done. Waiting for the amount to reach your Passport.'
-            : `Step 1 done. Step 2 — paying it into ${record.recipient.label}’s account — has not finished.`,
+        label: record.leg === 'change'
+          ? `Your change from paying ${record.recipient.label}`
+          : `Sending ${pendingSendAmountLabel(record)} to ${record.recipient.label}`,
+        step: pendingSendStepLine(record),
         reason: record.lastError?.message ?? null,
         onContinue: () => void continuePendingSend(record.id),
         ...(record.withdrawTxHash
