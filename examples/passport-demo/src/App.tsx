@@ -13,9 +13,13 @@ import type {
   PassportAccountBlobWriteOutcome,
 } from './backend.js';
 import {
+  accountFromBlob,
+  accountRecheckDelayMs,
   accountToRemember,
+  aliasFromRecoveredAccount,
   pendingAccountBlob,
   settledAccountOnPasskey,
+  type AccountFromBlobAccount,
 } from './lib/accountOnPasskey.js';
 import { compactAddress } from './lib/address.js';
 import { holdCriticalWork } from './lib/appBusy.js';
@@ -77,6 +81,7 @@ import { PassportCallbackConsent } from './screens/callbackConsent.js';
 import { PassportTxConsent } from './txConsent.js';
 import OnboardingScreen from './screens/Onboarding.js';
 import WelcomeScreen from './screens/Welcome.js';
+import AccountRecoveryScreen from './screens/AccountRecovery.js';
 import HomeScreen from './screens/Home.js';
 import AliasClaimScreen from './screens/AliasClaim.js';
 import BackupScreen from './screens/Backup.js';
@@ -85,6 +90,7 @@ import AliasReclaimModal from './screens/AliasReclaimModal.js';
 import {
   loadAliasRecord,
   loadAliasRecords,
+  removeAliasRecord,
   saveAliasRecord,
   subscribeAliasRecords,
   type AliasRecord,
@@ -652,6 +658,31 @@ const PASSPORT_CONTRACT_SCOPE = { appId: APP_ID, accountId: 'passport-contract-v
  * shown once.
  */
 type IdentityStep = 'welcome' | 'alias' | 'backup' | 'ecosystem' | null;
+
+/**
+ * An account read off a passkey that the chain has not answered for YET.
+ *
+ * It is a session's state and never storage: what survives a reload is the
+ * profile note the recovery writes (`accountOnPasskey`) and the name it
+ * restores. This is only the search itself — where it has got to, and whether
+ * it is still running — because a search is the one thing a reload should
+ * start again rather than resume half-way through.
+ */
+interface AccountSearch {
+  /** The account-custody address the blob named. */
+  address: string;
+  network: string;
+  /** The name restored with it, when the blob carried one. */
+  alias: string | null;
+  /** How many read-backs have already come back with nothing. */
+  attempt: number;
+  /**
+   * `checking` while the chain is still being asked — Home says the account is
+   * being set up — and `not-found` once the attempts are spent, which raises
+   * `AccountRecovery.tsx` and its two controls.
+   */
+  phase: 'checking' | 'not-found';
+}
 
 /**
  * How long a WebAuthn ceremony may sit unanswered before Passport stops
@@ -1242,6 +1273,20 @@ export default function PassportDemo() {
   const [aliasRecords, setAliasRecords] = useState<Record<string, AliasRecord>>(loadAliasRecords);
   const [incentives, setIncentives] = useState<PassportIncentiveRecord[]>(loadIncentives);
   const [identityStep, setIdentityStep] = useState<IdentityStep>(null);
+  /** See {@link AccountSearch}. `null` when nothing is being looked for. */
+  const [accountSearch, setAccountSearch] = useState<AccountSearch | null>(null);
+  /**
+   * A sign-in that is CARRYING an account blob, from the moment the ceremony
+   * hands one over to the moment the recovery has finished with it.
+   *
+   * It exists to hold the name step, and it is a separate flag from
+   * {@link accountSearch} because it has to be true EARLIER than the search
+   * can be: the name-step gate resolves the instant the wallet opens, which is
+   * before the blob's name has been restored, and a gate that resolved there
+   * would put a Passport that has a name onto "Choose your .night name" —
+   * which is the defect, seen live on 2026/09/03.
+   */
+  const [recoveringAccount, setRecoveringAccount] = useState(false);
   const [claimPhase, setClaimPhase] = useState<AliasClaimProgress['phase'] | null>(null);
   /**
    * Why the last claim did not complete, and whether the screen owes the user
@@ -1943,69 +1988,145 @@ export default function PassportDemo() {
   );
 
   /**
-   * Sign-in recovery: turn a blob read off the passkey into a contract record,
-   * but ONLY once the chain has answered for the address.
+   * Writes down an account that has ANSWERED — the end of a successful
+   * recovery, from the sign-in itself or from the search that followed it.
    *
-   * The three conditions, all required:
-   *
-   *   1. the assertion actually returned a blob (`null` on every platform
-   *      without largeBlob, which is most of them — and not an error);
-   *   2. this browser holds NO record for that credential and network. A
-   *      device that already knows its own contract is not recovering
-   *      anything, and a blob must never overwrite a locally observed record;
-   *   3. the indexer answers for the address. Until it does, all we have is a
-   *      claim by a file; `confirmPassportContractOnLedger` is what turns it
-   *      into a fact. If it does not confirm, NOTHING is written and nothing
-   *      is said — the user is simply where they were.
-   *
-   * The record it writes carries `recovered: true` precisely so no surface
-   * ever shows a deployment transaction this device never saw.
+   * `recovered: true` is load-bearing: it is what stops every surface showing
+   * a deployment transaction this device never saw.
    */
-  const recoverAccountFromPasskey = useCallback(
-    async (credentialId: string, blob: PassportAccountBlob | null): Promise<void> => {
-      if (!blob) return;
-      const handle = localWalletRef.current;
-      // The read-back has to happen against the network the blob names, and
-      // the only indexer this session holds is the open wallet's.
-      if (!handle || handle.network.networkId !== blob.acc.network) return;
-      if (loadPassportContractRecord(credentialId, blob.acc.network)) return;
-      const { confirmPassportContractOnLedger } = await import('./identity/passportContract.js');
-      const confirmed = await confirmPassportContractOnLedger(
-        handle.network.indexerHttpUrl,
-        blob.acc.address,
-      );
-      if (!confirmed) {
-        addActivity({
-          label: 'Passport not restored',
-          detail: `Your passkey names an account on ${blob.acc.network}, but ${blob.acc.network} does not answer for it, so nothing was restored.`,
-          status: 'blocked',
-          source: 'chain',
-        });
-        return;
-      }
+  const saveRecoveredAccount = useCallback(
+    (credentialId: string, account: AccountFromBlobAccount): void => {
       savePassportContractRecord({
         credentialId,
-        network: blob.acc.network,
+        network: account.network,
         status: 'deployed',
-        address: blob.acc.address,
+        address: account.address,
         recovered: true,
         ledgerConfirmed: true,
         updatedAt: new Date().toISOString(),
       });
       addActivity({
         label: 'Passport restored',
-        detail: `Your account was read from your passkey and confirmed on ${blob.acc.network}. This device never saw it being set up, so there is no transaction to show for it.`,
+        detail: `Your account was read from your passkey and confirmed on ${account.network}. This device never saw it being set up, so there is no transaction to show for it.`,
         status: 'complete',
         source: 'chain',
       });
       pushToast({
         tone: 'success',
-        title: 'Your Passport contract is back',
-        body: 'Read from your passkey and confirmed on chain.',
+        title: 'Your account is back',
+        body: 'Read from your passkey and confirmed on Midnight.',
       });
     },
     [addActivity],
   );
+
+  /**
+   * Sign-in recovery: what a blob read off the passkey is worth, and what is
+   * kept while the chain is still being asked.
+   *
+   * THE DEFECT THIS REPLACES (reproduced 2026/09/03). The old shape was one
+   * indexer read and a straight discard on anything but `true`. A browser whose
+   * site data had been cleared — which iOS does by itself after seven days away
+   * — signed in with the passkey that held the account, met one bad read, and
+   * was left holding NOTHING: no account, no name, and no trace but a line in
+   * an activity trail it could not reach. The screen it landed on was "Choose
+   * your .night name", over a Passport that already had one, where claiming
+   * again would set up a second account and pay for a second name.
+   *
+   * So the blob is treated as what it is: evidence, written by this Passport,
+   * onto its own credential. `src/lib/accountOnPasskey.ts` holds the rule; this
+   * is the wiring, and it does three things the old path did not:
+   *
+   *   - it KEEPS the account before the chain has answered — on the profile,
+   *     where a reload still finds it — and restores the name that came with
+   *     it, so the person lands on their own Passport rather than on a naming
+   *     ceremony they have already been through;
+   *   - it goes on ASKING, on a bounded backoff (see the effect below), and
+   *     upgrades to a recorded account the moment the chain answers;
+   *   - and when the asking runs out it hands the user a screen with two
+   *     controls rather than silence.
+   *
+   * What it still refuses to do is overrule this device's own witness: a record
+   * here for a different address is a conflict, and the record stays.
+   */
+  const recoverAccountFromPasskey = useCallback(
+    async (
+      activeProfile: DemoPassportProfile,
+      blob: PassportAccountBlob | null,
+    ): Promise<void> => {
+      try {
+        const credentialId = activeProfile.passkey.credentialId;
+        const handle = localWalletRef.current;
+        const context = {
+          // The read-back can only happen against the open wallet's own indexer.
+          walletNetwork: handle?.network.networkId ?? null,
+          localRecord: blob ? loadPassportContractRecord(credentialId, blob.acc.network) : null,
+          hasLocalAlias: blob ? loadAliasRecord(blob.acc.network) !== null : false,
+        };
+        const pending = accountFromBlob(blob, context, 'unconfirmed');
+        if (pending.kind === 'conflict') {
+          /* Both cannot be this Passport's account, and the one this device
+             watched being made is the one it has evidence for. Said out loud
+             rather than silently resolved, because it is the one outcome a
+             person might want to act on. */
+          addActivity({
+            label: 'Your passkey names a different account',
+            detail:
+              'This device already holds an account for this Passport, so the one written on your passkey was left alone. Nothing was changed.',
+            status: 'blocked',
+            source: 'local',
+          });
+          return;
+        }
+        const indexerUrl = handle?.network.indexerHttpUrl ?? null;
+        if (pending.kind !== 'adopt-checking' || !indexerUrl) return;
+        const account = pending.account;
+        /* HELD BEFORE IT IS CHECKED. The note is what a reload reads, and the
+           name is what keeps this Passport off the name step; neither claims
+           the account has been seen on chain, which is what a contract record
+           would claim and why one is not written here. */
+        await patchProfile(activeProfile, {
+          accountOnPasskey: {
+            address: account.address,
+            network: account.network,
+            ...(account.alias ? { alias: account.alias } : {}),
+            /* It came OFF the credential, so it is already on it: nothing is
+               owed to a future assertion. */
+            written: true,
+          },
+        });
+        const restoredAlias = aliasFromRecoveredAccount(account, new Date().toISOString());
+        if (restoredAlias) saveAliasRecord(restoredAlias);
+        const { confirmPassportContractOnLedger } = await import('./identity/passportContract.js');
+        const confirmed = await confirmPassportContractOnLedger(indexerUrl, account.address);
+        const settled = accountFromBlob(blob, context, confirmed ? 'confirmed' : 'unconfirmed');
+        if (settled.kind === 'adopt-confirmed') {
+          saveRecoveredAccount(credentialId, settled.account);
+          return;
+        }
+        /* Not answered for yet. The search below keeps asking; Home says the
+           account is being set up while it does. */
+        setAccountSearch({
+          address: account.address,
+          network: account.network,
+          alias: account.alias ?? null,
+          attempt: 0,
+          phase: 'checking',
+        });
+      } finally {
+        setRecoveringAccount(false);
+      }
+    },
+    [addActivity, patchProfile, saveRecoveredAccount],
+  );
+
+  /**
+   * Marks a sign-in as one that is carrying an account to recover, BEFORE the
+   * wallet opens. See {@link recoveringAccount} for why the moment matters.
+   */
+  const armAccountRecovery = (blob: PassportAccountBlob | null): void => {
+    if (blob) setRecoveringAccount(true);
+  };
 
   /**
    * A private-state store bound to ONE already-made assertion.
@@ -2043,8 +2164,10 @@ export default function PassportDemo() {
       const seed = await discovered.deriveWalletSeed(scope);
       setProfile(known);
       setLocalPassportKnown(true);
+      // Held before the wallet opens: see `recoveringAccount`.
+      armAccountRecovery(discovered.accountBlob);
       await openLocalWalletWithSeed(seed, scope, known.passkey.credentialId);
-      await recoverAccountFromPasskey(known.passkey.credentialId, discovered.accountBlob);
+      await recoverAccountFromPasskey(known, discovered.accountBlob);
       addActivity({
         label: 'Signed in',
         detail: 'Opened with a passkey chosen from this device.',
@@ -2086,11 +2209,12 @@ export default function PassportDemo() {
     // part of ITS setup. A sign-in to a known profile never arms it.
     identityStepArmed.current = true;
     const seed = await discovered.deriveWalletSeed(scope);
+    armAccountRecovery(discovered.accountBlob);
     await openLocalWalletWithSeed(seed, scope, discovered.credentialId);
     /* The fresh-device case this whole mechanism exists for: a passkey
        synced here from another device, no local records at all, and its
-       blob naming the contract to look for. */
-    await recoverAccountFromPasskey(discovered.credentialId, discovered.accountBlob);
+       blob naming the account to look for. */
+    await recoverAccountFromPasskey(nextProfile, discovered.accountBlob);
     addActivity({
       label: 'Passport created',
       detail: 'This passkey now holds its own Passport on this device.',
@@ -2535,12 +2659,13 @@ export default function PassportDemo() {
       setProfile(existing);
       setLocalPassportKnown(true);
       const seed = await handle.deriveWalletSeed(unlockScope);
+      armAccountRecovery(handle.accountBlob);
       await openLocalWalletWithSeed(seed, unlockScope, existing.passkey.credentialId);
       /* The blob rode in on the assertion above, so this costs no prompt. It
-         does nothing at all unless this browser has no record of the contract
-         AND the indexer confirms the address — which is exactly why the
-         assertion above may spend its largeBlob slice writing instead. */
-      await recoverAccountFromPasskey(existing.passkey.credentialId, handle.accountBlob);
+         does nothing at all unless this browser has no record of the account —
+         which is exactly why the assertion above may spend its largeBlob slice
+         writing instead. */
+      await recoverAccountFromPasskey(existing, handle.accountBlob);
       /* What the write did, recorded rather than announced. Never awaited into
          the sign-in's own outcome: a blob is a nicety, and a signed-in
          Passport does not depend on one. */
@@ -2661,6 +2786,10 @@ export default function PassportDemo() {
       }
       setOnboardingIntent(null);
       setOnboardingBusyLabel(null);
+      /* A sign-in that never reached the recovery — the wallet refused to open,
+         the state would not decrypt — must not leave the name step held open
+         for a recovery that is not coming. */
+      setRecoveringAccount(false);
       onboardingRunning.current = false;
     }
   };
@@ -2935,6 +3064,99 @@ export default function PassportDemo() {
   useEffect(() => subscribeAliasRecords(setAliasRecords), []);
   useEffect(() => subscribeIncentives(setIncentives), []);
   useEffect(() => subscribePassportContractRecords(setContractRecords), []);
+
+  /**
+   * KEEP ASKING — the bounded search for an account a passkey named and the
+   * chain has not answered for yet.
+   *
+   * The read it retries used to happen exactly once, inside the sign-in, and a
+   * single unlucky answer was the difference between somebody's Passport and a
+   * blank name step. One read is the right number for a sign-in, which must not
+   * stall behind an indexer; it is the wrong number for the question "does this
+   * account exist", which a node three blocks behind answers wrongly and
+   * correctly a few seconds later.
+   *
+   * So the retrying happens HERE, out of the sign-in's way: five attempts on a
+   * doubling backoff — about a minute in all, `accountRecheckDelayMs` — while
+   * Home says the account is being set up. It ends in one of two places and
+   * never in silence: a recorded account, or `AccountRecovery.tsx`, which puts
+   * the choice to the person whose account it is.
+   */
+  useEffect(() => {
+    const search = accountSearch;
+    if (!search || search.phase !== 'checking') return undefined;
+    const delay = accountRecheckDelayMs(search.attempt);
+    if (delay === null) {
+      /* Spent. The screen this raises is the way out; nothing is deleted and
+         nothing is set up behind the user's back. */
+      setAccountSearch({ ...search, phase: 'not-found' });
+      addActivity({
+        label: 'Your account could not be found',
+        detail: `Your passkey names an account on ${search.network} and ${search.network} has not answered for it. Nothing was changed — you can look again, or set up a new account.`,
+        status: 'blocked',
+        source: 'chain',
+      });
+      return undefined;
+    }
+    let live = true;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const handle = localWalletRef.current;
+        const credentialId = profileRef.current?.passkey.credentialId ?? null;
+        const indexerUrl = handle?.network.indexerHttpUrl ?? null;
+        /* Signed out, or the wallet moved networks under us: the search is
+           about a session that no longer exists. */
+        if (!indexerUrl || !credentialId) return;
+        const { confirmPassportContractOnLedger } = await import(
+          './identity/passportContract.js'
+        );
+        const confirmed = await confirmPassportContractOnLedger(indexerUrl, search.address);
+        if (!live) return;
+        if (!confirmed) {
+          setAccountSearch((current) =>
+            current && current.phase === 'checking'
+              ? { ...current, attempt: current.attempt + 1 }
+              : current,
+          );
+          return;
+        }
+        saveRecoveredAccount(credentialId, {
+          address: search.address,
+          network: search.network,
+          ...(search.alias ? { alias: search.alias } : {}),
+        });
+        setAccountSearch(null);
+      })();
+    }, delay);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [accountSearch, addActivity, saveRecoveredAccount]);
+
+  /**
+   * The way out's second control: stop looking, and set an account up the way
+   * a new Passport does — by choosing a name, deliberately, on screen.
+   *
+   * It CREATES NOTHING here. What it does is clear what was read off the
+   * passkey — the profile note, and the name restored from it, which is the
+   * one record that would otherwise sit on a Passport claiming a name whose
+   * account nobody could find — and hand the person to the name step. The
+   * account the passkey names is untouched: it is on Midnight, not on this
+   * device, and a later sign-in that can see it will still find it.
+   */
+  const startNewAccountAfterSearch = async (): Promise<void> => {
+    const search = accountSearch;
+    const active = profileRef.current;
+    setAccountSearch(null);
+    if (search) {
+      const restored = loadAliasRecord(search.network);
+      // Only the name THIS search restored; never one this browser watched.
+      if (restored?.recovered === true) removeAliasRecord(search.network);
+    }
+    if (active) await patchProfile(active, { accountOnPasskey: undefined });
+    setIdentityStep('alias');
+  };
 
   /**
    * The stored record for THIS credential on the network the WALLET signs on.
@@ -4421,6 +4643,13 @@ export default function PassportDemo() {
    */
   useEffect(() => {
     if (localWalletStatus !== 'ready' || !localSurfaces || !profile) return;
+    /* A RECOVERY IS STILL RUNNING, so this cannot be decided yet — and this
+       guard deliberately does not latch. The wallet is open before the blob
+       read off the passkey has been acted on, and the name that blob carries
+       is the whole answer to the question below. Resolving here is exactly how
+       a Passport that HAS a name met "Choose your .night name" on a browser
+       whose site data had been cleared (2026/09/03). */
+    if (recoveringAccount) return;
     if (identityStepResolved.current) return;
     identityStepResolved.current = true;
     /* Read before it is cleared: this is the one signal that says the Passport
@@ -4431,6 +4660,11 @@ export default function PassportDemo() {
     const passportJustCreated = identityStepArmed.current;
     identityStepArmed.current = false;
     if (loadAliasRecords()[selectedNetwork]) return;
+    /* A name recovered from the passkey, before any of it reaches the alias
+       store — a second reading of the same fact, because the cost of getting
+       this wrong is asking somebody to claim a name they already own. */
+    const recoveredNote = profile.accountOnPasskey;
+    if (recoveredNote?.alias && recoveredNote.network === selectedNetwork) return;
     /* Only a DONE resolution suppresses the step. 'skipped' deliberately does
        not any more: a skip used to be remembered per credential forever, so a
        passkey that skipped once landed on Home with no name and no account on
@@ -4444,7 +4678,7 @@ export default function PassportDemo() {
     setIdentityStep(
       passportJustCreated && !welcomeSeen(profile.passkey.credentialId) ? 'welcome' : 'alias',
     );
-  }, [localSurfaces, localWalletStatus, profile, selectedNetwork]);
+  }, [localSurfaces, localWalletStatus, profile, recoveringAccount, selectedNetwork]);
 
   const signOutPassport = async () => {
     // Sign-out is the boundary of the §2.2 session stopgap: the wrapped seed
@@ -4483,6 +4717,11 @@ export default function PassportDemo() {
     // themselves are NOT cleared: the same passkey re-derives the same wallet,
     // so the name it registered is still that wallet's name.
     setIdentityStep(null);
+    /* The search belongs to the session that started it. A sign-out ends both;
+       what it does NOT touch is the profile note, which is how the next
+       sign-in on this browser still knows where to look. */
+    setAccountSearch(null);
+    setRecoveringAccount(false);
     setClaimPhase(null);
     setAliasFailure(null);
     setReclaim(null);
@@ -6358,8 +6597,13 @@ export default function PassportDemo() {
              otherwise read "Deploying…" over a contract that is simply there. */
           busy:
             contractBusy ||
-            (claimPhase !== null && activeContractRecord?.status !== 'deployed'),
-          phase: contractPhase,
+            (claimPhase !== null && activeContractRecord?.status !== 'deployed') ||
+            /* Looking for an account read off the passkey. There is no record
+               to show yet and the card would otherwise render nothing at all,
+               which is the same screen as "you have no account" — and the
+               person does have one. */
+            accountSearch?.phase === 'checking',
+          phase: accountSearch?.phase === 'checking' ? 'confirming' : contractPhase,
           disabledReason:
             activeContractRecord?.status === 'failed' ? contractDeployDisabledReason : null,
         }
@@ -6486,6 +6730,21 @@ export default function PassportDemo() {
           unusableCredential={unusableCredential}
           keylessPasskey={keylessPasskey}
           onCreateNewPasskey={() => startPasskeyOnboarding('enrol-new')}
+        />
+      ) : accountSearch?.phase === 'not-found' ? (
+        /* THE END OF THE SEARCH, and the reason it has one. A passkey named an
+           account, the chain never answered for it, and what used to happen at
+           this point was nothing: no record, no name, and the name step in
+           front of somebody who already had a name. Two controls, and neither
+           of them sets anything up on its own. See `AccountRecovery.tsx`. */
+        <AccountRecoveryScreen
+          name={accountSearch.alias ? `${accountSearch.alias}.night` : null}
+          onTryAgain={() =>
+            setAccountSearch((current) =>
+              current ? { ...current, attempt: 0, phase: 'checking' } : current,
+            )
+          }
+          onStartOver={() => void startNewAccountAfterSearch()}
         />
       ) : identityStep === 'welcome' ? (
         /* What Passport IS, said once to a Passport that has just been made
