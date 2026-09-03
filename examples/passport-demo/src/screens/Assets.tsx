@@ -20,6 +20,13 @@ import {
   assetsOnTheWayLine,
   type OnTheWayCandidate,
 } from './assetsOnTheWay.js'
+/* Whether the opening balance is still coming. Pure — see `lib/activation.ts`. */
+import { openingBalanceOnTheWay } from '../lib/activation.js'
+/* When to read the account again, so a figure that moves on the chain moves on
+   this screen without a reload. Rules in `lib/balanceWatch.ts`, wiring in
+   `useBalanceWatch.ts`. */
+import { accountHoldsSomething, holdingsSignature } from '../lib/balanceWatch.js'
+import { useBalanceWatch } from './useBalanceWatch.js'
 import './assets.css'
 
 /**
@@ -100,8 +107,27 @@ export default function AssetsScreen(props: AssetsScreenProps) {
   const { account, network, onSelectNetwork, onRefresh, activity } = props
 
   /* What has been announced and has not landed. One line under the token
-     shelf, from the trail, gone the moment the balances themselves say it. */
-  const onTheWayLine = assetsOnTheWayLine(assetsOnTheWay(activity))
+     shelf, from the trail, gone the moment the balances themselves say it —
+     plus the opening balance, which is on its way from the moment this
+     Passport has an account for it to land in and nothing in it yet. */
+  const onTheWay = assetsOnTheWay(activity, {
+    openingBalance: openingBalanceOnTheWay({
+      hasAccount: Boolean(account),
+      holdsNothing: !accountHoldsSomething(account),
+      entries: activity ?? [],
+    }),
+  })
+  const onTheWayLine = assetsOnTheWayLine(onTheWay)
+
+  /* Read the account again on its own, so an amount that arrives while this
+     shelf is open appears without anybody reloading the page. Home keeps the
+     same watch; only one of the two screens is ever mounted. */
+  useBalanceWatch({
+    active: Boolean(account),
+    refresh: onRefresh,
+    signature: holdingsSignature(account),
+    chaseKey: `${onTheWay.length}|${activity?.[0]?.id ?? ''}|${activity?.[0]?.status ?? ''}`,
+  })
 
   /* Collapsed by default and never remembered, on the same rule Home keeps:
      the list is short for almost every Passport, and a preference that
@@ -207,7 +233,10 @@ export default function AssetsScreen(props: AssetsScreenProps) {
   /* The account's own read, in the vocabulary the cards already speak: a
      figure still being read is 'Syncing', a read that failed is 'Unavailable',
      and neither is ever a zero. */
-  const balancesLoading = account?.status === 'loading' || account?.status === 'idle'
+  /* Only while there is nothing to show. See Home for why: the account is
+     re-read on a timer now, and every read passes through 'loading'. */
+  const balancesLoading =
+    account?.status === 'idle' || (account?.status === 'loading' && account.nightBalance === null)
 
   return (
     <section className="mnassets-screen" aria-busy={balancesLoading}>

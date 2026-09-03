@@ -324,3 +324,39 @@ export function classifyFundAccountAnswer(
     activities,
   };
 }
+
+/**
+ * Whether the opening balance should be shown as ON ITS WAY.
+ *
+ * Asked for directly on 2026/09/02: "show the expected opening balance as
+ * pending from the moment activation begins" — and never as a settled figure
+ * until the chain shows it. Activation begins the moment this Passport has an
+ * account for a grant to be deposited INTO, which is what `hasAccount` means;
+ * from then until either the money shows up or the sponsor gives up, the
+ * honest reading of an empty account is "it is coming", not "you have nothing".
+ *
+ * Three conditions, and each one is a way of misleading somebody if dropped:
+ *
+ *   `hasAccount`   — no account, nothing has been asked for, and a line
+ *                    promising an opening balance would be a promise nobody
+ *                    made.
+ *   `holdsNothing` — the moment the account holds ANYTHING the balance itself
+ *                    is the answer, and a line saying it is still on its way
+ *                    would be contradicting the figure printed above it.
+ *   no failure row — the sponsor refusing, or its ten minutes running out,
+ *                    ends the wait. The trail already says so in the sponsor's
+ *                    own words and carries the control to ask again; a line
+ *                    still saying "on the way" beside it would be the screen
+ *                    telling two stories at once.
+ *
+ * Pure over the trail the screens already hold, so Home and Assets cannot
+ * disagree about whether a Passport is still waiting for its first money.
+ */
+export function openingBalanceOnTheWay(input: {
+  hasAccount: boolean;
+  holdsNothing: boolean;
+  entries: readonly { label: string }[];
+}): boolean {
+  if (!input.hasAccount || !input.holdsNothing) return false;
+  return !input.entries.some((entry) => ACTIVATION_FAILURE_LABELS.has(entry.label));
+}

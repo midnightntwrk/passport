@@ -26,6 +26,7 @@ import {
   ACTIVATION_STABLECOIN_LABEL,
   activationRetryRowId,
   classifyFundAccountAnswer,
+  openingBalanceOnTheWay,
 } from './activation.js';
 
 /** A real stagenet account-custody contract address, for the detail strings. */
@@ -451,5 +452,53 @@ describe('the trail row that carries a retry', () => {
   it('is nothing on an empty trail, and on one with no activation in it', () => {
     expect(activationRetryRowId([])).toBeNull();
     expect(activationRetryRowId([row('a', 'Passport created')])).toBeNull();
+  });
+});
+
+describe('openingBalanceOnTheWay', () => {
+  const entry = (label: string) => ({ label });
+
+  it('is on its way from the moment there is an account holding nothing', () => {
+    /* Asked for on 2026/09/02: the opening balance should read as pending from
+       the moment activation begins, not from whenever the sponsor answers. */
+    expect(
+      openingBalanceOnTheWay({ hasAccount: true, holdsNothing: true, entries: [] }),
+    ).toBe(true);
+  });
+
+  it('is nothing without an account for it to land in', () => {
+    expect(
+      openingBalanceOnTheWay({ hasAccount: false, holdsNothing: true, entries: [] }),
+    ).toBe(false);
+  });
+
+  it('goes the moment the account holds anything', () => {
+    /* The balance itself is then the answer, and a line still saying it is
+       coming would contradict the figure printed above it. */
+    expect(
+      openingBalanceOnTheWay({ hasAccount: true, holdsNothing: false, entries: [] }),
+    ).toBe(false);
+  });
+
+  it('goes when the sponsor refused, and when its ten minutes ran out', () => {
+    for (const label of [ACTIVATION_REFUSED_LABEL, ACTIVATION_EXHAUSTED_LABEL]) {
+      expect(
+        openingBalanceOnTheWay({
+          hasAccount: true,
+          holdsNothing: true,
+          entries: [entry('Passport created'), entry(label)],
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it('survives a trail of rows about anything else', () => {
+    expect(
+      openingBalanceOnTheWay({
+        hasAccount: true,
+        holdsNothing: true,
+        entries: [entry('Passport created'), entry('Your name is registered')],
+      }),
+    ).toBe(true);
   });
 });

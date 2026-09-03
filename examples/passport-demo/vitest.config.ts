@@ -39,6 +39,23 @@
  * listener set, and the rule that a release only counts once — so every one of
  * those branches is drilled directly in `src/lib/appBusy.test.ts`.
  *
+ * `src/lib/balanceWatch.ts` went IN on 2026/09/03, the day it was written. It
+ * decides WHEN this app reads the account's ledger again, and the defect it was
+ * written for is a reviewer watching an opening balance sit at zero until they
+ * reloaded the page themselves — with the recipient of a transfer seeing the
+ * same thing from the other side. Every branch in it is a way of lying about
+ * somebody's money by omission: a chase that never starts leaves the figure
+ * stale, one that never ends turns a Passport left open into a load generator,
+ * one that mistakes a failed read for an arrival stops early, and one that runs
+ * in a backgrounded tab is a schedule the browser will throttle into
+ * dishonesty. It holds no DOM, no React, no `fetch`, and no clock of its own —
+ * the timers and the clock are injected — so all of it is drilled on a
+ * hand-wound clock in `src/lib/balanceWatch.test.ts`. Its React wiring is
+ * `src/screens/useBalanceWatch.ts`, which is out for the same reason every
+ * other module in `src/screens` is: it imports React, and there is no jsdom
+ * here to render a hook into. That file holds the watch's lifetime, a
+ * `visibilitychange` listener, and two refs — no decisions.
+ *
  * `src/identity/claimWarmup.ts` went IN on 2026/08/26, the day it was written,
  * and it belongs in the denominator more than most: it is the module that
  * decides whether a claim may REUSE an answer to "is this name still free" and
@@ -366,6 +383,7 @@ export default mergeConfig(
           'src/lib/activityFeed.ts',
           'src/lib/address.ts',
           'src/lib/appBusy.ts',
+          'src/lib/balanceWatch.ts',
           'src/lib/claimFailure.ts',
           'src/lib/claimSteps.ts',
           'src/lib/colour.ts',

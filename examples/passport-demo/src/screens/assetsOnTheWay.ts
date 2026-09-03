@@ -36,6 +36,16 @@ export interface AssetOnTheWay {
 /** The sources that mean "this is happening somewhere other than this device". */
 const OFF_DEVICE_SOURCES = new Set(['chain', 'sponsor']);
 
+/** The synthetic row for a grant that has been asked for and not landed. */
+const OPENING_BALANCE_ID = 'opening-balance';
+/**
+ * What that row says. No figure in it, deliberately: the amount is the
+ * sponsor's to decide and this device has not been told it. Naming a number
+ * nobody has promised would be exactly the settled-looking balance the
+ * reviewer asked us not to show.
+ */
+const OPENING_BALANCE_LABEL = 'Your opening balance';
+
 /**
  * The rows that are still arriving.
  *
@@ -47,9 +57,20 @@ const OFF_DEVICE_SOURCES = new Set(['chain', 'sponsor']);
  */
 export function assetsOnTheWay(
   activity: readonly OnTheWayCandidate[] | undefined,
+  options?: { openingBalance?: boolean },
 ): readonly AssetOnTheWay[] {
-  if (!activity) return [];
   const out: AssetOnTheWay[] = [];
+  /* The opening balance leads, because it is the one a new Passport is
+     actually waiting on and the only one with nothing else on screen to
+     explain it. It is not derived from a trail row: the grant is announced
+     when the account exists, which is BEFORE the sponsor has been asked, and a
+     line that only appeared once a row was written would still leave the first
+     minutes of a new Passport reading as "you have nothing". See
+     `openingBalanceOnTheWay` in `lib/activation.ts`. */
+  if (options?.openingBalance) {
+    out.push({ id: OPENING_BALANCE_ID, label: OPENING_BALANCE_LABEL });
+  }
+  if (!activity) return out;
   for (const entry of activity) {
     if (entry.status !== 'pending') continue;
     const offDevice =

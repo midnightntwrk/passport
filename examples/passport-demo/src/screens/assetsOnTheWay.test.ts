@@ -43,3 +43,42 @@ describe('assetsOnTheWay', () => {
     ).toBe('On the way · 2 amounts still arriving');
   });
 });
+
+describe('the opening balance', () => {
+  it('leads the list, and names no figure', () => {
+    /* The reviewer asked for the opening balance to read as pending from the
+       moment activation begins. What it must NOT do is name an amount this
+       device has not been told, which would be the settled-looking balance the
+       same review objected to. */
+    expect(assetsOnTheWay([], { openingBalance: true })).toEqual([
+      { id: 'opening-balance', label: 'Your opening balance' },
+    ]);
+    expect(assetsOnTheWayLine(assetsOnTheWay([], { openingBalance: true }))).toBe(
+      'On the way · Your opening balance',
+    );
+  });
+
+  it('sits above whatever else is arriving', () => {
+    expect(
+      assetsOnTheWay([{ id: 'x', label: 'Transfer in', status: 'pending', source: 'chain' }], {
+        openingBalance: true,
+      }),
+    ).toEqual([
+      { id: 'opening-balance', label: 'Your opening balance' },
+      { id: 'x', label: 'Transfer in' },
+    ]);
+  });
+
+  it('is absent unless asked for', () => {
+    expect(assetsOnTheWay([], { openingBalance: false })).toEqual([]);
+    expect(assetsOnTheWay(undefined, {})).toEqual([]);
+  });
+
+  it('is offered even when there is no trail at all', () => {
+    /* A Passport whose account has just been deployed has nothing on its trail
+       yet, and that is exactly the moment the line is needed. */
+    expect(assetsOnTheWay(undefined, { openingBalance: true })).toEqual([
+      { id: 'opening-balance', label: 'Your opening balance' },
+    ]);
+  });
+});

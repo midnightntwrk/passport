@@ -6603,6 +6603,9 @@ export default function PassportDemo() {
               network={selectedNetwork}
               onSelectNetwork={handleSelectNetwork}
               onRefresh={refreshMobile}
+              /* The same trail Home reads, so this shelf can say what is on
+                 its way but has not landed. */
+              activity={homeActivity}
             />
           ) : (
             <AppsScreen

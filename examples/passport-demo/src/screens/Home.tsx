@@ -23,6 +23,13 @@ import ActivityFeed, { type ActivityFeedItem } from './ActivityFeed.js'
 /* What has been announced but has not landed yet, derived from the same trail
    this screen already renders below. Pure — see `assetsOnTheWay.ts`. */
 import { assetsOnTheWay, assetsOnTheWayLine } from './assetsOnTheWay.js'
+/* Whether the opening balance is still coming. Pure — see `lib/activation.ts`. */
+import { openingBalanceOnTheWay } from '../lib/activation.js'
+/* When to read the account again, so a figure that moves on the chain moves on
+   this screen without a reload. Rules in `lib/balanceWatch.ts`, wiring in
+   `useBalanceWatch.ts`. */
+import { accountHoldsSomething, holdingsSignature } from '../lib/balanceWatch.js'
+import { useBalanceWatch } from './useBalanceWatch.js'
 /* Naming a colour, and the order a balance list puts colours in. Pure, drilled,
    and free of the wallet SDK — see `lib/colour.ts`. */
 import {
@@ -431,8 +438,31 @@ export default function HomeScreen(props: HomeScreenProps) {
   const visibleTokens = showAllTokens ? tokenRows : tokenRows.slice(0, TOKENS_VISIBLE)
 
   /* One line under the balances for whatever has been announced and has not
-     landed. Absent when there is nothing in flight. */
-  const onTheWayLine = assetsOnTheWayLine(assetsOnTheWay(activity))
+     landed — including the opening balance, which is on its way from the
+     moment this Passport HAS an account for it to land in and has nothing in
+     it yet. It is never a settled figure: the line says something is coming,
+     the balance above it keeps saying what is actually there. */
+  const onTheWay = assetsOnTheWay(activity, {
+    openingBalance: openingBalanceOnTheWay({
+      hasAccount: Boolean(account),
+      holdsNothing: !accountHoldsSomething(account ?? null),
+      entries: activity ?? [],
+    }),
+  })
+  const onTheWayLine = assetsOnTheWayLine(onTheWay)
+
+  /* Read the account again on its own, so an opening balance that lands a beat
+     after the sponsor answers — and an amount somebody else sends while this
+     screen is open — appear without anybody reloading the page. */
+  useBalanceWatch({
+    active: Boolean(account),
+    refresh: onRefresh,
+    signature: holdingsSignature(account ?? null),
+    /* Anything announced starts a chase: a change in what is on the way, or a
+       new row at the head of the trail (a send that just completed, a grant
+       the sponsor has just confirmed). */
+    chaseKey: `${onTheWay.length}|${activity?.[0]?.id ?? ''}|${activity?.[0]?.status ?? ''}`,
+  })
 
   /**
    * The shielded colours this screen is already showing, handed to the Send
@@ -509,8 +539,14 @@ export default function HomeScreen(props: HomeScreenProps) {
 
   /* The account's own read, in the vocabulary the cards already speak: a
      figure still being read is 'Syncing', a read that failed is 'Unavailable',
-     and neither is ever a zero. */
-  const balancesLoading = account?.status === 'loading' || account?.status === 'idle'
+     and neither is ever a zero.
+     ONLY WHILE THERE IS NOTHING TO SHOW (2026/09/03). The account is now
+     re-read on a timer, and every read passes through 'loading' — so a screen
+     that treated 'loading' as "no figure yet" flashed every card into a
+     skeleton twice a minute, over figures it was already holding. A read in
+     flight over a KNOWN balance is not the reader's business. */
+  const balancesLoading =
+    account?.status === 'idle' || (account?.status === 'loading' && account.nightBalance === null)
 
   /* The failed read's own words, to the console and nowhere else. Logged once
      per distinct message rather than on every render, so a screen that
