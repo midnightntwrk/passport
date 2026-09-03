@@ -1362,8 +1362,22 @@ restart resumes in under a second instead of walking the chain again.
 
 `Restart=always` with `RestartSec=5` on the unit is load-bearing, not
 decoration: it is what the health loop's last-resort rung relies on, since the
-only way this process can reopen its wallet is to be given a new one. Install
-the external watchdog beside it — the second leg of "Keeping itself alive"
+only way this process can reopen its wallet is to be given a new one — and it is
+what makes the liveness worker a remedy rather than a diagnosis. The unit itself
+lives at `deploy/passport-balancer.service`, because `TimeoutStopSec=15s` is
+part of that fix: a process whose event loop has stopped cannot answer
+`SIGTERM`, and systemd's default made finding that out cost ninety seconds on
+2026/09/03.
+
+```sh
+rsync -a deploy/ root@<droplet>:/opt/passport-balancer/deploy/
+ssh root@<droplet> '
+  install -m 644 /opt/passport-balancer/deploy/passport-balancer.service \
+    /etc/systemd/system/
+  systemctl daemon-reload'
+```
+
+Install the external watchdog beside it — the second leg of "Keeping itself alive"
 above:
 
 ```sh
