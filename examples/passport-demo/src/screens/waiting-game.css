@@ -11,9 +11,9 @@
 .mngame {
   margin: 12px 0 0;
   padding: 10px 12px 8px;
-  border: var(--mn-hairline) solid #23262c;
+  border: var(--mn-hairline) solid var(--mn-border-soft, #23262c);
   border-radius: var(--mn-radius-md);
-  background: #0a0b0d;
+  background: var(--mn-surface-card, #0a0b0d);
 }
 
 .mngame-head {
@@ -24,7 +24,7 @@
 }
 
 .mngame-title {
-  color: rgba(247, 249, 252, .68);
+  color: var(--mn-text-muted, rgba(247, 249, 252, .68));
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .06em;
@@ -44,9 +44,10 @@
   background: transparent;
   cursor: pointer;
 }
-.mngame-close:hover { color: #f7f9fc; background: rgba(247, 249, 252, .09); }
+.mngame-close:hover { color: var(--mn-text-primary, #f7f9fc); background: var(--mn-surface-active, rgba(247, 249, 252, .09)); }
 
 .mngame-canvas {
+  color: var(--mn-text-primary, #f7f9fc);
   display: block;
   width: 100%;
   max-width: 320px;

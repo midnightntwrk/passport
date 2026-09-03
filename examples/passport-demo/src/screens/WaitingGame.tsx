@@ -42,9 +42,17 @@ import './waiting-game.css'
 
 /** Infared. The one accent, on the runner, so the eye has something to hold. */
 const RUNNER = '#E52321'
-const OBSTACLE = 'rgba(247, 249, 252, 0.62)'
-const GROUND = 'rgba(247, 249, 252, 0.22)'
-const SCORE_INK = 'rgba(247, 249, 252, 0.72)'
+/* The rest of the palette follows the theme: the canvas asks its own element
+   for the text colour the page is using, so the field reads on the light
+   theme's card as well as the dark one instead of painting a black panel. */
+function inkOf(canvas: HTMLCanvasElement): string {
+  const ink = getComputedStyle(canvas).color.trim()
+  return ink.length > 0 ? ink : 'rgb(247, 249, 252)'
+}
+function withAlpha(colour: string, alpha: number): string {
+  const m = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(colour)
+  return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})` : colour
+}
 
 export interface WaitingGameProps {
   /**
@@ -102,6 +110,10 @@ export default function WaitingGame({ paused, onDismiss }: WaitingGameProps) {
     let last = performance.now()
     const draw = (state: WaitingGameState) => {
       context.clearRect(0, 0, FIELD.width, FIELD.height)
+      const ink = inkOf(canvas)
+      const GROUND = withAlpha(ink, 0.22)
+      const OBSTACLE = withAlpha(ink, 0.62)
+      const SCORE_INK = withAlpha(ink, 0.72)
       context.fillStyle = GROUND
       context.fillRect(0, FIELD.groundY, FIELD.width, 1)
       context.fillStyle = OBSTACLE
