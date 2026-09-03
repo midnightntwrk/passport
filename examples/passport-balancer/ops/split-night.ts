@@ -1,12 +1,50 @@
 /**
- * Split the balancer's NIGHT into N UTxOs, so its DUST arrives in N coins.
+ * Split CHOSEN NIGHT UTxOs into N UTxOs each, so the balancer's DUST arrives in
+ * more coins and its spend lanes multiply.
  *
- * THIS SCRIPT IS NOT APPROVED TO RUN. As of 2026/09/02 the authorisation on the
- * DUST-coin split is `approved=false`: the sizing may be computed, printed, and
- * argued about, and nothing may be moved. `--plan` is therefore the only mode
- * anybody should be invoking, and `--execute` refuses unless an operator has
- * deliberately set `SPLIT_APPROVED=yes` AND stopped the service. Read
- * `./SPLIT.md` before you even consider the second one.
+ * WHAT CHANGED ON 2026/09/02. This script was written for a wallet that held
+ * one lump of NIGHT, and it split the lot. The wallet now holds four material
+ * UTxOs, and the ruling is to split only the two NEWEST 5,000 NIGHT coins into
+ * ten coins of 1,000 — leaving the original coin and the third 5,000 untouched
+ * so their accrued DUST keeps paying fees while the new coins generate from
+ * zero. That makes WHICH UTxOs are spent the load-bearing question, and the
+ * answer is `--inputs`.
+ *
+ * WHY `--inputs` NEEDED REAL WORK. The wallet SDK's unshielded transfer does
+ * its own coin selection and offers no way to pin inputs:
+ * `WalletFacade.transferTransaction` takes `{ type, outputs }` and a
+ * `{ ttl, payFees }` — there is no `inputs` field in the type or the runtime
+ * (`wallet-sdk-facade/dist/index.d.ts:427-433`, `index.js:686-710`). The
+ * selector it uses is `chooseCoin` in
+ * `wallet-sdk-capabilities/dist/balancer/Balancer.js:63-68`:
+ *
+ *     coins.filter((c) => c.type === tokenType).sort((a,b) => Number(a.value-b.value)).at(0)
+ *
+ * — SMALLEST-FIRST, called repeatedly until the outputs are covered. So the
+ * obvious trick of "just ask for a self-send of exactly 5,000 and let the
+ * selector satisfy it from one 5,000 coin" DOES NOT WORK: the smallest UTxO in
+ * this wallet is the original ~4,998.9 coin, so it would be taken FIRST, then a
+ * 5,000 to cover the shortfall — spending the very coin the ruling protects,
+ * and breaking one 5,000 anyway.
+ *
+ * WHAT DOES WORK. `V1Builder.withCoinSelection` replaces that selector
+ * wholesale (`wallet-sdk-unshielded-wallet/dist/v1/V1Builder.d.ts:45`), and the
+ * selector is the ONLY way a UTxO becomes an unshielded input: `makeTransfer`
+ * calls `#balanceSegment(..., this.getCoinSelection())`, which passes it
+ * straight to `getBalanceRecipe`, whose `doBalance` adds inputs from nowhere
+ * else (`v1/Transacting.js:100,114,243-255`;
+ * `capabilities/dist/balancer/Balancer.js:28-62`). So a selector that only ever
+ * returns UTxOs from an allow-list — and `undefined` for everything else —
+ * provably cannot spend a protected coin: the worst it can do is fail to cover
+ * the outputs, which surfaces as `InsufficientFundsError` before anything is
+ * signed. This script wires that selector up through `CustomUnshieldedWallet`,
+ * and then CHECKS the built transaction's own offer inputs against the
+ * allow-list before it signs anything.
+ *
+ * THIS SCRIPT MOVES NIGHT. `--execute` refuses unless an operator has
+ * deliberately set `SPLIT_APPROVED=yes` AND stopped the service AND named the
+ * inputs. `--plan` moves nothing, and `--plan --live` reads the live wallet
+ * without ever writing a snapshot. Read `./SPLIT.md` before the second one.
  *
  * WHY IT IS A SEPARATE SCRIPT AND NOT A ROUTE. This spends the NIGHT that backs
  * every DUST coin the balancer sponsors from. It must never be reachable over
@@ -20,7 +58,7 @@
  *
  *   npx esbuild ops/split-night.ts --bundle --format=esm --platform=node \
  *     --packages=external --outfile=dist/ops/split-night.mjs
- *   node dist/ops/split-night.mjs --plan --outputs 8 --total 4998916000
+ *   node dist/ops/split-night.mjs --plan --outputs 5 --amount 1000 --spend 5000
  */
 
 import { spawnSync } from 'node:child_process';
@@ -47,34 +85,69 @@ import { WasmProver } from '@midnight-ntwrk/wallet-sdk/prover-client/effect';
 import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk/shielded';
 import {
   createKeystore,
+  CustomUnshieldedWallet,
   PublicKey,
   UnshieldedWallet,
   type UnshieldedKeystore,
 } from '@midnight-ntwrk/wallet-sdk/unshielded';
+import { V1Builder } from '@midnight-ntwrk/wallet-sdk/unshielded/v1';
 
 import { applyEnvFile, loadConfig, type BalancerConfig } from '../src/config.js';
 import { deriveRoleKeys, formatNight } from '../src/wallet.js';
-import { computeSplitPlan, formatSplitPlan, type SplitPlan } from './splitPlan.js';
+import {
+  assertOnlyChosenInputs,
+  createPinnedSelector,
+  parseNightAmount,
+  parseUtxoRef,
+  Refusal,
+  resolveRefs,
+  utxoKey,
+  type PinnedSelector,
+  type TransactionLike,
+  type UtxoRef,
+} from './splitInputs.js';
+import {
+  ATOMIC_PER_NIGHT,
+  computeSplitPlan,
+  formatNightAtomic,
+  formatSplitPlan,
+  RULED_PER_COIN_ATOMIC_NIGHT,
+  type SplitPlan,
+} from './splitPlan.js';
 
 // The wallet SDK's indexer client needs a global WebSocket under plain Node.
 (globalThis as { WebSocket?: unknown }).WebSocket ??= WebSocket;
 
 const SERVICE_UNIT = 'passport-balancer';
-/** The balancer's own holding on 2026/09/02, for `--plan` with no wallet. */
-const DEFAULT_TOTAL_ATOMIC = 4_998_916_000n;
-const DEFAULT_OUTPUTS = 8;
+/** The ruling of 2026/09/02: five coins of 1,000 NIGHT out of each 5,000. */
+const DEFAULT_OUTPUTS = 5;
+/** One 5,000 NIGHT UTxO, for `--plan` with no wallet. */
+const DEFAULT_SPEND_ATOMIC = 5_000n * ATOMIC_PER_NIGHT;
+
+/* -------------------------------------------------------------------------- */
+/* Arguments                                                                  */
+/* -------------------------------------------------------------------------- */
 
 interface Options {
   mode: 'plan' | 'execute' | 'help';
   outputs: number;
-  total: bigint | null;
+  /** Size of each output, atomic. `--amount 1000` → 1,000,000,000. */
+  perCoinAtomic: bigint;
+  /** Offline sizing only: what the chosen inputs would carry. */
+  spendAtomic: bigint | null;
+  inputs: UtxoRef[];
+  /** Read the live wallet (never writing to it) rather than sizing on paper. */
+  live: boolean;
   cold: boolean;
 }
 
 export function parseArgs(argv: readonly string[]): Options {
   let mode: Options['mode'] = 'help';
   let outputs = DEFAULT_OUTPUTS;
-  let total: bigint | null = null;
+  let perCoinAtomic = RULED_PER_COIN_ATOMIC_NIGHT;
+  let spendAtomic: bigint | null = null;
+  let inputs: UtxoRef[] = [];
+  let live = false;
   let cold = false;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -85,6 +158,9 @@ export function parseArgs(argv: readonly string[]): Options {
         break;
       case '--execute':
         mode = 'execute';
+        break;
+      case '--live':
+        live = true;
         break;
       case '--cold':
         cold = true;
@@ -98,12 +174,34 @@ export function parseArgs(argv: readonly string[]): Options {
         index += 1;
         break;
       }
-      case '--total': {
-        const raw = argv[index + 1];
-        if (!raw || !/^\d+$/.test(raw)) {
-          throw new Error('--total takes atomic NIGHT as digits (4998916000 = 4,998.916 NIGHT)');
+      case '--amount': {
+        try {
+          perCoinAtomic = parseNightAmount(argv[index + 1]);
+        } catch (cause) {
+          throw new Error(`--amount: ${cause instanceof Error ? cause.message : String(cause)}`);
         }
-        total = BigInt(raw);
+        if (perCoinAtomic <= 0n) throw new Error('--amount must be positive');
+        index += 1;
+        break;
+      }
+      case '--spend': {
+        try {
+          spendAtomic = parseNightAmount(argv[index + 1]);
+        } catch (cause) {
+          throw new Error(`--spend: ${cause instanceof Error ? cause.message : String(cause)}`);
+        }
+        index += 1;
+        break;
+      }
+      case '--inputs': {
+        const raw = argv[index + 1];
+        if (!raw) throw new Error('--inputs takes <intentHash>:<outputNo>[,…]');
+        inputs = raw
+          .split(',')
+          .map((part) => part.trim())
+          .filter((part) => part.length > 0)
+          .map(parseUtxoRef);
+        if (inputs.length === 0) throw new Error('--inputs named no UTxOs');
         index += 1;
         break;
       }
@@ -116,21 +214,33 @@ export function parseArgs(argv: readonly string[]): Options {
     }
   }
 
-  return { mode, outputs, total, cold };
+  return { mode, outputs, perCoinAtomic, spendAtomic, inputs, live, cold };
 }
 
 const USAGE = `split-night — size and (only when approved) perform a DUST-coin split
 
-  --plan [--outputs N] [--total ATOMIC]   print the sizing. Moves nothing, needs
-                                          no seed, no wallet, no network.
-  --execute --outputs N [--cold]          perform the split. Refuses unless
-                                          SPLIT_APPROVED=yes and the
-                                          ${SERVICE_UNIT} unit is stopped.
+  --plan [--outputs N] [--amount NIGHT] [--spend NIGHT]
+        print the sizing on paper. Moves nothing, needs no seed, no wallet,
+        no network.
 
-The split is NOT approved as of 2026/09/02. Read ops/SPLIT.md first.`;
+  --plan --live [--inputs REF,…] [--cold]
+        print the sizing against the LIVE wallet: every NIGHT UTxO with its
+        reference, which ones --inputs would spend, which ones are protected,
+        and where the DUST fee would come from. Reads only — it never writes
+        the snapshot, so it is safe while ${SERVICE_UNIT} is running.
 
-/** A refusal an operator can act on, as distinct from a crash. */
-class Refusal extends Error {}
+  --execute --inputs REF,… --outputs N --amount NIGHT [--cold]
+        perform the split. Refuses unless SPLIT_APPROVED=yes, the
+        ${SERVICE_UNIT} unit is stopped, and --inputs names the UTxOs.
+
+REF is <intentHash>:<outputNo>, copied from the --plan --live listing. A hash
+prefix is enough as long as it is unambiguous.
+
+Read ops/SPLIT.md first.`;
+
+/* -------------------------------------------------------------------------- */
+/* Preconditions                                                              */
+/* -------------------------------------------------------------------------- */
 
 /**
  * Both writers of this wallet's snapshot must never run at once, and "the unit
@@ -161,7 +271,8 @@ function snapshotPath(config: BalancerConfig): string {
 /**
  * A `.tmp` beside the snapshot means a `writeFile`/`rename` pair was interrupted
  * — the service died mid-save. Opening the wallet over that is how a
- * half-written state becomes the state.
+ * half-written state becomes the state. It is checked for `--plan --live` too:
+ * a plan read off a half-written snapshot names the wrong coins.
  */
 async function assertNoSnapshotWriteInFlight(config: BalancerConfig): Promise<void> {
   const temp = `${snapshotPath(config)}.tmp`;
@@ -174,6 +285,23 @@ async function assertNoSnapshotWriteInFlight(config: BalancerConfig): Promise<vo
     `${temp} exists — a snapshot write was interrupted. Investigate (and move it aside) before splitting.`,
   );
 }
+
+function loadBalancerConfig(): BalancerConfig {
+  applyEnvFile();
+  try {
+    return loadConfig();
+  } catch (cause) {
+    /* A missing seed or a malformed env is an operator problem to fix, not a
+       crash to read a stack trace out of. */
+    throw new Refusal(
+      `the balancer's own environment does not load: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* The wallet                                                                 */
+/* -------------------------------------------------------------------------- */
 
 interface OpenedWallet {
   facade: WalletFacade;
@@ -192,8 +320,18 @@ interface OpenedWallet {
  * interface (balance-only, the spend queue, the health hooks) and deliberately
  * exposes no way to build a transfer: a routine spend path that could move the
  * balancer's NIGHT is exactly what should not exist.
+ *
+ * The ONE deliberate divergence from the service is `selector`: when it is
+ * given, the unshielded wallet is built through `CustomUnshieldedWallet` with
+ * the pinned selector in place of the SDK's smallest-first default. `--plan`
+ * passes nothing and gets the stock wallet, because a plan that read the world
+ * through a modified selector would not be describing what `--execute` does.
  */
-async function openWallet(config: BalancerConfig, cold: boolean): Promise<OpenedWallet> {
+async function openWallet(
+  config: BalancerConfig,
+  cold: boolean,
+  selector: PinnedSelector | null,
+): Promise<OpenedWallet> {
   setNetworkId(config.networkId);
 
   const keys = deriveRoleKeys(config.seedHex);
@@ -212,6 +350,23 @@ async function openWallet(config: BalancerConfig, cold: boolean): Promise<Opened
 
   const snapshot = cold ? null : await readSnapshot(config, publicKey.address);
   if (cold) console.log('[split] --cold: ignoring the sync snapshot, walking from chain');
+
+  const unshieldedWallet = selector
+    ? (cfg: Parameters<typeof UnshieldedWallet>[0]) =>
+        CustomUnshieldedWallet(
+          cfg,
+          new V1Builder()
+            .withDefaults()
+            /* The one deliberate divergence from the service's wallet. The
+               SDK's `CoinSelection` is 4-arity; `amountNeeded` and the cost
+               model are ignored here exactly as they are ignored by the stock
+               `chooseCoin` it replaces. */
+            .withCoinSelection(
+              () => (coins: readonly ledger.Utxo[], tokenType: ledger.RawTokenType) =>
+                selector.select(coins, tokenType) as ledger.Utxo | undefined,
+            ),
+        )
+    : UnshieldedWallet;
 
   const facade = await WalletFacade.init({
     configuration: {
@@ -232,8 +387,8 @@ async function openWallet(config: BalancerConfig, cold: boolean): Promise<Opened
         : ShieldedWallet(cfg).startWithSecretKeys(shieldedSecretKeys),
     unshielded: (cfg) =>
       snapshot
-        ? UnshieldedWallet(cfg).restore(snapshot.unshielded)
-        : UnshieldedWallet(cfg).startWithPublicKey(publicKey),
+        ? unshieldedWallet(cfg).restore(snapshot.unshielded)
+        : unshieldedWallet(cfg).startWithPublicKey(publicKey),
     dust: (cfg) =>
       snapshot
         ? DustWallet(cfg).restore(snapshot.dust)
@@ -287,7 +442,9 @@ async function readSnapshot(
 }
 
 /* Byte-for-byte the shape `src/wallet.ts` writes, including the `.tmp`/rename
-   pair — the service must be able to resume from what this leaves behind. */
+   pair — the service must be able to resume from what this leaves behind.
+   Called from `--execute` and from nowhere else: `--plan --live` opens the same
+   wallet and never reaches this function, which is what makes it read-only. */
 async function writeSnapshot(
   config: BalancerConfig,
   facade: WalletFacade,
@@ -342,75 +499,236 @@ async function waitForSync(facade: WalletFacade): Promise<FacadeState> {
   }
 }
 
-/** NIGHT UTxOs and DUST coins, the two counts the split is judged by. */
-function shape(state: FacadeState, nightTokenType: string): {
-  nightAtomic: bigint;
-  nightUtxos: number;
-  dustCoins: number;
-} {
-  const nightUtxos = (state.unshielded.availableCoins ?? []).filter(
-    (coin) => coin.utxo.type === nightTokenType,
-  );
-  return {
-    nightAtomic: state.unshielded.balances[nightTokenType] ?? 0n,
-    nightUtxos: nightUtxos.length,
-    dustCoins: state.dust.availableCoins.length + state.dust.pendingCoins.length,
-  };
+/* -------------------------------------------------------------------------- */
+/* Reading the wallet's shape                                                 */
+/* -------------------------------------------------------------------------- */
+
+interface NightUtxo {
+  utxo: { intentHash: string; outputNo: number; value: bigint; type: string };
+  meta: { ctime: Date; registeredForDustGeneration: boolean };
 }
+
+interface DustCoin {
+  generatedNow: bigint;
+  rate: bigint;
+  dtime?: Date | undefined;
+}
+
+function nightUtxos(state: FacadeState, nightTokenType: string): NightUtxo[] {
+  return ((state.unshielded.availableCoins ?? []) as unknown as NightUtxo[])
+    .filter((coin) => coin.utxo.type === nightTokenType)
+    .sort((a, b) => a.meta.ctime.getTime() - b.meta.ctime.getTime());
+}
+
+function dustCoins(state: FacadeState): DustCoin[] {
+  return ([...state.dust.availableCoins] as unknown as DustCoin[]).sort((a, b) =>
+    a.generatedNow < b.generatedNow ? -1 : a.generatedNow > b.generatedNow ? 1 : 0,
+  );
+}
+
+/**
+ * Prints every NIGHT UTxO with the reference `--inputs` takes, and marks the
+ * ones the split would spend. The `PROTECTED` marker is the line an operator is
+ * meant to read before typing `--execute`: it is the promise that the coins
+ * still paying fees are not in the transaction.
+ */
+function reportUtxos(coins: readonly NightUtxo[], chosenKeys: ReadonlySet<string>): string[] {
+  return coins.map((coin) => {
+    const key = utxoKey(coin.utxo);
+    const marker = chosenKeys.has(key) ? 'SPEND    ' : 'PROTECTED';
+    const age = `${Math.round((Date.now() - coin.meta.ctime.getTime()) / 60_000)} min old`;
+    const registered = coin.meta.registeredForDustGeneration ? 'registered' : 'UNREGISTERED';
+    return `  ${marker} ${key}  ${formatNightAtomic(coin.utxo.value).padStart(16)} NIGHT  ${age}, ${registered}`;
+  });
+}
+
+/**
+ * Where the fee comes from.
+ *
+ * The DUST leg is balanced completely separately from the unshielded one — the
+ * facade builds the transfer first and only then calls
+ * `dust.balanceTransactions` on the finished transaction
+ * (`wallet-sdk-facade/dist/index.js:425`) — and it selects
+ * smallest-generated-first, with no knowledge of which NIGHT UTxOs the transfer
+ * just consumed. So the coin at the top of this list is the one that pays, and
+ * it may well be the DUST backed by a UTxO this very transaction spends. That
+ * is not a problem to fix: that DUST starts decaying the moment its backing
+ * NIGHT is spent, so spending it first is the right order. It IS something the
+ * operator should see before signing.
+ */
+function reportDustCoins(coins: readonly DustCoin[], parametersRate: bigint): string[] {
+  return coins.map((coin, index) => {
+    const backing = coin.rate > 0n ? coin.rate / parametersRate : 0n;
+    const marker = index === 0 ? 'FEE FROM ' : '         ';
+    const decaying = coin.dtime ? ', DECAYING' : '';
+    return `  ${marker} ${String(coin.generatedNow).padStart(22)} Specks  backed by ${formatNightAtomic(backing).padStart(16)} NIGHT${decaying}`;
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Plan                                                                       */
+/* -------------------------------------------------------------------------- */
+
+function planOnPaper(options: Options): void {
+  const spend = options.spendAtomic ?? DEFAULT_SPEND_ATOMIC;
+  let plan: SplitPlan;
+  try {
+    plan = computeSplitPlan({
+      spendAtomicNight: spend,
+      outputs: options.outputs,
+      perCoinAtomicNight: options.perCoinAtomic,
+    });
+  } catch (cause) {
+    /* Arithmetic that does not add up is an argument the operator got wrong,
+       not a bug to read a stack trace out of. */
+    throw new Refusal(cause instanceof Error ? cause.message : String(cause));
+  }
+  console.log(formatSplitPlan(plan));
+  console.log(
+    '\n  This is the sizing on paper. Run --plan --live to see it against the wallet.',
+  );
+}
+
+async function planAgainstLiveWallet(options: Options): Promise<void> {
+  const config = loadBalancerConfig();
+  await assertNoSnapshotWriteInFlight(config);
+
+  console.log(
+    `[split] --plan --live: reading only. This never writes the snapshot, so ${SERVICE_UNIT} may keep running.`,
+  );
+  /* The STOCK selector, deliberately: a plan built through the pinned one would
+     be describing a wallet the service does not have. */
+  const wallet = await openWallet(config, options.cold, null);
+  try {
+    const synced = await waitForSync(wallet.facade);
+    const nightTokenType = ledger.nativeToken().raw;
+    const coins = nightUtxos(synced, nightTokenType);
+    const dust = dustCoins(synced);
+    const generationRate = ledger.LedgerParameters.initialParameters().dust.generationDecayRate;
+
+    const chosen = options.inputs.length > 0 ? resolveRefs(coins, options.inputs) : [];
+    const chosenKeys = new Set(chosen.map((coin) => utxoKey(coin.utxo)));
+    const protectedCoins = coins.filter((coin) => !chosenKeys.has(utxoKey(coin.utxo)));
+
+    console.log(`\n[split] ${wallet.address}`);
+    console.log(
+      `[split] holds ${formatNight(synced.unshielded.balances[nightTokenType] ?? 0n)} NIGHT in ${coins.length} UTxO(s), ${dust.length} DUST coin(s)\n`,
+    );
+    console.log('NIGHT UTxOs (oldest first) — the reference is what --inputs takes:');
+    console.log(reportUtxos(coins, chosenKeys).join('\n'));
+    console.log('\nDUST coins (smallest first — the SDK balances the fee in this order):');
+    console.log(reportDustCoins(dust, BigInt(generationRate)).join('\n'));
+
+    if (chosen.length === 0) {
+      console.log(
+        '\n[split] no --inputs given, so nothing is selected. Name the UTxOs to size the split.',
+      );
+      return;
+    }
+
+    const spendAtomic = chosen.reduce((sum, coin) => sum + coin.utxo.value, 0n);
+    const untouchedSpendable = dust.reduce((sum, coin) => sum + coin.generatedNow, 0n);
+    const plan = computeSplitPlan({
+      spendAtomicNight: spendAtomic,
+      outputs: options.outputs,
+      perCoinAtomicNight: options.perCoinAtomic,
+      untouchedCoinsAtomicNight: protectedCoins.map((coin) => coin.utxo.value),
+      untouchedSpendableSpecks: untouchedSpendable,
+    });
+
+    console.log(`\n${formatSplitPlan(plan)}`);
+    console.log(`\nWhat --execute would do with these arguments:`);
+    console.log(`  spend      ${chosen.length} UTxO(s): ${[...chosenKeys].join(', ')}`);
+    console.log(
+      `  pay        ${plan.explicitOutputs} × ${plan.perCoinAtomicNight} atomic NIGHT to ${wallet.address}`,
+    );
+    console.log(`  change     ${plan.changeAtomicNight} atomic NIGHT to the same address`);
+    console.log(
+      `  fee        DUST, balanced from this wallet's own coins — top of the list above`,
+    );
+    console.log(
+      `  protect    ${protectedCoins.length} UTxO(s) excluded from the transaction: ${protectedCoins.map((coin) => utxoKey(coin.utxo)).join(', ') || '(none)'}`,
+    );
+    console.log('\n  Nothing was moved and no snapshot was written.');
+  } finally {
+    await wallet.facade.stop().catch(() => undefined);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Execute                                                                    */
+/* -------------------------------------------------------------------------- */
 
 async function execute(options: Options): Promise<void> {
   if (process.env.SPLIT_APPROVED !== 'yes') {
     throw new Refusal(
-      'the DUST-coin split is approved=false. Nothing moves. Set SPLIT_APPROVED=yes only once the split has been approved in writing — and read ops/SPLIT.md first.',
+      'the DUST-coin split needs SPLIT_APPROVED=yes. Nothing moves. Set it only once the split has been approved in writing — and read ops/SPLIT.md first.',
+    );
+  }
+  if (options.inputs.length === 0) {
+    throw new Refusal(
+      '--execute needs --inputs. Without it the SDK would select coins smallest-first and take the very UTxOs the ruling protects: run --plan --live, read the listing, and name the UTxOs to spend.',
     );
   }
   assertServiceStopped();
 
-  applyEnvFile();
-  let config: BalancerConfig;
-  try {
-    config = loadConfig();
-  } catch (cause) {
-    /* A missing seed or a malformed env is an operator problem to fix, not a
-       crash to read a stack trace out of. */
-    throw new Refusal(
-      `the balancer's own environment does not load: ${cause instanceof Error ? cause.message : String(cause)}`,
-    );
-  }
+  const config = loadBalancerConfig();
   await assertNoSnapshotWriteInFlight(config);
 
-  const wallet = await openWallet(config, options.cold);
+  const selector = createPinnedSelector();
+  const wallet = await openWallet(config, options.cold, selector);
   try {
     const synced = await waitForSync(wallet.facade);
     const nightTokenType = ledger.nativeToken().raw;
-    const before = shape(synced, nightTokenType);
-    console.log(
-      `[split] ${wallet.address} holds ${formatNight(before.nightAtomic)} NIGHT in ${before.nightUtxos} UTxO(s), ${before.dustCoins} DUST coin(s)`,
-    );
+    const coins = nightUtxos(synced, nightTokenType);
+    if (coins.length === 0) throw new Refusal('the wallet holds no NIGHT');
 
-    if (before.nightAtomic <= 0n) throw new Refusal('the wallet holds no NIGHT');
-    if (before.nightUtxos >= options.outputs) {
-      throw new Refusal(
-        `the wallet already holds ${before.nightUtxos} NIGHT UTxO(s); splitting into ${options.outputs} would not add a lane`,
-      );
+    let chosen: NightUtxo[];
+    try {
+      chosen = resolveRefs(coins, options.inputs);
+    } catch (cause) {
+      throw new Refusal(cause instanceof Error ? cause.message : String(cause));
     }
+    const chosenKeys = new Set(chosen.map((coin) => utxoKey(coin.utxo)));
+    const protectedCoins = coins.filter((coin) => !chosenKeys.has(utxoKey(coin.utxo)));
 
-    const plan = computeSplitPlan({
-      totalAtomicNight: before.nightAtomic,
-      outputs: options.outputs,
-    });
+    console.log(`[split] ${wallet.address}`);
+    console.log(reportUtxos(coins, chosenKeys).join('\n'));
+
+    const spendAtomic = chosen.reduce((sum, coin) => sum + coin.utxo.value, 0n);
+    const untouchedSpendable = dustCoins(synced).reduce(
+      (sum, coin) => sum + coin.generatedNow,
+      0n,
+    );
+    let plan: SplitPlan;
+    try {
+      plan = computeSplitPlan({
+        spendAtomicNight: spendAtomic,
+        outputs: options.outputs,
+        perCoinAtomicNight: options.perCoinAtomic,
+        untouchedCoinsAtomicNight: protectedCoins.map((coin) => coin.utxo.value),
+        untouchedSpendableSpecks: untouchedSpendable,
+      });
+    } catch (cause) {
+      throw new Refusal(cause instanceof Error ? cause.message : String(cause));
+    }
     console.log(formatSplitPlan(plan));
 
-    const identifier = await submitSplit(wallet, plan, nightTokenType);
+    /* The allow-list is the pin. Until this line the selector can hand out
+       nothing at all, which is why nothing may build a transfer before it. */
+    for (const key of chosenKeys) selector.allow.add(key);
+
+    const identifier = await submitSplit(wallet, plan, nightTokenType, selector, chosenKeys);
     console.log(`[split] submitted ${identifier}`);
 
-    const after = await waitForShape(wallet.facade, nightTokenType, options.outputs);
+    const expectedUtxos = coins.length - chosen.length + options.outputs;
+    const after = await waitForShape(wallet.facade, nightTokenType, expectedUtxos);
     console.log(
       `[split] settled: ${after.nightUtxos} NIGHT UTxO(s), ${after.dustCoins} DUST coin(s)`,
     );
     await wallet.save();
     console.log(
-      `[split] done. The new coins hold NO DUST yet: no fee is payable for about ${plan.worstCaseBlackoutSeconds} s, and the coins are not independent for about ${plan.singleLaneGapSeconds} s. Start ${SERVICE_UNIT} and watch that its first registration logs 'already-generating', not 'registered' — see ops/SPLIT.md.`,
+      `[split] done. The ${options.outputs} new coins hold NO DUST yet: each needs about ${plan.secondsToLaneCapablePerCoin} s to become a lane. The ${protectedCoins.length} protected coin(s) kept paying throughout. Start ${SERVICE_UNIT} and check its first [dust] line — see ops/SPLIT.md.`,
     );
   } finally {
     await wallet.facade.stop().catch(() => undefined);
@@ -418,15 +736,18 @@ async function execute(options: Options): Promise<void> {
 }
 
 /**
- * One unshielded self-transfer: `outputs - 1` explicit outputs of the per-coin
- * amount, and the change the wallet gives itself is the last coin. Paying
- * oneself is what makes this safe — every atomic unit that leaves the wallet
- * comes straight back to the same address, and a failure loses only the fee.
+ * One unshielded self-transfer out of the CHOSEN UTxOs: `outputs - 1` explicit
+ * outputs of the per-coin amount, and the change the wallet gives itself is the
+ * last coin. Paying oneself is what makes this safe — every atomic unit that
+ * leaves the wallet comes straight back to the same address, and a failure
+ * loses only the fee.
  */
 async function submitSplit(
   wallet: OpenedWallet,
   plan: SplitPlan,
   nightTokenType: string,
+  selector: PinnedSelector,
+  chosenKeys: ReadonlySet<string>,
 ): Promise<string> {
   const outputs = Array.from({ length: plan.explicitOutputs }, () => ({
     type: nightTokenType as ledger.RawTokenType,
@@ -440,11 +761,35 @@ async function submitSplit(
   const ttl = new Date(Date.now() + 30 * 60_000);
   /* `payFees: true` balances the DUST leg out of this wallet's OWN coins —
      there is no sponsor for the sponsor. */
-  const recipe = await wallet.facade.transferTransaction(
-    [{ type: 'unshielded', outputs }],
-    { shieldedSecretKeys: wallet.shieldedSecretKeys, dustSecretKey: wallet.dustSecretKey },
-    { ttl, payFees: true },
+  let recipe;
+  try {
+    recipe = await wallet.facade.transferTransaction(
+      [{ type: 'unshielded', outputs }],
+      { shieldedSecretKeys: wallet.shieldedSecretKeys, dustSecretKey: wallet.dustSecretKey },
+      { ttl, payFees: true },
+    );
+  } catch (cause) {
+    if (selector.refusedFor.length > 0) {
+      throw new Refusal(
+        `the chosen inputs do not cover ${plan.outputs} × ${plan.perCoinAtomicNight} atomic NIGHT, and the selector refused to reach for a protected coin. Nothing was signed or submitted. (${cause instanceof Error ? cause.message : String(cause)})`,
+      );
+    }
+    throw cause;
+  }
+
+  /* The last gate before a signature, and the one that does not take the
+     selector's word for it: it reads the BUILT transaction's own unshielded
+     offers. Two independent checks of the same property, because the cost of
+     being wrong is the balancer's fee-paying DUST. */
+  const spent = assertOnlyChosenInputs(
+    recipe.transaction as unknown as TransactionLike,
+    chosenKeys,
+    selector,
   );
+  console.log(
+    `[split] verified: the transaction spends ${spent.length} UTxO(s), all of them named by --inputs (${spent.join(', ')})`,
+  );
+
   const signed = await wallet.facade.signRecipe(recipe, wallet.keystore.signDataAsync);
   console.log('[split] proving…');
   const finalized = await wallet.facade.finalizeRecipe(signed);
@@ -454,28 +799,28 @@ async function submitSplit(
 
 /**
  * Waits for the wallet to SEE the split, not merely for the node to accept it:
- * `outputs` NIGHT UTxOs, and one DUST entry per NIGHT UTxO plus the one the old
- * NIGHT left behind.
+ * the expected NIGHT UTxO count, and at least one DUST entry per NIGHT UTxO.
  */
 async function waitForShape(
   facade: WalletFacade,
   nightTokenType: string,
-  outputs: number,
-): Promise<{ nightAtomic: bigint; nightUtxos: number; dustCoins: number }> {
+  expectedUtxos: number,
+): Promise<{ nightUtxos: number; dustCoins: number }> {
   const deadline = Date.now() + 15 * 60_000;
   for (;;) {
     const state = await currentState(facade);
-    const seen = shape(state, nightTokenType);
-    if (seen.nightUtxos >= outputs && seen.dustCoins >= outputs) {
-      return seen;
+    const seenNight = nightUtxos(state, nightTokenType).length;
+    const seenDust = state.dust.availableCoins.length + state.dust.pendingCoins.length;
+    if (seenNight >= expectedUtxos && seenDust >= expectedUtxos) {
+      return { nightUtxos: seenNight, dustCoins: seenDust };
     }
     if (Date.now() > deadline) {
       throw new Error(
-        `the split did not settle within 15 min: ${seen.nightUtxos} NIGHT UTxO(s), ${seen.dustCoins} DUST coin(s). The transaction may still land — check before retrying anything.`,
+        `the split did not settle within 15 min: ${seenNight}/${expectedUtxos} NIGHT UTxO(s), ${seenDust} DUST coin(s). The transaction may still land — check before retrying anything.`,
       );
     }
     console.log(
-      `[split]   waiting: ${seen.nightUtxos}/${outputs} NIGHT UTxO(s), ${seen.dustCoins} DUST coin(s)`,
+      `[split]   waiting: ${seenNight}/${expectedUtxos} NIGHT UTxO(s), ${seenDust} DUST coin(s)`,
     );
     await new Promise((settle) => setTimeout(settle, 10_000));
   }
@@ -496,19 +841,12 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
 
-  if (options.mode === 'plan') {
-    console.log(
-      formatSplitPlan(
-        computeSplitPlan({
-          totalAtomicNight: options.total ?? DEFAULT_TOTAL_ATOMIC,
-          outputs: options.outputs,
-        }),
-      ),
-    );
-    return 0;
-  }
-
   try {
+    if (options.mode === 'plan') {
+      if (options.live) await planAgainstLiveWallet(options);
+      else planOnPaper(options);
+      return 0;
+    }
     await execute(options);
     return 0;
   } catch (cause) {
