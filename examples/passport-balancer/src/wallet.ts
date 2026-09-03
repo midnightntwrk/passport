@@ -1267,6 +1267,18 @@ export async function openBalancerWallet(
    * compute): a recipe that passes here passes there. See
    * `createDustFeeSelector` for what is done about a recipe that fails.
    */
+  /**
+   * The ledger parameters the CHAIN is using, not the SDK's initial ones. The
+   * dust wallet fetches the latest block for every balance and the recipe
+   * carries it as `blockData`; a check against `initialParameters()` passed
+   * at 07:06 on 2026/09/03 for a transaction the node then refused, because
+   * the chain's allowance per byte is not the initial one.
+   */
+  const paramsOf = (recipe: unknown): ledger.LedgerParameters =>
+    ((recipe as { blockData?: { ledgerParameters?: ledger.LedgerParameters } }).blockData
+      ?.ledgerParameters as ledger.LedgerParameters | undefined) ??
+    ledger.LedgerParameters.initialParameters();
+
   const assertWithinTimeToDismiss = (recipe: BalancingRecipe): void => {
     const parts: Array<{ eraseProofs(): unknown }> = [];
     if (recipe.type === 'UNBOUND_TRANSACTION') {
@@ -1281,7 +1293,7 @@ export async function openBalancerWallet(
     const merged = erased
       .slice(1)
       .reduce((acc, tx) => acc.merge(tx) as typeof acc, erased[0]!);
-    merged.fees(ledger.LedgerParameters.initialParameters(), true);
+    merged.fees(paramsOf(recipe), true);
   };
 
   let balanceLock: Promise<unknown> = Promise.resolve();
@@ -2134,7 +2146,7 @@ export async function openBalancerWallet(
                 if (!isTimeToDismiss(cause)) throw cause;
                 const message = cause instanceof Error ? cause.message : String(cause);
                 console.warn(
-                  `[fee] ${label}: the ledger would refuse this shape (${message.slice(0, 200)}) — reverting and balancing again with ${padRounds + crumbsForDeficit(message)} crumb DUST inputs for size`,
+                  `[fee] ${label}: the ledger would refuse this shape (${message.slice(0, 320)}) — reverting and balancing again with ${padRounds + crumbsForDeficit(message)} crumb DUST inputs for size`,
                 );
                 try {
                   await facade.revert(result);
@@ -2233,7 +2245,7 @@ export async function openBalancerWallet(
                is. A refusal here costs one proof, not three submissions. */
             try {
               (proved as { fees(params: unknown, enforce: boolean): bigint }).fees(
-                ledger.LedgerParameters.initialParameters(),
+                paramsOf(balanced),
                 true,
               );
             } catch (cause) {
@@ -2241,7 +2253,7 @@ export async function openBalancerWallet(
               const message = cause instanceof Error ? cause.message : String(cause);
               const more = crumbsForDeficit(message);
               console.warn(
-                `[fee] ${label}: the PROVEN transaction would be refused (${message.slice(0, 200)}) — reverting and rebuilding with ${Math.min(8, padRounds + more)} crumb DUST inputs`,
+                `[fee] ${label}: the PROVEN transaction would be refused (${message.slice(0, 320)}) — reverting and rebuilding with ${Math.min(8, padRounds + more)} crumb DUST inputs`,
               );
               try {
                 await reserve(() => facade.revert(proved as never));
