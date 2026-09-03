@@ -2057,7 +2057,36 @@ export async function openBalancerWallet(
               }
               return result;
             };
-            const balanced = await reserve(balanceOnce, 'contract balancing');
+            /* CONTENTION BEFORE POVERTY, for the balance as for the estimate:
+               when the selectors hand back nothing because every coin of the
+               type is held by another job or in flight — or is a NIGHT lineage
+               a small need must not rotate — the balance waits for a release,
+               outside the claim so the job holding the coin can finish, and
+               tries again inside the same budget. */
+            let balanced: BalancingRecipe;
+            for (;;) {
+              try {
+                balanced = await reserve(balanceOnce, 'contract balancing');
+                break;
+              } catch (cause) {
+                const message = cause instanceof Error ? cause.message : String(cause);
+                const excluded = coins.excluded();
+                if (
+                  !/insufficient funds/i.test(message) ||
+                  excluded.length === 0 ||
+                  Date.now() - startedAt >= waitForReservedCoinMs
+                ) {
+                  throw cause;
+                }
+                progress('waiting for a reserved coin');
+                console.log(
+                  `[coins] ${label}: no selectable coin to balance with — ${excluded.length} excluded by other jobs (${message.slice(0, 60)}), waiting`,
+                );
+                await coins.whenReleased(
+                  Math.min(10_000, waitForReservedCoinMs - (Date.now() - startedAt)),
+                );
+              }
+            }
             recipe = balanced;
             inFlightUntil = deadline.getTime() + 30_000;
             progress('balanced');

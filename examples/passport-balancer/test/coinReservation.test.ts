@@ -194,8 +194,15 @@ describe('the NIGHT payload selector', () => {
     assert.equal(nightPayloadFirst([lineage, n2], NIGHT, 2_000n, {}), n2);
   });
 
-  it('spends a lineage only when nothing smaller is left, smallest lineage first', () => {
-    assert.equal(nightPayloadFirst([bigger, lineage], NIGHT, 2_000n, {}), lineage);
+  it('hands back NOTHING for a small need when only lineages remain — the wallet waits instead', () => {
+    assert.equal(nightPayloadFirst([bigger, lineage], NIGHT, 2_000n, {}), undefined);
+    assert.equal(nightPayloadFirst([bigger, lineage], NIGHT, -2_000n, {}), undefined, 'a deficit is a negative amount');
+    assert.equal(nightPayloadFirst([bigger, lineage], NIGHT, 10n, {}), undefined, "a registration's COST");
+  });
+
+  it('spends a lineage only for a need no change coin could cover, smallest lineage first', () => {
+    assert.equal(nightPayloadFirst([bigger, lineage], NIGHT, LARGE_NIGHT_ATOMIC, {}), lineage);
+    assert.equal(nightPayloadFirst([bigger, lineage], NIGHT, -(LARGE_NIGHT_ATOMIC * 2n), {}), lineage);
   });
 
   it('is the plain smallest-first rule for any other token', () => {

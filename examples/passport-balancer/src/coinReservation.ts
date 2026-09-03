@@ -134,7 +134,18 @@ export const nightPayloadFirst: CoinSelector = (coins, tokenType, amount, costMo
   if (tokenType !== NATIVE_TOKEN_TYPE) return smallestOfType(coins, tokenType, amount, costModel);
   const candidates = coins.filter((coin) => coin.type === tokenType);
   const change = candidates.filter((coin) => coin.value < LARGE_NIGHT_ATOMIC);
-  return smallestOfType(change.length > 0 ? change : candidates, tokenType, amount, costModel);
+  if (change.length > 0) return smallestOfType(change, tokenType, amount, costModel);
+  /* No change coin is selectable. For a SMALL need — a grant, a registration's
+     COST — a lineage is never the answer: rotating it resets its DUST
+     generation, and on 2026/09/03 at 04:35:15 a grant balanced on the
+     4,998-NIGHT coin u:363747…:1 for exactly that reason, because every small
+     coin was held in flight at that moment. Handing back nothing makes the
+     balance fail with insufficient funds, which the wallet turns into a wait
+     for a held coin to come free. Only a need that no change coin could cover
+     may spend a lineage. */
+  const needed = amount < 0n ? -amount : amount;
+  if (needed < LARGE_NIGHT_ATOMIC) return undefined;
+  return smallestOfType(candidates, tokenType, amount, costModel);
 };
 
 /**
