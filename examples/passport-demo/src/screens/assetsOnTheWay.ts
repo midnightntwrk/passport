@@ -16,6 +16,11 @@
  * either get a list or get nothing.
  */
 
+import {
+  OPENING_BALANCE_ON_THE_WAY_DETAIL,
+  OPENING_BALANCE_ON_THE_WAY_LABEL,
+} from '../lib/activation.js';
+
 /** The shape this leaf needs from a trail row. A subset of `ActivityFeedItem`. */
 export interface OnTheWayCandidate {
   id: string;
@@ -31,6 +36,13 @@ export interface OnTheWayCandidate {
 export interface AssetOnTheWay {
   id: string;
   label: string;
+  /**
+   * The fuller sentence, where the row has one to give — today, only the
+   * opening balance, whose two figures are known before anything arrives. A
+   * trail row has none: what it is arriving as is the trail's own business,
+   * and the line under a balance is not a second trail.
+   */
+  detail?: string;
 }
 
 /** The sources that mean "this is happening somewhere other than this device". */
@@ -38,13 +50,6 @@ const OFF_DEVICE_SOURCES = new Set(['chain', 'sponsor']);
 
 /** The synthetic row for a grant that has been asked for and not landed. */
 const OPENING_BALANCE_ID = 'opening-balance';
-/**
- * What that row says. No figure in it, deliberately: the amount is the
- * sponsor's to decide and this device has not been told it. Naming a number
- * nobody has promised would be exactly the settled-looking balance the
- * reviewer asked us not to show.
- */
-const OPENING_BALANCE_LABEL = 'Your opening balance';
 
 /**
  * The rows that are still arriving.
@@ -65,10 +70,16 @@ export function assetsOnTheWay(
      explain it. It is not derived from a trail row: the grant is announced
      when the account exists, which is BEFORE the sponsor has been asked, and a
      line that only appeared once a row was written would still leave the first
-     minutes of a new Passport reading as "you have nothing". See
-     `openingBalanceOnTheWay` in `lib/activation.ts`. */
+     minutes of a new Passport reading as "you have nothing". It names the two
+     figures it is waiting for, because the grant is the sponsor's fixed one
+     and both live in `lib/activation.ts` as the single source. See
+     `openingBalanceOnTheWay` there for when this row is offered at all. */
   if (options?.openingBalance) {
-    out.push({ id: OPENING_BALANCE_ID, label: OPENING_BALANCE_LABEL });
+    out.push({
+      id: OPENING_BALANCE_ID,
+      label: OPENING_BALANCE_ON_THE_WAY_LABEL,
+      detail: OPENING_BALANCE_ON_THE_WAY_DETAIL,
+    });
   }
   if (!activity) return out;
   for (const entry of activity) {
@@ -86,12 +97,19 @@ export function assetsOnTheWay(
  * The one line both screens print.
  *
  * A single item is named, because naming it is the whole value — the reader
- * learns WHICH thing is arriving. Several are counted instead: a strip under a
- * balance is not a second activity trail, and the trail itself is a scroll
- * away on the same screen.
+ * learns WHICH thing is arriving, and, where the row knows them, WHAT AMOUNTS:
+ * the opening balance carries its `detail` here, so the two figures a new
+ * Passport is waiting for are on screen while they are still pending. The
+ * `On the way ·` stays in front of them, which is what keeps a figure that has
+ * not arrived from reading as one that has. Several are counted instead: a
+ * strip under a balance is not a second activity trail, and the trail itself
+ * is a scroll away on the same screen.
  */
 export function assetsOnTheWayLine(items: readonly AssetOnTheWay[]): string | null {
   if (items.length === 0) return null;
-  if (items.length === 1) return `On the way · ${items[0]!.label}`;
+  if (items.length === 1) {
+    const only = items[0]!;
+    return `On the way · ${only.detail ?? only.label}`;
+  }
   return `On the way · ${items.length} amounts still arriving`;
 }

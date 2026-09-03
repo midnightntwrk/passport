@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import {
+  OPENING_BALANCE_ON_THE_WAY_DETAIL,
+  OPENING_BALANCE_ON_THE_WAY_LABEL,
+} from '../lib/activation.js';
 import { assetsOnTheWay, assetsOnTheWayLine } from './assetsOnTheWay.js';
 
 describe('assetsOnTheWay', () => {
@@ -45,16 +49,21 @@ describe('assetsOnTheWay', () => {
 });
 
 describe('the opening balance', () => {
-  it('leads the list, and names no figure', () => {
+  const openingRow = {
+    id: 'opening-balance',
+    label: OPENING_BALANCE_ON_THE_WAY_LABEL,
+    detail: OPENING_BALANCE_ON_THE_WAY_DETAIL,
+  };
+
+  it('leads the list, and names the two figures it is waiting for', () => {
     /* The reviewer asked for the opening balance to read as pending from the
-       moment activation begins. What it must NOT do is name an amount this
-       device has not been told, which would be the settled-looking balance the
-       same review objected to. */
-    expect(assetsOnTheWay([], { openingBalance: true })).toEqual([
-      { id: 'opening-balance', label: 'Your opening balance' },
-    ]);
+       moment activation begins, and on 2026/09/03 for the expected figures to
+       be visible while it is. Both are the sponsor's fixed grant, so naming
+       them promises nothing this device has not been told — and the line still
+       leads with `On the way`, so it is never read as a settled balance. */
+    expect(assetsOnTheWay([], { openingBalance: true })).toEqual([openingRow]);
     expect(assetsOnTheWayLine(assetsOnTheWay([], { openingBalance: true }))).toBe(
-      'On the way · Your opening balance',
+      'On the way · 100 mUSD and 0.002 NIGHT are being added to your account.',
     );
   });
 
@@ -63,10 +72,7 @@ describe('the opening balance', () => {
       assetsOnTheWay([{ id: 'x', label: 'Transfer in', status: 'pending', source: 'chain' }], {
         openingBalance: true,
       }),
-    ).toEqual([
-      { id: 'opening-balance', label: 'Your opening balance' },
-      { id: 'x', label: 'Transfer in' },
-    ]);
+    ).toEqual([openingRow, { id: 'x', label: 'Transfer in' }]);
   });
 
   it('is absent unless asked for', () => {
@@ -77,8 +83,6 @@ describe('the opening balance', () => {
   it('is offered even when there is no trail at all', () => {
     /* A Passport whose account has just been deployed has nothing on its trail
        yet, and that is exactly the moment the line is needed. */
-    expect(assetsOnTheWay(undefined, { openingBalance: true })).toEqual([
-      { id: 'opening-balance', label: 'Your opening balance' },
-    ]);
+    expect(assetsOnTheWay(undefined, { openingBalance: true })).toEqual([openingRow]);
   });
 });

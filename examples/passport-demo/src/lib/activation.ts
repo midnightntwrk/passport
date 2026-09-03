@@ -133,6 +133,44 @@ export const ACTIVATION_REFUSED_LABEL = 'Opening balance not deposited';
 /** The whole retry schedule ran out. Written by `fundAccountOnce` in `App.tsx`. */
 export const ACTIVATION_EXHAUSTED_LABEL = 'Opening balance not added';
 
+/**
+ * THE GRANT'S TWO FIGURES, ONCE.
+ *
+ * The sponsor's opening grant is fixed — the same two amounts for every
+ * Passport — so this device can name them before the sponsor has answered
+ * without inventing anything. They live here, beside the labels, because the
+ * copy below is built from them and a figure written out a second time in a
+ * screen is a figure that drifts from the one the sponsor actually deposits.
+ *
+ * `OPENING_NIGHT` is a STRING. `0.002` as a number is not `0.002`, and a
+ * trailing-digit surprise under a balance is exactly the kind of thing this
+ * row exists to avoid.
+ */
+export const OPENING_MUSD = 100;
+export const OPENING_NIGHT = '0.002';
+
+/**
+ * What the pending opening-balance row says, now that it names the figures.
+ *
+ * Asked for on 2026/09/03: the reviewer wanted the expected amounts VISIBLE
+ * while the deposits are pending, rather than a row that admits only that
+ * something unnamed is coming. Naming them is safe in a way that naming an
+ * arbitrary number would not have been — the grant is the sponsor's fixed one,
+ * and it is the figure every Passport gets.
+ *
+ * The row is only ever the PENDING one. It carries no transaction, it is never
+ * added to a balance, and it is gone the moment the account holds something or
+ * the trail says the grant is not coming — see {@link openingBalanceOnTheWay},
+ * which is the whole of that rule and is unchanged by this copy.
+ *
+ * Deliberately in NEITHER label set above: this is not a row an activation
+ * writes to the trail, so {@link activationRetryRowId} must not see it as a
+ * landing or as a failure. Both sets match by identity, and this label is
+ * distinct from all four.
+ */
+export const OPENING_BALANCE_ON_THE_WAY_LABEL = 'Opening balance on the way';
+export const OPENING_BALANCE_ON_THE_WAY_DETAIL = `${OPENING_MUSD} mUSD and ${OPENING_NIGHT} NIGHT are being added to your account.`;
+
 const ACTIVATION_FAILURE_LABELS = new Set<string>([
   ACTIVATION_REFUSED_LABEL,
   ACTIVATION_EXHAUSTED_LABEL,
