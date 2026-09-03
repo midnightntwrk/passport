@@ -50,6 +50,11 @@ export interface VoteProof {
   readonly exchange: string;
   readonly signature?: string;
   readonly publicKey?: string;
+  /** The vote's own transaction on chain — a NIGHT transfer from the voter's account. */
+  readonly txHash?: string;
+  /** Set by the service once the indexer has the transaction, with its block. */
+  readonly confirmed?: boolean;
+  readonly block?: number;
 }
 
 export interface Vote {
@@ -172,10 +177,12 @@ function readProof(value: unknown): VoteProof | null {
   if (exchange.length === 0) return null;
   const signature = tidy(record.signature).slice(0, MAX_PROOF_LENGTH);
   const publicKey = tidy(record.publicKey).slice(0, MAX_PROOF_LENGTH);
+  const txHash = tidy(record.txHash).toLowerCase();
   return {
     exchange,
     ...(signature.length > 0 ? { signature } : {}),
     ...(publicKey.length > 0 ? { publicKey } : {}),
+    ...(/^[0-9a-f]{64}$/.test(txHash) ? { txHash } : {}),
   };
 }
 
@@ -240,4 +247,14 @@ export function shorten(value: string): string {
 
 export function randomId(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+/** Marks a vote's transaction as seen on chain. Returns true when something changed. */
+export function confirmVote(state: TallyState, pollId: string, account: string, block: number): boolean {
+  const index = state.votes.findIndex((vote) => vote.pollId === pollId && vote.account === account);
+  if (index < 0) return false;
+  const vote = state.votes[index]!;
+  if (vote.proof.confirmed) return false;
+  state.votes[index] = { ...vote, proof: { ...vote.proof, confirmed: true, block } };
+  return true;
 }

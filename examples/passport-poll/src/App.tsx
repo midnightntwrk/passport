@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { PassportProfileResult, PassportTrafficEvent } from '@midnight-passport/connect';
-import { usePassport, usePassportProfile } from '@midnight-passport/connect/react';
+import { usePassport, usePassportPayment, usePassportProfile } from '@midnight-passport/connect/react';
 
 import { listPolls, newPoll, readPoll, vote } from './api.js';
-import { PASSPORT_ORIGIN, REFRESH_MS } from './config.js';
+import { BALLOT_BOX, PASSPORT_ORIGIN, REFRESH_MS, VOTE_ATOMIC, explorerTxUrl } from './config.js';
 import { applyTheme, currentTheme, type Theme } from './theme.js';
 import type { PollResults } from '../service/tally.js';
 
@@ -85,6 +85,7 @@ function ThemeToggle() {
 export function App() {
   const { presence, traffic } = usePassport();
   const profile = usePassportProfile(['displayName', 'passportContract']);
+  const payment = usePassportPayment();
 
   const [voter, setVoter] = useState<Voter | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -175,18 +176,35 @@ export function App() {
     }
     setBusy(true);
     setNotice(null);
+    /* A vote is a real transaction: a few atomic units of NIGHT from the
+       voter's account to the ballot box, approved on Passport's own sheet.
+       The tally records the transaction and confirms it once the chain has it. */
+    const paid = await payment.request({
+      recipientAddress: BALLOT_BOX,
+      amount: VOTE_ATOMIC,
+      purpose: `Vote "${option}" — ${current.poll.question}`,
+    });
+    if (paid.status !== 'submitted') {
+      setBusy(false);
+      setNotice(
+        paid.status === 'declined'
+          ? 'You turned the vote down. Nothing was sent.'
+          : 'Passport did not send the vote. Nothing was counted — try again.',
+      );
+      return;
+    }
     const outcome = await vote(current.poll.id, {
       option,
       account: voter.account,
       ...(voter.name === undefined ? {} : { name: voter.name }),
-      proof: { exchange: voter.exchange },
+      proof: { exchange: voter.exchange, txHash: paid.txId },
     });
     setBusy(false);
     if (!outcome.ok) {
       setNotice(outcome.message);
       return;
     }
-    setNotice(`Counted. You voted for ${option}.`);
+    setNotice(`Counted. Your vote for ${option} is on its way to the chain.`);
     await refresh();
     void readPoll(current.poll.id);
   };
@@ -274,8 +292,8 @@ export function App() {
           {verifying ? (
             <div className="verify">
               <p className="detail">
-                Every vote, the account it was counted against, and the reference Passport answered
-                the consent under. Nothing here was taken without being handed over.
+                Every vote, the account it was counted against, and the transaction that carried it —
+                a tick once the chain has it. Nothing here was taken without being handed over.
               </p>
               <table>
                 <thead>
@@ -292,7 +310,15 @@ export function App() {
                       <td>{receipt.name ?? '—'}</td>
                       <td className="mono">{shorten(receipt.account)}</td>
                       <td>{receipt.option}</td>
-                      <td className="mono">{receipt.proof.signature ?? receipt.proof.exchange}</td>
+                      <td className="mono">
+                        {receipt.proof.txHash ? (
+                          <a href={explorerTxUrl(receipt.proof.txHash)} target="_blank" rel="noreferrer">
+                            {receipt.proof.txHash.slice(0, 10)}… {receipt.proof.confirmed ? '✓' : '…'}
+                          </a>
+                        ) : (
+                          receipt.proof.signature ?? receipt.proof.exchange
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {current.receipts.length === 0 ? (

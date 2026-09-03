@@ -22,6 +22,7 @@ import {
   emptyState,
   results,
   type TallyState,
+  confirmVote,
 } from './tally.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -187,6 +188,40 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
 
   send(response, 404, { error: 'not-found' });
 }
+
+/* Every vote names its own transaction. The service asks the indexer for it
+   until it lands, then marks the vote confirmed with its block, so the Verify
+   table can show a real chain reference rather than a promise. */
+const INDEXER = process.env.POLL_INDEXER_URL ?? 'https://indexer.stagenet.shielded.tools/api/v4/graphql';
+async function landed(hash: string): Promise<number | null> {
+  for (const offset of [`hash: "${hash}"`, `identifier: "${hash}"`]) {
+    try {
+      const response = await fetch(INDEXER, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: `{ transactions(offset: { ${offset} }) { hash block { height } } }` }),
+      });
+      if (!response.ok) continue;
+      const body = (await response.json()) as { data?: { transactions?: Array<{ block?: { height?: number } }> } };
+      const found = body.data?.transactions?.[0];
+      if (found) return found.block?.height ?? 0;
+    } catch {
+      /* try the next shape, or the next tick */
+    }
+  }
+  return null;
+}
+setInterval(() => {
+  void (async () => {
+    let changed = false;
+    for (const vote of state.votes) {
+      if (!vote.proof.txHash || vote.proof.confirmed) continue;
+      const block = await landed(vote.proof.txHash);
+      if (block !== null && confirmVote(state, vote.pollId, vote.account, block)) changed = true;
+    }
+    if (changed) save();
+  })();
+}, 5_000).unref();
 
 server.listen(PORT, () => {
   console.log(`[poll] tally service on http://localhost:${PORT}`);

@@ -49,7 +49,7 @@ export function newPoll(
 
 export function vote(
   id: string,
-  input: { option: string; account: string; name?: string; proof: { exchange: string } },
+  input: { option: string; account: string; name?: string; proof: { exchange: string; txHash?: string } },
 ): Promise<ApiOutcome<{ poll: PollResults }>> {
   return call(`/api/polls/${encodeURIComponent(id)}/votes`, {
     method: 'POST',
