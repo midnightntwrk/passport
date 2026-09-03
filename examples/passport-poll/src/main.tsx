@@ -6,6 +6,9 @@ import { PassportProvider } from '@midnight-passport/connect/react';
 import { App } from './App.js';
 import { PASSPORT_ORIGIN } from './config.js';
 import './app.css';
+import { restoreTheme } from './theme.js';
+
+restoreTheme();
 
 /*
  * One provider, one client, for the life of the tree. Passport Poll is served

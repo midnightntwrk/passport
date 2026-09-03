@@ -8,6 +8,7 @@ import {
 } from '@midnight-passport/connect/react';
 
 import { PASSPORT_ORIGIN, SWAP_DESK, SWAP_DESK_KEY, explorerTxUrl } from './config.js';
+import { applyTheme, currentTheme, type Theme } from './theme.js';
 
 /* ---------------------------------------------------------------------------
  * Passport Swap
@@ -90,6 +91,24 @@ async function askDesk(path: string, init?: RequestInit): Promise<unknown> {
     throw new Error(typeof body.message === 'string' ? body.message : `The desk answered ${response.status}.`);
   }
   return body;
+}
+
+function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>(() => currentTheme());
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+  return (
+    <button
+      type="button"
+      className="theme-toggle"
+      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+    >
+      {theme === 'dark' ? '☀' : '☾'}
+    </button>
+  );
 }
 
 export function App() {
@@ -190,6 +209,7 @@ export function App() {
 
   return (
     <main className="swap">
+      <ThemeToggle />
       <header>
         <p className="eyebrow">A swap desk on its own origin</p>
         <h1>Passport Swap</h1>

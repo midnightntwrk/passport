@@ -5,6 +5,7 @@ import { usePassport, usePassportProfile } from '@midnight-passport/connect/reac
 
 import { listPolls, newPoll, readPoll, vote } from './api.js';
 import { PASSPORT_ORIGIN, REFRESH_MS } from './config.js';
+import { applyTheme, currentTheme, type Theme } from './theme.js';
 import type { PollResults } from '../service/tally.js';
 
 /* ---------------------------------------------------------------------------
@@ -62,6 +63,24 @@ function describeRefusal(result: Extract<PassportProfileResult, { approved: fals
 }
 
 /* ------------------------------------------------------------------------ */
+
+function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>(() => currentTheme());
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+  return (
+    <button
+      type="button"
+      className="theme-toggle"
+      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+    >
+      {theme === 'dark' ? '☀' : '☾'}
+    </button>
+  );
+}
 
 export function App() {
   const { presence, traffic } = usePassport();
@@ -176,6 +195,7 @@ export function App() {
 
   return (
     <main className="poll">
+      <ThemeToggle />
       <header>
         <p className="eyebrow">Passport-signed voting on stagenet</p>
         <h1>Passport Poll</h1>

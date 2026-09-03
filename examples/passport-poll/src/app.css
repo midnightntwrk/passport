@@ -13,7 +13,55 @@
   --panel: rgba(255, 255, 255, 0.04);
   --line: rgba(255, 255, 255, 0.1);
   --muted: rgba(255, 255, 255, 0.58);
+  --accent-ink: #d9a3ff;
+  --hover-fill: rgba(255, 255, 255, 0.11);
+  --hover-line: rgba(255, 255, 255, 0.22);
+  --btn-fill: rgba(255, 255, 255, 0.06);
+  --field-fill: rgba(0, 0, 0, 0.35);
+  --count-fill: rgba(0, 0, 0, 0.35);
+  --grad-a: rgba(155, 0, 197, 0.45);
+  --grad-b: rgba(0, 67, 255, 0.28);
+  --grad-c: rgba(35, 14, 73, 0.9);
   color-scheme: dark;
+}
+
+/* Light mode: the same tokens, swapped. The system setting picks it, and
+   the button in the corner overrides it either way. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --ink: #f7f5fb;
+    --paper: #0d0b12;
+    --panel: rgba(255, 255, 255, 0.78);
+    --line: rgba(13, 11, 18, 0.12);
+    --muted: rgba(13, 11, 18, 0.6);
+    --accent-ink: #6b12a6;
+    --hover-fill: rgba(13, 11, 18, 0.06);
+    --hover-line: rgba(13, 11, 18, 0.3);
+    --btn-fill: rgba(13, 11, 18, 0.04);
+    --field-fill: rgba(255, 255, 255, 0.9);
+    --count-fill: rgba(255, 255, 255, 0.75);
+    --grad-a: rgba(167, 0, 255, 0.16);
+    --grad-b: rgba(44, 79, 250, 0.12);
+    --grad-c: rgba(132, 33, 162, 0.12);
+    color-scheme: light;
+  }
+}
+:root[data-theme='light'] {
+  --ink: #f7f5fb;
+  --paper: #0d0b12;
+  --panel: rgba(255, 255, 255, 0.78);
+  --line: rgba(13, 11, 18, 0.12);
+  --muted: rgba(13, 11, 18, 0.6);
+  --accent-ink: #6b12a6;
+  --hover-fill: rgba(13, 11, 18, 0.06);
+  --hover-line: rgba(13, 11, 18, 0.3);
+  --btn-fill: rgba(13, 11, 18, 0.04);
+  --field-fill: rgba(255, 255, 255, 0.9);
+  --count-fill: rgba(255, 255, 255, 0.75);
+  --grad-a: rgba(167, 0, 255, 0.16);
+  --grad-b: rgba(44, 79, 250, 0.12);
+  --grad-c: rgba(132, 33, 162, 0.12);
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -23,9 +71,9 @@ body {
   margin: 0;
   min-height: 100%;
   background:
-    radial-gradient(ellipse 70% 55% at 85% -5%, rgba(155, 0, 197, 0.45), transparent 60%),
-    radial-gradient(ellipse 55% 45% at 5% 15%, rgba(0, 67, 255, 0.28), transparent 55%),
-    radial-gradient(ellipse 40% 35% at 50% 110%, rgba(35, 14, 73, 0.9), transparent 60%),
+    radial-gradient(ellipse 70% 55% at 85% -5%, var(--grad-a), transparent 60%),
+    radial-gradient(ellipse 55% 45% at 5% 15%, var(--grad-b), transparent 55%),
+    radial-gradient(ellipse 40% 35% at 50% 110%, var(--grad-c), transparent 60%),
     var(--ink);
   background-attachment: fixed;
   color: var(--paper);
@@ -55,7 +103,7 @@ header { margin-bottom: 0.25rem; }
   font-size: 0.7rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #d9a3ff;
+  color: var(--accent-ink);
 }
 .eyebrow::before {
   content: '';
@@ -126,7 +174,7 @@ h2 {
   border-radius: 14px;
   border: 1px solid rgba(167, 0, 255, 0.35);
   background: rgba(167, 0, 255, 0.1);
-  color: #eed2ff;
+  color: var(--accent-ink);
   font-size: 0.92rem;
 }
 
@@ -136,12 +184,12 @@ button {
   padding: 0.65rem 1.1rem;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--btn-fill);
   color: var(--paper);
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease, transform 120ms ease;
 }
-button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.11); border-color: rgba(255, 255, 255, 0.22); }
+button:hover:not(:disabled) { background: var(--hover-fill); border-color: var(--hover-line); }
 button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: 0.5; cursor: default; }
 
@@ -153,7 +201,7 @@ button.primary {
 }
 button.primary:hover:not(:disabled) { background: #f02f2d; }
 
-button.ghost { background: transparent; border-color: transparent; color: #d9a3ff; padding-left: 0.4rem; }
+button.ghost { background: transparent; border-color: transparent; color: var(--accent-ink); padding-left: 0.4rem; }
 button.ghost:hover:not(:disabled) { background: rgba(167, 0, 255, 0.12); border-color: transparent; }
 
 /* The ballot. Each option is a tall row; the tally bar grows behind the
@@ -178,7 +226,7 @@ button.ghost:hover:not(:disabled) { background: rgba(167, 0, 255, 0.12); border-
   padding: 1rem 1.1rem;
   border-radius: 16px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--btn-fill);
   text-align: left;
   font-size: 1.08rem;
   font-weight: 600;
@@ -202,7 +250,7 @@ button.ghost:hover:not(:disabled) { background: rgba(167, 0, 255, 0.12); border-
   white-space: nowrap;
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--count-fill);
 }
 
 li.leading .option { border-color: rgba(167, 0, 255, 0.75); box-shadow: inset 3px 0 0 var(--violet); }
@@ -211,7 +259,7 @@ li.leading .option .label::after {
   margin-left: 0.6rem;
   font-size: 0.62rem;
   letter-spacing: 0.12em;
-  color: #d9a3ff;
+  color: var(--accent-ink);
   vertical-align: middle;
 }
 
@@ -235,7 +283,7 @@ input {
   padding: 0.7rem 0.85rem;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--field-fill);
   color: var(--paper);
 }
 input:focus { outline: 2px solid var(--violet); outline-offset: 1px; }
@@ -245,7 +293,7 @@ input:focus { outline: 2px solid var(--violet); outline-offset: 1px; }
 /* Verify: a receipt table. */
 .verify { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed var(--line); }
 .verify table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.86rem; }
-.verify th { text-align: left; font-weight: 600; color: #d9a3ff; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0 0.5rem 0.5rem 0; }
+.verify th { text-align: left; font-weight: 600; color: var(--accent-ink); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0 0.5rem 0.5rem 0; }
 .verify td { padding: 0.5rem 0.5rem 0.5rem 0; border-top: 1px solid var(--line); vertical-align: top; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; color: var(--muted); word-break: break-all; }
 
@@ -256,4 +304,21 @@ input:focus { outline: 2px solid var(--violet); outline-offset: 1px; }
   .poll { padding: 2rem 1rem 4rem; }
   .grid { grid-template-columns: 1fr; }
   .identity { border-radius: 20px; flex-direction: column; align-items: stretch; }
+}
+
+.theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--paper);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 10;
 }

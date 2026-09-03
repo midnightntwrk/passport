@@ -14,7 +14,42 @@
   --line: rgba(255, 255, 255, 0.14);
   --panel: rgba(255, 255, 255, 0.04);
   --good: #06ff89;
+  --grad-a: rgba(236, 100, 29, 0.28);
+  --grad-b: rgba(174, 20, 15, 0.32);
+  --hover-line: rgba(255, 255, 255, 0.4);
+  --hover-fill: rgba(255, 255, 255, 0.06);
   color-scheme: dark;
+}
+
+/* Light mode: the same tokens, swapped. The system setting picks it, and
+   the button in the corner overrides it either way. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --ink: #f6f6f8;
+    --paper: #0a0a0c;
+    --muted: rgba(10, 10, 12, 0.6);
+    --line: rgba(10, 10, 12, 0.12);
+    --panel: rgba(255, 255, 255, 0.72);
+    --good: #0a8a4a;
+    --grad-a: rgba(236, 100, 29, 0.18);
+    --grad-b: rgba(229, 35, 33, 0.14);
+    --hover-line: rgba(10, 10, 12, 0.35);
+    --hover-fill: rgba(10, 10, 12, 0.05);
+    color-scheme: light;
+  }
+}
+:root[data-theme='light'] {
+  --ink: #f6f6f8;
+  --paper: #0a0a0c;
+  --muted: rgba(10, 10, 12, 0.6);
+  --line: rgba(10, 10, 12, 0.12);
+  --panel: rgba(255, 255, 255, 0.72);
+  --good: #0a8a4a;
+  --grad-a: rgba(236, 100, 29, 0.18);
+  --grad-b: rgba(229, 35, 33, 0.14);
+  --hover-line: rgba(10, 10, 12, 0.35);
+  --hover-fill: rgba(10, 10, 12, 0.05);
+  color-scheme: light;
 }
 
 * {
@@ -25,8 +60,8 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(ellipse at 12% -10%, rgba(236, 100, 29, 0.28), transparent 55%),
-    radial-gradient(ellipse at 90% 0%, rgba(174, 20, 15, 0.32), transparent 50%),
+    radial-gradient(ellipse at 12% -10%, var(--grad-a), transparent 55%),
+    radial-gradient(ellipse at 90% 0%, var(--grad-b), transparent 50%),
     var(--ink);
   color: var(--paper);
   font-family: 'Barlow', 'Bricolage Grotesque', system-ui, sans-serif;
@@ -106,8 +141,8 @@ button {
 }
 
 button:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--hover-line);
+  background: var(--hover-fill);
 }
 
 button.primary {
@@ -202,4 +237,22 @@ button:disabled {
 
 .back:hover {
   text-decoration: underline;
+}
+
+/* Theme toggle, top right. */
+.theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--paper);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 10;
 }

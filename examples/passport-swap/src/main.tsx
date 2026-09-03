@@ -6,6 +6,9 @@ import { PassportProvider } from '@midnight-passport/connect/react';
 import { App } from './App.js';
 import { PASSPORT_ORIGIN } from './config.js';
 import './app.css';
+import { restoreTheme } from './theme.js';
+
+restoreTheme();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Passport Swap could not find its mount point.');
