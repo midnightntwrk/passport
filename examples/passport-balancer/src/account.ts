@@ -260,6 +260,8 @@ export interface NodeRejectionRetryOptions {
   pollMs?: number;
   wait?: (ms: number) => Promise<void>;
   log?: (line: string) => void;
+  /** Reports a step of the running spend job. Injectable for the tests. */
+  progress?: (step: string) => void;
 }
 
 /**
@@ -308,6 +310,15 @@ export async function withNodeRejectionRetry<T>(
       log(
         `[retry] ${isNodeRejection(cause) ? 'the node refused' : 'this service gave up waiting on'} ${options.label} (${cause instanceof Error ? cause.message : String(cause)}) — waiting for this wallet to catch up with the chain, then rebuilding (attempt ${attempt + 1} of ${attempts})`,
       );
+      /* Reported as a STEP, not only as a log line. This wait is up to
+         `budgetMs` — two minutes — with nothing at the prover, which is exactly
+         the shape the stall watchdog aborts on. A job rebuilding after a
+         refusal is healthy and must say so, or the watchdog takes its lane away
+         for doing the right thing. Measured on the deployed service on
+         2026/09/03: a grant sat 115 s at `fee leg proved` through one of these
+         and recovered on its own, 35 s inside the window. */
+      const step = options.progress ?? progress;
+      step(`rebuilding after ${isNodeRejection(cause) ? 'a node refusal' : 'a timeout'}`);
       const deadline = Date.now() + budgetMs;
       for (;;) {
         let caught = false;
@@ -317,6 +328,8 @@ export async function withNodeRejectionRetry<T>(
           // An unreadable wallet is not a synced one; asked again below.
         }
         if (caught) break;
+        /* Every poll, because the wait is the silence being explained. */
+        step('waiting for this wallet to catch up');
         if (Date.now() >= deadline) {
           log(
             `[retry] ${options.label}: this wallet has not caught up within ${Math.round(budgetMs / 1_000)} s — reporting the rejection rather than rebuilding against a view that is still stale`,

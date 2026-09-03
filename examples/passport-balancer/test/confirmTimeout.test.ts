@@ -149,6 +149,41 @@ describe('what a caller does with a confirmation timeout', () => {
     assert.doesNotMatch(log[0]!, /the node refused/, 'and does not call it a refusal, because it was not');
   });
 
+  it('reports steps through the rebuild wait, so the stall watchdog leaves it alone', async () => {
+    /* The wait between a refusal and a rebuild is up to budgetMs — two minutes
+       — with nothing at the prover, which is exactly the shape the stall
+       watchdog aborts on. Measured on the deployed service on 2026/09/03: a
+       grant sat 115 s at `fee leg proved` through one of these and recovered on
+       its own, 35 s inside the window. A job doing the right thing must not
+       lose its lane for being quiet about it. */
+    const steps: string[] = [];
+    let polls = 0;
+
+    await withNodeRejectionRetry(
+      async () => {
+        if (polls === 0) throw new Error('1010: Invalid Transaction: Custom error: 231');
+        return 'rebuilt';
+      },
+      {
+        label: 'deposit_night into 0xabc',
+        synced: async () => polls >= 3,
+        pollMs: 1,
+        budgetMs: 1_000,
+        wait: async () => {
+          polls += 1;
+        },
+        log: () => undefined,
+        progress: (step) => steps.push(step),
+      },
+    );
+
+    assert.equal(steps[0], 'rebuilding after a node refusal');
+    assert.ok(
+      steps.filter((step) => step === 'waiting for this wallet to catch up').length >= 2,
+      'and it keeps saying so for as long as it waits',
+    );
+  });
+
   it('counts a timeout as rebuildable and an unrelated fault as not', () => {
     assert.equal(isRebuildable(new ConfirmationTimeout('transaction', 'tx', 1)), true);
     assert.equal(
