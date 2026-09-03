@@ -28,6 +28,14 @@ import {
   type SelectableCoin,
 } from '../src/coinReservation.js';
 import { DEFAULT_SPEND_QUEUE_MAX } from '../src/config.js';
+import { TokenBucket } from '../src/limits.js';
+import {
+  assertNoDuplicateInputs,
+  createDustFeeSelector,
+  DuplicateInput,
+  inputKeysOf,
+  isTimeToDismiss,
+} from '../src/coinReservation.js';
 
 const NIGHT = '0'.repeat(64);
 const night = (intentHash: string, outputNo: number, value: bigint): SelectableCoin => ({
@@ -498,5 +506,117 @@ describe('the queue depth and the journal name for dust', () => {
 
   it("names a coin the dust wallet types as 'dust' DUST", () => {
     assert.equal(describeCoin({ type: 'dust', value: 5n, token: { nonce: 'ab' } }), 'DUST n:ab value 5');
+  });
+});
+
+describe('the SDK asking twice within one balance', () => {
+  const large = dust('f'.repeat(64), 1_063_482_701_844_916_860n);
+  const mid = dust('e'.repeat(64), 70_879_718_578_226_536n);
+
+  it('is handed two DISTINCT coins, or one coin and then none', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(dustFeeFirst);
+    const job = coins.open('the activation grant');
+    coins.beginBalance(job);
+    const first = select([large, mid], 'dust', -15_000_000_000_000_000n, {});
+    const second = select([large, mid], 'dust', -15_000_000_000_000_000n, {});
+    assert.equal(first, mid);
+    assert.equal(second, large, 'the second ask of the same balance is not answered with mid again');
+    assert.equal(select([large, mid], 'dust', -1n, {}), undefined, 'and a third ask, with both handed, gets none');
+    coins.endBalance();
+    /* The same job's NEXT balance may have its own coins again. */
+    coins.beginBalance(job);
+    assert.equal(select([large, mid], 'dust', -15_000_000_000_000_000n, {}), mid);
+    coins.endBalance();
+  });
+
+  it('a transaction that names one input twice is refused before proving, and that is rebuildable', () => {
+    const nullifier = 'ab'.repeat(32);
+    const recipe = {
+      type: 'UNBOUND_TRANSACTION',
+      baseTransaction: { intents: new Map([[1, { guaranteedUnshieldedOffer: { inputs: [{ intentHash: 'c'.repeat(64), outputNo: 0, value: 10n, type: NIGHT, owner: 'o' }] } }]]) },
+      balancingTransaction: {
+        intents: new Map([[2, { dustActions: { spends: [{ oldNullifier: nullifier }, { oldNullifier: nullifier }] } }]]),
+      },
+    };
+    assert.deepEqual(inputKeysOf(recipe), [`u:${'c'.repeat(64)}:0`, `d:${nullifier}`, `d:${nullifier}`]);
+    assert.throws(() => assertNoDuplicateInputs(recipe), (cause: unknown) => cause instanceof DuplicateInput && isCoinContention(cause));
+    assert.throws(
+      () => createCoinReservation({ log: () => undefined }).claimInputs(createCoinReservation({ log: () => undefined }).open('x'), [n1, n1]),
+      DuplicateInput,
+    );
+  });
+});
+
+describe('a job refused on its inputs', () => {
+  it('is not handed them again, keeps them from everyone else, and is told plainly when nothing else is free', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(nightPayloadFirst);
+    const grant = coins.open('grant');
+    coins.beginBalance(grant);
+    assert.equal(select([n1, n2], NIGHT, -2_000n, {}), n1);
+    coins.endBalance();
+    grant.refused();
+    assert.equal(grant.avoiding(), 1);
+    coins.beginBalance(grant);
+    assert.equal(select([n1, n2], NIGHT, -2_000n, {}), n2, 'a different shape');
+    coins.endBalance();
+    grant.refused();
+    coins.beginBalance(grant);
+    assert.equal(select([n1, n2], NIGHT, -2_000n, {}), undefined, 'nothing else: the balance fails and the job says so');
+    coins.endBalance();
+    const other = coins.open('registration');
+    coins.beginBalance(other);
+    assert.equal(select([n1, n2, n3], NIGHT, 1n, {}), n3, 'the refused coins are still held from others');
+    coins.endBalance();
+    grant.release();
+    assert.equal(grant.avoiding(), 0);
+    assert.deepEqual(coins.excluded(), [coinKey(n3)]);
+  });
+});
+
+describe('padding a fee leg for size', () => {
+  const crumbs = Array.from({ length: 5 }, (_, i) => dust(String(i).padStart(64, '0'), 3_968_160_000n + BigInt(i)));
+  const large = dust('f'.repeat(64), 1_063_482_701_844_916_860n);
+
+  it('answers the first `padding` asks with the smallest crumbs, then the covering coin', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(createDustFeeSelector(coins));
+    const job = coins.open('grant');
+    coins.setDustPadding(2);
+    coins.beginBalance(job);
+    const inputs = balanceLike(select, [large, ...crumbs], 15_000_000_000_000_000n);
+    coins.endBalance();
+    assert.deepEqual(inputs, [crumbs[0], crumbs[1], large]);
+  });
+
+  it('with no padding is the one-coin selector', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(createDustFeeSelector(coins));
+    coins.beginBalance(coins.open('grant'));
+    assert.deepEqual(balanceLike(select, [large, ...crumbs], 15_000_000_000_000_000n), [large]);
+    coins.endBalance();
+  });
+
+  it("recognises the ledger's refusal wherever it is wrapped", () => {
+    const ledgerMessage =
+      'exceeded the maximum time to dismiss for transaction size; this transaction would take 12s to dismiss, but given its size of 9000 bytes, it may take at most 9s';
+    assert.equal(isTimeToDismiss(new Error(ledgerMessage)), true);
+    assert.equal(isTimeToDismiss(new Error('outer', { cause: new Error(ledgerMessage) })), true);
+    assert.equal(isTimeToDismiss(new Error('insufficient funds')), false);
+  });
+});
+
+describe('a probe the client was told to repeat', () => {
+  it('gets its rate-limit token back', () => {
+    let now = 0;
+    const bucket = new TokenBucket({ ratePerMinute: 3, burst: 3, now: () => now });
+    assert.equal(bucket.take('c').allowed, true);
+    assert.equal(bucket.take('c').allowed, true);
+    assert.equal(bucket.take('c').allowed, true);
+    assert.equal(bucket.take('c').allowed, false, 'the fourth in the same instant is refused');
+    bucket.refund('c');
+    assert.equal(bucket.take('c').allowed, true, 'a refunded probe leaves room for the next');
+    bucket.refund('unknown');
   });
 });

@@ -100,10 +100,12 @@ import {
   type NodeConnection,
 } from './submission.js';
 import {
+  assertNoDuplicateInputs,
   coinKey,
   createCoinReservation,
+  createDustFeeSelector,
   describeCoin,
-  dustFeeFirst,
+  isTimeToDismiss,
   nightPayloadFirst,
   smallestOfType,
   unshieldedInputsOf,
@@ -1244,7 +1246,7 @@ export async function openBalancerWallet(
       cfg,
       new DustV1Builder()
         .withDefaults()
-        .withCoinSelection((() => coins.guard(dustFeeFirst)) as never) as never,
+        .withCoinSelection((() => coins.guard(createDustFeeSelector(coins))) as never) as never,
     );
   /* Held here rather than inside the submission service, so `nodeHeight` can
      ask the same connection the submissions use. */
@@ -1255,6 +1257,32 @@ export async function openBalancerWallet(
      interleave at their awaits are what handed u:2dd48b54…:17 to two grants at
      05:23:52 on 2026/09/03. The guard records hand-outs into the balance that
      is active, and there must be exactly one. */
+  /**
+   * The node's `231` — `FeeCalculation.OutsideTimeToDismiss` — asked of the
+   * ledger locally, before anything is proved: a transaction's processing time
+   * may not exceed a bound that grows with its byte size, and
+   * `fees(params, true)` throws the very same refusal. Proofs are erased for
+   * the check, which makes it STRICTER than the node's (fewer bytes, same
+   * compute): a recipe that passes here passes there. See
+   * `createDustFeeSelector` for what is done about a recipe that fails.
+   */
+  const assertWithinTimeToDismiss = (recipe: BalancingRecipe): void => {
+    const parts: Array<{ eraseProofs(): unknown }> = [];
+    if (recipe.type === 'UNBOUND_TRANSACTION') {
+      parts.push(recipe.baseTransaction as never);
+      if (recipe.balancingTransaction) parts.push(recipe.balancingTransaction as never);
+    } else if (recipe.type === 'UNPROVEN_TRANSACTION') {
+      parts.push(recipe.transaction as never);
+    } else {
+      parts.push(recipe.originalTransaction as never, recipe.balancingTransaction as never);
+    }
+    const erased = parts.map((part) => part.eraseProofs() as { merge(other: unknown): unknown; fees(p: unknown, e: boolean): bigint });
+    const merged = erased
+      .slice(1)
+      .reduce((acc, tx) => acc.merge(tx) as typeof acc, erased[0]!);
+    merged.fees(ledger.LedgerParameters.initialParameters(), true);
+  };
+
   let balanceLock: Promise<unknown> = Promise.resolve();
   const oneBalanceAtATime = <T>(work: () => Promise<T>): Promise<T> => {
     const run = balanceLock.then(work, work);
@@ -2018,8 +2046,10 @@ export async function openBalancerWallet(
               ticket = opened;
               releaseWithJob(() => opened.release());
             }
+            let padRounds = 0;
             const balanceOnce = async (): Promise<BalancingRecipe> => {
               const mine = ticket!;
+              coins.setDustPadding(padRounds * 2);
               /* Read before the balance, for the coins it CREATES: the DUST
                  successors the ledger writes at spend time, which the dust
                  wallet lists as available at once and which are not on chain
@@ -2062,9 +2092,11 @@ export async function openBalancerWallet(
               });
               /* Inputs the transaction carries that no selector handed out —
                  a transaction that arrived already balanced — are checked
-                 against every other job before this one may keep them. On a
-                 clash the recipe is reverted and the job rebuilds. */
+                 against every other job before this one may keep them, and
+                 no input may appear twice. On a clash the recipe is reverted
+                 and the job rebuilds. */
               try {
+                assertNoDuplicateInputs(result);
                 coins.claimInputs(mine, fromRecipe);
               } catch (cause) {
                 try {
@@ -2091,6 +2123,25 @@ export async function openBalancerWallet(
               } catch {
                 // A state that cannot be read leaves the created set empty; the consumed coins are held regardless.
               }
+              /* The node's fee rule, asked locally. A recipe the ledger would
+                 refuse as 231 is reverted here and balanced again with more
+                 bytes — crumb DUST inputs — rather than proved, submitted,
+                 and refused three times over. */
+              try {
+                assertWithinTimeToDismiss(result);
+              } catch (cause) {
+                if (!isTimeToDismiss(cause)) throw cause;
+                const message = cause instanceof Error ? cause.message : String(cause);
+                console.warn(
+                  `[fee] ${label}: the ledger would refuse this shape (${message.slice(0, 200)}) — reverting and balancing again with ${(padRounds + 1) * 2} crumb DUST inputs for size`,
+                );
+                try {
+                  await facade.revert(result);
+                } catch {
+                  // Best effort; the rebalance selects afresh.
+                }
+                throw cause;
+              }
               return result;
             };
             /* CONTENTION BEFORE POVERTY, for the balance as for the estimate:
@@ -2106,12 +2157,26 @@ export async function openBalancerWallet(
                 break;
               } catch (cause) {
                 const message = cause instanceof Error ? cause.message : String(cause);
+                if (isTimeToDismiss(cause)) {
+                  if (padRounds >= 4) {
+                    throw new Error(
+                      `this transaction is too small for its compute at every padding tried (the ledger says: ${message.slice(0, 160)})`,
+                    );
+                  }
+                  padRounds += 1;
+                  continue;
+                }
                 const excluded = coins.excluded();
                 if (
                   !/insufficient funds/i.test(message) ||
                   excluded.length === 0 ||
                   Date.now() - startedAt >= waitForReservedCoinMs
                 ) {
+                  if (/insufficient funds/i.test(message) && (ticket?.avoiding() ?? 0) > 0) {
+                    throw new Error(
+                      `the node refused this job's previous inputs and no other coin is free to build a different transaction (${ticket?.avoiding()} avoided) — giving up so the client is told plainly`,
+                    );
+                  }
                   throw cause;
                 }
                 progress('waiting for a reserved coin');
@@ -2247,7 +2312,10 @@ export async function openBalancerWallet(
               // Best effort — the original submission failure is the real news.
             }
             /* Refused at the RPC: never in a block. The coins stay held by
-               this job for its rebuild, and are released when the job ends. */
+               this job — nobody else may take them — but this job will not
+               be handed them again: its rebuild must be a different shape.
+               Released when the job ends. */
+            ticket?.refused();
             /* The node-rejection path, and the one the two wedges of
                2026/09/02 came down. When the revert lands within the SDK's
                six-second event window it works and this finds nothing; when it
