@@ -153,6 +153,17 @@ export interface RunningJob {
   /** The name of that step: `started`, `balanced`, `proved`, `submitted`, … */
   lastStep: string;
   /**
+   * Whether this job has handed a transaction to the node yet.
+   *
+   * Read by the confirmation wrapper to tell a CONFIRMATION from a LOOKUP.
+   * midnight-js's `findDeployedContract` reads an existing contract through the
+   * very same `watchForDeployTxData` that `deployContract` waits on after a
+   * submission, so the call alone cannot say which it is — and on 2026/09/03
+   * the journal carried `seen-on-chain` one line after `started`, before the
+   * job had built anything at all, four times in thirteen minutes.
+   */
+  submitted: boolean;
+  /**
    * Aborted by the watchdog. Everything a job waits on that CAN be unwound —
    * the submission wrapper, the confirmation deadlines — races against it, so
    * the abort is not merely bookkeeping.
@@ -188,6 +199,7 @@ export function progress(step: string, log?: (line: string) => void): void {
   if (!job) return;
   job.lastProgressAt = job.now();
   job.lastStep = step;
+  if (step === 'submitted') job.submitted = true;
   (log ?? ((line: string) => console.log(line)))(`[job] ${job.label} ${step} (${job.id})`);
 }
 
@@ -430,6 +442,7 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
             startedAt,
             lastProgressAt: startedAt,
             lastStep: 'started',
+            submitted: false,
             abort: new AbortController(),
             now,
           };

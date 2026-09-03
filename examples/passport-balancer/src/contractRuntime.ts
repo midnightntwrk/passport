@@ -652,16 +652,29 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
     return job ? `${job.label} (${job.id}): ` : '';
   };
 
+  /**
+   * `seen-on-chain` if this job has submitted something, `found …` if it has
+   * not. See the note on `step` below — the two are the same call.
+   */
+  const confirmationOrLookup =
+    (subject: string) =>
+    (): string =>
+      currentJob()?.submitted === true ? 'seen-on-chain' : `found ${subject} on chain`;
+
   const bound = async <T>(
     what: string,
     subject: string,
     call: (from: WatchingProvider) => Promise<T>,
     landed: () => Promise<IndexerAnswer>,
-    /* What reaching this wait means for the job. Reading a deployed contract's
-       state is a lookup that happens BEFORE anything is built, so reporting it
-       as `seen-on-chain` would put a step in the journal that reads like a
-       confirmation of a transaction this job has not made yet. */
-    step: string,
+    /* What reaching this wait means for the job, decided WHEN IT IS REACHED.
+       midnight-js uses the same two watches for two opposite things: reading a
+       contract that already exists, which happens before this job has built
+       anything, and waiting for the transaction this job just sent. Only the
+       second is `seen-on-chain`, and the difference between them is not visible
+       in the call — it is whether this job has submitted anything yet. Reported
+       as a confirmation regardless, the journal said `seen-on-chain` one line
+       after `started` four times on 2026/09/03. */
+    step: () => string,
   ): Promise<T> => {
     try {
       const result = await withDeadline(
@@ -669,7 +682,7 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
         options.confirmTimeoutMs,
         (waitedMs) => new ConfirmationTimeout(what, subject, waitedMs),
       );
-      progress(step);
+      progress(step());
       return result;
     } catch (cause) {
       if (!isConfirmationTimeout(cause)) throw cause;
@@ -709,7 +722,7 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
         options.confirmTimeoutMs,
         (waitedMs) => new ConfirmationTimeout(what, subject, waitedMs),
       );
-      progress(`${step} (direct query)`);
+      progress(`${step()} (direct query)`);
       return result;
     }
   };
@@ -725,7 +738,7 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
         txId,
         (from) => from.watchForTxData(txId),
         () => askDirectly('transaction', txId),
-        'seen-on-chain',
+        confirmationOrLookup('the transaction'),
       ),
     watchForDeployTxData: (address: string) =>
       bound(
@@ -733,7 +746,7 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
         address,
         (from) => from.watchForDeployTxData(address),
         () => askDirectly('contract', address),
-        'seen-on-chain',
+        confirmationOrLookup('the contract'),
       ),
     watchForContractState: (address: string) =>
       bound(
@@ -741,7 +754,7 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
         address,
         (from) => from.watchForContractState(address),
         () => askDirectly('contract', address),
-        'read the contract state',
+        () => 'read the contract state',
       ),
   });
   return wrapper;

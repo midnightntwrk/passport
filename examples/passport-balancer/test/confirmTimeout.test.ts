@@ -25,6 +25,7 @@ import {
   boundedPublicDataProvider,
   isConfirmationTimeout,
 } from '../src/contractRuntime.js';
+import { createWalletReservation, progress } from '../src/reservation.js';
 
 /** A public data provider whose three watches this test drives. */
 function stubProvider(watch: (what: string, subject: string) => Promise<unknown>) {
@@ -264,5 +265,68 @@ describe('an indexer that cannot be reached', () => {
 
     await assert.rejects(bounded.watchForTxData('tx-absent'), isConfirmationTimeout);
     assert.equal(asked, 1, 'a definite answer is taken at once, not retried');
+  });
+});
+
+/**
+ * `seen-on-chain` is a confirmation, and must never be printed for a lookup.
+ *
+ * midnight-js `findDeployedContract` reads an existing contract through the
+ * very same `watchForDeployTxData` that `deployContract` waits on after it
+ * submits. Reported as a confirmation either way, the journal of 2026/09/03
+ * carried `the spare mUSD mint seen-on-chain (job-13)` one line after
+ * `started` — before the job had built anything at all — four times in
+ * thirteen minutes.
+ */
+describe('a confirmation and a lookup are not the same step', () => {
+  const passthrough = () =>
+    boundedPublicDataProvider(stubProvider(async (what, subject) => `${what}:${subject}`), {
+      confirmTimeoutMs: 1_000,
+      fresh: async () => stubProvider(async () => 'unused'),
+      indexerHttpUrl: 'http://indexer.invalid/graphql',
+      landed: async () => ({ found: true, reachable: true }),
+      log: () => undefined,
+    });
+
+  /** `progress` writes to the journal with `console.log`; this is the journal. */
+  const journalOf = async (task: () => Promise<void>, label: string): Promise<string[]> => {
+    const lines: string[] = [];
+    const original = console.log;
+    console.log = (...parts: unknown[]) => lines.push(parts.map(String).join(' '));
+    const queue = createWalletReservation({ log: (line) => lines.push(line) });
+    try {
+      await queue.exclusive(task, { label });
+    } finally {
+      console.log = original;
+      queue.stop();
+    }
+    return lines;
+  };
+
+  it('calls a pre-submission read a lookup', async () => {
+    const lines = await journalOf(async () => {
+      await passthrough().watchForDeployTxData('0200aa');
+    }, 'the spare mUSD mint');
+
+    assert.ok(
+      lines.some((line) => /found the contract on chain/.test(line)),
+      lines.join('\n'),
+    );
+    assert.ok(
+      !lines.some((line) => /seen-on-chain/.test(line)),
+      'nothing had been submitted, so nothing can have been seen',
+    );
+  });
+
+  it('calls the same read a confirmation once the job has submitted', async () => {
+    const lines = await journalOf(async () => {
+      progress('submitted');
+      await passthrough().watchForDeployTxData('0200aa');
+    }, 'a resolver leaf for the shelf');
+
+    assert.ok(
+      lines.some((line) => /seen-on-chain/.test(line)),
+      lines.join('\n'),
+    );
   });
 });

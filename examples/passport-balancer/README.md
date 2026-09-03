@@ -889,9 +889,16 @@ Four things close it, and the fourth is the one that matters most:
    was already in block 293270; that is the answer this rules out.
 
 Every step of a spend job is now one journal line — `queued`, `started`,
-`proving`, `proved`, `balanced`, `fee leg proved`, `waiting to submit`,
-`submitting`, `submitted`, `seen-on-chain`, `confirmed`, then
+`proving`, `proved`, `balancing`, `balanced`, `fee leg proved`, `waiting to
+submit`, `submitting`, `submitted`, `seen-on-chain`, `confirmed`, then
 `done`/`failed`/`aborted` — prefixed `[job]` and naming the job's label and id.
+
+`seen-on-chain` is a **confirmation** and is printed only after this job has
+submitted something. midnight-js reads an existing contract through the very
+same `watchForDeployTxData` that a deploy waits on, so a job that is merely
+looking one up says `found the contract on chain` instead. Without that
+distinction the journal of 2026/09/03 carried `seen-on-chain` one line after
+`started`, before the job had built anything at all.
 
 The steps that look like padding are the ones that earn their place. A job
 waiting its turn to submit, and a job waiting to rebuild after a node refusal,
