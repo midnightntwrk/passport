@@ -97,6 +97,17 @@ export interface SerialisedSubmissionOptions<TTransaction> {
   signal?: () => AbortSignal | undefined;
   /** One line per submission, for the journal. */
   log?: (line: string) => void;
+  /**
+   * Reports a step of the running spend job — `reservation.progress`.
+   *
+   * Not decoration. Submissions are serialised, so a job whose turn has not
+   * come yet is genuinely doing nothing and saying nothing, and with three
+   * lanes it can wait two full ceilings before it starts. Without a step
+   * reported here that silence is indistinguishable from the wedge the stall
+   * watchdog exists to catch, and the watchdog would eventually abort a job
+   * that was merely queued.
+   */
+  onStep?: (step: string) => void;
 }
 
 /**
@@ -129,6 +140,7 @@ export function serialiseSubmissions<TTransaction>(
   let tail: Promise<unknown> = Promise.resolve();
 
   const bounded = async (transaction: TTransaction): Promise<unknown> => {
+    options.onStep?.('submitting');
     const startedAt = Date.now();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let onAbort: (() => void) | null = null;
@@ -164,6 +176,9 @@ export function serialiseSubmissions<TTransaction>(
     async submitTransaction(transaction: TTransaction): Promise<unknown> {
       /* Chained on the tail rather than guarded by a flag, so submissions run
          in arrival order and a rejected predecessor never poisons the chain. */
+      /* Announced before the wait, not after it: this is the step that explains
+         a job which is about to go quiet for somebody else's ceiling. */
+      options.onStep?.('waiting to submit');
       const mine = tail.then(
         () => bounded(transaction),
         () => bounded(transaction),

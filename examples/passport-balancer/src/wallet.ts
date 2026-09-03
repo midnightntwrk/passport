@@ -1175,6 +1175,9 @@ export async function openBalancerWallet(
           /* The running job's watchdog, so an abort actually unwinds the wait
              rather than merely rejecting the caller above it. */
           signal: () => currentJob()?.abort.signal,
+          /* So a job waiting its turn to submit is visibly waiting rather than
+             silent — see `onStep` in `./submission.ts`. */
+          onStep: (step) => progress(step),
         }) as never,
       provingService: () => provingService,
       shielded: (cfg) =>
