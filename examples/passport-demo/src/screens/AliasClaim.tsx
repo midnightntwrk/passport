@@ -2,6 +2,7 @@ import {
   ArrowRight,
   Check,
   CircleSlash,
+  Gamepad2,
   Home,
   Loader2,
   RotateCcw,
@@ -33,8 +34,10 @@ import {
   type ClaimStep,
   type FeeWait,
 } from '../lib/claimSteps.js'
+import { OFFER_AFTER_MS } from '../lib/waitingGame.js'
 import { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
 import { PasskeyWayOutActions } from './PasskeyWayOut.js'
+import WaitingGame from './WaitingGame.js'
 import ThemeToggle from './ThemeToggle.js'
 import './identity.css'
 
@@ -377,6 +380,49 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
   }, [activeStepId])
 
   /* ---------------------------------------------------------------- */
+  /* THE OFFER OF SOMETHING TO DO (2026/09/03)                          */
+  /*                                                                    */
+  /* "An embedded game while you're waiting, like the Chrome dinosaur." */
+  /* The stepper is what makes a two-minute wait legible; this is for   */
+  /* the two minutes themselves.                                        */
+  /*                                                                    */
+  /* It is OFFERED, never started: a control appears once the claim has */
+  /* been running for {@link OFFER_AFTER_MS}, and nothing is on screen  */
+  /* until it is pressed. Most claims never reach that mark, and an     */
+  /* offer of a distraction from a wait that is about to end is itself  */
+  /* the distraction.                                                   */
+  /*                                                                    */
+  /* Three rules keep it subordinate to the claim, and they are the     */
+  /* whole of what this state is for. It sits BENEATH the stepper in    */
+  /* normal flow, so it covers nothing. It is taken off screen — and    */
+  /* the loop stopped — the moment the passkey step is the running one, */
+  /* because that is the one moment the claim needs the reader's hand,  */
+  /* and it comes back afterwards where it left off rather than         */
+  /* starting again. And it can be shut, for the rest of this claim.    */
+  /* ---------------------------------------------------------------- */
+  const [waitedMs, setWaitedMs] = useState(0)
+  const [gameOpen, setGameOpen] = useState(false)
+  const [gameDismissed, setGameDismissed] = useState(false)
+
+  useEffect(() => {
+    if (!busy) {
+      // The claim ended, one way or the other. The next one is offered afresh.
+      setWaitedMs(0)
+      setGameOpen(false)
+      setGameDismissed(false)
+      return undefined
+    }
+    const startedAt = Date.now()
+    const timer = window.setInterval(() => setWaitedMs(Date.now() - startedAt), 1_000)
+    return () => window.clearInterval(timer)
+  }, [busy])
+
+  /* The passkey prompt is a browser dialogue over this screen, and the game
+     goes away for it rather than competing with it. */
+  const passkeyPromptUp = claimPhase === 'confirm-passkey'
+  const offerGame = busy && waitedMs >= OFFER_AFTER_MS && !gameDismissed
+
+  /* ---------------------------------------------------------------- */
   /* THE SPONSOR WAIT (2026/09/02)                                      */
   /*                                                                    */
   /* The fee gate no longer refuses a claim because the sponsor said    */
@@ -622,6 +668,28 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
               })}
             </ol>
           </div>
+        ) : null}
+
+        {/* Beneath the stepper, never over it — see the block above. */}
+        {steps !== null && offerGame ? (
+          gameOpen ? (
+            <WaitingGame
+              paused={passkeyPromptUp}
+              onDismiss={() => {
+                setGameOpen(false)
+                setGameDismissed(true)
+              }}
+            />
+          ) : passkeyPromptUp ? null : (
+            <button
+              type="button"
+              className="mngame-offer"
+              onClick={() => setGameOpen(true)}
+            >
+              <Gamepad2 size={14} aria-hidden="true" />
+              Play while you wait
+            </button>
+          )
         ) : null}
 
         {/* The promise, until it is being kept. "Press claim" is advice about a

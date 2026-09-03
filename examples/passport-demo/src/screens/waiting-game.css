@@ -1,0 +1,86 @@
+@import './tokens.css';
+
+/* The waiting game — prefix "mngame-".
+
+   Deliberately dark in BOTH themes. It is a game panel sitting under a claim's
+   progress, not a surface the app's content is read on, and the one accent in
+   it is Infared on the runner. It is also, deliberately, small and quiet: it
+   sits beneath the stepper in normal flow and must never look like the thing
+   the screen is about. */
+
+.mngame {
+  margin: 12px 0 0;
+  padding: 10px 12px 8px;
+  border: var(--mn-hairline) solid #23262c;
+  border-radius: var(--mn-radius-md);
+  background: #0a0b0d;
+}
+
+.mngame-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+
+.mngame-title {
+  color: rgba(247, 249, 252, .68);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.mngame-close {
+  margin-left: auto;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: rgba(247, 249, 252, .6);
+  background: transparent;
+  cursor: pointer;
+}
+.mngame-close:hover { color: #f7f9fc; background: rgba(247, 249, 252, .09); }
+
+.mngame-canvas {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: 108px;
+  margin: 0 auto;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+.mngame-prompt {
+  margin: 4px 0 0;
+  color: rgba(247, 249, 252, .5);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* The offer. A quiet, full-width control under the stepper: it must read as
+   something available, never as the next thing to press in a claim. */
+.mngame-offer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border: var(--mn-hairline) dashed var(--mn-border-medium);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-muted);
+  background: transparent;
+  font-family: var(--mn-font-body);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+.mngame-offer:hover { color: var(--mn-text-primary); border-color: var(--mn-border-strong); }

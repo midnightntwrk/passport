@@ -154,6 +154,27 @@
  * drilled directly in `src/lib/claimFailure.test.ts`. The two buttons the
  * screen paints from its answer stay out with the rest of the `.tsx`.
  *
+ * `src/lib/waitingGame.ts` went IN on 2026/09/03, the day it was written, and
+ * it is in the denominator for a reason that has nothing to do with the game:
+ * it is the module that promises a diversion offered beside a claim can never
+ * become a reason the claim goes wrong. The screen pauses the game by taking
+ * its state out of `running`, and the guarantee it leans on is that a tick on
+ * a state which is not running returns that same state, unadvanced — so "stop
+ * the instant the passkey prompt appears" is one call rather than a race with
+ * a frame loop. That property, and the frame clamp beside it, are the two
+ * drills that matter: a backgrounded tab hands the loop a gap of seconds on
+ * return, and a runner integrated through it lands on the far side of an
+ * obstacle it never touched.
+ *
+ * The rest of it is in the denominator because it can be: it holds no canvas,
+ * no `requestAnimationFrame`, no clock, no `Math.random`, and no keyboard. The
+ * elapsed milliseconds are handed in and the obstacle sizes come from a seeded
+ * generator carried in the state, so a run replays exactly and the collision
+ * rule is drilled rather than eyeballed, on a hand-wound clock in
+ * `src/lib/waitingGame.test.ts`. Its other half — a canvas, a frame loop, and
+ * two listeners, holding no rules at all — is `src/screens/WaitingGame.tsx`,
+ * out with the rest of the `.tsx`.
+ *
  * `src/lib/companionLink.ts` went IN on 2026/09/03, the day it was written. It
  * is four lines of rule behind a link out to a Telegram chat, and it is in the
  * denominator because it is the only part of that control anybody can get
@@ -457,6 +478,7 @@ export default mergeConfig(
           'src/lib/shieldedNote.ts',
           'src/lib/sponsor.ts',
           'src/lib/walletProver.ts',
+          'src/lib/waitingGame.ts',
           'src/lib/zkArtefactCache.ts',
           'src/identity/backup.ts',
           'src/identity/claimWarmup.ts',
