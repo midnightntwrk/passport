@@ -319,7 +319,14 @@ export const DEFAULT_SPEND_BURST = 3;
  * eight is comfortably more than the demo's own concurrency while being a number
  * a flood reaches immediately.
  */
-export const DEFAULT_SPEND_QUEUE_MAX = 8;
+/**
+ * Thirty-two, not eight. Measured on 2026/09/03: the fifth sign-up inside a
+ * minute was answered `429 queue-full` with four requests in flight, and the
+ * client told its user the claim was "queued and will register on its own"
+ * with nothing behind it. Five people clicking in a minute is the demo, not an
+ * attack; the per-client limits are what bound one caller.
+ */
+export const DEFAULT_SPEND_QUEUE_MAX = 32;
 
 /**
  * How many spend jobs may run at once, before the free-coin limit is applied.
