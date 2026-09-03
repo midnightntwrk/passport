@@ -46,6 +46,7 @@ import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js
    see `lib/qrPayload.ts` for why both directions live in one place. */
 import { encodeReceivePayload } from '../lib/qrPayload.js'
 import { FeaturedApps, type AppsScreenProps, type FeaturedAppsProps } from './Apps.js'
+import CompanionLink from './Companion.js'
 import { EcosystemIdentity } from './Ecosystem.js'
 /* "Install Passport", in the bar where a person looks for it. Renders nothing
    at all when Passport is already installed, or in a browser that cannot
@@ -645,6 +646,11 @@ export default function HomeScreen(props: HomeScreenProps) {
           {/* Standard 34px size, matching the icon buttons beside it. */}
           <ThemeToggle />
           <InstallPassport />
+          {/* The Companion, as the same 34px circle as its neighbours. It is
+              a link out and nothing else — see `Companion.tsx`. The full
+              control lives on the Apps tab; this is the shortcut for somebody
+              already on Home. */}
+          <CompanionLink variant="icon" />
           <button
             type="button"
             className="mnhome-icon-button"

@@ -154,6 +154,20 @@
  * drilled directly in `src/lib/claimFailure.test.ts`. The two buttons the
  * screen paints from its answer stay out with the rest of the `.tsx`.
  *
+ * `src/lib/companionLink.ts` went IN on 2026/09/03, the day it was written. It
+ * is four lines of rule behind a link out to a Telegram chat, and it is in the
+ * denominator because it is the only part of that control anybody can get
+ * wrong. Passport does not talk to the Companion, holds nothing for it, and
+ * learns nothing back — the whole of the interaction is an address opened in a
+ * new tab — so the address IS the feature. Both ways of getting it wrong put a
+ * reader somewhere nobody chose: ignoring a `VITE_COMPANION_URL` an operator
+ * deliberately set, or forwarding a half-configured one — blank, unparseable,
+ * or on a scheme no browser should follow from a link this app renders. It
+ * reads a plain value rather than `import.meta.env`, so every case is drilled
+ * directly in `src/lib/companionLink.test.ts`. The two shapes the control is
+ * painted in, `src/screens/Companion.tsx`, stay out with the rest of the
+ * `.tsx`.
+ *
  * `src/lib/endpoints.ts` went IN on 2026/08/31, the day it was written, and it
  * belongs in the denominator because it is the rule that decides WHERE a
  * transaction gets proved and who pays for it. Until that day proving, fee
@@ -427,6 +441,7 @@ export default mergeConfig(
           'src/lib/balanceWatch.ts',
           'src/lib/claimFailure.ts',
           'src/lib/claimSteps.ts',
+          'src/lib/companionLink.ts',
           'src/lib/colour.ts',
           'src/lib/endpoints.ts',
           'src/lib/feeReadinessPoll.ts',

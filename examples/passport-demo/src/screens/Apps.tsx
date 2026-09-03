@@ -8,6 +8,7 @@ import {
   type RegistryCategory,
 } from '../lib/registry.js'
 import RaffleArt from './RaffleArt.js'
+import CompanionLink from './Companion.js'
 import AppBrowser, { AppIcon, type AppBrowserProps } from './AppBrowser.js'
 import { type PassportNetwork } from './NetworkSwitcher.js'
 import ThemeToggle from './ThemeToggle.js'
@@ -309,6 +310,12 @@ export default function AppsScreen(props: AppsScreenProps) {
             device until you approve it.
           </p>
         </header>
+
+        {/* The Companion sits above the search box rather than in the grid: it
+            is not an app Passport frames and opens, it is a chat somewhere
+            else, and a card in the list would promise the same handshake every
+            other card on this screen makes. See `Companion.tsx`. */}
+        <CompanionLink />
 
         <div className="mnapps-search">
           <Search size={16} strokeWidth={2} aria-hidden="true" />
