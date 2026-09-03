@@ -12,7 +12,8 @@
  * is the node submission, not the indexer watch:
  *
  *   1. `makeDefaultSubmissionServiceEffect` builds ONE `PolkadotNodeClient`,
- *      and therefore one polkadot-js `ApiPromise`, for the whole facade.
+ *      and therefore one polkadot-js `ApiPromise` and one `WsProvider`, for the
+ *      whole facade.
  *   2. `PolkadotNodeClient.sendMidnightTransaction` ends EVERY submission
  *      stream with `Stream.ensuring(api.disconnect())`. So the end of any one
  *      submission closes the socket every other submission is watching on.
@@ -24,20 +25,40 @@
  *      the `Stream.async` never ends, and `reconnectionTimeout` is
  *      `Duration.infinity`.
  *
- * Both hangs have the same shape and the shape is the giveaway: a resolver-leaf
- * deploy waiting for `'Finalized'` while the same user's `deposit_night` was
- * refused by the node (`1010: Invalid Transaction: Custom error: 231`) on the
- * shared connection. The lanes change of 2026/09/02 is what made two balancer
- * submissions overlap for the first time.
+ * WHY SERIALISING WAS NOT ENOUGH, WHICH IS THE 2026/09/03 CORRECTION
+ * -----------------------------------------------------------------
+ * The first fix here was a mutex: one submission at a time, so two watches on
+ * the shared connection could not coexist. The live run of 02:28 UTC on
+ * 2026/09/03 shows why that is insufficient, and the journal names the
+ * mechanism outright. `job-8` was refused (`1010: Invalid Transaction: Custom
+ * error: 231`), its stream ended, and its `ensuring` ran `api.disconnect()`.
+ * `WsProvider.disconnect()` calls `websocket.close(1000)` and RESOLVES
+ * IMMEDIATELY — it does not wait for the socket's close event. So the mutex was
+ * handed on, `job-16` reconnected the SAME provider and registered its own
+ * handler, and only THEN did the old socket's close event reach
+ * `#onSocketClose`, which walks the provider-wide handler map and errors
+ * everything in it. `job-16` died on somebody else's disconnect with
+ * `disconnected from wss://rpc.stagenet.shielded.tools/: 1000:: Normal Closure`
+ * after 39.7 s, and the user saw a refused registration.
  *
- * WHAT THIS WRAPPER DOES ABOUT IT, IN TWO PARTS
- * ---------------------------------------------
- *   1. **One submission at a time.** Not a throttle on the service — the spend
- *      queue's lanes are still three — but a mutex around the seconds a
- *      submission actually occupies the shared connection. Two in-flight
- *      watches on one `ApiPromise` cannot be made safe from out here, so they
- *      are never allowed to coexist.
- *   2. **A hard ceiling.** `submitTimeoutMs`, after which the wait is abandoned
+ * Ordering cannot fix that, because the damage is done by an event that arrives
+ * after the submission which caused it has already finished. The only property
+ * that does fix it is isolation.
+ *
+ * WHAT THIS WRAPPER DOES ABOUT IT
+ * -------------------------------
+ *   1. **One connection per submission.** Every submission gets its own
+ *      `PolkadotNodeClient`, and therefore its own `ApiPromise`, `WsProvider`,
+ *      and handler map. `ensuring(api.disconnect())` and the close event that
+ *      follows it can then only ever reach handlers belonging to the submission
+ *      that is already over. Nothing shared, nothing to lose. The connection is
+ *      opened BEFORE the queue is joined, so the second or so it costs overlaps
+ *      the wait rather than adding to it.
+ *   2. **One submission at a time.** Kept, though isolation no longer requires
+ *      it: at `'Submitted'` the window is under a second, it costs the queue
+ *      almost nothing, and it keeps the node from seeing several of this
+ *      wallet's transactions built against one view of its coins at once.
+ *   3. **A hard ceiling.** `submitTimeoutMs`, after which the wait is abandoned
  *      with a typed {@link SubmissionTimeout} and the caller decides whether the
  *      transaction landed anyway. Nothing underneath this bounds anything.
  *
@@ -111,35 +132,32 @@ export interface SerialisedSubmissionOptions<TTransaction> {
 }
 
 /**
- * Wraps any submission service so that submissions are serialised and bounded.
+ * Wraps a submission-service FACTORY so that each submission gets its own
+ * connection, submissions do not overlap, and none of them waits for ever.
  *
- * The mutex is held across the whole bounded call, so on the healthy path — the
- * only path that matters for the defect — two `author_submitAndWatchExtrinsic`
- * subscriptions never coexist and no submission can kill another's watch.
+ * The factory, rather than one service, is the whole point: `open()` is called
+ * once per submission and the service it returns is closed as soon as that
+ * submission settles. See the header for the close event that made a shared
+ * connection unusable no matter how carefully submissions were ordered.
  *
- * ONE CASE THIS CANNOT MAKE CLEAN, stated plainly rather than papered over.
- * When a submission times out, its underlying promise is abandoned, not
- * cancelled — nothing in the SDK offers cancellation — so the next submission
- * does start while the abandoned one is, as far as the shared `ApiPromise` is
- * concerned, still an open subscription. Holding the mutex until it settled
- * would be the tidier invariant and the wrong trade: it would turn one
- * unanswerable submission into a permanently blocked queue, which is precisely
- * the wedge of 2026/09/02. A submission that has gone `timeoutMs` without a
- * status is in practice one whose subscription is already dead — that is why it
- * timed out — and the caller resolves the ambiguity properly by asking the
- * indexer whether the transaction landed.
- *
- * So the worst case is a wait of `timeoutMs` per queued submission, and never
- * an unbounded one.
+ * A timed-out submission is abandoned rather than cancelled — nothing in the
+ * SDK offers cancellation — but closing its own service disconnects its own
+ * socket, so the subscription it left behind dies with it and touches nothing
+ * else. That is the difference isolation makes: an abandoned submission is now
+ * this service's problem alone for as long as it takes the caller to ask the
+ * indexer whether the transaction landed, and never the next job's.
  */
 export function serialiseSubmissions<TTransaction>(
-  inner: SubmissionLike<TTransaction>,
+  open: () => SubmissionLike<TTransaction>,
   options: SerialisedSubmissionOptions<TTransaction>,
 ): SubmissionLike<TTransaction> {
   const waitForStatus = options.waitForStatus ?? 'Submitted';
   let tail: Promise<unknown> = Promise.resolve();
 
-  const bounded = async (transaction: TTransaction): Promise<unknown> => {
+  const bounded = async (
+    client: SubmissionLike<TTransaction>,
+    transaction: TTransaction,
+  ): Promise<unknown> => {
     options.onStep?.('submitting');
     const startedAt = Date.now();
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -160,7 +178,7 @@ export function serialiseSubmissions<TTransaction>(
            cancel it — it is merely stopped being waited on. Its eventual
            rejection is swallowed here rather than left to crash the process as
            an unhandled rejection. */
-        void inner.submitTransaction(transaction, waitForStatus).then(settle, fail);
+        void client.submitTransaction(transaction, waitForStatus).then(settle, fail);
       });
     } finally {
       if (timer) clearTimeout(timer);
@@ -174,24 +192,37 @@ export function serialiseSubmissions<TTransaction>(
 
   return {
     async submitTransaction(transaction: TTransaction): Promise<unknown> {
-      /* Chained on the tail rather than guarded by a flag, so submissions run
-         in arrival order and a rejected predecessor never poisons the chain. */
-      /* Announced before the wait, not after it: this is the step that explains
-         a job which is about to go quiet for somebody else's ceiling. */
-      options.onStep?.('waiting to submit');
-      const mine = tail.then(
-        () => bounded(transaction),
-        () => bounded(transaction),
-      );
-      tail = mine.then(
-        () => undefined,
-        () => undefined,
-      );
-      const result = await mine;
-      options.log?.('[job] the node acknowledged this transaction');
-      return result;
+      /* Opened BEFORE the queue is joined. The SDK starts connecting the moment
+         the service is built, so the connection this submission will use warms
+         while it waits for its turn instead of after it. */
+      const client = open();
+      try {
+        /* Chained on the tail rather than guarded by a flag, so submissions run
+           in arrival order and a rejected predecessor never poisons the chain. */
+        /* Announced before the wait, not after it: this is the step that explains
+           a job which is about to go quiet for somebody else's ceiling. */
+        options.onStep?.('waiting to submit');
+        const mine = tail.then(
+          () => bounded(client, transaction),
+          () => bounded(client, transaction),
+        );
+        tail = mine.then(
+          () => undefined,
+          () => undefined,
+        );
+        const result = await mine;
+        options.log?.('[job] the node acknowledged this transaction');
+        return result;
+      } finally {
+        /* Closed on every path, including the one where the submission was
+           abandoned on a timeout: this socket belongs to this submission and to
+           nothing else, so closing it can only end what is already over. */
+        void client.close().catch(() => undefined);
+      }
     },
-    close: () => inner.close(),
+    /* Nothing is held between submissions, so there is nothing left to close.
+       The facade calls this from `stop()`. */
+    close: async () => undefined,
   };
 }
 
@@ -207,7 +238,7 @@ export function serialisedSubmissionService<TTransaction>(
   options: SerialisedSubmissionOptions<TTransaction>,
 ): SubmissionLike<TTransaction> {
   return serialiseSubmissions(
-    makeDefaultSubmissionService(config) as unknown as SubmissionLike<TTransaction>,
+    () => makeDefaultSubmissionService(config) as unknown as SubmissionLike<TTransaction>,
     options,
   );
 }

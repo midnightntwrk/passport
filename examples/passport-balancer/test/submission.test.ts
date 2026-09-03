@@ -1,5 +1,5 @@
 /**
- * The wait that never returned, and the two properties that end it.
+ * The wait that never returned, and the properties that end it.
  *
  * THE FAILURE THIS PINS DOWN. On 2026/09/02 two spend jobs went silent holding
  * a lane — 23:03:31 and 23:46:30 UTC — with the proof server idle and not one
@@ -17,15 +17,24 @@
  * `author_submitAndWatchExtrinsic` that is open when ANOTHER submission
  * finishes — the second job's `deposit_night`, refused by the node with
  * `1010: Invalid Transaction: Custom error: 231`, at 23:03:14 and 23:45:47 — is
- * dropped in silence. No status callback ever arrives, the `Stream.async` never
- * ends, and `reconnectionTimeout` is `Duration.infinity`.
+ * dropped in silence.
  *
- * Two properties close it, and they are what this file asserts: submissions
- * never overlap, so a second one cannot kill a first one's watch; and no
- * submission waits for ever, so even an overlap this service did not cause
- * ends in a typed failure a caller can act on rather than in a held lane.
+ * AND THE FAILURE THAT ORDERING ALONE DID NOT FIX, 2026/09/03 at 02:28 UTC.
+ * With submissions serialised, `job-16`'s registration still died — on the
+ * disconnect belonging to `job-8`, which had finished. `WsProvider.disconnect()`
+ * calls `websocket.close(1000)` and resolves without waiting for the close
+ * event, so the event landed after the next submission had reconnected the same
+ * provider and registered its handler, and `#onSocketClose` errored the whole
+ * provider-wide handler map: `disconnected from
+ * wss://rpc.stagenet.shielded.tools/: 1000:: Normal Closure`, 39.7 s in, and a
+ * refused registration for the user.
  *
- * The third assertion is the one that keeps the fix honest: a node REFUSAL must
+ * So the property this file asserts first is ISOLATION: one connection per
+ * submission, closed with it, because no ordering can protect a submission from
+ * an event that arrives after the submission which caused it is over. Then that
+ * submissions do not overlap, and that none of them waits for ever.
+ *
+ * The last assertions are the ones that keep the fix honest: a node REFUSAL must
  * still travel out unchanged, because `isNodeRejection` matches on its message
  * and `withNodeRejectionRetry` is what turns a refusal into a rebuild.
  */
@@ -35,36 +44,100 @@ import { describe, it } from 'node:test';
 import { isNodeRejection } from '../src/account.js';
 import { isSubmissionTimeout, serialiseSubmissions, SubmissionTimeout } from '../src/submission.js';
 
-/** A submission service under this test's control. */
-function fakeService(
-  behaviour: (transaction: string, waitFor: unknown) => Promise<unknown>,
-): {
-  service: { submitTransaction(tx: string, waitFor?: unknown): Promise<unknown>; close(): Promise<void> };
-  calls: Array<{ transaction: string; waitFor: unknown; at: number }>;
-  closed: () => boolean;
+interface FakeClient {
+  submitTransaction(tx: string, waitFor?: unknown): Promise<unknown>;
+  close(): Promise<void>;
+  closed: boolean;
+}
+
+/** A submission-service factory under this test's control. */
+function fakeClients(behaviour: (transaction: string, waitFor: unknown) => Promise<unknown>): {
+  open: () => FakeClient;
+  opened: FakeClient[];
+  calls: Array<{ transaction: string; waitFor: unknown; client: number; at: number }>;
 } {
-  const calls: Array<{ transaction: string; waitFor: unknown; at: number }> = [];
-  let wasClosed = false;
+  const calls: Array<{ transaction: string; waitFor: unknown; client: number; at: number }> = [];
+  const opened: FakeClient[] = [];
   return {
     calls,
-    closed: () => wasClosed,
-    service: {
-      submitTransaction(transaction: string, waitFor?: unknown) {
-        calls.push({ transaction, waitFor, at: Date.now() });
-        return behaviour(transaction, waitFor);
-      },
-      close: async () => {
-        wasClosed = true;
-      },
+    opened,
+    open: (): FakeClient => {
+      const index = opened.length;
+      const client: FakeClient = {
+        closed: false,
+        submitTransaction(transaction: string, waitFor?: unknown) {
+          calls.push({ transaction, waitFor, client: index, at: Date.now() });
+          return behaviour(transaction, waitFor);
+        },
+        close: async () => {
+          client.closed = true;
+        },
+      };
+      opened.push(client);
+      return client;
     },
   };
 }
 
+describe('one connection per submission', () => {
+  it('opens its own service for each submission and closes it again', async () => {
+    /* The 02:28 failure in one assertion. A submission that shares a provider
+       with another can be killed by the other one's close event no matter how
+       carefully the two were ordered, so no two submissions may share one. */
+    const { open, opened, calls } = fakeClients(async () => 'ok');
+    const wrapped = serialiseSubmissions(open, { timeoutMs: 1_000 });
+
+    await wrapped.submitTransaction('one');
+    await wrapped.submitTransaction('two');
+
+    assert.equal(opened.length, 2, 'a connection each, never a shared one');
+    assert.deepEqual(
+      calls.map((call) => call.client),
+      [0, 1],
+      'and each submission went to its own',
+    );
+    assert.ok(
+      opened.every((client) => client.closed),
+      'both closed once their submission was over',
+    );
+  });
+
+  it('opens the connection before joining the queue, so the wait warms it', async () => {
+    /* The SDK starts connecting the moment the service is built. Opening after
+       the mutex would put a second of connect on top of every queued
+       submission instead of inside the wait it already has. */
+    const { open, opened } = fakeClients(
+      (transaction) => (transaction === 'first' ? new Promise(() => undefined) : Promise.resolve('ok')),
+    );
+    const wrapped = serialiseSubmissions(open, { timeoutMs: 200 });
+
+    const first = wrapped.submitTransaction('first').catch(() => undefined);
+    const second = wrapped.submitTransaction('second').catch(() => undefined);
+    await new Promise((settle) => setTimeout(settle, 20));
+
+    assert.equal(opened.length, 2, "the queued submission's connection is already open");
+    await Promise.all([first, second]);
+  });
+
+  it('closes the connection of a submission it abandoned', async () => {
+    /* Isolation is what makes abandonment safe: the dead subscription dies with
+       its own socket instead of outliving the wrapper on a shared one. */
+    const { open, opened } = fakeClients(() => new Promise(() => undefined));
+    const wrapped = serialiseSubmissions(open, { timeoutMs: 40 });
+
+    await wrapped.submitTransaction('tx').catch(() => undefined);
+    await new Promise((settle) => setTimeout(settle, 10));
+
+    assert.equal(opened.length, 1);
+    assert.equal(opened[0]?.closed, true, 'the abandoned submission took its socket with it');
+  });
+});
+
 describe('bounding a node submission', () => {
   it('gives up on a submission that never answers, and says so in its own type', async () => {
     /* The hang itself: the SDK's promise simply never settles. */
-    const { service } = fakeService(() => new Promise(() => undefined));
-    const wrapped = serialiseSubmissions(service, { timeoutMs: 60 });
+    const { open } = fakeClients(() => new Promise(() => undefined));
+    const wrapped = serialiseSubmissions(open, { timeoutMs: 60 });
 
     const started = Date.now();
     const failure = await wrapped.submitTransaction('tx').then(
@@ -81,8 +154,8 @@ describe('bounding a node submission', () => {
   });
 
   it('names the wait it abandoned, without claiming the transaction failed', async () => {
-    const { service } = fakeService(() => new Promise(() => undefined));
-    const wrapped = serialiseSubmissions(service, { timeoutMs: 40 });
+    const { open } = fakeClients(() => new Promise(() => undefined));
+    const wrapped = serialiseSubmissions(open, { timeoutMs: 40 });
     const failure = (await wrapped.submitTransaction('tx').catch((c: unknown) => c)) as Error;
     /* The wording matters as much as the type: both hangs had landed, so a
        message that said "this transaction failed" would be false, and `submitTx`
@@ -93,12 +166,12 @@ describe('bounding a node submission', () => {
 
 describe('never two submissions at once', () => {
   it('starts the second only after the first has settled', async () => {
-    /* The overlap is the defect. One `ApiPromise`, and the end of any stream
-       disconnects it, so two open `author_submitAndWatchExtrinsic`
-       subscriptions is a state this service must never be in. */
+    /* Isolation no longer requires this, but the node still sees one
+       transaction of this wallet's at a time, built against one view of its
+       coins, and at `'Submitted'` the window costs the queue under a second. */
     const order: string[] = [];
     let releaseFirst: (() => void) | null = null;
-    const { service } = fakeService(
+    const { open } = fakeClients(
       (transaction) =>
         new Promise((settle) => {
           order.push(`start ${transaction}`);
@@ -106,7 +179,7 @@ describe('never two submissions at once', () => {
           else settle('ok');
         }),
     );
-    const wrapped = serialiseSubmissions(service, { timeoutMs: 5_000 });
+    const wrapped = serialiseSubmissions(open, { timeoutMs: 5_000 });
 
     const first = wrapped.submitTransaction('first');
     const second = wrapped.submitTransaction('second');
@@ -125,12 +198,12 @@ describe('never two submissions at once', () => {
        queue that stopped at the first refusal would be a worse wedge than the
        one being fixed. */
     const seen: string[] = [];
-    const { service } = fakeService(async (transaction) => {
+    const { open } = fakeClients(async (transaction) => {
       seen.push(transaction);
       if (transaction === 'refused') throw new Error('1010: Invalid Transaction: Custom error: 231');
       return 'ok';
     });
-    const wrapped = serialiseSubmissions(service, { timeoutMs: 5_000 });
+    const wrapped = serialiseSubmissions(open, { timeoutMs: 5_000 });
 
     const refused = wrapped.submitTransaction('refused').catch((cause: unknown) => cause);
     const after = wrapped.submitTransaction('after');
@@ -141,27 +214,21 @@ describe('never two submissions at once', () => {
   });
 
   it('holds the next submission for the ceiling, then lets it through', async () => {
-    /* The case the wrapper cannot make perfectly clean, pinned down as it
-       actually behaves. A timed-out submission is abandoned, not cancelled, so
-       the next one does eventually start on top of a subscription the SDK still
-       thinks is open. Holding the mutex until it settled would be tidier and
-       wrong: one unanswerable submission would block the queue for ever, which
-       is the wedge being fixed. What IS guaranteed is that the second waits out
-       the first's whole ceiling rather than starting alongside it. */
+    /* A timed-out submission is abandoned, not cancelled. What is guaranteed is
+       that the next one waits out the first's whole ceiling rather than starting
+       alongside it — and, since 2026/09/03, that it starts on a connection the
+       abandoned one cannot touch. */
     const starts: number[] = [];
-    const { service } = fakeService(
+    const { open } = fakeClients(
       () =>
         new Promise(() => {
           starts.push(Date.now());
         }),
     );
-    const wrapped = serialiseSubmissions(service, { timeoutMs: 60 });
+    const wrapped = serialiseSubmissions(open, { timeoutMs: 60 });
 
     const at = Date.now();
-    await Promise.allSettled([
-      wrapped.submitTransaction('one'),
-      wrapped.submitTransaction('two'),
-    ]);
+    await Promise.allSettled([wrapped.submitTransaction('one'), wrapped.submitTransaction('two')]);
 
     assert.equal(starts.length, 2);
     assert.ok(starts[0]! - at < 40, 'the first went straight to the node');
@@ -177,12 +244,12 @@ describe('what the wrapper must not change', () => {
     /* `withNodeRejectionRetry` matches on this message. A wrapper that wrapped
        it, or replaced it with its own error, would silently turn every
        recoverable refusal into a failed activation. */
-    const { service } = fakeService(async () => {
+    const { open } = fakeClients(async () => {
       throw new Error(
         'RPC-CORE: submitAndWatchExtrinsic: 1010: Invalid Transaction: Custom error: 231',
       );
     });
-    const wrapped = serialiseSubmissions(service, { timeoutMs: 5_000 });
+    const wrapped = serialiseSubmissions(open, { timeoutMs: 5_000 });
 
     const failure = await wrapped.submitTransaction('tx').catch((cause: unknown) => cause);
     assert.ok(isNodeRejection(failure), 'still recognised as a node rejection');
@@ -193,16 +260,23 @@ describe('what the wrapper must not change', () => {
     /* Finality is 15–25 s on stagenet, per submission, and this service has no
        use for it: every job confirms against the INDEXER afterwards. Holding a
        lane through it was seconds off every user's click for nothing. */
-    const { service, calls } = fakeService(async () => 'ok');
-    const wrapped = serialiseSubmissions(service, { timeoutMs: 1_000 });
+    const { open, calls } = fakeClients(async () => 'ok');
+    const wrapped = serialiseSubmissions(open, { timeoutMs: 1_000 });
     await wrapped.submitTransaction('tx');
     assert.equal(calls[0]?.waitFor, 'Submitted');
   });
 
-  it('closes the service underneath it', async () => {
-    const { service, closed } = fakeService(async () => 'ok');
-    await serialiseSubmissions(service, { timeoutMs: 1_000 }).close();
-    assert.equal(closed(), true);
+  it('has nothing left to close between submissions', async () => {
+    /* The facade calls `close()` from `stop()`. Every connection this wrapper
+       opens is closed with the submission that opened it, so there is nothing
+       for that call to do — and, importantly, nothing it could shut that a
+       later submission would need. */
+    const { open, opened } = fakeClients(async () => 'ok');
+    const wrapped = serialiseSubmissions(open, { timeoutMs: 1_000 });
+    await wrapped.submitTransaction('tx');
+    await wrapped.close();
+    assert.equal(opened.length, 1);
+    assert.equal(opened[0]?.closed, true);
   });
 
   it("ends the wait when the running job's watchdog aborts it", async () => {
@@ -210,8 +284,8 @@ describe('what the wrapper must not change', () => {
        the wrapper's mutex — and so every later submission — waiting behind a
        job that has already been given up on. */
     const abort = new AbortController();
-    const { service } = fakeService(() => new Promise(() => undefined));
-    const wrapped = serialiseSubmissions(service, {
+    const { open } = fakeClients(() => new Promise(() => undefined));
+    const wrapped = serialiseSubmissions(open, {
       timeoutMs: 60_000,
       signal: () => abort.signal,
     });
