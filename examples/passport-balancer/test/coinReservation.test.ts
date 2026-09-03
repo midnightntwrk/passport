@@ -310,3 +310,35 @@ describe('the coins a balance creates', () => {
     assert.match(log.at(-1)!, /TTL has passed — selectable again \(2 coins\)/);
   });
 });
+
+describe('recording what a balance is handed', () => {
+  it('holds each coin the instant the selector hands it out, with no state to diff', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(smallestOfType);
+    const a = coins.open('the spare mUSD mint');
+    coins.beginBalance(a);
+    assert.equal(select([n1, n2, n3], NIGHT, 1n, {}), n1);
+    assert.deepEqual(coins.excluded(), [coinKey(n1)], 'held before the SDK has committed anything');
+    assert.equal(select([n1, n2, n3], NIGHT, 1n, {}), n2, 'the same balance asking again is not handed n1 twice');
+    const handed = coins.endBalance();
+    assert.deepEqual(handed, [n1, n2]);
+
+    /* The next balance, serialised behind it, is handed the one coin left. */
+    const b = coins.open('the activation grant');
+    coins.beginBalance(b);
+    assert.equal(select([n1, n2, n3], NIGHT, 1n, {}), n3);
+    assert.deepEqual(coins.endBalance(), [n3]);
+    assert.deepEqual(coins.excluded().sort(), [coinKey(n1), coinKey(n2), coinKey(n3)].sort());
+    a.release();
+    assert.deepEqual(coins.excluded(), [coinKey(n3)]);
+  });
+
+  it('records nothing outside a balance, and endBalance with none active is empty', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(smallestOfType);
+    assert.equal(select([n1], NIGHT, 1n, {}), n1);
+    assert.deepEqual(coins.excluded(), []);
+    assert.deepEqual(coins.endBalance(), []);
+    assert.equal(coins.hasFlights(), false);
+  });
+});

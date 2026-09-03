@@ -1497,10 +1497,12 @@ export async function openBalancerWallet(
       /* An in-flight coin that is in neither list has been applied by the
          sync, and stops being excluded. Every state event, because the whole
          hazard is the window between a facade revert and this application. */
-      coins.observe(
-        walletCoins(state, 'available').map(coinKey),
-        walletCoins(state, 'pending').map(coinKey),
-      );
+      if (coins.hasFlights()) {
+        coins.observe(
+          walletCoins(state, 'available').map(coinKey),
+          walletCoins(state, 'pending').map(coinKey),
+        );
+      }
       /* The lane count, refreshed from the same stream that changes it. Every
          spend and every block with dust activity comes through here, so a lane
          closes within a block of its coin being taken and reopens within a
@@ -1991,19 +1993,29 @@ export async function openBalancerWallet(
             const label = currentJob()?.label ?? 'this transaction';
             ticket?.release();
             ticket = coins.open(label);
-            const balanced = await reserve(
-              async () => {
-                /* The coins this balancing takes are exactly the ones that move
-                   from available to pending while it runs — the SDK commits its
-                   selection into the wallet before returning the recipe — and
-                   the claim held here means nothing else moves a coin
-                   meanwhile. Read before and after, and the difference is the
-                   payload and the fee, named in the journal so a shared coin
-                   between two jobs is provable from the log alone. */
-                const before = await currentState();
-                const pendingBefore = new Set(walletCoins(before, 'pending').map(coinKey));
-                const availableBefore = new Set(walletCoins(before, 'available').map(coinKey));
-                const result = await withDeadline(
+            const balanceOnce = async (): Promise<BalancingRecipe> => {
+              const mine = ticket!;
+              /* Read before the balance, for the coins it CREATES: the DUST
+                 successors the ledger writes at spend time, which the dust
+                 wallet lists as available at once and which are not on chain
+                 until this lands. Held and released with the consumed coins —
+                 see `created` in `./coinReservation.ts`. */
+              const before = await currentState();
+              const availableBefore = new Set(walletCoins(before, 'available').map(coinKey));
+              /* The coins this balance CONSUMES are recorded by the guard as
+                 the SDK's selectors hand them out — held that instant, before
+                 anything is committed or read back — plus the unshielded
+                 inputs read from the built transaction, because the unshielded
+                 wallet does not commit an unbound transaction's inputs (see
+                 `unshieldedInputsOf`). Nothing here diffs wallet states for
+                 the consumed set: a diff against the facade's replayed state
+                 attributed the previous job's four DUST coins to the next one
+                 at 04:38:39 on 2026/09/03. */
+              coins.beginBalance(mine);
+              let selected: SelectableCoin[];
+              let result: BalancingRecipe;
+              try {
+                result = (await withDeadline(
                   () =>
                     facade.balanceUnboundTransaction(
                       tx as never,
@@ -2012,53 +2024,40 @@ export async function openBalancerWallet(
                     ),
                   config.walletCallTimeoutMs,
                   (waitedMs) => new WalletCallTimeout('balancing the transaction', waitedMs),
+                )) as BalancingRecipe;
+              } finally {
+                selected = coins.endBalance();
+              }
+              try {
+                const seen = new Set(selected.map(coinKey));
+                const taken = [
+                  ...selected,
+                  ...unshieldedInputsOf(result).filter((coin) => {
+                    const key = coinKey(coin);
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                  }),
+                ];
+                mine.hold(taken.map(coinKey));
+                const after = await stateAfterChange(before);
+                const createdNow = walletCoins(after, 'available').filter(
+                  (coin) => !availableBefore.has(coinKey(coin)) && !seen.has(coinKey(coin)),
                 );
-                try {
-                  /* The shielded and dust legs from the wallet's pending list;
-                     the UNSHIELDED leg from the transaction itself, because
-                     the unshielded wallet does not commit an unbound
-                     transaction's inputs — see `unshieldedInputsOf`. The state
-                     is read once it has CHANGED: the facade's stream emits a
-                     beat after the SDK commits, and a diff against the replayed
-                     pre-balance state attributed the previous job's coins to
-                     this one at 04:38:39 on 2026/09/03. */
-                  const after = await stateAfterChange(before);
-                  const fromPending = walletCoins(after, 'pending').filter(
-                    (coin) => !pendingBefore.has(coinKey(coin)),
-                  );
-                  /* What this balance CREATED: the DUST successors the ledger
-                     writes at spend time, listed as available at once and not
-                     on chain until this lands. Held and released with the
-                     consumed coins — see `created` in `./coinReservation.ts`. */
-                  const createdNow = walletCoins(after, 'available').filter(
-                    (coin) => !availableBefore.has(coinKey(coin)),
-                  );
-                  const seen = new Set(fromPending.map(coinKey));
-                  const taken = [
-                    ...fromPending,
-                    ...unshieldedInputsOf(result).filter((coin) => {
-                      const key = coinKey(coin);
-                      if (seen.has(key)) return false;
-                      seen.add(key);
-                      return true;
-                    }),
-                  ];
-                  ticket?.hold(taken.map(coinKey));
-                  ticket?.created(createdNow.map(coinKey));
-                  console.log(
-                    `[job] ${label} consumes ${taken.length === 0 ? 'no coin of this wallet' : taken.map((coin) => describeCoin(coin)).join(', ')}${
-                      createdNow.length === 0
-                        ? ''
-                        : `; creates ${createdNow.map((coin) => describeCoin(coin)).join(', ')} (spendable once this lands)`
-                    }`,
-                  );
-                } catch {
-                  // A state that cannot be read leaves nothing held; the SDK's own pending mark still stands.
-                }
-                return result;
-              },
-              'contract balancing',
-            );
+                mine.created(createdNow.map(coinKey));
+                console.log(
+                  `[job] ${label} consumes ${taken.length === 0 ? 'no coin of this wallet' : taken.map((coin) => describeCoin(coin)).join(', ')}${
+                    createdNow.length === 0
+                      ? ''
+                      : `; creates ${createdNow.map((coin) => describeCoin(coin)).join(', ')} (spendable once this lands)`
+                  }`,
+                );
+              } catch {
+                // A state that cannot be read leaves the created set empty; the consumed coins are held regardless.
+              }
+              return result;
+            };
+            const balanced = await reserve(balanceOnce, 'contract balancing');
             recipe = balanced;
             inFlightUntil = deadline.getTime() + 30_000;
             progress('balanced');

@@ -224,6 +224,17 @@ export interface CoinReservationOptions {
 
 export interface CoinReservation {
   open(label: string): CoinTicket;
+  /**
+   * From here until `endBalance`, every coin a guarded selector hands out is
+   * HELD by this ticket the instant it is handed out — before the SDK has
+   * committed anything, before any state has been read back. Balancing is
+   * serialised under the wallet claim, so at most one balance is active.
+   */
+  beginBalance(ticket: CoinTicket): void;
+  /** Ends the active balance and returns the coins its selectors handed out. */
+  endBalance(): SelectableCoin[];
+  /** Is any submitted transaction still unsettled? Cheap; for the state stream. */
+  hasFlights(): boolean;
   /** Wraps a selector so it never hands out an excluded coin. */
   guard<TCoin extends SelectableCoin>(base: CoinSelector<TCoin>): CoinSelector<TCoin>;
   /** The keys currently excluded, for `/status` and for the wait's decision. */
@@ -286,7 +297,19 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
 
   const isExcluded = (key: string): boolean => held.has(key) || inFlight.has(key);
 
+  let active: { ticket: CoinTicket; selected: SelectableCoin[] } | null = null;
+
   return {
+    beginBalance(ticket) {
+      active = { ticket, selected: [] };
+    },
+    endBalance() {
+      const selected = active?.selected ?? [];
+      active = null;
+      return selected;
+    },
+    hasFlights: () => flights.size > 0,
+
     open(label) {
       const consumed = new Set<string>();
       const created = new Set<string>();
@@ -338,12 +361,17 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
     guard(base) {
       return (coins, tokenType, amount, costModel) => {
         expireInFlight();
-        return base(
+        const chosen = base(
           coins.filter((coin) => !isExcluded(coinKey(coin))),
           tokenType,
           amount,
           costModel,
         );
+        if (chosen !== undefined && active) {
+          active.ticket.hold([coinKey(chosen)]);
+          active.selected.push(chosen);
+        }
+        return chosen;
       };
     },
 
