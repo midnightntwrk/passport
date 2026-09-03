@@ -221,7 +221,18 @@ export const nightPayloadFirst: CoinSelector = (coins, tokenType, amount, costMo
   if (tokenType !== NATIVE_TOKEN_TYPE) return smallestOfType(coins, tokenType, amount, costModel);
   const candidates = coins.filter((coin) => coin.type === tokenType);
   const change = candidates.filter((coin) => coin.value < LARGE_NIGHT_ATOMIC);
-  if (change.length > 0) return smallestOfType(change, tokenType, amount, costModel);
+  const needed = amount < 0n ? -amount : amount;
+  if (change.length > 0) {
+    /* ONE change coin that covers the need, the smallest such; only when
+       none does, the largest first. Every unshielded input is a signature the
+       node verifies, and the fee rule below charges that time against the
+       transaction's bytes: a grant built from six 10-atomic crumbs and a
+       change coin was 29.5 ms of processing in 9,503 bytes on 2026/09/03,
+       and refused. */
+    const covering = change.filter((coin) => coin.value >= needed);
+    if (covering.length > 0) return covering.sort((a, b) => Number(a.value - b.value)).at(0);
+    return change.sort((a, b) => Number(b.value - a.value)).at(0);
+  }
   /* No change coin is selectable. For a SMALL need — a grant, a registration's
      COST — a lineage is never the answer: rotating it resets its DUST
      generation, and on 2026/09/03 at 04:35:15 a grant balanced on the
@@ -230,10 +241,42 @@ export const nightPayloadFirst: CoinSelector = (coins, tokenType, amount, costMo
      balance fail with insufficient funds, which the wallet turns into a wait
      for a held coin to come free. Only a need that no change coin could cover
      may spend a lineage. */
-  const needed = amount < 0n ? -amount : amount;
   if (needed < LARGE_NIGHT_ATOMIC) return undefined;
   return smallestOfType(candidates, tokenType, amount, costModel);
 };
+
+/**
+ * How many crumb DUST inputs to add for the deficit the ledger reports.
+ *
+ * The ledger says, verbatim: "this transaction would take T to dismiss, but
+ * given its size of B bytes, it may take at most M". Measured on 2026/09/03
+ * from those very lines: the allowance is 2 µs per byte (9,503 bytes → 19.006
+ * ms; 15,509 → 31.018), and one crumb spend adds about 3,000 bytes of
+ * transaction — 6 ms of allowance — and about 2.65 ms of processing, so each
+ * is worth roughly 3.3 ms of headroom. One more than the arithmetic says,
+ * because the proven transaction's verification costs more than the erased
+ * estimate; never fewer than one, never more than eight.
+ */
+export const CRUMB_HEADROOM_MS = 3.3;
+
+export function crumbsForDeficit(message: string): number {
+  const match =
+    /would take ([\d.]+)\s*(ms|s|[\u00b5\u03bc]s|us) to dismiss, but given its size of (\d+) bytes, it may take at most ([\d.]+)\s*(ms|s|[\u00b5\u03bc]s|us)/i.exec(
+      message,
+    );
+  if (!match) return 2;
+  const toMs = (value: string, unit: string): number => {
+    const n = Number(value);
+    if (unit === 's') return n * 1000;
+    if (unit === 'us' || /^[\u00b5\u03bc]s$/.test(unit)) return n / 1000;
+    return n;
+  };
+  const takes = toMs(match[1]!, match[2]!);
+  const allowed = toMs(match[4]!, match[5]!);
+  const deficit = takes - allowed;
+  if (!(deficit > 0)) return 1;
+  return Math.max(1, Math.min(8, Math.ceil(deficit / CRUMB_HEADROOM_MS) + 1));
+}
 
 /**
  * The unshielded inputs a balanced recipe will spend, read from the built

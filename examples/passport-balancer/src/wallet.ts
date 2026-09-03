@@ -104,6 +104,7 @@ import {
   coinKey,
   createCoinReservation,
   createDustFeeSelector,
+  crumbsForDeficit,
   describeCoin,
   isTimeToDismiss,
   nightPayloadFirst,
@@ -2049,7 +2050,7 @@ export async function openBalancerWallet(
             let padRounds = 0;
             const balanceOnce = async (): Promise<BalancingRecipe> => {
               const mine = ticket!;
-              coins.setDustPadding(padRounds * 2);
+              coins.setDustPadding(padRounds);
               /* Read before the balance, for the coins it CREATES: the DUST
                  successors the ledger writes at spend time, which the dust
                  wallet lists as available at once and which are not on chain
@@ -2133,7 +2134,7 @@ export async function openBalancerWallet(
                 if (!isTimeToDismiss(cause)) throw cause;
                 const message = cause instanceof Error ? cause.message : String(cause);
                 console.warn(
-                  `[fee] ${label}: the ledger would refuse this shape (${message.slice(0, 200)}) — reverting and balancing again with ${(padRounds + 1) * 2} crumb DUST inputs for size`,
+                  `[fee] ${label}: the ledger would refuse this shape (${message.slice(0, 200)}) — reverting and balancing again with ${padRounds + crumbsForDeficit(message)} crumb DUST inputs for size`,
                 );
                 try {
                   await facade.revert(result);
@@ -2150,6 +2151,7 @@ export async function openBalancerWallet(
                a small need must not rotate — the balance waits for a release,
                outside the claim so the job holding the coin can finish, and
                tries again inside the same budget. */
+            for (;;) {
             let balanced: BalancingRecipe;
             for (;;) {
               try {
@@ -2158,12 +2160,12 @@ export async function openBalancerWallet(
               } catch (cause) {
                 const message = cause instanceof Error ? cause.message : String(cause);
                 if (isTimeToDismiss(cause)) {
-                  if (padRounds >= 4) {
+                  if (padRounds >= 8) {
                     throw new Error(
                       `this transaction is too small for its compute at every padding tried (the ledger says: ${message.slice(0, 160)})`,
                     );
                   }
-                  padRounds += 1;
+                  padRounds = Math.min(8, padRounds + crumbsForDeficit(message));
                   continue;
                 }
                 const excluded = coins.excluded();
@@ -2224,8 +2226,35 @@ export async function openBalancerWallet(
                twice, once for the circuit and once for the DUST fee leg, and a
                journal with two identical `proved` lines does not say which
                half is slow. */
+            /* THE SAME QUESTION, OF THE PROVEN TRANSACTION. The erased check
+               above undercounts verification time as well as bytes, and on
+               2026/09/03 a recipe that passed it erased was refused proven —
+               so the proven, bound transaction is asked too, before the node
+               is. A refusal here costs one proof, not three submissions. */
+            try {
+              (proved as { fees(params: unknown, enforce: boolean): bigint }).fees(
+                ledger.LedgerParameters.initialParameters(),
+                true,
+              );
+            } catch (cause) {
+              if (!isTimeToDismiss(cause) || padRounds >= 8) throw cause;
+              const message = cause instanceof Error ? cause.message : String(cause);
+              const more = crumbsForDeficit(message);
+              console.warn(
+                `[fee] ${label}: the PROVEN transaction would be refused (${message.slice(0, 200)}) — reverting and rebuilding with ${Math.min(8, padRounds + more)} crumb DUST inputs`,
+              );
+              try {
+                await reserve(() => facade.revert(proved as never));
+              } catch {
+                // Best effort; the rebuild selects afresh.
+              }
+              recipe = null;
+              padRounds = Math.min(8, padRounds + more);
+              continue;
+            }
             progress('fee leg proved');
             return proved;
+            }
           } catch (cause) {
             const toRevert = recipe;
             if (toRevert) {

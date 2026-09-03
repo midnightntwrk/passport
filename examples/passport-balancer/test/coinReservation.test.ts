@@ -32,6 +32,7 @@ import { TokenBucket } from '../src/limits.js';
 import {
   assertNoDuplicateInputs,
   createDustFeeSelector,
+  crumbsForDeficit,
   DuplicateInput,
   inputKeysOf,
   isTimeToDismiss,
@@ -618,5 +619,41 @@ describe('a probe the client was told to repeat', () => {
     bucket.refund('c');
     assert.equal(bucket.take('c').allowed, true, 'a refunded probe leaves room for the next');
     bucket.refund('unknown');
+  });
+});
+
+describe('one NIGHT coin for a small need', () => {
+  const c10a = night('1'.repeat(64), 0, 10n);
+  const c10b = night('2'.repeat(64), 0, 10n);
+  const c12020 = night('3'.repeat(64), 0, 12_020n);
+  const c17980 = night('4'.repeat(64), 0, 17_980n);
+
+  it('is the smallest change coin that covers the need, not six crumbs and a coin', () => {
+    assert.equal(nightPayloadFirst([c10a, c10b, c12020, c17980], NIGHT, -2_000n, {}), c12020);
+    assert.equal(nightPayloadFirst([c10a, c10b, c17980], NIGHT, -12_500n, {}), c17980);
+  });
+
+  it('accumulates largest-first only when no single change coin covers it', () => {
+    assert.equal(nightPayloadFirst([c10a, c10b, c12020], NIGHT, -15_000n, {}), c12020);
+    assert.equal(nightPayloadFirst([c10a, c10b], NIGHT, -15n, {}), c10a);
+  });
+});
+
+describe('how many crumbs a deficit is worth', () => {
+  it('reads the ledger line and pads by the deficit plus one', () => {
+    const line =
+      'exceeded the maximum time to dismiss for transaction size; this transaction would take 29.513ms to dismiss, but given its size of 9503 bytes, it may take at most 19.006ms';
+    assert.equal(crumbsForDeficit(line), 5, '10.5 ms short at 3.3 ms a crumb is four, plus one');
+    assert.equal(
+      crumbsForDeficit('this transaction would take 34.818ms to dismiss, but given its size of 15509 bytes, it may take at most 31.018ms'),
+      3,
+    );
+  });
+
+  it('handles seconds and microseconds, never fewer than one nor more than eight, and two when it cannot read the line', () => {
+    assert.equal(crumbsForDeficit('would take 1s to dismiss, but given its size of 1 bytes, it may take at most 900ms'), 8);
+    assert.equal(crumbsForDeficit('would take 500µs to dismiss, but given its size of 1 bytes, it may take at most 400µs'), 2, 'any deficit at all is one crumb plus the margin');
+    assert.equal(crumbsForDeficit('would take 1ms to dismiss, but given its size of 1 bytes, it may take at most 5ms'), 1);
+    assert.equal(crumbsForDeficit('something else entirely'), 2);
   });
 });
