@@ -661,17 +661,24 @@ export async function readAccountState(
   contractAddress: string,
 ): Promise<AccountState> {
   const address = rawContractAddress(contractAddress);
-  const [{ indexerPublicDataProvider }, { ledger }] = await Promise.all([
-    import('@midnight-ntwrk/midnight-js-indexer-public-data-provider'),
+  /* THE PROVIDER IS SHARED, not built here (2026/09/03). This function used to
+     construct an `indexerPublicDataProvider` — an Apollo client, an
+     `InMemoryCache`, a retry link, and a `graphql-ws` client — and drop it on
+     the floor at every read. That was one allocation per thing the reader did
+     until `lib/balanceWatch.ts` began re-reading the account every five to
+     thirty seconds, at which point it became one per tick, for ever, for as
+     long as a Passport is open. See `contractRuntime.sharedPublicDataProvider`. */
+  const [{ sharedPublicDataProvider }, { ledger }] = await Promise.all([
+    import('./contractRuntime.js'),
     loadAccountContract(),
   ]);
 
   let state: unknown;
   try {
-    const provider = indexerPublicDataProvider({
-      queryURL: network.indexerHttpUrl,
-      subscriptionURL: network.indexerWsUrl ?? indexerWsFrom(network.indexerHttpUrl),
-    });
+    const provider = (await sharedPublicDataProvider(
+      network.indexerHttpUrl,
+      network.indexerWsUrl ?? indexerWsFrom(network.indexerHttpUrl),
+    )) as { queryContractState(address: string): Promise<unknown> };
     state = await provider.queryContractState(address);
   } catch (cause) {
     throw new AccountCustodyError(

@@ -51,6 +51,11 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { describeEndpointRefusals, firstEndpointThatServes } from '../lib/endpoints.js';
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
+/* One fetch per ZK artefact instead of three. Pure, drilled, and the reason a
+   shielded leg's artefacts are no longer downloaded once per library layer —
+   see `../lib/zkArtefactCache.ts`. */
+import { memoisingZkConfigProvider } from '../lib/zkArtefactCache.js';
+import type { ZkArtefactSource } from '../lib/zkArtefactCache.js';
 import {
   SponsorError,
   sponsorAbandonBalance,
@@ -684,6 +689,64 @@ export interface ContractProvidersOptions {
   initialPrivateState?: unknown;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Providers held for the tab                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The ZK config provider for a contract, built once for the tab.
+ *
+ * Shared rather than per-connection because {@link memoisingZkConfigProvider}'s
+ * whole value is across connections: a send to a name opens the sender's
+ * account and then the recipient's, and the second leg's artefacts were being
+ * fetched by a provider that had never heard of the first leg's.
+ *
+ * The base URL is a pure function of the contract name (see
+ * {@link contractAssetBase}), so the name is the whole of the key.
+ */
+const zkConfigProviders = new Map<PassportContractName, unknown>();
+
+/**
+ * The indexer's public-data provider for a query URL, built once for the tab.
+ *
+ * `indexerPublicDataProvider` constructs an Apollo client, an `InMemoryCache`,
+ * a retry link, and a `graphql-ws` client, and hands back no way to reach them
+ * except the provider itself. Every caller here was building one and dropping
+ * it — which cost nothing while every read followed something the reader had
+ * just done, and became a per-tick allocation on 2026/09/03 when
+ * `lib/balanceWatch.ts` started re-reading the account every five to thirty
+ * seconds for as long as a Passport is open.
+ */
+const publicDataProviders = new Map<string, unknown>();
+
+/**
+ * The shared public-data provider for an indexer, made on first use.
+ *
+ * Keyed by both URLs because the subscription URL is derived separately by
+ * some callers, and a provider built for one pair must not be served to a
+ * caller that asked for another.
+ */
+export async function sharedPublicDataProvider(
+  queryURL: string,
+  subscriptionURL: string,
+): Promise<unknown> {
+  const key = `${queryURL}|${subscriptionURL}`;
+  const existing = publicDataProviders.get(key);
+  if (existing) return existing;
+  const { indexerPublicDataProvider } = await import(
+    '@midnight-ntwrk/midnight-js-indexer-public-data-provider'
+  );
+  const provider = indexerPublicDataProvider({ queryURL, subscriptionURL });
+  publicDataProviders.set(key, provider);
+  return provider;
+}
+
+/** Drops both caches. For drills, and for a network switch. */
+export function resetSharedProviders(): void {
+  zkConfigProviders.clear();
+  publicDataProviders.clear();
+}
+
 /**
  * The provider set midnight-js 5 wants: the wallet balances, signs, finalises,
  * and submits; the ZK artefacts arrive over HTTP from `/zk/<contract>`; and the
@@ -701,19 +764,20 @@ export async function createContractProviders(
   wallet: LocalMidnightWallet,
   options: ContractProvidersOptions,
 ) {
-  const [
-    { indexerPublicDataProvider },
-    { FetchZkConfigProvider },
-  ] = await Promise.all([
-    import('@midnight-ntwrk/midnight-js-indexer-public-data-provider'),
-    import('@midnight-ntwrk/midnight-js-fetch-zk-config-provider'),
-  ]);
-
-  const zkConfigProvider = new FetchZkConfigProvider(contractAssetBase(options.contract), {
-    /* `globalThis`, not `window`: the identical call has to work under the Node
-       drill harness, which deliberately has no window. */
-    fetchFunc: globalThis.fetch.bind(globalThis) as never,
-  });
+  let zkConfigProvider = zkConfigProviders.get(options.contract);
+  if (zkConfigProvider === undefined) {
+    const { FetchZkConfigProvider } = await import(
+      '@midnight-ntwrk/midnight-js-fetch-zk-config-provider'
+    );
+    zkConfigProvider = memoisingZkConfigProvider(
+      new FetchZkConfigProvider(contractAssetBase(options.contract), {
+        /* `globalThis`, not `window`: the identical call has to work under the
+           Node drill harness, which deliberately has no window. */
+        fetchFunc: globalThis.fetch.bind(globalThis) as never,
+      }) as unknown as ZkArtefactSource,
+    );
+    zkConfigProviders.set(options.contract, zkConfigProvider);
+  }
 
   const proofProvider = await createContractProofProvider(wallet, zkConfigProvider);
 
@@ -723,10 +787,10 @@ export async function createContractProviders(
     privateStateProvider: inMemoryPrivateStateProvider(
       options.privateStateId ? { [options.privateStateId]: options.initialPrivateState } : {},
     ),
-    publicDataProvider: indexerPublicDataProvider({
-      queryURL: wallet.network.indexerHttpUrl,
-      subscriptionURL: wallet.network.indexerWsUrl,
-    }),
+    publicDataProvider: await sharedPublicDataProvider(
+      wallet.network.indexerHttpUrl,
+      wallet.network.indexerWsUrl,
+    ),
     zkConfigProvider,
     proofProvider,
     walletProvider,

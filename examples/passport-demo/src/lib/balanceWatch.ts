@@ -77,6 +77,29 @@ export const BALANCE_WATCH_CHASE_WINDOW_MS = 10 * 60_000;
 /** The cadence when nothing in particular is expected. */
 export const BALANCE_WATCH_STEADY_MS = 30_000;
 
+/**
+ * How long the watch stands off while the Passport is in the middle of
+ * something, before asking again whether it still is.
+ *
+ * WHY A WATCH STANDS OFF AT ALL (2026/09/03). A read of the account is not
+ * free: it is an indexer round trip and a ledger-state decode, and the timer
+ * this module owns is the only read in the app that can land in the middle of
+ * a proving run rather than following something the reader did. A shielded leg
+ * is already the largest allocation Passport ever makes — 19.5 MB of prover
+ * key per artefact read, RSS 330 MB at rest against 787 MB mid-leg, measured
+ * on stagenet — and a browser died in that window on 2026/09/03 at 16:30:46
+ * UTC. A courtesy read has no business being the thing on top.
+ *
+ * DEFERRED, NEVER DROPPED. The read that was due is taken as soon as the work
+ * releases, so nothing this watch exists for is lost: the opening balance that
+ * 2026/09/02's report was about lands DURING activation, which is exactly a
+ * busy stretch, and a watch that skipped its read there would have been a
+ * regression dressed as an optimisation. Two seconds, because that is short
+ * against every cadence here and long enough that standing off is not itself a
+ * poll.
+ */
+export const BALANCE_WATCH_BUSY_STANDOFF_MS = 2_000;
+
 /** How the growth between chase reads is shaped. Gentle: 5s, 7.5s, 11.2s… */
 const CHASE_GROWTH = 1.5;
 
@@ -175,6 +198,12 @@ export interface BalanceWatchOptions {
   refresh: () => void | Promise<void>;
   /** The holdings fingerprint RIGHT NOW. Read after each probe settles. */
   signature: () => string;
+  /**
+   * Whether the Passport is in the middle of something a read must not be
+   * piled on top of — see {@link BALANCE_WATCH_BUSY_STANDOFF_MS}. Defaults to
+   * "never busy", so a caller that does not know keeps the old behaviour.
+   */
+  busy?: () => boolean;
   /** Defaults to `Date.now`. */
   now?: () => number;
   /** Defaults to `setTimeout`. Returns whatever handle `clearTimer` takes. */
@@ -215,6 +244,7 @@ export interface BalanceWatch {
  */
 export function startBalanceWatch(options: BalanceWatchOptions): BalanceWatch {
   const now = options.now ?? (() => Date.now());
+  const busy = options.busy ?? ((): boolean => false);
   const setTimer =
     options.setTimer ?? ((run: () => void, delayMs: number) => setTimeout(run, delayMs));
   const clearTimer =
@@ -239,22 +269,31 @@ export function startBalanceWatch(options: BalanceWatchOptions): BalanceWatch {
     }
   };
 
-  const schedule = (): void => {
+  const schedule = (delayMs?: number): void => {
     if (stopped || paused) return;
     cancel();
-    const delayMs = nextBalanceProbeDelayMs({
-      chasing,
-      attempt: chaseAttempt,
-      elapsedMs: now() - chaseStartedAt,
-    });
+    const delay =
+      delayMs ??
+      nextBalanceProbeDelayMs({
+        chasing,
+        attempt: chaseAttempt,
+        elapsedMs: now() - chaseStartedAt,
+      });
     timer = setTimer(() => {
       timer = null;
       void probe();
-    }, delayMs);
+    }, delay);
   };
 
   const probe = async (): Promise<void> => {
     if (stopped || paused || inFlight) return;
+    /* STOOD OFF, NOT SKIPPED. The read that was due is taken as soon as the
+       work releases — the chase keeps its baseline, its clock, and its attempt
+       count, so a stretch of busy costs the chase nothing but the standoff. */
+    if (busy()) {
+      schedule(BALANCE_WATCH_BUSY_STANDOFF_MS);
+      return;
+    }
     inFlight = true;
     if (chasing) chaseAttempt += 1;
     try {

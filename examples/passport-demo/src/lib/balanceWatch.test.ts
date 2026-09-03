@@ -16,6 +16,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   accountHoldsSomething,
+  BALANCE_WATCH_BUSY_STANDOFF_MS,
   BALANCE_WATCH_CHASE_CEILING_MS,
   BALANCE_WATCH_CHASE_FIRST_MS,
   BALANCE_WATCH_CHASE_WINDOW_MS,
@@ -439,6 +440,111 @@ describe('startBalanceWatch', () => {
     await Promise.resolve();
     /* Nothing rescheduled itself behind the stop. */
     expect(timers.pendingCount()).toBe(0);
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* The standoff while the Passport is in the middle of something            */
+  /* ------------------------------------------------------------------------ */
+
+  it('does not read while the Passport is busy, and takes the read the moment it is not', async () => {
+    /* The scheduling rule of 2026/09/03: this timer is the only read in the
+       app that can land inside a proving run, and a shielded leg is already
+       the largest allocation Passport makes. */
+    const timers = fakeTimers();
+    const refresh = vi.fn();
+    let busy = false;
+    const watch = startBalanceWatch({
+      refresh,
+      signature: () => 'a',
+      busy: () => busy,
+      ...timers,
+    });
+
+    busy = true;
+    await timers.fire();
+    expect(refresh).not.toHaveBeenCalled();
+    /* Not skipped — stood off, and asked again shortly. */
+    expect(timers.nextDelay()).toBe(BALANCE_WATCH_BUSY_STANDOFF_MS);
+
+    await timers.fire();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(timers.nextDelay()).toBe(BALANCE_WATCH_BUSY_STANDOFF_MS);
+
+    busy = false;
+    await timers.fire();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(timers.nextDelay()).toBe(BALANCE_WATCH_STEADY_MS);
+    watch.stop();
+  });
+
+  it('costs a chase nothing but the standoff — the baseline, the clock, and the backoff all keep', async () => {
+    /* The opening balance lands DURING activation, which is exactly a busy
+       stretch. A watch that dropped its reads there would have regressed the
+       defect it was written for. */
+    const timers = fakeTimers();
+    let holdings: HoldingsSnapshot = EMPTY;
+    const refresh = vi.fn();
+    let busy = true;
+    const watch = startBalanceWatch({
+      refresh,
+      signature: () => holdingsSignature(holdings),
+      busy: () => busy,
+      ...timers,
+    });
+
+    watch.expectChange();
+    expect(timers.nextDelay()).toBe(BALANCE_WATCH_CHASE_FIRST_MS);
+
+    /* Two standoffs. No read is made, and no chase attempt is spent on one. */
+    await timers.fire();
+    await timers.fire();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(watch.chasing()).toBe(true);
+
+    busy = false;
+    await timers.fire();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    /* The FIRST chase read, at the first chase cadence: the standoff did not
+       advance the backoff past the reads that never happened. */
+    expect(timers.nextDelay()).toBe(BALANCE_WATCH_CHASE_FIRST_MS * 1.5);
+
+    holdings = WITH_STABLECOIN;
+    await timers.fire();
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(watch.chasing()).toBe(false);
+    watch.stop();
+  });
+
+  it('stands off on resume too, rather than reading on the way back from a background tab', async () => {
+    const timers = fakeTimers();
+    const refresh = vi.fn();
+    let busy = true;
+    const watch = startBalanceWatch({
+      refresh,
+      signature: () => 'a',
+      busy: () => busy,
+      ...timers,
+    });
+
+    watch.pause();
+    watch.resume();
+    await Promise.resolve();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(timers.nextDelay()).toBe(BALANCE_WATCH_BUSY_STANDOFF_MS);
+
+    busy = false;
+    await timers.fire();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    watch.stop();
+  });
+
+  it('reads on its own cadence when no busy signal is given', async () => {
+    const timers = fakeTimers();
+    const refresh = vi.fn();
+    const watch = startBalanceWatch({ refresh, signature: () => 'a', ...timers });
+    await timers.fire();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    watch.stop();
   });
 
   it('uses the real clock and real timers when none are injected', async () => {

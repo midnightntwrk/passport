@@ -56,6 +56,34 @@
  * here to render a hook into. That file holds the watch's lifetime, a
  * `visibilitychange` listener, and two refs — no decisions.
  *
+ * `src/lib/zkArtefactCache.ts` went IN on 2026/09/03, the day it was written,
+ * and it is in the denominator because it is a RULE about somebody's memory
+ * budget, measured rather than guessed. midnight-js asks a ZK config provider
+ * for a circuit's artefacts three times per contract call — `lookupKey`,
+ * `check` (whose payload uses the IR alone and discards the prover key), and
+ * `prove` — and neither `ZKConfigRegistry` nor `FetchZkConfigProvider` holds
+ * the bytes between them. For `withdraw_shielded` that is 19.5 MB a time, and
+ * one mUSD send to a name is two such legs: six downloads and six SHA-256
+ * integrity passes, 117 MB, for a transaction that needs 39 MB. Measured live
+ * on stagenet against bf5a527 the same day, that is the whole of the renderer's
+ * memory profile — 330 MB at rest, 711 MB across leg one's artefact reads,
+ * 787 MB across leg two's — and it is the window a headless browser running two
+ * Passports died in at 16:30:46 UTC.
+ *
+ * Every way this module can be wrong is a way of making that worse or of
+ * breaking a proof: an artefact served for the wrong circuit proves the wrong
+ * thing; a remembered REJECTION makes one bad moment on the network permanent
+ * for the life of the tab; a memo that never releases trades a peak for a
+ * resting 39 MB that never comes back; and a wrapper that reimplemented
+ * midnight-js's `get` and `getVerifierKeys` instead of inheriting them is a
+ * second copy of somebody else's composition rules, waiting to drift. All four
+ * are drilled, the last against a provider carrying those compositions on its
+ * prototype. It holds no DOM, no React, no `fetch`, and no clock of its own —
+ * the provider and the clock are injected — so all of it is drilled directly in
+ * `src/lib/zkArtefactCache.test.ts`. The `FetchZkConfigProvider` it wraps, and
+ * the one place it is wrapped, stay out in `src/identity/contractRuntime.ts`
+ * with the rest of the midnight-js plumbing.
+ *
  * `src/lib/installPrompt.ts` went IN on 2026/09/03, the day it was written. It
  * decides whether a person is offered a way to install Passport and which of
  * the two offers they get, and it exists because a reviewer running the app in
@@ -414,6 +442,7 @@ export default mergeConfig(
           'src/lib/shieldedNote.ts',
           'src/lib/sponsor.ts',
           'src/lib/walletProver.ts',
+          'src/lib/zkArtefactCache.ts',
           'src/identity/backup.ts',
           'src/identity/claimWarmup.ts',
           'src/identity/midnamesText.ts',

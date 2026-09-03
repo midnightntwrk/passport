@@ -1,5 +1,10 @@
 import { useEffect, useRef } from 'react'
 
+/* The app's own "in the middle of something" counter — the same one that stops
+   a service-worker reload landing inside a passkey ceremony. The watch stands
+   off while it is held rather than piling an indexer read and a ledger decode
+   on top of a proving run: see BALANCE_WATCH_BUSY_STANDOFF_MS. */
+import { criticalWorkInFlight } from '../lib/appBusy.js'
 import { startBalanceWatch } from '../lib/balanceWatch.js'
 
 /**
@@ -50,6 +55,7 @@ export function useBalanceWatch({ active, refresh, signature, chaseKey }: Balanc
     const watch = startBalanceWatch({
       refresh: () => refreshRef.current?.(),
       signature: () => signatureRef.current,
+      busy: criticalWorkInFlight,
     })
     watchRef.current = watch
     const onVisibility = () => {

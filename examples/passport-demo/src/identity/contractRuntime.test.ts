@@ -14,6 +14,8 @@ import {
   awaitSponsorReadiness,
   balancingFailure,
   hexToBytes,
+  resetSharedProviders,
+  sharedPublicDataProvider,
   walletProviderFor,
   BalancingFailure,
 } from './contractRuntime.js';
@@ -408,5 +410,67 @@ describe('submitTx, after the node refuses a sponsored transaction', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(thrown).toBe(cause);
     expect(abandons).toEqual([]);
+  });
+});
+
+/**
+ * The indexer provider is built ONCE for a tab (2026/09/03).
+ *
+ * `indexerPublicDataProvider` builds an Apollo client, an `InMemoryCache`, a
+ * retry link, and a `graphql-ws` client, and offers no way to reach any of them
+ * again. Every caller in this app used to build one per read and drop it, which
+ * cost nothing while a read followed something the reader had just done — and
+ * became a per-tick allocation the day `lib/balanceWatch.ts` began re-reading
+ * the account every five to thirty seconds for as long as a Passport is open.
+ *
+ * Nothing here reaches the network: constructing the provider opens no socket
+ * (the `graphql-ws` client is lazy) and no query is made.
+ */
+describe('sharedPublicDataProvider', () => {
+  afterEach(() => {
+    resetSharedProviders();
+  });
+
+  it('hands the same provider back for the same indexer', async () => {
+    const first = await sharedPublicDataProvider(
+      'https://indexer.example/api/v4/graphql',
+      'wss://indexer.example/api/v4/graphql/ws',
+    );
+    const second = await sharedPublicDataProvider(
+      'https://indexer.example/api/v4/graphql',
+      'wss://indexer.example/api/v4/graphql/ws',
+    );
+    expect(second).toBe(first);
+  });
+
+  it('does not serve one indexer’s provider to a caller that asked for another', async () => {
+    const stagenet = await sharedPublicDataProvider(
+      'https://indexer.example/api/v4/graphql',
+      'wss://indexer.example/api/v4/graphql/ws',
+    );
+    const elsewhere = await sharedPublicDataProvider(
+      'https://other.example/api/v4/graphql',
+      'wss://other.example/api/v4/graphql/ws',
+    );
+    expect(elsewhere).not.toBe(stagenet);
+    /* And the subscription URL is part of the answer, not decoration. */
+    const otherSocket = await sharedPublicDataProvider(
+      'https://indexer.example/api/v4/graphql',
+      'wss://elsewhere.example/api/v4/graphql/ws',
+    );
+    expect(otherSocket).not.toBe(stagenet);
+  });
+
+  it('builds a new one after the cache is dropped', async () => {
+    const before = await sharedPublicDataProvider(
+      'https://indexer.example/api/v4/graphql',
+      'wss://indexer.example/api/v4/graphql/ws',
+    );
+    resetSharedProviders();
+    const after = await sharedPublicDataProvider(
+      'https://indexer.example/api/v4/graphql',
+      'wss://indexer.example/api/v4/graphql/ws',
+    );
+    expect(after).not.toBe(before);
   });
 });
