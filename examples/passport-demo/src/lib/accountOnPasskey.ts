@@ -300,6 +300,9 @@ export function aliasFromRecoveredAccount(
     domain: `${account.alias}.night`,
     network: account.network,
     status: 'registered',
+    /* No transaction ids, and the flag that says why: this device did not
+       watch the name being registered, it read it off a passkey. */
+    recovered: true,
     registryConfirmed: false,
     resolverTarget: 'contract',
     resolverTargetHex: account.address,
@@ -317,6 +320,7 @@ export interface RecoveredAliasRecord {
   domain: string;
   network: string;
   status: 'registered';
+  recovered: true;
   registryConfirmed: false;
   resolverTarget: 'contract';
   resolverTargetHex: string;

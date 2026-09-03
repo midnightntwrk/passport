@@ -281,7 +281,9 @@ describe('aliasFromRecoveredAccount', () => {
       domain: 'passportwalk.night',
       network: 'stagenet',
       status: 'registered',
-      // This browser has not watched the registry answer, and does not pretend to.
+      // No transaction ids: nothing happened on THIS device to have ids for.
+      recovered: true,
+      // This browser has not watched the name answer, and does not pretend to.
       registryConfirmed: false,
       resolverTarget: 'contract',
       resolverTargetHex: 'b'.repeat(64),

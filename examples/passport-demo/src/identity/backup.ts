@@ -611,6 +611,11 @@ const ALIAS_FIELDS = [
   'registryConfirmed',
   'resolverTarget',
   'resolverTargetHex',
+  /* An alias read off a passkey rather than watched being registered. On the
+     list for the same reason `recovered` is on the contract list below: without
+     it an export would drop the flag, and the restore would then refuse its own
+     file for carrying a registered name with no transaction ids. */
+  'recovered',
   'updatedAt',
 ];
 const CONTRACT_FIELDS = [

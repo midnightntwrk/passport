@@ -38,6 +38,20 @@ export interface AliasRecord {
   /** The raw 64-hex bytes {@link resolverTarget} resolves to, when recorded. */
   resolverTargetHex?: string;
   /**
+   * True when this record was READ OFF A PASSKEY rather than watched being
+   * made — a device that has never seen this Passport before, signing in with
+   * the passkey that carries the account and the name it holds.
+   *
+   * It is the alias half of `PassportContractRecord.recovered`, and it exists
+   * for the same reason: such a record has no transaction ids, because no
+   * transaction happened HERE, and a surface must never show one that this
+   * device did not see. The registration itself is real — it is what put the
+   * name on the passkey — so the status is `registered` and
+   * {@link registryConfirmed} stays false until this browser has watched the
+   * name answer for itself.
+   */
+  recovered?: boolean;
+  /**
    * When this record last changed, ISO-8601 — and ABSENT where nothing has
    * ever recorded one.
    *
@@ -159,7 +173,17 @@ function refuseAliasRecord(record: AliasRecord): string | null {
   ) {
     return 'An alias record\'s status must be registered, queued, or failed.';
   }
-  if (record.status === 'registered' && (!record.resolverDeployTxId || !record.registerTxId)) {
+  /* The transaction-id invariant asks a question about THIS device's own
+     evidence, so it is asked only of records this device made. A recovered
+     record was read off a passkey by a browser that holds nothing: there are no
+     ids to carry, and refusing it would leave the one device that needs the
+     name most as the one device not allowed to keep it. What it may never do is
+     claim ids it does not have — see {@link AliasRecord.recovered}. */
+  if (
+    record.status === 'registered' &&
+    record.recovered !== true &&
+    (!record.resolverDeployTxId || !record.registerTxId)
+  ) {
     return 'A registered alias record must carry both the resolver deployment and registration transaction ids.';
   }
   if (record.status !== 'registered' && !record.queuedReason) {
@@ -244,6 +268,31 @@ export function restoreAliasRecords(records: AliasRecord[]): AliasRecordWriteOut
   }
   publish();
   return outcomes;
+}
+
+/**
+ * Forgets ONE network's record — and it exists for exactly one caller.
+ *
+ * A name restored from a passkey (`recovered: true`) is a claim this device
+ * cannot check on its own. When the account it names never answers and the
+ * person chooses to set up a new one instead, the restored name must go with
+ * it: leaving it would put somebody else's name — or their own, over an account
+ * that is not there — on a Passport they have just decided to start again.
+ *
+ * It removes the record and nothing else. It is never a way to "release" a
+ * name: the name lives on chain, and this store is only what this browser
+ * remembers about it.
+ */
+export function removeAliasRecord(network: string): void {
+  try {
+    const records = readAll();
+    if (!Object.hasOwn(records, network)) return;
+    delete records[network];
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  } catch {
+    // Storage denied: the record outlives this, which is the safe direction.
+  }
+  publish();
 }
 
 export function clearAliasRecords(): void {
