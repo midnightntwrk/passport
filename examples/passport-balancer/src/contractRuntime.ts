@@ -29,6 +29,8 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import type { ZKConfigProvider } from '@midnight-ntwrk/midnight-js-types';
 
 import type { BalancerConfig } from './config.js';
+import { countingProof } from './proving.js';
+import { currentJob, progress } from './reservation.js';
 import type { ContractWalletProvider } from './wallet.js';
 
 /** Attempts, {@link CONFIRM_INTERVAL_MS} apart, to resolve an identifier to a hash. */
@@ -154,6 +156,143 @@ export async function resolveTransactionHash(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Deadlines                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A wait after a submission that was abandoned rather than answered.
+ *
+ * It says nothing about the transaction — see {@link boundedPublicDataProvider},
+ * which asks the indexer directly by identifier before it throws one of these.
+ * The two hangs of 2026/09/02 had both landed on chain, and a service that
+ * treated its own timeout as a failure would have rebuilt two transactions that
+ * were already in blocks 291694 and 292118.
+ */
+export class ConfirmationTimeout extends Error {
+  readonly what: string;
+  readonly subject: string;
+
+  constructor(what: string, subject: string, waitedMs: number) {
+    super(
+      `The indexer did not report ${what} ${subject} within ${Math.round(waitedMs / 1_000)} s, and a direct query did not find it either.`,
+    );
+    this.name = 'ConfirmationTimeout';
+    this.what = what;
+    this.subject = subject;
+  }
+}
+
+/** Matches {@link ConfirmationTimeout} across a bundle boundary. */
+export function isConfirmationTimeout(cause: unknown): boolean {
+  if (cause instanceof ConfirmationTimeout) return true;
+  return cause instanceof Error && cause.name === 'ConfirmationTimeout';
+}
+
+/** A proof that took longer than this service is willing to hold a lane for. */
+export class ProofTimeout extends Error {
+  constructor(waitedMs: number) {
+    super(`Proving did not finish within ${Math.round(waitedMs / 1_000)} s.`);
+    this.name = 'ProofTimeout';
+  }
+}
+
+/** Matches {@link ProofTimeout} across a bundle boundary. */
+export function isProofTimeout(cause: unknown): boolean {
+  if (cause instanceof ProofTimeout) return true;
+  return cause instanceof Error && cause.name === 'ProofTimeout';
+}
+
+/**
+ * Runs `work` with a ceiling, and with the running job's abort as a second exit.
+ *
+ * The underlying promise is never CANCELLED — nothing in midnight-js or the
+ * wallet SDK offers cancellation — it is stopped being waited on, and its
+ * eventual settlement is discarded rather than left to surface as an unhandled
+ * rejection. That is the honest description of what this service can do about a
+ * library that waits for ever, and it is enough: the lane comes back, the job
+ * rebuilds, and the DUST is recovered through the orphan sweeper.
+ */
+export async function withDeadline<T>(
+  work: () => Promise<T>,
+  milliseconds: number,
+  onExpiry: (waitedMs: number) => Error,
+): Promise<T> {
+  const startedAt = Date.now();
+  const signal = currentJob()?.abort.signal;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let onAbort: (() => void) | null = null;
+  try {
+    return await new Promise<T>((settle, fail) => {
+      timer = setTimeout(() => fail(onExpiry(Date.now() - startedAt)), milliseconds);
+      if (signal) {
+        if (signal.aborted) {
+          fail(signal.reason);
+          return;
+        }
+        onAbort = (): void => fail(signal.reason);
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+      void work().then(settle, fail);
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+  }
+}
+
+/**
+ * One indexer query: has the transaction with this IDENTIFIER landed?
+ *
+ * The bounded sibling of {@link resolveTransactionHash}, which retries for
+ * thirty seconds because it runs when the answer is known to be yes. This one
+ * runs when the answer is the question — a watch that timed out — so it asks
+ * once and reports what it got, including "the indexer would not answer",
+ * which is not the same as "the transaction is not there".
+ */
+export async function queryTransactionByIdentifier(
+  indexerHttpUrl: string,
+  identifier: string,
+): Promise<{ landed: boolean; hash: string | null; block: number | null }> {
+  const query = `{ transactions(offset: { identifier: "${identifier}" }) { hash block { height } } }`;
+  try {
+    const response = await fetch(indexerHttpUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body = (await response.json()) as {
+      data?: { transactions?: Array<{ hash?: string; block?: { height?: number } }> };
+    };
+    const found = body.data?.transactions?.[0];
+    if (found?.hash) return { landed: true, hash: found.hash, block: found.block?.height ?? null };
+  } catch {
+    // An unreachable indexer is not a landed transaction, and not a missing one.
+  }
+  return { landed: false, hash: null, block: null };
+}
+
+/** One indexer query: does a contract exist at this address? */
+export async function queryContractExists(
+  indexerHttpUrl: string,
+  contractAddress: string,
+): Promise<boolean> {
+  const query = `{ contractAction(address: "${contractAddress}") { address } }`;
+  try {
+    const response = await fetch(indexerHttpUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body = (await response.json()) as { data?: { contractAction?: { address?: string } | null } };
+    return Boolean(body.data?.contractAction?.address);
+  } catch {
+    return false;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Compiled builds                                                            */
 /* -------------------------------------------------------------------------- */
 
@@ -251,11 +390,13 @@ export async function createContractProofProvider(
     );
     return {
       mode: 'server',
-      proofProvider: httpClientProofProvider({
-        url: config.provingServerUrl,
-        zkConfigProvider,
-        timeout: CONTRACT_PROOF_TIMEOUT_MS,
-      } as never),
+      proofProvider: countedProofProvider(
+        httpClientProofProvider({
+          url: config.provingServerUrl,
+          zkConfigProvider,
+          timeout: CONTRACT_PROOF_TIMEOUT_MS,
+        } as never),
+      ),
     };
   }
 
@@ -290,7 +431,45 @@ export async function createContractProofProvider(
   };
 
   const prover = Effect.runSync(WasmProver.create({ keyMaterialProvider }));
-  return { mode: 'wasm', proofProvider: createProofProvider(prover.asProvingProvider()) };
+  return {
+    mode: 'wasm',
+    proofProvider: countedProofProvider(createProofProvider(prover.asProvingProvider())),
+  };
+}
+
+/** What midnight-js asks a proof provider to do. */
+interface ProvingProvider {
+  proveTx(...args: unknown[]): Promise<unknown>;
+  [key: string]: unknown;
+}
+
+/**
+ * Makes midnight-js's own proving visible to the stall watchdog.
+ *
+ * `deployContract` and `callTx` prove through this provider, and a contract
+ * proof is minutes long and reports nothing while it runs. Without this count
+ * the watchdog in `./reservation.ts` would see a job that has not moved since
+ * `balanced` and abort a perfectly healthy registration; with it, `proverIdle`
+ * is false for exactly as long as the proof is outstanding.
+ *
+ * Prototype-preserving, for the reason `boundedPublicDataProvider` gives: the
+ * providers are class instances with methods this wrapper does not name.
+ */
+function countedProofProvider(provider: unknown): unknown {
+  const inner = provider as ProvingProvider;
+  if (typeof inner?.proveTx !== 'function') return provider;
+  const wrapper = Object.create(inner) as ProvingProvider;
+  Object.assign(wrapper, {
+    proveTx: (...args: unknown[]) => {
+      progress('proving');
+      return countingProof(async () => {
+        const proved = await inner.proveTx(...args);
+        progress('proved');
+        return proved;
+      });
+    },
+  });
+  return wrapper;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -344,6 +523,137 @@ export async function publicDataProviderFor(config: BalancerConfig) {
   });
 }
 
+/** The three provider methods a spend job can wait on for ever. */
+interface WatchingProvider {
+  watchForTxData(txId: string): Promise<unknown>;
+  watchForDeployTxData(contractAddress: string): Promise<unknown>;
+  watchForContractState(contractAddress: string): Promise<unknown>;
+  [key: string]: unknown;
+}
+
+export interface BoundedProviderOptions {
+  /** See `config.confirmTimeoutMs`. */
+  confirmTimeoutMs: number;
+  /**
+   * Builds a SECOND, independent provider for the recovery attempt.
+   *
+   * Independent is the load-bearing word. midnight-js polls the indexer through
+   * one Apollo client per provider, and the failure being recovered from is a
+   * client that has stopped producing results — so retrying on the same one
+   * would wait out a second deadline and learn nothing. A fresh client asks the
+   * same query over a new socket.
+   *
+   * Recovery goes through the LIBRARY rather than hand-parsing the indexer's
+   * answer, and deliberately: the value these methods return carries a parsed
+   * ledger `Transaction`, and this service links `@midnightntwrk/ledger-v9`
+   * while midnight-js links `@midnight-ntwrk/ledger-v9` — two different WASM
+   * modules. A transaction parsed here and handed to midnight-js would be an
+   * object from a foreign instance, which is a worse fault than the one being
+   * fixed.
+   */
+  fresh: () => Promise<WatchingProvider>;
+  /** Where {@link queryTransactionByIdentifier} asks. */
+  indexerHttpUrl: string;
+  /**
+   * The direct question: is this transaction, or this contract, on chain?
+   *
+   * Injectable so the recovery path is a unit test rather than a stagenet
+   * afternoon — the default is the real pair of one-shot indexer queries, and
+   * that is what production uses.
+   */
+  landed?: (what: 'transaction' | 'contract', subject: string) => Promise<boolean>;
+  log?: (line: string) => void;
+}
+
+/**
+ * Puts a ceiling on the three indexer waits midnight-js performs with none.
+ *
+ * `pollUntilPresent` — `watchForTxData`, `watchForDeployTxData` — is an Apollo
+ * `watchQuery` filtered to the first matching answer and taken once. If the
+ * answer never comes, or the socket underneath stops producing answers, the
+ * promise never settles and the spend job holding a lane never ends. Nothing in
+ * midnight-js, and until now nothing here, bounded it.
+ *
+ * On expiry the indexer is asked DIRECTLY, once, by identifier or by address.
+ * A transaction that landed and was merely not streamed to us is a completed
+ * job — that is both hangs of 2026/09/02 — so the watch is retried on a fresh
+ * client and the job carries on. A transaction that is genuinely not there is a
+ * {@link ConfirmationTimeout}, which `withNodeRejectionRetry` treats as a
+ * rebuildable failure.
+ */
+export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
+  provider: TProvider,
+  options: BoundedProviderOptions,
+): TProvider {
+  const log = options.log ?? ((line: string) => console.log(line));
+  const askDirectly =
+    options.landed ??
+    (async (what: 'transaction' | 'contract', subject: string): Promise<boolean> =>
+      what === 'transaction'
+        ? (await queryTransactionByIdentifier(options.indexerHttpUrl, subject)).landed
+        : queryContractExists(options.indexerHttpUrl, subject));
+
+  const bound = async <T>(
+    what: string,
+    subject: string,
+    call: (from: WatchingProvider) => Promise<T>,
+    landed: () => Promise<boolean>,
+  ): Promise<T> => {
+    try {
+      const result = await withDeadline(
+        () => call(provider),
+        options.confirmTimeoutMs,
+        (waitedMs) => new ConfirmationTimeout(what, subject, waitedMs),
+      );
+      progress('seen-on-chain');
+      return result;
+    } catch (cause) {
+      if (!isConfirmationTimeout(cause)) throw cause;
+      log(
+        `[job] the indexer has not reported ${what} ${subject} in ${Math.round(options.confirmTimeoutMs / 1_000)} s — asking it directly`,
+      );
+      if (!(await landed())) throw cause;
+      log(`[job] ${what} ${subject} is on chain — retrying the watch on a fresh indexer client`);
+      const result = await withDeadline(
+        async () => call(await options.fresh()),
+        options.confirmTimeoutMs,
+        (waitedMs) => new ConfirmationTimeout(what, subject, waitedMs),
+      );
+      progress('seen-on-chain (direct query)');
+      return result;
+    }
+  };
+
+  /* Prototype-preserving: `indexerPublicDataProvider` returns a CLASS instance,
+     and midnight-js calls methods this wrapper does not name. Spreading it
+     would drop every one of them. */
+  const wrapper = Object.create(provider) as TProvider;
+  Object.assign(wrapper, {
+    watchForTxData: (txId: string) =>
+      bound(
+        'transaction',
+        txId,
+        (from) => from.watchForTxData(txId),
+        () => askDirectly('transaction', txId),
+      ),
+    watchForDeployTxData: (address: string) =>
+      bound(
+        'the deploy of',
+        address,
+        (from) => from.watchForDeployTxData(address),
+        () => askDirectly('contract', address),
+      ),
+    watchForContractState: (address: string) =>
+      bound(
+        'the state of',
+        address,
+        (from) => from.watchForContractState(address),
+        () => askDirectly('contract', address),
+      ),
+  });
+  return wrapper;
+}
+
 /**
  * The provider set one contract job runs against.
  *
@@ -368,7 +678,16 @@ export async function contractProviders(
     privateStateProvider: inMemoryPrivateStateProvider({
       [options.privateStateId]: options.initialPrivateState,
     }),
-    publicDataProvider: await publicDataProviderFor(config),
+    /* Bounded, because midnight-js waits on these three with no deadline at
+       all — see `boundedPublicDataProvider`. */
+    publicDataProvider: boundedPublicDataProvider(
+      (await publicDataProviderFor(config)) as never,
+      {
+        confirmTimeoutMs: config.confirmTimeoutMs,
+        fresh: async () => (await publicDataProviderFor(config)) as never,
+        indexerHttpUrl: config.indexerHttpUrl,
+      },
+    ),
     zkConfigProvider: options.zkConfigProvider,
     proofProvider: options.proofProvider,
     walletProvider: options.walletProvider,

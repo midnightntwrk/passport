@@ -80,6 +80,7 @@ import {
   contractProviders,
   createContractProofProvider,
   hexToBytes,
+  isConfirmationTimeout,
   managedBuildPath,
   nativeColourBytes,
   publicDataProviderFor,
@@ -89,6 +90,8 @@ import {
   wait,
   type ContractProvingMode,
 } from './contractRuntime.js';
+import { progress } from './reservation.js';
+import { isSubmissionTimeout } from './submission.js';
 import { isDustShortfall, type BalancerWallet } from './wallet.js';
 
 /** Attempts, {@link CONFIRM_INTERVAL_MS} apart, to watch the credit appear. */
@@ -229,6 +232,23 @@ export function isNodeRejection(cause: unknown): boolean {
   return false;
 }
 
+/**
+ * Is this a failure a REBUILD could fix?
+ *
+ * A node rejection is the original case, and a bounded wait that expired is the
+ * new one. They are different failures with the same remedy: in both, the bytes
+ * this service built are not going to become a landed transaction, and the
+ * coins they select were chosen against a view that has since moved on. The
+ * distinction the caller has already drawn by the time this is asked is the
+ * important one — a `ConfirmationTimeout` is only thrown after the indexer has
+ * been asked directly and said the transaction is NOT there, and a
+ * `SubmissionTimeout` only after the same check in `submitTx`. A transaction
+ * that landed is never rebuilt.
+ */
+export function isRebuildable(cause: unknown): boolean {
+  return isNodeRejection(cause) || isConfirmationTimeout(cause) || isSubmissionTimeout(cause);
+}
+
 export interface NodeRejectionRetryOptions {
   /** Builds and submits the transaction. Called afresh on every attempt. */
   label: string;
@@ -284,9 +304,9 @@ export async function withNodeRejectionRetry<T>(
       return await build();
     } catch (cause) {
       last = cause;
-      if (!isNodeRejection(cause) || attempt === attempts) throw cause;
+      if (!isRebuildable(cause) || attempt === attempts) throw cause;
       log(
-        `[retry] the node refused ${options.label} (${cause instanceof Error ? cause.message : String(cause)}) — waiting for this wallet to catch up with the block that refused it, then rebuilding (attempt ${attempt + 1} of ${attempts})`,
+        `[retry] ${isNodeRejection(cause) ? 'the node refused' : 'this service gave up waiting on'} ${options.label} (${cause instanceof Error ? cause.message : String(cause)}) — waiting for this wallet to catch up with the chain, then rebuilding (attempt ${attempt + 1} of ${attempts})`,
       );
       const deadline = Date.now() + budgetMs;
       for (;;) {
@@ -738,7 +758,7 @@ export async function createAccountFunder(
           bytes: recipientBytes,
         });
         return transactionIdentifier(mint);
-      });
+      }, { label: `the spare ${ASSET_SYMBOL} mint` });
     } catch (cause) {
       throw new AccountFundingError(
         'mint-failed',
@@ -934,6 +954,7 @@ export async function createAccountFunder(
           const held = mirroredNight(await readAccount(address));
           if (held >= target) {
             balanceAfter = held;
+            progress('confirmed');
             break;
           }
         } catch {
@@ -1025,7 +1046,7 @@ export async function createAccountFunder(
             value: coin.value,
           });
           return transactionIdentifier(deposit);
-          }),
+          }, { label: `deposit_shielded into ${address}` }),
           { label: `deposit_shielded into ${address}`, synced: caughtUp },
         );
       } catch (cause) {
@@ -1047,6 +1068,7 @@ export async function createAccountFunder(
           const held = heldAsset(await readAccount(address));
           if (held >= target) {
             balanceAfter = held;
+            progress('confirmed');
             break;
           }
         } catch {
