@@ -75,7 +75,20 @@ import {
 } from '@midnight-ntwrk/wallet-sdk/unshielded';
 
 import type { BalancerConfig } from './config.js';
-import { createWalletReservation } from './reservation.js';
+import {
+  createWalletReservation,
+  currentJob,
+  progress,
+  type RunningJobSummary,
+} from './reservation.js';
+import { countingProof, proverIdle } from './proving.js';
+import {
+  CONTRACT_PROOF_TIMEOUT_MS,
+  ProofTimeout,
+  queryTransactionByIdentifier,
+  withDeadline,
+} from './contractRuntime.js';
+import { isSubmissionTimeout, serialisedSubmissionService } from './submission.js';
 import { FEE_CAPABLE_SPECKS } from './resolverPool.js';
 
 // The wallet SDK's indexer client needs a global WebSocket under plain Node.
@@ -578,6 +591,29 @@ export class DustUnavailable extends Error {
   }
 }
 
+/**
+ * The background chain walk stopped producing state events.
+ *
+ * Reported rather than repaired. A wallet that is not syncing is a wallet whose
+ * indexer socket has gone quiet, and the health loop already knows how to
+ * rewarm one — what was missing was any way to find out, since the wait itself
+ * had no ceiling and simply never returned.
+ */
+export class SyncStalled extends Error {
+  constructor(waitedMs: number) {
+    super(
+      `the chain walk reported nothing for ${Math.round(waitedMs / 1_000)} s — the indexer subscription has most likely gone quiet`,
+    );
+    this.name = 'SyncStalled';
+  }
+}
+
+/** Matches {@link SyncStalled} across a bundle boundary. */
+export function isSyncStalled(cause: unknown): boolean {
+  if (cause instanceof SyncStalled) return true;
+  return cause instanceof Error && cause.name === 'SyncStalled';
+}
+
 /** Three seconds — half a block, and the figure `/wallet-status` publishes. */
 const SHORTFALL_RETRY_AFTER_MS = 3_000;
 
@@ -935,6 +971,15 @@ export interface BalancerWallet {
   /** Spend jobs running right now — `/status` publishes it as `jobsRunning`. */
   jobCount(): number;
   /**
+   * What each running spend job is doing, and how long since it last said so.
+   *
+   * This is what makes a silent job visible from OUTSIDE the process. On
+   * 2026/09/02 `/status` could say `jobsRunning: 1` for thirty-seven minutes
+   * and nothing could tell whether that job was proving or wedged; the droplet
+   * watchdog now reads a step and an age and can decide.
+   */
+  runningJobs(): RunningJobSummary[];
+  /**
    * How many may run at once: the configured ceiling, or the free FEE-CAPABLE
    * DUST coins if there are fewer.
    */
@@ -1002,7 +1047,10 @@ export interface BalancerWallet {
    * `priority` reorders only what is still WAITING — see {@link SpendPriority},
    * which is where the measurement behind the one non-default value lives.
    */
-  exclusive<T>(task: () => Promise<T>, options?: { priority?: number }): Promise<T>;
+  exclusive<T>(
+    task: () => Promise<T>,
+    options?: { priority?: number; label?: string },
+  ): Promise<T>;
   /**
    * Keeps the queue's next lane for a job that is waiting for a DUST coin
    * outside the queue. See `hold` in `./reservation.ts` for the measurement
@@ -1106,6 +1154,28 @@ export async function openBalancerWallet(
   const startFacade = async (snapshot: StoredSnapshot | null): Promise<WalletFacade> =>
     WalletFacade.init({
       configuration,
+      /* NOT the SDK's default service, and this is the fix for the two silent
+         hangs of 2026/09/02. The default holds ONE polkadot-js connection for
+         the whole facade and disconnects it at the end of every submission,
+         and polkadot-js drops `author_*` subscriptions on the reconnect without
+         erroring them — so one submission ending kills another's watch in
+         silence, for ever. `./submission.ts` serialises submissions so two
+         watches never coexist, and bounds each one. */
+      submissionService: (cfg: { relayURL: URL }) =>
+        /* Cast because the SDK types `submitTransaction` as an OVERLOAD SET
+           whose return type follows the status the caller asked for, and this
+           wrapper deliberately does not honour that: it asks the node for
+           `'Submitted'` whatever it was handed, so it would be lying to claim
+           it returns a `Finalized` event. Nothing in this service reads the
+           return value — the facade discards it, and `submitTx` below returns
+           the identifier it already had — so the narrower truth is the safe
+           one. */
+        serialisedSubmissionService(cfg, {
+          timeoutMs: config.submitTimeoutMs,
+          /* The running job's watchdog, so an abort actually unwinds the wait
+             rather than merely rejecting the caller above it. */
+          signal: () => currentJob()?.abort.signal,
+        }) as never,
       provingService: () => provingService,
       shielded: (cfg) =>
         snapshot
@@ -1311,6 +1381,11 @@ export async function openBalancerWallet(
        only when there is a coin for it to spend, so lanes close as coins are
        taken and reopen as change lands. */
     lanes: () => spendLaneCount(freeDustCoins, config.spendLanes),
+    /* The watchdog that gives a silent job's lane back. It fires only while
+       nothing of ours is at the prover — see `./proving.ts` — because a job
+       that is proving legitimately reports no step for minutes. */
+    stallMs: config.jobStallMs,
+    proverIdle,
     onSlowClaim: (label, heldMs) =>
       console.log(
         `[claim] ${label} held this wallet for ${(heldMs / 1_000).toFixed(1)} s — /wallet-status answered available: 0 for that long`,
@@ -1516,7 +1591,20 @@ export async function openBalancerWallet(
           }, 5_000)
         : null;
       try {
-        await Rx.firstValueFrom(facade.state().pipe(Rx.filter((state) => state.isSynced)));
+        /* Bounded, because a wedged indexer socket produces no state events at
+           all and this wait is on the service's start path: without a ceiling a
+           dead socket is a service that never finishes starting and never says
+           why. The caller logs the stall and lets the health loop's existing
+           rewarm remedy act — this is a report, not a repair. */
+        await Rx.firstValueFrom(
+          facade.state().pipe(
+            Rx.filter((state) => state.isSynced),
+            Rx.timeout({
+              each: config.syncStallMs,
+              with: () => Rx.throwError(() => new SyncStalled(config.syncStallMs)),
+            }),
+          ),
+        );
       } finally {
         if (ticker) clearInterval(ticker);
       }
@@ -1542,6 +1630,7 @@ export async function openBalancerWallet(
     awaitFreeDustCoin,
 
     jobCount: () => reservation.counts().jobs,
+    runningJobs: () => reservation.counts().running,
     spendLanes: () => reservation.lanes(),
 
     async shieldedBalance(tokenType: string, state?: FacadeState): Promise<bigint> {
@@ -1685,6 +1774,7 @@ export async function openBalancerWallet(
               'contract balancing',
             );
             recipe = balanced;
+            progress('balanced');
             const signed = await reserve(
               () => facade.signRecipe(balanced, unshieldedKeystore.signDataAsync),
               'contract signing',
@@ -1696,7 +1786,21 @@ export async function openBalancerWallet(
                spent by the balancing above, so a `/balance-only` arriving now
                selects different ones. Holding the claim through it is what made
                `/wallet-status` answer `available: 0` while a grant proved. */
-            return await facade.finalizeRecipe(signed);
+            /* Bounded, and counted as a proof while it runs. The bound is the
+               same ten minutes a contract proof gets: a dust proof that has not
+               finished by then is not slow, and the lane it holds is one every
+               registration behind it is waiting for. The catch below reverts
+               the recipe, so a `ProofTimeout` gives the DUST back rather than
+               leaving it booked against a proof nobody is waiting for. */
+            const proved = await countingProof(() =>
+              withDeadline(
+                () => facade.finalizeRecipe(signed),
+                CONTRACT_PROOF_TIMEOUT_MS,
+                (waitedMs) => new ProofTimeout(waitedMs),
+              ),
+            );
+            progress('proved');
+            return proved;
           } catch (cause) {
             const toRevert = recipe;
             if (toRevert) {
@@ -1728,9 +1832,42 @@ export async function openBalancerWallet(
             () => facade.pendingTransactionsService.addPendingTransaction(finalized),
             'contract submission booking',
           );
+          const identifier = String(finalized.identifiers().at(-1));
           try {
             await facade.submissionService.submitTransaction(finalized, 'Finalized');
+            progress('submitted');
           } catch (cause) {
+            /* A submission this service STOPPED WAITING FOR is not a failed
+               one. Both hangs of 2026/09/02 had their transaction in a block
+               already — 291694 and 292118 — so reverting on a timeout would
+               throw away DUST that the chain has genuinely spent and rebuild a
+               transaction that has genuinely landed. The indexer is asked
+               first, and only an answer of "not there" is treated as failure. */
+            if (isSubmissionTimeout(cause)) {
+              const seen = await queryTransactionByIdentifier(config.indexerHttpUrl, identifier);
+              if (seen.landed) {
+                console.log(
+                  `[job] the node never acknowledged ${identifier}, but it is on chain in block ${seen.block ?? '?'} — carrying on`,
+                );
+                progress('submitted');
+                return identifier;
+              }
+              /* Not on chain YET, and possibly on its way: the bytes were handed
+                 to the node before this service gave up on the answer. Reverting
+                 now would double-spend the DUST if it lands a second later, so
+                 the booking is handed to the orphan sweeper, which reverts it in
+                 `balanceOrphanMs` if the chain never carries it. */
+              console.log(
+                `[job] the node never acknowledged ${identifier} and it is not on chain — watching it as an orphan and rebuilding`,
+              );
+              orphans.watch({
+                txHash: String(finalized.transactionHash()),
+                identifier,
+                finalized,
+                balancedAt: Date.now(),
+              });
+              throw cause;
+            }
             try {
               await reserve(() => facade.revert(finalized));
             } catch {
@@ -1744,7 +1881,7 @@ export async function openBalancerWallet(
             await noticeWedgeAfterRevert();
             throw cause;
           }
-          return String(finalized.identifiers().at(-1));
+          return identifier;
         },
       };
     },

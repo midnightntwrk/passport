@@ -114,6 +114,29 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    */
   dustWaitMs: number;
   /**
+   * How long ONE node submission may take before this service stops waiting on
+   * it. See {@link DEFAULT_SUBMIT_TIMEOUT_MS}: the wallet SDK's submission
+   * stream can be dropped without a callback, and nothing underneath bounds it.
+   */
+  submitTimeoutMs: number;
+  /**
+   * How long a submitted transaction may go unseen by the indexer before the
+   * job stops waiting and asks the indexer directly. See
+   * {@link DEFAULT_CONFIRM_TIMEOUT_MS}.
+   */
+  confirmTimeoutMs: number;
+  /**
+   * How long a running spend job may make no progress, with nothing of ours at
+   * the prover, before the queue aborts it and gives its lane back. See
+   * {@link DEFAULT_JOB_STALL_MS}.
+   */
+  jobStallMs: number;
+  /**
+   * How long the background chain walk may stall before {@link
+   * BalancerWallet.waitForSync} gives up and lets the health loop's rewarm act.
+   */
+  syncStallMs: number;
+  /**
    * How many pre-deployed resolver leaves the sponsor tries to hold. The filler
    * tops the shelf up to here and never past it. Zero switches the pool off and
    * every registration deploys its own leaf, which is the behaviour this
@@ -310,6 +333,51 @@ export const DEFAULT_SPEND_LANES = 3;
  * budget is still zero.
  */
 export const DEFAULT_DUST_WAIT_MS = 240_000;
+
+/**
+ * How long ONE node submission may take before this service stops waiting.
+ *
+ * THIRTY SECONDS, AND IT IS A CEILING ON A SUB-SECOND OPERATION. Since
+ * 2026/09/02 every submission asks the node for `'Submitted'` — the first
+ * Ready/Broadcast status, which arrives in well under a second — rather than
+ * `'Finalized'`, which is 15–25 s of stagenet finality this service has no
+ * reason to hold a lane through. The bound exists because the wallet SDK's
+ * default submission service shares ONE polkadot-js `ApiPromise` across every
+ * submission and disconnects it at the end of each one, and polkadot-js drops
+ * `author_*` subscriptions on a reconnect WITHOUT erroring their handlers: an
+ * overlapping submission therefore leaves the first one's watch waiting for a
+ * status callback that will never come. That is the 23:03 and 23:46 hangs of
+ * 2026/09/02, both of which held a lane silently until an operator restarted
+ * the service.
+ */
+export const DEFAULT_SUBMIT_TIMEOUT_MS = 30_000;
+
+/**
+ * How long a submitted transaction may go unseen by the INDEXER.
+ *
+ * Two minutes: a stagenet block is 6 s and the indexer's own lag is about 14 s,
+ * so this is eight blocks of slack over the worst honest case. midnight-js
+ * waits on `watchForTxData` / `watchForDeployTxData` with no deadline at all,
+ * which turns a wedged indexer socket into a job that never ends. On expiry the
+ * transaction is looked up DIRECTLY by identifier before anything is given up
+ * on: a transaction that landed and was merely not streamed to us is a
+ * completed job, not a failed one.
+ */
+export const DEFAULT_CONFIRM_TIMEOUT_MS = 120_000;
+
+/**
+ * How long a running spend job may make NO PROGRESS before the queue aborts it.
+ *
+ * Two and a half minutes, and only while nothing of ours is at the prover — a
+ * proof is legitimately minutes long and reports no steps while it runs. Every
+ * other step of a job is seconds, so a job that has not moved for this long
+ * with an idle prover is not slow, it is stuck, and the lane it holds is a lane
+ * every user behind it is waiting for.
+ */
+export const DEFAULT_JOB_STALL_MS = 150_000;
+
+/** How long the background chain walk may stall before it is reported. */
+export const DEFAULT_SYNC_STALL_MS = 600_000;
 
 /**
  * How many pre-deployed resolver leaves to hold, and the depth below which the
@@ -585,6 +653,41 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     );
   }
 
+  const submitTimeoutMs = wholeNumber(
+    'BALANCER_SUBMIT_TIMEOUT_MS',
+    trimmed(env.BALANCER_SUBMIT_TIMEOUT_MS),
+    DEFAULT_SUBMIT_TIMEOUT_MS,
+  );
+  if (submitTimeoutMs < 1_000) {
+    throw new Error('BALANCER_SUBMIT_TIMEOUT_MS must be at least 1000 ms.');
+  }
+  const confirmTimeoutMs = wholeNumber(
+    'BALANCER_CONFIRM_TIMEOUT_MS',
+    trimmed(env.BALANCER_CONFIRM_TIMEOUT_MS),
+    DEFAULT_CONFIRM_TIMEOUT_MS,
+  );
+  if (confirmTimeoutMs < 1_000) {
+    throw new Error('BALANCER_CONFIRM_TIMEOUT_MS must be at least 1000 ms.');
+  }
+  const jobStallMs = wholeNumber(
+    'BALANCER_JOB_STALL_MS',
+    trimmed(env.BALANCER_JOB_STALL_MS),
+    DEFAULT_JOB_STALL_MS,
+  );
+  if (jobStallMs < 10_000) {
+    throw new Error(
+      'BALANCER_JOB_STALL_MS must be at least 10000 ms: a shorter watchdog would abort jobs that are merely slow.',
+    );
+  }
+  const syncStallMs = wholeNumber(
+    'BALANCER_SYNC_STALL_MS',
+    trimmed(env.BALANCER_SYNC_STALL_MS),
+    DEFAULT_SYNC_STALL_MS,
+  );
+  if (syncStallMs < 10_000) {
+    throw new Error('BALANCER_SYNC_STALL_MS must be at least 10000 ms.');
+  }
+
   const resolverPoolTarget = wholeNumber(
     'RESOLVER_POOL_TARGET',
     trimmed(env.RESOLVER_POOL_TARGET),
@@ -650,6 +753,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     spendQueueMax,
     spendLanes,
     dustWaitMs,
+    submitTimeoutMs,
+    confirmTimeoutMs,
+    jobStallMs,
+    syncStallMs,
     resolverPoolTarget,
     resolverPoolFloor,
     trustedProxies: trustedProxies.length > 0 ? trustedProxies : [...DEFAULT_TRUSTED_PROXIES],
