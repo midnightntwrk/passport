@@ -6,6 +6,8 @@ import { useMemo, useState, type ReactNode } from 'react'
    wallet SDK — see `lib/colour.ts`. */
 import {
   describeColours,
+  describeItem,
+  type ItemArt,
   NIGHT_COLOUR_HEX,
   nftTitle,
   sortTokenHoldings,
@@ -106,6 +108,13 @@ interface AssetRow {
   unitIsColour: boolean
   /** Which shelf it landed on. See `classifyHolding`. */
   item: boolean
+  /**
+   * The picture and the name for a colour this build knows, or `null`.
+   *
+   * Always `null` on the token shelf: a balance row is a figure to compare,
+   * and a picture beside one would be furniture. See `describeItem`.
+   */
+  art?: ItemArt | null
 }
 
 export default function AssetsScreen(props: AssetsScreenProps) {
@@ -210,23 +219,34 @@ export default function AssetsScreen(props: AssetsScreenProps) {
       held.map((row) => row.colourHex),
       sponsored,
     )
-    const rows = held.map((row, index) => ({
+    const rows = held.map((row, index) => {
+      /* The art, where this build has any for the colour. A registry hit is
+         the exception — most items are colours nothing has ever heard of — so
+         `null` is the ordinary answer and the generic card below is the
+         ordinary card. See `describeItem`. */
+      const art = row.item ? describeItem(row.colourHex) : null
+      return {
       key: row.colourHex,
       icon: row.icon,
-      /* Items are re-nouned off the SAME handle the naming authority gave the
-         colour: on a card whose job is to say "one of a kind", the first word
-         must not be "Token". See `nftTitle`. */
-      label: row.item ? nftTitle(identities[index].symbol) : identities[index].symbol,
+      art,
+      /* A known item leads with its own name. Everything else is re-nouned off
+         the SAME handle the naming authority gave the colour: on a card whose
+         job is to say "one of a kind", the first word must not be "Token".
+         See `nftTitle`. */
+      label: art ? art.title : row.item ? nftTitle(identities[index].symbol) : identities[index].symbol,
       value: row.value,
       /* Both shelves take their subtitle from the naming authority: a ticker
          gets "stablecoin", a colour nobody can name gets the shortened colour,
-         and NOTHING gets the 64 characters. */
-      unit: identities[index].name,
+         and NOTHING gets the 64 characters. A known item overrides it with a
+         sentence about the thing, which is the same kind of answer the ticker
+         rows get and a better one than four characters of colour. */
+      unit: art ? art.description : identities[index].name,
       /* Which of those two the subtitle is, so the card can set a WORD like a
          label and DATA like data. See `.mnassets-card-unit-colour`. */
-      unitIsColour: !identities[index].known,
+      unitIsColour: !art && !identities[index].known,
       item: row.item,
-    }))
+      }
+    })
     return {
       tokens: rows.filter((row) => !row.item),
       nfts: rows.filter((row) => row.item),
@@ -376,6 +396,7 @@ export default function AssetsScreen(props: AssetsScreenProps) {
                   <NftCard
                     key={row.key}
                     icon={row.icon}
+                    art={row.art ?? null}
                     label={row.label}
                     value={row.value ?? ''}
                     unit={row.unit}
@@ -470,6 +491,8 @@ function TokenLine(props: TokenLineProps) {
 
 interface NftCardProps {
   icon: ReactNode
+  /** The picture and the name, where this build knows the colour. */
+  art: ItemArt | null
   label: string
   value: string
   unit: string
@@ -487,9 +510,19 @@ interface NftCardProps {
  * thing on this screen that gets one.
  */
 function NftCard(props: NftCardProps) {
-  const { icon, label, value, unit, unitIsColour } = props
+  const { icon, art, label, value, unit, unitIsColour } = props
   return (
     <article className="mnassets-card mnassets-card-item">
+      {/* The picture, where there is one. It leads the card because seeing the
+          thing IS what an item card is for, and it is decorative in the
+          accessibility sense — the name is right underneath it as text, and a
+          screen reader announcing the same words twice is worse than one.
+          Same-origin, so an installed Passport shows it offline. */}
+      {art ? (
+        <p className="mnassets-card-art">
+          <img src={art.image} alt="" width={400} height={400} loading="lazy" decoding="async" />
+        </p>
+      ) : null}
       <p className="mnassets-card-head">
         {icon}
         <span className="mnassets-micro">{label}</span>

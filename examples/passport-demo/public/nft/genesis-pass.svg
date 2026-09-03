@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-labelledby="gp-title gp-desc">
+  <title id="gp-title">Midnight Genesis Pass</title>
+  <desc id="gp-desc">A crescent moon over a schematic grid, in Input Output Group's Enlightenment palette.</desc>
+  <defs>
+    <!-- Enlightenment: black corners into Infared and Dawn, anchored bottom left. -->
+    <radialGradient id="gp-ground" cx="18%" cy="88%" r="105%">
+      <stop offset="0%" stop-color="#ec641d"/>
+      <stop offset="26%" stop-color="#ae140f"/>
+      <stop offset="62%" stop-color="#180404"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+    <linearGradient id="gp-moon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffb27a"/>
+      <stop offset="45%" stop-color="#ec641d"/>
+      <stop offset="100%" stop-color="#e52321"/>
+    </linearGradient>
+    <linearGradient id="gp-rule" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e52321" stop-opacity="0"/>
+      <stop offset="35%" stop-color="#e52321" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ec641d" stop-opacity="0"/>
+    </linearGradient>
+    <!-- The crescent: one disc bitten by another, so the moon has no seam. -->
+    <mask id="gp-crescent">
+      <rect width="400" height="400" fill="#000"/>
+      <circle cx="200" cy="176" r="76" fill="#fff"/>
+      <circle cx="232" cy="156" r="70" fill="#000"/>
+    </mask>
+    <clipPath id="gp-frame">
+      <rect x="0" y="0" width="400" height="400" rx="28"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#gp-frame)">
+    <rect width="400" height="400" fill="#000000"/>
+    <rect width="400" height="400" fill="url(#gp-ground)"/>
+
+    <!-- Schematic overlay: a coordinate grid, thin and low, never the subject. -->
+    <g stroke="#ffffff" stroke-opacity="0.07" stroke-width="0.75">
+      <path d="M40 0V400M120 0V400M200 0V400M280 0V400M360 0V400"/>
+      <path d="M0 40H400M0 120H400M0 200H400M0 280H400M0 360H400"/>
+    </g>
+
+    <!-- Orbital arcs around the moon: technical, not literal. -->
+    <g fill="none" stroke="#e52321" stroke-opacity="0.34" stroke-width="0.9">
+      <circle cx="200" cy="176" r="104"/>
+      <circle cx="200" cy="176" r="132"/>
+      <ellipse cx="200" cy="176" rx="150" ry="58" transform="rotate(-18 200 176)"/>
+    </g>
+    <g fill="none" stroke="#ec641d" stroke-opacity="0.5" stroke-width="1.1" stroke-linecap="round">
+      <path d="M96 176a104 104 0 0 1 44-85"/>
+      <path d="M304 176a104 104 0 0 1-44 85"/>
+    </g>
+
+    <!-- Wing filaments: the butterfly, read as schematic rather than drawn. -->
+    <g fill="none" stroke="#ffffff" stroke-opacity="0.16" stroke-width="0.75">
+      <path d="M200 176C160 118 104 108 74 140c-28 30-6 84 46 92 34 5 62-20 80-56Z"/>
+      <path d="M200 176c40-58 96-68 126-36 28 30 6 84-46 92-34 5-62-20-80-56Z"/>
+    </g>
+
+    <!-- Nodes on the grid, the only solid marks besides the moon. -->
+    <g fill="#f2ff58" fill-opacity="0.55">
+      <circle cx="120" cy="280" r="1.8"/>
+      <circle cx="280" cy="120" r="1.8"/>
+      <circle cx="40" cy="120" r="1.4"/>
+      <circle cx="360" cy="280" r="1.4"/>
+    </g>
+
+    <!-- The moon. -->
+    <g mask="url(#gp-crescent)">
+      <rect x="110" y="86" width="180" height="180" fill="url(#gp-moon)"/>
+    </g>
+    <circle cx="200" cy="176" r="76" fill="none" stroke="#ec641d" stroke-opacity="0.42" stroke-width="0.9"/>
+
+    <!-- Wordmark. -->
+    <path d="M64 306h272" stroke="url(#gp-rule)" stroke-width="1"/>
+    <text x="200" y="290" text-anchor="middle" fill="#ffffff" fill-opacity="0.66"
+          font-family="Barlow, 'Bricolage Grotesque', 'Helvetica Neue', Arial, sans-serif"
+          font-size="10.5" font-weight="300" letter-spacing="4.6">MIDNIGHT PASSPORT</text>
+    <text x="200" y="346" text-anchor="middle" fill="#ffffff"
+          font-family="Barlow, 'Bricolage Grotesque', 'Helvetica Neue', Arial, sans-serif"
+          font-size="34" font-weight="500" letter-spacing="1.6">GENESIS PASS</text>
+    <text x="200" y="370" text-anchor="middle" fill="#e52321"
+          font-family="Barlow, 'Bricolage Grotesque', 'Helvetica Neue', Arial, sans-serif"
+          font-size="9" font-weight="300" letter-spacing="3.4">1 OF 1 · STAGENET</text>
+
+    <rect x="0.5" y="0.5" width="399" height="399" rx="27.5" fill="none"
+          stroke="#e52321" stroke-opacity="0.4" stroke-width="1"/>
+  </g>
+</svg>

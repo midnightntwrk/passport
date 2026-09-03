@@ -491,3 +491,34 @@
   .mnassets-screen { animation: none; }
   .mnassets-icon-button { transition: none; }
 }
+
+/* --- Item art (2026/09/03) ------------------------------------------------ */
+
+/* THE PICTURE, AND WHY IT GETS THE TOP OF THE CARD.
+   An item card's whole claim is "you have this thing" — and until now it made
+   that claim in four characters of colour. Where the build knows what a colour
+   IS, the art leads and the words follow it, which is the order a person reads
+   a card in anyway.
+
+   A fixed square, not the image's own shape: two cards side by side on the
+   grid must have their titles on one line, and an item whose art is a
+   different aspect ratio would stagger them. `object-fit: cover` is what makes
+   an unknown future image obey that without being distorted to fit it. */
+.mnassets-card-art {
+  margin: 0 0 2px;
+  border: 1px solid var(--mn-border);
+  border-radius: 10px;
+  overflow: hidden;
+  /* Black under the art rather than the card's surface: every item image this
+     build ships is dark-first, and a light gap around it while the image
+     decodes reads as a broken card. */
+  background: #000;
+  line-height: 0;
+}
+.mnassets-card-art img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
