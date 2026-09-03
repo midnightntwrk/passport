@@ -11,9 +11,12 @@
 export const PASSPORT_ORIGIN: string =
   import.meta.env.VITE_PASSPORT_ORIGIN ?? 'https://midnightpassport.com';
 
-/** The swap desk — the same service that opens a Passport's account. */
+/**
+ * The swap desk — the same service that opens a Passport's account, behind the
+ * `/balancer` path its gateway serves it on.
+ */
 export const SWAP_DESK: string = (
-  import.meta.env.VITE_SWAP_DESK ?? 'https://67-205-177-162.sslip.io'
+  import.meta.env.VITE_SWAP_DESK ?? 'https://67-205-177-162.sslip.io/balancer'
 ).replace(/\/+$/, '');
 
 /** Sent only when the desk is configured to require it. */

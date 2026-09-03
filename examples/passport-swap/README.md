@@ -6,7 +6,7 @@ Passport and answered there.
 
 ```
 npm install            # from the workspace root
-npm run dev -w passport-swap        # http://localhost:5181
+npm run dev -w passport-swap        # http://localhost:5175
 ```
 
 The three things it needs are named in `src/config.ts` and overridable with a
@@ -15,7 +15,7 @@ The three things it needs are named in `src/config.ts` and overridable with a
 | Variable | Default | What it is |
 | --- | --- | --- |
 | `VITE_PASSPORT_ORIGIN` | `https://midnightpassport.com` | The Passport this app talks to. |
-| `VITE_SWAP_DESK` | `https://67-205-177-162.sslip.io` | The desk — the same service that opens a Passport's account. |
+| `VITE_SWAP_DESK` | `https://67-205-177-162.sslip.io/balancer` | The desk — the same service that opens a Passport's account. |
 | `VITE_SWAP_DESK_KEY` | unset | Sent as `x-passport-key`, when the desk requires one. |
 
 The desk's origin allow-list must name whatever origin this app is served on,

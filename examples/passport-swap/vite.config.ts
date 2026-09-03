@@ -24,9 +24,20 @@ export default defineConfig({
       { find: /^@midnight-passport\/connect$/, replacement: connect('index.ts') },
     ],
   },
+  /*
+   * 5175 is not arbitrary: the desk answers a browser only from an origin its
+   * own allow-list names, and `http://localhost:5175` is the one it already
+   * carries for a locally served partner app. A different port is a quote the
+   * browser blocks before the desk ever sees the request.
+   */
   server: {
     host: 'localhost',
-    port: 5181,
+    port: 5175,
+    strictPort: true,
+  },
+  preview: {
+    host: 'localhost',
+    port: 5175,
     strictPort: true,
   },
 });
