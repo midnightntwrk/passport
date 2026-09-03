@@ -1419,6 +1419,7 @@ export async function openBalancerWallet(
        nothing of ours is at the prover — see `./proving.ts` — because a job
        that is proving legitimately reports no step for minutes. */
     stallMs: config.jobStallMs,
+    maxMs: config.jobMaxMs,
     proverIdle,
     onSlowClaim: (label, heldMs) =>
       console.log(

@@ -725,3 +725,71 @@ describe('the stall watchdog', () => {
     reservation.stop();
   });
 });
+
+/**
+ * The ceiling the prover cannot stand off.
+ *
+ * `stallMs` never fires while a proof is outstanding, which is right and is
+ * also a way to be silenced: on 2026/09/03 one wallet call that never returned,
+ * inside a job the proof counter still called busy, kept the five-second sweep
+ * returning at its first line for eight minutes.
+ */
+describe('the lane ceiling', () => {
+  const silentForever = () => new Promise<never>(() => undefined);
+
+  it('aborts a job past maxMs even with the prover busy', async () => {
+    const lines: string[] = [];
+    let clock = 1_000;
+    const reservation = createWalletReservation({
+      stallMs: 150,
+      maxMs: 720,
+      proverIdle: () => false,
+      watchdogIntervalMs: 5,
+      now: () => clock,
+      log: (line) => lines.push(line),
+    });
+
+    const held = reservation
+      .exclusive(silentForever, { label: 'the spare mUSD mint' })
+      .catch((cause: unknown) => cause);
+
+    await wait(10);
+    clock += 719;
+    await wait(10);
+    assert.equal(reservation.counts().jobs, 1, 'one tick short of the ceiling is a running job');
+
+    clock += 1;
+    const failure = await held;
+    assert.ok(isSpendJobStalled(failure), 'the caller learns why');
+    assert.equal((failure as { reason: string }).reason, 'ceiling');
+    assert.equal(reservation.counts().jobs, 0, 'and the lane is back');
+    assert.ok(
+      lines.some((line) => /past every bound underneath it/.test(line)),
+      lines.join('\n'),
+    );
+    reservation.stop();
+  });
+
+  it('leaves a proving job alone right up to the ceiling', async () => {
+    let clock = 1_000;
+    const reservation = createWalletReservation({
+      stallMs: 150,
+      maxMs: 720,
+      proverIdle: () => false,
+      watchdogIntervalMs: 5,
+      now: () => clock,
+      log: () => undefined,
+    });
+
+    const held = reservation
+      .exclusive(silentForever, { label: 'a registration' })
+      .catch((cause: unknown) => cause);
+    void held;
+
+    await wait(10);
+    clock += 600;
+    await wait(10);
+    assert.equal(reservation.counts().jobs, 1, 'ten minutes of proving is a healthy job');
+    reservation.stop();
+  });
+});

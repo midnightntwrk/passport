@@ -137,6 +137,11 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    */
   syncStallMs: number;
   /**
+   * How long a spend job may hold a lane IN TOTAL, prover or no prover. See
+   * {@link DEFAULT_JOB_MAX_MS}. Zero removes the ceiling.
+   */
+  jobMaxMs: number;
+  /**
    * How long one call into the wallet facade may take before this service stops
    * waiting on it. See {@link DEFAULT_WALLET_CALL_TIMEOUT_MS}.
    */
@@ -383,6 +388,21 @@ export const DEFAULT_JOB_STALL_MS = 150_000;
 
 /** How long the background chain walk may stall before it is reported. */
 export const DEFAULT_SYNC_STALL_MS = 600_000;
+
+/**
+ * The LAST bound on a spend job: how long it may hold a lane in total.
+ *
+ * Twelve minutes, and — this is the point — regardless of the prover. The stall
+ * watchdog stands off while a proof is outstanding, because a proof reports no
+ * step for minutes and is perfectly healthy. That stand-off is also a way for
+ * one call to disable the watchdog for ever: on 2026/09/03 a job sat inside an
+ * unbounded wallet call with `proofInFlight` true and the five-second sweep
+ * returned at its first line for eight minutes, until systemd killed the
+ * process. A contract proof is itself bounded at ten minutes
+ * (`CONTRACT_PROOF_TIMEOUT_MS`), so a job still holding a lane at twelve has
+ * outlived every bound underneath it and is not proving.
+ */
+export const DEFAULT_JOB_MAX_MS = 720_000;
 
 /**
  * How long ONE call into the wallet facade may take before this service stops
@@ -709,6 +729,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
   if (syncStallMs < 10_000) {
     throw new Error('BALANCER_SYNC_STALL_MS must be at least 10000 ms.');
   }
+  const jobMaxMs = wholeNumber('BALANCER_JOB_MAX_MS', trimmed(env.BALANCER_JOB_MAX_MS), DEFAULT_JOB_MAX_MS);
+  if (jobMaxMs > 0 && jobMaxMs <= jobStallMs) {
+    throw new Error(
+      'BALANCER_JOB_MAX_MS is the ceiling the stall watchdog cannot reach, so it must be greater than BALANCER_JOB_STALL_MS (0 removes the ceiling).',
+    );
+  }
   const walletCallTimeoutMs = wholeNumber(
     'BALANCER_WALLET_CALL_TIMEOUT_MS',
     trimmed(env.BALANCER_WALLET_CALL_TIMEOUT_MS),
@@ -787,6 +813,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     confirmTimeoutMs,
     jobStallMs,
     syncStallMs,
+    jobMaxMs,
     walletCallTimeoutMs,
     resolverPoolTarget,
     resolverPoolFloor,

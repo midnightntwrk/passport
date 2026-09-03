@@ -106,15 +106,33 @@ export class SpendJobStalled extends Error {
   readonly job: string;
   readonly step: string;
   readonly stalledMs: number;
+  /**
+   * Which of the two rules took the lane back.
+   *
+   * `no-progress` is the ordinary one: no step for `stallMs` with nothing of
+   * ours at the prover. `ceiling` is the one that does not consult the prover
+   * at all — see {@link WalletReservationOptions.maxMs} — and it exists because
+   * the prover check is itself a way to be silenced.
+   */
+  readonly reason: 'no-progress' | 'ceiling';
 
-  constructor(job: string, label: string, step: string, stalledMs: number) {
+  constructor(
+    job: string,
+    label: string,
+    step: string,
+    stalledMs: number,
+    reason: 'no-progress' | 'ceiling' = 'no-progress',
+  ) {
     super(
-      `${label} made no progress for ${Math.round(stalledMs / 1_000)} s with nothing at the prover — last step ${step} (${job}). Its lane has been given back.`,
+      reason === 'ceiling'
+        ? `${label} held a lane for ${Math.round(stalledMs / 1_000)} s, past every bound underneath it — last step ${step} (${job}). Its lane has been given back.`
+        : `${label} made no progress for ${Math.round(stalledMs / 1_000)} s with nothing at the prover — last step ${step} (${job}). Its lane has been given back.`,
     );
     this.name = 'SpendJobStalled';
     this.job = job;
     this.step = step;
     this.stalledMs = stalledMs;
+    this.reason = reason;
   }
 }
 
@@ -303,6 +321,20 @@ export interface WalletReservationOptions {
    * fires while this is false. Absent means "always idle".
    */
   proverIdle?: () => boolean;
+  /**
+   * How long a job may hold a lane IN TOTAL before it is aborted whatever the
+   * prover is doing. Absent, or zero, removes the ceiling.
+   *
+   * WHY THE PROVER CHECK NEEDS A CHECK OF ITS OWN. `stallMs` above never fires
+   * while a proof is outstanding, and that is right — a proof reports nothing
+   * for minutes and is healthy. But it means one call that never returns while
+   * counted as a proof switches the watchdog off for the life of the process,
+   * which is what happened on 2026/09/03: `[job] the spare mUSD mint proved
+   * (job-13)` at 01:45:29 UTC was the last line the service wrote, and the
+   * five-second sweep returned at its first line every time until systemd
+   * killed it eight minutes later. This rule consults nothing.
+   */
+  maxMs?: number;
   /** How often the watchdog looks. */
   watchdogIntervalMs?: number;
   now?: () => number;
@@ -473,15 +505,27 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
 
   const proverIdle = options.proverIdle ?? ((): boolean => true);
   const stallMs = options.stallMs ?? 0;
+  const maxMs = options.maxMs ?? 0;
 
   /** One pass. Exported through nothing; the timer and the tests drive it. */
   const sweepStalled = (): void => {
-    if (stallMs <= 0) return;
-    if (!proverIdle()) return;
     const at = now();
+    const idle = proverIdle();
     for (const job of [...running.values()]) {
       if (job.abort.signal.aborted) continue;
       const idleMs = at - job.lastProgressAt;
+      const ageMs = at - job.startedAt;
+      /* The ceiling is read FIRST and asks the prover nothing. A job that has
+         outlived every bound underneath it — the ten-minute proof bound
+         included — is not proving, whatever a counter says. */
+      if (maxMs > 0 && ageMs >= maxMs) {
+        log(
+          `[job] aborting ${job.label} after ${Math.round(ageMs / 1_000)} s holding a lane, past every bound underneath it — last step ${job.lastStep} (${job.id})`,
+        );
+        job.abort.abort(new SpendJobStalled(job.id, job.label, job.lastStep, ageMs, 'ceiling'));
+        continue;
+      }
+      if (stallMs <= 0 || !idle) continue;
       if (idleMs < stallMs) continue;
       log(
         `[job] aborting ${job.label} after ${Math.round(idleMs / 1_000)} s with no progress — last step ${job.lastStep} (${job.id})`,
@@ -491,7 +535,7 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
   };
 
   const watchdog =
-    stallMs > 0
+    stallMs > 0 || maxMs > 0
       ? setInterval(sweepStalled, options.watchdogIntervalMs ?? 5_000)
       : null;
   watchdog?.unref();
