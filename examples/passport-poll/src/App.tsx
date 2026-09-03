@@ -177,7 +177,7 @@ export function App() {
   return (
     <main className="poll">
       <header>
-        <p className="eyebrow">A poll on its own origin</p>
+        <p className="eyebrow">Passport-signed voting on stagenet</p>
         <h1>Passport Poll</h1>
         <p className="lede">
           Ask a question, answer it with your Passport. Every vote is counted against the account
@@ -221,7 +221,15 @@ export function App() {
           </p>
           <ul className="options">
             {current.options.map((option) => (
-              <li key={option.option}>
+              <li
+                key={option.option}
+                className={
+                  current.total > 0 &&
+                  option.count === Math.max(...current.options.map((o) => o.count))
+                    ? 'leading'
+                    : undefined
+                }
+              >
                 <button
                   type="button"
                   className="option"
