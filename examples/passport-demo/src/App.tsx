@@ -54,6 +54,7 @@ import {
   readPendingSends,
   retryDelayMs,
   SEND_LEG_ATTEMPTS,
+  sendRefusalText,
   serialisePendingSends,
   watchForSettlement,
   type PendingSend,
@@ -5976,17 +5977,40 @@ export default function PassportDemo() {
             source: 'wallet',
           });
           try {
-            const result = await withdrawShielded(
-              account.handle,
-              deviceSecret,
-              {
-                contractAddress: account.address,
-                colourHex: params.tokenType,
-                amount: params.amount,
-                recipientShieldedAddress: params.recipientAddress,
-              },
-              (progress) => setAccountPhase(progress.phase),
-            );
+            /* ONE REBUILD, AND ONLY ONE (2026/09/03). A node refusal means the
+               transaction was proved against a state that has moved, so the
+               same bytes earn the same answer and a fresh build is worth a try
+               — `withdrawShielded` re-reads the account from chain before it
+               builds anything, so the second attempt is against the state as it
+               is now. It costs no second passkey ceremony: the device secret is
+               already held by the block around this.
+
+               ONLY ONE, because a refusal that survives a rebuild has been
+               measured to survive every rebuild — three attempts, three
+               `Custom error: 239`s, live on stagenet — and the attempts after
+               the first buy a person forty more seconds of watching a sheet
+               before being told the same thing. */
+            const withdrawOnce = () =>
+              withdrawShielded(
+                account.handle,
+                deviceSecret,
+                {
+                  contractAddress: account.address,
+                  colourHex: params.tokenType,
+                  amount: params.amount,
+                  recipientShieldedAddress: params.recipientAddress,
+                },
+                (progress) => setAccountPhase(progress.phase),
+              );
+            let result;
+            try {
+              result = await withdrawOnce();
+            } catch (firstAttempt) {
+              if (!classifyLegError(firstAttempt).rebuild) throw firstAttempt;
+              console.debug('[send] the shielded withdrawal is being built again', firstAttempt);
+              await new Promise((resolve) => setTimeout(resolve, retryDelayMs(0)));
+              result = await withdrawOnce();
+            }
             updateActivity(entry.id, {
               status: 'complete',
               label: 'Sent a shielded token',
@@ -6005,25 +6029,44 @@ export default function PassportDemo() {
             });
             void refreshLocalBalances();
           } catch (cause) {
+            /* THE PANEL GETS A SENTENCE, THE CONSOLE GETS THE CAUSE
+               (2026/09/03). A user's second mUSD send showed them "The account
+               contract rejected withdraw_shielded — SubmissionError: 1010:
+               Invalid Transaction: Custom error: 239": three machinery words, a
+               circuit name, and a number, none of it theirs to act on. The
+               chain is logged whole — as the error, not a string of it, so its
+               causes survive — and the row says what happened to the money.
+               See `sendRefusalText` in `lib/sendLegs.ts`. */
+            console.debug('[send] the shielded withdrawal was refused', cause);
             updateActivity(entry.id, {
               status: 'error',
-              detail: cause instanceof Error ? cause.message : String(cause),
+              detail: sendRefusalText(cause),
               source: 'local',
             });
             throw cause;
           }
         });
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
         const code =
           typeof cause === 'object' && cause !== null &&
           typeof (cause as { code?: unknown }).code === 'string'
             ? (cause as { code: string }).code
             : null;
         if (code === 'wallet-closed') {
-          pushToast({ tone: 'error', title: 'Nothing was sent', body: message });
+          pushToast({
+            tone: 'error',
+            title: 'Nothing was sent',
+            body: cause instanceof Error ? cause.message : String(cause),
+          });
         }
-        throw cause;
+        /* A CODED refusal is this app's own and was written for a reader —
+           "Passport cannot see its own receiving address yet" is a thing to do
+           something about. Everything else is rethrown as the sentence rather
+           than as the machinery: the sheet renders whatever reaches it, and
+           what reached it was the SDK's. The original is on the console above,
+           and on the row. */
+        if (code !== null) throw cause;
+        throw Object.assign(new Error(sendRefusalText(cause)), { cause });
       } finally {
         setAccountPhase(null);
       }

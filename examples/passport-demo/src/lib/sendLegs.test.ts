@@ -30,6 +30,8 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyLegError,
   pendingSendsStorageKey,
+  SEND_REFUSED_TEXT,
+  sendRefusalText,
   readPendingSends,
   retryDelayMs,
   SEND_LEG_ATTEMPTS,
@@ -609,5 +611,78 @@ describe('watchForSettlement', () => {
     /* Not a value assertion: the point of the pair is that the wait AFTER the
        chain has it is the shorter one, because that read touches no network. */
     expect(SETTLE_LOOK_AFTER_LANDING_MS).toBeLessThan(SETTLE_LOOK_BEFORE_LANDING_MS);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* What a refused transfer is TOLD                                            */
+/* -------------------------------------------------------------------------- */
+
+describe('sendRefusalText', () => {
+  /** The machinery a panel must never show, in the words it showed them in. */
+  const MACHINERY = /account contract|withdraw_shielded|withdraw_night|deposit_shielded|SubmissionError|Custom error|circuit|contract|1010|239/i;
+
+  it('says one sentence about the send a user reported, not the node’s', () => {
+    /* Verbatim from production, 2026/09/03: a second mUSD send. The chain is
+       the one the app builds — the account module's sentence about the circuit,
+       wrapping the node's refusal. */
+    const refusal = Object.assign(new Error('SubmissionError: 1010: Invalid Transaction: Custom error: 239'), {
+      name: 'SubmissionError',
+    });
+    const wrapped = Object.assign(
+      new Error('The account contract rejected withdraw_shielded.'),
+      { detail: 'SubmissionError: 1010: Invalid Transaction: Custom error: 239', cause: refusal },
+    );
+    const said = sendRefusalText(wrapped);
+    expect(said).toBe(SEND_REFUSED_TEXT);
+    expect(said).not.toMatch(MACHINERY);
+  });
+
+  it('says it for a failure nobody has classified, rather than quoting it', () => {
+    const said = sendRefusalText(
+      new Error('The account contract rejected withdraw_shielded.'),
+    );
+    expect(said).toBe(SEND_REFUSED_TEXT);
+    expect(said).not.toMatch(MACHINERY);
+  });
+
+  it('says it for a plain string, an object, and nothing at all', () => {
+    expect(sendRefusalText('boom')).toBe(SEND_REFUSED_TEXT);
+    expect(sendRefusalText({ nope: true })).toBe(SEND_REFUSED_TEXT);
+    expect(sendRefusalText(undefined)).toBe(SEND_REFUSED_TEXT);
+  });
+
+  it('keeps a message that was written for a reader in the first place', () => {
+    /* The runtime classified this one and wrote the sentence itself; replacing
+       it with a generic one would be a worse screen, not a cleaner one. */
+    const balancing = Object.assign(new Error('balancing failed'), {
+      name: 'BalancingFailure',
+      retryable: true,
+      userMessage: 'The fee sponsor is busy. Passport will try again.',
+      stage: 'balance',
+    });
+    expect(sendRefusalText(balancing)).toBe('The fee sponsor is busy. Passport will try again.');
+    expect(sendRefusalText(balancing)).not.toMatch(MACHINERY);
+  });
+
+  it('keeps the not-enough-money sentence, wherever in the chain it was said', () => {
+    const inner = new Error('insufficient funds for the shielded offer');
+    const outer = Object.assign(new Error('The account contract rejected withdraw_shielded.'), {
+      cause: inner,
+    });
+    const said = sendRefusalText(outer);
+    expect(said).toBe('There was not enough to cover this step, so nothing further was sent.');
+    expect(said).not.toMatch(MACHINERY);
+  });
+
+  it('never lets a node refusal through as the retry sentence', () => {
+    /* `classifyLegError` says "Passport is building it again" because it drives
+       a retry; that is a decision, not a thing to leave on a panel after the
+       last attempt has been spent. */
+    const refused = Object.assign(new Error('Invalid Transaction: Custom error: 239'), {
+      name: 'SubmissionError',
+    });
+    expect(classifyLegError(refused).rebuild).toBe(true);
+    expect(sendRefusalText(refused)).toBe(SEND_REFUSED_TEXT);
   });
 });

@@ -347,12 +347,8 @@ export function classifyLegError(error: unknown): LegErrorVerdict {
     if (verdict) return verdict;
   }
   for (const node of chain) {
-    if (/insufficient funds|insufficient balance|not enough/i.test(messageOf(node))) {
-      return {
-        retryable: false,
-        rebuild: false,
-        message: 'There was not enough to cover this step, so nothing further was sent.',
-      };
+    if (INSUFFICIENT_PATTERN.test(messageOf(node))) {
+      return { retryable: false, rebuild: false, message: INSUFFICIENT_TEXT };
     }
   }
   for (const node of chain) {
@@ -375,6 +371,72 @@ export function classifyLegError(error: unknown): LegErrorVerdict {
     rebuild: false,
     message: head || 'This step could not be finished.',
   };
+}
+
+/** What "there is not enough" looks like, wherever in the chain it is said. */
+const INSUFFICIENT_PATTERN = /insufficient funds|insufficient balance|not enough/i;
+
+/** And what a reader is told about it — a sentence, not a classification. */
+const INSUFFICIENT_TEXT = 'There was not enough to cover this step, so nothing further was sent.';
+
+/**
+ * THE ONE SENTENCE A REFUSED TRANSFER IS TOLD IN.
+ *
+ * Reported by a user on 2026/09/03, from production: a second mUSD send showed
+ * them
+ *
+ *     The account contract rejected withdraw_shielded — SubmissionError:
+ *     1010: Invalid Transaction: Custom error: 239
+ *
+ * which names the machinery three times, quotes a circuit, and ends in a
+ * number. Nothing in it is theirs to act on, and the one fact that IS —
+ * that their money did not move — is the one thing it does not say.
+ *
+ * So the panel gets this and nothing else. It is deliberately not a
+ * classification: a person deciding whether to press the button again does not
+ * need to know whether the node refused, the proof failed, or the sponsor was
+ * out of DUST, and every one of those words has been shown to leak the
+ * machinery back in. What varies is the console, where the whole cause chain
+ * goes untouched for whoever is debugging it.
+ *
+ * "nothing left your account" is a claim, and it is only made where it is
+ * true: {@link callAccountCircuit} raises this class of failure only when the
+ * submission was refused, which means no transaction landed. A leg that failed
+ * AFTER something moved is the two-leg orchestrator's business and says so in
+ * its own words.
+ */
+export const SEND_REFUSED_TEXT =
+  'That transfer could not be sent just now — nothing left your account. Try again.';
+
+/**
+ * What to SHOW a person whose transfer was refused, and what to log instead.
+ *
+ * One sentence out, always — see {@link SEND_REFUSED_TEXT} — except where a
+ * failure carries a message that was written FOR a reader in the first place:
+ * a balancing refusal the runtime classified with its own `userMessage`, and
+ * the "not enough to cover this" case, are both about a decision the person can
+ * make, and replacing them with a generic sentence would be a worse screen
+ * rather than a cleaner one. Neither names a circuit or a contract.
+ *
+ * `console.debug` is the caller's to make, with the cause itself rather than a
+ * string of it: an error printed as an object keeps its chain, and the chain is
+ * the whole of what a debugger wants.
+ */
+export function sendRefusalText(error: unknown): string {
+  const chain = chainOf(error);
+  for (const node of chain) {
+    /* Written for a reader by the runtime that classified it. */
+    const verdict = balancingVerdict(node);
+    if (verdict) return verdict.message;
+  }
+  for (const node of chain) {
+    if (INSUFFICIENT_PATTERN.test(messageOf(node))) return INSUFFICIENT_TEXT;
+  }
+  /* Everything else — a node refusal, a proof that failed, a circuit that was
+     rejected, an error nobody has classified — is the one sentence. The
+     alternative is the head of the chain, and the head of the chain is where
+     "The account contract rejected withdraw_shielded" came from. */
+  return SEND_REFUSED_TEXT;
 }
 
 /**
