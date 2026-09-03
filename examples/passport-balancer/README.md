@@ -884,8 +884,17 @@ Four things close it, and the fourth is the one that matters most:
    answer of *not there* becomes a rebuild.
 
 Every step of a spend job is now one journal line — `queued`, `started`,
-`balanced`, `proved`, `submitted`, `seen-on-chain`, `confirmed`, then
+`proving`, `proved`, `balanced`, `fee leg proved`, `waiting to submit`,
+`submitting`, `submitted`, `seen-on-chain`, `confirmed`, then
 `done`/`failed`/`aborted` — prefixed `[job]` and naming the job's label and id.
+
+The steps that look like padding are the ones that earn their place. A job
+waiting its turn to submit, and a job waiting to rebuild after a node refusal,
+are both doing nothing at the prover for up to two minutes — the exact shape the
+stall watchdog aborts on. Reporting them is what stops a healthy job losing its
+lane for being quiet: on 2026/09/03 an activation grant sat 115 s at `fee leg
+proved` through a rebuild and recovered on its own, thirty-five seconds inside
+the window.
 The droplet watchdog reads the same facts off `/status` and restarts the unit if
 a job stays silent with an idle prover for `BALANCER_WATCHDOG_JOB_STALL`
 seconds (default 300), which is the backstop for a stall the process cannot end
