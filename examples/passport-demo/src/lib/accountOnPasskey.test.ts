@@ -20,7 +20,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ACCOUNT_RECHECK_ATTEMPTS,
+  accountFromBlob,
+  accountRecheckDelayMs,
   accountToRemember,
+  aliasFromRecoveredAccount,
   pendingAccountBlob,
   settledAccountOnPasskey,
   type AccountOnPasskeyProfile,
@@ -164,5 +168,143 @@ describe('settledAccountOnPasskey', () => {
 
   it('records nothing when there was no note to settle', () => {
     expect(settledAccountOnPasskey({}, 'written')).toBeNull();
+  });
+});
+
+/**
+ * Drills for the other direction: what a blob READ off a passkey is worth.
+ *
+ * The defect these hold the line on was reproduced on 2026/09/03. A browser
+ * with its site data cleared signed in with the passkey that held the account,
+ * the one indexer read did not answer, and the app kept nothing at all — so the
+ * user was shown the name step over an account that already existed and already
+ * had a name. Every test below is one of the two ways to be wrong about that:
+ * throwing away evidence, or believing it over this device's own witness.
+ */
+describe('accountFromBlob', () => {
+  const BLOB = {
+    v: 1 as const,
+    acc: { address: 'b'.repeat(64), network: 'stagenet' },
+    alias: 'passportwalk',
+  };
+  const ON_STAGENET = {
+    walletNetwork: 'stagenet',
+    localRecord: null,
+    hasLocalAlias: false,
+  };
+
+  it('adopts an unconfirmed account rather than discarding it', () => {
+    // The reported failure, in one assertion: one read that did not answer
+    // used to mean nothing was kept and the user met the name step.
+    expect(accountFromBlob(BLOB, ON_STAGENET, 'unconfirmed')).toEqual({
+      kind: 'adopt-checking',
+      account: { address: BLOB.acc.address, network: 'stagenet', alias: 'passportwalk' },
+    });
+  });
+
+  it('adopts an account the chain has answered for', () => {
+    expect(accountFromBlob(BLOB, ON_STAGENET, 'confirmed')).toEqual({
+      kind: 'adopt-confirmed',
+      account: { address: BLOB.acc.address, network: 'stagenet', alias: 'passportwalk' },
+    });
+  });
+
+  it('restores no name when the blob carries none', () => {
+    const decision = accountFromBlob(
+      { v: 1, acc: BLOB.acc },
+      ON_STAGENET,
+      'confirmed',
+    );
+    expect(decision).toEqual({
+      kind: 'adopt-confirmed',
+      account: { address: BLOB.acc.address, network: 'stagenet' },
+    });
+  });
+
+  it('leaves a name this browser watched being registered alone', () => {
+    const decision = accountFromBlob(BLOB, { ...ON_STAGENET, hasLocalAlias: true }, 'confirmed');
+    expect(decision).toEqual({
+      kind: 'adopt-confirmed',
+      account: { address: BLOB.acc.address, network: 'stagenet' },
+    });
+  });
+
+  it('has nothing to do when this device already holds the same account', () => {
+    expect(
+      accountFromBlob(BLOB, { ...ON_STAGENET, localRecord: { address: BLOB.acc.address } }, 'confirmed'),
+    ).toEqual({ kind: 'keep-local' });
+  });
+
+  it('keeps this device’s own witness when the blob names another account', () => {
+    expect(
+      accountFromBlob(BLOB, { ...ON_STAGENET, localRecord: { address: 'c'.repeat(64) } }, 'confirmed'),
+    ).toEqual({ kind: 'conflict', local: 'c'.repeat(64), blob: BLOB.acc.address });
+  });
+
+  it('treats a record with no address as no record at all', () => {
+    // A failed deploy leaves a record behind with nothing to compare against;
+    // it must not block the account the passkey is carrying.
+    expect(accountFromBlob(BLOB, { ...ON_STAGENET, localRecord: {} }, 'unconfirmed')).toMatchObject({
+      kind: 'adopt-checking',
+    });
+  });
+
+  it('does nothing at all without a blob', () => {
+    expect(accountFromBlob(null, ON_STAGENET, 'confirmed')).toEqual({ kind: 'nothing' });
+  });
+
+  it('refuses a blob for a network this session cannot read', () => {
+    // "We cannot check" must never be dressed up as an answer either way.
+    expect(accountFromBlob(BLOB, { ...ON_STAGENET, walletNetwork: 'testnet' }, 'confirmed')).toEqual({
+      kind: 'nothing',
+    });
+  });
+
+  it('refuses a blob when no wallet is open', () => {
+    expect(accountFromBlob(BLOB, { ...ON_STAGENET, walletNetwork: null }, 'confirmed')).toEqual({
+      kind: 'nothing',
+    });
+  });
+});
+
+describe('aliasFromRecoveredAccount', () => {
+  const NOW = '2026-09-03T12:00:00.000Z';
+
+  it('restores the name against the account it was read beside, unconfirmed', () => {
+    expect(
+      aliasFromRecoveredAccount(
+        { address: 'b'.repeat(64), network: 'stagenet', alias: 'passportwalk' },
+        NOW,
+      ),
+    ).toEqual({
+      alias: 'passportwalk',
+      domain: 'passportwalk.night',
+      network: 'stagenet',
+      status: 'registered',
+      // This browser has not watched the registry answer, and does not pretend to.
+      registryConfirmed: false,
+      resolverTarget: 'contract',
+      resolverTargetHex: 'b'.repeat(64),
+      updatedAt: NOW,
+    });
+  });
+
+  it('restores nothing for an account with no name', () => {
+    expect(
+      aliasFromRecoveredAccount({ address: 'b'.repeat(64), network: 'stagenet' }, NOW),
+    ).toBeNull();
+  });
+});
+
+describe('accountRecheckDelayMs', () => {
+  it('doubles the wait between attempts', () => {
+    expect(accountRecheckDelayMs(0)).toBe(2_000);
+    expect(accountRecheckDelayMs(1)).toBe(4_000);
+    expect(accountRecheckDelayMs(4)).toBe(32_000);
+  });
+
+  it('stops rather than polling an address that is not coming', () => {
+    expect(accountRecheckDelayMs(ACCOUNT_RECHECK_ATTEMPTS)).toBeNull();
+    expect(accountRecheckDelayMs(-1)).toBeNull();
   });
 });
