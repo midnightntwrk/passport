@@ -186,6 +186,12 @@ import {
 } from './wallet.js';
 import { activationLegs, GRANT_RETRY_DELAY_MS, shouldRetryGrant } from './activationLegs.js';
 import {
+  createGiftDesk,
+  giftLedgerOf,
+  type GiftDesk,
+  type GiftEntry,
+} from './gift.js';
+import {
   createSwapDesk,
   swapLedgerOf,
   verifyPaymentOnChain,
@@ -290,6 +296,8 @@ async function main(): Promise<void> {
   );
   /* The swap desk's idempotency gate: one payment hash, one lot, forever. */
   const swapLedger = await JsonLedger.open<SwapEntry>(config.stateDir, config.networkId, 'swaps');
+  /* One item per account, so a second ask answers with the first gift. */
+  const giftLedger = await JsonLedger.open<GiftEntry>(config.stateDir, config.networkId, 'gifts');
   /**
    * The shelf of pre-deployed resolver leaves, beside the other once-only
    * ledgers. Not once-only itself — a leaf is written when it is deployed and
@@ -2375,6 +2383,22 @@ async function main(): Promise<void> {
     normaliseAccount: rawContractAddress,
   });
 
+  /**
+   * The gift desk. `../ops/gift-nft.ts` does the same two legs with the unit
+   * stopped for five to ten minutes; this runs them in the process that owns
+   * the wallet, under the same spend lock, so nothing has to be stopped.
+   */
+  const giftDesk: GiftDesk = createGiftDesk({
+    config,
+    wallet,
+    ledger: giftLedgerOf(giftLedger),
+  });
+  if (giftDesk.available) {
+    console.log(`[gift] items mint under colour ${giftDesk.colourHex}`);
+  } else {
+    console.warn(`[gift] items are DISABLED: ${giftDesk.unavailableReason}`);
+  }
+
   const spendGuards: Record<string, { prefix: string; bucket: TokenBucket }> = {
     '/balance-only': { prefix: 'balance', bucket: balanceBucket },
     /* Guarded like the route it undoes, and on the same bucket: it costs a
@@ -2390,6 +2414,9 @@ async function main(): Promise<void> {
     /* A swap pays out one asset grant, so it costs what an activation's asset
        leg costs and is metered on the same bucket. */
     '/swap': { prefix: 'swap', bucket: accountBucket },
+    /* An item is one mint and one deposit — an activation's asset leg with two
+       arguments changed — so it is metered on the same bucket. */
+    '/gift-nft': { prefix: 'gift', bucket: accountBucket },
   };
 
   /**
@@ -2655,6 +2682,22 @@ async function main(): Promise<void> {
         return;
       }
 
+      if (request.method === 'POST' && path === '/gift-nft') {
+        let body: unknown;
+        try {
+          body = JSON.parse((await readRawBody(request)).toString('utf8') || '{}');
+        } catch {
+          respond(request, response, 400, {
+            error: 'invalid-request',
+            message: 'The request body must be JSON of the form {"account": "64 hex"}.',
+          });
+          return;
+        }
+        const outcome = await giftDesk.give((body ?? {}) as { account?: unknown; network?: unknown });
+        respond(request, response, outcome.status, outcome.body);
+        return;
+      }
+
       if (request.method === 'POST' && path === '/swap') {
         let body: unknown;
         try {
@@ -2691,7 +2734,7 @@ async function main(): Promise<void> {
       respond(request, response, 404, {
         error: 'not-found',
         message:
-          'Routes: GET /status, GET /wallet-status, GET /swap/quote, POST /balance-only, POST /balance-only/abandon, POST /register-alias, POST /fund-account, POST /swap.',
+          'Routes: GET /status, GET /wallet-status, GET /swap/quote, POST /balance-only, POST /balance-only/abandon, POST /register-alias, POST /fund-account, POST /swap, POST /gift-nft.',
       });
     })()
       .catch((cause) => {
