@@ -50,6 +50,8 @@ Environment=NODE_OPTIONS=--max-old-space-size=4096
 # /status answering inside one second throughout. Every registration deploys its
 # own leaf meanwhile, which is what this service did before the shelf existed.
 Environment=RESOLVER_POOL_TARGET=0
+# The floor may not exceed the target, so both go to zero together.
+Environment=RESOLVER_POOL_FLOOR=0
 ExecStart=/usr/bin/node dist/server.mjs
 Restart=always
 RestartSec=5
