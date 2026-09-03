@@ -725,6 +725,41 @@ describe('enrolment overwrite guard', () => {
     expect(excluded.every((entry) => entry.id instanceof ArrayBuffer)).toBe(true);
   });
 
+  it('asks for a FRESH user handle on every enrolment, so no create can replace a passkey', async () => {
+    /* The re-login defect of 2026/09/03, in one assertion. The handle used to
+       be SHA-256 over a constant id, so a create on a browser whose site data
+       had been cleared named the pair the surviving credential occupied — and
+       `residentKey: 'required'` makes that a REPLACEMENT, not a refusal. The
+       replaced credential's PRF secret, and with it the wallet seed and the
+       `.night` name it held, were gone. Two enrolments, two handles, and the
+       authenticator has nothing to overwrite. */
+    const handles: string[] = [];
+    replaceNavigator({
+      credentials: {
+        create: async (options: CredentialCreationOptions) => {
+          const publicKey = options.publicKey as unknown as {
+            user: { id: ArrayBuffer };
+          };
+          handles.push(Buffer.from(new Uint8Array(publicKey.user.id)).toString('hex'));
+          return {
+            rawId: new Uint8Array([9]).buffer,
+            getClientExtensionResults: () => ({ prf: { enabled: true } }),
+          };
+        },
+      },
+    });
+
+    const options = { label: 'Midnight Passport', userId: 'passport-local-device' };
+    await WebAuthnPrfKeyProvider.enrollWithPrf(options);
+    // The SAME userId a second time: it is the case the defect was reported in.
+    await WebAuthnPrfKeyProvider.enrollWithPrf(options);
+
+    expect(handles).toHaveLength(2);
+    expect(handles[0]).not.toBe(handles[1]);
+    // 32 bytes of randomness, not a digest of anything a caller passed.
+    expect(handles[0]).toMatch(/^[0-9a-f]{64}$/);
+  });
+
   it('sends no exclusion list at all when nothing is known', async () => {
     let capturedOptions: CredentialCreationOptions | undefined;
     replaceNavigator({

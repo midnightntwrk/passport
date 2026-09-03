@@ -30,6 +30,12 @@ export interface PassportPasskeyReference {
 
 export interface EnrollPassportPasskeyOptions {
   label: string;
+  /**
+   * @deprecated Names the enrolment for a caller's own bookkeeping and nothing
+   * else. It used to be hashed into the WebAuthn user handle, which is how a
+   * second `create` came to REPLACE the passkey a Passport was already held
+   * behind; the handle is now random per enrolment. See {@link newUserHandle}.
+   */
   userId: string;
   rpName?: string;
   rpId?: string;
@@ -38,18 +44,20 @@ export interface EnrollPassportPasskeyOptions {
    * enrolled here, or synced to this device from another. All of them go into
    * `excludeCredentials`.
    *
-   * WHY THIS MATTERS. {@link userHandle} is deterministic and enrolment asks
-   * for `residentKey: 'required'`, so a second `create` for the same
-   * `(rpId, user.id)` does not fail: it REPLACES the credential. The
-   * replacement has a new PRF secret, and the old wallet seed — every coin it
-   * holds — becomes underivable, permanently. Excluding the ids we know makes
-   * the authenticator refuse instead, which surfaces as
-   * {@link PassportEnrolmentConflictError}.
+   * WHY IT IS STILL SENT, now that the handle is random. Replacement is no
+   * longer possible — {@link newUserHandle} gives every create a pair no
+   * credential occupies — so this no longer stands between a user and a lost
+   * wallet seed. What it still does is stop a browser that ALREADY holds a
+   * working Passport from quietly collecting a second credential for the same
+   * person: the authenticator refuses, and the refusal arrives as
+   * {@link PassportEnrolmentConflictError}, which callers route into sign-in.
    *
-   * Exclusion cannot cover the dangerous case on its own: site data cleared
-   * while the passkey survives in the keychain leaves no ids to exclude. For
-   * that, call {@link WebAuthnPrfKeyProvider.discoverOrEnroll}, which asks
-   * the authenticator itself before it creates anything.
+   * It never covered the dangerous case on its own, and that is the whole
+   * reason the handle changed: site data cleared while the passkey survives in
+   * the keychain leaves no ids to exclude. {@link
+   * WebAuthnPrfKeyProvider.discoverOrEnroll} asks the authenticator itself
+   * before it creates anything, and is still the right call wherever a picker
+   * is an acceptable cost.
    */
   knownCredentialIds?: readonly string[];
   /**
@@ -324,11 +332,40 @@ function randomChallenge(): Uint8Array {
   return challenge;
 }
 
-async function userHandle(userId: string): Promise<ArrayBuffer> {
-  return globalThis.crypto.subtle.digest(
-    'SHA-256',
-    asArrayBuffer(utf8(`midnight-passport:user:v1:${userId}`)),
-  );
+/**
+ * A FRESH user handle for every enrolment — the one thing that makes a create
+ * incapable of destroying a Passport.
+ *
+ * Until 2026/09/03 this was `SHA-256("midnight-passport:user:v1:" + userId)`
+ * over a constant `userId`, so every enrolment on this origin asked for the
+ * same `(rpId, user.id)` pair. WebAuthn is explicit about what that means with
+ * `residentKey: 'required'`: the authenticator does not refuse, it REPLACES the
+ * credential it already holds for that pair. The replacement carries a new PRF
+ * secret, so the wallet seed and the private-state key of the Passport that was
+ * there become underivable — permanently, and with nothing on screen to say so.
+ *
+ * `excludeCredentials` cannot cover that on its own, because the case where it
+ * matters is exactly the case where this browser has no ids to exclude: site
+ * data cleared (iOS evicts it after seven days of not visiting) with the passkey
+ * still in the keychain. Reproduced on 2026/09/03 against a virtual
+ * authenticator — one credential in, one credential out, a different id, the
+ * account blob gone, and the old `.night` name unreachable for ever.
+ *
+ * A random handle makes that impossible rather than unlikely: no create can
+ * name the pair an existing credential occupies, so the authenticator has
+ * nothing to replace and stores a second credential beside the first. The old
+ * passkey stays in the picker, which is what "Use a different passkey" needs to
+ * find it, and its blob still names the account.
+ *
+ * NOTHING READS THE HANDLE BACK. It is not a key, not an identifier this app
+ * stores, and not something a later ceremony has to reproduce: assertions are
+ * targeted by credential id and discovery is by relying party. So there is no
+ * value in it being derivable, and — as this incident proves — a real cost.
+ */
+function newUserHandle(): ArrayBuffer {
+  const handle = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(handle);
+  return asArrayBuffer(handle);
 }
 
 /**
@@ -622,7 +659,9 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
         publicKey: {
           rp,
           user: {
-            id: await userHandle(options.userId),
+            /* Random, never derived from `options.userId`: see
+               {@link newUserHandle} for the passkey this used to overwrite. */
+            id: newUserHandle(),
             name: options.label,
             displayName: options.label,
           },
@@ -690,12 +729,14 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
   /**
    * DISCOVER BEFORE CREATE — the affordance `excludeCredentials` cannot give.
    *
-   * Exclusion only protects against overwriting credentials whose ids this
-   * device still remembers. The dangerous case is exactly the one where it
-   * remembers none: site data cleared, passkey still in the keychain. An app
-   * that keys "create or sign in" off local storage then calls `create`, the
-   * deterministic user handle matches, and the surviving credential is
-   * REPLACED — the wallet seed gone for good.
+   * Exclusion only knows credentials whose ids this device still remembers.
+   * The case that matters is exactly the one where it remembers none: site
+   * data cleared, passkey still in the keychain. An app that keys "create or
+   * sign in" off local storage then calls `create` — which, until the handle
+   * became random on 2026/09/03, REPLACED the surviving credential and took
+   * the wallet seed with it. It no longer can; what it still does is leave the
+   * user with a second, empty Passport and their own one merely unfound. This
+   * finds it instead.
    *
    * So ask the authenticator first. One discoverable assertion: if a resident
    * credential answers, that is the Passport, and this returns its one-shot
@@ -719,8 +760,9 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
    * {@link PassportEnrolmentConflictError} instead.
    *
    * A credential that answered WITHOUT a PRF result is the one outcome worth
-   * stopping for: it cannot open a Passport, and creating under the same
-   * deterministic handle may replace it. That comes back as
+   * stopping for: it cannot open a Passport, and enrolling silently past it
+   * leaves the person with two passkeys for this site and no account of why.
+   * That comes back as
    * `outcome: 'unusable-credential'` so the caller can put the choice to the
    * user, rather than failing or overwriting on its own.
    *

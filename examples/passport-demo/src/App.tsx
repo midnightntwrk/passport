@@ -2257,10 +2257,11 @@ export default function PassportDemo() {
    *
    * A resident credential for this origin answered and returned no PRF output,
    * so it CANNOT open a Passport — there is no seed to derive from it and no
-   * state it could decrypt. Passport refuses to create over that on its own,
-   * because a create under the same deterministic user handle may replace the
-   * answering credential, and replacing a passkey that might have been someone
-   * else's Passport is not a decision an app may take silently.
+   * state it could decrypt. Passport still does not enrol over that on its own:
+   * the credential that answered may be somebody else's Passport, and quietly
+   * leaving a second passkey for this site beside it — which is all a create
+   * can do since the user handle became random on 2026/09/03 — is not a
+   * decision an app may take without saying so.
    *
    * It is a decision the USER may take, and this is the only path on which
    * they take it: they have been told, in as many words, that the passkey this
@@ -2345,11 +2346,14 @@ export default function PassportDemo() {
    * ASK THE AUTHENTICATOR BEFORE CREATING ANYTHING — BUT ONLY WHEN THERE IS
    * SOMETHING TO ASK ABOUT. "No local profile" is not the same fact as "no
    * passkey": site data cleared with the passkey still in the keychain looks
-   * identical to a first visit, and a `create` there would REPLACE the
-   * surviving credential — the user handle is deterministic — taking its PRF
-   * secret, and every coin the wallet seed derives with it. So when this
-   * browser knows of any credential, discovery runs first and enrolment only
-   * follows if nothing answers.
+   * identical to a first visit. Until 2026/09/03 a `create` there REPLACED the
+   * surviving credential — the user handle was a digest of a constant — taking
+   * its PRF secret and every coin the wallet seed derives with it. The handle
+   * is now random per enrolment (`demo-backend/src/passkey.ts#newUserHandle`),
+   * so that credential can no longer be overwritten by anything this app does;
+   * what a create still costs such a user is a SECOND Passport where they
+   * meant to reopen their first. So when this browser knows of any credential,
+   * discovery runs first and enrolment only follows if nothing answers.
    *
    * When it knows of none, discovery is skipped, because the dialog it raises
    * asks the wrong question of a newcomer and can leave them with no way
@@ -2391,14 +2395,15 @@ export default function PassportDemo() {
        ID, Windows Hello, or a phone, and the question asked is the one the
        user came to answer.
 
-       The overwrite this replaces is still guarded where it can be: every
-       create carries `knownCredentialIds` in `excludeCredentials`, and the
-       authenticator reports {@link PassportEnrolmentConflictError} rather
-       than replacing a credential we named. What is genuinely given up is the
-       case where site data was cleared and the passkey survived, leaving
-       nothing to exclude — that user now creates a second credential instead
-       of finding the first. "Use a different passkey" on the landing screen
-       is the discovery path, and remains their way back to the original. */
+       What that costs is bounded, and since 2026/09/03 it is bounded at the
+       right place: the create cannot replace anything, because the user handle
+       is random per enrolment, and `knownCredentialIds` still makes the
+       authenticator refuse outright for a credential this browser knows of.
+       The user whose site data was cleared with the passkey surviving does
+       still enrol a second credential instead of finding the first — their
+       original is untouched, in the picker, holding the account blob, and
+       "Use a different passkey" is the one control that reaches it. That is a
+       recoverable wrong turn rather than the permanent loss it used to be. */
     const discoverFirst = knownCredentialIds.length > 0;
     setOnboardingBusyLabel(
       discoverFirst
