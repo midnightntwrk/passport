@@ -86,6 +86,13 @@ export interface SubmissionLike<TTransaction> {
 export interface NodeConnection {
   /** Resolves at the node's first status for this transaction. */
   send(transaction: Uint8Array): Promise<string>;
+  /**
+   * The node's best block height right now, or `null` if it cannot be asked.
+   * Optional so a test's fake connection need not carry it. The rebuild path
+   * reads it at a `1010` refusal, as the height the indexer must reach before
+   * the refused transaction is worth building again.
+   */
+  height?(): Promise<number | null>;
   close(): Promise<void>;
 }
 
@@ -147,6 +154,7 @@ interface MidnightApi {
   isConnected: boolean;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
+  rpc: { chain: { getHeader(): Promise<{ number: { toNumber(): number } }> } };
   tx: {
     midnight: {
       sendMnTransaction(payload: string): {
@@ -201,6 +209,16 @@ export function polkadotConnection(config: { relayURL: URL }): NodeConnection {
   };
 
   return {
+    async height(): Promise<number | null> {
+      try {
+        const api = await connected();
+        const header = await api.rpc.chain.getHeader();
+        return header.number.toNumber();
+      } catch {
+        return null;
+      }
+    },
+
     async send(transaction: Uint8Array): Promise<string> {
       const api = await connected();
       return await new Promise<string>((settle, fail) => {

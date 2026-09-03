@@ -57,7 +57,8 @@ import {
   makeServerProvingService,
   makeWasmProvingService,
 } from '@midnight-ntwrk/wallet-sdk/capabilities/proving';
-import { DustWallet } from '@midnight-ntwrk/wallet-sdk/dust';
+import { CustomDustWallet, DustWallet } from '@midnight-ntwrk/wallet-sdk/dust';
+import { V1Builder as DustV1Builder } from '@midnight-ntwrk/wallet-sdk/dust/v1';
 import {
   WalletFacade,
   type BalancingRecipe,
@@ -66,13 +67,16 @@ import {
 } from '@midnight-ntwrk/wallet-sdk/facade';
 import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk/hd';
 import { WasmProver } from '@midnight-ntwrk/wallet-sdk/prover-client/effect';
-import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk/shielded';
+import { CustomShieldedWallet, ShieldedWallet } from '@midnight-ntwrk/wallet-sdk/shielded';
+import { V1Builder as ShieldedV1Builder } from '@midnight-ntwrk/wallet-sdk/shielded/v1';
 import {
   createKeystore,
+  CustomUnshieldedWallet,
   PublicKey,
   UnshieldedWallet,
   type UnshieldedKeystore,
 } from '@midnight-ntwrk/wallet-sdk/unshielded';
+import { V1Builder as UnshieldedV1Builder } from '@midnight-ntwrk/wallet-sdk/unshielded/v1';
 
 import type { BalancerConfig } from './config.js';
 import {
@@ -88,7 +92,21 @@ import {
   queryTransactionByIdentifier,
   withDeadline,
 } from './contractRuntime.js';
-import { isSubmissionTimeout, serialisedSubmissionService } from './submission.js';
+import {
+  isSubmissionTimeout,
+  polkadotConnection,
+  serialiseSubmissions,
+  type NodeConnection,
+} from './submission.js';
+import {
+  coinKey,
+  createCoinReservation,
+  describeCoin,
+  smallestDust,
+  smallestOfType,
+  type CoinTicket,
+  type SelectableCoin,
+} from './coinReservation.js';
 import { FEE_CAPABLE_SPECKS } from './resolverPool.js';
 
 // The wallet SDK's indexer client needs a global WebSocket under plain Node.
@@ -928,6 +946,15 @@ export interface ContractWalletProviderOptions {
    * has started should fail fast.
    */
   waitForDustMs?: number;
+  /**
+   * How long `balanceTx` may wait for a coin another job holds or has in
+   * flight to come free, when that is the only reason no coin of the needed
+   * type is selectable. Thirty seconds by default: this is contention between
+   * this service's own jobs, resolved by the job in front finishing, and is
+   * the wait the DUST lane already makes for the fee coin — see
+   * `./coinReservation.ts`.
+   */
+  waitForReservedCoinMs?: number;
 }
 
 export interface BalancerWallet {
@@ -978,6 +1005,13 @@ export interface BalancerWallet {
    * expired grace period. See {@link isDustWedged}.
    */
   pendingTransactionCount(state?: FacadeState): Promise<number>;
+  /**
+   * The node's best block height now, or `null`. The rebuild path uses it as
+   * the height the indexer must reach after a `1010` refusal.
+   */
+  nodeHeight(): Promise<number | null>;
+  /** Coins no job may currently be handed, as keys — for `/status` and the journal. */
+  excludedCoins(): string[];
   /**
    * Whether this wallet's DUST is hidden rather than absent, read from the live
    * state. `false` for every explainable shortfall — see {@link isDustWedged}
@@ -1182,6 +1216,37 @@ export async function openBalancerWallet(
     ? makeServerProvingService({ provingServerUrl: new URL(provingServerUrl) })
     : makeWasmProvingService({ keyMaterialProvider });
 
+  /* The exclusions every selector consults — see `./coinReservation.ts` for
+     what the SDK already does at balance time and what it does afterwards
+     that this exists to catch. Wired into all three wallets through the
+     SDK's public hook, `V1Builder.withCoinSelection`, with each wallet's own
+     default selector underneath. */
+  const coins = createCoinReservation({ log: (line) => console.log(line) });
+  const guardedShielded = (cfg: Parameters<typeof ShieldedWallet>[0]) =>
+    CustomShieldedWallet(
+      cfg,
+      new ShieldedV1Builder()
+        .withDefaults()
+        .withCoinSelection((() => coins.guard(smallestOfType)) as never) as never,
+    );
+  const guardedUnshielded = (cfg: Parameters<typeof UnshieldedWallet>[0]) =>
+    CustomUnshieldedWallet(
+      cfg,
+      new UnshieldedV1Builder()
+        .withDefaults()
+        .withCoinSelection((() => coins.guard(smallestOfType)) as never) as never,
+    );
+  const guardedDust = (cfg: Parameters<typeof DustWallet>[0]) =>
+    CustomDustWallet(
+      cfg,
+      new DustV1Builder()
+        .withDefaults()
+        .withCoinSelection((() => coins.guard(smallestDust)) as never) as never,
+    );
+  /* Held here rather than inside the submission service, so `nodeHeight` can
+     ask the same connection the submissions use. */
+  let nodeConnection: NodeConnection | null = null;
+
   const startFacade = async (snapshot: StoredSnapshot | null): Promise<WalletFacade> =>
     WalletFacade.init({
       configuration,
@@ -1192,7 +1257,8 @@ export async function openBalancerWallet(
          erroring them — so one submission ending kills another's watch in
          silence, for ever. `./submission.ts` serialises submissions so two
          watches never coexist, and bounds each one. */
-      submissionService: (cfg: { relayURL: URL }) =>
+      submissionService: (cfg: { relayURL: URL }) => {
+        nodeConnection = polkadotConnection(cfg);
         /* Cast because the SDK types `submitTransaction` as an OVERLOAD SET
            whose return type follows the status the caller asked for, and this
            wrapper deliberately does not honour that: it asks the node for
@@ -1201,7 +1267,7 @@ export async function openBalancerWallet(
            return value — the facade discards it, and `submitTx` below returns
            the identifier it already had — so the narrower truth is the safe
            one. */
-        serialisedSubmissionService(cfg, {
+        return serialiseSubmissions(nodeConnection, {
           timeoutMs: config.submitTimeoutMs,
           /* The running job's watchdog, so an abort actually unwinds the wait
              rather than merely rejecting the caller above it. */
@@ -1209,23 +1275,24 @@ export async function openBalancerWallet(
           /* So a job waiting its turn to submit is visibly waiting rather than
              silent — see `onStep` in `./submission.ts`. */
           onStep: (step) => progress(step),
-        }) as never,
+        }) as never;
+      },
       provingService: () => provingService,
       shielded: (cfg) =>
         snapshot
-          ? ShieldedWallet(cfg).restore(snapshot.shielded)
-          : ShieldedWallet(cfg).startWithSecretKeys(shieldedSecretKeys),
+          ? guardedShielded(cfg).restore(snapshot.shielded)
+          : guardedShielded(cfg).startWithSecretKeys(shieldedSecretKeys),
       unshielded: (cfg) =>
         snapshot
-          ? UnshieldedWallet(cfg).restore(snapshot.unshielded)
-          : UnshieldedWallet(cfg).startWithPublicKey(publicKey),
+          ? guardedUnshielded(cfg).restore(snapshot.unshielded)
+          : guardedUnshielded(cfg).startWithPublicKey(publicKey),
       dust: (cfg) =>
         /* An EMPTY `dust` field is the cold-start request above, and it is a
            different thing from no snapshot at all: the other two wallets still
            resume. */
         snapshot && snapshot.dust
-          ? DustWallet(cfg).restore(snapshot.dust)
-          : DustWallet(cfg).startWithSecretKey(
+          ? guardedDust(cfg).restore(snapshot.dust)
+          : guardedDust(cfg).startWithSecretKey(
               dustSecretKey,
               ledger.LedgerParameters.initialParameters().dust,
             ),
@@ -1353,6 +1420,50 @@ export async function openBalancerWallet(
     feeCapableCoinCount(state.dust.availableCoins, minSpecks);
   const pendingCountOf = (state: FacadeState): number => state.pending.all.length;
 
+  /**
+   * Every coin of one kind across the three wallets, in the shape the
+   * selectors see, so one key function serves both the selectors and the
+   * state stream. The unshielded entries arrive as `{ utxo, meta }` from the
+   * facade; the shielded as `{ coin }`; the dust as `{ token, generatedNow }`.
+   */
+  const walletCoins = (state: FacadeState, which: 'available' | 'pending'): SelectableCoin[] => {
+    const un = (
+      which === 'available' ? state.unshielded.availableCoins : state.unshielded.pendingCoins
+    ) as readonly unknown[];
+    const sh = (
+      which === 'available' ? state.shielded.availableCoins : state.shielded.pendingCoins
+    ) as readonly { coin: { type: unknown; value: bigint; nonce: unknown } }[];
+    const du = (which === 'available' ? state.dust.availableCoins : state.dust.pendingCoins) as readonly {
+      token: { nonce: unknown; initialValue?: bigint };
+      generatedNow: bigint;
+    }[];
+    return [
+      ...(un ?? []).map((entry) => {
+        const u = ((entry as { utxo?: unknown }).utxo ?? entry) as {
+          type: unknown;
+          value: bigint;
+          intentHash: unknown;
+          outputNo: unknown;
+        };
+        return {
+          type: String(u.type),
+          value: BigInt(u.value),
+          intentHash: String(u.intentHash),
+          outputNo: Number(u.outputNo),
+        };
+      }),
+      ...(sh ?? []).map((entry) => ({
+        type: String(entry.coin.type),
+        value: BigInt(entry.coin.value),
+        nonce: String(entry.coin.nonce),
+      })),
+      ...(du ?? []).map((entry) => ({
+        value: BigInt(entry.generatedNow),
+        token: { nonce: String(entry.token.nonce) },
+      })),
+    ];
+  };
+
   // Refresh the snapshot every minute while synced, so a killed process resumes
   // from close to the tip rather than replaying 150k blocks.
   let sawSynced = false;
@@ -1362,6 +1473,13 @@ export async function openBalancerWallet(
   snapshotTimer.unref();
   const snapshotSubscription = facade.state().subscribe({
     next: (state) => {
+      /* An in-flight coin that is in neither list has been applied by the
+         sync, and stops being excluded. Every state event, because the whole
+         hazard is the window between a facade revert and this application. */
+      coins.observe(
+        walletCoins(state, 'available').map(coinKey),
+        walletCoins(state, 'pending').map(coinKey),
+      );
       /* The lane count, refreshed from the same stream that changes it. Every
          spend and every block with dust activity comes through here, so a lane
          closes within a block of its coin being taken and reopens within a
@@ -1662,6 +1780,22 @@ export async function openBalancerWallet(
 
     dustWedged: readDustWedged,
 
+    async nodeHeight(): Promise<number | null> {
+      const connection = nodeConnection;
+      if (!connection?.height) return null;
+      try {
+        return await withDeadline(
+          () => connection.height!(),
+          5_000,
+          (waitedMs) => new WalletCallTimeout('reading the node height', waitedMs),
+        );
+      } catch {
+        return null;
+      }
+    },
+
+    excludedCoins: () => coins.excluded(),
+
     awaitFreeDustCoin,
 
     jobCount: () => reservation.counts().jobs,
@@ -1754,6 +1888,11 @@ export async function openBalancerWallet(
 
     contractWalletProvider(options: ContractWalletProviderOptions = {}): ContractWalletProvider {
       const waitForDustMs = options.waitForDustMs ?? 0;
+      const waitForReservedCoinMs = options.waitForReservedCoinMs ?? 30_000;
+      /* One ticket per provider, which is one per job: the coins its balancing
+         takes, then the coins its submission puts in flight. */
+      let ticket: CoinTicket | null = null;
+      let inFlightUntil = 0;
       return {
         getCoinPublicKey: () => shieldedSecretKeys.coinPublicKey,
         getEncryptionPublicKey: () => shieldedSecretKeys.encryptionPublicKey,
@@ -1787,6 +1926,22 @@ export async function openBalancerWallet(
             } catch (cause) {
               const message = cause instanceof Error ? cause.message : String(cause);
               if (!/insufficient funds|could not balance dust/i.test(message)) throw cause;
+              /* CONTENTION BEFORE POVERTY. If coins are excluded because another
+                 job holds them or has them in flight, the shortage is that
+                 job's, and it ends when that job does — worth a bounded wait
+                 inside the lane, the way the DUST lane waits for its fee coin.
+                 Only when nothing is excluded is the shortage real. */
+              const excluded = coins.excluded();
+              if (excluded.length > 0 && Date.now() - startedAt < waitForReservedCoinMs) {
+                progress('waiting for a reserved coin');
+                console.log(
+                  `[coins] ${currentJob()?.label ?? 'this job'}: no selectable coin — ${excluded.length} excluded by other jobs (${message.slice(0, 60)}), waiting`,
+                );
+                await coins.whenReleased(
+                  Math.min(10_000, waitForReservedCoinMs - (Date.now() - startedAt)),
+                );
+                continue;
+              }
               if (Date.now() - startedAt >= waitForDustMs) throw new DustUnavailable(message);
               console.log(`[contract] waiting for DUST (${message.slice(0, 80)})`);
               await new Promise((settle) =>
@@ -1812,9 +1967,20 @@ export async function openBalancerWallet(
                The other two calls of that trio are the fee estimate above and
                the signing below. */
             progress('balancing');
+            const label = currentJob()?.label ?? 'this transaction';
+            ticket?.release();
+            ticket = coins.open(label);
             const balanced = await reserve(
-              () =>
-                withDeadline(
+              async () => {
+                /* The coins this balancing takes are exactly the ones that move
+                   from available to pending while it runs — the SDK commits its
+                   selection into the wallet before returning the recipe — and
+                   the claim held here means nothing else moves a coin
+                   meanwhile. Read before and after, and the difference is the
+                   payload and the fee, named in the journal so a shared coin
+                   between two jobs is provable from the log alone. */
+                const pendingBefore = new Set(walletCoins(await currentState(), 'pending').map(coinKey));
+                const result = await withDeadline(
                   () =>
                     facade.balanceUnboundTransaction(
                       tx as never,
@@ -1823,10 +1989,24 @@ export async function openBalancerWallet(
                     ),
                   config.walletCallTimeoutMs,
                   (waitedMs) => new WalletCallTimeout('balancing the transaction', waitedMs),
-                ),
+                );
+                try {
+                  const taken = walletCoins(await currentState(), 'pending').filter(
+                    (coin) => !pendingBefore.has(coinKey(coin)),
+                  );
+                  ticket?.hold(taken.map(coinKey));
+                  console.log(
+                    `[job] ${label} consumes ${taken.length === 0 ? 'no coin of this wallet' : taken.map((coin) => describeCoin(coin)).join(', ')}`,
+                  );
+                } catch {
+                  // A state that cannot be read leaves nothing held; the SDK's own pending mark still stands.
+                }
+                return result;
+              },
               'contract balancing',
             );
             recipe = balanced;
+            inFlightUntil = deadline.getTime() + 30_000;
             progress('balanced');
             const signed = await reserve(
               () =>
@@ -1873,6 +2053,11 @@ export async function openBalancerWallet(
               }
               await noticeWedgeAfterRevert();
             }
+            /* Nothing was submitted, so nothing is in flight: whatever this
+               balancing took is free for the next job the moment it is
+               reverted. */
+            ticket?.release();
+            ticket = null;
             throw cause;
           }
         },
@@ -1898,6 +2083,10 @@ export async function openBalancerWallet(
           try {
             await facade.submissionService.submitTransaction(finalized, 'Finalized');
             progress('submitted');
+            /* In flight from here: excluded from every other job's selection
+               until the sync applies the spend or the transaction's TTL has
+               passed — whichever the facade's own revert may say in between. */
+            ticket?.submitted(inFlightUntil);
           } catch (cause) {
             /* A submission this service STOPPED WAITING FOR is not a failed
                one. Both hangs of 2026/09/02 had their transaction in a block
@@ -1912,6 +2101,7 @@ export async function openBalancerWallet(
                   `[job] the node never acknowledged ${identifier}, but it is on chain in block ${seen.block ?? '?'} — carrying on`,
                 );
                 progress('submitted');
+                ticket?.submitted(inFlightUntil);
                 return identifier;
               }
               /* Not on chain YET, and possibly on its way: the bytes were handed
@@ -1930,6 +2120,9 @@ export async function openBalancerWallet(
                 finalized,
                 balancedAt: Date.now(),
               });
+              /* Possibly on its way, so its coins stay out of everyone else's
+                 reach until the chain or the TTL settles it. */
+              ticket?.submitted(inFlightUntil);
               throw cause;
             }
             try {
@@ -1937,6 +2130,10 @@ export async function openBalancerWallet(
             } catch {
               // Best effort — the original submission failure is the real news.
             }
+            /* Refused at the RPC: never in a block, so its coins are free the
+               moment the revert returns them. */
+            ticket?.release();
+            ticket = null;
             /* The node-rejection path, and the one the two wedges of
                2026/09/02 came down. When the revert lands within the SDK's
                six-second event window it works and this finds nothing; when it
