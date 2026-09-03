@@ -96,6 +96,8 @@ export interface LoopHealth {
    * not outlive the observation.
    */
   blockedMs: number;
+  /** When the worker last asked the inspector for the main thread's stack, or 0. */
+  stackAskedAt: number;
 }
 
 export interface LivenessWatch {
@@ -147,6 +149,13 @@ export interface LivenessOptions {
   idle?: () => boolean;
   /** Recycles. Defaults to a clean exit, which `Restart=always` answers. */
   recycle?: () => void;
+  /**
+   * How long the main thread may be stalled before the worker opens the
+   * inspector and writes the main thread's stack to the journal. Defaults to
+   * two thirds of `blockedMs` when that is at least thirty seconds; zero
+   * switches it off. See `captureStack` in the worker.
+   */
+  stackAfterMs?: number;
   log?: (line: string) => void;
 }
 
@@ -162,13 +171,55 @@ export interface LivenessOptions {
 const WORKER_SOURCE = `
 const { writeSync } = require('node:fs');
 const { workerData } = require('node:worker_threads');
+const { spawnSync } = require('node:child_process');
 const shared = new BigInt64Array(workerData.buffer);
 const blockedMs = workerData.blockedMs;
+const stackAfterMs = workerData.stackAfterMs;
 const kill = workerData.kill;
+let stackAskedFor = 0;
+const say = (line) => { try { writeSync(2, line + '\\n'); } catch {} };
+/* THE ONE THING THAT CAN READ A BLOCKED MAIN THREAD. Node's signal report
+   (--report-on-signal) is delivered through the main loop and never fires
+   while that loop is stuck — measured 2026/09/03, zero reports from a spinning
+   process. SIGUSR1 is different: the inspector starts from a signal thread and
+   interrupts the isolate wherever it is, and Debugger.pause then reports the
+   frames it stopped in. Done once per stall, some seconds before the kill, so
+   the journal carries the stack of the thing that froze rather than a line
+   saying only that something did. */
+const captureStack = async (stalledMs) => {
+  spawnSync('kill', ['-USR1', String(process.pid)]);
+  await new Promise((s) => setTimeout(s, 800));
+  const list = await (await fetch('http://127.0.0.1:9229/json/list')).json();
+  const target = list.find((t) => t.webSocketDebuggerUrl);
+  if (!target) throw new Error('no inspector target');
+  const socket = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((s, f) => { socket.onopen = s; socket.onerror = () => f(new Error('inspector socket')); });
+  const frames = await new Promise((settle, fail) => {
+    const timer = setTimeout(() => fail(new Error('Debugger.pause did not answer in 5 s')), 5000);
+    socket.onmessage = (event) => {
+      const m = JSON.parse(String(event.data));
+      if (m.method === 'Debugger.paused') {
+        clearTimeout(timer);
+        settle(m.params.callFrames.slice(0, 12).map((f) =>
+          (f.functionName || '(anonymous)') + ' @ ' + String(f.url || '?').split('/').slice(-2).join('/') + ':' + (f.location.lineNumber + 1)));
+        socket.send(JSON.stringify({ id: 3, method: 'Debugger.resume' }));
+      }
+    };
+    socket.send(JSON.stringify({ id: 1, method: 'Debugger.enable' }));
+    socket.send(JSON.stringify({ id: 2, method: 'Debugger.pause' }));
+  });
+  say('[loop] the main thread has not run for ' + Math.round(stalledMs / 1000) + ' s — it is inside:\\n    ' + frames.join('\\n    '));
+  try { socket.close(); } catch {}
+};
 setInterval(() => {
   const last = Number(Atomics.load(shared, 0));
   if (last === 0) return;
   const stalledMs = Date.now() - last;
+  if (stackAfterMs > 0 && stalledMs >= stackAfterMs && stackAskedFor !== last) {
+    stackAskedFor = last;
+    Atomics.store(shared, 2, BigInt(Date.now()));
+    captureStack(stalledMs).catch((cause) => say('[loop] could not read the main thread\\'s stack: ' + String(cause && cause.message || cause)));
+  }
   if (stalledMs < blockedMs) return;
   if (stalledMs > Number(Atomics.load(shared, 1))) {
     Atomics.store(shared, 1, BigInt(Math.round(stalledMs)));
@@ -197,7 +248,9 @@ export function startLivenessWatch(options: LivenessOptions): LivenessWatch {
   /* Two slots: the main thread's stamp, and the worst block the worker has
      seen. Shared rather than messaged, because a message is delivered on the
      main thread's event loop and that is precisely what may have stopped. */
-  const buffer = new SharedArrayBuffer(16);
+  /* Three slots: the main thread's last tick, the worst stall the worker has
+     seen, and when the worker last asked the inspector for the stack. */
+  const buffer = new SharedArrayBuffer(24);
   const shared = new BigInt64Array(buffer);
   let worstLagMs = 0;
   let lagMs = 0;
@@ -246,9 +299,14 @@ export function startLivenessWatch(options: LivenessOptions): LivenessWatch {
 
   let worker: Worker | null = null;
   if (options.blockedMs > 0) {
+    /* The stack is read two thirds of the way to the kill, so a stall that
+       clears itself still leaves its frames in the journal, and a stall that
+       does not is described before it is ended. */
+    const stackAfterMs =
+      options.stackAfterMs ?? (options.blockedMs >= 30_000 ? Math.round(options.blockedMs * 2 / 3) : 0);
     worker = new Worker(WORKER_SOURCE, {
       eval: true,
-      workerData: { buffer, blockedMs: options.blockedMs, kill },
+      workerData: { buffer, blockedMs: options.blockedMs, stackAfterMs, kill },
     });
     worker.unref();
     worker.on('error', (cause) => {
@@ -274,6 +332,8 @@ export function startLivenessWatch(options: LivenessOptions): LivenessWatch {
       lagMs,
       watching: worker !== null,
       blockedMs: Number(Atomics.load(shared, 1)),
+      /** When the worker last asked the inspector for the main thread's stack; 0 if never. */
+      stackAskedAt: Number(Atomics.load(shared, 2)),
       heapUsedBytes,
       rssBytes,
     }),

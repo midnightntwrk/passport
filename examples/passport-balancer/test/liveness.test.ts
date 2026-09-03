@@ -160,3 +160,33 @@ describe('recycling on the heap', () => {
     await watch.stop();
   });
 });
+
+describe('reading the stack of a blocked main thread', () => {
+  it('asks for it once the stall passes stackAfterMs, before any kill would', async () => {
+    const watch = startLivenessWatch({ blockedMs: 5_000, tickMs: 20, kill: false, stackAfterMs: 150 });
+    await new Promise((settle) => setTimeout(settle, 100));
+    /* Block the main thread for longer than stackAfterMs AND longer than the
+       worker's one-second tick, so at least one tick lands inside the stall. */
+    const until = Date.now() + 1_300;
+    while (Date.now() < until) {
+      // spinning
+    }
+    await new Promise((settle) => setTimeout(settle, 1_500));
+    const health = watch.health();
+    assert.ok(health.stackAskedAt > 0, 'the worker asked the inspector for the stack');
+    assert.ok(health.stackAskedAt >= until - 1_300, 'and asked during the stall, not before it');
+    await watch.stop();
+  });
+
+  it('is switched off by stackAfterMs: 0', async () => {
+    const watch = startLivenessWatch({ blockedMs: 5_000, tickMs: 20, kill: false, stackAfterMs: 0 });
+    await new Promise((settle) => setTimeout(settle, 100));
+    const until = Date.now() + 300;
+    while (Date.now() < until) {
+      // spinning
+    }
+    await new Promise((settle) => setTimeout(settle, 300));
+    assert.equal(watch.health().stackAskedAt, 0);
+    await watch.stop();
+  });
+});
