@@ -52,6 +52,7 @@ Environment=NODE_OPTIONS=--max-old-space-size=4096
 Environment=RESOLVER_POOL_TARGET=0
 # The floor may not exceed the target, so both go to zero together.
 Environment=RESOLVER_POOL_FLOOR=0
+Environment=BALANCER_SPEND_LANES=6
 ExecStart=/usr/bin/node dist/server.mjs
 Restart=always
 RestartSec=5
