@@ -778,21 +778,26 @@ export async function createAccountFunder(
     const mintNonce = new Uint8Array(randomBytes(32));
     const mintNonceHex = bytesToHex(mintNonce);
 
-    const faucetProviders = await contractProviders(config, {
-      privateStateId: 'passport-balancer-faucet',
-      initialPrivateState: {},
-      zkConfigProvider: faucetZkConfigProvider as never,
-      proofProvider: faucetProofProvider,
-      /* Explicitly zero, though zero is now the default: this job must never
-         be the one that holds a lane waiting for a coin. If there is no DUST
-         free when the mint reaches its fee estimate, it gives the lane back
-         within a second and the next minute tick asks again. */
-      walletProvider: wallet.contractWalletProvider({ waitForDustMs: 0 }),
-    });
-
     let mintTx: string;
     try {
       mintTx = await wallet.exclusive(async () => {
+        /* Built INSIDE the job, so the job closes it. Built outside, as it was
+           until 2026/09/03, its indexer client belonged to nobody: the balancer
+           mints a spare at start-up and after every grant, and each of those
+           left an Apollo client and a WebSocket behind for the life of the
+           process. `contractProviders` says so in the journal when it happens,
+           which is how this one was found. */
+        const faucetProviders = await contractProviders(config, {
+          privateStateId: 'passport-balancer-faucet',
+          initialPrivateState: {},
+          zkConfigProvider: faucetZkConfigProvider as never,
+          proofProvider: faucetProofProvider,
+          /* Explicitly zero, though zero is now the default: this job must
+             never be the one that holds a lane waiting for a coin. If there is
+             no DUST free when the mint reaches its fee estimate, it gives the
+             lane back within a second and the next minute tick asks again. */
+          walletProvider: wallet.contractWalletProvider({ waitForDustMs: 0 }),
+        });
         const found = await findDeployedContract(faucetProviders as never, {
           compiledContract: compiledFaucet,
           contractAddress: faucetAddress,
