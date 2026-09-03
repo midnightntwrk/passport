@@ -42,6 +42,18 @@
  *   - the WAIT: when the only coins of a type are excluded, the shortage is
  *     contention, not poverty, and the caller may wait for a release rather
  *     than fail.
+ *   - CREATED: the DUST successor a spend writes. Measured on 2026/09/03 on
+ *     the build that held consumed coins only: the registration of
+ *     famtl14uefvbh.night deployed its leaf at 04:33:56 spending DUST
+ *     n:1707…/n:1013…, submitted at 04:34:00; the grant balanced at 04:34:02
+ *     was handed DUST n:1590… — a coin no line had named before, the successor
+ *     the ledger's local state had written for that spend, which the dust
+ *     wallet lists as available at once — and the node refused it at 04:34:12
+ *     with `231`, eight seconds before the deploy landed at 04:34:20. At
+ *     04:34:42 the same n:1590… paid the registration's own second leg and
+ *     landed. Every refusal of that run has this shape. So the coins a
+ *     balance CREATES are excluded with the ones it consumes, until the spend
+ *     that created them is applied.
  *
  * It is wired into the SDK through `V1Builder.withCoinSelection`, the public
  * hook: `CustomUnshieldedWallet(cfg, new V1Builder().withDefaults()
@@ -191,6 +203,14 @@ export function describeCoin(coin: SelectableCoin, names: Record<string, string>
 export interface CoinTicket {
   /** Mark these coins as taken by this job's balancing. */
   hold(keys: Iterable<string>): void;
+  /**
+   * Mark these coins as CREATED by this job's balancing — the DUST successors
+   * the ledger's local state writes at spend time, which the dust wallet lists
+   * as available at once and which do not exist on chain until this job's
+   * transaction lands. Excluded with the consumed coins, and released with
+   * them: the moment the spend is applied, the successor is real.
+   */
+  created(keys: Iterable<string>): void;
   /** The transaction carrying the held coins was submitted; keep them excluded until applied or `expiresAt`. */
   submitted(expiresAt: number): void;
   /** The job ended without a submission, or reverted: every held coin is free again. */
@@ -214,35 +234,51 @@ export interface CoinReservation {
    */
   isContended(tokenType: string, coins: SelectableCoin[]): boolean;
   /**
-   * Called with every wallet state: an in-flight coin that is in neither list
-   * has been applied by the sync, and is forgotten. The lists are keys.
+   * Called with every wallet state. A submitted transaction whose consumed
+   * coins are in neither list has been applied by the sync; it, and the coins
+   * it created, are forgotten. The lists are keys.
    */
   observe(available: Iterable<string>, pending: Iterable<string>): void;
   /** Resolves on the next release or application, or after `maxMs`. True if something came free. */
   whenReleased(maxMs: number): Promise<boolean>;
 }
 
+/** One submitted transaction's coins, until the chain or the TTL settles it. */
+interface Flight {
+  label: string;
+  consumed: Set<string>;
+  created: Set<string>;
+  expiresAt: number;
+}
+
 export function createCoinReservation(options: CoinReservationOptions = {}): CoinReservation {
   const now = options.now ?? Date.now;
   const log = options.log ?? ((line: string) => console.log(line));
 
-  /** key → ticket label, for coins a job holds before submitting. */
+  /** key → ticket label, for coins a job holds (consumed or created) before submitting. */
   const held = new Map<string, string>();
-  /** key → { label, expiresAt }, for coins of a submitted transaction. */
-  const inFlight = new Map<string, { label: string; expiresAt: number }>();
+  /** Every submitted transaction still unsettled, and an index from key to it. */
+  const flights = new Set<Flight>();
+  const inFlight = new Map<string, Flight>();
   const waiters = new Set<() => void>();
 
   const wake = (): void => {
     for (const waiter of [...waiters]) waiter();
   };
 
+  const forget = (flight: Flight): void => {
+    flights.delete(flight);
+    for (const key of flight.consumed) if (inFlight.get(key) === flight) inFlight.delete(key);
+    for (const key of flight.created) if (inFlight.get(key) === flight) inFlight.delete(key);
+  };
+
   const expireInFlight = (): void => {
     const at = now();
-    for (const [key, entry] of inFlight) {
-      if (entry.expiresAt <= at) {
-        inFlight.delete(key);
+    for (const flight of [...flights]) {
+      if (flight.expiresAt <= at) {
+        forget(flight);
         log(
-          `[coins] ${key} of ${entry.label} was never seen applied and its transaction's TTL has passed — selectable again`,
+          `[coins] ${flight.label} was never seen applied and its transaction's TTL has passed — selectable again (${flight.consumed.size + flight.created.size} coins)`,
         );
       }
     }
@@ -252,32 +288,48 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
 
   return {
     open(label) {
-      const mine = new Set<string>();
+      const consumed = new Set<string>();
+      const created = new Set<string>();
       let state: 'open' | 'submitted' | 'released' = 'open';
       return {
         hold(keys) {
           if (state !== 'open') return;
           for (const key of keys) {
-            mine.add(key);
+            consumed.add(key);
+            held.set(key, label);
+          }
+        },
+        created(keys) {
+          if (state !== 'open') return;
+          for (const key of keys) {
+            created.add(key);
             held.set(key, label);
           }
         },
         submitted(expiresAt) {
           if (state !== 'open') return;
           state = 'submitted';
-          for (const key of mine) {
+          const flight: Flight = { label, consumed: new Set(consumed), created: new Set(created), expiresAt };
+          flights.add(flight);
+          for (const key of consumed) {
             held.delete(key);
-            inFlight.set(key, { label, expiresAt });
+            inFlight.set(key, flight);
+          }
+          for (const key of created) {
+            held.delete(key);
+            inFlight.set(key, flight);
           }
         },
         release() {
           if (state === 'released') return;
           const wasHeld = state === 'open';
           state = 'released';
-          for (const key of mine) {
-            if (wasHeld) held.delete(key);
+          if (wasHeld) {
+            for (const key of consumed) held.delete(key);
+            for (const key of created) held.delete(key);
           }
-          mine.clear();
+          consumed.clear();
+          created.clear();
           if (wasHeld) wake();
         },
       };
@@ -306,17 +358,23 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
     },
 
     observe(available, pending) {
-      if (inFlight.size === 0) return;
+      if (flights.size === 0) return;
       const present = new Set<string>();
       for (const key of available) present.add(key);
       for (const key of pending) present.add(key);
       let applied = 0;
-      for (const [key, entry] of inFlight) {
-        if (!present.has(key)) {
-          inFlight.delete(key);
-          applied += 1;
-          log(`[coins] ${key} of ${entry.label} is applied on chain — forgotten`);
-        }
+      for (const flight of [...flights]) {
+        /* Applied when every coin it consumed has left both lists. The coins
+           it created stay present — they are real now — and are released
+           with it. A flight that consumed nothing has nothing to wait for. */
+        let outstanding = 0;
+        for (const key of flight.consumed) if (present.has(key)) outstanding += 1;
+        if (outstanding > 0) continue;
+        forget(flight);
+        applied += 1;
+        log(
+          `[coins] ${flight.label} is applied on chain — forgotten (${flight.consumed.size} consumed, ${flight.created.size} created)`,
+        );
       }
       if (applied > 0) wake();
     },

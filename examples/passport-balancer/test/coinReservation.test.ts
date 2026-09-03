@@ -250,3 +250,63 @@ describe('reading the unshielded inputs from a balanced recipe', () => {
     assert.deepEqual(unshieldedInputsOf(undefined), []);
   });
 });
+
+describe('the coins a balance creates', () => {
+  const successor = dust('5'.repeat(64), 1_000n);
+
+  it('are excluded while the job is open, and while its transaction is in flight', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(smallestDust);
+    const deploy = coins.open('the registration of famtl14uefvbh.night');
+    deploy.hold([coinKey(dust('1'.repeat(64), 5n))]);
+    deploy.created([coinKey(successor)]);
+    assert.equal(select([successor], '', 1n, {}), undefined, 'held: not on chain yet');
+    deploy.submitted(Date.now() + 60_000);
+    assert.equal(select([successor], '', 1n, {}), undefined, 'in flight: still not on chain');
+    assert.deepEqual(coins.excluded().sort(), [coinKey(dust('1'.repeat(64), 5n)), coinKey(successor)].sort());
+  });
+
+  it('become selectable the moment the spend that created them is applied', () => {
+    const log: string[] = [];
+    const coins = createCoinReservation({ log: (line) => log.push(line) });
+    const select = coins.guard(smallestDust);
+    const spent = dust('1'.repeat(64), 5n);
+    const deploy = coins.open('the registration of famtl14uefvbh.night');
+    deploy.hold([coinKey(spent)]);
+    deploy.created([coinKey(successor)]);
+    deploy.submitted(Date.now() + 60_000);
+
+    /* The successor is in available throughout; the spent coin is pending until applied. */
+    coins.observe([coinKey(successor)], [coinKey(spent)]);
+    assert.equal(select([successor], '', 1n, {}), undefined, 'predecessor still pending');
+
+    coins.observe([coinKey(successor)], []);
+    assert.equal(select([successor], '', 1n, {}), successor, 'the deploy landed: the successor is real');
+    assert.match(log.at(-1)!, /is applied on chain — forgotten \(1 consumed, 1 created\)/);
+    assert.deepEqual(coins.excluded(), []);
+  });
+
+  it('a revert before submission frees the created coins with the consumed ones', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(smallestDust);
+    const job = coins.open('grant');
+    job.hold([coinKey(dust('1'.repeat(64), 5n))]);
+    job.created([coinKey(successor)]);
+    job.release();
+    assert.equal(select([successor], '', 1n, {}), successor);
+  });
+
+  it('expire with the transaction, and the line counts them', () => {
+    const log: string[] = [];
+    let now = 1_000;
+    const coins = createCoinReservation({ now: () => now, log: (line) => log.push(line) });
+    const select = coins.guard(smallestDust);
+    const job = coins.open('grant');
+    job.hold([coinKey(dust('1'.repeat(64), 5n))]);
+    job.created([coinKey(successor)]);
+    job.submitted(now + 10);
+    now += 11;
+    assert.equal(select([successor], '', 1n, {}), successor);
+    assert.match(log.at(-1)!, /TTL has passed — selectable again \(2 coins\)/);
+  });
+});

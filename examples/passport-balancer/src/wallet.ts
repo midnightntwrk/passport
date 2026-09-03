@@ -1343,6 +1343,25 @@ export async function openBalancerWallet(
   const currentState = (): Promise<FacadeState> =>
     Rx.firstValueFrom(facade.state().pipe(Rx.timeout({ first: 30_000 })));
 
+  /**
+   * The first state that is not `before`, within three quarters of a second;
+   * the latest state if none arrives. `facade.state()` replays its last value
+   * and emits the SDK's commit a beat later, so a read straight after a
+   * balance can see the state from before it.
+   */
+  const stateAfterChange = async (before: FacadeState): Promise<FacadeState> => {
+    try {
+      return await Rx.firstValueFrom(
+        facade.state().pipe(
+          Rx.filter((state) => state !== before),
+          Rx.timeout({ first: 750 }),
+        ),
+      );
+    } catch {
+      return currentState();
+    }
+  };
+
   const progressOf = (state: FacadeState): SyncSnapshotProgress => {
     const shielded = state.shielded.progress;
     const unshielded = state.unshielded.progress;
@@ -1981,7 +2000,9 @@ export async function openBalancerWallet(
                    meanwhile. Read before and after, and the difference is the
                    payload and the fee, named in the journal so a shared coin
                    between two jobs is provable from the log alone. */
-                const pendingBefore = new Set(walletCoins(await currentState(), 'pending').map(coinKey));
+                const before = await currentState();
+                const pendingBefore = new Set(walletCoins(before, 'pending').map(coinKey));
+                const availableBefore = new Set(walletCoins(before, 'available').map(coinKey));
                 const result = await withDeadline(
                   () =>
                     facade.balanceUnboundTransaction(
@@ -1996,9 +2017,21 @@ export async function openBalancerWallet(
                   /* The shielded and dust legs from the wallet's pending list;
                      the UNSHIELDED leg from the transaction itself, because
                      the unshielded wallet does not commit an unbound
-                     transaction's inputs — see `unshieldedInputsOf`. */
-                  const fromPending = walletCoins(await currentState(), 'pending').filter(
+                     transaction's inputs — see `unshieldedInputsOf`. The state
+                     is read once it has CHANGED: the facade's stream emits a
+                     beat after the SDK commits, and a diff against the replayed
+                     pre-balance state attributed the previous job's coins to
+                     this one at 04:38:39 on 2026/09/03. */
+                  const after = await stateAfterChange(before);
+                  const fromPending = walletCoins(after, 'pending').filter(
                     (coin) => !pendingBefore.has(coinKey(coin)),
+                  );
+                  /* What this balance CREATED: the DUST successors the ledger
+                     writes at spend time, listed as available at once and not
+                     on chain until this lands. Held and released with the
+                     consumed coins — see `created` in `./coinReservation.ts`. */
+                  const createdNow = walletCoins(after, 'available').filter(
+                    (coin) => !availableBefore.has(coinKey(coin)),
                   );
                   const seen = new Set(fromPending.map(coinKey));
                   const taken = [
@@ -2011,8 +2044,13 @@ export async function openBalancerWallet(
                     }),
                   ];
                   ticket?.hold(taken.map(coinKey));
+                  ticket?.created(createdNow.map(coinKey));
                   console.log(
-                    `[job] ${label} consumes ${taken.length === 0 ? 'no coin of this wallet' : taken.map((coin) => describeCoin(coin)).join(', ')}`,
+                    `[job] ${label} consumes ${taken.length === 0 ? 'no coin of this wallet' : taken.map((coin) => describeCoin(coin)).join(', ')}${
+                      createdNow.length === 0
+                        ? ''
+                        : `; creates ${createdNow.map((coin) => describeCoin(coin)).join(', ')} (spendable once this lands)`
+                    }`,
                   );
                 } catch {
                   // A state that cannot be read leaves nothing held; the SDK's own pending mark still stands.
