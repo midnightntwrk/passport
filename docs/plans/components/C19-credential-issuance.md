@@ -50,3 +50,18 @@ intended for issuer A's schema is accepted under issuer B's.
 **B — Multi-issuer from day one** (per design doc principle 5).
 
 **C — Hybrid (one default issuer + extension points for others).**
+
+## Readings
+
+- **External prior art.** A permissioned, commitment-holding issuer flow
+  is realised by the agent-DID registry
+  ([midnight-agent-did-manager](https://github.com/mzf11125/midnight-agent-did-manager),
+  `contracts/did_registry.compact`): `issue_did` is gated on an on-chain
+  issuer key, and request/issue state is stored as commitments; see
+  [research/agent-did-registry.md](../../../research/agent-did-registry.md).
+- **External prior art.** A single-attestor credential is realised by
+  [Kredz](https://github.com/zkos-labs/kredz)
+  (`kredz_score_profile.compact`): `attest_score` is gated on a
+  witness-derived attestor key, and the score is stored only as a
+  `persistentHash(score, salt)` commitment; see
+  [research/kredz-credit-credentials.md](../../../research/kredz-credit-credentials.md).
