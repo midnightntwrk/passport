@@ -850,9 +850,46 @@ until the fee is covered, so a job started with no free coin does not wait
 politely — it fails to balance, or sweeps a coin a running job was about to
 spend. Lanes therefore close as coins are taken and reopen as change lands, with
 nothing having to notify the queue. `/status` publishes `lanes`,
-`lanesConfigured`, and `jobsRunning`.
+`lanesConfigured`, `jobsRunning`, and a `jobs` array giving each running job's
+label, its last reported step, and how long ago it reported it.
 
 Set it to `1` to restore the strictly-serial behaviour.
+
+### Nothing waits for ever
+
+Lanes made two balancer submissions overlap for the first time, and that
+uncovered a fault underneath. The wallet SDK holds **one** node connection for
+the whole facade and disconnects it at the end of every submission; polkadot-js
+drops `author_*` subscriptions on the reconnect without erroring them. So one
+submission ending could kill another's watch in silence — and on 2026/09/02 it
+did, twice: a spend job held a lane for 37 minutes and another for 23, with the
+proof server idle and not one journal line, until an operator restarted the
+service. Both transactions had landed on chain the whole time.
+
+Four things close it, and the fourth is the one that matters most:
+
+1. **Submissions are serialised and bounded** (`BALANCER_SUBMIT_TIMEOUT_MS`), so
+   two node watches never coexist. Submissions also ask the node for
+   `Submitted` rather than `Finalized` — 15–25 s of stagenet finality per
+   transaction that no longer sits on a user's click, since every job confirms
+   against the indexer anyway.
+2. **Indexer watches are bounded** (`BALANCER_CONFIRM_TIMEOUT_MS`). midnight-js
+   waits on `watchForTxData` and `watchForDeployTxData` with no deadline at all.
+3. **A stalled job loses its lane** (`BALANCER_JOB_STALL_MS`), but only while
+   nothing of ours is at the prover — a proof is minutes of legitimate silence.
+4. **A timeout never means "failed".** Every one of these paths asks the indexer
+   directly before it gives up on a transaction, because both hangs had already
+   landed: treating a deadline as a failure would revert DUST the chain has
+   genuinely spent and rebuild transactions that are genuinely on chain. Only an
+   answer of *not there* becomes a rebuild.
+
+Every step of a spend job is now one journal line — `queued`, `started`,
+`balanced`, `proved`, `submitted`, `seen-on-chain`, `confirmed`, then
+`done`/`failed`/`aborted` — prefixed `[job]` and naming the job's label and id.
+The droplet watchdog reads the same facts off `/status` and restarts the unit if
+a job stays silent with an idle prover for `BALANCER_WATCHDOG_JOB_STALL`
+seconds (default 300), which is the backstop for a stall the process cannot end
+itself.
 
 An activation's two grants — NIGHT into `night_balances`, mUSD into `coins` —
 now run together, since they contend for nothing. Priorities are unchanged: they
@@ -916,6 +953,16 @@ stops the unit first (a running service rewrites the snapshot every minute and
 would overwrite the repair), runs `dist/dust-rollback.mjs`, falls back to moving
 the snapshot aside for a cold walk, and starts the unit again. Its own cooldown,
 `BALANCER_WATCHDOG_DUST_COOLDOWN`, defaults to **300 s**.
+
+It has a second leg, for a spend job that has gone silent while holding a lane.
+That failure looks perfectly healthy from outside — through both hangs of
+2026/09/02 `/wallet-status` answered `ready: true` — so it is matched on
+`/status` alone: `jobsRunning` at least one, `proofInFlight: false`, and a
+`jobs[].sinceProgressMs` past `BALANCER_WATCHDOG_JOB_STALL` (default **300 s**,
+deliberately twice the in-process window, so the service gets first refusal on
+its own stall). `proofInFlight` is not optional there: a proof is minutes of
+silence and perfectly healthy, and restarting through one would fail a
+registration somebody is watching.
 
 `bash test/watchdog.test.sh` drives the whole script against a stub HTTP server,
 with recorders standing in for `systemctl` and `node`, and checks each term of
@@ -1028,6 +1075,10 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_ACCOUNT_BURST` | `3` | Burst allowance on `/fund-account`. |
 | `BALANCER_SPEND_QUEUE_MAX` | `8` | Spend requests in flight at once, across every client. **`0` is unbounded.** |
 | `BALANCER_SPEND_LANES` | `3` | Ceiling on concurrent spend jobs. The effective limit is `min(this, free DUST coins)`. `1` runs spends strictly one at a time. |
+| `BALANCER_SUBMIT_TIMEOUT_MS` | `30000` | How long one node submission may take before the service stops waiting on it and asks the indexer whether it landed. |
+| `BALANCER_CONFIRM_TIMEOUT_MS` | `120000` | How long a submitted transaction may go unseen by the indexer before the service queries it directly. Eight stagenet blocks of slack. |
+| `BALANCER_JOB_STALL_MS` | `150000` | How long a running spend job may report no step, **with nothing at the prover**, before the queue aborts it and gives its lane back. |
+| `BALANCER_SYNC_STALL_MS` | `600000` | How long the background chain walk may stall before it is reported and the health loop's rewarm is left to act. |
 | `BALANCER_TRUSTED_PROXIES` | `127.0.0.1,::1` | The peers whose `X-Forwarded-For` is believed. Everything else is keyed on its socket address. |
 | `BALANCER_CLIENT_KEY` | — | When set, the three spend endpoints require it in an `X-Passport-Key` header. Unset leaves them open. |
 | `BALANCER_MIDNAMES_ASSETS` | `contracts-stagenet/managed/midnames` | Overrides where the compiled Midnames ZK artefacts are read from. |

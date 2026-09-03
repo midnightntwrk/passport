@@ -200,6 +200,64 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+echo
+echo "the watchdog's stalled-spend-job leg"
+
+# The 23:46 hang of 2026/09/02, as /status would report it today: the alias job
+# holding a lane, its last step `submitted`, nothing at the prover, and — this
+# is what made it invisible — a wallet that still answers ready:true.
+stalled_bodies() {
+  local since="$1"
+  local step="$2"
+  cat > "$BODIES/status.json" <<JSON
+{"synced":true,"balanceAtomic":"4998916000","dustSpecks":"24990017628947616000",
+ "pendingTransactions":0,"balancesWatched":0,"balancing":false,"busy":true,
+ "settling":false,"ready":true,"lanes":3,"jobsRunning":1,"proofInFlight":false,
+ "jobs":[{"id":"job-7","label":"the registration of rvmtkqu91rwsk.night",
+ "step":"$step","ageMs":$((since + 4000)),"sinceProgressMs":$since}]}
+JSON
+  cat > "$BODIES/wallet-status.json" <<JSON
+{"total":1,"available":1,"wallets":[{"index":0,"ready":true,"syncState":"ready",
+ "dust":{"balance":"24990017628947616000","utxoCount":4,"isSynced":true}}]}
+JSON
+}
+
+stalled_bodies 400000 submitted
+run stalled-job
+if [ "$(calls)" = "systemctl restart passport-balancer" ]; then
+  pass "restarts the unit for a job silent 400 s at step submitted with an idle prover"
+else
+  fail "restarts for a stalled spend job" "$(calls)"
+fi
+
+if grep -q 'step submitted' "$WORK/out-stalled-job"; then
+  pass "names the step it was stuck at, which is the line the journal never had"
+else
+  fail "names the step" "$(cat "$WORK/out-stalled-job")"
+fi
+
+# A job that is merely SLOW is not a stalled one.
+stalled_bodies 40000 proved
+run stalled-job-young
+if [ -z "$(calls)" ]; then
+  pass "leaves a job alone that reported a step 40 s ago"
+else
+  fail "leaves a young job alone" "$(calls)"
+fi
+
+# The distinction the whole watchdog rests on: a proof is minutes of silence and
+# perfectly healthy, and aborting one would fail a registration a person is
+# watching.
+stalled_bodies 400000 proving
+sed -i.bak 's/"proofInFlight":false/"proofInFlight":true/' "$BODIES/status.json"
+run stalled-job-proving
+if [ -z "$(calls)" ]; then
+  pass "never restarts while something of ours is at the prover"
+else
+  fail "never restarts while proving" "$(calls)"
+fi
+
+# ---------------------------------------------------------------------------
 healthy_bodies
 run healthy
 if [ -z "$(calls)" ]; then

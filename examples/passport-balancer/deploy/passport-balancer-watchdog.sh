@@ -86,6 +86,14 @@ TIMEOUT="${BALANCER_WATCHDOG_TIMEOUT:-10}"
 # shorter than the restart cooldown: a wedge is proved rather than inferred, and
 # the repair costs the service ten seconds rather than a chain walk.
 DUST_COOLDOWN="${BALANCER_WATCHDOG_DUST_COOLDOWN:-300}"
+# How long a running spend job may report no step, with nothing at the prover,
+# before this script restarts the unit. Five minutes, and deliberately twice the
+# in-process watchdog's own window: the process gets first refusal on its own
+# stall, and this is the backstop for the case where the abort itself cannot
+# land. On 2026/09/02 two jobs held a lane silently for 37 and 23 minutes and
+# only an operator ended them — /status now publishes enough to see that from
+# out here.
+JOB_STALL="${BALANCER_WATCHDOG_JOB_STALL:-300}"
 
 log() { echo "[watchdog] $*"; }
 
@@ -165,6 +173,48 @@ if dust_wedged; then
   "$SYSTEMCTL" start "$UNIT"
   echo 0 > "$STRIKES_FILE"
   log "$UNIT started again after the DUST repair"
+  exit 0
+fi
+
+# --------------------------------------------------------------------------
+# A spend job that has gone silent while holding a lane.
+#
+# Asked BEFORE the readiness check, because this failure looks perfectly
+# healthy from outside: on 2026/09/02 /wallet-status answered ready:true
+# throughout both hangs. The whole signature is in /status now — a job running,
+# nothing of ours at the prover, and no step reported for minutes. A job that is
+# proving reports nothing too, which is why proofInFlight is not optional here.
+# --------------------------------------------------------------------------
+
+job_stalled() {
+  [ -n "$status" ] || return 1
+  printf '%s' "$status" | grep -q '"proofInFlight":false' || return 1
+  printf '%s' "$status" | grep -Eq '"jobsRunning":[1-9]' || return 1
+  # The worst of the running jobs, in milliseconds. `sort -n | tail -1` rather
+  # than the first match: with several lanes the stalled one need not be first.
+  stalled_ms=$(printf '%s' "$status" \
+    | grep -Eo '"sinceProgressMs":[0-9]+' \
+    | grep -Eo '[0-9]+' \
+    | sort -n \
+    | tail -1)
+  [ -n "$stalled_ms" ] || return 1
+  [ "$((stalled_ms / 1000))" -ge "$JOB_STALL" ] || return 1
+  return 0
+}
+
+if job_stalled; then
+  now=$(date +%s)
+  last=$(cat "$RESTART_FILE" 2>/dev/null || echo 0)
+  case "$last" in ''|*[!0-9]*) last=0 ;; esac
+  if [ $((now - last)) -lt "$COOLDOWN" ]; then
+    log "a spend job has been silent for $((stalled_ms / 1000)) s, but the last watchdog restart was $((now - last)) s ago and the cooldown is ${COOLDOWN} s"
+    exit 0
+  fi
+  step=$(printf '%s' "$status" | grep -Eo '"step":"[^"]*"' | head -1 | cut -d'"' -f4)
+  log "A SPEND JOB IS WEDGED: silent for $((stalled_ms / 1000)) s at step ${step:-unknown} with nothing at the prover — restarting $UNIT"
+  echo "$now" > "$RESTART_FILE"
+  echo 0 > "$STRIKES_FILE"
+  "$SYSTEMCTL" restart "$UNIT"
   exit 0
 fi
 
