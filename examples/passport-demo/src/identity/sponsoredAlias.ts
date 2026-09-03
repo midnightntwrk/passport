@@ -160,6 +160,18 @@ const SPONSOR_BUSY_SENTENCE =
  *     Said in that order, without a party named, because at this point the
  *     honest answer is that we do not know which one is at fault.
  *
+ * ONE SENTENCE EACH, AND ONE ONLY (2026/09/03)
+ * --------------------------------------------
+ * This sentence is the WHOLE of the body of the failure card on the claim
+ * screen — see `screens/AliasClaim.tsx`, whose panel is now a punctuated
+ * heading, this sentence, and the two controls. It was three sentences on
+ * screen at once: the second half of the refusal here ("can be registered
+ * again"), the host's own addition to it in `App.tsx`, and a note beneath the
+ * pair in `lib/claimFailure.ts` — each of them saying the name was kept, none
+ * of them saying anything the others did not. So every branch below returns
+ * exactly one sentence, and everything a person can DO about it lives on the
+ * buttons rather than in a third paragraph telling them the buttons are there.
+ *
  * `detail` and `retryAfterMs` are read to CLASSIFY and are never rendered:
  * `detail` is where the service puts the ledger's own words, which is exactly
  * the vocabulary this function exists to keep off the screen.
@@ -171,7 +183,7 @@ export function aliasRefusalMessage(refusal: {
   retryAfterMs: number | null;
 }): string {
   if (refusal.code === 'name-taken') {
-    return `${refusal.domain} has already been taken. Choose another name.`;
+    return `${refusal.domain} has already been taken — choose another name.`;
   }
   if (
     SPONSOR_BUSY_CODES.has(refusal.code) ||
@@ -180,7 +192,7 @@ export function aliasRefusalMessage(refusal: {
   ) {
     return SPONSOR_BUSY_SENTENCE;
   }
-  return `${refusal.domain} was not registered. Your name is kept for you and can be registered again.`;
+  return `${refusal.domain} was not registered, and your name is kept for you.`;
 }
 
 /** Codes after which the name must NOT be re-attempted — see `selfPayWorthTrying`. */

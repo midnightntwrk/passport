@@ -37,8 +37,28 @@
  * that failed has ALREADY left the name queued (see `claimOrQueueAlias` in
  * `App.tsx`, which persists the record with the failure as its reason), so
  * Home is where that name is waiting with its own "Register now" beside it.
- * The note below is the sentence that says so, because a control whose
- * destination the reader has to guess is only half an exit.
+ * The control says where it goes and the label is the whole of it.
+ *
+ * WHY THERE IS NO NOTE ANY MORE (2026/09/03)
+ * ------------------------------------------------------------------------
+ * This module used to contribute a sentence of its own — `CLAIM_QUEUED_NOTE`,
+ * "Your name is kept for you. Try again now, or carry on to your Passport…" —
+ * and with it the card read: a heading with no full stop on it, the service's
+ * refusal ("… was not registered. Your name is kept for you and can be
+ * registered again."), the host's addition to that ("… the name is kept for you
+ * to register again shortly."), and then the note. Three sentences saying the
+ * name is kept, and a fourth clause describing the two buttons directly beneath
+ * the two buttons.
+ *
+ * The refusal sentence itself now carries the fact, once — see
+ * `aliasRefusalMessage` in `identity/sponsoredAlias.ts` — so the card is a
+ * punctuated heading, that one sentence, and the pair. It is also the only
+ * shape that stays TRUE for every refusal: a fixed note promising the name is
+ * kept was wrong beside "has already been taken", which is the one refusal
+ * where it is not.
+ *
+ * What survives here is the part a screen cannot get right on its own: WHICH
+ * pair the card carries, and whether the retry may be pressed.
  */
 
 /** Which pair of controls the failure card carries, if any. */
@@ -71,24 +91,7 @@ export interface ClaimFailureCard {
    * answer is still computed for both, because it is the same fact either way.
    */
   canRetry: boolean;
-  /**
-   * The sentence under the failure that says where the name went and how to
-   * get back to it, or `null` where the card's own copy already says it.
-   */
-  note: string | null;
 }
-
-/**
- * Where the name is, and what the reader can do about it.
- *
- * NO MACHINERY IN IT. The claim screen's vocabulary sweep
- * (`e2e/claim-progress.spec.ts`) refuses "contract", "resolver", "registry",
- * "indexer", "wallet", and "DUST" anywhere on this screen, and this sentence is
- * on it. What a person can act on is that the name is theirs, that pressing
- * again is free, and that Home holds it either way.
- */
-export const CLAIM_QUEUED_NOTE =
-  'Your name is kept for you. Try again now, or carry on to your Passport — the name is waiting there and can be registered whenever you like.';
 
 /**
  * The failure card's shape, from what the screen knows.
@@ -111,13 +114,13 @@ export function claimFailureCard(input: {
   busy: boolean;
 }): ClaimFailureCard {
   if (input.error === null) {
-    return { way: 'none', canRetry: false, note: null };
+    return { way: 'none', canRetry: false };
   }
   const canRetry = input.alias !== null && !input.busy;
   if (input.passkeyWayOut && input.canSignOut) {
     /* The passkey card says its own two sentences — what the platform could
        not do, and that signing out costs neither the name nor the account. */
-    return { way: 'passkey', canRetry, note: null };
+    return { way: 'passkey', canRetry };
   }
-  return { way: 'queued', canRetry, note: CLAIM_QUEUED_NOTE };
+  return { way: 'queued', canRetry };
 }

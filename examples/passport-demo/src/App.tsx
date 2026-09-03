@@ -471,9 +471,14 @@ function appTransferCodeFor(code: string | null): string | null {
 /**
  * The queue reason when the sponsor cannot register a name right now. Never
  * followed by a wallet-funded attempt: the wallet does not pay for names.
+ *
+ * ONE SENTENCE, because this is the whole body of the claim screen's failure
+ * card — see `aliasRefusalMessage` in `identity/sponsoredAlias.ts` for the rule
+ * and the three-sentence card it was written against. What the reader can do
+ * about it is on the two controls, not in a second clause.
  */
 const SPONSOR_UNAVAILABLE_SENTENCE =
-  'The Passport service that registers names is not available right now. Your name is kept for you and can be registered when it is back.';
+  'The Passport service that registers names is not available right now, and your name is kept for you.';
 
 /**
  * Whether the funder is sponsoring `.night` registrations on `network` right
@@ -4036,7 +4041,13 @@ export default function PassportDemo() {
                and retried, never bought from the wallet (ruled 2026/08/25). */
             throw new AliasClaimError(
               'register-rejected',
-              `${cause.message} Passport registers names through its service and does not spend from your account — the name is kept for you to register again shortly.`,
+              /* The service's own sentence, and nothing added to it. What used
+                 to be appended here said the name was kept for a second time
+                 in a row — `aliasRefusalMessage` had already said it — and
+                 volunteered that Passport does not spend from the account,
+                 which the foot of the claim screen says on every state of it.
+                 The card is a heading, one sentence, and two controls. */
+              cause.message,
             );
           }
         }
@@ -4047,7 +4058,10 @@ export default function PassportDemo() {
              this path rather than a gap in it. */
           throw new AliasClaimError(
             'network-unreachable',
-            'The Passport service that registers names is not available right now. Your name is kept for you and can be registered when it is back — Passport does not spend from your account for this.',
+            /* The same sentence the pre-check refusal above uses, from the one
+               place it is written down: two copies of one fact drifted apart
+               once already. */
+            SPONSOR_UNAVAILABLE_SENTENCE,
           );
         }
 

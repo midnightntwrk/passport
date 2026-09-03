@@ -273,7 +273,7 @@ describe('sponsorAliasRegistration — a target that is submitted but not yet se
        was not registered and is kept, and "still nothing there" — which is
        about a contract they have never heard of — goes to the log half. */
     expect((refusal as AliasSponsorRefusal).message).toBe(
-      'alice.night was not registered. Your name is kept for you and can be registered again.',
+      'alice.night was not registered, and your name is kept for you.',
     );
     expect((refusal as AliasSponsorRefusal).serviceMessage).toBe('Still nothing there.');
   });
@@ -447,7 +447,7 @@ describe('sponsorAliasRegistration — refusals', () => {
     const refusal = await sponsorAliasRegistration(FUNDER, request).catch((cause) => cause);
     expect(refusal.code).toBe('unreachable');
     expect(refusal.message).toBe(
-      'alice.night was not registered. Your name is kept for you and can be registered again.',
+      'alice.night was not registered, and your name is kept for you.',
     );
     expect(refusal.serviceMessage).toBe('The sponsorship service refused with status 504.');
     expect(refusal.selfPayWorthTrying).toBe(true);
@@ -458,7 +458,7 @@ describe('sponsorAliasRegistration — refusals', () => {
     const refusal = await sponsorAliasRegistration(FUNDER, request).catch((cause) => cause);
     expect(refusal.code).toBe('unreachable');
     expect(refusal.message).toBe(
-      'alice.night was not registered. Your name is kept for you and can be registered again.',
+      'alice.night was not registered, and your name is kept for you.',
     );
     expect(refusal.serviceMessage).toBe('The sponsorship service refused with status 400.');
   });
@@ -604,7 +604,7 @@ describe('sponsorAliasRegistration — the independent read-back', () => {
 
 describe('aliasRefusalMessage', () => {
   const BUSY = 'The sponsor is busy — your name is queued and will register on its own.';
-  const KEPT = 'alice.night was not registered. Your name is kept for you and can be registered again.';
+  const KEPT = 'alice.night was not registered, and your name is kept for you.';
   const base = { code: 'register-rejected', domain: 'alice.night', detail: null, retryAfterMs: null };
 
   it('calls the measured fault what it is: the sponsor, busy, and the name kept', () => {
@@ -641,8 +641,12 @@ describe('aliasRefusalMessage', () => {
        not be folded into the busy sentence: a name somebody else holds will
        never register on its own, however long the queue runs. */
     const taken = aliasRefusalMessage({ ...base, code: 'name-taken' });
-    expect(taken).toBe('alice.night has already been taken. Choose another name.');
+    expect(taken).toBe('alice.night has already been taken — choose another name.');
     expect(taken).not.toMatch(/queue/i);
+    /* And it does NOT say the name is kept, which is why the claim card cannot
+       carry a fixed note promising that it is: this is the one refusal where
+       the promise would be false. */
+    expect(taken).not.toMatch(/kept/i);
   });
 
   it('says the honest non-answer when it cannot tell which party failed', () => {
@@ -665,6 +669,33 @@ describe('aliasRefusalMessage', () => {
     ];
     for (const sentence of every) {
       expect(sentence).not.toMatch(/registry|resolver|indexer|contract|wallet|DUST|ledger|tx\b/i);
+    }
+  });
+
+  it('says it in ONE sentence, whichever branch answers', () => {
+    /* THE COPY DEFECT OF 2026/09/03. This sentence is the whole body of the
+       claim screen's failure card, and the card read: an unpunctuated heading,
+       a two-sentence refusal from here, a second "the name is kept for you to
+       register again shortly" appended by `App.tsx`, and a note beneath the
+       buttons describing the buttons. Three sentences for one fact.
+
+       Held as a shape rather than as four string comparisons: exactly one
+       terminal stop, at the end, and the fact said once. An em dash or a comma
+       is how a second clause joins — a full stop is how a second sentence
+       starts, and there is not one. */
+    const every = [
+      aliasRefusalMessage(base),
+      aliasRefusalMessage({ ...base, code: 'name-taken' }),
+      aliasRefusalMessage({ ...base, code: 'funder-no-dust' }),
+      aliasRefusalMessage({ ...base, retryAfterMs: 1 }),
+      aliasRefusalMessage({ ...base, detail: 'DustUnavailable' }),
+    ];
+    for (const sentence of every) {
+      expect(sentence, sentence).toMatch(/\.$/);
+      /* One stop only. `alice.night` carries stops of its own, so the count is
+         of SENTENCE ends — a stop followed by a space or the end of the line. */
+      expect(sentence.match(/\.(?=\s|$)/g) ?? [], sentence).toHaveLength(1);
+      expect(sentence.match(/\bkept\b/gi) ?? [], sentence).not.toHaveLength(2);
     }
   });
 });

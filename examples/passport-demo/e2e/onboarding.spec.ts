@@ -410,10 +410,6 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
      name on Home. Both controls are on it now, with the sentence between them
      that says where the name went. */
   const refusal = page.locator('.mnid-panel[role="alert"]');
-  /* The sentence that names the destination. Matched on its own second half:
-     the service's refusal above says "your name is kept for you" too, and the
-     half that is NEW is the one that tells the reader where to go. */
-  await expect(refusal.getByText(/carry on to your Passport/i)).toBeVisible();
   await expect(refusal.getByRole('button', { name: 'Try again' })).toBeEnabled();
   await expect(refusal.getByRole('button', { name: 'Continue to Home' })).toBeEnabled();
   /* NOT the passkey pair, and never both: this failure is the service's, and
@@ -424,6 +420,21 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
   // And no machinery in the way out, on the screen where that rule is hardest.
   const refusalText = await refusal.innerText();
   expect(refusalText).not.toMatch(/\bwallet\b|\bDUST\b|\bcontract\b|\bindexer\b/i);
+
+  /* ONE HEADING, ONE SENTENCE, TWO CONTROLS (copy fix, 2026/09/03).
+     This card used to say the name was kept three times over — the service's
+     refusal, a clause `App.tsx` appended to it, and a note under the buttons
+     describing the buttons — with the heading running into the first of them
+     unpunctuated: "The claim did not complete alice.night was not registered".
+     Held here as a count rather than as a string, because the sentence itself
+     varies with the refusal and the DUPLICATION is the defect. */
+  expect(refusalText).toMatch(/The claim did not complete\./);
+  expect(refusalText.match(/kept for you/gi) ?? []).toHaveLength(1);
+  expect(refusalText).not.toMatch(/carry on to your Passport/i);
+  expect(refusalText).not.toMatch(/register again shortly/i);
+  /* Two sentence ends on the card, one of them the heading's: everything else
+     on it is a button label. */
+  expect(refusalText.match(/\.(?=\s|$)/g) ?? []).toHaveLength(2);
 
   /* THE STAGES, in the order they happened. Two distinct sentences before the
      refusal, each naming what the running step is doing: this is the whole of

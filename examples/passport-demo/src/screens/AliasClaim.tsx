@@ -664,8 +664,20 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
           <div className="mnid-panel" role="alert">
             <p className="mnid-panel-head">
               <CircleSlash size={15} aria-hidden="true" />
-              The claim did not complete
+              {/* PUNCTUATED, because the heading and the sentence beneath it
+                  are read as one line by anybody scanning the card and by
+                  every screen reader that runs them together: "The claim did
+                  not complete alice.night was not registered" was the whole
+                  of the first thing a refused claim said. */}
+              The claim did not complete.
             </p>
+            {/* THE ONE SENTENCE. It names what happened and that the name is
+                kept, and it is composed once — `aliasRefusalMessage` in
+                `identity/sponsoredAlias.ts`, or the host's own sentence for a
+                failure the service never saw. Nothing is added to it here:
+                this card carried the "kept" fact three times over until
+                2026/09/03, the last copy of it a note describing the two
+                buttons immediately below the two buttons. */}
             <p>{error}</p>
             {/* THE CARD THAT HAD NOTHING ON IT.
                 A passkey failure here used to end at the line above, on a
@@ -679,8 +691,8 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
                 one. A name the service refused after the account was already
                 live landed on this card with nothing but the sentence — and the
                 "Register now" that could have finished the job was on Home,
-                which the card never mentioned. The second pair below says so
-                and goes there. */}
+                which the card never mentioned. "Continue to Home" below is
+                that way there, and its label is the whole of the promise. */}
             {/* The passkey pair keeps the SURFACE's own busy flag rather than
                 `failure.canRetry`: one flag governs both its controls, and a
                 sign-out disabled because the name field happened to be empty
@@ -693,35 +705,31 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
                 busy={busy}
               />
             ) : null}
+            {/* The same two-pill row as the passkey pair, because they are the
+                same object in the same card: a claim that did not complete, and
+                the two things a person can do about it. The retry runs the claim
+                that was pressed — one passkey assertion, exactly as the first
+                attempt did — and nothing here is promptless. */}
             {failure.way === 'queued' ? (
-              <>
-                {failure.note ? <p>{failure.note}</p> : null}
-                {/* The same two-pill row as the passkey pair, because they are
-                    the same object in the same card: a claim that did not
-                    complete, and the two things a person can do about it. The
-                    retry runs the claim that was pressed — one passkey
-                    assertion, exactly as the first attempt did — and nothing
-                    here is promptless. */}
-                <div className="mnwo-actions">
-                  <button
-                    type="button"
-                    className="mnwo-action mnwo-action-primary"
-                    onClick={handleSubmit}
-                    disabled={!failure.canRetry}
-                  >
-                    <RotateCcw size={15} strokeWidth={2} aria-hidden="true" />
-                    Try again
-                  </button>
-                  <button
-                    type="button"
-                    className="mnwo-action"
-                    onClick={onContinueHome}
-                  >
-                    <Home size={15} strokeWidth={2} aria-hidden="true" />
-                    Continue to Home
-                  </button>
-                </div>
-              </>
+              <div className="mnwo-actions">
+                <button
+                  type="button"
+                  className="mnwo-action mnwo-action-primary"
+                  onClick={handleSubmit}
+                  disabled={!failure.canRetry}
+                >
+                  <RotateCcw size={15} strokeWidth={2} aria-hidden="true" />
+                  Try again
+                </button>
+                <button
+                  type="button"
+                  className="mnwo-action"
+                  onClick={onContinueHome}
+                >
+                  <Home size={15} strokeWidth={2} aria-hidden="true" />
+                  Continue to Home
+                </button>
+              </div>
             ) : null}
           </div>
         ) : null}

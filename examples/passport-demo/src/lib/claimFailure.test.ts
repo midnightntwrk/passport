@@ -10,18 +10,21 @@
  *   - exactly one pair, never both, because two "Try again" buttons on one card
  *     is an ambiguous control in a real browser;
  *   - no retry with no name to claim, and none while a claim is running;
- *   - the queued card says where the name went, in words that name none of the
- *     machinery the claim screen's vocabulary sweep refuses.
+ *   - and the card contributes NO sentence of its own. It carried one until
+ *     2026/09/03, beneath a refusal that had already said the name was kept and
+ *     a host addition that had said it again — see the module header. The one
+ *     sentence on the card is `aliasRefusalMessage`'s, drilled where it is
+ *     composed (`identity/sponsoredAlias.test.ts`).
  */
 
 import { describe, expect, it } from 'vitest';
 
-import { CLAIM_QUEUED_NOTE, claimFailureCard } from './claimFailure.js';
+import { claimFailureCard } from './claimFailure.js';
 
 /** The screen's ordinary state, one field at a time overridden per case. */
 const card = (over: Partial<Parameters<typeof claimFailureCard>[0]> = {}) =>
   claimFailureCard({
-    error: 'alice.night was not registered. Your name is kept for you and can be registered again.',
+    error: 'alice.night was not registered, and your name is kept for you.',
     passkeyWayOut: false,
     canSignOut: true,
     alias: 'alice',
@@ -31,24 +34,22 @@ const card = (over: Partial<Parameters<typeof claimFailureCard>[0]> = {}) =>
 
 describe('claimFailureCard', () => {
   it('renders nothing at all when no claim has failed', () => {
-    expect(card({ error: null })).toEqual({ way: 'none', canRetry: false, note: null });
+    expect(card({ error: null })).toEqual({ way: 'none', canRetry: false });
   });
 
-  it('gives a service refusal the queued pair and the sentence that says where the name is', () => {
+  it('gives a service refusal the queued pair, and no third sentence with it', () => {
     /* THE REPORTED DEFECT. The account was live, the service answered 500, and
-       this card was the whole of what the user had — with nothing on it. */
-    expect(card()).toEqual({ way: 'queued', canRetry: true, note: CLAIM_QUEUED_NOTE });
+       this card was the whole of what the user had — with nothing on it. What
+       it must NOT come back with is a `note`: the refusal above the pair has
+       already said the name is kept, and a card that says it twice more is the
+       copy defect fixed on 2026/09/03. */
+    expect(card()).toEqual({ way: 'queued', canRetry: true });
   });
 
-  it('gives a passkey ceremony its own pair, and does not repeat the note', () => {
+  it('gives a passkey ceremony its own pair', () => {
     /* The passkey card carries its own two sentences — what the platform could
-       not do, and that signing out keeps the name and the account — so a third
-       one here would say the same thing a second time. */
-    expect(card({ passkeyWayOut: true })).toEqual({
-      way: 'passkey',
-      canRetry: true,
-      note: null,
-    });
+       not do, and that signing out keeps the name and the account. */
+    expect(card({ passkeyWayOut: true })).toEqual({ way: 'passkey', canRetry: true });
   });
 
   it('never offers both pairs for one failure', () => {
@@ -66,7 +67,6 @@ describe('claimFailureCard', () => {
     expect(card({ passkeyWayOut: true, canSignOut: false })).toEqual({
       way: 'queued',
       canRetry: true,
-      note: CLAIM_QUEUED_NOTE,
     });
   });
 
@@ -82,14 +82,21 @@ describe('claimFailureCard', () => {
     expect(card({ busy: true, passkeyWayOut: true }).canRetry).toBe(false);
   });
 
-  it('names none of the machinery in the sentence it puts on screen', () => {
-    /* The same sweep `e2e/claim-progress.spec.ts` makes over the whole screen,
-       made here over the one sentence this module contributes to it. */
-    for (const word of [/\bcontract\b/i, /\bresolver\b/i, /\bregistry\b/i, /\bindexer\b/i, /\bwallet\b/i, /\bDUST\b/]) {
-      expect(CLAIM_QUEUED_NOTE).not.toMatch(word);
+  it('contributes no copy of its own, on any answer it can give', () => {
+    /* The whole of the 2026/09/03 fix, as an invariant rather than as one
+       assertion: whatever the card decides, the only strings on it are the
+       heading, the refusal sentence the host composed, and the button labels.
+       A `note` reintroduced anywhere here is a third "your name is kept". */
+    const answers = [
+      card({ error: null }),
+      card(),
+      card({ passkeyWayOut: true }),
+      card({ passkeyWayOut: true, canSignOut: false }),
+      card({ alias: null }),
+      card({ busy: true }),
+    ];
+    for (const answer of answers) {
+      expect(Object.keys(answer).sort()).toEqual(['canRetry', 'way']);
     }
-    // And it does say the two things a reader can act on.
-    expect(CLAIM_QUEUED_NOTE).toMatch(/kept for you/i);
-    expect(CLAIM_QUEUED_NOTE).toMatch(/registered whenever you like/i);
   });
 });
