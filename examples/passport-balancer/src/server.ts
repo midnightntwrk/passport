@@ -185,6 +185,13 @@ import {
   type BalancerWallet,
 } from './wallet.js';
 import { activationLegs, GRANT_RETRY_DELAY_MS, shouldRetryGrant } from './activationLegs.js';
+import {
+  createSwapDesk,
+  swapLedgerOf,
+  verifyPaymentOnChain,
+  type SwapDesk,
+  type SwapEntry,
+} from './swap.js';
 
 /**
  * `MidnightBech32m.parse` reports mainnet as the exported `mainnet` symbol (a
@@ -281,6 +288,8 @@ async function main(): Promise<void> {
     config.networkId,
     'accounts',
   );
+  /* The swap desk's idempotency gate: one payment hash, one lot, forever. */
+  const swapLedger = await JsonLedger.open<SwapEntry>(config.stateDir, config.networkId, 'swaps');
   /**
    * The shelf of pre-deployed resolver leaves, beside the other once-only
    * ledgers. Not once-only itself — a leaf is written when it is deployed and
@@ -2337,6 +2346,35 @@ async function main(): Promise<void> {
    * prefix it already refuses under — so a guard refusal reads like every other
    * refusal that endpoint makes and the watchdog needs to learn nothing new.
    */
+  /**
+   * The swap desk. It sells one fixed lot of the asset for a fixed price in
+   * NIGHT, and pays out through the account funder's existing asset path — so
+   * it inherits the mint, the spare coin, and the read-back this service
+   * already trusts. Everything it decides lives in `./swap.ts`.
+   */
+  const swapDesk: SwapDesk = createSwapDesk({
+    networkId: config.networkId,
+    depositTo: wallet.address,
+    assetSymbol: accountFunder?.assetSymbol ?? ASSET_SYMBOL,
+    assetLot: accountFunder?.assetGrant ?? 0n,
+    assetAvailable: accountFunder?.assetAvailable ?? false,
+    assetUnavailableReason:
+      accountFunder?.assetUnavailableReason ?? accountFunderUnavailableReason,
+    ledger: swapLedgerOf(swapLedger),
+    verifyPayment: (txHash) => verifyPaymentOnChain(config.indexerHttpUrl, txHash),
+    payOut: async (account) => {
+      const funder = accountFunder;
+      if (!funder) throw new Error(accountFunderUnavailableReason);
+      const funded = await funder.fundAsset(account);
+      return {
+        depositTxHash: funded.depositTxHash,
+        mintTxHash: funded.mintTxHash,
+        amount: funded.amount,
+      };
+    },
+    normaliseAccount: rawContractAddress,
+  });
+
   const spendGuards: Record<string, { prefix: string; bucket: TokenBucket }> = {
     '/balance-only': { prefix: 'balance', bucket: balanceBucket },
     /* Guarded like the route it undoes, and on the same bucket: it costs a
@@ -2349,6 +2387,9 @@ async function main(): Promise<void> {
     '/balance-only/abandon': { prefix: 'abandon', bucket: balanceBucket },
     '/register-alias': { prefix: 'alias', bucket: aliasBucket },
     '/fund-account': { prefix: 'account', bucket: accountBucket },
+    /* A swap pays out one asset grant, so it costs what an activation's asset
+       leg costs and is metered on the same bucket. */
+    '/swap': { prefix: 'swap', bucket: accountBucket },
   };
 
   /**
@@ -2608,6 +2649,28 @@ async function main(): Promise<void> {
         return;
       }
 
+      if (request.method === 'GET' && path === '/swap/quote') {
+        const outcome = swapDesk.quote(new URL(request.url ?? '/', 'http://localhost').searchParams);
+        respond(request, response, outcome.status, outcome.body);
+        return;
+      }
+
+      if (request.method === 'POST' && path === '/swap') {
+        let body: unknown;
+        try {
+          body = JSON.parse((await readRawBody(request)).toString('utf8') || '{}');
+        } catch {
+          respond(request, response, 400, {
+            error: 'invalid-request',
+            message: 'The request body must be JSON of the form {"account": "64 hex", "txHash": "…"}.',
+          });
+          return;
+        }
+        const outcome = await swapDesk.swap((body ?? {}) as Parameters<SwapDesk['swap']>[0]);
+        respond(request, response, outcome.status, outcome.body);
+        return;
+      }
+
       if (request.method === 'POST' && path === '/register-alias') {
         let body: AliasRequestBody;
         try {
@@ -2628,7 +2691,7 @@ async function main(): Promise<void> {
       respond(request, response, 404, {
         error: 'not-found',
         message:
-          'Routes: GET /status, GET /wallet-status, POST /balance-only, POST /balance-only/abandon, POST /register-alias, POST /fund-account.',
+          'Routes: GET /status, GET /wallet-status, GET /swap/quote, POST /balance-only, POST /balance-only/abandon, POST /register-alias, POST /fund-account, POST /swap.',
       });
     })()
       .catch((cause) => {

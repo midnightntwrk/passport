@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@midnight-passport/connect": ["../../node_modules/@midnight-passport/connect/src/index.ts"],
+      "@midnight-passport/connect/react": [
+        "../../node_modules/@midnight-passport/connect/src/react/index.tsx"
+      ],
+      "@midnight-passport/connect/redirect": [
+        "../../node_modules/@midnight-passport/connect/src/redirect/index.ts"
+      ]
+    }
+  },
+  "include": ["src", "service", "test", "vite.config.ts", "vitest.config.ts"]
+}

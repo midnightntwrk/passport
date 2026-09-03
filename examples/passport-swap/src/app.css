@@ -1,0 +1,205 @@
+/*
+ * Dark first, in the house palette: black ground, Infared for the one action
+ * that spends, Barlow for everything. Nothing here is decoration for its own
+ * sake — the price is the biggest thing on the screen, because it is the thing
+ * somebody is agreeing to.
+ */
+
+:root {
+  --infared: #e52321;
+  --dawn: #ec641d;
+  --ink: #000000;
+  --paper: #ffffff;
+  --muted: rgba(255, 255, 255, 0.62);
+  --line: rgba(255, 255, 255, 0.14);
+  --panel: rgba(255, 255, 255, 0.04);
+  --good: #06ff89;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at 12% -10%, rgba(236, 100, 29, 0.28), transparent 55%),
+    radial-gradient(ellipse at 90% 0%, rgba(174, 20, 15, 0.32), transparent 50%),
+    var(--ink);
+  color: var(--paper);
+  font-family: 'Barlow', 'Bricolage Grotesque', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.swap {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem 6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(2.4rem, 7vw, 3.6rem);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.lede {
+  margin: 0 0 1.5rem;
+  max-width: 40rem;
+  color: var(--muted);
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1.4rem 1.5rem;
+  background: var(--panel);
+}
+
+.detail {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
+.detail.good {
+  color: var(--good);
+}
+
+.detail.bad {
+  color: var(--dawn);
+}
+
+button {
+  margin-top: 1rem;
+  padding: 0.7rem 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--paper);
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+button.primary {
+  border-color: transparent;
+  background: var(--infared);
+  font-weight: 500;
+}
+
+button.primary:hover:not(:disabled) {
+  background: #f4372f;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.quote {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin: 0.6rem 0 0;
+  flex-wrap: wrap;
+}
+
+.quote dt {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.quote dd {
+  margin: 0.15rem 0 0;
+}
+
+.figure {
+  font-size: 2rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.figure span {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin-left: 0.35rem;
+}
+
+.arrow {
+  font-size: 1.6rem;
+  color: var(--infared);
+}
+
+.receipt {
+  border-color: rgba(6, 255, 137, 0.32);
+}
+
+.hashes {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hashes li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.92rem;
+}
+
+.hashes span {
+  color: var(--muted);
+}
+
+.hashes a,
+.back {
+  color: var(--paper);
+  font-variant-numeric: tabular-nums;
+}
+
+.back {
+  display: inline-block;
+  margin-top: 1.1rem;
+  color: var(--dawn);
+  text-decoration: none;
+}
+
+.back:hover {
+  text-decoration: underline;
+}
