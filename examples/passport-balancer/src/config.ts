@@ -142,6 +142,12 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    */
   jobMaxMs: number;
   /**
+   * How long the main thread may stop running before the liveness worker kills
+   * the process. See {@link DEFAULT_LOOP_BLOCKED_MS}. Zero switches the worker
+   * off and leaves only the lag measurement `/status` publishes.
+   */
+  loopBlockedMs: number;
+  /**
    * How long one call into the wallet facade may take before this service stops
    * waiting on it. See {@link DEFAULT_WALLET_CALL_TIMEOUT_MS}.
    */
@@ -403,6 +409,23 @@ export const DEFAULT_SYNC_STALL_MS = 600_000;
  * outlived every bound underneath it and is not proving.
  */
 export const DEFAULT_JOB_MAX_MS = 720_000;
+
+/**
+ * How long the MAIN THREAD may stop running before this service kills itself.
+ *
+ * Ninety seconds. On 2026/09/03 the process stopped answering HTTP at about
+ * 01:45:30 UTC, wrote no journal line for eight minutes, ran neither its own
+ * five-second stall sweep nor its `SIGTERM` handler, and was `SIGKILL`ed by
+ * systemd at 01:53:29 after a ninety-second stop timeout. Nothing scheduled on
+ * a blocked event loop can end that, which is why the check that enforces this
+ * runs on a worker thread; see `./liveness.ts`.
+ *
+ * Ninety seconds is long enough that a heavy synchronous balancing — measured
+ * at several seconds on this two-core droplet, where the proof server is a
+ * neighbour — is never mistaken for a freeze, and short enough that
+ * `Restart=always` returns the sponsor inside a demo's patience.
+ */
+export const DEFAULT_LOOP_BLOCKED_MS = 90_000;
 
 /**
  * How long ONE call into the wallet facade may take before this service stops
@@ -729,6 +752,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
   if (syncStallMs < 10_000) {
     throw new Error('BALANCER_SYNC_STALL_MS must be at least 10000 ms.');
   }
+  const loopBlockedMs = wholeNumber(
+    'BALANCER_LOOP_BLOCKED_MS',
+    trimmed(env.BALANCER_LOOP_BLOCKED_MS),
+    DEFAULT_LOOP_BLOCKED_MS,
+  );
+  if (loopBlockedMs > 0 && loopBlockedMs < 10_000) {
+    throw new Error(
+      'BALANCER_LOOP_BLOCKED_MS must be at least 10000 ms (0 switches the liveness worker off).',
+    );
+  }
   const jobMaxMs = wholeNumber('BALANCER_JOB_MAX_MS', trimmed(env.BALANCER_JOB_MAX_MS), DEFAULT_JOB_MAX_MS);
   if (jobMaxMs > 0 && jobMaxMs <= jobStallMs) {
     throw new Error(
@@ -814,6 +847,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     jobStallMs,
     syncStallMs,
     jobMaxMs,
+    loopBlockedMs,
     walletCallTimeoutMs,
     resolverPoolTarget,
     resolverPoolFloor,

@@ -163,6 +163,7 @@ import {
   type AliasRegistration,
   type MidnamesSponsor,
 } from './midnames.js';
+import { startLivenessWatch } from './liveness.js';
 import { countingProof, proofsInFlight } from './proving.js';
 import { SpendPriority } from './reservation.js';
 import {
@@ -961,6 +962,14 @@ async function main(): Promise<void> {
          for minutes while the prover is idle is stuck, not slow. */
       jobs: wallet.runningJobs(),
       proofInFlight: proofsInFlight() > 0,
+      /* The health of the event loop itself, which is the number that would
+         have made the eight-minute freeze of 2026/09/03 visible while it was
+         happening rather than afterwards in a proxy's access log. A `/status`
+         that answers at all proves the loop is running; `loopWorstLagMs` says
+         how close it has come to not. */
+      loopLagMs: Math.round(liveness.health().lagMs),
+      loopWorstLagMs: Math.round(liveness.health().worstLagMs),
+      loopWatched: liveness.health().watching,
       /* Since this process started, and — for each `…Total` — the persisted
          once-only ledger, which survives restarts. None of these is key
          material and none of them names a user. */
@@ -2551,6 +2560,10 @@ async function main(): Promise<void> {
       .finally(() => releaseSlot?.());
   });
 
+  /* Started before the listener, because the failure it watches for has
+     already happened to this service while it was answering requests. */
+  const liveness = startLivenessWatch({ blockedMs: config.loopBlockedMs });
+
   server.listen(config.port, config.host, () => {
     console.log(
       `listening on http://${config.host}:${config.port} — GET /status, GET /wallet-status, POST /balance-only, POST /balance-only/abandon, POST /register-alias, POST /fund-account`,
@@ -2560,6 +2573,7 @@ async function main(): Promise<void> {
 
   const shutdown = (signal: string) => {
     console.log(`\n${signal} — saving the sync snapshot and stopping`);
+    void liveness.stop();
     /* Stopped first, so a tick cannot start while the wallet is closing and
        read a half-shut facade as a fault. */
     healthMonitor?.stop();

@@ -1,0 +1,58 @@
+# The balancer's systemd unit, as deployed on the sponsor droplet.
+#
+# Kept in the repository because two of its settings are part of the fix for
+# the freeze of 2026/09/03 and would otherwise live only in one machine's
+# /etc/systemd/system:
+#
+#   TimeoutStopSec  systemd's default is ninety seconds, and a process whose
+#                   event loop has stopped cannot answer SIGTERM at all — on
+#                   2026/09/03 the stop was issued at 01:51:59 and the SIGKILL
+#                   that ended it came at 01:53:29. Fifteen seconds is longer
+#                   than a healthy shutdown has ever taken here (it saves one
+#                   snapshot and closes one wallet, and its own handler already
+#                   gives up after ten) and ninety seconds shorter than a stop
+#                   that is never going to be answered.
+#   Restart         always, which is what makes `./liveness.ts` a remedy rather
+#                   than a diagnosis: the worker thread kills the process, and
+#                   this brings it back five seconds later.
+#
+# Install with:
+#   install -m644 deploy/passport-balancer.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl restart passport-balancer
+#
+# The environment file it reads is NOT in this repository: /etc/passport-balancer.env
+# holds the sponsor's seed.
+
+[Unit]
+Description=Midnight Passport stagenet balancer (fee, name, and activation sponsor)
+Documentation=https://github.com/midnightntwrk/passport/tree/demo/pwa-demo/examples/passport-balancer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/passport-balancer
+EnvironmentFile=/etc/passport-balancer.env
+Environment=BALANCER_NETWORK=stagenet
+Environment=BALANCER_STATE_DIR=/var/lib/passport-balancer
+Environment=BALANCER_PORT=8807
+Environment=BALANCER_PROVER_URL=http://127.0.0.1:6300
+# Reached only by the TLS proxy on the funder host; the firewall admits it alone.
+Environment=BALANCER_HOST=0.0.0.0
+Environment=BALANCER_ALLOWED_ORIGINS=https://midnightpassport.com,https://raffle.midnightpassport.com,https://template.midnightpassport.com,http://localhost:5175
+Environment=NODE_OPTIONS=--max-old-space-size=4096
+ExecStart=/usr/bin/node dist/server.mjs
+Restart=always
+RestartSec=5
+TimeoutStartSec=0
+TimeoutStopSec=15s
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/passport-balancer
+
+[Install]
+WantedBy=multi-user.target

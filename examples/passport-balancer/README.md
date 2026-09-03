@@ -904,6 +904,40 @@ An activation's two grants — NIGHT into `night_balances`, mUSD into `coins` �
 now run together, since they contend for nothing. Priorities are unchanged: they
 order what is *waiting*, and a registration still overtakes a queued grant.
 
+### When the event loop itself stops
+
+The four bounds above are all scheduled on the main thread, and on 2026/09/03
+that thread stopped. The service wrote `[job] the spare mUSD mint proved
+(job-13)` at 01:45:29 UTC and then nothing: no journal line for eight minutes,
+no five-second stall sweep, no answer on `/status` (the TLS proxy held one
+request open for 369.8 s before returning 502), and no `SIGTERM` handler when
+systemd tried to stop the unit at 01:51:59 — it was `SIGKILL`ed at 01:53:29
+after the ninety-second stop timeout.
+
+Nothing scheduled on a blocked loop can end one. Three things close it:
+
+- **The wallet calls that hang now expire** (`BALANCER_WALLET_CALL_TIMEOUT_MS`).
+  `proved` is the last step before the fee estimate, the balancing, and the
+  signing, and none of those three had a ceiling. All three now do, and the
+  journal names which one a quiet job is inside.
+- **A lane comes back at a ceiling the prover cannot raise**
+  (`BALANCER_JOB_MAX_MS`). The stall watchdog stands off while a proof is
+  outstanding, which is right and is also a way to be silenced; the ceiling
+  consults nothing.
+- **A worker thread kills the process if the main one stops**
+  (`BALANCER_LOOP_BLOCKED_MS`, `src/liveness.ts`). The main thread stamps a
+  shared buffer twice a second; a worker reads that stamp through `Atomics` —
+  no message, no callback, no main-thread scheduling — and after ninety stale
+  seconds writes a line straight to file descriptor 2 (a worker's `stderr` is
+  forwarded *by the parent*, so `console.error` would queue behind the very
+  blockage it reports) and sends `SIGKILL`. `Restart=always` with
+  `TimeoutStopSec=15s` — see `deploy/passport-balancer.service` — brings the
+  sponsor back in seconds rather than after eight minutes of silence and ninety
+  more of an unanswerable stop.
+
+`/status` publishes `loopLagMs`, `loopWorstLagMs`, and `loopWatched`, which is
+the measurement that would have made the freeze visible while it was happening.
+
 ### Rebuilding a transaction the node refused
 
 A transaction balanced one block behind the chain is refused with
@@ -1087,6 +1121,9 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_SUBMIT_TIMEOUT_MS` | `30000` | How long one node submission may take before the service stops waiting on it and asks the indexer whether it landed. |
 | `BALANCER_CONFIRM_TIMEOUT_MS` | `120000` | How long a submitted transaction may go unseen by the indexer before the service queries it directly. Eight stagenet blocks of slack. |
 | `BALANCER_JOB_STALL_MS` | `150000` | How long a running spend job may report no step, **with nothing at the prover**, before the queue aborts it and gives its lane back. |
+| `BALANCER_JOB_MAX_MS` | `720000` | How long a spend job may hold a lane in total, **prover or no prover**. Past every bound underneath it, the ten-minute proof bound included. `0` removes the ceiling. |
+| `BALANCER_WALLET_CALL_TIMEOUT_MS` | `120000` | How long one call into the wallet facade — the fee estimate, the balancing, the signing — may take before the service stops waiting on it and rebuilds. |
+| `BALANCER_LOOP_BLOCKED_MS` | `90000` | How long the main thread may stop running before the liveness worker kills the process for the supervisor to restart. `0` switches the worker off and leaves only the lag measurement. |
 | `BALANCER_SYNC_STALL_MS` | `600000` | How long the background chain walk may stall before it is reported and the health loop's rewarm is left to act. |
 | `BALANCER_TRUSTED_PROXIES` | `127.0.0.1,::1` | The peers whose `X-Forwarded-For` is believed. Everything else is keyed on its socket address. |
 | `BALANCER_CLIENT_KEY` | — | When set, the three spend endpoints require it in an `X-Passport-Key` header. Unset leaves them open. |
