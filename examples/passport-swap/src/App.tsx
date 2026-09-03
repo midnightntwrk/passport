@@ -210,114 +210,104 @@ export function App() {
   return (
     <main className="swap">
       <ThemeToggle />
-      <header>
-        <p className="eyebrow">A swap desk on its own origin</p>
-        <h1>Passport Swap</h1>
-        <p className="lede">
-          One fixed lot, one fixed price. This page runs on {window.location.origin}, talks to a
-          Passport at {PASSPORT_ORIGIN}, and asks for exactly two things: who you are, and the
-          payment. It never holds anything of yours.
-        </p>
+      <header className="hero">
+        <h1>Swap anytime, anywhere.</h1>
+        <p className="lede">Your Passport pays, the desk delivers, and both sides are on chain.</p>
       </header>
 
-      <section className="card">
-        <h2>1. Sign in with Passport</h2>
-        <p className="detail">
-          {presence === null
-            ? 'Looking for a Passport…'
-            : presence.present === true
-              ? 'A Passport answered.'
-              : presence.present === 'unknown'
-                ? 'This page cannot tell from here — it will find out when it asks.'
-                : 'No Passport answered.'}
-        </p>
-        <button type="button" onClick={() => void connect()} disabled={profile.pending}>
-          {profile.pending ? 'Waiting for Passport…' : account ? 'Sign in again' : 'Sign in with Passport'}
-        </button>
-        {greeting ? <p className="detail good">{greeting}</p> : null}
-      </section>
+      <section className="box" aria-label="Swap">
+        <div className="panel sell">
+          <div className="panel-head">
+            <span>Sell</span>
+            {account ? <span className="who">{greeting?.replace('Signed in as ', '').replace(/\.$/, '')}</span> : null}
+          </div>
+          <div className="panel-row">
+            <div className="amount">{quote ? quote.pay : '0'}</div>
+            <div className="token pill">
+              <span className="coin night" aria-hidden="true" />
+              NIGHT
+            </div>
+          </div>
+          <div className="panel-foot">Fixed lot · one price for everyone</div>
+        </div>
 
-      <section className="card">
-        <h2>2. The quote</h2>
-        {quote ? (
-          <>
-            <dl className="quote">
-              <div>
-                <dt>You pay</dt>
-                <dd className="figure">
-                  {quote.pay} <span>NIGHT</span>
-                </dd>
-              </div>
-              <div className="arrow" aria-hidden="true">
-                →
-              </div>
-              <div>
-                <dt>You receive</dt>
-                <dd className="figure">
-                  {quote.receive} <span>{quote.to}</span>
-                </dd>
-              </div>
-            </dl>
-            <p className="detail">
-              {quote.rate}. A fixed demo rate, not a market. The quote holds until{' '}
-              {new Date(quote.expiresAt).toLocaleTimeString('en-GB')}.
-            </p>
-          </>
+        <div className="flip" aria-hidden="true">
+          <span>↓</span>
+        </div>
+
+        <div className="panel buy">
+          <div className="panel-head">
+            <span>Buy</span>
+          </div>
+          <div className="panel-row">
+            <div className="amount">{quote ? quote.receive : '0'}</div>
+            <div className="token pill accent">
+              <span className="coin susd" aria-hidden="true" />
+              {quote ? quote.to : 'sUSD'}
+            </div>
+          </div>
+          <div className="panel-foot">
+            {quote
+              ? `${quote.rate} · holds until ${new Date(quote.expiresAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+              : (quoteError ?? 'Asking the desk for a price…')}
+          </div>
+        </div>
+
+        {!account ? (
+          <button type="button" className="cta" onClick={() => void connect()} disabled={profile.pending}>
+            {profile.pending ? 'Waiting for Passport…' : 'Connect Passport'}
+          </button>
         ) : (
-          <p className="detail bad">{quoteError ?? 'Asking the desk for a price…'}</p>
+          <button type="button" className="cta" onClick={() => void swap()} disabled={!quote || busy}>
+            {stage === 'paying'
+              ? 'Confirm in Passport…'
+              : stage === 'settling'
+                ? 'Settling on chain…'
+                : quoteError
+                  ? 'No price yet'
+                  : 'Swap'}
+          </button>
         )}
+
         {quoteError ? (
-          <button type="button" onClick={() => void loadQuote()}>
-            Ask again
+          <button type="button" className="link" onClick={() => void loadQuote()}>
+            Ask the desk again
           </button>
         ) : null}
+        {problem ? <p className="problem">{problem}</p> : null}
       </section>
 
-      <section className="card">
-        <h2>3. Swap</h2>
-        <p className="detail">
-          Passport asks you before anything is sent. The desk pays out only once your payment is on
-          chain.
-        </p>
-        <button
-          type="button"
-          className="primary"
-          onClick={() => void swap()}
-          disabled={!quote || !account || busy}
-        >
-          {stage === 'paying'
-            ? 'Waiting for Passport…'
-            : stage === 'settling'
-              ? 'Settling with the desk…'
-              : quote
-                ? `Swap ${quote.pay} NIGHT for ${quote.receive} ${quote.to}`
-                : 'Swap'}
-        </button>
-        {!account ? <p className="detail">Sign in first — the desk pays into your Passport.</p> : null}
-        {problem ? <p className="detail bad">{problem}</p> : null}
-      </section>
+      <p className="foot">
+        Passport asks before anything is sent. The desk pays out only once your payment is on chain.
+        {presence?.present === false ? ' No Passport answered from this page.' : ''}
+      </p>
 
       {settlement ? (
-        <section className="card receipt">
-          <h2>
-            Received {settlement.received} {settlement.symbol}
-          </h2>
-          <p className="detail">
-            {settlement.repeat
-              ? 'That payment had already been settled, so this is the same swap, not a second one.'
-              : `You paid ${settlement.paid} NIGHT. Both transactions are on chain, and anybody can read them.`}
-          </p>
+        <section className="receipt" aria-live="polite">
+          <div className="receipt-head">
+            <span className="tick" aria-hidden="true">✓</span>
+            <div>
+              <h2>
+                Received {settlement.received} {settlement.symbol}
+              </h2>
+              <p>
+                {settlement.repeat
+                  ? 'That payment had already been settled, so this is the same swap, not a second one.'
+                  : `You paid ${settlement.paid} NIGHT. Both transactions are on chain.`}
+              </p>
+            </div>
+          </div>
           <ul className="hashes">
             <li>
               <span>Your payment</span>
               <a href={explorerTxUrl(settlement.paymentTx)} target="_blank" rel="noreferrer">
-                {shortHash(settlement.paymentTx)}
+                {shortHash(settlement.paymentTx)} ↗
               </a>
             </li>
             <li>
-              <span>The desk’s payout</span>
+              <span>Desk payout</span>
               <a href={explorerTxUrl(settlement.depositTx)} target="_blank" rel="noreferrer">
-                {shortHash(settlement.depositTx)}
+                {shortHash(settlement.depositTx)} ↗
               </a>
             </li>
           </ul>

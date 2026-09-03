@@ -1,258 +1,227 @@
-/*
- * Dark first, in the house palette: black ground, Infared for the one action
- * that spends, Barlow for everything. Nothing here is decoration for its own
- * sake — the price is the biggest thing on the screen, because it is the thing
- * somebody is agreeing to.
- */
+/* Passport Swap — one card, the Uniswap shape: a Sell panel, a Buy panel, the
+   flip arrow between them, and a single wide action. The price is the biggest
+   thing on the screen because it is the thing somebody agrees to. Infared is
+   the action colour; Ultraviolet marks the token the desk gives back. */
 
 :root {
   --infared: #e52321;
   --dawn: #ec641d;
+  --violet: #a700ff;
   --ink: #000000;
   --paper: #ffffff;
-  --muted: rgba(255, 255, 255, 0.62);
-  --line: rgba(255, 255, 255, 0.14);
-  --panel: rgba(255, 255, 255, 0.04);
+  --muted: rgba(255, 255, 255, 0.55);
+  --line: rgba(255, 255, 255, 0.09);
+  --card: #0b0b0d;
+  --panel: #131316;
+  --panel-2: #1a1a1e;
+  --pill: #232328;
   --good: #06ff89;
-  --grad-a: rgba(236, 100, 29, 0.28);
-  --grad-b: rgba(174, 20, 15, 0.32);
-  --hover-line: rgba(255, 255, 255, 0.4);
-  --hover-fill: rgba(255, 255, 255, 0.06);
+  --grad-a: rgba(236, 100, 29, 0.22);
+  --grad-b: rgba(167, 0, 255, 0.18);
   color-scheme: dark;
 }
-
-/* Light mode: the same tokens, swapped. The system setting picks it, and
-   the button in the corner overrides it either way. */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme='dark']) {
-    --ink: #f6f6f8;
-    --paper: #0a0a0c;
-    --muted: rgba(10, 10, 12, 0.6);
-    --line: rgba(10, 10, 12, 0.12);
-    --panel: rgba(255, 255, 255, 0.72);
-    --good: #0a8a4a;
-    --grad-a: rgba(236, 100, 29, 0.18);
-    --grad-b: rgba(229, 35, 33, 0.14);
-    --hover-line: rgba(10, 10, 12, 0.35);
-    --hover-fill: rgba(10, 10, 12, 0.05);
+    --ink: #f5f5f7; --paper: #0a0a0c; --muted: rgba(10, 10, 12, 0.55);
+    --line: rgba(10, 10, 12, 0.1); --card: #ffffff; --panel: #f2f2f5; --panel-2: #ebebef;
+    --pill: #ffffff; --good: #0a8a4a; --grad-a: rgba(236, 100, 29, 0.14); --grad-b: rgba(167, 0, 255, 0.1);
     color-scheme: light;
   }
 }
 :root[data-theme='light'] {
-  --ink: #f6f6f8;
-  --paper: #0a0a0c;
-  --muted: rgba(10, 10, 12, 0.6);
-  --line: rgba(10, 10, 12, 0.12);
-  --panel: rgba(255, 255, 255, 0.72);
-  --good: #0a8a4a;
-  --grad-a: rgba(236, 100, 29, 0.18);
-  --grad-b: rgba(229, 35, 33, 0.14);
-  --hover-line: rgba(10, 10, 12, 0.35);
-  --hover-fill: rgba(10, 10, 12, 0.05);
+  --ink: #f5f5f7; --paper: #0a0a0c; --muted: rgba(10, 10, 12, 0.55);
+  --line: rgba(10, 10, 12, 0.1); --card: #ffffff; --panel: #f2f2f5; --panel-2: #ebebef;
+  --pill: #ffffff; --good: #0a8a4a; --grad-a: rgba(236, 100, 29, 0.14); --grad-b: rgba(167, 0, 255, 0.1);
   color-scheme: light;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(ellipse at 12% -10%, var(--grad-a), transparent 55%),
-    radial-gradient(ellipse at 90% 0%, var(--grad-b), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 20% -5%, var(--grad-a), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 85% 10%, var(--grad-b), transparent 55%),
     var(--ink);
+  background-attachment: fixed;
   color: var(--paper);
   font-family: 'Barlow', 'Bricolage Grotesque', system-ui, sans-serif;
   font-size: 16px;
-  line-height: 1.55;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 .swap {
-  max-width: 46rem;
+  max-width: 30rem;
   margin: 0 auto;
-  padding: 4rem 1.5rem 6rem;
+  padding: 4.5rem 1rem 5rem;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 1.25rem;
 }
 
-.eyebrow {
+.hero { text-align: center; margin-bottom: 0.25rem; }
+.hero h1 {
   margin: 0 0 0.5rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
+  font-size: clamp(2.2rem, 8vw, 3.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  font-weight: 600;
 }
+.hero .lede { margin: 0 auto; max-width: 26rem; color: var(--muted); font-size: 1rem; }
 
-h1 {
-  margin: 0 0 0.75rem;
-  font-size: clamp(2.4rem, 7vw, 3.6rem);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-}
-
-h2 {
-  margin: 0 0 0.6rem;
-  font-size: 1.05rem;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-
-.lede {
-  margin: 0 0 1.5rem;
-  max-width: 40rem;
-  color: var(--muted);
-}
-
-.card {
+/* The card. */
+.box {
+  background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 1.4rem 1.5rem;
-  background: var(--panel);
-}
-
-.detail {
-  margin: 0.5rem 0 0;
-  color: var(--muted);
-  font-size: 0.94rem;
-}
-
-.detail.good {
-  color: var(--good);
-}
-
-.detail.bad {
-  color: var(--dawn);
-}
-
-button {
-  margin-top: 1rem;
-  padding: 0.7rem 1.15rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--paper);
-  font: inherit;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
-}
-
-button:hover:not(:disabled) {
-  border-color: var(--hover-line);
-  background: var(--hover-fill);
-}
-
-button.primary {
-  border-color: transparent;
-  background: var(--infared);
-  font-weight: 500;
-}
-
-button.primary:hover:not(:disabled) {
-  background: #f4372f;
-}
-
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.quote {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  margin: 0.6rem 0 0;
-  flex-wrap: wrap;
-}
-
-.quote dt {
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.quote dd {
-  margin: 0.15rem 0 0;
-}
-
-.figure {
-  font-size: 2rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-}
-
-.figure span {
-  font-size: 0.9rem;
-  color: var(--muted);
-  margin-left: 0.35rem;
-}
-
-.arrow {
-  font-size: 1.6rem;
-  color: var(--infared);
-}
-
-.receipt {
-  border-color: rgba(6, 255, 137, 0.32);
-}
-
-.hashes {
-  list-style: none;
-  margin: 1rem 0 0;
-  padding: 0;
+  border-radius: 24px;
+  padding: 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
+  position: relative;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
 }
 
-.hashes li {
+.panel {
+  border-radius: 18px;
+  padding: 1rem 1.1rem 0.9rem;
+  background: var(--panel);
+  border: 1px solid transparent;
+}
+.panel.buy { background: var(--panel-2); }
+.panel:focus-within, .panel:hover { border-color: var(--line); }
+
+.panel-head {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.55rem 0;
-  border-top: 1px solid var(--line);
-  font-size: 0.92rem;
-}
-
-.hashes span {
+  align-items: center;
+  font-size: 0.9rem;
   color: var(--muted);
+  margin-bottom: 0.35rem;
 }
+.panel-head .who { font-size: 0.8rem; color: var(--muted); }
 
-.hashes a,
-.back {
-  color: var(--paper);
+.panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.amount {
+  font-size: clamp(2.2rem, 9vw, 2.9rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.panel-foot { margin-top: 0.4rem; font-size: 0.82rem; color: var(--muted); }
 
-.back {
-  display: inline-block;
-  margin-top: 1.1rem;
-  color: var(--dawn);
-  text-decoration: none;
-}
-
-.back:hover {
-  text-decoration: underline;
-}
-
-/* Theme toggle, top right. */
-.theme-toggle {
-  position: fixed;
-  top: 1rem;
-  right: 1rem;
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  border-radius: 50%;
+/* Token pills. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.9rem 0.45rem 0.5rem;
+  border-radius: 999px;
+  background: var(--pill);
   border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--paper);
+  font-weight: 600;
   font-size: 1.05rem;
-  line-height: 1;
+  white-space: nowrap;
+}
+.pill.accent { background: var(--violet); border-color: transparent; color: #fff; }
+.coin {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff 0, rgba(255,255,255,0.2) 22%, transparent 24%), linear-gradient(135deg, #e52321, #ec641d);
+}
+.coin.susd { background: radial-gradient(circle at 35% 30%, #fff 0, rgba(255,255,255,0.25) 22%, transparent 24%), linear-gradient(135deg, #ffffff, #d9a3ff); }
+
+/* The flip arrow between the panels. */
+.flip {
+  position: relative;
+  height: 0;
+  z-index: 1;
+}
+.flip span {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, -50%);
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  background: var(--card);
+  border: 4px solid var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--paper);
+  font-size: 1.1rem;
+}
+
+/* The one action. */
+.cta {
+  margin-top: 0.25rem;
+  width: 100%;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 0;
+  background: var(--infared);
+  color: #fff;
+  font: inherit;
+  font-size: 1.15rem;
+  font-weight: 600;
   cursor: pointer;
-  z-index: 10;
+  transition: filter 150ms ease, transform 120ms ease;
+}
+.cta:hover:not(:disabled) { filter: brightness(1.08); }
+.cta:active:not(:disabled) { transform: translateY(1px); }
+.cta:disabled { background: rgba(229, 35, 33, 0.18); color: rgba(229, 35, 33, 0.9); cursor: default; }
+
+.link { background: none; border: 0; color: var(--muted); font: inherit; text-decoration: underline; cursor: pointer; padding: 0.4rem; }
+.problem {
+  margin: 0.25rem 0.5rem 0.5rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(229, 35, 33, 0.1);
+  border: 1px solid rgba(229, 35, 33, 0.3);
+  color: var(--paper);
+  font-size: 0.9rem;
+}
+.foot { margin: 0; text-align: center; color: var(--muted); font-size: 0.85rem; max-width: 26rem; align-self: center; }
+
+/* Receipt. */
+.receipt {
+  background: var(--card);
+  border: 1px solid rgba(6, 255, 137, 0.28);
+  border-radius: 20px;
+  padding: 1.1rem 1.2rem;
+}
+.receipt-head { display: flex; gap: 0.8rem; align-items: flex-start; }
+.receipt h2 { margin: 0 0 0.2rem; font-size: 1.25rem; font-weight: 600; }
+.receipt p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.tick {
+  flex: 0 0 auto;
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(6, 255, 137, 0.15);
+  color: var(--good);
+  font-weight: 700;
+}
+.hashes { list-style: none; margin: 0.9rem 0 0.6rem; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.hashes li { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.9rem; }
+.hashes span { color: var(--muted); }
+.hashes a, .back { color: var(--paper); text-decoration: none; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+.hashes a:hover, .back:hover { text-decoration: underline; }
+.back { display: inline-block; margin-top: 0.4rem; font-family: inherit; color: var(--dawn); font-weight: 600; }
+
+.theme-toggle {
+  position: fixed; top: 1rem; right: 1rem;
+  width: 38px; height: 38px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--card); color: var(--paper);
+  font-size: 1.05rem; line-height: 1; cursor: pointer; z-index: 10;
 }

@@ -91,6 +91,7 @@ export function App() {
   const [polls, setPolls] = useState<PollResults[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [question, setQuestion] = useState("What's better: McDonald's or Burger King?");
@@ -195,50 +196,45 @@ export function App() {
 
   return (
     <main className="poll">
-      <ThemeToggle />
-      <header>
-        <p className="eyebrow">Passport-signed voting on stagenet</p>
-        <h1>Passport Poll</h1>
-        <p className="lede">
-          Ask a question, answer it with your Passport. Every vote is counted against the account
-          that cast it, so one person is one vote — and you can check the workings yourself.
-        </p>
-      </header>
-
-      <section className="card identity">
-        <div className="who">
-          <h2>{voter ? (voter.name ?? shorten(voter.account)) : 'Not signed in'}</h2>
-          <p className="detail">
-            {voter
-              ? shorten(voter.account)
-              : presence === null
-                ? 'Looking for a Passport…'
-                : presence.present === false
-                  ? `No Passport answered at ${PASSPORT_ORIGIN}.`
-                  : 'Sign in and your vote gets counted.'}
-          </p>
+      <nav className="bar">
+        <div className="brand">
+          <span className="mark" aria-hidden="true" />
+          Passport Poll
         </div>
-        {voter ? (
-          <button type="button" onClick={() => setVoter(null)}>
-            Sign out
-          </button>
-        ) : (
-          <button type="button" className="primary" onClick={() => void signIn()} disabled={profile.pending}>
-            {profile.pending ? 'Waiting for Passport…' : 'Sign in with Passport'}
-          </button>
-        )}
-      </section>
+        <div className="bar-right">
+          {voter ? (
+            <button type="button" className="chip" onClick={() => setVoter(null)} title="Sign out">
+              <span className="dot" aria-hidden="true" />
+              {voter.name ?? shorten(voter.account)}
+            </button>
+          ) : (
+            <button type="button" className="chip primary" onClick={() => void signIn()} disabled={profile.pending}>
+              {profile.pending ? 'Waiting for Passport…' : 'Sign in with Passport'}
+            </button>
+          )}
+          <ThemeToggle />
+        </div>
+      </nav>
+
+      <header className="hero">
+        <p className="eyebrow">One account, one vote</p>
+        <h1>{current ? current.poll.question : 'Ask the room.'}</h1>
+        <p className="lede">
+          {current
+            ? current.total === 0
+              ? 'No votes yet. Sign in with Passport and cast the first one.'
+              : `${current.total} ${current.total === 1 ? 'vote' : 'votes'} so far, each counted against the account that cast it.`
+            : 'Every vote is signed with a Passport, so one person is one vote — and anyone can check the workings.'}
+        </p>
+        {!voter && presence?.present === false ? (
+          <p className="detail">No Passport answered at {PASSPORT_ORIGIN}.</p>
+        ) : null}
+      </header>
 
       {notice ? <p className="notice">{notice}</p> : null}
 
       {current ? (
-        <section className="card">
-          <h2>{current.poll.question}</h2>
-          <p className="detail">
-            {current.total === 0
-              ? 'No votes yet.'
-              : `${current.total} ${current.total === 1 ? 'vote' : 'votes'} so far.`}
-          </p>
+        <section className="ballot" aria-label="Ballot">
           <ul className="options">
             {current.options.map((option) => (
               <li
@@ -256,23 +252,25 @@ export function App() {
                   onClick={() => void cast(option.option)}
                   disabled={busy || alreadyVoted}
                 >
-                  <span className="bar" style={{ width: `${option.share}%` }} aria-hidden="true" />
+                  <span className="bar-fill" style={{ width: `${option.share}%` }} aria-hidden="true" />
                   <span className="label">{option.option}</span>
-                  <span className="count">
-                    {option.count} · {option.share}%
-                  </span>
+                  <span className="share">{option.share}%</span>
+                  <span className="count">{option.count}</span>
                 </button>
                 {option.voters.length > 0 ? (
-                  <p className="voters">{option.voters.join(', ')}</p>
+                  <p className="voters">{option.voters.join(' · ')}</p>
                 ) : null}
               </li>
             ))}
           </ul>
-          {alreadyVoted ? <p className="detail">You have voted in this poll.</p> : null}
-
-          <button type="button" className="ghost" onClick={() => setVerifying((on) => !on)}>
-            {verifying ? 'Hide the workings' : 'Verify'}
-          </button>
+          <div className="ballot-foot">
+            <span className="detail">
+              {alreadyVoted ? 'You have voted in this poll.' : voter ? 'Tap an option to vote.' : 'Sign in to vote.'}
+            </span>
+            <button type="button" className="ghost" onClick={() => setVerifying((on) => !on)}>
+              {verifying ? 'Hide the workings' : 'Verify'}
+            </button>
+          </div>
           {verifying ? (
             <div className="verify">
               <p className="detail">
@@ -294,9 +292,7 @@ export function App() {
                       <td>{receipt.name ?? '—'}</td>
                       <td className="mono">{shorten(receipt.account)}</td>
                       <td>{receipt.option}</td>
-                      <td className="mono">
-                        {receipt.proof.signature ?? receipt.proof.exchange}
-                      </td>
+                      <td className="mono">{receipt.proof.signature ?? receipt.proof.exchange}</td>
                     </tr>
                   ))}
                   {current.receipts.length === 0 ? (
@@ -311,39 +307,41 @@ export function App() {
         </section>
       ) : null}
 
-      <section className="card">
-        <h2>Ask something</h2>
-        <label>
-          <span>Question</span>
-          <input
-            value={question}
-            maxLength={140}
-            onChange={(event) => setQuestion(event.target.value)}
-          />
-        </label>
-        <div className="grid">
-          {options.map((option, index) => (
-            <label key={index}>
-              <span>{index < 2 ? `Option ${index + 1}` : `Option ${index + 1} (optional)`}</span>
-              <input
-                value={option}
-                maxLength={60}
-                onChange={(event) =>
-                  setOptions((current) =>
-                    current.map((value, at) => (at === index ? event.target.value : value)),
-                  )
-                }
-              />
-            </label>
-          ))}
-        </div>
-        <button type="button" className="primary" onClick={() => void create()} disabled={busy}>
-          Create the poll
+      <section className="ask">
+        <button type="button" className="ask-toggle" onClick={() => setAsking((on) => !on)}>
+          {asking ? 'Close' : current ? '+ Ask something else' : '+ Ask something'}
         </button>
+        {asking || !current ? (
+          <div className="ask-form">
+            <label>
+              <span>Question</span>
+              <input value={question} maxLength={140} onChange={(event) => setQuestion(event.target.value)} />
+            </label>
+            <div className="grid">
+              {options.map((option, index) => (
+                <label key={index}>
+                  <span>{index < 2 ? `Option ${index + 1}` : `Option ${index + 1} (optional)`}</span>
+                  <input
+                    value={option}
+                    maxLength={60}
+                    onChange={(event) =>
+                      setOptions((current) =>
+                        current.map((value, at) => (at === index ? event.target.value : value)),
+                      )
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+            <button type="button" className="primary wide" onClick={() => void create()} disabled={busy}>
+              Create the poll
+            </button>
+          </div>
+        ) : null}
       </section>
 
       {polls.length > 1 ? (
-        <section className="card">
+        <section className="others">
           <h2>Other questions</h2>
           <ul className="list">
             {polls.map((poll) => (
@@ -359,8 +357,8 @@ export function App() {
 
       <footer>
         <p className="detail">
-          Passport Poll runs on {window.location.origin} and asks a Passport at {PASSPORT_ORIGIN}.
-          It never sees your keys and never holds anything of yours.
+          Runs on {window.location.origin}; asks a Passport at {PASSPORT_ORIGIN}. It never sees your
+          keys and never holds anything of yours.
         </p>
       </footer>
     </main>
