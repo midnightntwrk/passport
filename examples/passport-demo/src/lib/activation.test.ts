@@ -19,7 +19,14 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { classifyFundAccountAnswer } from './activation.js';
+import {
+  ACTIVATION_DEPOSITED_LABEL,
+  ACTIVATION_EXHAUSTED_LABEL,
+  ACTIVATION_REFUSED_LABEL,
+  ACTIVATION_STABLECOIN_LABEL,
+  activationRetryRowId,
+  classifyFundAccountAnswer,
+} from './activation.js';
 
 /** A real stagenet account-custody contract address, for the detail strings. */
 const ACCOUNT = '7c2f4a19e6d0b83c5194fe2a77bb0c61d8a3e94f20cb5d7e8f16a0b3c4d5e6f7';
@@ -367,5 +374,82 @@ describe('bodies that are not objects', () => {
       expect(plan.activities).toHaveLength(1);
       expect(plan.activities[0]?.detail).toContain('an opening atomic NIGHT');
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The row that carries the retry (2026/09/02).                               */
+/*                                                                            */
+/* A grant that never arrives leaves a trail row saying so and, until this     */
+/* rule existed, nothing to press. The marker is only written on evidence the  */
+/* grant landed, so asking again was always going to work — see               */
+/* `activationRetryRowId`. Rows arrive newest first, as `addActivity` writes   */
+/* them.                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** A trail row, in the two fields the rule reads. */
+const row = (id: string, label: string) => ({ id, label });
+
+describe('the trail row that carries a retry', () => {
+  it('is the failure row when nothing has happened since', () => {
+    expect(
+      activationRetryRowId([
+        row('c', ACTIVATION_EXHAUSTED_LABEL),
+        row('b', 'Your name is registered'),
+        row('a', 'Passport created'),
+      ]),
+    ).toBe('c');
+  });
+
+  it('is the one-attempt refusal too', () => {
+    expect(activationRetryRowId([row('c', ACTIVATION_REFUSED_LABEL)])).toBe('c');
+  });
+
+  it('is nothing at all when the grant has since landed', () => {
+    /* A control here would ask the sponsor for a SECOND opening balance. */
+    expect(
+      activationRetryRowId([
+        row('d', ACTIVATION_DEPOSITED_LABEL),
+        row('c', ACTIVATION_EXHAUSTED_LABEL),
+      ]),
+    ).toBeNull();
+  });
+
+  it('is nothing when only the stablecoin half is on the trail above it', () => {
+    /* The stablecoin row is written by the same landed answer as the NIGHT
+       one, so it is the same evidence and it counts. */
+    expect(
+      activationRetryRowId([
+        row('d', ACTIVATION_STABLECOIN_LABEL),
+        row('c', ACTIVATION_EXHAUSTED_LABEL),
+      ]),
+    ).toBeNull();
+  });
+
+  it('steps over rows that are about anything else', () => {
+    /* A send made after a failed grant must not hide the failed grant. */
+    expect(
+      activationRetryRowId([
+        row('e', 'Sent to bob.night'),
+        row('d', 'Your name is registered'),
+        row('c', ACTIVATION_EXHAUSTED_LABEL),
+      ]),
+    ).toBe('c');
+  });
+
+  it('offers the newest failure only, never both', () => {
+    /* Two spent schedules leave two rows and one of them is history; a control
+       on the older would describe an attempt that is over. */
+    expect(
+      activationRetryRowId([
+        row('c', ACTIVATION_EXHAUSTED_LABEL),
+        row('b', ACTIVATION_REFUSED_LABEL),
+      ]),
+    ).toBe('c');
+  });
+
+  it('is nothing on an empty trail, and on one with no activation in it', () => {
+    expect(activationRetryRowId([])).toBeNull();
+    expect(activationRetryRowId([row('a', 'Passport created')])).toBeNull();
   });
 });

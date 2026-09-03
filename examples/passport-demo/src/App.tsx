@@ -28,7 +28,11 @@ import {
   PASSKEY_CEREMONY_TIMEOUT_MESSAGE,
   passkeySignInRecovery,
 } from './lib/passkeyRecovery.js';
-import { classifyFundAccountAnswer } from './lib/activation.js';
+import {
+  ACTIVATION_EXHAUSTED_LABEL,
+  activationRetryRowId,
+  classifyFundAccountAnswer,
+} from './lib/activation.js';
 import type { FundAccountAnswer } from './lib/activation.js';
 import {
   ACTIVITY_KEEP,
@@ -1269,6 +1273,15 @@ export default function PassportDemo() {
   const [nameSponsored, setNameSponsored] = useState(false);
   /** True while a queued name's "Register now" re-run is in flight. */
   const [registerNowBusy, setRegisterNowBusy] = useState(false);
+  /**
+   * True while the trail's own "Retry" is asking for the opening balance again.
+   *
+   * `fundAccountOnce` is patient — it keeps asking for up to ten minutes — and
+   * it is silent while it waits, by design. Without this the control would
+   * answer a second press by doing nothing at all (the in-flight guard) with
+   * nothing on screen to say why, which is a button that looks broken.
+   */
+  const [grantRetryBusy, setGrantRetryBusy] = useState(false);
   /* ---------------------------------------------------------------------- */
   /* The account-custody contract (C1), per credential and network          */
   /* ---------------------------------------------------------------------- */
@@ -3314,7 +3327,7 @@ export default function PassportDemo() {
             /* The schedule is spent. The account is empty and the screen already
                says so honestly; this row is why, in the sponsor's own words. */
             addActivity({
-              label: 'Opening balance not added',
+              label: ACTIVATION_EXHAUSTED_LABEL,
               detail: `The sponsor could not add your opening balance within ten minutes of trying: ${outcome.reason}`,
               status: 'blocked',
               source: 'chain',
@@ -5926,23 +5939,42 @@ export default function PassportDemo() {
    * there is no link at all rather than one that goes nowhere — the same rule
    * the success toasts follow, and for the same reason.
    */
-  const homeActivity = useMemo<ActivityFeedItem[]>(
-    () =>
-      activity.map((entry) => {
-        const link = explorerTxLink(entry.txHash, entry.network ?? selectedNetwork);
-        return {
-          id: entry.id,
-          label: entry.label,
-          detail: entry.detail,
-          status: entry.status,
-          createdAt: entry.createdAt,
-          ...(entry.txHash ? { txHash: entry.txHash } : {}),
-          ...(entry.network ? { network: entry.network } : {}),
-          ...(link ? { link } : {}),
-        };
-      }),
-    [activity, selectedNetwork],
-  );
+  const homeActivity = useMemo<ActivityFeedItem[]>(() => {
+    /* THE ONE ROW THAT IS STILL FIXABLE (2026/09/02). The opening grant has its
+       own ten-minute schedule and can run out of it — a Passport then has its
+       name and its stablecoin on the trail and no NIGHT, with the row that says
+       so and nothing to press. The marker is only ever written on evidence the
+       grant landed, so `fundAccountOnce` will genuinely ask again; which row
+       carries the control is decided by `activationRetryRowId`, and it is at
+       most one. No account, no control: there would be nothing to fund. */
+    const retryRowId = accountContractAddress ? activationRetryRowId(activity) : null;
+    const address = accountContractAddress;
+    return activity.map((entry) => {
+      const link = explorerTxLink(entry.txHash, entry.network ?? selectedNetwork);
+      return {
+        id: entry.id,
+        label: entry.label,
+        detail: entry.detail,
+        status: entry.status,
+        createdAt: entry.createdAt,
+        ...(entry.txHash ? { txHash: entry.txHash } : {}),
+        ...(entry.network ? { network: entry.network } : {}),
+        ...(link ? { link } : {}),
+        ...(address !== null && entry.id === retryRowId
+          ? {
+              retry: {
+                label: 'Retry',
+                busy: grantRetryBusy,
+                run: () => {
+                  setGrantRetryBusy(true);
+                  void fundAccountOnce(address).finally(() => setGrantRetryBusy(false));
+                },
+              },
+            }
+          : {}),
+      };
+    });
+  }, [accountContractAddress, activity, fundAccountOnce, grantRetryBusy, selectedNetwork]);
 
   /**
    * The unfinished payments Home offers to carry on.
@@ -6342,6 +6374,25 @@ export default function PassportDemo() {
     setIdentityStep(null);
   };
 
+  /**
+   * Leaves the name step for Home. ONE handler, two offers.
+   *
+   * The claim screen's host escape hatch (a network Passport cannot register
+   * on) and its failure card's "Continue to Home" do exactly the same thing —
+   * the step is settled, the failure is dropped, and the dashboard comes up —
+   * so they are the same function rather than two copies that can drift. The
+   * name is not lost either way: a claim that failed persisted it as queued,
+   * and Home's card carries "Register now" for it.
+   *
+   * The resolution is remembered per credential, so a reload — or the next
+   * sign-in — never asks again; Home keeps the "Claim a name" entry point.
+   */
+  const leaveNameStepForHome = () => {
+    setAliasFailure(null);
+    if (profile) storeNameStep(profile.passkey.credentialId, 'skipped');
+    setIdentityStep(null);
+  };
+
   const appsProfile = sessionActive
     ? {
         displayName: sessionDisplayName,
@@ -6456,13 +6507,13 @@ export default function PassportDemo() {
           checkAvailability={checkAliasOnActiveNetwork}
           onClaim={(alias) => claimOrQueueAlias(alias, selectedNetwork)}
           onQueue={queueFromClaimScreen}
-          onSkip={() => {
-            setAliasFailure(null);
-            // Remembered per credential, so a reload — or the next sign-in —
-            // never asks again. Home keeps the "Claim a name" entry point.
-            if (profile) storeNameStep(profile.passkey.credentialId, 'skipped');
-            setIdentityStep(null);
-          }}
+          onSkip={leaveNameStepForHome}
+          /* The failure card's second control. It runs the same handler as the
+             skip above because the two land in the same place, but it is a
+             different OFFER and the screen says so: a claim that failed has
+             already saved its name as queued (see `claimOrQueueAlias`), so
+             Home is where that name is waiting with "Register now" on it. */
+          onContinueHome={leaveNameStepForHome}
           claimPhase={claimPhase}
           error={aliasFailure?.message ?? null}
           /* The name step has no sign-out in its header, so when a passkey

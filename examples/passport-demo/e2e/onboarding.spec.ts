@@ -403,6 +403,28 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
     page.getByText(/The Passport service that registers names is not available right now/i),
   ).toBeVisible();
 
+  /* THE CARD THAT DEAD-ENDED (live acceptance, 2026/09/02).
+     The account was already live, the service refused the name, and this card
+     carried the sentence above and NOTHING ELSE — no way to run the claim
+     again, and no mention of the "Register now" that was waiting for this very
+     name on Home. Both controls are on it now, with the sentence between them
+     that says where the name went. */
+  const refusal = page.locator('.mnid-panel[role="alert"]');
+  /* The sentence that names the destination. Matched on its own second half:
+     the service's refusal above says "your name is kept for you" too, and the
+     half that is NEW is the one that tells the reader where to go. */
+  await expect(refusal.getByText(/carry on to your Passport/i)).toBeVisible();
+  await expect(refusal.getByRole('button', { name: 'Try again' })).toBeEnabled();
+  await expect(refusal.getByRole('button', { name: 'Continue to Home' })).toBeEnabled();
+  /* NOT the passkey pair, and never both: this failure is the service's, and
+     leaving the session is no answer to it. Two "Try again" buttons on one card
+     would be an ambiguous control in a real browser. */
+  await expect(refusal.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+  await expect(refusal.getByRole('button', { name: 'Try again' })).toHaveCount(1);
+  // And no machinery in the way out, on the screen where that rule is hardest.
+  const refusalText = await refusal.innerText();
+  expect(refusalText).not.toMatch(/\bwallet\b|\bDUST\b|\bcontract\b|\bindexer\b/i);
+
   /* THE STAGES, in the order they happened. Two distinct sentences before the
      refusal, each naming what the running step is doing: this is the whole of
      the defect, which was ONE unchanging label — "Deploying your name's
@@ -418,7 +440,24 @@ test('a slow registry is narrated in stages, and never as an unexplained spinner
   // And not one of them claims a step that had not started.
   expect(labels.some((label) => /Deploying your name's resolver/.test(label))).toBe(false);
 
-  // NOT ONE passkey prompt for a claim that was always going to be refused.
+  /* TRY AGAIN RUNS THE SAME CLAIM. The card stands down while it runs — the
+     host clears the failure before the first phase — and comes back with the
+     same refusal, because the service is still stood down. That is the whole
+     contract of the control: the claim that was pressed, pressed again. */
+  const before = labels.length;
+  await refusal.getByRole('button', { name: 'Try again' }).click();
+  /* The observer above is still watching, so a claim that really ran narrates
+     itself again — that, rather than a card that blinked, is the proof. */
+  await expect
+    .poll(
+      () => page.evaluate(() => (window as unknown as { __labels: string[] }).__labels.length),
+      { timeout: 60_000 },
+    )
+    .toBeGreaterThan(before);
+  await expect(page.getByText(/The claim did not complete/i)).toBeVisible({ timeout: 60_000 });
+
+  // NOT ONE passkey prompt for a claim that was always going to be refused —
+  // the retry included, because the refusal still lands before any ceremony.
   expect(await page.evaluate(() => (window as unknown as { __prompts: number }).__prompts)).toBe(0);
   // And nothing was asked of the registration endpoint either.
   expect(network.calls.filter((call) => call.includes('register-alias'))).toHaveLength(0);
@@ -559,6 +598,22 @@ test('the claim shows three steps, and the long wait is one of them — not thre
 
   // The claim is refused for want of a sponsor, before any ceremony.
   await expect(page.getByText(/The claim did not complete/i)).toBeVisible({ timeout: 30_000 });
+
+  /* AND THE SECOND CONTROL, WALKED THE WHOLE WAY. "Continue to Home" is the
+     half of the fix a unit test cannot see: it has to LAND somewhere, and the
+     somewhere is the Passport with this name already queued on it and the
+     "Register now" that finishes the job. Before 2026/09/02 the card named no
+     destination at all, so the only way to that control was to guess it
+     existed. */
+  await page
+    .locator('.mnid-panel[role="alert"]')
+    .getByRole('button', { name: 'Continue to Home' })
+    .click();
+  await expect(page.getByText(/Choose your .night name/i)).toHaveCount(0);
+  const landed = page.locator('.mnid-card').first();
+  await expect(landed).toContainText(`${stepperName}.night`, { timeout: 60_000 });
+  await expect(landed).toContainText(/Queued — not registered yet/i);
+  await expect(landed.getByRole('button', { name: 'Register now' })).toBeVisible();
 
   network.setRegistryDelay(0);
   await page.route(sponsorRoute('/status'), (route) =>

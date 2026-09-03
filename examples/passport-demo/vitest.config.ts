@@ -76,6 +76,26 @@
  * stays in the screen, because it is a timer and not a rule; what is drilled
  * here is what the screen is allowed to say with it.
  *
+ * `src/lib/claimFailure.ts` went IN on 2026/09/02, the day it was written, and
+ * it is in the denominator because it is the rule that decides whether somebody
+ * whose claim did not complete is offered a way on or only an explanation. It
+ * exists because of a live acceptance run that night: the account was already
+ * deployed, the service refused the name with a 500 during a forced blackout of
+ * the read side, and the failure card said the name was being kept and then
+ * stopped — no retry, and no mention of the "Register now" that was sitting on
+ * Home for exactly that name. The card had been furnished for one failure only,
+ * the passkey one, and bare for every other.
+ *
+ * Every way it can be wrong is a way of stranding somebody or of costing them
+ * more than it gives them: a card with no controls at all (the reported
+ * defect); BOTH pairs on one card, which is two "Try again" buttons and an
+ * ambiguous control in a real browser; a retry offered with no name to claim,
+ * which can only fail; and a retry offered mid-claim, which is how a second
+ * passkey ceremony gets started on top of the first. It holds no DOM, no React,
+ * no storage, and no clock — four facts in, a shape out — so all of it is
+ * drilled directly in `src/lib/claimFailure.test.ts`. The two buttons the
+ * screen paints from its answer stay out with the rest of the `.tsx`.
+ *
  * `src/lib/endpoints.ts` went IN on 2026/08/31, the day it was written, and it
  * belongs in the denominator because it is the rule that decides WHERE a
  * transaction gets proved and who pays for it. Until that day proving, fee
@@ -346,6 +366,7 @@ export default mergeConfig(
           'src/lib/activityFeed.ts',
           'src/lib/address.ts',
           'src/lib/appBusy.ts',
+          'src/lib/claimFailure.ts',
           'src/lib/claimSteps.ts',
           'src/lib/colour.ts',
           'src/lib/endpoints.ts',

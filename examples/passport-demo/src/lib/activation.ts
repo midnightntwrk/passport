@@ -119,6 +119,60 @@ interface FundAccountBody {
   message?: unknown;
 }
 
+/**
+ * The four labels an activation writes to the activity trail, as constants,
+ * because {@link activationRetryRowId} has to tell them apart by identity and a
+ * literal repeated in two files is a rule that drifts. `Opening balance
+ * deposited` and `Opening balance not deposited` differ by one word, which is
+ * exactly the kind of pair a substring match gets wrong.
+ */
+export const ACTIVATION_DEPOSITED_LABEL = 'Opening balance deposited';
+export const ACTIVATION_STABLECOIN_LABEL = 'Stablecoin deposited';
+/** The sponsor said no, in one attempt. Written by the classifier below. */
+export const ACTIVATION_REFUSED_LABEL = 'Opening balance not deposited';
+/** The whole retry schedule ran out. Written by `fundAccountOnce` in `App.tsx`. */
+export const ACTIVATION_EXHAUSTED_LABEL = 'Opening balance not added';
+
+const ACTIVATION_FAILURE_LABELS = new Set<string>([
+  ACTIVATION_REFUSED_LABEL,
+  ACTIVATION_EXHAUSTED_LABEL,
+]);
+const ACTIVATION_LANDED_LABELS = new Set<string>([
+  ACTIVATION_DEPOSITED_LABEL,
+  ACTIVATION_STABLECOIN_LABEL,
+]);
+
+/**
+ * Which trail row — if any — should carry a "Retry" the reader can press.
+ *
+ * THE SECOND HALF OF THE 2026/09/02 DEAD END. A Passport can finish onboarding
+ * with its name and its stablecoin on the trail and no opening NIGHT, because
+ * the two are independent asks and the grant has its own ten-minute schedule to
+ * run out of. When it does, the trail says so — and said only that. The grant
+ * is only ever marked done on evidence that it landed, so asking again was
+ * always going to work; there was simply nothing to press.
+ *
+ * `entries` are newest first, as `addActivity` writes them. The rule is the
+ * newest activation row wins: a failure with nothing after it earns the
+ * control, and a failure with a landed deposit ABOVE it earns nothing, because
+ * a retry beside a grant that has since arrived would ask the sponsor for a
+ * second one. Rows that are not about activation are stepped over, so a send
+ * made after a failed grant does not hide it.
+ *
+ * At most one id comes back. A schedule that has been spent twice leaves two
+ * failure rows and one of them is history; a control on both would be the same
+ * action offered twice, with the older one describing an attempt that is over.
+ */
+export function activationRetryRowId(
+  entries: readonly { id: string; label: string }[],
+): string | null {
+  for (const entry of entries) {
+    if (ACTIVATION_LANDED_LABELS.has(entry.label)) return null;
+    if (ACTIVATION_FAILURE_LABELS.has(entry.label)) return entry.id;
+  }
+  return null;
+}
+
 /** The refusal codes that mean the grant is already in place. */
 const ALREADY_GRANTED_CODES = new Set(['already-activated', 'already-funded']);
 
@@ -196,7 +250,7 @@ export function classifyFundAccountAnswer(
       stablecoin: null,
       activities: [
         {
-          label: 'Opening balance not deposited',
+          label: ACTIVATION_REFUSED_LABEL,
           detail: sponsorSentence,
           status: 'blocked',
         },
@@ -240,7 +294,7 @@ export function classifyFundAccountAnswer(
   const txHash = typeof body.txHash === 'string' ? body.txHash : undefined;
   const activities: ActivationActivity[] = [
     {
-      label: 'Opening balance deposited',
+      label: ACTIVATION_DEPOSITED_LABEL,
       detail: `The sponsor deposited ${
         typeof body.amountAtomic === 'string' ? body.amountAtomic : 'an opening'
       } atomic NIGHT into your account ${compactAddress(contractAddress)}.${
@@ -252,7 +306,7 @@ export function classifyFundAccountAnswer(
   ];
   if (assetTx) {
     activities.push({
-      label: 'Stablecoin deposited',
+      label: ACTIVATION_STABLECOIN_LABEL,
       detail: `${
         typeof body.assetAmount === 'string' ? body.assetAmount : 'The sponsor’s stablecoin'
       } went into your account ${compactAddress(contractAddress)} alongside the NIGHT.`,

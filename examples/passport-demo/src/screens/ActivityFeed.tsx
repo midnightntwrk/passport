@@ -1,4 +1,4 @@
-import { ChevronDown, ExternalLink } from 'lucide-react'
+import { ChevronDown, ExternalLink, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 
 import {
@@ -55,6 +55,30 @@ import './home.css'
 export interface ActivityFeedItem extends ActivityFeedEntry {
   /** Where the transaction can be looked at, when the host could build one. */
   link?: { label: string; href: string }
+  /**
+   * The action a row that reports something UNFINISHED offers, where the host
+   * has one to give — today, only the opening balance that never arrived.
+   *
+   * A trail is a record, so this is deliberately rare: a row that failed and
+   * cannot be re-run says so and stops, exactly as it always has. What earns a
+   * control is a row whose failure is still fixable and whose fix nothing else
+   * on the screen offers — which was the opening grant's position until
+   * 2026/09/02, when it could time out after ten minutes of trying and leave
+   * the Passport with a name, a stablecoin, and no NIGHT, with nowhere at all
+   * to ask again. The host decides which row that is (`activationRetryRowId`
+   * in `../lib/activation.ts`); this file paints the answer.
+   */
+  retry?: {
+    label: string
+    run: () => void
+    /**
+     * True while the ask is still running. The opening grant is PATIENT — it
+     * keeps trying for ten minutes — and it is silent while it waits, so
+     * without this the row would answer a second press by doing nothing with
+     * nothing on screen to say why.
+     */
+    busy?: boolean
+  }
 }
 
 export interface ActivityFeedProps {
@@ -120,6 +144,29 @@ export default function ActivityFeed(props: ActivityFeedProps) {
                           <span>View</span>
                           <ExternalLink size={11} aria-hidden="true" />
                         </a>
+                      ) : null}
+                      {/* Shaped like the link beside it rather than as a
+                          button, because it sits in the same column on the same
+                          calm list — the difference is that this one acts here
+                          instead of leaving. Its accessible name carries the
+                          row's own label, so a reader moving by control hears
+                          which thing is being asked for again rather than four
+                          identical "Retry"s. */}
+                      {item.retry ? (
+                        <button
+                          type="button"
+                          className="mnhome-activity-retry"
+                          onClick={item.retry.run}
+                          disabled={item.retry.busy === true}
+                          aria-label={`${item.retry.label}: ${entry.label}`}
+                        >
+                          <RotateCcw
+                            size={11}
+                            aria-hidden="true"
+                            className={item.retry.busy === true ? 'mnhome-send-spinner' : undefined}
+                          />
+                          <span>{item.retry.busy === true ? 'Asking…' : item.retry.label}</span>
+                        </button>
                       ) : null}
                     </span>
                   </li>

@@ -2,7 +2,9 @@ import {
   ArrowRight,
   Check,
   CircleSlash,
+  Home,
   Loader2,
+  RotateCcw,
   Sparkles,
   Wifi,
 } from 'lucide-react'
@@ -19,6 +21,7 @@ import {
   type AliasAvailability,
   type AliasClaimProgress,
 } from '../identity/midnamesText.js'
+import { claimFailureCard } from '../lib/claimFailure.js'
 import {
   claimSteps,
   claimSubStages,
@@ -91,6 +94,18 @@ export interface AliasClaimProps {
    */
   onQueue: (alias: string, reason: string) => Promise<void>
   onSkip: () => void
+  /**
+   * Leaves the name step for Home, with the name still queued.
+   *
+   * NOT a skip, though the host runs the same handler for both: a claim that
+   * failed has already persisted its name as queued, so Home is where that
+   * name is waiting with its own "Register now" beside it. This is the
+   * SECOND control on the failure card — the one that turns a refusal into a
+   * destination — and it is a separate prop from {@link AliasClaimProps.onSkip}
+   * because that one is the host's escape hatch for a network Passport cannot
+   * register on, and the two must stay legible as different offers.
+   */
+  onContinueHome: () => void
   claimPhase: AliasClaimProgress['phase'] | null
   error: string | null
   /**
@@ -213,6 +228,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     onClaim,
     onQueue,
     onSkip,
+    onContinueHome,
     claimPhase,
     error,
     errorIsPasskeyWayOut,
@@ -433,6 +449,21 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     availability === null ||
     availability.status === 'taken'
 
+  /* WHAT THE FAILURE CARD CARRIES, decided in `../lib/claimFailure.ts` rather
+     than by the shape of the JSX below. The card used to be furnished for
+     exactly one failure — the passkey one — and bare for every other, which is
+     how a claim refused by the service after the account was already live
+     ended on a panel with nothing on it (live acceptance, 2026/09/02). The
+     rule is one answer for all of them, so a card with no controls is not a
+     state this screen can be in. */
+  const failure = claimFailureCard({
+    error,
+    passkeyWayOut: errorIsPasskeyWayOut === true,
+    canSignOut: onSignOut !== undefined,
+    alias,
+    busy,
+  })
+
   return (
     <section className="mnid-screen" aria-busy={busy}>
       <header className="mnid-bar">
@@ -642,13 +673,55 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
                 browser's back button and closing the tab. Both controls go in
                 THIS card rather than in a toast: the card is where the user is
                 already reading, and a toast that carried the only way out of a
-                dead end would take it away again after five seconds. */}
-            {errorIsPasskeyWayOut && onSignOut ? (
+                dead end would take it away again after five seconds.
+
+                Since 2026/09/02 EVERY failure gets a pair, not just the passkey
+                one. A name the service refused after the account was already
+                live landed on this card with nothing but the sentence — and the
+                "Register now" that could have finished the job was on Home,
+                which the card never mentioned. The second pair below says so
+                and goes there. */}
+            {/* The passkey pair keeps the SURFACE's own busy flag rather than
+                `failure.canRetry`: one flag governs both its controls, and a
+                sign-out disabled because the name field happened to be empty
+                would be this screen's dead end all over again. Its retry is
+                guarded where it lands, in `handleSubmit`. */}
+            {failure.way === 'passkey' && onSignOut ? (
               <PasskeyWayOutActions
                 onRetry={handleSubmit}
                 onSignOut={onSignOut}
                 busy={busy}
               />
+            ) : null}
+            {failure.way === 'queued' ? (
+              <>
+                {failure.note ? <p>{failure.note}</p> : null}
+                {/* The same two-pill row as the passkey pair, because they are
+                    the same object in the same card: a claim that did not
+                    complete, and the two things a person can do about it. The
+                    retry runs the claim that was pressed — one passkey
+                    assertion, exactly as the first attempt did — and nothing
+                    here is promptless. */}
+                <div className="mnwo-actions">
+                  <button
+                    type="button"
+                    className="mnwo-action mnwo-action-primary"
+                    onClick={handleSubmit}
+                    disabled={!failure.canRetry}
+                  >
+                    <RotateCcw size={15} strokeWidth={2} aria-hidden="true" />
+                    Try again
+                  </button>
+                  <button
+                    type="button"
+                    className="mnwo-action"
+                    onClick={onContinueHome}
+                  >
+                    <Home size={15} strokeWidth={2} aria-hidden="true" />
+                    Continue to Home
+                  </button>
+                </div>
+              </>
             ) : null}
           </div>
         ) : null}
