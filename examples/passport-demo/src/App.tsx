@@ -6382,7 +6382,15 @@ export default function PassportDemo() {
       try {
         const { readAccountState } = await import('./identity/accountCustody.js');
         const state = await readAccountState(account.handle.network, account.address);
-        held = state.shieldedCoins.get(params.tokenType) ?? undefined;
+        /* MATCHED ON THE NORMALISED COLOUR, not on the raw string. The account's
+           own map is keyed by the ledger's bytes; the colour the picker chose
+           came from the sponsor. They have always agreed, and a count that
+           silently fell back to two the day they did not would be a worse
+           screen than one that costs a comparison. */
+        const wanted = normalisedColourHex(params.tokenType);
+        for (const [colour, amount] of state.shieldedCoins) {
+          if (normalisedColourHex(colour) === wanted) held = amount;
+        }
       } catch (cause) {
         console.info('[send] the account balance could not be read before the send', cause);
       }

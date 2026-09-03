@@ -68,7 +68,12 @@ import {
 /* The sentence a refused send earns, and how many attempts a leg gets. Both
    are decisions rather than renderings, so both are drilled directly — see
    `lib/sendLegs.ts`. */
-import { SEND_LEG_ATTEMPTS, sendFailureNotice, sendStepLine } from '../lib/sendLegs.js'
+import {
+  planShieldedSend,
+  SEND_LEG_ATTEMPTS,
+  sendFailureNotice,
+  sendStepLine,
+} from '../lib/sendLegs.js'
 
 import './home.css'
 
@@ -365,12 +370,14 @@ export interface SendSheetProps {
   nameLeg?: 'withdrawing' | 'settling' | 'depositing' | 'changing' | 'returning' | null
   /**
    * How many steps the running payment has: two, or three when the account's
-   * coin is bigger than the payment and the change has to come back.
+   * coin is bigger than the payment and the change has to come back — see
+   * `planShieldedSend` in `lib/sendLegs.ts` for why a shielded payment takes
+   * the whole coin out.
    *
-   * The host is the only place this is known — see `planShieldedSend` in
-   * `lib/sendLegs.ts` for why a shielded payment takes the whole coin out —
-   * and a line that counted to two through a three-step run would leave
-   * somebody watching an apparently finished payment carry on.
+   * OPTIONAL, because this sheet can answer it for itself out of the picker's
+   * own figures, and does. What the host knows that the sheet does not is what
+   * leg one REALLY withdrew, which is read from the account again as it builds;
+   * where the host says so, its answer wins.
    */
   nameLegSteps?: 2 | 3
   /**
@@ -606,7 +613,7 @@ export default function SendSheet(props: SendSheetProps) {
     phase,
     nameLeg,
     nameLegAttempt,
-    nameLegSteps,
+    nameLegSteps: hostNameLegSteps,
     onSignOut,
     onClose,
   } = props
@@ -1068,12 +1075,24 @@ export default function SendSheet(props: SendSheetProps) {
   /* The sentences themselves live in `lib/sendLegs.ts`, beside the plan that
      decides how many steps there are — see `sendStepLine`. This screen chooses
      WHEN to show one; it does not own the words. */
+  /* HOW MANY STEPS THIS PAYMENT IS, and it is a question this screen can
+     answer for itself. A shielded payment out of a coin bigger than the amount
+     takes the whole coin out and puts the change back — three transactions,
+     not two — see `planShieldedSend` in `lib/sendLegs.ts` for why. The picker
+     already knows what the account holds of the chosen colour, which is the
+     whole of the input; the host may still say so itself once leg one has read
+     the figure again, and that answer wins. */
+  const nameLegSteps: 2 | 3 =
+    hostNameLegSteps ??
+    (mode === 'shielded' && amount !== null && asset.available !== null
+      ? (planShieldedSend({ held: asset.available, amount })?.steps ?? 2)
+      : 2)
   const nameLegLine =
     resolvedName === null || nameLeg == null || nameLeg === undefined
       ? null
       : sendStepLine({
           step: nameLeg,
-          steps: nameLegSteps ?? 2,
+          steps: nameLegSteps,
           recipient: resolvedName.domain,
           attemptSuffix,
         })
@@ -1660,10 +1679,11 @@ export default function SendSheet(props: SendSheetProps) {
                 <div className="mnhome-send-row">
                   <dt>How it goes</dt>
                   <dd>
-                    <strong>Two steps</strong>
+                    <strong>{nameLegSteps === 3 ? 'Three steps' : 'Two steps'}</strong>
                     <small>
-                      The amount leaves your account, then it is paid into theirs. Both are
-                      network transactions, so this takes longer than sending to an address.
+                      {nameLegSteps === 3
+                        ? 'The whole of what your account holds of this comes out, they are paid, and your change goes back in. All three are network transactions, so this takes longer than sending to an address.'
+                        : 'The amount leaves your account, then it is paid into theirs. Both are network transactions, so this takes longer than sending to an address.'}
                     </small>
                   </dd>
                 </div>
