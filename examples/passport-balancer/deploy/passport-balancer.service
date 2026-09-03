@@ -36,7 +36,40 @@ EnvironmentFile=/etc/passport-balancer.env
 Environment=BALANCER_NETWORK=stagenet
 Environment=BALANCER_STATE_DIR=/var/lib/passport-balancer
 Environment=BALANCER_PORT=8807
-Environment=BALANCER_PROVER_URL=http://127.0.0.1:6300
+# The sponsor proves through the SAME public route the app uses — the 1AM
+# gateway first, our own proof server behind it — instead of addressing
+# 127.0.0.1:6300 directly. This box has two vCPUs and one proof server with a
+# twelve-slot queue, and it also carries the balancer and the indexer; a mUSD
+# deposit used to wait behind every other proof on it.
+#
+# THIS MOVES ONE OF THE TWO PROVING LEGS, NOT BOTH, because the two clients
+# join a base URL to `/prove` differently:
+#
+#   - CONTRACT circuits (`createContractProofProvider` in
+#     ../src/contractRuntime.ts) use midnight-js's `httpClientProofProvider`,
+#     which appends: `url.pathname = url.pathname.replace(/\/$/, '') + '/prove'`.
+#     A base with a path is preserved, so these post to `/prover/prove` and
+#     `handle_path /prover/*` in ./Caddyfile.stagenet sends them to the gateway.
+#     This is the leg that carries `deposit_night`, `deposit_shielded`, and
+#     `register_domain_for` — the queue this change is for.
+#   - The WALLET's balancing leg (`makeServerProvingService` in ../src/wallet.ts)
+#     uses wallet-sdk's `HttpProverClient`, which builds `new URL('/prove', base)`.
+#     `/prove` is an absolute path, so the base's path is DISCARDED and the
+#     request goes to the origin root, `/prove`. That root is deliberately
+#     routed to 127.0.0.1:6300 in ./Caddyfile.stagenet, so this leg still
+#     proves on this box — now by way of one loopback TLS hop, measured at
+#     ~40 ms against multi-second proofs.
+#
+# Verified on the droplet by status code, which differs per upstream: an empty
+# POST to /prover/prove answers 500 (the gateway), and to /prove or
+# /prover-local/prove answers 400 (our proof server).
+#
+# To move the wallet leg too, the base URL would have to carry no path — a
+# loopback listener serving /prove and /check at ITS root over the same
+# gateway-first upstream pair, with BALANCER_PROVER_URL naming that listener.
+# Not done here: the origin root is claimed by the browser client, which has
+# the same path-dropping SDK and must keep reaching a prover that works.
+Environment=BALANCER_PROVER_URL=https://67-205-177-162.sslip.io/prover
 # Reached only by the TLS proxy on the funder host; the firewall admits it alone.
 Environment=BALANCER_HOST=0.0.0.0
 Environment=BALANCER_ALLOWED_ORIGINS=https://midnightpassport.com,https://raffle.midnightpassport.com,https://template.midnightpassport.com,http://localhost:5175
@@ -52,7 +85,14 @@ Environment=NODE_OPTIONS=--max-old-space-size=4096
 Environment=RESOLVER_POOL_TARGET=0
 # The floor may not exceed the target, so both go to zero together.
 Environment=RESOLVER_POOL_FLOOR=0
-Environment=BALANCER_SPEND_LANES=6
+# Four, not six, now that the contract leg proves off-box. A lane is a
+# concurrent spend job, and every one of them still runs its wallet balancing
+# proof HERE — see the note on BALANCER_PROVER_URL above for why that leg stays
+# local. Six lanes were sized for a box that did all of its own proving and
+# queued the excess inside the proof server; with the contract leg gone the
+# limit that remains is this box's two vCPUs against the wallet leg, and four
+# is the setting that matches it.
+Environment=BALANCER_SPEND_LANES=4
 ExecStart=/usr/bin/node dist/server.mjs
 Restart=always
 RestartSec=5
