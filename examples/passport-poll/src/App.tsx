@@ -209,7 +209,7 @@ export function App() {
             </button>
           ) : (
             <button type="button" className="chip primary" onClick={() => void signIn()} disabled={profile.pending}>
-              {profile.pending ? 'Waiting for Passport…' : 'Sign in with Passport'}
+              {profile.pending ? 'Waiting…' : 'Sign in'}
             </button>
           )}
           <ThemeToggle />

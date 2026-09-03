@@ -138,5 +138,5 @@ footer .detail { font-size: 0.8rem; }
 @media (max-width: 480px) {
   .poll { padding: 0.75rem 0.9rem 4rem; }
   .grid { grid-template-columns: 1fr; }
-  .chip { max-width: 9.5rem; }
+  .chip { max-width: 11rem; }
 }
