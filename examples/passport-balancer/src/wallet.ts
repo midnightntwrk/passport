@@ -1799,7 +1799,11 @@ export async function openBalancerWallet(
                 (waitedMs) => new ProofTimeout(waitedMs),
               ),
             );
-            progress('proved');
+            /* Named apart from the contract proof above it: a spend job proves
+               twice, once for the circuit and once for the DUST fee leg, and a
+               journal with two identical `proved` lines does not say which
+               half is slow. */
+            progress('fee leg proved');
             return proved;
           } catch (cause) {
             const toRevert = recipe;

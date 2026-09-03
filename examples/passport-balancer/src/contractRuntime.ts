@@ -598,6 +598,11 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
     subject: string,
     call: (from: WatchingProvider) => Promise<T>,
     landed: () => Promise<boolean>,
+    /* What reaching this wait means for the job. Reading a deployed contract's
+       state is a lookup that happens BEFORE anything is built, so reporting it
+       as `seen-on-chain` would put a step in the journal that reads like a
+       confirmation of a transaction this job has not made yet. */
+    step: string,
   ): Promise<T> => {
     try {
       const result = await withDeadline(
@@ -605,7 +610,7 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
         options.confirmTimeoutMs,
         (waitedMs) => new ConfirmationTimeout(what, subject, waitedMs),
       );
-      progress('seen-on-chain');
+      progress(step);
       return result;
     } catch (cause) {
       if (!isConfirmationTimeout(cause)) throw cause;
@@ -619,7 +624,7 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
         options.confirmTimeoutMs,
         (waitedMs) => new ConfirmationTimeout(what, subject, waitedMs),
       );
-      progress('seen-on-chain (direct query)');
+      progress(`${step} (direct query)`);
       return result;
     }
   };
@@ -635,6 +640,7 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
         txId,
         (from) => from.watchForTxData(txId),
         () => askDirectly('transaction', txId),
+        'seen-on-chain',
       ),
     watchForDeployTxData: (address: string) =>
       bound(
@@ -642,6 +648,7 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
         address,
         (from) => from.watchForDeployTxData(address),
         () => askDirectly('contract', address),
+        'seen-on-chain',
       ),
     watchForContractState: (address: string) =>
       bound(
@@ -649,6 +656,7 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
         address,
         (from) => from.watchForContractState(address),
         () => askDirectly('contract', address),
+        'read the contract state',
       ),
   });
   return wrapper;
