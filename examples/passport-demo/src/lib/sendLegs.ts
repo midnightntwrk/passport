@@ -393,6 +393,145 @@ export function retryDelayMs(attempt: number): number {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Waiting for leg one to arrive                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What one look at the wallet found.
+ *
+ * `note` is the shielded note the paying leg will consume, and `null` for a
+ * NIGHT run — which arrives as a rise in a balance and has no note to name. So
+ * "nothing yet" is a flag rather than a null: the two are different answers and
+ * a null that meant both is how a NIGHT run comes to pay itself twice.
+ */
+export type SettleProbe<T> = { arrived: false } | { arrived: true; note: T };
+
+/**
+ * A wait for the withdrawn amount to appear in the sender's own wallet.
+ *
+ * WHY THIS IS NOT A `setInterval` IN THE ORCHESTRATOR (2026/09/03)
+ * ---------------------------------------------------------------
+ * It was, and the measured cost of it was 20 to 30 seconds of a 54-second
+ * NIGHT send. Between the two legs the client looked at its own wallet, slept a
+ * flat two or three seconds, and looked again — so the arrival was noticed up
+ * to a full tick after it had happened, and the tick was chosen for a wallet
+ * that had not yet been asked whether the transaction was even on chain.
+ *
+ * The chain is the thing that knows. Leg one returns an identifier the indexer
+ * can be asked about directly ({@link SettleWatchOptions.confirmLanded}, one
+ * bounded point lookup), and until the indexer has the transaction there is
+ * nothing the wallet could possibly be holding — so the wait runs at two
+ * cadences and the interesting one starts at the LANDING EDGE:
+ *
+ *   - before it lands: {@link SETTLE_LOOK_BEFORE_LANDING_MS}, one free wallet
+ *     read and one cheap indexer question per turn;
+ *   - the moment it lands: the wallet is re-read IMMEDIATELY, with no sleep in
+ *     between — this is the tick that used to be waited out;
+ *   - after it lands: {@link SETTLE_LOOK_AFTER_LANDING_MS}, because the only
+ *     question left is when the wallet's own sync applies a transaction the
+ *     chain already carries, and the read that answers it touches no network.
+ *
+ * A run whose leg one resolved its own ledger hash starts `landed` — that
+ * resolution IS an indexer answer for the transaction, and asking again would
+ * be paying for a fact already in hand.
+ *
+ * NO CLOCK AND NO `fetch` IN HERE. `now` and `sleep` are arguments and both
+ * probes are callbacks, which is what lets the whole schedule — including the
+ * landing edge and the deadline — be driven by a test rather than waited out by
+ * one. Same rule as the rest of this module: the orchestrator does the talking,
+ * this decides when.
+ */
+export interface SettleWatchOptions<T> {
+  /**
+   * One look at the sender's own wallet. No network: this reads the state the
+   * wallet's live sync has already applied.
+   */
+  readWallet: () => Promise<SettleProbe<T>>;
+  /**
+   * One bounded question to the indexer — has leg one's transaction landed? —
+   * or omitted when leg one already proved that it had.
+   */
+  confirmLanded?: () => Promise<boolean>;
+  /** True when leg one resolved its own ledger hash. */
+  landed?: boolean;
+  /**
+   * Called once, on the landing edge, so the orchestrator can begin everything
+   * leg two needs that is not the note itself.
+   */
+  onLanded?: () => void;
+  /** How long the whole wait may take. */
+  deadlineMs: number;
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+  beforeLandingMs?: number;
+  afterLandingMs?: number;
+}
+
+/** How the wait ended, and what it learnt on the way. */
+export type SettleOutcome<T> =
+  | { settled: true; note: T; landed: boolean; looks: number }
+  | { settled: false; landed: boolean; looks: number };
+
+/**
+ * While the chain has not been shown to carry leg one yet.
+ *
+ * One second, against a block time measured in seconds: the wallet read is free
+ * and the indexer question is a single point lookup measured at 102–123 ms warm
+ * (see `identity/contractRuntime.ts`, which records the samples), so a second
+ * is already several times the cost of asking.
+ */
+export const SETTLE_LOOK_BEFORE_LANDING_MS = 1_000;
+
+/**
+ * Once it has landed.
+ *
+ * The transaction is on chain and the only question left is when this wallet's
+ * own sync applies it. The read that answers is a projection of state already
+ * in memory — no network at all — so the interval is set by how soon a person
+ * should be moved on rather than by what it costs to ask.
+ */
+export const SETTLE_LOOK_AFTER_LANDING_MS = 400;
+
+/**
+ * Waits for what leg one paid in, and says whether it arrived.
+ *
+ * Never throws: a wait that ran out of time is an OUTCOME, because the money
+ * has moved and the record must be left at `settle` rather than failed. The
+ * only exceptions that escape are the caller's own probes'.
+ */
+export async function watchForSettlement<T>(
+  options: SettleWatchOptions<T>,
+): Promise<SettleOutcome<T>> {
+  const beforeMs = options.beforeLandingMs ?? SETTLE_LOOK_BEFORE_LANDING_MS;
+  const afterMs = options.afterLandingMs ?? SETTLE_LOOK_AFTER_LANDING_MS;
+  const started = options.now();
+  let landed = options.landed ?? false;
+  let looks = 0;
+  /* The hook fires for a run that STARTS landed too. That is the common case —
+     leg one resolves its own hash — and it is the earliest leg two's
+     preparation could possibly begin. */
+  if (landed) options.onLanded?.();
+  for (;;) {
+    looks += 1;
+    const probe = await options.readWallet();
+    if (probe.arrived) return { settled: true, note: probe.note, landed, looks };
+    if (!landed && options.confirmLanded !== undefined) {
+      landed = await options.confirmLanded();
+      if (landed) {
+        options.onLanded?.();
+        /* THE TICK THAT WAS WAITED OUT. The chain has it, so the wallet is
+           asked again now rather than after another interval. */
+        continue;
+      }
+    }
+    if (options.now() - started >= options.deadlineMs) {
+      return { settled: false, landed, looks };
+    }
+    await options.sleep(landed ? afterMs : beforeMs);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* What the Send sheet says about a failure                                    */
 /* -------------------------------------------------------------------------- */
 

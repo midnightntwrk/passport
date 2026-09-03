@@ -881,7 +881,10 @@ async function resolveTransactionHash(
   for (let attempt = 0; attempt < TX_HASH_ATTEMPTS; attempt += 1) {
     const hash = await resolveDeployTxHashOnce(indexerHttpUrl, identifier);
     if (hash) return { txId: hash, resolved: true };
-    await wait(TX_HASH_INTERVAL_MS);
+    /* No sleep after the LAST look. It bought nothing but half a second on the
+       front of the wait that follows — and on the send path that wait is the
+       one between the two legs, which now asks this same question itself. */
+    if (attempt + 1 < TX_HASH_ATTEMPTS) await wait(TX_HASH_INTERVAL_MS);
   }
   return { txId: identifier, resolved: false };
 }
@@ -920,41 +923,22 @@ export async function checkAccountCustodyFees(): Promise<
 type AccountCallTx = Record<string, (...args: unknown[]) => Promise<unknown>>;
 
 /**
- * Connects to the deployed contract and runs one circuit against it.
- *
- * The private-state id is fresh per call, which is `PassportAccount.connect`'s
- * own rule and its own reason: the secrets this call was handed must win over
- * anything a previous connection left behind, and a shared id would let a
- * stale private state decide who signed.
+ * Providers, compiled artefact, and `findDeployedContract` — everything up to
+ * the point where a circuit could be called, and nothing that submits.
  *
  * `findDeployedContract` is not a formality — it re-reads the deployed
  * contract's verifier keys and refuses our compiled build if they differ, which
  * is the check that turns an artefact-drift bug into a `call-rejected` with the
  * mismatch attached instead of a proof nobody can verify.
  */
-async function callAccountCircuit(
+async function openAccountContract(
   wallet: LocalMidnightWallet,
   options: {
-    contractAddress: string;
-    circuit: string;
-    args: readonly unknown[];
+    address: string;
+    privateStateId: string;
     secrets: { deviceSecret?: Uint8Array; grantSecret?: Uint8Array };
-    /**
-     * Coin-pk-hex → encryption-pk-hex, required by midnight-js to build a
-     * shielded output's note ciphertext for a third-party recipient. Presence
-     * switches the call onto `withContractScopedTransaction`, the only form
-     * that carries the mapping to the output builder.
-     */
-    coinEncPublicKeyMappings?: ReadonlyMap<string, string>;
   },
-  onPhase?: (progress: AccountCustodyProgress) => void,
-): Promise<AccountCustodyTxResult> {
-  const address = rawContractAddress(options.contractAddress);
-  const nonce = new Uint8Array(8);
-  globalThis.crypto.getRandomValues(nonce);
-  const privateStateId = `passport-account-${address.slice(0, 8)}-${bytesToHex(nonce)}`;
-
-  onPhase?.({ phase: 'connecting' });
+): Promise<{ providers: unknown; callTx: AccountCallTx }> {
   /* The witness factory and private-state builder from `./passportContract.ts`
      — the module that DEPLOYED this contract, so the two cannot disagree about
      what the private state looks like. They used to be imported from
@@ -978,33 +962,145 @@ async function callAccountCircuit(
      through this same plumbing later without changing it. */
   const initialPrivateState = accountPrivateStateFrom(options.secrets);
   const [providers, compiledContract, { findDeployedContract }] = await Promise.all([
-    createAccountProviders(wallet, privateStateId, initialPrivateState),
+    createAccountProviders(wallet, options.privateStateId, initialPrivateState),
     compiledAccountContract(accountWitnesses()),
     import('@midnight-ntwrk/midnight-js-contracts'),
   ]);
 
-  /* Two try blocks, not one, because the two failures are different things to
-     say: nothing has been submitted when the CONNECT fails, and something may
-     have been proved and refused when the CALL fails. A single catch would
-     report "the contract rejected withdraw_night" for a contract that was
-     never reached. */
-  let callTx: AccountCallTx;
+  /* Two try blocks across the pair, not one, because the two failures are
+     different things to say: nothing has been submitted when the CONNECT
+     fails, and something may have been proved and refused when the CALL fails.
+     A single catch would report "the contract rejected withdraw_night" for a
+     contract that was never reached. */
   try {
     const deployed = await findDeployedContract(providers as never, {
       compiledContract,
-      contractAddress: address,
-      privateStateId,
+      contractAddress: options.address,
+      privateStateId: options.privateStateId,
       initialPrivateState,
     } as never);
-    callTx = (deployed as { callTx: AccountCallTx }).callTx;
+    return { providers, callTx: (deployed as { callTx: AccountCallTx }).callTx };
   } catch (cause) {
     throw new AccountCustodyError(
       'call-rejected',
-      `The account contract at ${address.slice(0, 10)}… could not be opened, so nothing was submitted.`,
+      `The account contract at ${options.address.slice(0, 10)}… could not be opened, so nothing was submitted.`,
       cause instanceof Error ? cause.message : String(cause),
       { cause },
     );
   }
+}
+
+/**
+ * A contract this wallet has already CONNECTED to, ready for one circuit call.
+ *
+ * WHAT IT IS FOR (2026/09/03). Paying a `.night` name is two legs, and the
+ * second one's connection depends on nothing the first one produces: the
+ * recipient's account address was resolved before the send began, and
+ * `deposit_night` / `deposit_shielded` are permissionless, so no secret goes
+ * into the private state. Everything expensive about reaching that contract —
+ * the compiled artefact, the providers, and `findDeployedContract`'s verifier-
+ * key read against the deployed build — can therefore be done WHILE leg one is
+ * still confirming, which is where it now happens. See `App.tsx#runNameSend`.
+ *
+ * ONLY FOR A CIRCUIT THAT NEEDS NO SECRETS. The private-state id is fresh per
+ * connection precisely so that the secrets a call was handed win over anything
+ * a previous one left behind; a prepared connection carries an EMPTY private
+ * state, and {@link callAccountCircuit} refuses to reuse one for a call that
+ * was given a secret rather than quietly proving against the wrong witness.
+ */
+export interface PreparedAccountCall {
+  /** The raw contract address this connection is for. */
+  readonly contractAddress: string;
+  readonly privateStateId: string;
+  readonly providers: unknown;
+  readonly callTx: AccountCallTx;
+}
+
+/**
+ * One connection to a deployed account contract, with its own private state.
+ *
+ * The private-state id is fresh per connection, which is
+ * `PassportAccount.connect`'s own rule and its own reason: the secrets this
+ * call was handed must win over anything a previous connection left behind,
+ * and a shared id would let a stale private state decide who signed.
+ */
+async function connectAccountContract(
+  wallet: LocalMidnightWallet,
+  options: {
+    contractAddress: string;
+    secrets: { deviceSecret?: Uint8Array; grantSecret?: Uint8Array };
+  },
+): Promise<PreparedAccountCall> {
+  const address = rawContractAddress(options.contractAddress);
+  const nonce = new Uint8Array(8);
+  globalThis.crypto.getRandomValues(nonce);
+  const privateStateId = `passport-account-${address.slice(0, 8)}-${bytesToHex(nonce)}`;
+  const { providers, callTx } = await openAccountContract(wallet, {
+    address,
+    privateStateId,
+    secrets: options.secrets,
+  });
+  return { contractAddress: address, privateStateId, providers, callTx };
+}
+
+/**
+ * Reaches the recipient's account contract before there is anything to pay
+ * into it — the preparation leg two would otherwise do on the critical path.
+ *
+ * Deposits only, and the type says so: no secret is accepted, because a
+ * connection made without one may not be reused for a circuit that needs one.
+ * A failure is the caller's to absorb — the unprepared path still works, and a
+ * prewarm that could break a send would be worse than the wait it saves.
+ */
+export async function prepareAccountDeposit(
+  handle: LocalMidnightWallet,
+  contractAddress: string,
+): Promise<PreparedAccountCall> {
+  return connectAccountContract(handle, { contractAddress, secrets: {} });
+}
+
+/**
+ * Runs one circuit against the deployed contract, connecting first unless the
+ * caller has already done that for us — see {@link PreparedAccountCall}.
+ */
+async function callAccountCircuit(
+  wallet: LocalMidnightWallet,
+  options: {
+    contractAddress: string;
+    circuit: string;
+    args: readonly unknown[];
+    secrets: { deviceSecret?: Uint8Array; grantSecret?: Uint8Array };
+    /**
+     * Coin-pk-hex → encryption-pk-hex, required by midnight-js to build a
+     * shielded output's note ciphertext for a third-party recipient. Presence
+     * switches the call onto `withContractScopedTransaction`, the only form
+     * that carries the mapping to the output builder.
+     */
+    coinEncPublicKeyMappings?: ReadonlyMap<string, string>;
+    /**
+     * A connection made earlier, by {@link prepareAccountDeposit}. Ignored
+     * when it is for another contract, and refused outright for a call that
+     * carries a secret — see {@link PreparedAccountCall}.
+     */
+    prepared?: PreparedAccountCall | null;
+  },
+  onPhase?: (progress: AccountCustodyProgress) => void,
+): Promise<AccountCustodyTxResult> {
+  const address = rawContractAddress(options.contractAddress);
+
+  onPhase?.({ phase: 'connecting' });
+  const hasSecret =
+    options.secrets.deviceSecret !== undefined || options.secrets.grantSecret !== undefined;
+  const reusable =
+    options.prepared && !hasSecret && options.prepared.contractAddress === address
+      ? options.prepared
+      : null;
+  const { providers, callTx } =
+    reusable ??
+    (await connectAccountContract(wallet, {
+      contractAddress: address,
+      secrets: options.secrets,
+    }));
 
   onPhase?.({ phase: 'submitting' });
   let identifier: string;
@@ -1276,6 +1372,13 @@ export interface DepositNightRequest {
   contractAddress: string;
   colourHex: string;
   amount: bigint;
+  /**
+   * A connection to {@link contractAddress} made earlier by
+   * {@link prepareAccountDeposit}, so the proof starts without waiting for the
+   * verifier-key read. Optional in every sense: absent, or for another
+   * contract, and the call opens its own.
+   */
+  prepared?: PreparedAccountCall | null;
 }
 
 /**
@@ -1319,6 +1422,7 @@ export async function depositNight(
       circuit: 'deposit_night',
       args: [colour, request.amount],
       secrets: {},
+      prepared: request.prepared ?? null,
     },
     onPhase,
   );
@@ -1332,6 +1436,8 @@ export interface DepositShieldedRequest {
    * not enough, because `receiveShielded` consumes that specific coin.
    */
   coin: AccountShieldedCoin;
+  /** As {@link DepositNightRequest.prepared}. */
+  prepared?: PreparedAccountCall | null;
 }
 
 /**
@@ -1375,6 +1481,7 @@ export async function depositShielded(
       circuit: 'deposit_shielded',
       args: [{ nonce: coin.nonce, color: coin.color, value: coin.value }],
       secrets: {},
+      prepared: request.prepared ?? null,
     },
     onPhase,
   );

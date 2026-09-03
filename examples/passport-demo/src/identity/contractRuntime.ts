@@ -937,7 +937,10 @@ export async function resolveTransactionHash(
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const hash = await resolveTxHashOnce(indexerHttpUrl, identifier);
     if (hash) return hash;
-    await wait(TX_HASH_INTERVAL_MS);
+    /* Not after the last look: the caller has already decided what an
+       unresolved identifier means, and half a second of waiting to tell them
+       so is half a second nothing is waiting for. */
+    if (attempt + 1 < attempts) await wait(TX_HASH_INTERVAL_MS);
   }
   return identifier;
 }

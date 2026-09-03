@@ -55,6 +55,7 @@ import {
   retryDelayMs,
   SEND_LEG_ATTEMPTS,
   serialisePendingSends,
+  watchForSettlement,
   type PendingSend,
   type PendingSendKind,
 } from './lib/sendLegs.js';
@@ -124,7 +125,7 @@ import type {
 /* The account-custody contract's own progress vocabulary. Type-only, so the
    module — and the ledger it statically imports — stays behind the dynamic
    imports every call site below uses. */
-import type { AccountCustodyProgress } from './identity/accountCustody.js';
+import type { AccountCustodyProgress, PreparedAccountCall } from './identity/accountCustody.js';
 import type { PassportBackupLedgerCheck } from './identity/backup.js';
 import {
   NETWORK_LABELS,
@@ -5429,6 +5430,7 @@ export default function PassportDemo() {
       const {
         depositNight,
         depositShielded,
+        prepareAccountDeposit,
         shieldedCoinFromNote,
         walletShieldedNotes,
         withdrawNight,
@@ -5482,6 +5484,38 @@ export default function PassportDemo() {
 
       let activityId = record.activityId ?? '';
       let settledNote: WalletShieldedNote | null = null;
+      /* WHAT THE CHAIN HAS SEEN OF LEG ONE. `txIdResolved` is an indexer answer
+         FOR that transaction, so a resolved hash IS the landing; an unresolved
+         one leaves the 33-byte identifier, which the indexer can be asked about
+         directly and cheaply while the wait runs. */
+      let withdrawLanded = false;
+      let withdrawIdentifier: string | null = null;
+      /* LEG TWO'S CONNECTION, OPENED WHILE LEG ONE CONFIRMS (2026/09/03).
+         Nothing about it depends on leg one: the recipient's account address
+         was resolved before the send began, and `deposit_night` /
+         `deposit_shielded` are permissionless, so the private state is empty.
+         What it buys is the expensive half of reaching a contract — the
+         compiled artefact, the providers, and `findDeployedContract`'s
+         verifier-key read against the deployed build — off the critical path,
+         so leg two's proof starts as soon as the note is there rather than a
+         connection later. The fee gate is deliberately NOT prewarmed: it is
+         one cached probe (`lib/sponsor.ts`, 30-second TTL) and a fresher
+         answer is worth more than the round trip it would save.
+
+         A failure here is absorbed, never propagated: the unprepared path
+         still works, and a prewarm that could break a send would cost more
+         than the wait it saves. */
+      let depositConnection: Promise<PreparedAccountCall | null> | null = null;
+      const prepareDeposit = (): void => {
+        if (depositConnection !== null) return;
+        depositConnection = prepareAccountDeposit(
+          account.handle,
+          record.recipient.accountAddress,
+        ).catch((cause) => {
+          console.info('[send] leg two could not be opened ahead of time', cause);
+          return null;
+        });
+      };
       /* A RESUME GETS A FRESH BUDGET. The counts are what the record remembers
          about the run that stopped; carrying them into a new press would spend
          a person's Continue on a single attempt. */
@@ -5532,6 +5566,8 @@ export default function PassportDemo() {
                     },
                     (progress) => setAccountPhase(progress.phase),
                   );
+            withdrawLanded = out.txIdResolved;
+            withdrawIdentifier = out.txIdResolved ? null : out.txId;
             save({
               leg: 'settle',
               withdrawTxHash: out.txId,
@@ -5558,50 +5594,111 @@ export default function PassportDemo() {
         }
       };
 
+      /**
+       * ONE LOOK at the sender's own wallet for what leg one paid in. No
+       * network: this reads the state the wallet's live sync has applied.
+       */
+      const lookForArrival = async (): Promise<
+        { arrived: false } | { arrived: true; note: WalletShieldedNote | null }
+      > => {
+        const expectation = record.expectedNote;
+        if (record.kind === 'shielded') {
+          const heldBefore = new Set(
+            expectation && 'heldBeforeIds' in expectation ? expectation.heldBeforeIds : [],
+          );
+          const arrived = findArrivedNote(await walletShieldedNotes(account.handle), {
+            tokenType: record.tokenType ?? record.colourHex,
+            amount,
+            heldBefore,
+          });
+          return arrived === null ? { arrived: false } : { arrived: true, note: arrived };
+        }
+        /* THE ARRIVAL, NOT THE TOTAL. This compared the wallet's whole
+           unshielded balance against the amount until 2026/09/02, so a wallet
+           that already held enough went straight on to the paying leg and
+           built it against money that had not arrived — which fails inside the
+           SDK, unreadably. */
+        const before =
+          expectation && 'unshieldedBefore' in expectation
+            ? BigInt(expectation.unshieldedBefore)
+            : 0n;
+        const held = atomicNightFromFormatted(
+          (await account.handle.getBalances()).unshieldedBalance,
+        );
+        return held !== null && held >= before + amount
+          ? { arrived: true, note: null }
+          : { arrived: false };
+      };
+
+      /**
+       * THE WAIT BETWEEN THE LEGS — 20 to 30 seconds of a 54-second NIGHT send
+       * until 2026/09/03, and most of it spent not asking.
+       *
+       * It was a flat two-or-three-second sleep around the look above, so the
+       * arrival was noticed up to a whole tick after it happened, and the tick
+       * had been chosen for a client that never asked the CHAIN anything. It
+       * asks now: `withdrawIdentifier` is leg one's own transaction identifier
+       * and one indexer point lookup answers whether it has landed, at which
+       * moment the wallet is re-read immediately and thereafter every 400 ms —
+       * see `watchForSettlement` in `lib/sendLegs.ts` for the two cadences and
+       * why they are what they are.
+       *
+       * The deadline behaviour is unchanged and deliberate: a wait that runs
+       * out leaves the record at `settle` rather than failing it, because the
+       * money has moved and the arrival is still coming.
+       */
       const runSettle = async (): Promise<WalletShieldedNote | null> => {
         setNameSendLeg('settling');
         setNameSendAttempt(null);
-        const deadline = Date.now() + SETTLE_DEADLINE_MS;
-        for (;;) {
-          const expectation = record.expectedNote;
-          if (record.kind === 'shielded') {
-            const heldBefore = new Set(
-              expectation && 'heldBeforeIds' in expectation ? expectation.heldBeforeIds : [],
-            );
-            const arrived = findArrivedNote(await walletShieldedNotes(account.handle), {
-              tokenType: record.tokenType ?? record.colourHex,
-              amount,
-              heldBefore,
-            });
-            if (arrived !== null) return arrived;
-          } else {
-            /* THE ARRIVAL, NOT THE TOTAL. This compared the wallet's whole
-               unshielded balance against the amount until 2026/09/02, so a
-               wallet that already held enough went straight on to the paying
-               leg and built it against money that had not arrived — which
-               fails inside the SDK, unreadably. */
-            const before =
-              expectation && 'unshieldedBefore' in expectation
-                ? BigInt(expectation.unshieldedBefore)
-                : 0n;
-            const held = atomicNightFromFormatted(
-              (await account.handle.getBalances()).unshieldedBalance,
-            );
-            if (held !== null && held >= before + amount) return null;
-          }
-          if (Date.now() > deadline) {
-            /* Left at `settle`, not failed: the amount has moved and the
-               arrival is still coming. Home offers to look again. */
-            const message = `${amountText} left your account and has not reached your Passport yet.`;
-            save({ leg: 'settle', lastError: { message, retryable: true } });
-            throw failure(new Error(message), message, true);
-          }
-          await pause(record.kind === 'shielded' ? 2_000 : 3_000);
+        /* Leg two's connection, started before the first look rather than
+           after the last one. */
+        prepareDeposit();
+        /* The chain's own answer about leg one: one point lookup of the
+           identifier the withdrawal came back with. Absent where leg one
+           already resolved its ledger hash, which is the same evidence. */
+        const identifier = withdrawIdentifier;
+        let confirmLanded: (() => Promise<boolean>) | undefined;
+        if (identifier !== null) {
+          const { resolveDeployTxHashOnce } = await import('./identity/passportContract.js');
+          confirmLanded = async () =>
+            (await resolveDeployTxHashOnce(
+              account.handle.network.indexerHttpUrl,
+              identifier,
+            )) !== null;
         }
+        const outcome = await watchForSettlement<WalletShieldedNote | null>({
+          readWallet: lookForArrival,
+          landed: withdrawLanded,
+          confirmLanded,
+          /* The surfaces catch up with the chain rather than with the next
+             render: the amount has demonstrably left the account by now, and
+             Home was showing the figure from before it did. */
+          onLanded: () => {
+            void refreshLocalBalances();
+          },
+          now: () => Date.now(),
+          sleep: pause,
+          deadlineMs: SETTLE_DEADLINE_MS,
+        });
+        if (outcome.settled) return outcome.note;
+        /* Left at `settle`, not failed: the amount has moved and the arrival
+           is still coming. Home offers to look again. */
+        const message = `${amountText} left your account and has not reached your Passport yet.`;
+        save({ leg: 'settle', lastError: { message, retryable: true } });
+        throw failure(new Error(message), message, true);
       };
 
       const runDeposit = async (note: WalletShieldedNote | null): Promise<void> => {
         save({ leg: 'deposit' });
+        /* Whatever the prewarm managed, or nothing — a resumed run that skipped
+           the wait never started one, and the deposit opens its own.
+
+           FIRST ATTEMPT ONLY. A retryable refusal is a REBUILD (see
+           `classifyLegError`): the state it was proved against has moved, so
+           the next attempt opens the contract again rather than reusing a
+           connection made before the failure. The prewarm's whole value is on
+           the attempt that follows the wait, which is the one that succeeds. */
+        let prepared = depositConnection === null ? null : await depositConnection;
         for (let attempt = record.attempts.deposit; ; attempt += 1) {
           setNameSendLeg('depositing');
           setNameSendAttempt(attempt + 1);
@@ -5614,6 +5711,7 @@ export default function PassportDemo() {
                       contractAddress: record.recipient.accountAddress,
                       colourHex: record.colourHex,
                       amount,
+                      prepared,
                     },
                     (progress) => setAccountPhase(progress.phase),
                   )
@@ -5622,6 +5720,7 @@ export default function PassportDemo() {
                     {
                       contractAddress: record.recipient.accountAddress,
                       coin: shieldedCoinFromNote(note as WalletShieldedNote),
+                      prepared,
                     },
                     (progress) => setAccountPhase(progress.phase),
                   );
@@ -5650,6 +5749,7 @@ export default function PassportDemo() {
             return;
           } catch (cause) {
             const verdict = classifyLegError(cause);
+            prepared = null;
             save({
               attempts: { ...record.attempts, deposit: attempt + 1 },
               lastError: { message: verdict.message, retryable: verdict.retryable },
@@ -5667,6 +5767,12 @@ export default function PassportDemo() {
           await withAccountDeviceSecret((deviceSecret) => runWithdraw(deviceSecret));
         } else {
           activityId = begin(options.resumed ?? false);
+          /* A run being carried on submitted its first leg in an earlier pass
+             of this function — a reload ago at least — so the chain has had it
+             for longer than any block time. Nothing is gained by asking the
+             indexer whether a minutes-old transaction landed, and the record
+             keeps the resolved HASH rather than the identifier the lookup takes. */
+          withdrawLanded = true;
         }
         /* A shielded run needs the note itself however far it had got: the
            deposit consumes one specific note and only this can name it. A NIGHT

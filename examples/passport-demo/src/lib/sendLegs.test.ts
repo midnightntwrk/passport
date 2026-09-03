@@ -17,6 +17,12 @@
  *
  * The SENTENCE, because "Nothing was sent" over a first leg that landed is a
  * false statement about where the reader's money is.
+ *
+ * And the WAIT between the legs, added 2026/09/03, because it was 20 to 30
+ * seconds of a 54-second send and most of it was spent not asking. It is
+ * drilled with an injected clock and injected probes — no timers are waited
+ * out here — so the two cadences, the landing edge, and the deadline are all
+ * observable as counted calls rather than as elapsed time.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -27,9 +33,13 @@ import {
   readPendingSends,
   retryDelayMs,
   SEND_LEG_ATTEMPTS,
+  SETTLE_LOOK_AFTER_LANDING_MS,
+  SETTLE_LOOK_BEFORE_LANDING_MS,
   sendFailureNotice,
   serialisePendingSends,
+  watchForSettlement,
   type PendingSend,
+  type SettleProbe,
 } from './sendLegs.js';
 
 const NOW = '2026-09-02T14:00:00.000Z';
@@ -345,5 +355,259 @@ describe('sendFailureNotice', () => {
       'Step 1 landed: 10 mUSD left your account and is waiting at your Passport. ' +
         'Step 2 did not finish: The fee sponsor was busy. Continue from Home.',
     );
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The wait between the legs                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A clock that only ever moves because something SLEPT.
+ *
+ * That is the whole instrument: every millisecond in these drills is one the
+ * code under test asked for, so an assertion about elapsed time is an assertion
+ * about the schedule rather than about how long the test took to run.
+ */
+function fakeClock() {
+  let at = 1_000;
+  const slept: number[] = [];
+  return {
+    now: () => at,
+    slept,
+    sleep: async (ms: number) => {
+      slept.push(ms);
+      at += ms;
+    },
+  };
+}
+
+/** A wallet that reports the arrival on the nth look and not before. */
+function walletArrivingOnLook(nth: number, note: string | null = null) {
+  let looks = 0;
+  return {
+    get looks() {
+      return looks;
+    },
+    read: async (): Promise<SettleProbe<string | null>> => {
+      looks += 1;
+      return looks >= nth ? { arrived: true, note } : { arrived: false };
+    },
+  };
+}
+
+describe('watchForSettlement', () => {
+  it('returns the note the moment the wallet has it, having slept for nothing', async () => {
+    const clock = fakeClock();
+    const wallet = walletArrivingOnLook(1, 'note-1');
+    const outcome = await watchForSettlement<string | null>({
+      readWallet: wallet.read,
+      landed: true,
+      deadlineMs: 180_000,
+      now: clock.now,
+      sleep: clock.sleep,
+    });
+    expect(outcome).toEqual({ settled: true, note: 'note-1', landed: true, looks: 1 });
+    // A wallet that already holds it is not made to wait a tick first.
+    expect(clock.slept).toEqual([]);
+  });
+
+  it('reports a NIGHT arrival, which has no note, as an arrival all the same', async () => {
+    /* `null` is the answer for a run that arrives as a rise in a balance. It
+       must not read as "nothing yet": a null that meant both is how the paying
+       leg gets built against money that has not come. */
+    const clock = fakeClock();
+    const outcome = await watchForSettlement<string | null>({
+      readWallet: walletArrivingOnLook(1, null).read,
+      landed: true,
+      deadlineMs: 180_000,
+      now: clock.now,
+      sleep: clock.sleep,
+    });
+    expect(outcome).toEqual({ settled: true, note: null, landed: true, looks: 1 });
+  });
+
+  it('looks again the INSTANT the chain has leg one, with no tick in between', async () => {
+    /* THE 2026/09/03 FIX, as a schedule. Two slow turns while the indexer has
+       nothing, then the landing — and the look that follows the landing is not
+       separated from it by a sleep. That sleep was the two-or-three seconds a
+       send paid for the news it already had. */
+    const clock = fakeClock();
+    const wallet = walletArrivingOnLook(4, 'note-2');
+    let asked = 0;
+    const outcome = await watchForSettlement<string | null>({
+      readWallet: wallet.read,
+      confirmLanded: async () => {
+        asked += 1;
+        return asked >= 3;
+      },
+      deadlineMs: 180_000,
+      now: clock.now,
+      sleep: clock.sleep,
+    });
+    expect(outcome.settled).toBe(true);
+    expect(asked).toBe(3);
+    /* Two intervals at the slow cadence, and then nothing: the fourth look —
+       the one that found the note — happened on the landing edge itself. */
+    expect(clock.slept).toEqual([
+      SETTLE_LOOK_BEFORE_LANDING_MS,
+      SETTLE_LOOK_BEFORE_LANDING_MS,
+    ]);
+    expect(outcome.landed).toBe(true);
+  });
+
+  it('runs at the fast cadence once it has landed, and asks the indexer no more', async () => {
+    const clock = fakeClock();
+    let asked = 0;
+    const outcome = await watchForSettlement<string | null>({
+      readWallet: walletArrivingOnLook(4, 'note-3').read,
+      confirmLanded: async () => {
+        asked += 1;
+        return true;
+      },
+      deadlineMs: 180_000,
+      now: clock.now,
+      sleep: clock.sleep,
+    });
+    expect(outcome.settled).toBe(true);
+    // Asked once, answered yes, never asked again.
+    expect(asked).toBe(1);
+    expect(clock.slept).toEqual([
+      SETTLE_LOOK_AFTER_LANDING_MS,
+      SETTLE_LOOK_AFTER_LANDING_MS,
+    ]);
+  });
+
+  it('starts a run whose leg one resolved its own hash at the fast cadence', async () => {
+    /* The common case, and the reason `landed` is an input: `txIdResolved` IS
+       an indexer answer for that transaction, so asking again would be paying
+       for a fact already in hand. */
+    const clock = fakeClock();
+    const outcome = await watchForSettlement<string | null>({
+      readWallet: walletArrivingOnLook(3, 'note-4').read,
+      landed: true,
+      confirmLanded: async () => {
+        throw new Error('the indexer must not be asked about a resolved hash');
+      },
+      deadlineMs: 180_000,
+      now: clock.now,
+      sleep: clock.sleep,
+    });
+    expect(outcome).toEqual({ settled: true, note: 'note-4', landed: true, looks: 3 });
+    expect(clock.slept).toEqual([
+      SETTLE_LOOK_AFTER_LANDING_MS,
+      SETTLE_LOOK_AFTER_LANDING_MS,
+    ]);
+  });
+
+  it('tells the orchestrator once, on the landing edge, so leg two can be prepared', async () => {
+    const clock = fakeClock();
+    let told = 0;
+    let asked = 0;
+    await watchForSettlement<string | null>({
+      readWallet: walletArrivingOnLook(5, 'note-5').read,
+      confirmLanded: async () => {
+        asked += 1;
+        return asked >= 2;
+      },
+      onLanded: () => {
+        told += 1;
+      },
+      deadlineMs: 180_000,
+      now: clock.now,
+      sleep: clock.sleep,
+    });
+    expect(told).toBe(1);
+  });
+
+  it('tells it immediately for a run that starts landed', async () => {
+    const clock = fakeClock();
+    const told: number[] = [];
+    await watchForSettlement<string | null>({
+      readWallet: walletArrivingOnLook(2, 'note-6').read,
+      landed: true,
+      onLanded: () => told.push(clock.now()),
+      deadlineMs: 180_000,
+      now: clock.now,
+      sleep: clock.sleep,
+    });
+    // Before the first look, not after the first sleep.
+    expect(told).toEqual([1_000]);
+  });
+
+  it('waits without asking the chain at all when there is nothing to ask about', async () => {
+    const clock = fakeClock();
+    const outcome = await watchForSettlement<string | null>({
+      readWallet: walletArrivingOnLook(3, 'note-7').read,
+      deadlineMs: 180_000,
+      now: clock.now,
+      sleep: clock.sleep,
+    });
+    expect(outcome.settled).toBe(true);
+    expect(outcome.landed).toBe(false);
+    // The slow cadence throughout: nothing has said the chain has it.
+    expect(clock.slept).toEqual([
+      SETTLE_LOOK_BEFORE_LANDING_MS,
+      SETTLE_LOOK_BEFORE_LANDING_MS,
+    ]);
+  });
+
+  it('gives up on the deadline as an OUTCOME, never as a throw', async () => {
+    /* The money has moved. A wait that ran out has to leave the record at
+       `settle` and say so, which the orchestrator cannot do if this raises. */
+    const clock = fakeClock();
+    const outcome = await watchForSettlement<string | null>({
+      readWallet: async () => ({ arrived: false }),
+      landed: true,
+      deadlineMs: 1_000,
+      now: clock.now,
+      sleep: clock.sleep,
+      afterLandingMs: 400,
+    });
+    /* Four looks and three waits inside one second, and then the honest
+       answer — not a fifth wait that would take it past the deadline. */
+    expect(outcome).toEqual({ settled: false, landed: true, looks: 4 });
+    expect(clock.slept).toEqual([400, 400, 400]);
+  });
+
+  it('honours the cadences a caller names instead of the defaults', async () => {
+    const clock = fakeClock();
+    let asked = 0;
+    await watchForSettlement<string | null>({
+      readWallet: walletArrivingOnLook(3, 'note-8').read,
+      confirmLanded: async () => {
+        asked += 1;
+        return asked >= 2;
+      },
+      deadlineMs: 180_000,
+      now: clock.now,
+      sleep: clock.sleep,
+      beforeLandingMs: 7,
+      afterLandingMs: 3,
+    });
+    /* One slow interval, then the landing edge with no sleep on it, then the
+       look that found it. Nothing at the fast cadence was needed. */
+    expect(clock.slept).toEqual([7]);
+  });
+
+  it('lets a probe failure travel, rather than reporting it as an arrival', async () => {
+    const clock = fakeClock();
+    await expect(
+      watchForSettlement<string | null>({
+        readWallet: async () => {
+          throw new Error('the wallet state could not be read');
+        },
+        landed: true,
+        deadlineMs: 180_000,
+        now: clock.now,
+        sleep: clock.sleep,
+      }),
+    ).rejects.toThrow('the wallet state could not be read');
+  });
+
+  it('keeps the two cadences the right way round', async () => {
+    /* Not a value assertion: the point of the pair is that the wait AFTER the
+       chain has it is the shorter one, because that read touches no network. */
+    expect(SETTLE_LOOK_AFTER_LANDING_MS).toBeLessThan(SETTLE_LOOK_BEFORE_LANDING_MS);
   });
 });
