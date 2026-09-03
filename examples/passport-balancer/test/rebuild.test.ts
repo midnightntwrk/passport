@@ -21,7 +21,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { isNodeRejection, withNodeRejectionRetry } from '../src/account.js';
+import { isNodeRejection, isRebuildable, withNodeRejectionRetry } from '../src/account.js';
+import { withDeadline } from '../src/contractRuntime.js';
+import { WalletCallTimeout, isWalletCallTimeout } from '../src/wallet.js';
 import { createWalletReservation } from '../src/reservation.js';
 
 /** The rejection as the SDK actually delivered it, wrapper and all. */
@@ -197,5 +199,60 @@ describe('a spend whose fee estimate finds no free DUST', () => {
       `the registration waited ${registrationStartedAt - startedAt} ms for a lane`,
     );
     assert.equal(reservation.counts().jobs, 0, 'a failed job releases its lane');
+  });
+});
+
+/**
+ * The three wallet calls a spend job makes between its circuit proof and its
+ * fee-leg proof, and the eight minutes of silence that proved they needed a
+ * ceiling.
+ *
+ * On 2026/09/03 the deployed service wrote `the spare mUSD mint proved
+ * (job-13)` at 01:45:29 UTC and then no line of any kind until systemd killed
+ * it at 01:53:29. `proved` is the last step before `estimateTransactionFee`,
+ * and neither it, `balanceUnboundTransaction`, nor `signRecipe` had a bound.
+ */
+describe('a wallet call that never returns', () => {
+  it('expires with a WalletCallTimeout naming the call', async () => {
+    const started = Date.now();
+    await assert.rejects(
+      withDeadline(
+        () => new Promise<never>(() => {}),
+        60,
+        (waitedMs) => new WalletCallTimeout('balancing the transaction', waitedMs),
+      ),
+      (cause: unknown) =>
+        isWalletCallTimeout(cause) &&
+        (cause as Error).message.includes('balancing the transaction'),
+    );
+    assert.ok(Date.now() - started < 5_000, 'the bound must be the deadline, not the call');
+  });
+
+  it('is rebuildable: nothing has been submitted when one is thrown', () => {
+    assert.equal(isRebuildable(new WalletCallTimeout('estimating the fee', 120_000)), true);
+    /* And it is NOT mistaken for a node refusal, which is a different journal
+       line and a different explanation. */
+    assert.equal(isNodeRejection(new WalletCallTimeout('estimating the fee', 120_000)), false);
+  });
+
+  it('rebuilds once and succeeds, exactly as a refusal does', async () => {
+    let attempts = 0;
+    const built = await withNodeRejectionRetry(
+      async () => {
+        attempts += 1;
+        if (attempts === 1) throw new WalletCallTimeout('signing the recipe', 120_000);
+        return 'landed';
+      },
+      {
+        label: 'the spare mUSD mint',
+        synced: async () => true,
+        pollMs: 1,
+        wait: async () => {},
+        log: () => {},
+        progress: () => {},
+      },
+    );
+    assert.equal(built, 'landed');
+    assert.equal(attempts, 2);
   });
 });

@@ -92,7 +92,7 @@ import {
 } from './contractRuntime.js';
 import { progress } from './reservation.js';
 import { isSubmissionTimeout } from './submission.js';
-import { isDustShortfall, type BalancerWallet } from './wallet.js';
+import { isDustShortfall, isWalletCallTimeout, type BalancerWallet } from './wallet.js';
 
 /** Attempts, {@link CONFIRM_INTERVAL_MS} apart, to watch the credit appear. */
 const CONFIRM_ATTEMPTS = 180;
@@ -246,7 +246,16 @@ export function isNodeRejection(cause: unknown): boolean {
  * that landed is never rebuilt.
  */
 export function isRebuildable(cause: unknown): boolean {
-  return isNodeRejection(cause) || isConfirmationTimeout(cause) || isSubmissionTimeout(cause);
+  return (
+    isNodeRejection(cause) ||
+    isConfirmationTimeout(cause) ||
+    isSubmissionTimeout(cause) ||
+    /* Nothing has been submitted when one of these is thrown — the fee
+       estimate, the balancing, and the signing all happen before the fee leg is
+       proved, let alone sent — so a rebuild is not merely safe here, it is the
+       only thing left to try. */
+    isWalletCallTimeout(cause)
+  );
 }
 
 export interface NodeRejectionRetryOptions {

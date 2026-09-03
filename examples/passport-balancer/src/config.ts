@@ -137,6 +137,11 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    */
   syncStallMs: number;
   /**
+   * How long one call into the wallet facade may take before this service stops
+   * waiting on it. See {@link DEFAULT_WALLET_CALL_TIMEOUT_MS}.
+   */
+  walletCallTimeoutMs: number;
+  /**
    * How many pre-deployed resolver leaves the sponsor tries to hold. The filler
    * tops the shelf up to here and never past it. Zero switches the pool off and
    * every registration deploys its own leaf, which is the behaviour this
@@ -378,6 +383,23 @@ export const DEFAULT_JOB_STALL_MS = 150_000;
 
 /** How long the background chain walk may stall before it is reported. */
 export const DEFAULT_SYNC_STALL_MS = 600_000;
+
+/**
+ * How long ONE call into the wallet facade may take before this service stops
+ * waiting on it.
+ *
+ * Two minutes. `estimateTransactionFee`, `balanceUnboundTransaction`, and
+ * `signRecipe` are the three calls a spend job makes between its circuit proof
+ * and its fee-leg proof, and on 2026/09/03 at 01:45:29 UTC a job disappeared
+ * between two of them and never came back: `the spare mUSD mint proved
+ * (job-13)` was the last line the service wrote for eight minutes. Every one of
+ * the three is local work over state the wallet already holds — the longest
+ * honest one measured on stagenet is a fee estimate at 2.4 s — so two minutes
+ * is fifty times the worst honest case and still short enough that the lane
+ * comes back inside a claim's patience.
+ */
+export const DEFAULT_WALLET_CALL_TIMEOUT_MS = 120_000;
+
 
 /**
  * How many pre-deployed resolver leaves to hold, and the depth below which the
@@ -687,6 +709,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
   if (syncStallMs < 10_000) {
     throw new Error('BALANCER_SYNC_STALL_MS must be at least 10000 ms.');
   }
+  const walletCallTimeoutMs = wholeNumber(
+    'BALANCER_WALLET_CALL_TIMEOUT_MS',
+    trimmed(env.BALANCER_WALLET_CALL_TIMEOUT_MS),
+    DEFAULT_WALLET_CALL_TIMEOUT_MS,
+  );
+  if (walletCallTimeoutMs < 1_000) {
+    throw new Error('BALANCER_WALLET_CALL_TIMEOUT_MS must be at least 1000 ms.');
+  }
 
   const resolverPoolTarget = wholeNumber(
     'RESOLVER_POOL_TARGET',
@@ -757,6 +787,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     confirmTimeoutMs,
     jobStallMs,
     syncStallMs,
+    walletCallTimeoutMs,
     resolverPoolTarget,
     resolverPoolFloor,
     trustedProxies: trustedProxies.length > 0 ? trustedProxies : [...DEFAULT_TRUSTED_PROXIES],

@@ -592,6 +592,37 @@ export class DustUnavailable extends Error {
 }
 
 /**
+ * A call into the wallet facade that never came back.
+ *
+ * THE FAILURE THIS NAMES, AND WHERE IT WAS MEASURED. On 2026/09/03 a spend job
+ * wrote `the spare mUSD mint proved (job-13)` at 01:45:29 UTC and then nothing
+ * — no step, no error, no line of any kind for eight minutes, until systemd
+ * killed the process. `proved` is logged by `midnight-js` finishing the circuit
+ * proof; the next thing the job does is call into the wallet facade to estimate
+ * its fee and balance the transaction, and neither of those calls had a ceiling
+ * of any kind. Every other wait in a spend job had been given one by then. This
+ * is the three that had been missed.
+ *
+ * Rebuildable, like a node rejection: nothing has been submitted at the point
+ * any of the three runs, so the caller may simply build the transaction again.
+ */
+export class WalletCallTimeout extends Error {
+  readonly call: string;
+
+  constructor(call: string, waitedMs: number) {
+    super(`the wallet did not finish ${call} within ${Math.round(waitedMs / 1_000)} s`);
+    this.name = 'WalletCallTimeout';
+    this.call = call;
+  }
+}
+
+/** Matches {@link WalletCallTimeout} across a bundle boundary. */
+export function isWalletCallTimeout(cause: unknown): boolean {
+  if (cause instanceof WalletCallTimeout) return true;
+  return cause instanceof Error && cause.name === 'WalletCallTimeout';
+}
+
+/**
  * The background chain walk stopped producing state events.
  *
  * Reported rather than repaired. A wallet that is not syncing is a wallet whose
@@ -1744,7 +1775,13 @@ export async function openBalancerWallet(
           const startedAt = Date.now();
           for (;;) {
             try {
-              await facade.estimateTransactionFee(tx as never, dustSecretKey, { ttl: deadline });
+              /* Bounded — see {@link WalletCallTimeout}. This is one of the two
+                 calls the job of 2026/09/03 01:45:29 vanished between. */
+              await withDeadline(
+                () => facade.estimateTransactionFee(tx as never, dustSecretKey, { ttl: deadline }),
+                config.walletCallTimeoutMs,
+                (waitedMs) => new WalletCallTimeout('estimating the fee', waitedMs),
+              );
               break;
             } catch (cause) {
               const message = cause instanceof Error ? cause.message : String(cause);
@@ -1768,18 +1805,35 @@ export async function openBalancerWallet(
                stagenet against a TLD that demonstrably existed, at block 157797.
                The check is sound for a self-contained transfer and structurally
                impossible for a contract call. */
-            const balanced = await reserve(() =>
-              facade.balanceUnboundTransaction(
-                tx as never,
-                { shieldedSecretKeys, dustSecretKey },
-                { ttl: deadline },
-              ),
+            /* Bounded, and the step reported before it rather than only after:
+               a job that goes quiet here now says in the journal WHICH call it
+               is inside, which the eight-minute silence of 2026/09/03 did not.
+               The other two calls of that trio are the fee estimate above and
+               the signing below. */
+            progress('balancing');
+            const balanced = await reserve(
+              () =>
+                withDeadline(
+                  () =>
+                    facade.balanceUnboundTransaction(
+                      tx as never,
+                      { shieldedSecretKeys, dustSecretKey },
+                      { ttl: deadline },
+                    ),
+                  config.walletCallTimeoutMs,
+                  (waitedMs) => new WalletCallTimeout('balancing the transaction', waitedMs),
+                ),
               'contract balancing',
             );
             recipe = balanced;
             progress('balanced');
             const signed = await reserve(
-              () => facade.signRecipe(balanced, unshieldedKeystore.signDataAsync),
+              () =>
+                withDeadline(
+                  () => facade.signRecipe(balanced, unshieldedKeystore.signDataAsync),
+                  config.walletCallTimeoutMs,
+                  (waitedMs) => new WalletCallTimeout('signing the recipe', waitedMs),
+                ),
               'contract signing',
             );
             recipe = signed;
