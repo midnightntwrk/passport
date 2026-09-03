@@ -2215,7 +2215,13 @@ export async function openBalancerWallet(
       };
 
       const state = await currentState();
-      if (!state.isSynced) {
+      /* EFFECTIVELY synced, not the SDK's strict verdict. After any spend of
+         this wallet's own the unshielded leg reads "ahead" — applied past the
+         indexer's last announcement — for 27–179 s, measured 2026/09/03, and
+         the strict flag is false for the whole of it. A wallet that has applied
+         its own submission is better informed than a `complete` one, not
+         worse; refusing it cost four `429 WALLET_SYNCING` in one acceptance. */
+      if (!isEffectivelySynced(progressOf(state))) {
         refuseShortfall(
           'WALLET_SYNCING',
           'The balancer wallet is still syncing and cannot balance a transaction yet.',

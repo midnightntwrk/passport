@@ -85,7 +85,12 @@ import {
   deployTransactionReference,
   type PooledResolver,
 } from './resolverPool.js';
-import { isDustShortfall, withDustWait, type BalancerWallet } from './wallet.js';
+import {
+  isDustShortfall,
+  isEffectivelySynced,
+  withDustWait,
+  type BalancerWallet,
+} from './wallet.js';
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
@@ -713,7 +718,8 @@ export async function createMidnamesSponsor(
    */
   const caughtUp = async (): Promise<boolean> => {
     const walked = await wallet.progress();
-    if (!walked.isSynced || !walked.dust.complete) return false;
+    /* Effectively synced, for the reason `caughtUp` in `./account.ts` gives. */
+    if (!isEffectivelySynced(walked)) return false;
     return (await wallet.pendingTransactionCount()) === 0;
   };
   /** The rebuild's wait on the indexer, for every retry in this module. */

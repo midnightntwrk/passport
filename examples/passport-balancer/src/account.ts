@@ -93,7 +93,12 @@ import {
 } from './contractRuntime.js';
 import { progress } from './reservation.js';
 import { isSubmissionTimeout } from './submission.js';
-import { isDustShortfall, isWalletCallTimeout, type BalancerWallet } from './wallet.js';
+import {
+  isDustShortfall,
+  isEffectivelySynced,
+  isWalletCallTimeout,
+  type BalancerWallet,
+} from './wallet.js';
 
 /** Attempts, {@link CONFIRM_INTERVAL_MS} apart, to watch the credit appear. */
 const CONFIRM_ATTEMPTS = 180;
@@ -699,7 +704,12 @@ export async function createAccountFunder(
    */
   const caughtUp = async (): Promise<boolean> => {
     const walked = await wallet.progress();
-    if (!walked.isSynced || !walked.dust.complete) return false;
+    /* EFFECTIVELY synced — applied at or past the indexer's last relevant
+       announcement counts. The strict flag is false for 27–179 s after every
+       spend of this wallet's own (measured 2026/09/03), which is exactly when
+       a rebuild is waiting here, and three of them ran the whole 120 s budget
+       out on it. */
+    if (!isEffectivelySynced(walked)) return false;
     return (await wallet.pendingTransactionCount()) === 0;
   };
   /** The rebuild's wait on the indexer, for every retry in this module. */

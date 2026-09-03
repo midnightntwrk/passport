@@ -566,7 +566,10 @@ async function main(): Promise<void> {
       let heldDust = 0n;
       try {
         const state = await wallet.currentState();
-        isSynced = (await wallet.progress(state)).isSynced;
+        /* Effectively synced — see `isEffectivelySynced`: the strict flag is
+           false for the two to three minutes after every spend of this
+           wallet's own, which is when the next activation arrives. */
+        isSynced = isEffectivelySynced(await wallet.progress(state));
         heldNight = await wallet.nightBalance(state);
         heldDust = await wallet.dustBalance(state);
       } catch {
