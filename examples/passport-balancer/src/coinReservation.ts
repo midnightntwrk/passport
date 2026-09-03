@@ -231,6 +231,14 @@ export const nightPayloadFirst: CoinSelector = (coins, tokenType, amount, costMo
        transaction's bytes: a grant built from six 10-atomic crumbs and a
        change coin was 29.5 ms of processing in 9,503 bytes on 2026/09/03,
        and refused. */
+    /* An EXACT coin first: it leaves no change, and a change output is 2.49 ms
+       of the node's processing budget — measured against the chain's own
+       cost model on 2026/09/03: one unshielded output costs 2.49 ms and adds
+       some 80 bytes; one input 3.45 ms and 117 bytes. A grant that spends a
+       0.002-NIGHT coin whole is 13.4 ms of a 15 ms floor and needs no padding
+       at all; one that spends 0.02 and makes change is 15.9 ms and does. */
+    const exact = change.find((coin) => coin.value === needed);
+    if (exact) return exact;
     const covering = change.filter((coin) => coin.value >= needed);
     if (covering.length > 0) return covering.sort((a, b) => Number(a.value - b.value)).at(0);
     return change.sort((a, b) => Number(b.value - a.value)).at(0);
@@ -260,6 +268,62 @@ export const nightPayloadFirst: CoinSelector = (coins, tokenType, amount, costMo
  * estimate; never fewer than one, never more than eight.
  */
 export const CRUMB_HEADROOM_MS = 3.3;
+
+/** The ledger's sentence, parsed: what it would take, its bytes, and its bound. */
+export function parseTimeToDismiss(
+  message: string,
+): { takesMs: number; bytes: number; allowedMs: number } | null {
+  const match =
+    /would take ([\d.]+)\s*(ms|s|[\u00b5\u03bc]s|us) to dismiss, but given its size of (\d+) bytes, it may take at most ([\d.]+)\s*(ms|s|[\u00b5\u03bc]s|us)/i.exec(
+      message,
+    );
+  if (!match) return null;
+  const toMs = (value: string, unit: string): number => {
+    const n = Number(value);
+    if (unit === 's') return n * 1000;
+    if (unit === 'us' || /^[\u00b5\u03bc]s$/.test(unit)) return n / 1000;
+    return n;
+  };
+  return { takesMs: toMs(match[1]!, match[2]!), bytes: Number(match[3]), allowedMs: toMs(match[4]!, match[5]!) };
+}
+
+/**
+ * The chain's rule, as its parameters state it: a transaction may take at
+ * most `max(minTimeToDismissMs, timeToDismissPerByteUs × bytes)`. Stagenet
+ * on 2026/09/03: 2 µs per byte, 15 ms floor — read from
+ * `LedgerParameters.toString()` of block 299524, and identical to the
+ * initial parameters.
+ */
+export const TIME_TO_DISMISS_PER_BYTE_US = 2;
+export const MIN_TIME_TO_DISMISS_MS = 15;
+/** What one crumb DUST spend adds: bytes and processing, measured 2026/09/03 (9,503 → 15,509 bytes and 29.5 → 34.8 ms for two). */
+export const CRUMB_BYTES = 3_000;
+export const CRUMB_MS = 2.65;
+/**
+ * The node accepted a grant at 74% of its bound and refused one at 81%, so the
+ * node's own estimate runs some milliseconds above the ledger's local one.
+ * Seventy per cent leaves that room.
+ */
+export const TIME_TO_DISMISS_TARGET = 0.7;
+
+export function boundMsFor(bytes: number): number {
+  return Math.max(MIN_TIME_TO_DISMISS_MS, (TIME_TO_DISMISS_PER_BYTE_US * bytes) / 1000);
+}
+
+/**
+ * The crumb DUST inputs that bring a transaction of `takesMs` processing and
+ * `bytes` size under {@link TIME_TO_DISMISS_TARGET} of its bound. Crumbs are
+ * the cheapest padding the cost model offers — about 3,000 bytes (6 ms of
+ * bound) for 2.65 ms of processing, a net 3.35 ms of headroom each — where
+ * an unshielded output is 2.49 ms for 80 bytes and an input 3.45 ms for 117,
+ * both net losses. Never more than eight.
+ */
+export function crumbsForShape(takesMs: number, bytes: number, target = TIME_TO_DISMISS_TARGET): number {
+  for (let k = 0; k <= 8; k += 1) {
+    if (takesMs + k * CRUMB_MS <= target * boundMsFor(bytes + k * CRUMB_BYTES)) return k;
+  }
+  return 8;
+}
 
 export function crumbsForDeficit(message: string): number {
   const match =

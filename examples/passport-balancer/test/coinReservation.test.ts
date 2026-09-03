@@ -31,11 +31,17 @@ import { DEFAULT_SPEND_QUEUE_MAX } from '../src/config.js';
 import { TokenBucket } from '../src/limits.js';
 import {
   assertNoDuplicateInputs,
+  boundMsFor,
   createDustFeeSelector,
+  CRUMB_BYTES,
+  CRUMB_MS,
   crumbsForDeficit,
+  crumbsForShape,
   DuplicateInput,
   inputKeysOf,
   isTimeToDismiss,
+  parseTimeToDismiss,
+  TIME_TO_DISMISS_TARGET,
 } from '../src/coinReservation.js';
 
 const NIGHT = '0'.repeat(64);
@@ -655,5 +661,46 @@ describe('how many crumbs a deficit is worth', () => {
     assert.equal(crumbsForDeficit('would take 500µs to dismiss, but given its size of 1 bytes, it may take at most 400µs'), 2, 'any deficit at all is one crumb plus the margin');
     assert.equal(crumbsForDeficit('would take 1ms to dismiss, but given its size of 1 bytes, it may take at most 5ms'), 1);
     assert.equal(crumbsForDeficit('something else entirely'), 2);
+  });
+});
+
+describe("the chain's fee rule, in the ledger's own numbers", () => {
+  /* The proven grant of 07:18:09 on 2026/09/03, from the journal: 15.935 ms in
+     7,118 bytes against a 15.000 ms bound; refused with one DUST input,
+     refused with two and three, landed with four (a6f08aff…, 07:28:03). */
+  const REAL = 'exceeded the maximum time to dismiss for transaction size; this transaction would take 15.935ms to dismiss, but given its size of 7118 bytes, it may take at most 15.000ms';
+
+  it("parses the ledger's sentence", () => {
+    assert.deepEqual(parseTimeToDismiss(REAL), { takesMs: 15.935, bytes: 7118, allowedMs: 15 });
+    assert.equal(parseTimeToDismiss('something else'), null);
+  });
+
+  it('states the bound as the parameters do: a 15 ms floor, then 2 µs a byte', () => {
+    assert.equal(boundMsFor(7118), 15);
+    assert.equal(boundMsFor(15_509), 31.018);
+  });
+
+  it('pads the real 7,118-byte grant to four crumbs, under the target, in one step', () => {
+    const k = crumbsForShape(15.935, 7118);
+    assert.equal(k, 4);
+    const takes = 15.935 + k * CRUMB_MS;
+    const bound = boundMsFor(7118 + k * CRUMB_BYTES);
+    assert.ok(takes <= TIME_TO_DISMISS_TARGET * bound, `${takes} ms against ${bound} ms`);
+    assert.ok(15.935 + 3 * CRUMB_MS > TIME_TO_DISMISS_TARGET * boundMsFor(7118 + 3 * CRUMB_BYTES), 'three would not do');
+  });
+
+  it('needs one crumb fewer for a grant that spends an exact coin and makes no change', () => {
+    assert.equal(crumbsForShape(15.935 - 2.49, 7118 - 80), 3);
+    assert.equal(crumbsForShape(5, 7000), 0, 'a transaction already under the target needs none');
+    assert.equal(crumbsForShape(200, 7000), 8, 'and nothing sensible is capped at eight');
+  });
+});
+
+describe('an exact NIGHT coin', () => {
+  it('is chosen over a covering one, because it makes no change output', () => {
+    const exact = night('9'.repeat(64), 0, 2_000n);
+    const bigger = night('8'.repeat(64), 0, 12_020n);
+    assert.equal(nightPayloadFirst([bigger, exact], NIGHT, -2_000n, {}), exact);
+    assert.equal(nightPayloadFirst([bigger], NIGHT, -2_000n, {}), bigger);
   });
 });

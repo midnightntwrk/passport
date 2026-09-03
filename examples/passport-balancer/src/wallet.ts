@@ -105,8 +105,10 @@ import {
   createCoinReservation,
   createDustFeeSelector,
   crumbsForDeficit,
+  crumbsForShape,
   describeCoin,
   isTimeToDismiss,
+  parseTimeToDismiss,
   nightPayloadFirst,
   smallestOfType,
   unshieldedInputsOf,
@@ -1304,6 +1306,20 @@ export async function openBalancerWallet(
     merged.fees(paramsOf(recipe), true);
   };
 
+  /**
+   * The padding the ledger's sentence calls for: parse what the transaction
+   * takes and weighs WITHOUT the crumbs it already carries, then the crumbs
+   * that bring it under the target — one step, not a climb. Falls back to
+   * the deficit rule when the line cannot be read.
+   */
+  const paddingFromVerdict = (message: string, carrying: number): number => {
+    const parsed = parseTimeToDismiss(message);
+    if (!parsed) return Math.min(8, carrying + crumbsForDeficit(message));
+    const bareMs = parsed.takesMs - carrying * 2.65;
+    const bareBytes = parsed.bytes - carrying * 3_000;
+    return Math.max(carrying + 1, crumbsForShape(bareMs, bareBytes));
+  };
+
   let balanceLock: Promise<unknown> = Promise.resolve();
   const oneBalanceAtATime = <T>(work: () => Promise<T>): Promise<T> => {
     const run = balanceLock.then(work, work);
@@ -2160,7 +2176,7 @@ export async function openBalancerWallet(
                 if (!isTimeToDismiss(cause)) throw cause;
                 const message = cause instanceof Error ? cause.message : String(cause);
                 console.warn(
-                  `[fee] ${label}: the ledger would refuse this shape (${message.slice(0, 320)}) — reverting and balancing again with ${padRounds + crumbsForDeficit(message)} crumb DUST inputs for size`,
+                  `[fee] ${label}: the ledger would refuse this shape (${message.slice(0, 320)}) — reverting and balancing again with ${Math.min(8, paddingFromVerdict(message, padRounds))} crumb DUST inputs for size`,
                 );
                 try {
                   await facade.revert(result);
@@ -2191,7 +2207,7 @@ export async function openBalancerWallet(
                       `this transaction is too small for its compute at every padding tried (the ledger says: ${message.slice(0, 160)})`,
                     );
                   }
-                  padRounds = Math.min(8, padRounds + crumbsForDeficit(message));
+                  padRounds = Math.min(8, paddingFromVerdict(message, padRounds));
                   continue;
                 }
                 const excluded = coins.excluded();
@@ -2265,9 +2281,9 @@ export async function openBalancerWallet(
             } catch (cause) {
               if (!isTimeToDismiss(cause) || padRounds >= 8) throw cause;
               const message = cause instanceof Error ? cause.message : String(cause);
-              const more = crumbsForDeficit(message);
+              const next = Math.min(8, paddingFromVerdict(message, padRounds));
               console.warn(
-                `[fee] ${label}: the PROVEN transaction would be refused (${message.slice(0, 320)}) — reverting and rebuilding with ${Math.min(8, padRounds + more)} crumb DUST inputs`,
+                `[fee] ${label}: the PROVEN transaction would be refused (${message.slice(0, 320)}) — reverting and rebuilding with ${next} crumb DUST inputs`,
               );
               try {
                 await reserve(() => facade.revert(proved as never));
@@ -2275,7 +2291,7 @@ export async function openBalancerWallet(
                 // Best effort; the rebuild selects afresh.
               }
               recipe = null;
-              padRounds = Math.min(8, padRounds + more);
+              padRounds = next;
               continue;
             }
             progress('fee leg proved');

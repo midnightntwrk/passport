@@ -733,7 +733,13 @@ export async function createAccountFunder(
        a rebuild is waiting here, and three of them ran the whole 120 s budget
        out on it. */
     if (!isEffectivelySynced(walked)) return false;
-    return (await wallet.pendingTransactionCount()) === 0;
+    /* NOT "and nothing of ours pending". That term dated from the morning of
+       2026/09/03, when a rebuild against a stale coin view was the failure;
+       the coin reservation now keeps in-flight coins out of every selection,
+       and under three sign-ups at once something of this wallet's is always
+       pending — at 11:28 three grants each made one refused submission and
+       then waited the whole 120 s budget out on this line, never rebuilding. */
+    return true;
   };
   /** The rebuild's wait on the indexer, for every retry in this module. */
   const heightGate = {
