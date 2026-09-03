@@ -99,6 +99,7 @@ import {
   isWalletCallTimeout,
   type BalancerWallet,
 } from './wallet.js';
+import { isCoinContention } from './coinReservation.js';
 
 /** Attempts, {@link CONFIRM_INTERVAL_MS} apart, to watch the credit appear. */
 const CONFIRM_ATTEMPTS = 180;
@@ -293,6 +294,9 @@ export function describeRebuildCause(cause: unknown): {
   if (isLandedFailure(cause)) {
     return { verb: 'the chain landed but did not apply', step: 'an on-chain failure' };
   }
+  if (isCoinContention(cause)) {
+    return { verb: 'another job holds a coin of', step: 'a coin held elsewhere' };
+  }
   return { verb: 'this service gave up waiting on', step: 'a timeout' };
 }
 
@@ -315,6 +319,11 @@ export function isRebuildable(cause: unknown): boolean {
   return (
     isNodeRejection(cause) ||
     isLandedFailure(cause) ||
+    /* A built transaction that would spend a coin another job holds — see
+       `CoinContention`. Nothing was submitted; once the wallet has caught up
+       the other job's spend is applied or reverted, and a rebuild selects
+       afresh. */
+    isCoinContention(cause) ||
     isConfirmationTimeout(cause) ||
     isSubmissionTimeout(cause) ||
     /* Nothing has been submitted when one of these is thrown — the fee

@@ -83,6 +83,7 @@ import {
   createWalletReservation,
   currentJob,
   progress,
+  releaseWithJob,
   type RunningJobSummary,
 } from './reservation.js';
 import { countingProof, proverIdle } from './proving.js';
@@ -102,8 +103,8 @@ import {
   coinKey,
   createCoinReservation,
   describeCoin,
+  dustFeeFirst,
   nightPayloadFirst,
-  smallestDust,
   smallestOfType,
   unshieldedInputsOf,
   type CoinTicket,
@@ -1243,11 +1244,26 @@ export async function openBalancerWallet(
       cfg,
       new DustV1Builder()
         .withDefaults()
-        .withCoinSelection((() => coins.guard(smallestDust)) as never) as never,
+        .withCoinSelection((() => coins.guard(dustFeeFirst)) as never) as never,
     );
   /* Held here rather than inside the submission service, so `nodeHeight` can
      ask the same connection the submissions use. */
   let nodeConnection: NodeConnection | null = null;
+
+  /* ONE BALANCE AT A TIME. `reserve` in `./reservation.ts` COUNTS claims for
+     `/wallet-status`; it does not serialise them, and two balances that
+     interleave at their awaits are what handed u:2dd48b54…:17 to two grants at
+     05:23:52 on 2026/09/03. The guard records hand-outs into the balance that
+     is active, and there must be exactly one. */
+  let balanceLock: Promise<unknown> = Promise.resolve();
+  const oneBalanceAtATime = <T>(work: () => Promise<T>): Promise<T> => {
+    const run = balanceLock.then(work, work);
+    balanceLock = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  };
 
   const startFacade = async (snapshot: StoredSnapshot | null): Promise<WalletFacade> =>
     WalletFacade.init({
@@ -1991,8 +2007,17 @@ export async function openBalancerWallet(
                the signing below. */
             progress('balancing');
             const label = currentJob()?.label ?? 'this transaction';
-            ticket?.release();
-            ticket = coins.open(label);
+            /* The ticket lives as long as the JOB, not the attempt. A refusal
+               keeps its coins held for the rebuild — the same job may be
+               handed them again, nobody else may — and only the job ending
+               (or the transaction landing, when the ticket becomes a flight)
+               lets them go. Before 2026/09/03 each attempt released and
+               reopened, and the job beside it took the coin in between. */
+            if (!ticket || !ticket.isOpen()) {
+              const opened = coins.open(label);
+              ticket = opened;
+              releaseWithJob(() => opened.release());
+            }
             const balanceOnce = async (): Promise<BalancingRecipe> => {
               const mine = ticket!;
               /* Read before the balance, for the coins it CREATES: the DUST
@@ -2028,18 +2053,29 @@ export async function openBalancerWallet(
               } finally {
                 selected = coins.endBalance();
               }
+              const seen = new Set(selected.map(coinKey));
+              const fromRecipe = unshieldedInputsOf(result).filter((coin) => {
+                const key = coinKey(coin);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              });
+              /* Inputs the transaction carries that no selector handed out —
+                 a transaction that arrived already balanced — are checked
+                 against every other job before this one may keep them. On a
+                 clash the recipe is reverted and the job rebuilds. */
               try {
-                const seen = new Set(selected.map(coinKey));
-                const taken = [
-                  ...selected,
-                  ...unshieldedInputsOf(result).filter((coin) => {
-                    const key = coinKey(coin);
-                    if (seen.has(key)) return false;
-                    seen.add(key);
-                    return true;
-                  }),
-                ];
-                mine.hold(taken.map(coinKey));
+                coins.claimInputs(mine, fromRecipe);
+              } catch (cause) {
+                try {
+                  await facade.revert(result);
+                } catch {
+                  // The revert is best effort; the rebuild selects afresh regardless.
+                }
+                throw cause;
+              }
+              const taken = [...selected, ...fromRecipe];
+              try {
                 const after = await stateAfterChange(before);
                 const createdNow = walletCoins(after, 'available').filter(
                   (coin) => !availableBefore.has(coinKey(coin)) && !seen.has(coinKey(coin)),
@@ -2066,7 +2102,7 @@ export async function openBalancerWallet(
             let balanced: BalancingRecipe;
             for (;;) {
               try {
-                balanced = await reserve(balanceOnce, 'contract balancing');
+                balanced = await oneBalanceAtATime(() => reserve(balanceOnce, 'contract balancing'));
                 break;
               } catch (cause) {
                 const message = cause instanceof Error ? cause.message : String(cause);
@@ -2135,11 +2171,9 @@ export async function openBalancerWallet(
               }
               await noticeWedgeAfterRevert();
             }
-            /* Nothing was submitted, so nothing is in flight: whatever this
-               balancing took is free for the next job the moment it is
-               reverted. */
-            ticket?.release();
-            ticket = null;
+            /* Nothing was submitted. The coins stay HELD by this job's ticket
+               for its rebuild; they are released when the job ends, through
+               the hook registered when the ticket was opened. */
             throw cause;
           }
         },
@@ -2212,10 +2246,8 @@ export async function openBalancerWallet(
             } catch {
               // Best effort — the original submission failure is the real news.
             }
-            /* Refused at the RPC: never in a block, so its coins are free the
-               moment the revert returns them. */
-            ticket?.release();
-            ticket = null;
+            /* Refused at the RPC: never in a block. The coins stay held by
+               this job for its rebuild, and are released when the job ends. */
             /* The node-rejection path, and the one the two wedges of
                2026/09/02 came down. When the revert lands within the SDK's
                six-second event window it works and this finds nothing; when it

@@ -101,6 +101,44 @@ export const smallestDust: CoinSelector = (coins) =>
     .at(0);
 
 /**
+ * A DUST coin below this is a CRUMB: the generation of a 0.02-NIGHT coin an
+ * hour old, not a fee. Measured on 2026/09/03 after the crumb split: the forty
+ * new NIGHT coins each registered a DUST coin of a few thousand million
+ * Specks, the SDK's smallest-first accumulation swept all forty-one into every
+ * fee leg, and each of those forty-one inputs was a separate `/prove` against
+ * a proof server with a job capacity of ten — "Failed to prove: Job Queue
+ * full", five times before the first click. A fee that needs forty-one inputs
+ * is not being paid, it is being spread.
+ */
+export const DUST_CRUMB_FLOOR = 1_000_000_000_000_000n;
+
+/**
+ * The DUST fee selector. ONE coin that covers the need, the smallest such;
+ * only when no single coin covers it, the LARGEST first, so the set is as
+ * short as it can be. Crumbs below {@link DUST_CRUMB_FLOOR} are passed over
+ * while anything else exists. The reservation guard sits in front of this and
+ * removes held and in-flight coins before it is asked.
+ *
+ * The SDK asks again with the remaining need after every input it takes
+ * (`doBalance` in wallet-sdk-capabilities' `Balancer.js`), so a selector that
+ * returns the largest coin when nothing covers the need converges in the
+ * fewest calls. The dust wallet's cost model carries no per-input overhead,
+ * and its own loop re-estimates the fee after each recipe and stops once the
+ * inputs cover it.
+ */
+export const dustFeeFirst: CoinSelector = (coins, _tokenType, amount) => {
+  const needed = amount < 0n ? -amount : amount;
+  const spendable = coins.filter((coin) => coin.value > 0n);
+  const worth = spendable.filter((coin) => coin.value >= DUST_CRUMB_FLOOR);
+  const pool = worth.length > 0 ? worth : spendable;
+  const covering = pool.filter((coin) => coin.value >= needed);
+  if (covering.length > 0) {
+    return covering.sort((a, b) => Number(a.value - b.value)).at(0);
+  }
+  return pool.sort((a, b) => Number(b.value - a.value)).at(0);
+};
+
+/**
  * One key per coin, across all three wallets. Unshielded UTxOs are identified
  * the way the SDK's `isCoinEqual` identifies them — `intentHash` and
  * `outputNo` — and shielded and dust coins by `nonce`.
@@ -202,7 +240,7 @@ export function unshieldedInputsOf(recipe: unknown): SelectableCoin[] {
 export function describeCoin(coin: SelectableCoin, names: Record<string, string> = {}): string {
   const type = coin.type ?? coin.token?.type;
   const name =
-    type === undefined
+    type === undefined || type === 'dust' || coin.token !== undefined
       ? 'DUST'
       : (names[type] ?? (/^0+$/.test(type) ? 'NIGHT' : `${type.slice(0, 8)}…`));
   const key = coinKey(coin);
@@ -211,7 +249,45 @@ export function describeCoin(coin: SelectableCoin, names: Record<string, string>
   return `${name} ${short} value ${coin.value.toString()}`;
 }
 
+/**
+ * A built transaction would spend a coin another job holds or has in flight.
+ *
+ * Thrown by {@link CoinReservation.claimInputs} for the case the selectors
+ * cannot see: a transaction that reaches the wallet ALREADY carrying inputs —
+ * the shape of 05:23:52 on 2026/09/03, when a grant's rebuild consumed
+ * u:2dd48b54…:17 with no selector ever asked, while the grant beside it had
+ * just been handed the same coin. The remedy is a rebuild once the wallet has
+ * caught up, which is what `isRebuildable` in `./account.ts` makes of it.
+ */
+export class CoinContention extends Error {
+  readonly key: string;
+  readonly heldBy: string;
+
+  constructor(key: string, heldBy: string) {
+    super(
+      `this transaction would spend ${key}, which ${heldBy} holds — rebuilding rather than double-spending it`,
+    );
+    this.name = 'CoinContention';
+    this.key = key;
+    this.heldBy = heldBy;
+  }
+}
+
+export function isCoinContention(cause: unknown): boolean {
+  let current: unknown = cause;
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    if (current instanceof CoinContention) return true;
+    if (current instanceof Error && current.name === 'CoinContention') return true;
+    current = current instanceof Error ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return false;
+}
+
 export interface CoinTicket {
+  /** The job this ticket belongs to, for the journal and for refusals. */
+  readonly label: string;
+  /** Still holding, not yet submitted or released. */
+  isOpen(): boolean;
   /** Mark these coins as taken by this job's balancing. */
   hold(keys: Iterable<string>): void;
   /**
@@ -244,6 +320,13 @@ export interface CoinReservation {
   beginBalance(ticket: CoinTicket): void;
   /** Ends the active balance and returns the coins its selectors handed out. */
   endBalance(): SelectableCoin[];
+  /**
+   * The inputs a BUILT transaction carries, checked against everyone else:
+   * a coin held by another ticket or in flight throws {@link CoinContention};
+   * the rest are held by `ticket`. The gate for inputs that arrived without a
+   * selector being asked.
+   */
+  claimInputs(ticket: CoinTicket, coins: Iterable<SelectableCoin>): void;
   /** Is any submitted transaction still unsettled? Cheap; for the state stream. */
   hasFlights(): boolean;
   /** Wraps a selector so it never hands out an excluded coin. */
@@ -277,8 +360,8 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
   const now = options.now ?? Date.now;
   const log = options.log ?? ((line: string) => console.log(line));
 
-  /** key → ticket label, for coins a job holds (consumed or created) before submitting. */
-  const held = new Map<string, string>();
+  /** key → the ticket holding it, for coins a job holds (consumed or created) before submitting. */
+  const held = new Map<string, CoinTicket>();
   /** Every submitted transaction still unsettled, and an index from key to it. */
   const flights = new Set<Flight>();
   const inFlight = new Map<string, Flight>();
@@ -306,7 +389,18 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
     }
   };
 
-  const isExcluded = (key: string): boolean => held.has(key) || inFlight.has(key);
+  /**
+   * Excluded for `asker`: held by ANOTHER ticket, or in flight. A ticket may
+   * always be handed its own held coins again — that is how a rebuild after a
+   * refusal keeps the coins it already holds rather than releasing them for
+   * the job beside it to take.
+   */
+  const isExcludedFor = (key: string, asker: CoinTicket | null): boolean => {
+    const holder = held.get(key);
+    if (holder !== undefined && holder !== asker) return true;
+    return inFlight.has(key);
+  };
+  const isExcluded = (key: string): boolean => isExcludedFor(key, null);
 
   let active: { ticket: CoinTicket; selected: SelectableCoin[] } | null = null;
 
@@ -325,19 +419,21 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
       const consumed = new Set<string>();
       const created = new Set<string>();
       let state: 'open' | 'submitted' | 'released' = 'open';
-      return {
+      const ticket: CoinTicket = {
+        label,
+        isOpen: () => state === 'open',
         hold(keys) {
           if (state !== 'open') return;
           for (const key of keys) {
             consumed.add(key);
-            held.set(key, label);
+            held.set(key, ticket);
           }
         },
         created(keys) {
           if (state !== 'open') return;
           for (const key of keys) {
             created.add(key);
-            held.set(key, label);
+            held.set(key, ticket);
           }
         },
         submitted(expiresAt) {
@@ -346,11 +442,11 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
           const flight: Flight = { label, consumed: new Set(consumed), created: new Set(created), expiresAt };
           flights.add(flight);
           for (const key of consumed) {
-            held.delete(key);
+            if (held.get(key) === ticket) held.delete(key);
             inFlight.set(key, flight);
           }
           for (const key of created) {
-            held.delete(key);
+            if (held.get(key) === ticket) held.delete(key);
             inFlight.set(key, flight);
           }
         },
@@ -359,21 +455,37 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
           const wasHeld = state === 'open';
           state = 'released';
           if (wasHeld) {
-            for (const key of consumed) held.delete(key);
-            for (const key of created) held.delete(key);
+            for (const key of consumed) if (held.get(key) === ticket) held.delete(key);
+            for (const key of created) if (held.get(key) === ticket) held.delete(key);
           }
           consumed.clear();
           created.clear();
           if (wasHeld) wake();
         },
       };
+      return ticket;
+    },
+
+    claimInputs(ticket, inputs) {
+      expireInFlight();
+      const keys: string[] = [];
+      for (const coin of inputs) {
+        const key = coinKey(coin);
+        const holder = held.get(key);
+        if (holder !== undefined && holder !== ticket) throw new CoinContention(key, holder.label);
+        const flight = inFlight.get(key);
+        if (flight) throw new CoinContention(key, `${flight.label} (in flight)`);
+        keys.push(key);
+      }
+      ticket.hold(keys);
     },
 
     guard(base) {
       return (coins, tokenType, amount, costModel) => {
         expireInFlight();
+        const asker = active?.ticket ?? null;
         const chosen = base(
-          coins.filter((coin) => !isExcluded(coinKey(coin))),
+          coins.filter((coin) => !isExcludedFor(coinKey(coin), asker)),
           tokenType,
           amount,
           costModel,

@@ -12,16 +12,22 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  CoinContention,
   coinKey,
   createCoinReservation,
   describeCoin,
+  DUST_CRUMB_FLOOR,
+  dustFeeFirst,
+  isCoinContention,
   LARGE_NIGHT_ATOMIC,
   nightPayloadFirst,
   smallestDust,
   smallestOfType,
   unshieldedInputsOf,
+  type CoinSelector,
   type SelectableCoin,
 } from '../src/coinReservation.js';
+import { DEFAULT_SPEND_QUEUE_MAX } from '../src/config.js';
 
 const NIGHT = '0'.repeat(64);
 const night = (intentHash: string, outputNo: number, value: bigint): SelectableCoin => ({
@@ -326,7 +332,11 @@ describe('recording what a balance is handed', () => {
     coins.beginBalance(a);
     assert.equal(select([n1, n2, n3], NIGHT, 1n, {}), n1);
     assert.deepEqual(coins.excluded(), [coinKey(n1)], 'held before the SDK has committed anything');
-    assert.equal(select([n1, n2, n3], NIGHT, 1n, {}), n2, 'the same balance asking again is not handed n1 twice');
+    /* Its own held coin is still selectable BY ITSELF: within one balance the
+       SDK removes each chosen coin from its own pool (`isCoinEqual` in
+       `doBalance`), so the guard need not; across attempts, that is how a
+       rebuild keeps what it holds. */
+    assert.equal(select([n2, n3], NIGHT, 1n, {}), n2, 'the pool the SDK asks with no longer has n1');
     const handed = coins.endBalance();
     assert.deepEqual(handed, [n1, n2]);
 
@@ -347,5 +357,146 @@ describe('recording what a balance is handed', () => {
     assert.deepEqual(coins.excluded(), []);
     assert.deepEqual(coins.endBalance(), []);
     assert.equal(coins.hasFlights(), false);
+  });
+});
+
+/**
+ * The SDK's balancing loop, restated: ask the selector for the remaining need,
+ * take what it returns, remove it from the pool, ask again until covered or
+ * refused. `doBalance` in wallet-sdk-capabilities' `Balancer.js`.
+ */
+function balanceLike(select: CoinSelector, coins: SelectableCoin[], need: bigint): SelectableCoin[] {
+  const inputs: SelectableCoin[] = [];
+  let pool = [...coins];
+  let remaining = need;
+  while (remaining > 0n) {
+    const chosen = select(pool, 'dust', -remaining, {});
+    if (!chosen) throw new Error('insufficient');
+    inputs.push(chosen);
+    pool = pool.filter((coin) => coin !== chosen);
+    remaining -= chosen.value;
+  }
+  return inputs;
+}
+
+describe('the DUST fee selector', () => {
+  const crumbs = Array.from({ length: 40 }, (_, i) => dust(String(i).padStart(64, '0'), 3_968_160_000n));
+  const large = dust('f'.repeat(64), 1_063_482_701_844_916_860n);
+  const mid = dust('e'.repeat(64), 70_879_718_578_226_536n);
+
+  it('forty-one coins with one large: exactly ONE input, the large one', () => {
+    const inputs = balanceLike(dustFeeFirst, [...crumbs, large], 15_000_000_000_000_000n);
+    assert.equal(inputs.length, 1);
+    assert.equal(inputs[0], large);
+  });
+
+  it('several coins cover the need: the SMALLEST that covers it, alone', () => {
+    const inputs = balanceLike(dustFeeFirst, [large, mid, ...crumbs], 15_000_000_000_000_000n);
+    assert.deepEqual(inputs, [mid]);
+  });
+
+  it('none covers the need: largest first, the shortest set', () => {
+    const a = dust('a'.repeat(64), 9n * DUST_CRUMB_FLOOR);
+    const b = dust('b'.repeat(64), 5n * DUST_CRUMB_FLOOR);
+    const c = dust('c'.repeat(64), 2n * DUST_CRUMB_FLOOR);
+    const inputs = balanceLike(dustFeeFirst, [c, ...crumbs, a, b], 13n * DUST_CRUMB_FLOOR);
+    assert.deepEqual(inputs, [a, b]);
+  });
+
+  it('crumbs below the floor are passed over while anything else exists, and used only when nothing else does', () => {
+    assert.equal(dustFeeFirst([...crumbs, mid], 'dust', -1n, {}), mid, 'a crumb would have covered 1 Speck, and is still not chosen');
+    const only = dustFeeFirst(crumbs, 'dust', -1n, {});
+    assert.ok(only && crumbs.includes(only), 'with nothing else, a crumb it is');
+    assert.equal(dustFeeFirst([dust('0'.repeat(64), 0n)], 'dust', -1n, {}), undefined, 'a coin with nothing generated is never an input');
+  });
+
+  it('sits behind the guard: a held large coin is not the one input', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(dustFeeFirst);
+    coins.open('other').hold([coinKey(large)]);
+    assert.equal(select([large, mid, ...crumbs], 'dust', -15_000_000_000_000_000n, {}), mid);
+  });
+});
+
+describe('a ticket across its own rebuild attempts', () => {
+  it('keeps its coins held after a refusal, may be handed them again, and nobody else may', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(nightPayloadFirst);
+    const grant = coins.open('the activation grant for 1cfa…');
+    coins.beginBalance(grant);
+    assert.equal(select([n1, n2], NIGHT, -2_000n, {}), n1);
+    coins.endBalance();
+    /* Refused at the RPC: nothing is released. The rebuild balances again. */
+    coins.beginBalance(grant);
+    assert.equal(select([n1, n2], NIGHT, -2_000n, {}), n1, 'its own held coin, again');
+    coins.endBalance();
+    const other = coins.open('the activation grant for c427…');
+    coins.beginBalance(other);
+    assert.equal(select([n1, n2], NIGHT, -2_000n, {}), n2, 'the job beside it is not handed n1');
+    coins.endBalance();
+    assert.equal(grant.isOpen(), true);
+    grant.release();
+    assert.equal(grant.isOpen(), false);
+  });
+
+  it('a released coin is selectable by the next asker in the same tick — one ordered path', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(smallestOfType);
+    const refused = coins.open('refused grant');
+    refused.hold([coinKey(n1)]);
+    const next = coins.open('registration');
+    coins.beginBalance(next);
+    assert.equal(select([n1, n2], NIGHT, 1n, {}), n2, 'held elsewhere: not n1');
+    refused.release();
+    assert.equal(select([n1, n2], NIGHT, 1n, {}), n1, 'the release is visible to the very next call');
+    coins.endBalance();
+  });
+
+  it('a submitted ticket becomes a flight and a fresh ticket serves the next attempt', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const t = coins.open('grant');
+    t.hold([coinKey(n1)]);
+    t.submitted(Date.now() + 60_000);
+    assert.equal(t.isOpen(), false);
+    assert.equal(coins.hasFlights(), true);
+    t.hold([coinKey(n2)]);
+    assert.deepEqual(coins.excluded(), [coinKey(n1)], 'a flight takes no more coins');
+  });
+});
+
+describe('inputs that arrived without a selector being asked', () => {
+  it('are refused when another job holds one of them, and the refusal is rebuildable', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const a = coins.open('the activation grant for 1cfa…');
+    a.hold([coinKey(n1)]);
+    const b = coins.open('the activation grant for c427…');
+    assert.throws(
+      () => coins.claimInputs(b, [n1]),
+      (cause: unknown) => cause instanceof CoinContention && cause.key === coinKey(n1) && /1cfa/.test(cause.heldBy),
+    );
+    assert.equal(isCoinContention(new Error('wrapped', { cause: new CoinContention('k', 'x') })), true);
+    assert.equal(isCoinContention(new Error('insufficient funds')), false);
+  });
+
+  it('are refused when one is in flight, and otherwise held by the claimant', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const a = coins.open('grant A');
+    a.hold([coinKey(n1)]);
+    a.submitted(Date.now() + 60_000);
+    const b = coins.open('grant B');
+    assert.throws(() => coins.claimInputs(b, [n1]), /in flight/);
+    coins.claimInputs(b, [n2, n3]);
+    assert.deepEqual(coins.excluded().sort(), [coinKey(n1), coinKey(n2), coinKey(n3)].sort());
+    coins.claimInputs(b, [n2]);
+  });
+});
+
+describe('the queue depth and the journal name for dust', () => {
+  it('queues thirty-two sponsorship requests by default', () => {
+    assert.equal(DEFAULT_SPEND_QUEUE_MAX, 32);
+  });
+
+  it("names a coin the dust wallet types as 'dust' DUST", () => {
+    assert.equal(describeCoin({ type: 'dust', value: 5n, token: { nonce: 'ab' } }), 'DUST n:ab value 5');
   });
 });
