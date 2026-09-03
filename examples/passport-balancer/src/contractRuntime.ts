@@ -241,6 +241,52 @@ export async function withDeadline<T>(
 }
 
 /**
+ * What one direct indexer query came back with.
+ *
+ * THE DISTINCTION, AND WHAT IT COST TO LEARN IT. `found: false` used to be the
+ * answer to both "the indexer says the transaction is not there" and "the
+ * indexer would not answer". They are opposite facts. On 2026/09/03 an indexer
+ * blackout was induced deliberately to test the confirmation bounds, and all
+ * three jobs in flight failed with `ConfirmationTimeout` and refused the claim
+ * at 184.9 s — while `deposit_night` c381550… was already in block 293270. The
+ * journal said "nothing was credited" about a grant that had been credited.
+ *
+ * An unreachable indexer is evidence about the INDEXER, never about the chain.
+ * A caller may only give up on a transaction when a reachable indexer has said
+ * it is not there.
+ */
+export interface IndexerAnswer {
+  /** The indexer answered, and the subject is there. */
+  found: boolean;
+  /** The indexer answered at all. `false` says nothing about the subject. */
+  reachable: boolean;
+}
+
+/**
+ * Waits for `work`, or for the running job to be aborted — whichever is first.
+ *
+ * The sibling of {@link withDeadline} for waits that have no deadline of their
+ * own because the right ceiling is the job's, not this call's. Everything that
+ * waits inside a spend job must unwind when the queue takes its lane back, or
+ * the abort is bookkeeping and the wait carries on regardless.
+ */
+export async function raceAbort<T>(work: Promise<T>): Promise<T> {
+  const signal = currentJob()?.abort.signal;
+  if (!signal) return work;
+  if (signal.aborted) throw signal.reason;
+  let onAbort: (() => void) | null = null;
+  try {
+    return await new Promise<T>((settle, fail) => {
+      onAbort = (): void => fail(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+      void work.then(settle, fail);
+    });
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+  }
+}
+
+/**
  * One indexer query: has the transaction with this IDENTIFIER landed?
  *
  * The bounded sibling of {@link resolveTransactionHash}, which retries for
@@ -252,7 +298,7 @@ export async function withDeadline<T>(
 export async function queryTransactionByIdentifier(
   indexerHttpUrl: string,
   identifier: string,
-): Promise<{ landed: boolean; hash: string | null; block: number | null }> {
+): Promise<IndexerAnswer & { hash: string | null; block: number | null }> {
   const query = `{ transactions(offset: { identifier: "${identifier}" }) { hash block { height } } }`;
   try {
     const response = await fetch(indexerHttpUrl, {
@@ -265,18 +311,20 @@ export async function queryTransactionByIdentifier(
       data?: { transactions?: Array<{ hash?: string; block?: { height?: number } }> };
     };
     const found = body.data?.transactions?.[0];
-    if (found?.hash) return { landed: true, hash: found.hash, block: found.block?.height ?? null };
+    if (found?.hash) {
+      return { found: true, reachable: true, hash: found.hash, block: found.block?.height ?? null };
+    }
+    return { found: false, reachable: true, hash: null, block: null };
   } catch {
-    // An unreachable indexer is not a landed transaction, and not a missing one.
+    return { found: false, reachable: false, hash: null, block: null };
   }
-  return { landed: false, hash: null, block: null };
 }
 
 /** One indexer query: does a contract exist at this address? */
-export async function queryContractExists(
+export async function queryContract(
   indexerHttpUrl: string,
   contractAddress: string,
-): Promise<boolean> {
+): Promise<IndexerAnswer> {
   const query = `{ contractAction(address: "${contractAddress}") { address } }`;
   try {
     const response = await fetch(indexerHttpUrl, {
@@ -286,9 +334,9 @@ export async function queryContractExists(
       signal: AbortSignal.timeout(10_000),
     });
     const body = (await response.json()) as { data?: { contractAction?: { address?: string } | null } };
-    return Boolean(body.data?.contractAction?.address);
+    return { found: Boolean(body.data?.contractAction?.address), reachable: true };
   } catch {
-    return false;
+    return { found: false, reachable: false };
   }
 }
 
@@ -561,7 +609,9 @@ export interface BoundedProviderOptions {
    * afternoon — the default is the real pair of one-shot indexer queries, and
    * that is what production uses.
    */
-  landed?: (what: 'transaction' | 'contract', subject: string) => Promise<boolean>;
+  landed?: (what: 'transaction' | 'contract', subject: string) => Promise<IndexerAnswer>;
+  /** How long to wait between direct queries while the indexer is unreachable. */
+  retryMs?: number;
   log?: (line: string) => void;
 }
 
@@ -586,18 +636,27 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
   options: BoundedProviderOptions,
 ): TProvider {
   const log = options.log ?? ((line: string) => console.log(line));
+  const retryMs = options.retryMs ?? 5_000;
   const askDirectly =
     options.landed ??
-    (async (what: 'transaction' | 'contract', subject: string): Promise<boolean> =>
+    (async (what: 'transaction' | 'contract', subject: string): Promise<IndexerAnswer> =>
       what === 'transaction'
-        ? (await queryTransactionByIdentifier(options.indexerHttpUrl, subject)).landed
-        : queryContractExists(options.indexerHttpUrl, subject));
+        ? await queryTransactionByIdentifier(options.indexerHttpUrl, subject)
+        : await queryContract(options.indexerHttpUrl, subject));
+  /* Every line this wrapper writes names the job, because a journal in which
+     the bound fires and the job it fired for cannot be matched up is a journal
+     that needs a third source to read. The blackout drill of 2026/09/03 logged
+     three timeouts and three job labels with nothing joining them. */
+  const whose = (): string => {
+    const job = currentJob();
+    return job ? `${job.label} (${job.id}): ` : '';
+  };
 
   const bound = async <T>(
     what: string,
     subject: string,
     call: (from: WatchingProvider) => Promise<T>,
-    landed: () => Promise<boolean>,
+    landed: () => Promise<IndexerAnswer>,
     /* What reaching this wait means for the job. Reading a deployed contract's
        state is a lookup that happens BEFORE anything is built, so reporting it
        as `seen-on-chain` would put a step in the journal that reads like a
@@ -615,10 +674,36 @@ export function boundedPublicDataProvider<TProvider extends WatchingProvider>(
     } catch (cause) {
       if (!isConfirmationTimeout(cause)) throw cause;
       log(
-        `[job] the indexer has not reported ${what} ${subject} in ${Math.round(options.confirmTimeoutMs / 1_000)} s — asking it directly`,
+        `[job] ${whose()}the indexer has not reported ${what} ${subject} in ${Math.round(options.confirmTimeoutMs / 1_000)} s — asking it directly`,
       );
-      if (!(await landed())) throw cause;
-      log(`[job] ${what} ${subject} is on chain — retrying the watch on a fresh indexer client`);
+      /* AN UNREACHABLE INDEXER IS NOT A MISSING TRANSACTION, and this loop is
+         the whole difference. Under the blackout drill of 2026/09/03 the
+         direct query could not reach the indexer either — it is the same host
+         the watch was waiting on — and treating that silence as an answer
+         failed three jobs and refused a claim whose `deposit_night` was
+         already in block 293270. So while the indexer is UNREACHABLE this
+         waits, and only a reachable indexer saying "not there" is a failure.
+
+         Unbounded here on purpose, and bounded from outside: the deadlines
+         below race the running job's abort, and the queue's ceiling
+         (`BALANCER_JOB_MAX_MS`) ends any job that has held a lane past every
+         bound underneath it. A blackout that outlives the ceiling therefore
+         becomes an abort and a rebuild, which is a decision made once with the
+         whole job in view rather than by a query that could not connect. */
+      for (let attempt = 1; ; attempt += 1) {
+        const answer = await landed();
+        if (answer.found) break;
+        if (answer.reachable) throw cause;
+        if (attempt === 1 || attempt % 6 === 0) {
+          log(
+            `[job] ${whose()}the indexer cannot be reached either, so nothing is known about ${what} ${subject} — waiting rather than treating silence as a failure`,
+          );
+        }
+        await raceAbort(wait(retryMs));
+      }
+      log(
+        `[job] ${whose()}${what} ${subject} is on chain — retrying the watch on a fresh indexer client`,
+      );
       const result = await withDeadline(
         async () => call(await options.fresh()),
         options.confirmTimeoutMs,

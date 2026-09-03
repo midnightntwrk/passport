@@ -45,7 +45,7 @@ describe('bounding an indexer watch', () => {
       confirmTimeoutMs: 60,
       fresh: async () => stubProvider(() => new Promise(() => undefined)),
       indexerHttpUrl: 'http://indexer.invalid/graphql',
-      landed: async () => false,
+      landed: async () => ({ found: false, reachable: true }),
       log: () => undefined,
     });
 
@@ -73,7 +73,7 @@ describe('bounding an indexer watch', () => {
           return stubProvider(async () => 'the deploy');
         },
         indexerHttpUrl: 'http://indexer.invalid/graphql',
-        landed: async () => true,
+        landed: async () => ({ found: true, reachable: true }),
         log: () => undefined,
       },
     );
@@ -92,7 +92,7 @@ describe('bounding an indexer watch', () => {
         indexerHttpUrl: 'http://indexer.invalid/graphql',
         landed: async () => {
           asked += 1;
-          return true;
+          return { found: true, reachable: true };
         },
         log: () => undefined,
       },
@@ -110,7 +110,7 @@ describe('bounding an indexer watch', () => {
       confirmTimeoutMs: 60_000,
       fresh: async () => stubProvider(async () => 'x'),
       indexerHttpUrl: 'http://indexer.invalid/graphql',
-      landed: async () => true,
+      landed: async () => ({ found: true, reachable: true }),
     });
     assert.equal(typeof bounded.queryContractState, 'function');
   });
@@ -196,5 +196,73 @@ describe('what a caller does with a confirmation timeout', () => {
       false,
       'waiting does not make an unreachable prover better',
     );
+  });
+});
+
+/**
+ * The indexer blackout drill of 2026/09/03, and the answer it exposed as wrong.
+ *
+ * `iptables -I OUTPUT … -j DROP` against the indexer for three minutes, during
+ * a registration. The bound held — three jobs reported the timeout inside the
+ * window and gave their lanes back — but all three then FAILED, and the claim
+ * was refused at 184.9 s, because the direct query that decides whether a
+ * transaction landed goes to the same host the watch was waiting on. It could
+ * not connect, `landed` said `false`, and the journal reported "nothing was
+ * credited" about a `deposit_night` that was already in block 293270.
+ *
+ * An unreachable indexer is evidence about the indexer. Never about the chain.
+ */
+describe('an indexer that cannot be reached', () => {
+  it('waits instead of failing, and completes when the indexer comes back', async () => {
+    let asked = 0;
+    const lines: string[] = [];
+    const bounded = boundedPublicDataProvider(
+      stubProvider(() => new Promise(() => undefined)),
+      {
+        confirmTimeoutMs: 40,
+        retryMs: 5,
+        fresh: async () => stubProvider(async (what, subject) => `${what}:${subject}`),
+        indexerHttpUrl: 'http://indexer.invalid/graphql',
+        landed: async () => {
+          asked += 1;
+          /* Down for the first three asks, back on the fourth — the shape of a
+             three-minute blackout against a five-second retry. */
+          return asked < 4 ? { found: false, reachable: false } : { found: true, reachable: true };
+        },
+        log: (line) => lines.push(line),
+      },
+    );
+
+    assert.equal(await bounded.watchForTxData('tx-blackout'), 'tx:tx-blackout');
+    assert.ok(asked >= 4, `asked ${asked} times, waiting the blackout out`);
+    assert.ok(
+      lines.some((line) => /cannot be reached/.test(line)),
+      lines.join('\n'),
+    );
+    assert.ok(
+      lines.some((line) => /is on chain/.test(line)),
+      'and it says so when the answer finally arrives',
+    );
+  });
+
+  it('still fails fast when a REACHABLE indexer says the transaction is not there', async () => {
+    let asked = 0;
+    const bounded = boundedPublicDataProvider(
+      stubProvider(() => new Promise(() => undefined)),
+      {
+        confirmTimeoutMs: 40,
+        retryMs: 5,
+        fresh: async () => stubProvider(async () => 'unused'),
+        indexerHttpUrl: 'http://indexer.invalid/graphql',
+        landed: async () => {
+          asked += 1;
+          return { found: false, reachable: true };
+        },
+        log: () => undefined,
+      },
+    );
+
+    await assert.rejects(bounded.watchForTxData('tx-absent'), isConfirmationTimeout);
+    assert.equal(asked, 1, 'a definite answer is taken at once, not retried');
   });
 });

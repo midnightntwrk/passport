@@ -881,7 +881,12 @@ Four things close it, and the fourth is the one that matters most:
    directly before it gives up on a transaction, because both hangs had already
    landed: treating a deadline as a failure would revert DUST the chain has
    genuinely spent and rebuild transactions that are genuinely on chain. Only an
-   answer of *not there* becomes a rebuild.
+   answer of *not there* becomes a rebuild — and *not there* means a reachable
+   indexer said so. An indexer that cannot be reached is evidence about the
+   indexer, never about the chain, so the job waits it out and the queue's
+   ceiling, not a failed connection, decides when to give up. A blackout drill
+   on 2026/09/03 failed three jobs and refused a claim whose `deposit_night`
+   was already in block 293270; that is the answer this rules out.
 
 Every step of a spend job is now one journal line — `queued`, `started`,
 `proving`, `proved`, `balanced`, `fee leg proved`, `waiting to submit`,

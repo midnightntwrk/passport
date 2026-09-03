@@ -1907,7 +1907,7 @@ export async function openBalancerWallet(
                first, and only an answer of "not there" is treated as failure. */
             if (isSubmissionTimeout(cause)) {
               const seen = await queryTransactionByIdentifier(config.indexerHttpUrl, identifier);
-              if (seen.landed) {
+              if (seen.found) {
                 console.log(
                   `[job] the node never acknowledged ${identifier}, but it is on chain in block ${seen.block ?? '?'} — carrying on`,
                 );
@@ -1920,7 +1920,9 @@ export async function openBalancerWallet(
                  the booking is handed to the orphan sweeper, which reverts it in
                  `balanceOrphanMs` if the chain never carries it. */
               console.log(
-                `[job] the node never acknowledged ${identifier} and it is not on chain — watching it as an orphan and rebuilding`,
+                seen.reachable
+                  ? `[job] the node never acknowledged ${identifier} and the indexer says it is not on chain — watching it as an orphan and rebuilding`
+                  : `[job] the node never acknowledged ${identifier} and the indexer could not be reached, so nothing is known about it — watching it as an orphan and rebuilding`,
               );
               orphans.watch({
                 txHash: String(finalized.transactionHash()),
