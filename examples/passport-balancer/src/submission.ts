@@ -10,16 +10,16 @@
  * ALREADY LANDED on chain — the resolver-leaf `ContractDeploy` is in blocks
  * 291694 and 292118 — and the job never noticed.
  *
- * Everything about that traces back to one line in the SDK.
- * `PolkadotNodeClient.sendMidnightTransaction` ends every submission stream
- * with `Stream.ensuring(api.disconnect())`, and `PolkadotNodeClient.make`
+ * Every version of that failure comes back to one habit in the SDK's node
+ * client. `PolkadotNodeClient.sendMidnightTransaction` ends every submission
+ * stream with `Stream.ensuring(api.disconnect())`, and `PolkadotNodeClient.make`
  * disconnects once more the moment it has loaded metadata. polkadot-js's
  * `WsProvider.disconnect()` calls `websocket.close(1000)` and RESOLVES
  * IMMEDIATELY — it does not wait for the socket's close event — and when that
  * event eventually arrives, `#onSocketClose` walks the provider-wide handler
  * map and errors every entry in it, while `#resubscribe` explicitly skips
- * anything whose type starts with `author_`. So a disconnect belonging to one
- * submission reaches whatever the connection is doing a moment later:
+ * anything whose type starts with `author_`. So a disconnect reaches whatever
+ * the connection is doing a moment later:
  *
  *   - a live `author_submitAndWatchExtrinsic` is dropped in silence — no
  *     further status callback, the `Stream.async` never ends, and
@@ -30,39 +30,40 @@
  *     Closure`. That is the registration refused 39.7 s in at 02:28 UTC on
  *     2026/09/03.
  *
- * TWO FIXES THAT DID NOT HOLD, BECAUSE THEY BOTH LEFT THE DISCONNECT IN PLACE
- * --------------------------------------------------------------------------
- * Serialising submissions was the first. It cannot work: the damage is done by
- * an event that arrives after the submission which caused it is already over,
- * so there is no ordering of submissions that keeps them apart.
+ * TWO NARROWER FIXES, BOTH MEASURED FAILING ON THE DEPLOYED SERVICE
+ * ----------------------------------------------------------------
+ * Serialising submissions was the first, and it cannot work: the harm is done
+ * by an event that arrives after the submission which caused it is over, so no
+ * ordering of submissions keeps them apart.
  *
- * Giving each submission its own client was the second, and it made things
- * worse rather than better — every submission then hit the CONSTRUCTION
- * disconnect instead, the one `PolkadotNodeClient.make` performs after loading
- * metadata, a second or so before the submission it was built for. Deployed at
- * 02:41 UTC on 2026/09/03, it failed a grant, a mint, and a registration in
- * the first ninety seconds, all with `1000:: Normal Closure`.
+ * A connection per submission was the second, and it was worse. The client
+ * disconnects during its own construction, a second or so before the submission
+ * it was built for, so every submission killed itself with its own start-up
+ * close: deployed at 02:41 UTC on 2026/09/03, it failed a grant, a mint, and a
+ * registration inside ninety seconds, all with `1000:: Normal Closure`.
  *
  * WHAT THIS DOES INSTEAD
  * ----------------------
- * It keeps ONE polkadot-js connection and never disconnects it. Submission is
- * `api.tx.midnight.sendMnTransaction(...).send(callback)` — the same call the
- * SDK makes — with this service unsubscribing its own subscription when it is
+ * It owns the connection. One polkadot-js `ApiPromise`, opened on the first
+ * submission and disconnected only when this service is closed — which the
+ * facade does from `stop()`, and nothing else does at all. Submission is
+ * `api.tx.midnight.sendMnTransaction(...).send(callback)`, the same call the
+ * SDK makes, with this module unsubscribing its own subscription when it is
  * finished with it and nothing ever closing the socket underneath anybody.
- * `WsProvider` reconnects on its own if the socket drops, so the connection
- * outlives a network blip without any of this having to notice.
+ * `WsProvider` keeps its own auto-reconnect, so a socket that drops comes back
+ * without any of this having to notice.
  *
- * Two properties are then true that were not before: a submission cannot be
- * killed by another submission's clean-up, and a submission cannot wait for
- * ever, because {@link SubmissionTimeout} bounds it whatever the socket does.
+ * Two properties then hold that did not before: a submission cannot be killed
+ * by another submission's clean-up, and no submission waits for ever, because
+ * {@link SubmissionTimeout} bounds it whatever the socket does.
  *
- * And one consequence worth stating plainly: this asks the node for the first
- * status it reports rather than for finality. A node REFUSAL still arrives, as
- * the rejection of the `.send()` call itself — which is what `isNodeRejection`
- * and `withNodeRejectionRetry` match on, so neither changes — while the 15–25 s
- * of stagenet finality per submission comes off the user's click. Finality is
- * not a thing this service ever needed from the node: every job that cares
- * about its transaction confirms it against the INDEXER afterwards.
+ * And one consequence worth stating plainly: this takes the node's FIRST status
+ * rather than finality. A node REFUSAL still arrives, as the rejection of the
+ * `.send()` call itself — which is what `isNodeRejection` and
+ * `withNodeRejectionRetry` match on, so neither changes — while the 15–25 s of
+ * stagenet finality per submission comes off the user's click. Finality is not
+ * a thing this service ever needed from the node: every job that cares about
+ * its transaction confirms it against the INDEXER afterwards.
  */
 
 import { ApiPromise, WsProvider } from '@polkadot/api';
@@ -71,6 +72,20 @@ import { u8aToHex } from '@polkadot/util';
 /** The subset of the SDK's `SubmissionService` this service uses. */
 export interface SubmissionLike<TTransaction> {
   submitTransaction(transaction: TTransaction, waitForStatus?: unknown): Promise<unknown>;
+  close(): Promise<void>;
+}
+
+/**
+ * The node, as everything above it needs to see it: bytes in, a transaction
+ * hash out, and a `close` nobody but the facade's `stop()` ever calls.
+ *
+ * Narrow on purpose. The socket is the one part of this module that cannot be
+ * tested from a unit test, so it is the one part behind this interface —
+ * everything else is exercised against a fake connection.
+ */
+export interface NodeConnection {
+  /** Resolves at the node's first status for this transaction. */
+  send(transaction: Uint8Array): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -120,19 +135,13 @@ export interface SerialisedSubmissionOptions<TTransaction> {
   onStep?: (step: string) => void;
 }
 
-/** What a submission reports back. Nothing in this service reads it. */
-export interface SubmissionAcknowledged {
-  txHash: string;
-  status: string;
-}
-
 /** A transaction as the facade hands it over: it knows how to serialise itself. */
 interface Serialisable {
   serialize(): Uint8Array;
 }
 
-/* The extrinsic is reached through the chain's own metadata, which is why this
-   needs no generated types: the node publishes the `midnight` pallet and
+/* The extrinsic is reached through the chain's own metadata, which is why none
+   of this needs generated types: the node publishes the `midnight` pallet and
    polkadot-js builds `api.tx.midnight.sendMnTransaction` from it. */
 interface MidnightApi {
   isConnected: boolean;
@@ -164,18 +173,17 @@ interface ExtrinsicStatusResult {
 }
 
 /**
- * One connection to the node, opened once and never closed by a submission.
+ * The real connection: one `ApiPromise`, opened once and never disconnected by
+ * a submission.
  *
- * `WsProvider` is left with its own auto-reconnect, which is the whole point:
- * a socket that drops comes back by itself, and nothing in this file ever calls
- * `disconnect()` except {@link close}, which the facade calls when it stops.
+ * `WsProvider` keeps its own auto-reconnect, which is the whole point — a
+ * socket that drops comes back by itself, and nothing in here calls
+ * `disconnect()` except {@link NodeConnection.close}.
  */
-export function persistentNodeSubmission<TTransaction>(config: {
-  relayURL: URL;
-}): SubmissionLike<TTransaction> {
+export function polkadotConnection(config: { relayURL: URL }): NodeConnection {
   let opening: Promise<MidnightApi> | null = null;
 
-  const api = async (): Promise<MidnightApi> => {
+  const connected = async (): Promise<MidnightApi> => {
     if (!opening) {
       opening = ApiPromise.create({
         provider: new WsProvider(config.relayURL.toString()),
@@ -183,33 +191,33 @@ export function persistentNodeSubmission<TTransaction>(config: {
         noInitWarn: true,
       }) as unknown as Promise<MidnightApi>;
     }
-    const ready = await opening;
-    if (!ready.isConnected) {
+    const api = await opening;
+    if (!api.isConnected) {
       /* `connect()` rejects when a reconnect is already in flight, which is not
          an error here — the provider is doing exactly what is wanted. */
-      await ready.connect().catch(() => undefined);
+      await api.connect().catch(() => undefined);
     }
-    return ready;
+    return api;
   };
 
   return {
-    async submitTransaction(transaction: TTransaction): Promise<unknown> {
-      const connection = await api();
-      const bytes = (transaction as unknown as Serialisable).serialize();
-      return await new Promise<SubmissionAcknowledged>((settle, fail) => {
+    async send(transaction: Uint8Array): Promise<string> {
+      const api = await connected();
+      return await new Promise<string>((settle, fail) => {
         let unsubscribe: (() => void) | null = null;
         let done = false;
         const finish = (): void => {
           done = true;
-          /* Ours alone. Unsubscribing ends this watch and touches no other. */
+          /* Ours alone. Unsubscribing ends this watch and touches no other, and
+             it is the only teardown this module performs per submission. */
           try {
             unsubscribe?.();
           } catch {
             // A subscription the node has already closed is not a failure.
           }
         };
-        connection.tx.midnight
-          .sendMnTransaction(u8aToHex(bytes))
+        api.tx.midnight
+          .sendMnTransaction(u8aToHex(transaction))
           .send((result) => {
             if (done) return;
             const status = result.status;
@@ -221,12 +229,12 @@ export function persistentNodeSubmission<TTransaction>(config: {
               status.isInBlock ||
               status.isFinalized
             ) {
-              settle({ txHash: result.txHash.toString(), status: status.type });
+              settle(result.txHash.toString());
               finish();
             } else if (status.isInvalid || status.isDropped || status.isUsurped) {
-              /* Worded so `isNodeRejection` matches it: these are the node
-                 refusing the transaction after it accepted the RPC, and the
-                 remedy is the same rebuild a `1010` gets. */
+              /* Worded so `isNodeRejection` matches it. These are the node
+                 refusing a transaction it had already taken over RPC, and the
+                 remedy is the rebuild a `1010` gets. */
               fail(
                 new Error(
                   `1010: Invalid Transaction: the node reported this transaction as ${status.type}`,
@@ -238,8 +246,8 @@ export function persistentNodeSubmission<TTransaction>(config: {
           .then(
             (thunk) => {
               unsubscribe = thunk;
-              /* Settled before the subscription handle arrived — the status
-                 callback can fire first — so end the watch now. */
+              /* The status callback can fire before the subscription handle
+                 arrives, so the watch may already be over by now. */
               if (done) finish();
             },
             (cause: unknown) => {
@@ -253,9 +261,9 @@ export function persistentNodeSubmission<TTransaction>(config: {
 
     async close(): Promise<void> {
       if (!opening) return;
-      const ready = await opening.catch(() => null);
+      const api = await opening.catch(() => null);
       opening = null;
-      await ready?.disconnect().catch(() => undefined);
+      await api?.disconnect().catch(() => undefined);
     },
   };
 }
@@ -264,31 +272,29 @@ export function persistentNodeSubmission<TTransaction>(config: {
  * Bounds every submission, and takes them one at a time.
  *
  * The ceiling is the part that matters: nothing underneath this bounds
- * anything, and `reconnectionTimeout` in the SDK's client is
- * `Duration.infinity`. A submission that is still unanswered at `timeoutMs` is
- * abandoned with a typed {@link SubmissionTimeout}, and the caller — `submitTx`
- * in `./wallet.ts` — asks the indexer whether it landed before reverting
- * anything.
+ * anything. A submission still unanswered at `timeoutMs` is abandoned with a
+ * typed {@link SubmissionTimeout}, and the caller — `submitTx` in `./wallet.ts`
+ * — asks the indexer whether it landed before reverting anything.
  *
- * One at a time is no longer load-bearing now that no submission can disturb
- * another, and it is kept for a smaller reason: at the node's first status the
- * window is under a second, and it keeps the node from being handed several
- * transactions of this wallet's built against one view of its coins at once.
+ * One at a time is no longer what keeps submissions safe from each other, and
+ * it is kept for a smaller reason: at the node's first status the window is
+ * under a second, and it keeps the node from being handed several transactions
+ * of this wallet's built against one view of its coins at once.
  */
 export function serialiseSubmissions<TTransaction>(
-  inner: SubmissionLike<TTransaction>,
+  connection: NodeConnection,
   options: SerialisedSubmissionOptions<TTransaction>,
 ): SubmissionLike<TTransaction> {
   let tail: Promise<unknown> = Promise.resolve();
 
-  const bounded = async (transaction: TTransaction): Promise<unknown> => {
+  const bounded = async (transaction: TTransaction): Promise<{ txHash: string }> => {
     options.onStep?.('submitting');
     const startedAt = Date.now();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let onAbort: (() => void) | null = null;
     const signal = options.signal?.();
     try {
-      return await new Promise((settle, fail) => {
+      const txHash = await new Promise<string>((settle, fail) => {
         timer = setTimeout(() => fail(new SubmissionTimeout(Date.now() - startedAt)), options.timeoutMs);
         if (signal) {
           if (signal.aborted) {
@@ -301,8 +307,11 @@ export function serialiseSubmissions<TTransaction>(
         /* The underlying promise is merely stopped being waited on. Its
            eventual rejection is swallowed here rather than left to crash the
            process as an unhandled rejection. */
-        void inner.submitTransaction(transaction).then(settle, fail);
+        void connection
+          .send((transaction as unknown as Serialisable).serialize())
+          .then(settle, fail);
       });
+      return { txHash };
     } finally {
       if (timer) clearTimeout(timer);
       /* Removed on EVERY path, not just on abort. One job submits several
@@ -332,7 +341,7 @@ export function serialiseSubmissions<TTransaction>(
       options.log?.('[job] the node acknowledged this transaction');
       return result;
     },
-    close: () => inner.close(),
+    close: () => connection.close(),
   };
 }
 
@@ -347,5 +356,5 @@ export function serialisedSubmissionService<TTransaction>(
   config: { relayURL: URL },
   options: SerialisedSubmissionOptions<TTransaction>,
 ): SubmissionLike<TTransaction> {
-  return serialiseSubmissions(persistentNodeSubmission<TTransaction>(config), options);
+  return serialiseSubmissions(polkadotConnection(config), options);
 }
