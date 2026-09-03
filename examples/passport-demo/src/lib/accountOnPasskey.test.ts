@@ -283,12 +283,21 @@ describe('aliasFromRecoveredAccount', () => {
       status: 'registered',
       // No transaction ids: nothing happened on THIS device to have ids for.
       recovered: true,
-      // This browser has not watched the name answer, and does not pretend to.
-      registryConfirmed: false,
       resolverTarget: 'contract',
       resolverTargetHex: 'b'.repeat(64),
       updatedAt: NOW,
     });
+  });
+
+  it('claims nothing about the registry, in either direction', () => {
+    /* `false` is a restore's claim, and the surface that renders it answers
+       with a restore's sentence — including a promise to re-check that nothing
+       re-checks a recovered record. Absent is the state this record is in. */
+    const record = aliasFromRecoveredAccount(
+      { address: 'b'.repeat(64), network: 'stagenet', alias: 'passportwalk' },
+      NOW,
+    );
+    expect(record && 'registryConfirmed' in record).toBe(false);
   });
 
   it('restores nothing for an account with no name', () => {

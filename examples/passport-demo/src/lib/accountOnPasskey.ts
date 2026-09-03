@@ -283,12 +283,18 @@ export function accountFromBlob(
  * The alias record a recovered account restores, or `null` when the blob named
  * no name to restore.
  *
- * `registryConfirmed: false` is the whole of the honesty here. The name is on
- * chain — that is what a claim means, and the resolver it points at is the
- * account this record was read beside — but THIS browser has not watched the
- * registry answer for it, and a record that said otherwise would be inventing a
- * check nobody ran. `resolverTarget: 'contract'` is not a guess either: a blob
- * is only ever written for an account-custody contract.
+ * `recovered: true` is the whole of the honesty here: this browser did not
+ * watch the name being registered, it read it off a passkey, so the record
+ * carries no transaction ids and says why. `resolverTarget: 'contract'` is not
+ * a guess either — a blob is only ever written for an account-custody contract.
+ *
+ * `registryConfirmed` is deliberately ABSENT rather than `false`. Absent is the
+ * state this record is actually in: nobody has asked the registry about it,
+ * either way. `false` is a different claim — it is what a RESTORE writes, and
+ * the surface that renders it says so in a restore's words, promising a
+ * re-check on the next open that a recovered record is not queued for. A record
+ * that triggers a promise nothing will keep is worse than one that says
+ * nothing, so this says nothing.
  */
 export function aliasFromRecoveredAccount(
   account: AccountFromBlobAccount,
@@ -303,7 +309,6 @@ export function aliasFromRecoveredAccount(
     /* No transaction ids, and the flag that says why: this device did not
        watch the name being registered, it read it off a passkey. */
     recovered: true,
-    registryConfirmed: false,
     resolverTarget: 'contract',
     resolverTargetHex: account.address,
     updatedAt: now,
@@ -321,7 +326,6 @@ export interface RecoveredAliasRecord {
   network: string;
   status: 'registered';
   recovered: true;
-  registryConfirmed: false;
   resolverTarget: 'contract';
   resolverTargetHex: string;
   updatedAt: string;
