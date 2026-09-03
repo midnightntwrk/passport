@@ -28,12 +28,54 @@
  * ledger is keyed on it; and the route sits behind the same rate limiter and
  * admission slot as every other spend.
  *
+ * WHAT IT PAYS, AND WHY IT IS NOT mUSD. Until 2026/09/03 the payout leg was
+ * the account funder's own mUSD grant, and against a Passport that had already
+ * been activated — which is every Passport, since activation opens an account
+ * holding mUSD — the node refused the `deposit_shielded` with `1010: Invalid
+ * Transaction`. The deployed account contract will not take a further coin of a
+ * colour it already carries in some states. The `/gift-nft` leg, whose only
+ * difference is that its colour is new to the account, went through against
+ * those same accounts on the same day.
+ *
+ * So the desk sells a colour of its OWN: {@link SWAP_SEPARATOR_LABEL}, minted
+ * by the same permissionless faucet through the same mint → deposit engine in
+ * `./gift.ts`, and named {@link SWAP_ASSET_SYMBOL} by the client's colour
+ * registry so it renders as a currency on the token table rather than as an
+ * anonymous 64 characters. That is a way ROUND the refusal for the demo, not a
+ * fix to it: a Passport that has swapped once already holds sUSD, and its
+ * second swap will meet the same 1010. The route answers that in a sentence
+ * (`payout-failed`) rather than a 500, and nothing is recorded, so the payment
+ * may be presented again once the contract can take it.
+ *
  * The ledger is `swaps-<network>.json` beside the accounts ledger, and it is
  * the idempotency gate: a repeated `POST /swap` for a hash already served
  * returns the same two transaction hashes rather than paying a second lot.
  */
 
 import type { JsonLedger } from './ledgers.js';
+
+/* -------------------------------------------------------------------------- */
+/* The asset                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The domain separator the swap's payout is minted under, which IS its colour:
+ * the faucet computes `tokenType(separator, kernel.self())`, so a separator
+ * nothing has ever minted under is a colour no account has ever held.
+ *
+ * Against the stagenet faucet `4fc92e15…be78e92f` this is
+ * `a62e273dda9a4a288068dec91c3b6ce8ca10fd085703469ac371b7c415884d3b`, pinned by
+ * `test/swap.test.ts` and by `passport-demo/src/lib/colour.ts`. A different
+ * faucet is a different colour, and the client would correctly fall back to
+ * showing it unnamed rather than mislabelling somebody else's money.
+ */
+export const SWAP_SEPARATOR_LABEL = 'passport-swap-musd';
+
+/** What the client's registry calls that colour, and what the desk quotes in. */
+export const SWAP_ASSET_SYMBOL = 'sUSD';
+
+/** The line under the ticker on the token table. */
+export const SWAP_ASSET_NAME = 'Swap dollar';
 
 /* -------------------------------------------------------------------------- */
 /* The rate                                                                   */

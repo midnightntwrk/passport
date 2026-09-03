@@ -58,6 +58,28 @@ export const NIGHT_COLOUR_HEX = '0'.repeat(64);
 export const MUSD_COLOUR_HEX =
   '1a2917fbed8b5ce44d12ebc7d337689045f6c96a6bbd39cf3d8691ab310ef6a6';
 
+/**
+ * The swap desk's own colour on stagenet — what Passport Swap pays out.
+ *
+ * A SEPARATE COLOUR FROM mUSD, and not a cosmetic choice: the deployed account
+ * contract refuses a `deposit_shielded` of a colour the account already holds
+ * in some states, and every activated Passport already holds mUSD, so a swap
+ * that paid mUSD was refused by the node with `1010: Invalid Transaction`. The
+ * balancer therefore mints the swap's payout under its own domain separator,
+ * `passport-swap-musd`, against the same stagenet faucet `4fc92e15…be78e92f`
+ * — `rawTokenType(separator, faucet)`, printed by
+ * `passport-balancer/ops/gift-nft.ts --separator passport-swap-musd --dry-run`
+ * on the droplet on 2026/09/03 and pinned by `test/swap.test.ts` on the other
+ * side of the boundary, so the two cannot drift.
+ *
+ * It is NAMED here rather than left anonymous because it is a currency: a
+ * hundred of them is a balance somebody spends down, not a one-of-a-kind, and
+ * {@link classifyHolding} files a named colour on the token table however
+ * little of it is held. That is exactly what naming it is for.
+ */
+export const SUSD_COLOUR_HEX =
+  'a62e273dda9a4a288068dec91c3b6ce8ca10fd085703469ac371b7c415884d3b';
+
 /** What a colour is called on screen. */
 export interface TokenIdentity {
   /** What leads the row — a ticker, or `Token · 1a29…` for a colour we cannot name. */
@@ -79,11 +101,18 @@ export interface TokenIdentity {
   known: boolean;
 }
 
-/** Colours Passport can name without asking anybody. */
+/**
+ * Colours Passport can name without asking anybody.
+ *
+ * Zero decimals for every shielded colour here, for the reason
+ * {@link TokenIdentity.decimals} gives: a shielded colour carries no decimal
+ * scale anywhere on the ledger, so an amount is a whole count of its own units.
+ */
 const KNOWN_COLOURS: Readonly<Record<string, { symbol: string; name: string; decimals: number }>> =
   {
     [NIGHT_COLOUR_HEX]: { symbol: 'NIGHT', name: 'native token', decimals: 6 },
     [MUSD_COLOUR_HEX]: { symbol: 'mUSD', name: 'stablecoin', decimals: 0 },
+    [SUSD_COLOUR_HEX]: { symbol: 'sUSD', name: 'Swap dollar', decimals: 0 },
   };
 
 /**

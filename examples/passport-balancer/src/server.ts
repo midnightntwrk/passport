@@ -186,12 +186,15 @@ import {
 } from './wallet.js';
 import { activationLegs, GRANT_RETRY_DELAY_MS, shouldRetryGrant } from './activationLegs.js';
 import {
+  createColourPayer,
   createGiftDesk,
   giftLedgerOf,
   type GiftDesk,
   type GiftEntry,
 } from './gift.js';
 import {
+  SWAP_ASSET_SYMBOL,
+  SWAP_SEPARATOR_LABEL,
   createSwapDesk,
   swapLedgerOf,
   verifyPaymentOnChain,
@@ -2355,33 +2358,44 @@ async function main(): Promise<void> {
    * refusal that endpoint makes and the watchdog needs to learn nothing new.
    */
   /**
-   * The swap desk. It sells one fixed lot of the asset for a fixed price in
-   * NIGHT, and pays out through the account funder's existing asset path — so
-   * it inherits the mint, the spare coin, and the read-back this service
-   * already trusts. Everything it decides lives in `./swap.ts`.
+   * The swap desk. It sells one fixed lot of sUSD for a fixed price in NIGHT,
+   * and pays out through the same mint → `deposit_shielded` engine the gift
+   * desk uses, under a separator of its OWN — because the account contract
+   * refuses a second coin of a colour an account already holds, and every
+   * activated Passport already holds mUSD. `./swap.ts` sets out that refusal
+   * and what it costs. Everything the desk decides lives there too.
    */
+  const swapPayer = createColourPayer({
+    config,
+    wallet,
+    label: SWAP_SEPARATOR_LABEL,
+    name: SWAP_ASSET_SYMBOL,
+    amount: config.assetGrant,
+  });
   const swapDesk: SwapDesk = createSwapDesk({
     networkId: config.networkId,
     depositTo: wallet.address,
-    assetSymbol: accountFunder?.assetSymbol ?? ASSET_SYMBOL,
-    assetLot: accountFunder?.assetGrant ?? 0n,
-    assetAvailable: accountFunder?.assetAvailable ?? false,
-    assetUnavailableReason:
-      accountFunder?.assetUnavailableReason ?? accountFunderUnavailableReason,
+    assetSymbol: SWAP_ASSET_SYMBOL,
+    assetLot: config.assetGrant,
+    assetAvailable: swapPayer.available,
+    assetUnavailableReason: swapPayer.unavailableReason,
     ledger: swapLedgerOf(swapLedger),
     verifyPayment: (txHash) => verifyPaymentOnChain(config.indexerHttpUrl, txHash),
     payOut: async (account) => {
-      const funder = accountFunder;
-      if (!funder) throw new Error(accountFunderUnavailableReason);
-      const funded = await funder.fundAsset(account);
+      const paid = await swapPayer.payInto(account);
       return {
-        depositTxHash: funded.depositTxHash,
-        mintTxHash: funded.mintTxHash,
-        amount: funded.amount,
+        depositTxHash: paid.depositTx,
+        mintTxHash: paid.mintTx,
+        amount: paid.amount,
       };
     },
     normaliseAccount: rawContractAddress,
   });
+  if (swapPayer.available) {
+    console.log(`[swap] lots of ${config.assetGrant} ${SWAP_ASSET_SYMBOL} mint under colour ${swapPayer.colourHex}`);
+  } else {
+    console.warn(`[swap] the payout leg is DISABLED: ${swapPayer.unavailableReason}`);
+  }
 
   /**
    * The gift desk. `../ops/gift-nft.ts` does the same two legs with the unit

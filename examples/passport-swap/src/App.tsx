@@ -110,7 +110,7 @@ export function App() {
   const loadQuote = useCallback(async () => {
     setQuoteError(null);
     try {
-      setQuote((await askDesk('/swap/quote?from=NIGHT&to=mUSD')) as Quote);
+      setQuote((await askDesk('/swap/quote?from=NIGHT&to=sUSD')) as Quote);
     } catch (cause) {
       setQuote(null);
       setQuoteError(cause instanceof Error ? cause.message : 'The desk is not answering.');

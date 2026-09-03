@@ -17,6 +17,7 @@ import {
   GENESIS_PASS_COLOUR_HEX,
   MUSD_COLOUR_HEX,
   NIGHT_COLOUR_HEX,
+  SUSD_COLOUR_HEX,
   nftTitle,
   normalisedColourHex,
   shortColour,
@@ -74,6 +75,14 @@ describe('describeColour', () => {
     expect(describeColour(MUSD_COLOUR_HEX)).toEqual({
       symbol: 'mUSD',
       name: 'stablecoin',
+      decimals: 0,
+      known: true,
+    });
+    // The swap desk's own colour — a currency, so it belongs on the token
+    // table however little of it is held, not on the item shelf.
+    expect(describeColour(SUSD_COLOUR_HEX)).toEqual({
+      symbol: 'sUSD',
+      name: 'Swap dollar',
       decimals: 0,
       known: true,
     });
@@ -386,5 +395,31 @@ describe('the Genesis Pass on the shelves', () => {
       '815183a74a98593bf16344ef6e920313f9c57ccb2feef3f9fe944ba5c4079e26',
     );
     expect(normalisedColourHex(GENESIS_PASS_COLOUR_HEX)).toBe(GENESIS_PASS_COLOUR_HEX);
+  });
+});
+
+describe('the swap desk’s colour', () => {
+  it('is the hex the balancer mints, pinned on both sides of the boundary', () => {
+    // `rawTokenType(separator "passport-swap-musd", faucet 4fc92e15…be78e92f)`,
+    // printed by `passport-balancer/ops/gift-nft.ts --dry-run` on the droplet on
+    // 2026/09/03 and asserted against the same function in
+    // `passport-balancer/test/swap.test.ts`. This side pins the literal, so a
+    // change to either half fails here rather than showing a hundred sUSD as
+    // `Token · a62e…`.
+    expect(SUSD_COLOUR_HEX).toBe(
+      'a62e273dda9a4a288068dec91c3b6ce8ca10fd085703469ac371b7c415884d3b',
+    );
+  });
+
+  it('is a token on the balance table, not an item, at any amount', () => {
+    // The item rule is "one unit of a colour nothing can name". Naming it is
+    // exactly what keeps a swap payout off the item shelf.
+    expect(classifyHolding({ colourHex: SUSD_COLOUR_HEX, amount: 100n })).toBe('token');
+    expect(classifyHolding({ colourHex: SUSD_COLOUR_HEX, amount: 1n })).toBe('token');
+    expect(describeItem(SUSD_COLOUR_HEX)).toBeNull();
+  });
+
+  it('is a different colour from mUSD, which is the whole point of it', () => {
+    expect(SUSD_COLOUR_HEX).not.toBe(MUSD_COLOUR_HEX);
   });
 });

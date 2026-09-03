@@ -13,7 +13,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  SWAP_ASSET_SYMBOL,
   SWAP_PRICE_ATOMIC,
+  SWAP_SEPARATOR_LABEL,
   createSwapDesk,
   formatAtomicNight,
   parseNightAmount,
@@ -21,6 +23,21 @@ import {
   type SwapEntry,
   type SwapLedger,
 } from '../src/swap.js';
+import { giftColourHex, separatorBytes } from '../ops/gift-nft.js';
+
+/** `ASSET_FAUCET_DEFAULTS.stagenet` in `../src/config.ts`. */
+const STAGENET_FAUCET = '4fc92e152e8d854ef9337275504244e18bd6e3d7d41fd81ed2dabf62be78e92f';
+
+/**
+ * The colour the swap pays, as `passport-demo/src/lib/colour.ts` pins it.
+ *
+ * Printed by `ops/gift-nft.ts --separator passport-swap-musd --dry-run` on the
+ * droplet on 2026/09/03. This is the one assertion that keeps the desk and the
+ * client's token table talking about the same money: change the separator or
+ * the faucet and this fails loudly, rather than the demo quietly paying out a
+ * colour Passport shows as `Token · a62e…`.
+ */
+const SUSD_COLOUR = 'a62e273dda9a4a288068dec91c3b6ce8ca10fd085703469ac371b7c415884d3b';
 
 const ACCOUNT = 'ab'.repeat(32);
 const PAYMENT = 'cd'.repeat(32);
@@ -45,7 +62,7 @@ function desk(options: { verdict?: PaymentVerdict; ledger?: SwapLedger } = {}) {
   const made = createSwapDesk({
     networkId: 'stagenet',
     depositTo: 'mn_addr_test1sponsor',
-    assetSymbol: 'mUSD',
+    assetSymbol: SWAP_ASSET_SYMBOL,
     assetLot: 100n,
     assetAvailable: true,
     assetUnavailableReason: null,
@@ -67,12 +84,13 @@ function desk(options: { verdict?: PaymentVerdict; ledger?: SwapLedger } = {}) {
 describe('the quote', () => {
   it('prices one lot in display NIGHT, and names where the payment goes', () => {
     const { desk: d } = desk();
-    const outcome = d.quote(new URLSearchParams('from=NIGHT&to=mUSD'));
+    const outcome = d.quote(new URLSearchParams('from=NIGHT&to=sUSD'));
     assert.equal(outcome.status, 200);
     assert.equal(outcome.body.pay, '0.0005');
     assert.equal(outcome.body.payAtomic, SWAP_PRICE_ATOMIC.toString());
     assert.equal(outcome.body.receive, '100');
-    assert.equal(outcome.body.rate, '1 NIGHT = 200000 mUSD');
+    assert.equal(outcome.body.to, 'sUSD');
+    assert.equal(outcome.body.rate, '1 NIGHT = 200000 sUSD');
     assert.equal(outcome.body.depositTo, 'mn_addr_test1sponsor');
     assert.equal(typeof outcome.body.expiresAt, 'string');
   });
@@ -87,7 +105,11 @@ describe('the quote', () => {
 
   it('refuses a pair it does not trade', () => {
     const { desk: d } = desk();
-    assert.equal(d.quote(new URLSearchParams('from=mUSD&to=NIGHT')).body.error, 'unsupported-pair');
+    assert.equal(d.quote(new URLSearchParams('from=sUSD&to=NIGHT')).body.error, 'unsupported-pair');
+    /* mUSD is the colour it USED to pay, and the one it must now refuse to
+       quote: an app still asking for it is an app that would be told a price
+       for money this desk no longer sells. */
+    assert.equal(d.quote(new URLSearchParams('from=NIGHT&to=mUSD')).body.error, 'unsupported-pair');
   });
 
   it('reads NIGHT as exact units, never a float', () => {
@@ -152,7 +174,7 @@ describe('settling a payment', () => {
     const d = createSwapDesk({
       networkId: 'stagenet',
       depositTo: 'mn_addr_test1sponsor',
-      assetSymbol: 'mUSD',
+      assetSymbol: SWAP_ASSET_SYMBOL,
       assetLot: 100n,
       assetAvailable: true,
       assetUnavailableReason: null,
@@ -180,5 +202,25 @@ describe('settling a payment', () => {
       'wrong-network',
     );
     assert.equal(payouts(), 0);
+  });
+});
+
+describe('the colour it pays', () => {
+  it('is the one the client names sUSD, and never mUSD’s own', () => {
+    assert.equal(giftColourHex(SWAP_SEPARATOR_LABEL, STAGENET_FAUCET), SUSD_COLOUR);
+  });
+
+  it('is a printable-ASCII label, zero-padded to 32 bytes', () => {
+    const bytes = separatorBytes(SWAP_SEPARATOR_LABEL);
+    assert.equal(bytes.length, 32);
+    assert.equal(
+      new TextDecoder().decode(bytes.slice(0, SWAP_SEPARATOR_LABEL.length)),
+      SWAP_SEPARATOR_LABEL,
+    );
+    assert.ok(bytes.slice(SWAP_SEPARATOR_LABEL.length).every((byte) => byte === 0));
+    /* mUSD's separator is a single byte 6. A collision here would make the
+       swap mint the sponsor's stablecoin, which is the refusal it exists to
+       get round. */
+    assert.notEqual(bytes[0], 6);
   });
 });

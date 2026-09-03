@@ -27,12 +27,23 @@ The desk takes NIGHT and pays the stablecoin. That is not a preference: the
 payment protocol a partner app may use carries exactly one intent — a positive
 NIGHT transfer to an address the user's Passport approves — so the leg an app
 is allowed to ask for is the NIGHT leg. The other leg is the desk's, and it
-runs through the sponsor's existing asset path.
+runs through the sponsor's own mint.
+
+**Why sUSD and not mUSD.** The desk paid the sponsor's stablecoin until
+2026/09/03, and the node refused the `deposit_shielded` into any account that
+already held mUSD with `1010: Invalid Transaction` — which is every activated
+Passport, since activation opens an account holding mUSD. So the desk mints a
+colour of its own, `passport-swap-musd`, from the same faucet through the same
+path, and Passport's colour registry names it sUSD. That is a way round the
+refusal for the demo, not a fix to it: a second swap into the same Passport
+will meet the same 1010, and the route answers it in a sentence rather than a
+500.
 
 1. **Sign in.** A profile request for `displayName` and `passportContract`. The
    account address is what a settlement needs; without it the app says so.
-2. **The quote.** `GET /swap/quote?from=NIGHT&to=mUSD` — price, lot, rate, and
-   the address the payment goes to.
+2. **The quote.** `GET /swap/quote?from=NIGHT&to=sUSD` — price, lot, rate, and
+   the address the payment goes to. On stagenet that is 0.0005 NIGHT → 100
+   sUSD.
 3. **Swap.** A payment request for the quoted price to the quoted address.
    Passport shows its own consent sheet; this page never sees an approval.
 4. **Settle.** `POST /swap { account, txHash, amount }`. The desk checks the
