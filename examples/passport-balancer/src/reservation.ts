@@ -83,6 +83,8 @@
  * See {@link WalletReservation.hold} — without it the priority evaporates the
  * moment the wait begins, which is exactly when it is worth the most.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 export const SpendPriority = {
   /** Fee sponsorship, activation grants, housekeeping. */
   Normal: 0,
@@ -90,9 +92,100 @@ export const SpendPriority = {
   Registration: 10,
 } as const;
 
+/**
+ * A spend job that was abandoned because it stopped making progress.
+ *
+ * The lane is the scarce thing. Two jobs went silent holding one on 2026/09/02
+ * — 23:03:31 and 23:46:30 UTC — and both times the queue behind them waited
+ * until an operator restarted the service, because nothing in this process
+ * could tell "proving, which is minutes" from "wedged, which is for ever". The
+ * distinction this class rests on is the PROVER: a job that reports no step and
+ * has nothing of ours at the prover is not slow.
+ */
+export class SpendJobStalled extends Error {
+  readonly job: string;
+  readonly step: string;
+  readonly stalledMs: number;
+
+  constructor(job: string, label: string, step: string, stalledMs: number) {
+    super(
+      `${label} made no progress for ${Math.round(stalledMs / 1_000)} s with nothing at the prover — last step ${step} (${job}). Its lane has been given back.`,
+    );
+    this.name = 'SpendJobStalled';
+    this.job = job;
+    this.step = step;
+    this.stalledMs = stalledMs;
+  }
+}
+
+/** Matches {@link SpendJobStalled} across a bundle boundary. */
+export function isSpendJobStalled(cause: unknown): boolean {
+  if (cause instanceof SpendJobStalled) return true;
+  return cause instanceof Error && cause.name === 'SpendJobStalled';
+}
+
+/** A job that has STARTED — one lane, one record, until it settles. */
+export interface RunningJob {
+  id: string;
+  label: string;
+  priority: number;
+  startedAt: number;
+  /** When {@link progress} was last called, or when the job started. */
+  lastProgressAt: number;
+  /** The name of that step: `started`, `balanced`, `proved`, `submitted`, … */
+  lastStep: string;
+  /**
+   * Aborted by the watchdog. Everything a job waits on that CAN be unwound —
+   * the submission wrapper, the confirmation deadlines — races against it, so
+   * the abort is not merely bookkeeping.
+   */
+  abort: AbortController;
+  /**
+   * The clock its own queue keeps, so `progress` stamps the record with the
+   * same time the watchdog reads it by. A job stamped from `Date.now()` and
+   * swept against an injected clock is a watchdog that never fires — which is
+   * the whole defect, reproduced in the fix.
+   */
+  now: () => number;
+}
+
+/**
+ * The running job, for code that is nowhere near the queue.
+ *
+ * Threaded through `AsyncLocalStorage` rather than through a parameter because
+ * the callers that need to report a step are inside midnight-js: `balanceTx`
+ * and `submitTx` are called by `deployContract`, which this service hands a
+ * provider set to and never a job handle.
+ */
+const runningJob = new AsyncLocalStorage<RunningJob>();
+
+export const currentJob = (): RunningJob | undefined => runningJob.getStore();
+
+/**
+ * Records that the running job has reached a step. Silent when there is no job
+ * — every one of these call sites is also reachable from a probe or a test.
+ */
+export function progress(step: string, log?: (line: string) => void): void {
+  const job = runningJob.getStore();
+  if (!job) return;
+  job.lastProgressAt = job.now();
+  job.lastStep = step;
+  (log ?? ((line: string) => console.log(line)))(`[job] ${job.label} ${step} (${job.id})`);
+}
+
+/** What `/status` publishes, and what the droplet watchdog matches a stall on. */
+export interface RunningJobSummary {
+  id: string;
+  label: string;
+  step: string;
+  ageMs: number;
+  sinceProgressMs: number;
+}
+
 /** One job on the queue, waiting its turn. */
 interface QueuedJob {
   priority: number;
+  label: string;
   start: () => void;
 }
 
@@ -124,7 +217,7 @@ export interface WalletReservation {
    * order they arrived in, so the queue is still first-come, first-served for
    * everything that does not say otherwise. See {@link SpendPriority}.
    */
-  exclusive<T>(task: () => Promise<T>, options?: { priority?: number }): Promise<T>;
+  exclusive<T>(task: () => Promise<T>, options?: { priority?: number; label?: string }): Promise<T>;
   /**
    * Claims the NEXT free lane for a job that is not on the queue yet.
    *
@@ -152,10 +245,19 @@ export interface WalletReservation {
    * that took it. Releasing is idempotent and drains the queue.
    */
   hold(priority: number): () => void;
-  /** Both counters, for `/status` and for the tests. */
-  counts(): { reserved: number; jobs: number };
+  /**
+   * Both counters and the running jobs, for `/status` and for the tests.
+   *
+   * `running` is what makes a silent job visible from outside this process: the
+   * droplet watchdog reads `jobsRunning: 1` with an idle prover and no step for
+   * minutes and restarts the unit, which is what an operator had to do by hand
+   * twice on 2026/09/02.
+   */
+  counts(): { reserved: number; jobs: number; running: RunningJobSummary[] };
   /** How many spend jobs may run at once RIGHT NOW. See {@link WalletReservationOptions.lanes}. */
   lanes(): number;
+  /** Stops the stall watchdog. For tests and for shutdown. */
+  stop(): void;
 }
 
 export interface WalletReservationOptions {
@@ -189,6 +291,22 @@ export interface WalletReservationOptions {
    * existed: strictly one spend at a time.
    */
   lanes?: () => number;
+  /**
+   * How long a RUNNING job may report no step before it is aborted, with
+   * nothing of ours at the prover. Absent turns the watchdog off, which is the
+   * behaviour every test that does not ask for it keeps.
+   */
+  stallMs?: number;
+  /**
+   * False while this service has a proof outstanding. A job that is proving
+   * reports nothing for minutes and is perfectly healthy, so the watchdog never
+   * fires while this is false. Absent means "always idle".
+   */
+  proverIdle?: () => boolean;
+  /** How often the watchdog looks. */
+  watchdogIntervalMs?: number;
+  now?: () => number;
+  log?: (line: string) => void;
 }
 
 export function createWalletReservation(options: WalletReservationOptions = {}): WalletReservation {
@@ -201,8 +319,14 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
      free coins gets one lane, whose job then waits on the fee estimate — which
      is a wait it can be given a budget for, unlike a stalled queue. */
   const laneCount = (): number => Math.max(1, Math.floor(lanes()));
+  const now = options.now ?? Date.now;
+  const log = options.log ?? ((line: string) => console.log(line));
   let reserved = 0;
   let jobs = 0;
+  let nextJobId = 0;
+  /* Keyed by id so an abort can find its own record, and iterated by the
+     watchdog. Entries are removed in `finish`, on every path. */
+  const running = new Map<string, RunningJob>();
   const waiting: QueuedJob[] = [];
   /* Outstanding priority holds — see `hold`. A multiset rather than a counter
      per level, because the only question ever asked of it is its maximum. */
@@ -247,36 +371,80 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
     }
   };
 
-  const exclusive = <T>(task: () => Promise<T>, options: { priority?: number } = {}): Promise<T> => {
-    const priority = options.priority ?? SpendPriority.Normal;
+  const exclusive = <T>(
+    task: () => Promise<T>,
+    jobOptions: { priority?: number; label?: string } = {},
+  ): Promise<T> => {
+    const priority = jobOptions.priority ?? SpendPriority.Normal;
+    const label = jobOptions.label ?? 'spend';
     return new Promise<T>((settle, fail) => {
+      nextJobId += 1;
+      const id = `job-${nextJobId}`;
+      log(`[job] ${label} queued (${id})`);
       /* Inserted BEFORE the first waiting job of lower priority, and after
          every job of equal or higher priority. That is what makes equal
          priorities first-come, first-served: the scan stops at the first
          strictly-lower entry, so an arrival never overtakes its own peers. */
       const entry: QueuedJob = {
         priority,
+        label,
         start: () => {
           jobs += 1;
+          const startedAt = now();
+          const record: RunningJob = {
+            id,
+            label,
+            priority,
+            startedAt,
+            lastProgressAt: startedAt,
+            lastStep: 'started',
+            abort: new AbortController(),
+            now,
+          };
+          running.set(id, record);
+          log(`[job] ${label} started (${id})`);
+          /* Settles ONCE, whichever of the task and the watchdog gets there
+             first. A watchdog abort rejects the caller and gives the lane back
+             immediately; the underlying task may still be waiting on something
+             the SDK cannot cancel, and its eventual settlement is discarded. */
+          let settled = false;
           const finish = (settleJob: () => void): void => {
+            if (settled) return;
+            settled = true;
+            running.delete(id);
             jobs -= 1;
             settleJob();
             drain();
           };
-          let running: Promise<T>;
+          const done = (outcome: string): void => {
+            log(`[job] ${label} ${outcome} after ${((now() - startedAt) / 1_000).toFixed(1)} s (${id})`);
+          };
+          let task_: Promise<T>;
           try {
-            running = task();
+            task_ = runningJob.run(record, task);
           } catch (cause: unknown) {
             /* A task that throws before its first await. Async functions cannot
                do this, and every caller passes one — but a queue that let a
                synchronous throw escape `exclusive` would leave `jobs` standing
                at one for ever and stall every spend after it. */
+            done('failed');
             finish(() => fail(cause));
             return;
           }
-          running.then(
-            (value) => finish(() => settle(value)),
-            (cause: unknown) => finish(() => fail(cause)),
+          record.abort.signal.addEventListener('abort', () => {
+            const cause = record.abort.signal.reason;
+            done('aborted');
+            finish(() => fail(cause));
+          });
+          task_.then(
+            (value) => {
+              if (!settled) done('done');
+              finish(() => settle(value));
+            },
+            (cause: unknown) => {
+              if (!settled) done('failed');
+              finish(() => fail(cause));
+            },
           );
         },
       };
@@ -299,13 +467,55 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
     };
   };
 
+  /* -------------------------------------------------------------------------- */
+  /* The stall watchdog                                                         */
+  /* -------------------------------------------------------------------------- */
+
+  const proverIdle = options.proverIdle ?? ((): boolean => true);
+  const stallMs = options.stallMs ?? 0;
+
+  /** One pass. Exported through nothing; the timer and the tests drive it. */
+  const sweepStalled = (): void => {
+    if (stallMs <= 0) return;
+    if (!proverIdle()) return;
+    const at = now();
+    for (const job of [...running.values()]) {
+      if (job.abort.signal.aborted) continue;
+      const idleMs = at - job.lastProgressAt;
+      if (idleMs < stallMs) continue;
+      log(
+        `[job] aborting ${job.label} after ${Math.round(idleMs / 1_000)} s with no progress — last step ${job.lastStep} (${job.id})`,
+      );
+      job.abort.abort(new SpendJobStalled(job.id, job.label, job.lastStep, idleMs));
+    }
+  };
+
+  const watchdog =
+    stallMs > 0
+      ? setInterval(sweepStalled, options.watchdogIntervalMs ?? 5_000)
+      : null;
+  watchdog?.unref();
+
   return {
     isReserved: () => reserved > 0,
     isBusy: () => jobs > 0,
     reserve,
     exclusive,
     hold,
-    counts: () => ({ reserved, jobs }),
+    counts: () => ({
+      reserved,
+      jobs,
+      running: [...running.values()].map((job) => ({
+        id: job.id,
+        label: job.label,
+        step: job.lastStep,
+        ageMs: now() - job.startedAt,
+        sinceProgressMs: now() - job.lastProgressAt,
+      })),
+    }),
     lanes: laneCount,
+    stop: () => {
+      if (watchdog) clearInterval(watchdog);
+    },
   };
 }

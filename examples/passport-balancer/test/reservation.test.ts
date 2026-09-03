@@ -20,6 +20,8 @@ import { walletAvailability } from '../src/availability.js';
 import {
   SpendPriority,
   createWalletReservation,
+  isSpendJobStalled,
+  progress,
   type WalletReservation,
 } from '../src/reservation.js';
 
@@ -139,7 +141,7 @@ describe('the wallet reservation', () => {
 
     assert.deepEqual(results, ['first', 'second']);
     assert.deepEqual(order, ['first', 'second'], 'spends must still run one at a time');
-    assert.deepEqual(reservation.counts(), { reserved: 0, jobs: 0 });
+    assert.deepEqual(reservation.counts(), { reserved: 0, jobs: 0, running: [] });
   });
 
   it('never lets two claims overlap on a single-threaded run', async () => {
@@ -234,7 +236,7 @@ describe('the wallet reservation', () => {
 
     await assert.rejects(failed, /deposit failed/);
     assert.equal(await next, 'ran anyway');
-    assert.deepEqual(reservation.counts(), { reserved: 0, jobs: 0 });
+    assert.deepEqual(reservation.counts(), { reserved: 0, jobs: 0, running: [] });
   });
 
   it('is re-entrant, because a contract call claims the wallet twice inside one job', async () => {
@@ -245,7 +247,7 @@ describe('the wallet reservation', () => {
       return submitted;
     });
     assert.equal(result, 'balanced+submitted');
-    assert.deepEqual(reservation.counts(), { reserved: 0, jobs: 0 });
+    assert.deepEqual(reservation.counts(), { reserved: 0, jobs: 0, running: [] });
   });
 });
 
@@ -551,5 +553,175 @@ describe('spend lanes', () => {
 
   it('defaults to one lane, which is the behaviour every earlier test asserts', () => {
     assert.equal(createWalletReservation().lanes(), 1);
+  });
+});
+
+/**
+ * The watchdog that gives a silent job's lane back.
+ *
+ * THE FAILURE THIS PINS DOWN. On 2026/09/02, twice, a spend job stopped making
+ * progress while holding a lane and nothing in this process noticed: 23:03:31
+ * for thirty-seven minutes and 23:46:30 for twenty-three, both ended by an
+ * operator restarting the service by hand. The queue behind them waited the
+ * whole time.
+ *
+ * The hard part is not noticing that a job is quiet — it is telling a quiet job
+ * from a working one. A contract proof is legitimately minutes long and reports
+ * nothing at all while it runs, so a watchdog on time alone would abort healthy
+ * registrations, which is a worse fault than the one it fixes. The distinction
+ * this rests on is the PROVER: a job that reports no step AND has nothing of
+ * ours at the prover is not slow, it is stuck.
+ */
+describe('the stall watchdog', () => {
+  /** A job that never finishes, and reports whatever steps the test tells it to. */
+  const silentJob = () => new Promise<never>(() => undefined);
+
+  it('aborts a job that has gone quiet with the prover idle, and frees its lane', async () => {
+    const lines: string[] = [];
+    let clock = 1_000;
+    const reservation = createWalletReservation({
+      stallMs: 100,
+      proverIdle: () => true,
+      watchdogIntervalMs: 5,
+      now: () => clock,
+      log: (line) => lines.push(line),
+    });
+
+    const stalled = reservation
+      .exclusive(async () => {
+        progress('balanced');
+        return silentJob();
+      }, { label: 'the registration of alice.night' })
+      .catch((cause: unknown) => cause);
+
+    await wait(10);
+    assert.equal(reservation.counts().jobs, 1);
+    assert.equal(reservation.counts().running[0]?.step, 'balanced');
+
+    /* Past the stall window, on the test's own clock. */
+    clock += 200;
+    const failure = await stalled;
+
+    assert.ok(isSpendJobStalled(failure), 'the caller learns why, in a type it can match');
+    assert.match((failure as Error).message, /last step balanced/);
+    assert.equal(reservation.counts().jobs, 0, 'and the lane is back');
+    assert.ok(
+      lines.some((line) => /aborting the registration of alice\.night/.test(line)),
+      'and the journal says so, which is what was missing on 2026/09/02',
+    );
+    reservation.stop();
+  });
+
+  it('lets the next job start after a stalled one is aborted', async () => {
+    /* The point of the whole exercise. A wedged job used to hold its lane until
+       an operator intervened; every registration behind it waited. */
+    let clock = 1_000;
+    const reservation = createWalletReservation({
+      lanes: () => 1,
+      stallMs: 100,
+      proverIdle: () => true,
+      watchdogIntervalMs: 5,
+      now: () => clock,
+      log: () => undefined,
+    });
+
+    const stalled = reservation.exclusive(silentJob, { label: 'wedged' }).catch(() => 'aborted');
+    let started = false;
+    const behind = reservation.exclusive(async () => {
+      started = true;
+      return 'ran';
+    }, { label: 'waiting behind it' });
+
+    await wait(10);
+    assert.equal(started, false, 'the single lane is taken');
+
+    clock += 200;
+    assert.equal(await stalled, 'aborted');
+    assert.equal(await behind, 'ran');
+    reservation.stop();
+  });
+
+  it('never aborts a job while something of ours is at the prover', async () => {
+    /* A proof is minutes of silence and perfectly healthy. Aborting one would
+       fail a registration a person is watching. */
+    let clock = 1_000;
+    const reservation = createWalletReservation({
+      stallMs: 100,
+      proverIdle: () => false,
+      watchdogIntervalMs: 5,
+      now: () => clock,
+      log: () => undefined,
+    });
+
+    const proving = reservation.exclusive(silentJob, { label: 'proving' });
+    const outcome = await Promise.race([
+      proving.catch((cause: unknown) => cause),
+      (async () => {
+        await wait(10);
+        clock += 10_000;
+        await wait(20);
+        return 'still running';
+      })(),
+    ]);
+
+    assert.equal(outcome, 'still running');
+    assert.equal(reservation.counts().jobs, 1);
+    reservation.stop();
+  });
+
+  it('never aborts a job that keeps saying what it is doing', async () => {
+    let clock = 1_000;
+    const reservation = createWalletReservation({
+      stallMs: 100,
+      proverIdle: () => true,
+      watchdogIntervalMs: 5,
+      now: () => clock,
+      log: () => undefined,
+    });
+
+    const running = reservation.exclusive(async () => {
+      for (let step = 0; step < 6; step += 1) {
+        clock += 50;
+        progress(`step-${step}`);
+        await wait(5);
+      }
+      return 'finished';
+    }, { label: 'a long but honest job' });
+
+    assert.equal(await running, 'finished');
+    reservation.stop();
+  });
+
+  it('is off unless a stall window is configured', async () => {
+    /* Every test written before the watchdog keeps its behaviour. */
+    let clock = 1_000;
+    const reservation = createWalletReservation({ now: () => clock, log: () => undefined });
+    const job = reservation.exclusive(silentJob, { label: 'unwatched' });
+    clock += 10_000_000;
+    await wait(20);
+    assert.equal(reservation.counts().jobs, 1);
+    void job.catch(() => undefined);
+    reservation.stop();
+  });
+
+  it('publishes what each running job is doing, for /status', async () => {
+    /* This is what makes a silent job visible from OUTSIDE the process: the
+       droplet watchdog reads a step and an age and can act without a person. */
+    let clock = 5_000;
+    const reservation = createWalletReservation({ now: () => clock, log: () => undefined });
+    const job = reservation.exclusive(async () => {
+      progress('submitted');
+      return silentJob();
+    }, { label: 'the activation grant for 0xabc' });
+
+    await wait(10);
+    clock += 400_000;
+    const [summary] = reservation.counts().running;
+    assert.equal(summary?.label, 'the activation grant for 0xabc');
+    assert.equal(summary?.step, 'submitted');
+    assert.equal(summary?.ageMs, 400_000);
+    assert.equal(summary?.sinceProgressMs, 400_000);
+    void job.catch(() => undefined);
+    reservation.stop();
   });
 });

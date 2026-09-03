@@ -78,7 +78,7 @@ import {
   wait,
   type ContractProvingMode,
 } from './contractRuntime.js';
-import { SpendPriority } from './reservation.js';
+import { SpendPriority, progress } from './reservation.js';
 import {
   FEE_CAPABLE_SPECKS,
   deployTransactionReference,
@@ -1025,6 +1025,7 @@ export async function createMidnamesSponsor(
             resolved.target.hex === contractAddress
           ) {
             confirmed = true;
+            progress('confirmed');
             break;
           }
         } catch {
@@ -1078,6 +1079,7 @@ export async function createMidnamesSponsor(
               },
               { label: `change_owner for ${aliasDomain(label)}`, synced: caughtUp },
             ),
+            { label: `change_owner for ${aliasDomain(label)}` },
           )
           .then((handoverTx) =>
             console.log(
