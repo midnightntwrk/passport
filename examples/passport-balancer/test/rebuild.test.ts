@@ -256,3 +256,49 @@ describe('a wallet call that never returns', () => {
     assert.equal(attempts, 2);
   });
 });
+
+/**
+ * Rebuilding while another of this sponsor's transactions is still in flight,
+ * which is how one refusal became three on 2026/09/03.
+ *
+ * 02:14:19 UTC: an activation grant refused with `Custom error: 231`, rebuilt
+ * at 02:14:46 and again at 02:14:56, refused both times — with a registration
+ * of the same wallet's submitted and unlanded throughout. Three proofs, three
+ * balancings, and a lane on a wallet with one fee-capable coin went to
+ * transactions that could not land, and the two name claims behind them reached
+ * Home at 146.5 s against a bar of 120 s.
+ */
+describe('rebuilding behind this wallet own pending transaction', () => {
+  it('waits for the pending one to land before it rebuilds', async () => {
+    let pending = 1;
+    let attempts = 0;
+    const asked: number[] = [];
+    const built = await withNodeRejectionRetry(
+      async () => {
+        attempts += 1;
+        if (attempts === 1) throw rejection();
+        return 'landed';
+      },
+      {
+        label: 'deposit_night into 48c95e1b…',
+        /* The predicate the two call sites now pass: synced, dust complete, and
+           nothing of ours in flight. */
+        synced: async () => {
+          asked.push(pending);
+          if (pending > 0) {
+            pending -= 1;
+            return false;
+          }
+          return true;
+        },
+        pollMs: 1,
+        wait: async () => {},
+        log: () => {},
+        progress: () => {},
+      },
+    );
+    assert.equal(built, 'landed');
+    assert.equal(attempts, 2, 'one rebuild, after the wait — not one per poll');
+    assert.ok(asked.length >= 2, 'and it polled until the pending transaction had landed');
+  });
+});

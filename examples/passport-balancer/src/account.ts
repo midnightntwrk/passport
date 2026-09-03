@@ -534,9 +534,32 @@ export async function createAccountFunder(
    * unshielded halves are current but whose dust wallet is still replaying
    * would rebuild against exactly the stale view that was refused.
    */
+  /**
+   * Caught up ENOUGH to rebuild a transaction the node refused.
+   *
+   * Three terms, and the third was measured on 2026/09/03. The first two are
+   * the original rule: the refusal is about the DUST the balancing selected, so
+   * the wallet must have walked the block that refused it and finished its dust
+   * scan. The third is that this service must have NOTHING OF ITS OWN still in
+   * flight.
+   *
+   * At 02:14:19 UTC an activation grant was refused with `Custom error: 231`
+   * and rebuilt twice more, at 02:14:46 and 02:14:56, and refused both times —
+   * because a registration of this sponsor's was submitted and unlanded
+   * throughout, and a rebuild that spends this wallet's DUST while another of
+   * its transactions is pending selects against a view the node has already
+   * moved past. Three attempts of proving, balancing, and a lane went to
+   * transactions that could not land, on a wallet with one fee-capable coin,
+   * and the two name claims behind them reached Home at 146.5 s against a bar
+   * of 120.
+   *
+   * Waiting for the pending one costs a block or two. Not waiting cost a
+   * minute of somebody's onboarding.
+   */
   const caughtUp = async (): Promise<boolean> => {
-    const progress = await wallet.progress();
-    return progress.isSynced && progress.dust.complete;
+    const walked = await wallet.progress();
+    if (!walked.isSynced || !walked.dust.complete) return false;
+    return (await wallet.pendingTransactionCount()) === 0;
   };
 
   /* ------------------------------------------------------------------------ */

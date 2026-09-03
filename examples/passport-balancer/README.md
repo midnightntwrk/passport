@@ -998,11 +998,19 @@ A transaction balanced one block behind the chain is refused with
 `RpcError: 1010: Invalid Transaction: Custom error: 231` (or `239`). Seen at
 15:35:43 on 2026/09/02, five seconds after the registration in front of it
 landed. `withNodeRejectionRetry` (in `src/account.ts`, used by both
-`src/account.ts` and `src/midnames.ts`) waits for `isSynced` **and**
-`dust.complete` — the rejection is about the DUST the balancing selected — then
-**rebuilds** from a fresh `findDeployedContract`/`callTx`, because the bytes are
-what the node refused and resending them would fail identically for ever. Three
-attempts, a two-minute wait each. Anything that is not a node rejection is
+`src/account.ts` and `src/midnames.ts`) waits for `isSynced`,
+`dust.complete`, **and nothing of this sponsor's own still in flight** — the
+rejection is about the DUST the balancing selected — then **rebuilds** from a
+fresh `findDeployedContract`/`callTx`, because the bytes are what the node
+refused and resending them would fail identically for ever. Three attempts, a
+two-minute wait each.
+
+The third term was measured on 2026/09/03: a grant refused at 02:14:19 was
+rebuilt at 02:14:46 and 02:14:56 and refused both times, because a registration
+of the same wallet's was submitted and unlanded throughout. Three proofs, three
+balancings, and a lane on a wallet with one fee-capable coin went to
+transactions that could not land, and the two claims behind them reached Home at
+146.5 s against a bar of 120. Waiting for the pending one costs a block or two. Anything that is not a node rejection is
 rethrown untouched on the first attempt.
 
 It wraps `deposit_night`, `deposit_shielded`, the resolver deploy, and
