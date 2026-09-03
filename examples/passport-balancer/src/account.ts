@@ -84,6 +84,7 @@ import {
   managedBuildPath,
   nativeColourBytes,
   publicDataProviderFor,
+  queryIndexerHeight,
   rawContractAddress,
   resolveTransactionHash,
   transactionIdentifier,
@@ -319,11 +320,52 @@ export function isRebuildable(cause: unknown): boolean {
   );
 }
 
+/**
+ * The block a failed build was invalidated by, when the failure says.
+ *
+ * A `CallTxFailedError` carries `finalizedTxData.blockHeight`: the block that
+ * landed the transaction and discarded it, and the block the registry view the
+ * next proof is built against must include. Nothing else carries a height —
+ * a `1010` is refused before any block — so the caller supplies the chain's
+ * height at the moment of refusal instead (`chainHeight`).
+ */
+export function landedHeight(cause: unknown): number | null {
+  let current: unknown = cause;
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    if (typeof current === 'object') {
+      const height = (current as { finalizedTxData?: { blockHeight?: unknown } }).finalizedTxData
+        ?.blockHeight;
+      if (typeof height === 'number' && Number.isFinite(height)) return height;
+      if (typeof height === 'bigint') return Number(height);
+    }
+    const message = current instanceof Error ? current.message : String(current);
+    const match = /"blockHeight":\s*"?(\d+)"?/.exec(message);
+    if (match) return Number(match[1]);
+    current = current instanceof Error ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return null;
+}
+
 export interface NodeRejectionRetryOptions {
   /** Builds and submits the transaction. Called afresh on every attempt. */
   label: string;
   /** `true` once the wallet has caught up with the block that refused it. */
   synced: () => Promise<boolean>;
+  /**
+   * The indexer's latest block. When given, a rebuild does not start until
+   * this has reached the height that invalidated the previous build — see
+   * {@link landedHeight} — or `heightWaitMs` has passed, in which case the
+   * rebuild goes ahead with a journal line saying so.
+   */
+  indexerHeight?: () => Promise<number | null>;
+  /**
+   * The node's height now. Read at the moment of a `1010` refusal, which
+   * carries no height of its own, and used as the target the indexer must
+   * reach before that refusal is worth rebuilding against.
+   */
+  chainHeight?: () => Promise<number | null>;
+  /** The bound on the indexer wait. One minute by default. */
+  heightWaitMs?: number;
   attempts?: number;
   /** How long to wait for that, before giving up and reporting the rejection. */
   budgetMs?: number;
@@ -390,6 +432,43 @@ export async function withNodeRejectionRetry<T>(
          and recovered on its own, 35 s inside the window. */
       const step = options.progress ?? progress;
       step(`rebuilding after ${named.step}`);
+      /* THE INDEXER FIRST, THEN THE WALLET. `synced` says the wallet has applied
+         everything the indexer has; it does not say the indexer has the block
+         that made the last build wrong. On stagenet the indexer trails the node
+         by 13–14 s, and on 2026/09/03 a rebuild against a registry view that
+         had not yet seen block 293959 failed exactly as the build before it
+         had. So the height that invalidated the last build — carried by a
+         landed failure, or read from the node at a refusal — is waited for at
+         the indexer, bounded, before the wallet wait begins. */
+      if (options.indexerHeight) {
+        const target =
+          landedHeight(cause) ?? (options.chainHeight ? await options.chainHeight() : null);
+        if (target !== null) {
+          const heightWaitMs = options.heightWaitMs ?? 60_000;
+          const heightDeadline = Date.now() + heightWaitMs;
+          let reached = false;
+          for (;;) {
+            let seen: number | null = null;
+            try {
+              seen = await options.indexerHeight();
+            } catch {
+              // An unreachable indexer has not reached anything; asked again below.
+            }
+            if (seen !== null && seen >= target) {
+              reached = true;
+              break;
+            }
+            step(`waiting for the indexer to reach block ${target}`);
+            if (Date.now() >= heightDeadline) break;
+            await pause(pollMs);
+          }
+          if (!reached) {
+            log(
+              `[retry] ${options.label}: the indexer has not reached block ${target} within ${Math.round(heightWaitMs / 1_000)} s — rebuilding anyway, against whatever view it has`,
+            );
+          }
+        }
+      }
       const deadline = Date.now() + budgetMs;
       for (;;) {
         let caught = false;
@@ -622,6 +701,11 @@ export async function createAccountFunder(
     const walked = await wallet.progress();
     if (!walked.isSynced || !walked.dust.complete) return false;
     return (await wallet.pendingTransactionCount()) === 0;
+  };
+  /** The rebuild's wait on the indexer, for every retry in this module. */
+  const heightGate = {
+    indexerHeight: () => queryIndexerHeight(config.indexerHttpUrl),
+    chainHeight: () => wallet.nodeHeight(),
   };
 
   /* ------------------------------------------------------------------------ */
@@ -1041,7 +1125,7 @@ export async function createAccountFunder(
             const deposit = await callTx.deposit_night(colour, config.accountGrantAtomic);
             return transactionIdentifier(deposit);
           },
-          { label: `deposit_night into ${address}`, synced: caughtUp },
+          { label: `deposit_night into ${address}`, synced: caughtUp, ...heightGate },
         );
       } catch (cause) {
         /* A DUST shortfall is not a failed deposit — nothing was built, nothing
@@ -1164,7 +1248,7 @@ export async function createAccountFunder(
           });
           return transactionIdentifier(deposit);
           }, { label: `deposit_shielded into ${address}` }),
-          { label: `deposit_shielded into ${address}`, synced: caughtUp },
+          { label: `deposit_shielded into ${address}`, synced: caughtUp, ...heightGate },
         );
       } catch (cause) {
         throw new AccountFundingError(

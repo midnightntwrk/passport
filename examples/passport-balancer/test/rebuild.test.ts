@@ -26,6 +26,7 @@ import {
   isLandedFailure,
   isNodeRejection,
   isRebuildable,
+  landedHeight,
   withNodeRejectionRetry,
 } from '../src/account.js';
 import { withDeadline } from '../src/contractRuntime.js';
@@ -385,5 +386,164 @@ describe('recognising a transaction that landed and was not applied', () => {
     assert.match(log[0]!, /the chain landed but did not apply register_domain_for/);
     assert.doesNotMatch(log[0]!, /the node refused/, 'the node accepted these bytes');
     assert.equal(steps[0], 'rebuilding after an on-chain failure');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The indexer must have the block that made the last build wrong             */
+/* -------------------------------------------------------------------------- */
+
+describe('reading the height that invalidated a build', () => {
+  it('takes it from a landed failure, as a number, a bigint, or the message alone', () => {
+    assert.equal(landedHeight(landedFailure('FailFallible')), 293959);
+    const asBigint = landedFailure('FailFallible') as Error & { finalizedTxData: { blockHeight: unknown } };
+    asBigint.finalizedTxData.blockHeight = 293959n;
+    assert.equal(landedHeight(asBigint), 293959);
+    assert.equal(landedHeight(new Error(landedFailure('FailEntirely').message)), 293959);
+    assert.equal(landedHeight(new Error('outer', { cause: landedFailure('FailFallible') })), 293959);
+  });
+
+  it('has nothing to say about a refusal, which happened before any block', () => {
+    assert.equal(landedHeight(rejection()), null);
+    assert.equal(landedHeight(undefined), null);
+  });
+});
+
+describe('waiting for the indexer before a rebuild', () => {
+  it('does not rebuild until the indexer reports the landed height', async () => {
+    const heights = [293_950, 293_958, 293_959, 293_960];
+    const asked: number[] = [];
+    const steps: string[] = [];
+    let builds = 0;
+    const landed = await withNodeRejectionRetry(
+      async () => {
+        builds += 1;
+        if (builds === 1) throw landedFailure('FailFallible');
+        return 'tx-2';
+      },
+      {
+        label: 'register_domain_for hcmtkxcwhntzz.night',
+        synced: async () => true,
+        indexerHeight: async () => {
+          const height = heights[Math.min(asked.length, heights.length - 1)]!;
+          asked.push(height);
+          return height;
+        },
+        chainHeight: async () => {
+          throw new Error('a landed failure carries its own height; the node is not asked');
+        },
+        pollMs: 0,
+        wait: async () => undefined,
+        progress: (step) => steps.push(step),
+        log: () => undefined,
+      },
+    );
+    assert.equal(landed, 'tx-2');
+    assert.equal(builds, 2);
+    assert.deepEqual(asked, [293_950, 293_958, 293_959], 'polled until 293959, then stopped');
+    assert.ok(
+      steps.filter((step) => step === 'waiting for the indexer to reach block 293959').length === 2,
+      `two polls short of the height, two waiting steps: ${steps.join(' | ')}`,
+    );
+  });
+
+  it('after a refusal, the target is the node height at the moment of refusal', async () => {
+    const asked: number[] = [];
+    let builds = 0;
+    await withNodeRejectionRetry(
+      async () => {
+        builds += 1;
+        if (builds === 1) throw rejection();
+        return 'tx-2';
+      },
+      {
+        label: 'deposit_night',
+        synced: async () => true,
+        chainHeight: async () => 500,
+        indexerHeight: async () => {
+          const height = asked.length === 0 ? 486 : 500;
+          asked.push(height);
+          return height;
+        },
+        pollMs: 0,
+        wait: async () => undefined,
+        log: () => undefined,
+        progress: () => undefined,
+      },
+    );
+    assert.equal(builds, 2);
+    assert.deepEqual(asked, [486, 500]);
+  });
+
+  it('gives up on the indexer at the bound, says so, and rebuilds anyway', async () => {
+    const log: string[] = [];
+    let builds = 0;
+    const landed = await withNodeRejectionRetry(
+      async () => {
+        builds += 1;
+        if (builds === 1) throw landedFailure('FailFallible');
+        return 'tx-2';
+      },
+      {
+        label: 'register_domain_for hcmtkxcwhntzz.night',
+        synced: async () => true,
+        indexerHeight: async () => 1,
+        heightWaitMs: 0,
+        pollMs: 0,
+        wait: async () => undefined,
+        log: (line) => log.push(line),
+        progress: () => undefined,
+      },
+    );
+    assert.equal(landed, 'tx-2');
+    assert.equal(builds, 2, 'the bound expiring is not a failure, it is a rebuild with a warning');
+    assert.ok(
+      log.some((line) =>
+        /the indexer has not reached block 293959 within 0 s — rebuilding anyway/.test(line),
+      ),
+      log.join('\n'),
+    );
+  });
+
+  it('an unreachable indexer counts as not there yet, and the wallet wait still follows', async () => {
+    const synced: boolean[] = [];
+    let builds = 0;
+    await withNodeRejectionRetry(
+      async () => {
+        builds += 1;
+        if (builds === 1) throw landedFailure('FailFallible');
+        return 'tx-2';
+      },
+      {
+        label: 'register_domain_for x.night',
+        synced: async () => {
+          synced.push(true);
+          return true;
+        },
+        indexerHeight: async () => {
+          throw new Error('ECONNREFUSED');
+        },
+        heightWaitMs: 0,
+        pollMs: 0,
+        wait: async () => undefined,
+        log: () => undefined,
+        progress: () => undefined,
+      },
+    );
+    assert.equal(builds, 2);
+    assert.ok(synced.length >= 1, 'the wallet was still asked');
+  });
+
+  it('without an indexer to ask, behaves exactly as before', async () => {
+    let builds = 0;
+    await withNodeRejectionRetry(
+      async () => {
+        builds += 1;
+        if (builds === 1) throw landedFailure('FailFallible');
+        return 'tx-2';
+      },
+      { label: 'x', synced: async () => true, pollMs: 0, wait: async () => undefined, log: () => undefined, progress: () => undefined },
+    );
+    assert.equal(builds, 2);
   });
 });

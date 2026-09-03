@@ -295,6 +295,32 @@ export async function raceAbort<T>(work: Promise<T>): Promise<T> {
  * once and reports what it got, including "the indexer would not answer",
  * which is not the same as "the transaction is not there".
  */
+/**
+ * The highest block the INDEXER has, or `null` if it cannot be asked. Same
+ * `block(offset)` root the SDK's own `BLOCK_HASH_QUERY` uses, with the offset
+ * left out, which the schema documents as "latest".
+ *
+ * This is the number the rebuild path waits on. The wallet being synced means
+ * it has applied everything the indexer has given it; it says nothing about
+ * whether the indexer has the block that refused the last build, and on
+ * stagenet the indexer runs 13–14 s behind the node.
+ */
+export async function queryIndexerHeight(indexerHttpUrl: string): Promise<number | null> {
+  try {
+    const response = await fetch(indexerHttpUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: '{ block { height } }' }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body = (await response.json()) as { data?: { block?: { height?: number } } };
+    const height = body.data?.block?.height;
+    return typeof height === 'number' ? height : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function queryTransactionByIdentifier(
   indexerHttpUrl: string,
   identifier: string,

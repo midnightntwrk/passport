@@ -72,6 +72,7 @@ import {
   managedBuildPath,
   nativeColourBytes,
   publicDataProviderFor,
+  queryIndexerHeight,
   rawContractAddress,
   resolveTransactionHash,
   transactionIdentifier,
@@ -715,6 +716,11 @@ export async function createMidnamesSponsor(
     if (!walked.isSynced || !walked.dust.complete) return false;
     return (await wallet.pendingTransactionCount()) === 0;
   };
+  /** The rebuild's wait on the indexer, for every retry in this module. */
+  const heightGate = {
+    indexerHeight: () => queryIndexerHeight(config.indexerHttpUrl),
+    chainHeight: () => wallet.nodeHeight(),
+  };
 
   const isAvailable = async (label: string): Promise<boolean> => {
     const registry = await readLedger(tldAddress);
@@ -782,7 +788,7 @@ export async function createMidnamesSponsor(
             initialPrivateState: { secretKey: callerSecretHex },
             args: leafArgs({ targetBytes: zeroBytes(), ownerKey: sponsorOwnerKey }),
           } as never),
-        { label: 'resolver leaf for the pool', synced: caughtUp },
+        { label: 'resolver leaf for the pool', synced: caughtUp, ...heightGate },
       );
       const deployTxData = (deployed as { deployTxData: unknown }).deployTxData as {
         public: { contractAddress: string };
@@ -855,7 +861,7 @@ export async function createMidnamesSponsor(
                it is the FIRST of the name path's two dependent proofs, and the
                client's answer to a 502 here is to start the whole registration
                again. Rebuilt once the wallet is current instead. */
-            { label: `resolver deploy for ${aliasDomain(label)}`, synced: caughtUp },
+            { label: `resolver deploy for ${aliasDomain(label)}`, synced: caughtUp, ...heightGate },
           );
           const deployTxData = (deployed as { deployTxData: unknown }).deployTxData as {
             public: { contractAddress: string };
@@ -933,7 +939,7 @@ export async function createMidnamesSponsor(
             });
             return transactionIdentifier(registration);
           },
-          { label: `register_domain_for ${aliasDomain(label)}`, synced: caughtUp },
+          { label: `register_domain_for ${aliasDomain(label)}`, synced: caughtUp, ...heightGate },
         );
 
       /**
@@ -971,7 +977,7 @@ export async function createMidnamesSponsor(
             const update = await callTx.update_domain_target(contractTargetEither(targetBytes));
             return transactionIdentifier(update);
           },
-          { label: `update_domain_target for ${aliasDomain(label)}`, synced: caughtUp },
+          { label: `update_domain_target for ${aliasDomain(label)}`, synced: caughtUp, ...heightGate },
         );
       };
 
@@ -1100,7 +1106,7 @@ export async function createMidnamesSponsor(
                 });
                 return transactionIdentifier(handover);
               },
-              { label: `change_owner for ${aliasDomain(label)}`, synced: caughtUp },
+              { label: `change_owner for ${aliasDomain(label)}`, synced: caughtUp, ...heightGate },
             ),
             { label: `change_owner for ${aliasDomain(label)}` },
           )
