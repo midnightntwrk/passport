@@ -147,6 +147,30 @@ describe('settling a payment', () => {
     assert.equal(payouts(), 0);
   });
 
+  it('a payout that fails is a sentence and a retry, never a 500', async () => {
+    const ledger = memoryLedger();
+    const d = createSwapDesk({
+      networkId: 'stagenet',
+      depositTo: 'mn_addr_test1sponsor',
+      assetSymbol: 'mUSD',
+      assetLot: 100n,
+      assetAvailable: true,
+      assetUnavailableReason: null,
+      ledger,
+      verifyPayment: async () => ({ state: 'landed', hash: PAYMENT, block: 7 }),
+      payOut: async () => {
+        throw new Error('1010: Invalid Transaction');
+      },
+      normaliseAccount: (value) => value,
+    });
+    const outcome = await d.swap({ account: ACCOUNT, txHash: PAYMENT });
+    assert.equal(outcome.status, 503);
+    assert.equal(outcome.body.error, 'payout-failed');
+    assert.match(String(outcome.body.message), /1010/);
+    /* Nothing recorded, so the same payment may be presented again. */
+    assert.equal(ledger.count, 0);
+  });
+
   it('refuses a malformed account or payment before anything is verified', async () => {
     const { desk: d, payouts } = desk();
     assert.equal((await d.swap({ account: 'nope', txHash: PAYMENT })).body.error, 'invalid-account');

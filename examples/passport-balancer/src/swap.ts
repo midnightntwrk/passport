@@ -379,7 +379,29 @@ export function createSwapDesk(deps: SwapDeskDeps): SwapDesk {
         );
       }
 
-      const payout = await deps.payOut(account);
+      /* THE PAYOUT MAY FAIL, and a demo must be told so in a sentence rather
+         than by a 500. The asset leg is a mint and a deposit against a live
+         node, and a node that rejects a submission — `1010: Invalid
+         Transaction`, which this service has seen on the same leg during an
+         activation — is a condition to retry, not a bug in the request. The
+         ledger is written only after the credit is real, so nothing was spent
+         from the caller's point of view and asking again with the SAME payment
+         hash is exactly the right thing to do. */
+      let payout: SwapPayout;
+      try {
+        payout = await deps.payOut(account);
+      } catch (cause) {
+        const detail = cause instanceof Error ? cause.message : String(cause);
+        console.error(`[swap] the payout failed for ${account}: ${detail}`);
+        return {
+          status: 503,
+          body: {
+            error: 'payout-failed',
+            message: `Your payment stands, and nothing has been settled against it yet: ${detail} Ask again with the same payment.`,
+            retryAfterMs: 15_000,
+          },
+        };
+      }
       const entry: SwapEntry = {
         account,
         paidAtomic: price.toString(),
