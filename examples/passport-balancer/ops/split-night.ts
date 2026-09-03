@@ -78,7 +78,8 @@ import {
   makeServerProvingService,
   makeWasmProvingService,
 } from '@midnight-ntwrk/wallet-sdk/capabilities/proving';
-import { DustWallet } from '@midnight-ntwrk/wallet-sdk/dust';
+import { CustomDustWallet, DustWallet } from '@midnight-ntwrk/wallet-sdk/dust';
+import { V1Builder as DustV1Builder } from '@midnight-ntwrk/wallet-sdk/dust/v1';
 import { WalletFacade, type FacadeState } from '@midnight-ntwrk/wallet-sdk/facade';
 import { Roles } from '@midnight-ntwrk/wallet-sdk/hd';
 import { WasmProver } from '@midnight-ntwrk/wallet-sdk/prover-client/effect';
@@ -93,6 +94,7 @@ import {
 import { V1Builder } from '@midnight-ntwrk/wallet-sdk/unshielded/v1';
 
 import { applyEnvFile, loadConfig, type BalancerConfig } from '../src/config.js';
+import { dustFeeFirst } from '../src/coinReservation.js';
 import { deriveRoleKeys, formatNight } from '../src/wallet.js';
 import {
   assertOnlyChosenInputs,
@@ -351,6 +353,23 @@ async function openWallet(
   const snapshot = cold ? null : await readSnapshot(config, publicKey.address);
   if (cold) console.log('[split] --cold: ignoring the sync snapshot, walking from chain');
 
+  /* THE FEE LEG, AND WHY IT NEEDS ITS OWN SELECTOR. The dust wallet's stock
+     selection is smallest-first, the same accumulation `chooseCoin` does for
+     NIGHT. After the 2026/09/03 crumb split the wallet held fifty-three DUST
+     coins below `DUST_CRUMB_FLOOR` — a few thousand million Specks each, the
+     generation of the new 0.02-NIGHT coins — and smallest-first swept every
+     one of them into the fee leg ahead of the coins that could actually pay
+     it. Each input is a separate `/prove` against a proof server whose job
+     queue holds ten, so the split died with "Failed to prove: Job Queue full"
+     at 12:23 UTC, after the input check had passed and before anything was
+     signed. `dustFeeFirst` — the service's own fee selector — takes ONE coin
+     that covers the fee, and passes over crumbs while anything else exists. */
+  const dustWallet = (cfg: Parameters<typeof DustWallet>[0]) =>
+    CustomDustWallet(
+      cfg,
+      new DustV1Builder().withDefaults().withCoinSelection((() => dustFeeFirst) as never) as never,
+    );
+
   const unshieldedWallet = selector
     ? (cfg: Parameters<typeof UnshieldedWallet>[0]) =>
         CustomUnshieldedWallet(
@@ -391,8 +410,8 @@ async function openWallet(
         : unshieldedWallet(cfg).startWithPublicKey(publicKey),
     dust: (cfg) =>
       snapshot
-        ? DustWallet(cfg).restore(snapshot.dust)
-        : DustWallet(cfg).startWithSecretKey(
+        ? dustWallet(cfg).restore(snapshot.dust)
+        : dustWallet(cfg).startWithSecretKey(
             dustSecretKey,
             ledger.LedgerParameters.initialParameters().dust,
           ),

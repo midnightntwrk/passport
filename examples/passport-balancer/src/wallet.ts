@@ -107,6 +107,7 @@ import {
   crumbsForDeficit,
   crumbsForShape,
   describeCoin,
+  isCrumb,
   isTimeToDismiss,
   parseTimeToDismiss,
   nightPayloadFirst,
@@ -2090,9 +2091,13 @@ export async function openBalancerWallet(
               releaseWithJob(() => opened.release());
             }
             let padRounds = padFloor;
+            /* What the last balance ACTUALLY carried, which is not what it
+               asked for whenever the crumbs ran out. Every piece of
+               arithmetic that subtracts padding from the ledger's sentence
+               reads this, never `padRounds`. */
+            let appliedPadding = 0;
             const balanceOnce = async (): Promise<BalancingRecipe> => {
               const mine = ticket!;
-              coins.setDustPadding(padRounds);
               /* Read before the balance, for the coins it CREATES: the DUST
                  successors the ledger writes at spend time, which the dust
                  wallet lists as available at once and which are not on chain
@@ -2100,6 +2105,20 @@ export async function openBalancerWallet(
                  see `created` in `./coinReservation.ts`. */
               const before = await currentState();
               const availableBefore = new Set(walletCoins(before, 'available').map(coinKey));
+              /* ASK FOR NO MORE PADDING THAN EXISTS. The selector can only
+                 pad with crumbs that are free — unheld by another job, not in
+                 flight — and asking for four when one is free builds a
+                 transaction with one. Clamping here keeps the request, the
+                 line, and the arithmetic on the same number, and makes a
+                 shortage visible in the journal instead of silent. */
+              const crumbsFree = coins.freeCrumbs(mine, walletCoins(before, 'available'));
+              const asking = Math.min(padRounds, crumbsFree);
+              if (asking < padRounds) {
+                console.warn(
+                  `[fee] ${label}: ${padRounds} crumb DUST inputs wanted for size, ${crumbsFree} free — padding with ${asking}`,
+                );
+              }
+              coins.setDustPadding(asking);
               /* The coins this balance CONSUMES are recorded by the guard as
                  the SDK's selectors hand them out — held that instant, before
                  anything is committed or read back — plus the unshielded
@@ -2125,6 +2144,7 @@ export async function openBalancerWallet(
                 )) as BalancingRecipe;
               } finally {
                 selected = coins.endBalance();
+                appliedPadding = selected.filter(isCrumb).length;
               }
               const seen = new Set(selected.map(coinKey));
               const fromRecipe = unshieldedInputsOf(result).filter((coin) => {
@@ -2161,7 +2181,13 @@ export async function openBalancerWallet(
                     createdNow.length === 0
                       ? ''
                       : `; creates ${createdNow.map((coin) => describeCoin(coin)).join(', ')} (spendable once this lands)`
-                  }${padRounds > 0 ? ` [padded with ${padRounds} crumb DUST inputs for size]` : ''}`,
+                  }${
+                    appliedPadding > 0 || padRounds > 0
+                      ? ` [padded with ${appliedPadding} crumb DUST input${appliedPadding === 1 ? '' : 's'} for size${
+                          appliedPadding < padRounds ? `, ${padRounds} wanted` : ''
+                        }]`
+                      : ''
+                  }`,
                 );
               } catch {
                 // A state that cannot be read leaves the created set empty; the consumed coins are held regardless.
@@ -2176,7 +2202,7 @@ export async function openBalancerWallet(
                 if (!isTimeToDismiss(cause)) throw cause;
                 const message = cause instanceof Error ? cause.message : String(cause);
                 console.warn(
-                  `[fee] ${label}: the ledger would refuse this shape (${message.slice(0, 320)}) — reverting and balancing again with ${Math.min(8, paddingFromVerdict(message, padRounds))} crumb DUST inputs for size`,
+                  `[fee] ${label}: the ledger would refuse this shape (${message.slice(0, 320)}) — reverting and balancing again with ${Math.min(8, paddingFromVerdict(message, appliedPadding))} crumb DUST inputs for size`,
                 );
                 try {
                   await facade.revert(result);
@@ -2207,7 +2233,12 @@ export async function openBalancerWallet(
                       `this transaction is too small for its compute at every padding tried (the ledger says: ${message.slice(0, 160)})`,
                     );
                   }
-                  padRounds = Math.min(8, paddingFromVerdict(message, padRounds));
+                  /* Strictly upward, so the `>= 8` guard above always ends
+                     the climb. The verdict is read against the crumbs the
+                     transaction CARRIED, which can be fewer than the round
+                     asked for; without the `padRounds + 1` a scarce-crumb job
+                     would ask for the same number for ever. */
+                  padRounds = Math.min(8, Math.max(padRounds + 1, paddingFromVerdict(message, appliedPadding)));
                   continue;
                 }
                 const excluded = coins.excluded();
@@ -2281,7 +2312,7 @@ export async function openBalancerWallet(
             } catch (cause) {
               if (!isTimeToDismiss(cause) || padRounds >= 8) throw cause;
               const message = cause instanceof Error ? cause.message : String(cause);
-              const next = Math.min(8, paddingFromVerdict(message, padRounds));
+              const next = Math.min(8, Math.max(padRounds + 1, paddingFromVerdict(message, appliedPadding)));
               console.warn(
                 `[fee] ${label}: the PROVEN transaction would be refused (${message.slice(0, 320)}) — reverting and rebuilding with ${next} crumb DUST inputs`,
               );

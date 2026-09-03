@@ -113,6 +113,16 @@ export const smallestDust: CoinSelector = (coins) =>
 export const DUST_CRUMB_FLOOR = 1_000_000_000_000_000n;
 
 /**
+ * Is this coin a crumb — a DUST coin below {@link DUST_CRUMB_FLOOR}? The
+ * padding the fee leg adds for size is made of these, so counting them in a
+ * BUILT balance is how the wallet learns what padding it actually applied,
+ * rather than what it asked for.
+ */
+export function isCrumb(coin: SelectableCoin): boolean {
+  return coin.token !== undefined && coin.value > 0n && coin.value < DUST_CRUMB_FLOOR;
+}
+
+/**
  * The DUST fee selector. ONE coin that covers the need, the smallest such;
  * only when no single coin covers it, the LARGEST first, so the set is as
  * short as it can be. Crumbs below {@link DUST_CRUMB_FLOOR} are passed over
@@ -172,6 +182,8 @@ export function createDustFeeSelector(reservation: {
       const crumbs = coins
         .filter((coin) => coin.value > 0n && coin.value < DUST_CRUMB_FLOOR)
         .sort((a, b) => Number(b.value - a.value));
+      /* The dust wallet only ever asks this selector with DUST coins, so the
+         value test above is `isCrumb` minus the `token` check. */
       if (crumbs.length > 0) return crumbs[0];
     }
     return dustFeeFirst(coins, tokenType, amount, costModel);
@@ -539,6 +551,15 @@ export interface CoinReservation {
   /** How many crumb inputs the dust selector adds ahead of the covering coin — see `createDustFeeSelector`. */
   setDustPadding(count: number): void;
   dustPadding(): number;
+  /**
+   * How many crumbs `ticket` could ACTUALLY be handed out of `coins` right
+   * now: DUST below {@link DUST_CRUMB_FLOOR} that no other ticket holds and
+   * that is not in flight. Asking for more padding than this yields a
+   * transaction with fewer crumbs than the arithmetic assumed — on
+   * 2026/09/03 at 12:13:02 a balance asked for four and carried one, and the
+   * next round subtracted four crumbs' worth of bytes that were never there.
+   */
+  freeCrumbs(ticket: CoinTicket | null, coins: readonly SelectableCoin[]): number;
   /** How many coins the active balance has been handed so far. */
   balanceAsks(): number;
   /** Wraps a selector so it never hands out an excluded coin. */
@@ -640,6 +661,15 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
       padding = Math.max(0, Math.floor(count));
     },
     dustPadding: () => padding,
+    freeCrumbs(ticket, coins) {
+      let count = 0;
+      for (const coin of coins) {
+        if (!isCrumb(coin)) continue;
+        if (isExcludedFor(coinKey(coin), ticket)) continue;
+        count += 1;
+      }
+      return count;
+    },
     /* DUST hand-outs only: the NIGHT payload is handed out first in the same
        balance, and counting it made `padding` N yield N−1 crumbs. */
     balanceAsks: () => active?.selected.filter((coin) => coin.token !== undefined).length ?? 0,

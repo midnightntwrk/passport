@@ -19,6 +19,7 @@ import {
   DUST_CRUMB_FLOOR,
   dustFeeFirst,
   isCoinContention,
+  isCrumb,
   LARGE_NIGHT_ATOMIC,
   nightPayloadFirst,
   smallestDust,
@@ -40,6 +41,7 @@ import {
   DuplicateInput,
   inputKeysOf,
   isTimeToDismiss,
+  MIN_TIME_TO_DISMISS_MS,
   parseTimeToDismiss,
   TIME_TO_DISMISS_TARGET,
 } from '../src/coinReservation.js';
@@ -693,6 +695,91 @@ describe("the chain's fee rule, in the ledger's own numbers", () => {
     assert.equal(crumbsForShape(15.935 - 2.49, 7118 - 80), 3);
     assert.equal(crumbsForShape(5, 7000), 0, 'a transaction already under the target needs none');
     assert.equal(crumbsForShape(200, 7000), 8, 'and nothing sensible is capped at eight');
+  });
+});
+
+describe('a grant that spends an exact 0.002-NIGHT coin', () => {
+  /* WHAT THE SPLIT BOUGHT. The proven grant of 07:18:09 on 2026/09/03 was
+     15.935 ms in 7,118 bytes — a `deposit_night` whose NIGHT payload came
+     from a covering coin and therefore carried a CHANGE OUTPUT. An
+     unshielded output measured 2.49 ms in about 80 bytes on the chain's own
+     parameters, so the same grant paid from an EXACT 2,000-atomic coin makes
+     no change and is 13.445 ms in 7,038 bytes: under the ledger's 15 ms
+     floor, which is the check `balanceTx` runs before it proves anything.
+     Nothing has to be padded, so the fee leg is one covering DUST coin and
+     the transaction carries a single DUST input. */
+  const OUTPUT_MS = 2.49;
+  const OUTPUT_BYTES = 80;
+  const EXACT_MS = 15.935 - OUTPUT_MS;
+  const EXACT_BYTES = 7118 - OUTPUT_BYTES;
+
+  const exact = night('9'.repeat(64), 0, 2_000n);
+  const covering = night('8'.repeat(64), 0, 12_020n);
+  const lineage = night('7'.repeat(64), 0, LARGE_NIGHT_ATOMIC);
+  const crumbs = Array.from({ length: 5 }, (_, i) =>
+    dust(String(i).padStart(64, '0'), 3_968_160_000n + BigInt(i)),
+  );
+  const large = dust('f'.repeat(64), 1_063_482_701_844_916_860n);
+  const FEE = 15_000_000_000_000_000n;
+
+  it('is under the ledger\'s bound, so the first attempt needs no padding at all', () => {
+    assert.equal(boundMsFor(EXACT_BYTES), MIN_TIME_TO_DISMISS_MS, 'still on the floor at 7,038 bytes');
+    assert.ok(
+      EXACT_MS <= boundMsFor(EXACT_BYTES),
+      `${EXACT_MS} ms against a ${boundMsFor(EXACT_BYTES)} ms bound — this is the check that reverts and re-balances`,
+    );
+    assert.ok(
+      15.935 > boundMsFor(7118),
+      'the same grant WITH a change output is over the bound, which is why it was padded',
+    );
+  });
+
+  it('builds the grant leg with the exact coin and ONE DUST input, zero crumbs', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const selectNight = coins.guard(nightPayloadFirst);
+    const selectDust = coins.guard(createDustFeeSelector(coins));
+    const job = coins.open('deposit_night');
+
+    coins.setDustPadding(0);
+    coins.beginBalance(job);
+    const payload = selectNight([lineage, covering, exact], NIGHT, -2_000n, {});
+    const fee = balanceLike(selectDust, [large, ...crumbs], FEE);
+    const selected = coins.endBalance();
+
+    assert.equal(payload, exact, 'the exact coin, so there is no change output');
+    assert.deepEqual(fee, [large], 'one covering DUST coin, no crumbs ahead of it');
+    assert.equal(selected.filter(isCrumb).length, 0, 'zero applied padding');
+    assert.equal(
+      selected.filter((coin) => coin.token !== undefined).length,
+      1,
+      'a single DUST input',
+    );
+  });
+
+  it('reports the padding it APPLIED, which is what the crumbs allowed', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const selectDust = coins.guard(createDustFeeSelector(coins));
+    const mine = coins.open('deposit_night');
+    const other = coins.open('registration');
+    /* Four of the five crumbs are held by the job beside this one, exactly as
+       they were at 12:13:02 on 2026/09/03 when a balance asked for four and
+       carried one. */
+    other.hold(crumbs.slice(1).map(coinKey));
+
+    assert.equal(coins.freeCrumbs(mine, [large, ...crumbs]), 1, 'one crumb is free');
+    assert.equal(
+      coins.freeCrumbs(other, [large, ...crumbs]),
+      5,
+      'its holder may have its own again, and the free one besides',
+    );
+
+    coins.setDustPadding(Math.min(4, coins.freeCrumbs(mine, [large, ...crumbs])));
+    coins.beginBalance(mine);
+    const fee = balanceLike(selectDust, [large, ...crumbs], FEE);
+    const selected = coins.endBalance();
+
+    assert.deepEqual(fee, [crumbs[0], large], 'the one free crumb, then the covering coin');
+    assert.equal(selected.filter(isCrumb).length, 1, 'ONE applied, not the four a naive round would report');
   });
 });
 
