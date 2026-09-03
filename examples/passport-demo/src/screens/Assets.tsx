@@ -12,7 +12,7 @@ import {
   splitHoldings,
   TOKENS_VISIBLE,
 } from '../lib/colour.js'
-import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
+import { type PassportNetwork } from './NetworkSwitcher.js'
 import ThemeToggle from './ThemeToggle.js'
 import type { HomeScreenProps } from './Home.js'
 import {
@@ -74,6 +74,11 @@ export interface AssetsScreenProps {
   account: AssetsAccount | null
   /** Selected network context, mirroring the other tabs' top bars. */
   network?: PassportNetwork
+  /**
+   * Accepted and ignored since 2026/09/03, when the network switcher went.
+   * Kept so the host does not have to change to stop passing it; nothing on
+   * this screen can change the network any more. See `NetworkSwitcher.tsx`.
+   */
   onSelectNetwork?: (network: PassportNetwork) => void
   /**
    * Re-reads the account's ledger. Offered here because this is the screen a
@@ -104,7 +109,7 @@ interface AssetRow {
 }
 
 export default function AssetsScreen(props: AssetsScreenProps) {
-  const { account, network, onSelectNetwork, onRefresh, activity } = props
+  const { account, onRefresh, activity } = props
 
   /* What has been announced and has not landed. One line under the token
      shelf, from the trail, gone the moment the balances themselves say it —
@@ -243,9 +248,7 @@ export default function AssetsScreen(props: AssetsScreenProps) {
       <header className="mnassets-bar">
         <img className="mnassets-wordmark" src="/midnight-wordmark.svg" alt="Midnight" />
         <div className="mnassets-bar-actions">
-          {network && onSelectNetwork ? (
-            <NetworkSwitcher network={network} onSelect={onSelectNetwork} />
-          ) : null}
+          {/* No network switcher since 2026/09/03 — see `NetworkSwitcher.tsx`. */}
           <ThemeToggle size="sm" />
           {onRefresh ? (
             <button

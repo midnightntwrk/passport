@@ -51,7 +51,7 @@ import { EcosystemIdentity } from './Ecosystem.js'
    at all when Passport is already installed, or in a browser that cannot
    install it — see `lib/installPrompt.ts`. */
 import InstallPassport from './InstallPassport.js'
-import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
+import { type PassportNetwork } from './NetworkSwitcher.js'
 import NotificationToggle from './NotificationToggle.js'
 import PassportContractCard, { type PassportContractCardProps } from './PassportContract.js'
 import SendSheet, { type SendSheetHolding, type SendSheetProps } from './SendSheet.js'
@@ -207,7 +207,12 @@ export interface HomeScreenProps {
   syncPercent?: number | null
   /** Selected network context; filters the app grid, does not move the wallet. */
   network: PassportNetwork
-  onSelectNetwork: (network: PassportNetwork) => void
+  /**
+   * Accepted and ignored since 2026/09/03, when the network switcher went.
+   * Kept so the host does not have to change to stop passing it; nothing on
+   * this screen can change the network any more. See `NetworkSwitcher.tsx`.
+   */
+  onSelectNetwork?: (network: PassportNetwork) => void
   /** Failure from any control on this screen — copy, send, refresh. */
   error?: string | null
   onDismissError?: () => void
@@ -321,7 +326,6 @@ export default function HomeScreen(props: HomeScreenProps) {
     pendingSends,
     syncPercent,
     network,
-    onSelectNetwork,
     error,
     onDismissError,
     onRefresh,
@@ -632,7 +636,9 @@ export default function HomeScreen(props: HomeScreenProps) {
         <img className="mnhome-wordmark" src="/midnight-wordmark.svg" alt="Midnight" />
         <span className="mn-beta-badge">Beta</span>
         <div className="mnhome-bar-actions">
-          <NetworkSwitcher network={network} onSelect={onSelectNetwork} />
+          {/* The network switcher went 2026/09/03. It offered three networks
+              this build cannot sign on and needed two footnotes to say so;
+              Passport is a stagenet demo and now reads as one. */}
           {/* The address pill was cut 2026/08/19. A Passport user's visible
               identity is their `.night` name, not a truncated address in the
               chrome; the address they receive at lives inside Receive. */}

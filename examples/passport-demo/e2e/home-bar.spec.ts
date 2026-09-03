@@ -151,3 +151,30 @@ test('pressing it replays the browser’s own prompt, and nothing else', async (
      nothing left to press. */
   await expect(installControl()).toHaveCount(0);
 });
+
+/* -------------------------------------------------------------------------- */
+/* The network switcher, and the fact that there is not one                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The second half of the 2026/09/02 review. The bar carried a switcher
+ * offering Preview, Pre-production, and Mainnet beside Stagenet, and picking
+ * one of them moved nothing: Passport signs on the one network this build is
+ * configured for, so the control filtered the app grid and needed two
+ * footnotes in its own menu to say so. This is a stagenet demo and it should
+ * read as one.
+ */
+test('no network switcher on any tab, and no other network is named', async () => {
+  for (const tab of [/Home/i, /Assets/i, /Apps/i]) {
+    await page.locator('.mnnav .mnnav-tab', { hasText: tab }).click();
+    /* The switcher's own root and its pill, by class and by the accessible
+       name it carried. */
+    await expect(page.locator('.mnnet')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Change network/i })).toHaveCount(0);
+    await expect(page.getByRole('listbox', { name: /Choose a network/i })).toHaveCount(0);
+
+    /* And nothing on screen offers a network this build cannot sign on. */
+    const text = await page.locator('body').innerText();
+    expect(text).not.toMatch(/Pre-production|Mainnet/i);
+  }
+});

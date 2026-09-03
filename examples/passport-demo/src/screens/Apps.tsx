@@ -9,7 +9,7 @@ import {
 } from '../lib/registry.js'
 import RaffleArt from './RaffleArt.js'
 import AppBrowser, { AppIcon, type AppBrowserProps } from './AppBrowser.js'
-import NetworkSwitcher, { NETWORK_LABELS, type PassportNetwork } from './NetworkSwitcher.js'
+import { type PassportNetwork } from './NetworkSwitcher.js'
 import ThemeToggle from './ThemeToggle.js'
 import './apps.css'
 
@@ -34,6 +34,11 @@ export interface AppsScreenProps {
   onProfileShared?: (appName: string, fields: string[]) => void
   /** Selected network; only apps available on it are listed. */
   network?: PassportNetwork
+  /**
+   * Accepted and ignored since 2026/09/03, when the network switcher went.
+   * Kept so the host does not have to change to stop passing it; nothing on
+   * this screen can change the network any more. See `NetworkSwitcher.tsx`.
+   */
   onSelectNetwork?: (network: PassportNetwork) => void
   /**
    * The wallet seam an opened app can ask to spend from. All three are handed
@@ -232,7 +237,6 @@ export default function AppsScreen(props: AppsScreenProps) {
     profile,
     onProfileShared,
     network,
-    onSelectNetwork,
     executeTransfer,
     transferContext,
     onIncentiveRedeemed,
@@ -292,9 +296,7 @@ export default function AppsScreen(props: AppsScreenProps) {
             alt="Midnight"
           />
           <div className="mnapps-bar-actions">
-            {network && onSelectNetwork ? (
-              <NetworkSwitcher network={network} onSelect={onSelectNetwork} />
-            ) : null}
+            {/* No network switcher since 2026/09/03 — see `NetworkSwitcher.tsx`. */}
             <ThemeToggle size="sm" />
           </div>
         </header>
