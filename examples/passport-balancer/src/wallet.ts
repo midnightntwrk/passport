@@ -53,10 +53,7 @@ import { Zkir, type KeyMaterialProvider } from '@midnight-ntwrk/zkir-v2';
    declares — which is precisely how the `@midnight-ntwrk/ledger-v9` /
    `@midnightntwrk/ledger-v9` confusion arises in the first place. */
 import { NoOpTransactionHistoryStorage } from '@midnight-ntwrk/wallet-sdk';
-import {
-  makeServerProvingService,
-  makeWasmProvingService,
-} from '@midnight-ntwrk/wallet-sdk/capabilities/proving';
+import { makeWasmProvingService } from '@midnight-ntwrk/wallet-sdk/capabilities/proving';
 import { CustomDustWallet, DustWallet } from '@midnight-ntwrk/wallet-sdk/dust';
 import { V1Builder as DustV1Builder } from '@midnight-ntwrk/wallet-sdk/dust/v1';
 import {
@@ -86,7 +83,7 @@ import {
   releaseWithJob,
   type RunningJobSummary,
 } from './reservation.js';
-import { countingProof, proverIdle } from './proving.js';
+import { countingProof, httpWalletProvingService, proverIdle } from './proving.js';
 import {
   CONTRACT_PROOF_TIMEOUT_MS,
   ProofTimeout,
@@ -107,8 +104,11 @@ import {
   crumbsForDeficit,
   crumbsForShape,
   describeCoin,
+  isBlockLimit,
   isCrumb,
   isTimeToDismiss,
+  maxDustInputsFor,
+  parseBlockLimits,
   parseTimeToDismiss,
   nightPayloadFirst,
   smallestOfType,
@@ -674,6 +674,59 @@ export function isSyncStalled(cause: unknown): boolean {
 
 /** Three seconds — half a block, and the figure `/wallet-status` publishes. */
 const SHORTFALL_RETRY_AFTER_MS = 3_000;
+/**
+ * How long a caller waits for a fee-capable DUST coin to come free. One
+ * stagenet block is about six seconds, and the coin comes free when the job
+ * holding it has its spend applied — which is one block, not one round trip.
+ * Inside `sponsor.ts`'s 2–10 second retry band, so the client honours it as
+ * given.
+ */
+const FEE_COIN_RETRY_AFTER_MS = 6_000;
+
+/**
+ * The refusal `/balance-only` should give for a fee leg that could not be
+ * built, given what went wrong and whether any coin was excluded at the time.
+ *
+ * TRANSIENT, AND THE CLIENT ALREADY KNOWS HOW TO WAIT IT OUT. Two of these are
+ * about which of the sponsor's coins are free THIS INSTANT, not about the
+ * caller's transaction:
+ *
+ *   - `exceeded block limit in transaction fee computation`: the input cap in
+ *     `./coinReservation.ts` stopped the DUST accumulating, so what is missing
+ *     is a single covering coin — and the jobs holding those release them in
+ *     seconds;
+ *   - `insufficient funds` / `could not balance dust` while coins are excluded:
+ *     the same shortage, named differently by the SDK. With NOTHING excluded it
+ *     is a genuinely empty wallet, and saying "try again" would be a lie.
+ *
+ * Both were `502 BALANCE_FAILED`, which `sponsor.ts` does not retry, so a send
+ * that arrived while the sponsor's big DUST coins were held failed outright —
+ * four times in twenty-five seconds on 2026/09/03. As a `429
+ * PENDING_TRANSACTION` with a `retryAfterMs` the client's existing window waits
+ * them out and the send goes through.
+ */
+export function feeLegRefusal(
+  cause: unknown,
+  options: { contended: boolean },
+): { status: number; code: string; message: string; retryAfterMs?: number } {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  if (
+    isBlockLimit(cause) ||
+    (options.contended && /insufficient funds|could not balance dust/i.test(message))
+  ) {
+    return {
+      status: 429,
+      code: 'PENDING_TRANSACTION',
+      message: 'The balancer has no fee-capable DUST coin free this instant. Try again shortly.',
+      retryAfterMs: FEE_COIN_RETRY_AFTER_MS,
+    };
+  }
+  return {
+    status: 502,
+    code: 'BALANCE_FAILED',
+    message: 'The balancer could not add a fee leg to this transaction.',
+  };
+}
 
 /**
  * The wait for a coin ran out, and nothing was spent.
@@ -1230,7 +1283,7 @@ export async function openBalancerWallet(
      unconditionally keeps the branch below to one decision. */
   const keyMaterialProvider: KeyMaterialProvider = WasmProver.makeDefaultKeyMaterialProvider();
   const provingService = provingServerUrl
-    ? makeServerProvingService({ provingServerUrl: new URL(provingServerUrl) })
+    ? httpWalletProvingService(provingServerUrl)
     : makeWasmProvingService({ keyMaterialProvider });
 
   /* The exclusions every selector consults — see `./coinReservation.ts` for
@@ -1285,10 +1338,42 @@ export async function openBalancerWallet(
    * at 07:06 on 2026/09/03 for a transaction the node then refused, because
    * the chain's allowance per byte is not the initial one.
    */
-  const paramsOf = (recipe: unknown): ledger.LedgerParameters =>
-    ((recipe as { blockData?: { ledgerParameters?: ledger.LedgerParameters } }).blockData
-      ?.ledgerParameters as ledger.LedgerParameters | undefined) ??
-    ledger.LedgerParameters.initialParameters();
+  const paramsOf = (recipe: unknown): ledger.LedgerParameters => {
+    const params =
+      ((recipe as { blockData?: { ledgerParameters?: ledger.LedgerParameters } }).blockData
+        ?.ledgerParameters as ledger.LedgerParameters | undefined) ??
+      ledger.LedgerParameters.initialParameters();
+    noteBlockLimits(params);
+    return params;
+  };
+
+  /**
+   * The DUST input ceiling, from the CHAIN's parameters rather than a constant
+   * of ours. Read off the same `toString()` the size/time rule was read from,
+   * and re-read whenever a recipe carries a newer set — the limits are
+   * governance parameters and may move. Cheap because the text is only parsed
+   * when it changes.
+   */
+  let lastLimitsText = '';
+  const noteBlockLimits = (params: ledger.LedgerParameters): void => {
+    let text: string;
+    try {
+      text = params.toString(true);
+    } catch {
+      return;
+    }
+    if (text === lastLimitsText) return;
+    lastLimitsText = text;
+    const limits = parseBlockLimits(text);
+    const cap = maxDustInputsFor(limits);
+    coins.setMaxDustInputs(cap);
+    console.log(
+      limits
+        ? `[fee] the chain allows ${limits.blockUsage} bytes of block usage and ${limits.bytesWritten} written per block — at most ${cap} DUST inputs in one fee leg`
+        : `[fee] the chain's block limits could not be read from its parameters — capping a fee leg at ${cap} DUST inputs`,
+    );
+  };
+  noteBlockLimits(ledger.LedgerParameters.initialParameters());
 
   const assertWithinTimeToDismiss = (recipe: BalancingRecipe): void => {
     const parts: Array<{ eraseProofs(): unknown }> = [];
@@ -1361,7 +1446,13 @@ export async function openBalancerWallet(
           onStep: (step) => progress(step),
         }) as never;
       },
-      provingService: () => provingService,
+      /* Cast because the SDK types `prove` as returning its own nominal
+         `UnboundTransaction`, and a provider that proves the ledger's
+         transaction in place cannot claim that type without lying about what it
+         constructs. The wasm service satisfies it structurally; the HTTP one
+         (see `httpWalletProvingService` in `./proving.ts`) returns exactly what
+         the ledger's `prove` returns, which is the same object. */
+      provingService: () => provingService as never,
       shielded: (cfg) =>
         snapshot
           ? guardedShielded(cfg).restore(snapshot.shielded)
@@ -1959,11 +2050,20 @@ export async function openBalancerWallet(
         return 'waiting-for-dust';
       }
 
-      const recipe = await facade.registerNightUtxosForDustGeneration(
-        unregistered,
-        unshieldedKeystore.getPublicKey(),
-        unshieldedKeystore.signDataAsync,
-      );
+      /* Inside a balance too, ticket-less: this is the third path that selects
+         DUST through the guarded selector, and it gets the same input cap and
+         the same one-coin-once rule as the other two. */
+      coins.beginBalance(null);
+      let recipe;
+      try {
+        recipe = await facade.registerNightUtxosForDustGeneration(
+          unregistered,
+          unshieldedKeystore.getPublicKey(),
+          unshieldedKeystore.signDataAsync,
+        );
+      } finally {
+        coins.endBalance();
+      }
       const finalized = await facade.finalizeRecipe(recipe);
       await facade.submitTransaction(finalized);
       console.log(
@@ -2028,15 +2128,32 @@ export async function openBalancerWallet(
             try {
               /* Bounded — see {@link WalletCallTimeout}. This is one of the two
                  calls the job of 2026/09/03 01:45:29 vanished between. */
-              await withDeadline(
-                () => facade.estimateTransactionFee(tx as never, dustSecretKey, { ttl: deadline }),
-                config.walletCallTimeoutMs,
-                (waitedMs) => new WalletCallTimeout('estimating the fee', waitedMs),
-              );
+              /* INSIDE A BALANCE, ticket-less. The estimate selects DUST
+                 through the same guarded selector the balance does, so it needs
+                 the same two things the balance gets: the input cap, which is
+                 counted per balance, and a `handed` set, so one coin is not
+                 offered twice in the run. Without it `balanceAsks()` was zero
+                 for every ask the estimate made — see `dustPadding` in
+                 `./coinReservation.ts` for what that cost on 2026/09/03. */
+              coins.beginBalance(null);
+              try {
+                await withDeadline(
+                  () => facade.estimateTransactionFee(tx as never, dustSecretKey, { ttl: deadline }),
+                  config.walletCallTimeoutMs,
+                  (waitedMs) => new WalletCallTimeout('estimating the fee', waitedMs),
+                );
+              } finally {
+                coins.endBalance();
+              }
               break;
             } catch (cause) {
               const message = cause instanceof Error ? cause.message : String(cause);
-              if (!/insufficient funds|could not balance dust/i.test(message)) throw cause;
+              /* A shape the chain will not price is a shortage of a COVERING
+                 coin, not a shortage of DUST: the cap above stops the input
+                 count climbing, and what is wanted is one big coin somebody
+                 else is holding. Waited out in the lane with the rest. */
+              if (!/insufficient funds|could not balance dust/i.test(message) && !isBlockLimit(cause))
+                throw cause;
               /* CONTENTION BEFORE POVERTY. If coins are excluded because another
                  job holds them or has them in flight, the shortage is that
                  job's, and it ends when that job does — worth a bounded wait
@@ -2241,6 +2358,35 @@ export async function openBalancerWallet(
                   padRounds = Math.min(8, Math.max(padRounds + 1, paddingFromVerdict(message, appliedPadding)));
                   continue;
                 }
+                /* THE OPPOSITE OF THE CLIMB. `exceeded block limit in
+                   transaction fee computation` is the ledger declining to PRICE
+                   this shape at all: its cost is over one of the chain's
+                   per-block dimensions. More bytes cannot help — bytes are the
+                   problem — so the padding goes back to nothing and the job
+                   waits for a covering DUST coin to come free, the way it waits
+                   for any contended coin, and builds again. The input cap in
+                   `./coinReservation.ts` is what stops this being reached at
+                   all; this is the remedy for the case it is. */
+                if (isBlockLimit(cause)) {
+                  if (padRounds > 0 || Date.now() - startedAt < waitForReservedCoinMs) {
+                    const droppedPadding = padRounds;
+                    padRounds = 0;
+                    padFloor = 0;
+                    progress('waiting for a covering DUST coin');
+                    console.warn(
+                      `[fee] ${label}: the chain would not price this shape (${message.slice(0, 200)}) — dropping the padding from ${droppedPadding} to 0 and waiting for a covering DUST coin before building again`,
+                    );
+                    if (droppedPadding === 0) {
+                      await coins.whenReleased(
+                        Math.min(10_000, Math.max(0, waitForReservedCoinMs - (Date.now() - startedAt))),
+                      );
+                    }
+                    continue;
+                  }
+                  throw new Error(
+                    `the chain will not price this transaction at any input count this service will build (${message.slice(0, 160)})`,
+                  );
+                }
                 const excluded = coins.excluded();
                 if (
                   !/insufficient funds/i.test(message) ||
@@ -2310,6 +2456,22 @@ export async function openBalancerWallet(
                 true,
               );
             } catch (cause) {
+              /* A PROVEN transaction over a block limit is the same finding as
+                 above, reached one proof later: rebuild with no padding. */
+              if (isBlockLimit(cause) && padRounds > 0) {
+                console.warn(
+                  `[fee] ${label}: the PROVEN transaction is over a block limit — reverting and rebuilding with no padding`,
+                );
+                try {
+                  await reserve(() => facade.revert(proved as never));
+                } catch {
+                  // Best effort; the rebuild selects afresh.
+                }
+                recipe = null;
+                padRounds = 0;
+                padFloor = 0;
+                continue;
+              }
               if (!isTimeToDismiss(cause) || padRounds >= 8) throw cause;
               const message = cause instanceof Error ? cause.message : String(cause);
               const next = Math.min(8, Math.max(padRounds + 1, paddingFromVerdict(message, appliedPadding)));
@@ -2534,12 +2696,25 @@ export async function openBalancerWallet(
            `sponsor.ts`); adding to those here would spend the balancer's NIGHT
            on somebody else's transfer. */
         const reserved = await reserve(
-          () =>
-            facade.balanceFinalizedTransaction(
-              incoming,
-              { shieldedSecretKeys, dustSecretKey },
-              { ttl, tokenKindsToBalance: ['dust'] },
-            ),
+          () => {
+            /* A BALANCE, ticket-less — see `beginBalance` in
+               `./coinReservation.ts`. It holds nothing, exactly as before, but
+               it bounds the DUST inputs the SDK's loop may take and stops the
+               same coin being offered twice. Without it `dustPadding()` was
+               read against a `balanceAsks()` frozen at zero, and every ask from
+               13:12:42 on 2026/09/03 was answered with a crumb until the ledger
+               refused to price the result. */
+            coins.beginBalance(null);
+            return facade
+              .balanceFinalizedTransaction(
+                incoming,
+                { shieldedSecretKeys, dustSecretKey },
+                { ttl, tokenKindsToBalance: ['dust'] },
+              )
+              .finally(() => {
+                coins.endBalance();
+              });
+          },
           'fee-leg balancing',
         );
         recipe = reserved;
@@ -2592,12 +2767,13 @@ export async function openBalancerWallet(
         }
         if (cause instanceof BalanceRefusal) throw cause;
         const message = cause instanceof Error ? cause.message : String(cause);
-        throw new BalanceRefusal(
-          502,
-          'BALANCE_FAILED',
-          'The balancer could not add a fee leg to this transaction.',
-          { cause: message },
-        );
+        /* See {@link feeLegRefusal}: two of these are about which coins are
+           free this instant, and the client waits those out. */
+        const verdict = feeLegRefusal(cause, { contended: coins.excluded().length > 0 });
+        throw new BalanceRefusal(verdict.status, verdict.code, verdict.message, {
+          cause: message,
+          ...(verdict.retryAfterMs !== undefined ? { retryAfterMs: verdict.retryAfterMs } : {}),
+        });
       }
     },
 

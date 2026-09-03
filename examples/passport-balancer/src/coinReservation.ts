@@ -140,12 +140,27 @@ export const dustFeeFirst: CoinSelector = (coins, _tokenType, amount) => {
   const needed = amount < 0n ? -amount : amount;
   const spendable = coins.filter((coin) => coin.value > 0n);
   const worth = spendable.filter((coin) => coin.value >= DUST_CRUMB_FLOOR);
-  const pool = worth.length > 0 ? worth : spendable;
-  const covering = pool.filter((coin) => coin.value >= needed);
+  /* NO CRUMB POOL, and this is the fix for 13:23 on 2026/09/03. When no coin
+     above the floor is free the old rule fell back to `spendable` — the crumb
+     pool — and handed out the largest crumb, then the next, then the next: the
+     SDK asks again with the remaining need after every input it takes, and a
+     crumb is five orders of magnitude short of a fee. Before the sponsor split
+     its coins there were three crumbs and the loop ran out of them and reached
+     a covering coin; after the split there were some three hundred and ninety,
+     and the loop accumulated DUST inputs until `fees()` threw `exceeded block
+     limit in transaction fee computation`. A crumb is worth taking only when it
+     covers the need on its own; otherwise the answer is NOTHING, which the
+     wallet reads as a shortage and waits out in the lane for a covering coin to
+     come free — see `waitForReservedCoinMs` in `./wallet.ts`. */
+  if (worth.length === 0) {
+    const coveringCrumb = spendable.filter((coin) => coin.value >= needed);
+    return coveringCrumb.sort((a, b) => Number(a.value - b.value)).at(0);
+  }
+  const covering = worth.filter((coin) => coin.value >= needed);
   if (covering.length > 0) {
     return covering.sort((a, b) => Number(a.value - b.value)).at(0);
   }
-  return pool.sort((a, b) => Number(b.value - a.value)).at(0);
+  return worth.sort((a, b) => Number(b.value - a.value)).at(0);
 };
 
 /**
@@ -173,10 +188,21 @@ export const dustFeeFirst: CoinSelector = (coins, _tokenType, amount) => {
 export function createDustFeeSelector(reservation: {
   dustPadding(): number;
   balanceAsks(): number;
+  maxDustInputs(): number;
 }): CoinSelector {
   return (coins, tokenType, amount, costModel) => {
+    const needed = amount < 0n ? -amount : amount;
+    const asks = reservation.balanceAsks();
+    /* THE LEDGER'S OWN CEILING ON INPUT COUNT. Past it the only acceptable
+       answer is a coin that ends the balance in one — a covering coin — and
+       when none is free, nothing at all, so the lane waits rather than building
+       a transaction the ledger refuses to price. See `maxDustInputsFor`. */
+    if (asks >= reservation.maxDustInputs()) {
+      const covering = coins.filter((coin) => coin.value >= needed && coin.value > 0n);
+      return covering.sort((a, b) => Number(a.value - b.value)).at(0);
+    }
     const padding = reservation.dustPadding();
-    if (padding > 0 && reservation.balanceAsks() < padding) {
+    if (padding > 0 && asks < padding) {
       /* The LARGEST crumbs: a crumb's generated value is its age, and the
          oldest are the ones run 3 landed with. */
       const crumbs = coins
@@ -186,8 +212,114 @@ export function createDustFeeSelector(reservation: {
          value test above is `isCrumb` minus the `token` check. */
       if (crumbs.length > 0) return crumbs[0];
     }
-    return dustFeeFirst(coins, tokenType, amount, costModel);
+    const chosen = dustFeeFirst(coins, tokenType, amount, costModel);
+    if (chosen !== undefined) return chosen;
+    /* NOTHING above the crumb floor covers the need, and no single crumb does
+       either. Crumbs may still be COMBINED — a sponsor whose DUST is all
+       crumbs has to pay from crumbs or not at all — but only when a set that
+       fits under the cap could actually finish the job. Otherwise the answer is
+       nothing, and the wallet waits in the lane for a covering coin to come
+       free rather than building a transaction the chain will not price. That
+       test is the whole difference between the sponsor before its coins were
+       split (three crumbs: the loop ran out and reached a covering coin) and
+       after (three hundred and ninety: the loop kept going). */
+    const room = reservation.maxDustInputs() - asks;
+    if (room <= 0) return undefined;
+    const descending = coins.filter((coin) => coin.value > 0n).sort((a, b) => Number(b.value - a.value));
+    let reachable = 0n;
+    for (const coin of descending.slice(0, room)) reachable += coin.value;
+    return reachable >= needed ? descending[0] : undefined;
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* The ledger's block limits, and what they allow a fee leg to spend           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The chain's per-block resource ceiling, as its own parameters state it.
+ *
+ * `LedgerParameters` publishes no accessor for these, so they are read from the
+ * same place `TIME_TO_DISMISS_PER_BYTE_US` and `MIN_TIME_TO_DISMISS_MS` above
+ * were read from — `LedgerParameters.toString()`, which prints the whole
+ * `TransactionLimits` record. Stagenet on 2026/09/03, block 299524, and
+ * identical to `initialParameters()`:
+ *
+ *     limits: TransactionLimits {
+ *         transaction_byte_limit: 1048576,
+ *         time_to_dismiss_per_byte: 2.000μs,
+ *         min_time_to_dismiss: 15.000ms,
+ *         block_limits: SyntheticCost {
+ *             read_time: 1.000s,
+ *             compute_time: 1.000s,
+ *             block_usage: 200000,
+ *             bytes_written: 50000,
+ *             bytes_churned: 1000000,
+ *         },
+ *
+ * A transaction is priced against these, not merely a block: `fees(params, …)`
+ * normalises its own cost to the block limits (`normalizeFullness`) and throws
+ * `exceeded block limit in transaction fee computation` when any dimension is
+ * over. So the limit is a ceiling on ONE transaction's shape, and a transaction
+ * over it is not early — it is too big, and no wait will fix it.
+ */
+export interface BlockLimits {
+  blockUsage: number;
+  bytesWritten: number;
+}
+
+export function parseBlockLimits(text: string): BlockLimits | null {
+  const block = /block_limits:\s*SyntheticCost\s*\{([\s\S]*?)\}/.exec(text);
+  if (!block) return null;
+  const field = (name: string): number | null => {
+    const match = new RegExp(`${name}:\\s*(\\d+)`).exec(block[1] as string);
+    return match ? Number(match[1]) : null;
+  };
+  const blockUsage = field('block_usage');
+  const bytesWritten = field('bytes_written');
+  if (blockUsage === null || bytesWritten === null) return null;
+  return { blockUsage, bytesWritten };
+}
+
+/**
+ * How much of a block's usage one transaction may claim before this service
+ * stops adding inputs to it. Half, which leaves room for the base transaction
+ * the fee leg is being added to — 22,526 bytes for a Passport send, measured
+ * 2026/09/03 — and for the dimensions this arithmetic does not model
+ * (`bytes_written`, `read_time`).
+ */
+export const BLOCK_USAGE_HEADROOM = 0.5;
+
+/**
+ * The most DUST inputs one fee leg may carry, from the ledger's own block
+ * limits: the usage a transaction may claim, divided by what one DUST spend
+ * costs ({@link CRUMB_BYTES}, measured). Never fewer than two — one covering
+ * coin and one crumb of padding is the smallest shape the size rule ever needs
+ * — and never more than {@link MAX_DUST_INPUTS_CEILING}, because a fee that
+ * needs thirty inputs is not being paid, it is being spread.
+ */
+export const MAX_DUST_INPUTS_CEILING = 12;
+
+export function maxDustInputsFor(limits: BlockLimits | null): number {
+  if (!limits) return MAX_DUST_INPUTS_CEILING;
+  const fromUsage = Math.floor((limits.blockUsage * BLOCK_USAGE_HEADROOM) / CRUMB_BYTES);
+  return Math.max(2, Math.min(MAX_DUST_INPUTS_CEILING, fromUsage));
+}
+
+/**
+ * The ledger's refusal to PRICE a transaction: `normalizeFullness` threw
+ * because one of the block limits above is exceeded. Distinct from
+ * {@link isTimeToDismiss}, which is a shape the padding climb can fix; this one
+ * is fixed by taking inputs AWAY.
+ */
+export function isBlockLimit(cause: unknown): boolean {
+  let current: unknown = cause;
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    const message = current instanceof Error ? current.message : String(current);
+    if (/exceeded block limit/i.test(message)) return true;
+    current = current instanceof Error ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return false;
 }
 
 /** Matches the ledger's own refusal, thrown by `fees(params, true)` and sent back by the node as `231`. */
@@ -536,7 +668,7 @@ export interface CoinReservation {
    * committed anything, before any state has been read back. Balancing is
    * serialised under the wallet claim, so at most one balance is active.
    */
-  beginBalance(ticket: CoinTicket): void;
+  beginBalance(ticket: CoinTicket | null): void;
   /** Ends the active balance and returns the coins its selectors handed out. */
   endBalance(): SelectableCoin[];
   /**
@@ -550,7 +682,32 @@ export interface CoinReservation {
   hasFlights(): boolean;
   /** How many crumb inputs the dust selector adds ahead of the covering coin — see `createDustFeeSelector`. */
   setDustPadding(count: number): void;
+  /**
+   * The padding the ACTIVE balance asked for, and zero when no balance is
+   * active.
+   *
+   * THE `active` TEST IS THE FIX FOR 13:12 AND 13:23 ON 2026/09/03. `padding`
+   * is one number for the service, set by whichever contract balance last
+   * needed padding for the size rule and never lowered again until the next
+   * one. `/balance-only` and `estimateTransactionFee` never call
+   * {@link beginBalance}, so `balanceAsks()` was permanently zero for them and
+   * `padding > 0 && balanceAsks() < padding` was permanently TRUE: every ask
+   * was answered with a crumb, for ever, with no covering coin ever reached and
+   * nothing recorded in `handed` to stop the same coin coming back. The spare
+   * mUSD mint at 13:11:12 padded with four; every `/balance-only` from 13:12:42
+   * and the resolver deploy at 13:13:02 were refused `exceeded block limit in
+   * transaction fee computation`; the grant at 13:13:10, which balanced with no
+   * padding, set it back to zero and the next `/balance-only` succeeded. Twice,
+   * the same shape, an hour apart. Padding belongs to the balance that asked
+   * for it, so it is read only inside one and cleared at its end.
+   */
   dustPadding(): number;
+  /**
+   * The ceiling on how many DUST inputs one balance may be handed, from the
+   * ledger's own block limits — see {@link maxDustInputsFor}.
+   */
+  setMaxDustInputs(count: number): void;
+  maxDustInputs(): number;
   /**
    * How many crumbs `ticket` could ACTUALLY be handed out of `coins` right
    * now: DUST below {@link DUST_CRUMB_FLOOR} that no other ticket holds and
@@ -631,6 +788,7 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
   /** key → the ticket that was refused on it and must not be handed it again. */
   const avoided = new Map<string, CoinTicket>();
   let padding = 0;
+  let maxDustInputs = MAX_DUST_INPUTS_CEILING;
 
   const isExcludedFor = (key: string, asker: CoinTicket | null): boolean => {
     const holder = held.get(key);
@@ -645,7 +803,13 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
      SDK's loop asks again after re-estimating the fee, and a selector that
      answers twice with the same coin builds a transaction that names it
      twice. Across attempts the ticket may have its own coins again. */
-  let active: { ticket: CoinTicket; selected: SelectableCoin[]; handed: Set<string> } | null = null;
+  /* A TICKET-LESS balance is allowed, and is what `/balance-only` and the fee
+     estimate open. They hold no coins — nobody owns what they select, exactly
+     as before — but they are still a balance: the hand-outs are counted, so the
+     input cap applies to them, and a coin handed out once in the run is not
+     handed out again in it. */
+  let active: { ticket: CoinTicket | null; selected: SelectableCoin[]; handed: Set<string> } | null =
+    null;
 
   return {
     beginBalance(ticket) {
@@ -654,13 +818,20 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
     endBalance() {
       const selected = active?.selected ?? [];
       active = null;
+      /* The padding was this balance's. Leaving it set is what made every
+         later `/balance-only` pad — see `dustPadding` in the interface. */
+      padding = 0;
       return selected;
     },
     hasFlights: () => flights.size > 0,
     setDustPadding(count) {
-      padding = Math.max(0, Math.floor(count));
+      padding = Math.max(0, Math.min(maxDustInputs, Math.floor(count)));
     },
-    dustPadding: () => padding,
+    dustPadding: () => (active === null ? 0 : padding),
+    setMaxDustInputs(count) {
+      maxDustInputs = Math.max(2, Math.floor(count));
+    },
+    maxDustInputs: () => maxDustInputs,
     freeCrumbs(ticket, coins) {
       let count = 0;
       for (const coin of coins) {
@@ -768,7 +939,7 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
         );
         if (chosen !== undefined && active) {
           const key = coinKey(chosen);
-          active.ticket.hold([key]);
+          active.ticket?.hold([key]);
           active.handed.add(key);
           active.selected.push(chosen);
         }

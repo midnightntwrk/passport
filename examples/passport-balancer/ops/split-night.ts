@@ -74,10 +74,7 @@ import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { type KeyMaterialProvider } from '@midnight-ntwrk/zkir-v2';
 import { NoOpTransactionHistoryStorage } from '@midnight-ntwrk/wallet-sdk';
 import { UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
-import {
-  makeServerProvingService,
-  makeWasmProvingService,
-} from '@midnight-ntwrk/wallet-sdk/capabilities/proving';
+import { makeWasmProvingService } from '@midnight-ntwrk/wallet-sdk/capabilities/proving';
 import { CustomDustWallet, DustWallet } from '@midnight-ntwrk/wallet-sdk/dust';
 import { V1Builder as DustV1Builder } from '@midnight-ntwrk/wallet-sdk/dust/v1';
 import { WalletFacade, type FacadeState } from '@midnight-ntwrk/wallet-sdk/facade';
@@ -95,6 +92,7 @@ import { V1Builder } from '@midnight-ntwrk/wallet-sdk/unshielded/v1';
 
 import { applyEnvFile, loadConfig, type BalancerConfig } from '../src/config.js';
 import { dustFeeFirst } from '../src/coinReservation.js';
+import { httpWalletProvingService } from '../src/proving.js';
 import { deriveRoleKeys, formatNight } from '../src/wallet.js';
 import {
   assertOnlyChosenInputs,
@@ -346,8 +344,12 @@ async function openWallet(
   const publicKey = PublicKey.fromKeyStore(keystore);
 
   const keyMaterialProvider: KeyMaterialProvider = WasmProver.makeDefaultKeyMaterialProvider();
+  /* THE CONFIGURED ROUTE, PATH AND ALL — see `httpWalletProvingService` in
+     `../src/proving.ts`. The SDK's own client discards the base URL's path, so
+     `https://…/prover` became the origin root and this tool's Zswap and DUST
+     proofs went to the local proof server rather than through the gateway. */
   const provingService = config.provingServerUrl
-    ? makeServerProvingService({ provingServerUrl: new URL(config.provingServerUrl) })
+    ? httpWalletProvingService(config.provingServerUrl)
     : makeWasmProvingService({ keyMaterialProvider });
 
   const snapshot = cold ? null : await readSnapshot(config, publicKey.address);
@@ -399,7 +401,7 @@ async function openWallet(
       txHistoryStorage: new NoOpTransactionHistoryStorage(),
       ...(config.provingServerUrl ? { provingServerUrl: new URL(config.provingServerUrl) } : {}),
     },
-    provingService: () => provingService,
+    provingService: () => provingService as never,
     shielded: (cfg) =>
       snapshot
         ? ShieldedWallet(cfg).restore(snapshot.shielded)

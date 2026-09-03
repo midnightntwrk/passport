@@ -23,6 +23,7 @@ import { withNodeRejectionRetry } from '../src/account.js';
 import {
   DustUnavailable,
   DustWaitExhausted,
+  feeLegRefusal,
   isDustShortfall,
   withDustWait,
 } from '../src/wallet.js';
@@ -338,5 +339,47 @@ describe('waiting for a fee-capable coin', () => {
     });
     assert.equal(result, 'registered');
     assert.equal(attempt, 3, 'shortfall, then a node rejection, then the build that lands');
+  });
+});
+
+describe('what /balance-only says when the fee leg could not be built', () => {
+  const blockLimit = new Error(
+    'Failed to balance: exceeded block limit in transaction fee computation',
+  );
+
+  it('answers 429 PENDING_TRANSACTION with a retryAfterMs the client honours, not 502', () => {
+    const verdict = feeLegRefusal(blockLimit, { contended: false });
+    assert.equal(verdict.status, 429);
+    assert.equal(verdict.code, 'PENDING_TRANSACTION');
+    assert.ok(verdict.retryAfterMs !== undefined && verdict.retryAfterMs > 0);
+    /* `sponsor.ts` clamps a delay into 2–10 s and retries a 429
+       PENDING_TRANSACTION inside a 20-second window, so a delay in that band is
+       taken as given rather than clipped. */
+    assert.ok(verdict.retryAfterMs >= 2_000 && verdict.retryAfterMs <= 10_000);
+  });
+
+  it('reads the refusal through a wrapper, as the SDK delivers it', () => {
+    const wrapped = new Error('The balancer could not add a fee leg', { cause: blockLimit });
+    assert.equal(feeLegRefusal(wrapped, { contended: false }).status, 429);
+  });
+
+  it('says the same of a DUST shortage while other jobs hold coins', () => {
+    const shortage = new Error('could not balance dust: insufficient funds');
+    assert.equal(feeLegRefusal(shortage, { contended: true }).code, 'PENDING_TRANSACTION');
+  });
+
+  it('but tells the truth about an empty wallet, which no retry mends', () => {
+    const shortage = new Error('could not balance dust: insufficient funds');
+    const verdict = feeLegRefusal(shortage, { contended: false });
+    assert.equal(verdict.status, 502);
+    assert.equal(verdict.code, 'BALANCE_FAILED');
+    assert.equal(verdict.retryAfterMs, undefined);
+  });
+
+  it('leaves every other fault a plain BALANCE_FAILED', () => {
+    assert.equal(
+      feeLegRefusal(new Error('Invalid Transaction: Custom error: 239'), { contended: true }).code,
+      'BALANCE_FAILED',
+    );
   });
 });

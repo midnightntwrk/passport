@@ -40,8 +40,12 @@ import {
   crumbsForShape,
   DuplicateInput,
   inputKeysOf,
+  isBlockLimit,
   isTimeToDismiss,
+  MAX_DUST_INPUTS_CEILING,
+  maxDustInputsFor,
   MIN_TIME_TO_DISMISS_MS,
+  parseBlockLimits,
   parseTimeToDismiss,
   TIME_TO_DISMISS_TARGET,
 } from '../src/coinReservation.js';
@@ -789,5 +793,189 @@ describe('an exact NIGHT coin', () => {
     const bigger = night('8'.repeat(64), 0, 12_020n);
     assert.equal(nightPayloadFirst([bigger, exact], NIGHT, -2_000n, {}), exact);
     assert.equal(nightPayloadFirst([bigger], NIGHT, -2_000n, {}), bigger);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The burst of 13:22–13:24 on 2026/09/03                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `exceeded block limit in transaction fee computation`, and the three things
+ * that let it happen.
+ *
+ * The sponsor split its coins between 13:00 and 13:10 and came back holding
+ * some 390 crumb DUST coins where it had held three. The spare mUSD mint at
+ * 13:11:12 padded its fee leg with four crumbs, which left `dustPadding` at
+ * four for the whole service; `/balance-only` and `estimateTransactionFee`
+ * never open a balance, so `balanceAsks()` stayed at zero for them and the
+ * padding branch fired on EVERY ask; nothing recorded the hand-outs, so the
+ * SDK's loop was fed crumb after crumb until the ledger refused to price the
+ * result. Four `/balance-only` refusals and a resolver deploy, twice, an hour
+ * apart. Each `it` below is one of the three.
+ */
+describe('the burst that tripped the block limit', () => {
+  const manyCrumbs = Array.from({ length: 390 }, (_, i) =>
+    dust(`c${String(i).padStart(63, '0')}`, 22_816_920_000n),
+  );
+  const covering = dust('f'.repeat(64), 958_411_174_705_500_693n);
+  const feeNeed = 15_000_000_000_000_000n;
+
+  it('does not pad a balance nobody opened — the padding belongs to the balance that asked for it', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(createDustFeeSelector(coins));
+
+    /* The mUSD mint, padding four. */
+    const mint = coins.open('the spare mUSD mint');
+    coins.setDustPadding(4);
+    coins.beginBalance(mint);
+    balanceLike(select, [covering, ...manyCrumbs], feeNeed);
+    coins.endBalance();
+    mint.release();
+
+    assert.equal(coins.dustPadding(), 0, 'the mint took its padding with it');
+
+    /* `/balance-only` arriving next. Before the fix this asked with a padding
+       of four against a `balanceAsks()` frozen at zero and never stopped. */
+    coins.beginBalance(null);
+    const inputs = balanceLike(select, [covering, ...manyCrumbs], feeNeed);
+    coins.endBalance();
+    assert.deepEqual(inputs, [covering], 'one covering coin, no crumbs');
+  });
+
+  it('caps the DUST inputs at the ledger’s own limit rather than accumulating crumbs', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    coins.setMaxDustInputs(maxDustInputsFor({ blockUsage: 200_000, bytesWritten: 50_000 }));
+    const select = coins.guard(createDustFeeSelector(coins));
+    /* No covering coin free at all: every large DUST coin is held by one of
+       the four concurrent jobs, which is the shape of 13:23. */
+    coins.beginBalance(null);
+    assert.throws(
+      () => balanceLike(select, manyCrumbs, feeNeed),
+      /insufficient/,
+      'the selector hands back nothing rather than a transaction the chain will not price',
+    );
+    const handed = coins.endBalance();
+    assert.ok(
+      handed.length <= coins.maxDustInputs(),
+      `handed ${handed.length} DUST inputs, cap is ${coins.maxDustInputs()}`,
+    );
+    assert.ok(handed.length < 20, 'and nowhere near the 390 crumbs that were free');
+  });
+
+  it('hands back nothing when no coin above the crumb floor is free, so the lane waits', () => {
+    /* `undefined` is what the wallet turns into "insufficient funds", which is
+       what `waitForReservedCoinMs` in `../src/wallet.ts` waits out inside the
+       lane. A crumb that covers the need on its own is still taken. */
+    assert.equal(dustFeeFirst(manyCrumbs, 'dust', -feeNeed, {}), undefined);
+    assert.equal(
+      dustFeeFirst(manyCrumbs, 'dust', -1_000n, {}),
+      manyCrumbs[0],
+      'a crumb that covers the whole need is a fee, not padding',
+    );
+  });
+
+  it('never asks for more padding than the input cap allows', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    coins.setMaxDustInputs(3);
+    coins.setDustPadding(8);
+    coins.beginBalance(coins.open('a grant'));
+    assert.equal(coins.dustPadding(), 3);
+    coins.endBalance();
+  });
+
+  it('counts DUST hand-outs in a ticket-less balance, so one coin is not offered twice', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    const select = coins.guard(dustFeeFirst);
+    coins.beginBalance(null);
+    const first = select([covering, ...manyCrumbs], 'dust', -feeNeed, {});
+    assert.equal(first, covering);
+    const again = select([covering, ...manyCrumbs], 'dust', -feeNeed, {});
+    assert.equal(again, undefined, 'the covering coin was already handed out in this balance');
+    coins.endBalance();
+  });
+});
+
+describe("the chain's block limits, read from its own parameters", () => {
+  const printed = `LedgerParameters {
+    limits: TransactionLimits {
+        transaction_byte_limit: 1048576,
+        time_to_dismiss_per_byte: 2.000μs,
+        min_time_to_dismiss: 15.000ms,
+        block_limits: SyntheticCost {
+            read_time: 1.000s,
+            compute_time: 1.000s,
+            block_usage: 200000,
+            bytes_written: 50000,
+            bytes_churned: 1000000,
+        },
+        block_withdrawal_minimum_multiple: FixedPoint(0.5),
+    },
+}`;
+
+  it('reads block_usage and bytes_written off the printed parameters', () => {
+    assert.deepEqual(parseBlockLimits(printed), { blockUsage: 200_000, bytesWritten: 50_000 });
+  });
+
+  it('turns the usage limit into an input count, with headroom for the base transaction', () => {
+    const limits = parseBlockLimits(printed);
+    assert.ok(limits);
+    const cap = maxDustInputsFor(limits);
+    assert.equal(cap, Math.min(MAX_DUST_INPUTS_CEILING, Math.floor(100_000 / CRUMB_BYTES)));
+    assert.ok(cap * CRUMB_BYTES <= (limits as { blockUsage: number }).blockUsage / 2);
+  });
+
+  it('falls back to the ceiling when the parameters cannot be read, never to unbounded', () => {
+    assert.equal(parseBlockLimits('LedgerParameters { }'), null);
+    assert.equal(maxDustInputsFor(null), MAX_DUST_INPUTS_CEILING);
+    assert.ok(maxDustInputsFor({ blockUsage: 1, bytesWritten: 1 }) >= 2, 'never below two');
+  });
+
+  it("recognises the ledger's refusal to price a transaction, wherever it is wrapped", () => {
+    const message = 'exceeded block limit in transaction fee computation';
+    assert.equal(isBlockLimit(new Error(message)), true);
+    assert.equal(isBlockLimit(new Error('outer', { cause: new Error(message) })), true);
+    assert.equal(isBlockLimit(new Error('insufficient funds')), false);
+    assert.equal(
+      isTimeToDismiss(new Error(message)),
+      false,
+      'and does not confuse it with the size rule, which is fixed by ADDING bytes',
+    );
+  });
+});
+
+describe('a sponsor whose DUST is all crumbs', () => {
+  const feeNeed = 15_000_000_000_000_000n;
+
+  it('may still combine crumbs when a set inside the cap covers the fee', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    coins.setMaxDustInputs(maxDustInputsFor({ blockUsage: 200_000, bytesWritten: 50_000 }));
+    const select = coins.guard(createDustFeeSelector(coins));
+    /* Four coins under the floor whose sum covers the need — the shape of a
+       sponsor that has just registered a few NIGHT UTxOs and holds no lineage
+       coin at all. Refusing this would be refusing to pay a fee it can pay. */
+    const fat = Array.from({ length: 4 }, (_, i) =>
+      dust(`d${String(i).padStart(63, '0')}`, DUST_CRUMB_FLOOR - 1n - BigInt(i)),
+    );
+    coins.beginBalance(null);
+    const inputs = balanceLike(select, fat, feeNeed / 5n);
+    coins.endBalance();
+    assert.ok(inputs.length >= 2 && inputs.length <= coins.maxDustInputs());
+  });
+
+  it('waits instead when no set inside the cap could ever cover it', () => {
+    const coins = createCoinReservation({ log: () => undefined });
+    coins.setMaxDustInputs(maxDustInputsFor({ blockUsage: 200_000, bytesWritten: 50_000 }));
+    const select = coins.guard(createDustFeeSelector(coins));
+    const tiny = Array.from({ length: 390 }, (_, i) =>
+      dust(`e${String(i).padStart(63, '0')}`, 22_816_920_000n + BigInt(i)),
+    );
+    coins.beginBalance(null);
+    assert.equal(
+      select(tiny, 'dust', -feeNeed, {}),
+      undefined,
+      'not one input is taken: 390 crumbs times 2.3e10 is nowhere near the fee',
+    );
+    assert.deepEqual(coins.endBalance(), [], 'and nothing was held for a transaction never built');
   });
 });
