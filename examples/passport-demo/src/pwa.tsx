@@ -317,13 +317,6 @@ export function PassportPwaShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const install = async () => {
-    if (!installPrompt) return;
-    await installPrompt.prompt();
-    const choice = await installPrompt.userChoice;
-    if (choice.outcome === 'accepted') setInstallPrompt(null);
-  };
-
   /* --- The mobile invitation ---------------------------------------------- */
 
   /**
@@ -476,14 +469,11 @@ export function PassportPwaShell({ children }: { children: ReactNode }) {
             {reloadingForUpdate ? 'Updating' : 'Update Passport'}
           </button>
         )}
-        {/* Desktop keeps the quiet corner button. On mobile the sheet is the
-            invitation, and two competing install affordances is one too many. */}
-        {installPrompt && !standalone && !mobile && (
-          <button type="button" className="pwa-action" onClick={() => void install()}>
-            <Download size={15} />
-            Install Passport
-          </button>
-        )}
+        {/* THE CORNER BUTTON WENT ON 2026/09/03. Installing is offered from
+            Home's top bar now (`screens/InstallPassport.tsx`), where a person
+            looks for it and on every browser that can do it rather than only a
+            desktop-width Chromium one. A second button saying the same thing
+            in the corner of the same screen is one too many. */}
       </div>
 
       {installSheetOpen && (

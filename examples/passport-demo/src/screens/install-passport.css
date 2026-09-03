@@ -1,0 +1,64 @@
+@import './tokens.css';
+
+/* The install control — prefix "mninstall-". Token-driven, both themes.
+   The button itself borrows `.mnhome-icon-button`, so it is the same 34px
+   circle as the theme, refresh, and sign-out controls beside it; only the
+   iOS hint popover is drawn here. */
+
+.mninstall { position: relative; display: inline-flex; }
+
+.mninstall-hint {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: 244px;
+  padding: 12px 14px 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius);
+  background: var(--mn-surface-raised);
+  box-shadow: var(--mn-shadow-lg);
+  text-align: left;
+}
+
+.mninstall-hint-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--mn-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mninstall-hint-close {
+  margin-left: auto;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mn-radius-pill);
+  color: var(--mn-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.mninstall-hint-close:hover { background: var(--mn-surface-hover); }
+
+.mninstall-hint-steps {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+.mninstall-hint-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--mn-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.mninstall-hint-steps svg { flex: 0 0 auto; margin-top: 1px; color: var(--mn-accent-ink); }

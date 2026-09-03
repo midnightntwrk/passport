@@ -56,6 +56,19 @@
  * here to render a hook into. That file holds the watch's lifetime, a
  * `visibilitychange` listener, and two refs — no decisions.
  *
+ * `src/lib/installPrompt.ts` went IN on 2026/09/03, the day it was written. It
+ * decides whether a person is offered a way to install Passport and which of
+ * the two offers they get, and it exists because a reviewer running the app in
+ * an ordinary browser tab could find no way to install it at all. Both ways of
+ * getting it wrong are user-visible and opposite: offering nothing to somebody
+ * who could install, or offering a button on iOS Safari — which fires no
+ * install event and never will — that could only do nothing when pressed. The
+ * "already installed" test is two questions rather than one for the same
+ * reason, since iOS answers only its own. It reads a plain object rather than
+ * `window`, so every rule is drilled against real user-agent strings in
+ * `src/lib/installPrompt.test.ts`. The control that renders its answer,
+ * `src/screens/InstallPassport.tsx`, stays out with the rest of the `.tsx`.
+ *
  * `src/identity/claimWarmup.ts` went IN on 2026/08/26, the day it was written,
  * and it belongs in the denominator more than most: it is the module that
  * decides whether a claim may REUSE an answer to "is this name still free" and
@@ -389,6 +402,7 @@ export default mergeConfig(
           'src/lib/colour.ts',
           'src/lib/endpoints.ts',
           'src/lib/feeReadinessPoll.ts',
+          'src/lib/installPrompt.ts',
           'src/lib/networks.ts',
           'src/lib/notifications.ts',
           'src/lib/passkeyRecovery.ts',

@@ -47,6 +47,10 @@ import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js
 import { encodeReceivePayload } from '../lib/qrPayload.js'
 import { FeaturedApps, type AppsScreenProps, type FeaturedAppsProps } from './Apps.js'
 import { EcosystemIdentity } from './Ecosystem.js'
+/* "Install Passport", in the bar where a person looks for it. Renders nothing
+   at all when Passport is already installed, or in a browser that cannot
+   install it — see `lib/installPrompt.ts`. */
+import InstallPassport from './InstallPassport.js'
 import NetworkSwitcher, { type PassportNetwork } from './NetworkSwitcher.js'
 import NotificationToggle from './NotificationToggle.js'
 import PassportContractCard, { type PassportContractCardProps } from './PassportContract.js'
@@ -634,6 +638,7 @@ export default function HomeScreen(props: HomeScreenProps) {
               chrome; the address they receive at lives inside Receive. */}
           {/* Standard 34px size, matching the icon buttons beside it. */}
           <ThemeToggle />
+          <InstallPassport />
           <button
             type="button"
             className="mnhome-icon-button"

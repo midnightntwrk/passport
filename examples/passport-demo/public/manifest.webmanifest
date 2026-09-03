@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Midnight Passport",
   "short_name": "Passport",
-  "description": "Your Midnight wallet, encrypted Passport state, and account permissions in one installable client.",
+  "description": "Your Midnight name, your money, and the apps you have connected — in one installable app.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "/",
