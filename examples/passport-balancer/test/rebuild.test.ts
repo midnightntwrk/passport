@@ -21,7 +21,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { isNodeRejection, isRebuildable, withNodeRejectionRetry } from '../src/account.js';
+import {
+  describeRebuildCause,
+  isLandedFailure,
+  isNodeRejection,
+  isRebuildable,
+  withNodeRejectionRetry,
+} from '../src/account.js';
 import { withDeadline } from '../src/contractRuntime.js';
 import { WalletCallTimeout, isWalletCallTimeout } from '../src/wallet.js';
 import { createWalletReservation } from '../src/reservation.js';
@@ -300,5 +306,84 @@ describe('rebuilding behind this wallet own pending transaction', () => {
     assert.equal(built, 'landed');
     assert.equal(attempts, 2, 'one rebuild, after the wait — not one per poll');
     assert.ok(asked.length >= 2, 'and it polled until the pending transaction had landed');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* A transaction that landed and was not applied                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `CallTxFailedError` as midnight-js throws it: `finalizedTxData` on the
+ * instance, and the same data serialised as the message. These are the fields
+ * of the 2026/09/03 02:50:09 failure of hcmtkxcwhntzz.night, block 293959.
+ */
+const landedFailure = (status: 'FailFallible' | 'FailEntirely' | 'SucceedEntirely'): Error => {
+  const finalizedTxData = {
+    status,
+    txId: '0005750eb521da635035e09dfba250905d84b7b803b2eee6f04062f59ecccd4d22',
+    blockHeight: 293959,
+    segmentStatusMap: { '0': 'SegmentSuccess', '1': 'SegmentSuccess', '61517': 'SegmentFail' },
+  };
+  const error = new Error(
+    JSON.stringify({ circuitId: 'register_domain_for', ...finalizedTxData }, null, '\t'),
+  ) as Error & { finalizedTxData: unknown; circuitId: string };
+  error.name = 'CallTxFailedError';
+  error.finalizedTxData = finalizedTxData;
+  error.circuitId = 'register_domain_for';
+  return error;
+};
+
+describe('recognising a transaction that landed and was not applied', () => {
+  it('reads the SDK error structurally, for both statuses the ledger discards', () => {
+    assert.equal(isLandedFailure(landedFailure('FailFallible')), true);
+    assert.equal(isLandedFailure(landedFailure('FailEntirely')), true);
+    assert.equal(isRebuildable(landedFailure('FailFallible')), true);
+  });
+
+  it('reads the message alone once the error has been re-wrapped on its way out', () => {
+    const rewrapped = new Error(landedFailure('FailFallible').message);
+    assert.equal(isLandedFailure(rewrapped), true);
+    const nested = new Error('the registration failed', { cause: rewrapped });
+    assert.equal(isLandedFailure(nested), true);
+  });
+
+  it('is not a node rejection, and a landed success is neither', () => {
+    assert.equal(isNodeRejection(landedFailure('FailFallible')), false);
+    assert.equal(isLandedFailure(landedFailure('SucceedEntirely')), false);
+    assert.equal(isRebuildable(landedFailure('SucceedEntirely')), false);
+    for (const cause of [new Error('ECONNREFUSED 127.0.0.1:6300'), 'FailFallible', undefined]) {
+      assert.equal(isLandedFailure(cause), false, String(cause));
+    }
+  });
+
+  it('is named as what it was in the log and the step, not as a refusal', async () => {
+    assert.deepEqual(describeRebuildCause(landedFailure('FailFallible')), {
+      verb: 'the chain landed but did not apply',
+      step: 'an on-chain failure',
+    });
+    const log: string[] = [];
+    const steps: string[] = [];
+    let builds = 0;
+    const landed = await withNodeRejectionRetry(
+      async () => {
+        builds += 1;
+        if (builds === 1) throw landedFailure('FailFallible');
+        return 'tx-2';
+      },
+      {
+        label: 'register_domain_for hcmtkxcwhntzz.night',
+        synced: async () => true,
+        pollMs: 0,
+        wait: async () => undefined,
+        log: (line) => log.push(line),
+        progress: (step) => steps.push(step),
+      },
+    );
+    assert.equal(landed, 'tx-2');
+    assert.equal(builds, 2, 'REBUILT against the registry as it now stands');
+    assert.match(log[0]!, /the chain landed but did not apply register_domain_for/);
+    assert.doesNotMatch(log[0]!, /the node refused/, 'the node accepted these bytes');
+    assert.equal(steps[0], 'rebuilding after an on-chain failure');
   });
 });

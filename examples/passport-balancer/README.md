@@ -1043,6 +1043,49 @@ rethrown untouched on the first attempt.
 It wraps `deposit_night`, `deposit_shielded`, the resolver deploy, and
 `register_domain_for`.
 
+#### The other half: a transaction that lands and is not applied
+
+A refusal at the RPC is only the first half of this failure. The second is a
+transaction the node **accepts**, includes in a block, and then does not apply:
+midnight-js throws `CallTxFailedError` whenever the finalised status is not
+`SucceedEntirely`, and two such statuses exist — `FailFallible`, where the
+guaranteed segment (the fee) was applied and every fallible segment was
+discarded, and `FailEntirely`, where nothing was applied at all. In both, the
+effect this service was paying for did not happen, the fee was still charged,
+and a rebuild is safe because there is nothing a second build could double.
+
+Measured on 2026/09/03: the activation grant for `c1a4ae05…` was refused with
+`1010: Custom error: 231` at 02:48:26, 02:48:29, and 02:48:57 — and then, at
+02:50:09, `register_domain_for hcmtkxcwhntzz.night` **landed** at block
+**293959** as `FailFallible`, segment map `{0: SegmentSuccess, 1:
+SegmentSuccess, 61517: SegmentFail}`, fees paid in full. The proof had been
+built against a view of the registry the chain had since moved past. The caller
+reported it as a rejection by the registry, which it was not.
+
+`isLandedFailure` (in `src/account.ts`) recognises it — structurally through
+`finalizedTxData.status`, and by message for copies re-wrapped on their way out
+— and `isRebuildable` accepts it, so the same wait-then-rebuild applies.
+`describeRebuildCause` names it in the journal and the step as *the chain landed
+but did not apply*, never as a refusal, because the person reading the journal
+is trying to tell these two apart.
+
+#### Named residual: the wait is on the wallet, the staleness is in the indexer
+
+**`caughtUp` is a wallet predicate — `isSynced`, `dust.complete`, nothing of
+ours in flight — but the contract state a rebuild is proved against is read
+through the indexer, which trails the node by roughly fourteen seconds.** A
+wallet can therefore be caught up while the registry view is not, and attempt 2
+can rebuild against exactly the state that produced the `FailFallible` and fail
+identically; attempt 3, after a further ~30 s of proving, usually clears it.
+
+The real fix is to wait until the indexer's block height reaches the failing
+transaction's own `finalizedTxData.blockHeight` — **293959** in the case above,
+which the error hands us directly — before rebuilding. That means threading the
+public data provider into `withNodeRejectionRetry`, which is why it is recorded
+here rather than done in the same change. Anyone who sees a second
+`FailFallible` on the same circuit within ~15 s of the first is seeing this, not
+a new fault.
+
 ### Leg B — the external timer, for the wedged case
 
 A process that is alive but no longer answering HTTP cannot notice itself: the

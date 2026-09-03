@@ -233,6 +233,64 @@ export function isNodeRejection(cause: unknown): boolean {
 }
 
 /**
+ * A transaction that LANDED and was NOT APPLIED.
+ *
+ * midnight-js throws `CallTxFailedError` (and `DeployTxFailedError`) after
+ * `submitTx` whenever the finalised status is not `SucceedEntirely`. Two such
+ * statuses exist. `FailFallible`: the guaranteed segment — the fee — was
+ * applied and every fallible segment, the contract call among them, was
+ * discarded. `FailEntirely`: nothing was applied at all. In both, the effect
+ * this service was paying for did not happen, which is what makes a rebuild
+ * safe: the name is still unregistered, the grant still uncredited, and the
+ * confirmation each caller runs afterwards is what says so, not this predicate.
+ *
+ * On 2026/09/03 at 02:50:09 `register_domain_for` for hcmtkxcwhntzz.night
+ * landed at block 293959 as `FailFallible`, segment map `{0: SegmentSuccess,
+ * 1: SegmentSuccess, 61517: SegmentFail}`, fees paid in full. The proof had
+ * been built against a view of the registry the chain had since moved past —
+ * the same family as the `1010: Custom error: 231` refusal, except that here
+ * the node accepted the bytes and the conflict only showed at execution. The
+ * caller reported it as a rejection by the registry, which it was not.
+ *
+ * Matched structurally first — the SDK error carries `finalizedTxData.status`
+ * — and by message second, for the copies that have been re-wrapped into a
+ * plain `Error` on their way here. The message form is the JSON the SDK
+ * serialises into `TxFailedError.message`.
+ */
+const LANDED_FAILURE = /"status":\s*"(?:FailFallible|FailEntirely)"/;
+const LANDED_STATUSES = new Set(['FailFallible', 'FailEntirely']);
+
+export function isLandedFailure(cause: unknown): boolean {
+  let current: unknown = cause;
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    if (typeof current === 'object') {
+      const status = (current as { finalizedTxData?: { status?: unknown } }).finalizedTxData?.status;
+      if (typeof status === 'string' && LANDED_STATUSES.has(status)) return true;
+    }
+    const message = current instanceof Error ? current.message : String(current);
+    if (LANDED_FAILURE.test(message)) return true;
+    current = current instanceof Error ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return false;
+}
+
+/**
+ * How a rebuildable failure should be NAMED in the log and the step. Three
+ * failures share one remedy; they must not share one description, because the
+ * person reading the journal is trying to tell them apart.
+ */
+export function describeRebuildCause(cause: unknown): {
+  verb: string;
+  step: string;
+} {
+  if (isNodeRejection(cause)) return { verb: 'the node refused', step: 'a node refusal' };
+  if (isLandedFailure(cause)) {
+    return { verb: 'the chain landed but did not apply', step: 'an on-chain failure' };
+  }
+  return { verb: 'this service gave up waiting on', step: 'a timeout' };
+}
+
+/**
  * Is this a failure a REBUILD could fix?
  *
  * A node rejection is the original case, and a bounded wait that expired is the
@@ -243,11 +301,14 @@ export function isNodeRejection(cause: unknown): boolean {
  * important one — a `ConfirmationTimeout` is only thrown after the indexer has
  * been asked directly and said the transaction is NOT there, and a
  * `SubmissionTimeout` only after the same check in `submitTx`. A transaction
- * that landed is never rebuilt.
+ * that landed AND APPLIED is never rebuilt; one that landed and was discarded
+ * by the ledger — {@link isLandedFailure} — is the third case, added
+ * 2026/09/03, and has applied nothing that a second build could double.
  */
 export function isRebuildable(cause: unknown): boolean {
   return (
     isNodeRejection(cause) ||
+    isLandedFailure(cause) ||
     isConfirmationTimeout(cause) ||
     isSubmissionTimeout(cause) ||
     /* Nothing has been submitted when one of these is thrown — the fee
@@ -316,8 +377,9 @@ export async function withNodeRejectionRetry<T>(
     } catch (cause) {
       last = cause;
       if (!isRebuildable(cause) || attempt === attempts) throw cause;
+      const named = describeRebuildCause(cause);
       log(
-        `[retry] ${isNodeRejection(cause) ? 'the node refused' : 'this service gave up waiting on'} ${options.label} (${cause instanceof Error ? cause.message : String(cause)}) — waiting for this wallet to catch up with the chain, then rebuilding (attempt ${attempt + 1} of ${attempts})`,
+        `[retry] ${named.verb} ${options.label} (${cause instanceof Error ? cause.message : String(cause)}) — waiting for this wallet to catch up with the chain, then rebuilding (attempt ${attempt + 1} of ${attempts})`,
       );
       /* Reported as a STEP, not only as a log line. This wait is up to
          `budgetMs` — two minutes — with nothing at the prover, which is exactly
@@ -327,7 +389,7 @@ export async function withNodeRejectionRetry<T>(
          2026/09/03: a grant sat 115 s at `fee leg proved` through one of these
          and recovered on its own, 35 s inside the window. */
       const step = options.progress ?? progress;
-      step(`rebuilding after ${isNodeRejection(cause) ? 'a node refusal' : 'a timeout'}`);
+      step(`rebuilding after ${named.step}`);
       const deadline = Date.now() + budgetMs;
       for (;;) {
         let caught = false;
