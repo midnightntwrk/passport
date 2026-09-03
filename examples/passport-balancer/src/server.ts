@@ -184,6 +184,7 @@ import {
   withDustWait,
   type BalancerWallet,
 } from './wallet.js';
+import { activationLegs, GRANT_RETRY_DELAY_MS, shouldRetryGrant } from './activationLegs.js';
 
 /**
  * `MidnightBech32m.parse` reports mainnet as the exported `mainnet` symbol (a
@@ -472,6 +473,13 @@ async function main(): Promise<void> {
   let resolverPool: ResolverPool | null = null;
   let aliasesSponsored = 0;
   let accountsFunded = 0;
+  /**
+   * Accounts whose NIGHT grant this service is about to try again on its
+   * own, after a failed attempt. A re-post for one of these is told to wait
+   * rather than started beside the retry — two grants for one account is the
+   * double credit the once-only ledger exists to prevent.
+   */
+  const grantRetries = new Set<string>();
   /**
    * Guard refusals since this process started, published as `limits` on
    * `/status`.
@@ -1436,9 +1444,25 @@ async function main(): Promise<void> {
             outstanding" with no migration. */
       const previous = accountLedger.get(contractAddress);
       const assetSupported = funder.assetAvailable;
-      const nightNeeded = previous === null && held.night < funder.grantAtomic;
-      const assetNeeded =
-        assetSupported && previous?.asset === undefined && held.asset < funder.assetGrant;
+      if (grantRetries.has(contractAddress)) {
+        return fail(
+          refusal(
+            429,
+            'grant-retrying',
+            `The activation grant for this Passport failed a moment ago and this service is about to try it again itself. Ask again shortly.`,
+            { retryAfterMs: GRANT_RETRY_DELAY_MS },
+          ),
+        );
+      }
+      /* Per leg, and by THAT leg's own record — see `./activationLegs.ts`. */
+      const { nightNeeded, assetNeeded } = activationLegs({
+        previous,
+        heldNight: held.night,
+        heldAsset: held.asset,
+        assetSupported,
+        grantAtomic: funder.grantAtomic,
+        assetGrant: funder.assetGrant,
+      });
 
       if (!nightNeeded && !assetNeeded) {
         if (previous) {
@@ -1527,6 +1551,53 @@ async function main(): Promise<void> {
          request that ended with the asset leg outstanding. */
       let nightEntry: AccountEntry | null = previous;
       let nightTxHash: string | null = previous?.txHash ?? null;
+
+      /**
+       * The sponsor's own second attempt at a failed grant. One, delayed,
+       * detached from this request — the response still reports the failure,
+       * and a client that posts again meanwhile is told to wait. The ledger
+       * is checked again before spending: a client retry that got there first
+       * makes this a no-op, not a second credit.
+       */
+      const retryGrantLater = (why: string): void => {
+        if (grantRetries.has(contractAddress)) return;
+        grantRetries.add(contractAddress);
+        console.warn(
+          `[account] ${contractAddress}: the grant failed (${why}) — this service will try it once more itself in ${Math.round(GRANT_RETRY_DELAY_MS / 1_000)} s rather than wait for the client`,
+        );
+        const timer = setTimeout(() => {
+          void (async () => {
+            try {
+              if (accountLedger.get(contractAddress)?.txHash) {
+                console.log(`[account] ${contractAddress}: the grant landed before the retry — nothing to do`);
+                return;
+              }
+              const label = `the activation grant for ${contractAddress} (retry)`;
+              const result = await spendWaitingForDust(label, () =>
+                wallet.exclusive(() => funder.fund(contractAddress), { label }),
+              );
+              accountsFunded += 1;
+              lastSpendAt = Date.now();
+              await recordLeg({
+                txHash: result.txHash,
+                amountAtomic: result.amountAtomic.toString(),
+                balanceAfterAtomic: result.balanceAfterAtomic.toString(),
+                at: result.fundedAt,
+              });
+              console.log(
+                `[account] retry: ${formatNight(result.amountAtomic)} NIGHT → ${contractAddress} (tx ${result.txHash}${result.block ? `, block ${result.block}` : ''})`,
+              );
+            } catch (cause) {
+              console.error(
+                `[account] retry FAILED for ${contractAddress}: ${cause instanceof Error ? cause.message : String(cause)} — the next /fund-account runs the NIGHT leg again`,
+              );
+            } finally {
+              grantRetries.delete(contractAddress);
+            }
+          })();
+        }, GRANT_RETRY_DELAY_MS);
+        timer.unref();
+      };
       let nightBlock: number | null = null;
       let nightAmount = previous?.amountAtomic ?? '0';
       let nightBalanceAfter = previous?.balanceAfterAtomic ?? held.night.toString();
@@ -1599,6 +1670,7 @@ async function main(): Promise<void> {
                 : cause.code === 'not-an-account'
                   ? 400
                   : 502;
+            if (shouldRetryGrant(cause.code)) retryGrantLater(cause.code);
             return fail(
               refusal(
                 status,
@@ -1610,6 +1682,7 @@ async function main(): Promise<void> {
           }
           const message = cause instanceof Error ? cause.message : String(cause);
           console.error(`[account] FAILED for ${contractAddress}: ${message}`);
+          retryGrantLater('deposit-failed');
           return fail(
             refusal(500, 'deposit-failed', `The activation grant could not be deposited: ${message}`),
           );
