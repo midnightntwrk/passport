@@ -957,9 +957,11 @@ And a fourth, which is the kinder one:
   30–40% each against **2.39 GB** resident. That is a garbage collector marking
   continuously, not a call waiting on a socket: the heavy allocation after
   `proved` is where the spiral starts and the heap it starts against is why. So
-  the heap is sampled twice a second, and at 1.8 GB — with **no spend job
-  running and nothing at the prover** — the service exits cleanly for
-  `Restart=always` to replace it. That costs a second of resume-from-snapshot at
+  the heap is sampled twice a second, and at 1.8 GB of heap **or 2.0 GB
+  resident** — with **no spend job running and nothing at the prover** — the
+  service exits cleanly for `Restart=always` to replace it. Both marks, because
+  `heapUsed` counts none of the ledger's WASM memory or the prover keys beside
+  it, and the 2.39 GB that froze was read off `VmRSS`. That costs a second of resume-from-snapshot at
   a moment when nobody is waiting, instead of eight minutes of a frozen sponsor
   at a moment when somebody is.
 
@@ -1154,6 +1156,7 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_WALLET_CALL_TIMEOUT_MS` | `120000` | How long one call into the wallet facade — the fee estimate, the balancing, the signing — may take before the service stops waiting on it and rebuilds. |
 | `BALANCER_LOOP_BLOCKED_MS` | `90000` | How long the main thread may stop running before the liveness worker kills the process for the supervisor to restart. `0` switches the worker off and leaves only the lag measurement. |
 | `BALANCER_RECYCLE_HEAP_BYTES` | `1800000000` | The heap size past which the service exits cleanly, at the next moment with no spend job running and nothing at the prover, for the supervisor to replace it. `0` switches the recycle off. |
+| `BALANCER_RECYCLE_RSS_BYTES` | `2000000000` | The same recycle, on resident size — the half `heapUsed` does not count, and the number the 2026/09/03 freeze was read off. `0` switches it off. |
 | `BALANCER_SYNC_STALL_MS` | `600000` | How long the background chain walk may stall before it is reported and the health loop's rewarm is left to act. |
 | `BALANCER_TRUSTED_PROXIES` | `127.0.0.1,::1` | The peers whose `X-Forwarded-For` is believed. Everything else is keyed on its socket address. |
 | `BALANCER_CLIENT_KEY` | — | When set, the three spend endpoints require it in an `X-Passport-Key` header. Unset leaves them open. |

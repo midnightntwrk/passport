@@ -2570,6 +2570,7 @@ async function main(): Promise<void> {
   const liveness = startLivenessWatch({
     blockedMs: config.loopBlockedMs,
     recycleHeapBytes: config.recycleHeapBytes,
+    recycleRssBytes: config.recycleRssBytes,
     /* Quiet means quiet: no spend job on the queue and nothing of ours at the
        prover. A recycle mid-claim would abandon a transaction somebody is
        watching a screen for, and the whole point of recycling early is that it

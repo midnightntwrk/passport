@@ -127,6 +127,18 @@ export interface LivenessOptions {
    */
   recycleHeapBytes?: number;
   /**
+   * The RESIDENT size, in bytes, past which the same recycle happens.
+   *
+   * Both marks, because they measure different halves of the same process and
+   * either half can be the one that grows. V8's heap is what its collector
+   * thrashes over; the ledger and the prover keys live OUTSIDE it, in WASM
+   * memory and in buffers, which `heapUsed` does not count at all. The freeze
+   * of 2026/09/03 was read off `VmRSS` — 2.39 GB — before either number was
+   * being published, so the mark that has a measurement behind it is this one.
+   * Zero switches it off.
+   */
+  recycleRssBytes?: number;
+  /**
    * True when no spend job is running and nothing of ours is at the prover.
    * The recycle waits for this: a restart mid-claim would abandon a
    * transaction, and the whole point of recycling early is that it can be done
@@ -193,6 +205,7 @@ export function startLivenessWatch(options: LivenessOptions): LivenessWatch {
 
   Atomics.store(shared, 0, BigInt(previous));
   const recycleHeapBytes = options.recycleHeapBytes ?? 0;
+  const recycleRssBytes = options.recycleRssBytes ?? 0;
   const idle = options.idle ?? ((): boolean => true);
   const recycle =
     options.recycle ??
@@ -216,12 +229,14 @@ export function startLivenessWatch(options: LivenessOptions): LivenessWatch {
     const memory = process.memoryUsage();
     heapUsedBytes = memory.heapUsed;
     rssBytes = memory.rss;
-    if (recycling || recycleHeapBytes <= 0) return;
-    if (heapUsedBytes < recycleHeapBytes) return;
+    if (recycling) return;
+    const overHeap = recycleHeapBytes > 0 && heapUsedBytes >= recycleHeapBytes;
+    const overRss = recycleRssBytes > 0 && rssBytes >= recycleRssBytes;
+    if (!overHeap && !overRss) return;
     if (!idle()) return;
     recycling = true;
     log(
-      `[loop] the heap has reached ${Math.round(heapUsedBytes / 1e6)} MB and nothing is in flight — recycling now, while it costs nobody anything, rather than freezing later`,
+      `[loop] this process is using ${Math.round(heapUsedBytes / 1e6)} MB of heap and ${Math.round(rssBytes / 1e6)} MB in all, and nothing is in flight — recycling now, while it costs nobody anything, rather than freezing later`,
     );
     recycle();
   }, tickMs);

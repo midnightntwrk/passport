@@ -116,6 +116,29 @@ describe('recycling on the heap', () => {
     await watch.stop();
   });
 
+  it('recycles on resident size even when the heap looks healthy', async () => {
+    let recycled = 0;
+    const lines: string[] = [];
+    const watch = startLivenessWatch({
+      blockedMs: 0,
+      tickMs: 20,
+      kill: false,
+      /* The half `heapUsed` does not count: the ledger's WASM memory and the
+         prover keys beside it. A sponsor can reach 2.4 GB resident — which is
+         where it froze on 2026/09/03 — with a heap that reads healthy. */
+      recycleHeapBytes: 1_800_000_000,
+      recycleRssBytes: 1,
+      idle: () => true,
+      recycle: () => {
+        recycled += 1;
+      },
+      log: (line) => lines.push(line),
+    });
+    await wait(120);
+    assert.equal(recycled, 1, lines.join('\n'));
+    await watch.stop();
+  });
+
   it('leaves a healthy heap alone', async () => {
     let recycled = 0;
     const watch = startLivenessWatch({
@@ -123,6 +146,7 @@ describe('recycling on the heap', () => {
       tickMs: 20,
       kill: false,
       recycleHeapBytes: 1_800_000_000,
+      recycleRssBytes: 2_000_000_000,
       idle: () => true,
       recycle: () => {
         recycled += 1;
@@ -132,6 +156,7 @@ describe('recycling on the heap', () => {
     await wait(120);
     assert.equal(recycled, 0);
     assert.ok(watch.health().heapUsedBytes > 0, 'and the heap is reported for /status');
+    assert.ok(watch.health().rssBytes > 0, 'and so is the resident size');
     await watch.stop();
   });
 });

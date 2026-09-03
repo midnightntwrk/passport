@@ -153,6 +153,11 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    */
   recycleHeapBytes: number;
   /**
+   * The resident size, in bytes, past which the service recycles itself at the
+   * next quiet moment. See {@link DEFAULT_RECYCLE_RSS_BYTES}.
+   */
+  recycleRssBytes: number;
+  /**
    * How long one call into the wallet facade may take before this service stops
    * waiting on it. See {@link DEFAULT_WALLET_CALL_TIMEOUT_MS}.
    */
@@ -451,6 +456,19 @@ export const DEFAULT_LOOP_BLOCKED_MS = 90_000;
  * off.
  */
 export const DEFAULT_RECYCLE_HEAP_BYTES = 1_800_000_000;
+
+/**
+ * The resident size past which the same recycle happens.
+ *
+ * 2.0 GB, and this is the mark with the measurement behind it: the freeze of
+ * 2026/09/03 was read off `VmRSS`, at 2.39 GB, seventeen minutes into a fresh
+ * process. Both marks exist because they measure different halves. V8's heap is
+ * what its collector thrashes over, and `heapUsed` counts none of the ledger's
+ * WASM memory or the prover keys held beside it — a process can therefore reach
+ * 2.4 GB resident with a heap that looks healthy, which is what a sponsor doing
+ * contract work all day does. Zero switches it off.
+ */
+export const DEFAULT_RECYCLE_RSS_BYTES = 2_000_000_000;
 
 /**
  * How long ONE call into the wallet facade may take before this service stops
@@ -798,6 +816,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
       'BALANCER_RECYCLE_HEAP_BYTES must be at least 200000000 (0 switches the recycle off): a lower mark would recycle a healthy sponsor continuously.',
     );
   }
+  const recycleRssBytes = wholeNumber(
+    'BALANCER_RECYCLE_RSS_BYTES',
+    trimmed(env.BALANCER_RECYCLE_RSS_BYTES),
+    DEFAULT_RECYCLE_RSS_BYTES,
+  );
+  if (recycleRssBytes > 0 && recycleRssBytes < 400_000_000) {
+    throw new Error(
+      'BALANCER_RECYCLE_RSS_BYTES must be at least 400000000 (0 switches the recycle off): a sponsor holding three compiled builds is past that at rest.',
+    );
+  }
   if (jobMaxMs > 0 && jobMaxMs <= jobStallMs) {
     throw new Error(
       'BALANCER_JOB_MAX_MS is the ceiling the stall watchdog cannot reach, so it must be greater than BALANCER_JOB_STALL_MS (0 removes the ceiling).',
@@ -884,6 +912,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     jobMaxMs,
     loopBlockedMs,
     recycleHeapBytes,
+    recycleRssBytes,
     walletCallTimeoutMs,
     resolverPoolTarget,
     resolverPoolFloor,
