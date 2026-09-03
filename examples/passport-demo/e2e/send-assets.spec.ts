@@ -290,10 +290,11 @@ test('a name takes a shielded asset too, and is reviewed as the two steps it is'
   const review = await page.locator('.mnhome-send-rows').innerText();
   expect(review).toContain('1 mUSD');
   expect(review).toContain(`${RESOLVABLE_NAME}.night`);
-  /* SAID BEFORE THE CONFIRM. Paying a name in a shielded asset is two
-     transactions exactly as paying one in NIGHT is, and somebody about to wait
-     through both should know that is what they are waiting for. */
-  expect(review).toContain('Two steps');
+  /* SAID BEFORE THE CONFIRM. Paying a name part of a shielded coin is three
+     transactions — the whole coin comes out, the name is paid, the change goes
+     back in — and somebody about to wait through them should know that is
+     what they are waiting for. */
+  expect(review).toContain('Three steps');
   // Still no colour and still no account address on the step that confirms.
   expect(review).not.toMatch(/\b[0-9a-f]{16,}\b/);
   expect(review).not.toContain(PASSPORT_ACCOUNT_ADDRESS);
@@ -375,7 +376,7 @@ test('a Passport account can be paid by its address, in either asset', async () 
   await page.getByRole('button', { name: /^Review$/ }).click();
   review = await page.locator('.mnhome-send-rows').innerText();
   expect(review).toContain('1 mUSD');
-  expect(review).toContain('Two steps');
+  expect(review).toContain('Three steps');
   expect(review).not.toContain(RECIPIENT_ACCOUNT_ADDRESS);
   await page.getByRole('button', { name: /^Back$/ }).click();
 
