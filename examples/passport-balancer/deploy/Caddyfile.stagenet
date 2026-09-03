@@ -1,0 +1,148 @@
+# The one public face of the sponsor: the balancer, the proof server, and
+# nothing else.
+#
+# It moved onto this box on 2026/08/27, when the 1 GB droplet that used to hold
+# it was deleted and its address was handed to somebody else. Both services
+# already run here, so the proxy lives beside them and there is no second
+# machine to lose.
+#
+# Both names serve the same thing. The sslip.io name resolves to this droplet by
+# construction and needs no DNS record, so the sponsor has a working HTTPS
+# address even while funder.midnightpassport.com still points at an address that
+# is no longer ours.
+#
+# THE /prove AND /check BLOCKS ARE LOAD-BEARING. Add nothing above them without
+# reading this:
+#
+# The wallet SDK's `HttpProverClient` builds its endpoint as
+# `new URL('/prove', baseUrl)`, which DISCARDS the path on the base — so a
+# client configured with `https://…/prover` posts its Zswap spend proof to
+# `https://…/prove`, at the root. Until 2026/09/02 that fell through to the
+# catch-all below, which answered 200 with no `Access-Control-Allow-Origin`;
+# the browser blocked the preflight, and every send that needed a wallet-side
+# shielded proof — `deposit_shielded`, and so the second leg of every shielded
+# transfer — failed with what the app reported as a sponsor refusal. The note
+# was left stranded in the sender's wallet with no way to recover it.
+#
+# So the root paths the SDK actually uses are proxied to the proof server as
+# well. No `handle_path`: the proof server wants `/prove` and `/check` exactly
+# as they arrive, and it sets its own CORS headers — adding ours produced a
+# header with two values, which browsers refuse outright.
+#
+# Install with:
+#   install -m 644 deploy/Caddyfile.stagenet /etc/caddy/Caddyfile
+#   caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+
+# ---------------------------------------------------------------------------
+# The 1AM gateway, as a loopback upstream.
+#
+# `/prover/*` below wants two upstreams — the 1AM gateway first, our own proof
+# server second — but a single `reverse_proxy` applies its `transport` and its
+# `header_up` to every upstream it holds, and Caddy refuses to mix a `https://`
+# upstream with a plain one. So the gateway gets its own listener here, where
+# the TLS transport, the `Host` it insists on, and the API key apply to it and
+# to nothing else. To the load balancer next door it is just another plain HTTP
+# backend on localhost.
+#
+# The key comes from /etc/caddy/1am.env via the systemd drop-in at
+# /etc/systemd/system/caddy.service.d/10-1am-env.conf. `{$…}` — not `{env.…}` —
+# is substituted when the Caddyfile is adapted, and `systemctl reload caddy`
+# adapts it in a fresh process that systemd has just handed the environment
+# file, so a new key takes effect on a reload with no restart. An empty value
+# is fine: the gateway serves anonymous callers at a lower rate limit, and it
+# answers an empty `x-api-key` exactly as it answers no header at all.
+#
+# `bind 127.0.0.1` keeps the listener on the loopback interface, so nothing off
+# the box can reach it. The site address carries no hostname on purpose: a site
+# address of `http://127.0.0.1:6301` would add a *host matcher* for 127.0.0.1,
+# and a proxied request arrives carrying the client's original `Host`
+# (67-205-177-162.sslip.io), which would not match — Caddy would answer the
+# empty 200 it gives an unmatched route, and every proof would be swallowed
+# silently. Only the health check, which addresses the upstream by its dial
+# address, would have matched.
+http://:6301 {
+	bind 127.0.0.1
+
+	reverse_proxy https://api-stagenet.1am.xyz {
+		header_up Host api-stagenet.1am.xyz
+		header_up X-Api-Key {$ONE_AM_API_KEY}
+
+		transport http {
+			tls
+			tls_server_name api-stagenet.1am.xyz
+			# Fail fast when the gateway is unreachable, so the health
+			# check next door marks it down instead of hanging. No
+			# response timeout: a real proof takes as long as it takes.
+			dial_timeout 5s
+		}
+	}
+}
+
+funder.midnightpassport.com, 67-205-177-162.sslip.io {
+	encode zstd gzip
+
+	# The balancer: fees, names, and activation.
+	handle_path /balancer/* {
+		reverse_proxy 127.0.0.1:8807
+	}
+
+	# The public prover address. The 1AM gateway first — it runs on a far
+	# larger box than this one — with our own proof server behind it.
+	#
+	# `lb_policy first` always picks the earliest upstream that is up, so
+	# the gateway carries the traffic whenever it can. Two health checks
+	# decide "up":
+	#
+	#   - active: a GET /health every 15s, which the loopback listener above
+	#     forwards to the gateway's own /health. When the gateway is down
+	#     this marks it down before a user ever meets it.
+	#   - passive: one 502/503/504 takes it out for 30s. This catches a
+	#     gateway that fails between health checks — the first request after
+	#     the failure is lost, every one after it goes local.
+	#
+	# Neither upstream sees the /prover prefix: `handle_path` strips it, and
+	# both serve /prove and /check at their root.
+	#
+	# Still no CORS headers of ours. Both upstreams set their own, and
+	# adding ours produced a header with two values that browsers refuse.
+	handle_path /prover/* {
+		reverse_proxy {
+			to 127.0.0.1:6301 127.0.0.1:6300
+
+			lb_policy first
+			lb_retries 2
+			lb_try_duration 10s
+			lb_try_interval 250ms
+
+			fail_duration 30s
+			max_fails 1
+			unhealthy_status 502 503 504
+
+			health_uri /health
+			health_interval 15s
+			health_timeout 5s
+			health_status 2xx
+		}
+	}
+
+	# Our own proof server, addressed explicitly. A client that wants this
+	# box and not the gateway — or anyone establishing which of the two
+	# answered — asks here.
+	handle_path /prover-local/* {
+		reverse_proxy 127.0.0.1:6300
+	}
+
+	# The same proof server at the root paths the wallet SDK's prover client
+	# builds for itself, whatever base URL it was given. See the note above.
+	handle /prove {
+		reverse_proxy 127.0.0.1:6300
+	}
+
+	handle /check {
+		reverse_proxy 127.0.0.1:6300
+	}
+
+	handle {
+		respond "midnight passport funder" 200
+	}
+}
