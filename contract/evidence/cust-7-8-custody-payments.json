@@ -5,10 +5,10 @@
   "verdict": "PASS",
   "note": "One-hop: no transaction in the flow names both accounts. Direct: one composed transaction pairs the contract-recipient spend with the payee claim; both addresses visible by design, no coin material; the received coin is discoverable and spendable.",
   "details": {
-    "accountA": "275bdd749ad04c234b5b2f0d60bd1c9d79b33a1dbcdd2a814fbb03fd38cf20bc",
-    "accountB": "86bbf19f47aa3c18995e6b7cec7ddfc54dd6788ba5e291633301654e7acd1871",
-    "hop1Tx": "00c1d0f9e12c63ca76e7b921fed34ea1955083c24c0feac4cc43e84a2c3100a413",
-    "hop2Tx": "00800d7d79b0a27cec585dd52bfbdeed90e18eedc190b00c3de49910a7d00ae4d9",
+    "accountA": "36bf0cd2fad7c697287d6e2440fc1c63ebad2d5d6debb7e39fb9547ae6cb34b9",
+    "accountB": "dafecb153bdf383da6192d5578e5efe87ef792681e107052e425714c850c4891",
+    "hop1Tx": "009cf1ffa9d22876a2e909fe5b803f3bbc0bdaed78911eae939fb48e78b769aa5b",
+    "hop2Tx": "004188fcf993ca6b92642a999ca9051b84eaf2d66e3a384a5e21699d21437895a6",
     "oneHopAudit": {
       "hop1": {
         "a": true,
@@ -21,14 +21,14 @@
     },
     "composeAttempts": [
       {
-        "mtIndex": "40",
-        "outcome": "accepted: 00422ea2d646f63905c7c10d90dfafa7726dfd9cae3e43fcb7d2ff5e324278a49e"
+        "mtIndex": "46",
+        "outcome": "accepted: 0009e3e29e84ae7e471d48b8f009d6e4932f7f929f8af262a8c678dd0a66e09d2f"
       }
     ],
-    "composedTxId": "00422ea2d646f63905c7c10d90dfafa7726dfd9cae3e43fcb7d2ff5e324278a49e",
+    "composedTxId": "0009e3e29e84ae7e471d48b8f009d6e4932f7f929f8af262a8c678dd0a66e09d2f",
     "sent": {
       "value": "150",
-      "nonce": "d5e91d9fe48b1652…"
+      "nonce": "b754f7b1730080c7…"
     },
     "directAudit": {
       "link": {
@@ -52,54 +52,58 @@
     },
     "onwardWindow": {
       "reported": [
-        "43",
-        "44"
+        "49",
+        "50"
       ],
       "swept": [
-        "39",
-        "40",
-        "41",
-        "42",
-        "43",
-        "44",
         "45",
         "46",
         "47",
-        "48"
+        "48",
+        "49",
+        "50",
+        "51",
+        "52",
+        "53",
+        "54"
       ],
       "position": {
-        "startIndex": 43,
-        "endIndex": 45
+        "startIndex": 49,
+        "endIndex": 51
       }
     },
     "onwardAttempts": [
       {
-        "mtIndex": "39",
+        "mtIndex": "45",
         "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': ContractRuntimeError: Error executing cir"
       },
       {
-        "mtIndex": "40",
-        "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': RuntimeError: unreachable"
+        "mtIndex": "46",
+        "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': Error: invalid index into sparse merkle t"
       },
       {
-        "mtIndex": "41",
-        "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': RuntimeError: unreachable"
+        "mtIndex": "47",
+        "outcome": "rejected: Unexpected error executing scoped transaction '<unnamed>': Error: invalid index into sparse merkle t"
       },
       {
-        "mtIndex": "42",
+        "mtIndex": "48",
         "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error:"
       },
       {
-        "mtIndex": "43",
-        "outcome": "accepted: 003c6bacf92a45d501d8009508b2bd7e21218683264249b237c2991982b16e7921"
+        "mtIndex": "49",
+        "outcome": "rejected: Unexpected error submitting scoped transaction '<unnamed>': Error: 'prove' returned an error: Error:"
+      },
+      {
+        "mtIndex": "50",
+        "outcome": "accepted: 0056c3d13c62de5221c731a12733775c09d7d02d4cbc1e3a44f38b580e014bb7c5"
       }
     ],
-    "onwardSpendTx": "003c6bacf92a45d501d8009508b2bd7e21218683264249b237c2991982b16e7921"
+    "onwardSpendTx": "0056c3d13c62de5221c731a12733775c09d7d02d4cbc1e3a44f38b580e014bb7c5"
   },
-  "ranAt": "2026-07-17T16:16:50.119Z",
+  "ranAt": "2026-08-27T12:59:20.475Z",
   "stack": {
-    "node": "midnightntwrk/midnight-node:1.0.0",
-    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
-    "proofServer": "midnightntwrk/proof-server:8.1.0"
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
   }
 }

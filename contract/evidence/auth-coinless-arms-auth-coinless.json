@@ -1,0 +1,32 @@
+{
+  "testId": "AUTH-COINLESS-ARMS",
+  "name": "auth-coinless",
+  "description": "Co-resident arms: k256 and jubjub seams both gate on-node; cross-arm enrolment in both directions; tampered signatures abort per arm; seam guards S12 (identity key) and S13 (self-removal) hold",
+  "verdict": "PASS",
+  "note": "Both in-circuit verifications gate state changes on-node: a k256 device enrolled a jubjub device and vice versa (the arm-migration path), the jubjub device authorised its own gated call through its rolling entry, and a tampered signature of either arm failed its in-circuit assert with no state change. The seam guards are exercised through their real attacks. S12, on BOTH arms: an entry for the weak key was planted on-ledger, then a genuine forgery against it was refused — the secp256k1 point at infinity, against which ECDSA needs no private key, and the JubJub identity (0,1), against which the Schnorr equation collapses to s·G == R. S13: a device was refused the removal of the post-roll entry it had just authorised with. Each refusal left auth_nonce and device_count unchanged. S14, with a positive control: the deploy-time signing key was used to build a maintenance update that removes the verifier key of the gated operation withdraw_shielded_with_k256 and inserts the permissionless deposit_unshielded key in its place, substituting a relation that verifies no signature at all for the seam, at the authority counter read from chain. Against an account deployed with retireAuthority: false that update returns SucceedEntirely, which demonstrates that a live maintenance authority sits above the seam and can replace a gate; the identical update against the default account fails, and the account state shows a maintenance authority with an empty committee at threshold 1, which no signature set can satisfy. Measured while establishing this: a bare VerifierKeyInsert over an operation that already holds a key is refused at every counter, so replacing a key requires the remove-and-insert pair, and compact-js addOrReplaceContractOperation (which emits a bare insert) cannot replace one.",
+  "details": {
+    "account": "01ab379550da46f678f7d376e0141d38c363265ec6951b5ced00ee49134bce36",
+    "crossArmAddTx": "00f1221e12d26b8f320731ebfb563dcd6e5bf8b29129e8d4fdb72080e5f74d850f",
+    "jubjubSeamTx": "00eeb4aec9ae79e902300e553d1caf9c4823c56329f074b5d6c1742152d006940f",
+    "tamperedJubjubAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
+    "tamperedK256Abort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
+    "identityEntryPlantedTx": "00f848804c5ccc91a10af8724610aa4cf0f178fa9aa8494a98377dd30ed0ec87a5",
+    "identityForgeryAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key is the point at infinity",
+    "identityUnflaggedForgeryAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key is the point at infinity",
+    "jubjubIdentityEntryPlantedTx": "0082778a59074ffabacbbcfdf3c943a6bc913661479d9f7db68a8fccb9f4a31da0",
+    "jubjubIdentityForgeryAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: device key has small order",
+    "selfRemovalAbort": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: cannot remove the authorising device",
+    "liveAuthoritySwapTx": "0071f0b8f8483e7e8132db2301e3d2ab9294d971221142a4677f26a9de6b3aa19c",
+    "liveAuthoritySwapStatus": "SucceedEntirely",
+    "retiredAuthoritySwapRefusal": "rejected at submission: Transaction submission error",
+    "retiredAuthorityCommitteeSize": 0,
+    "retiredAuthorityThreshold": 1,
+    "reverseCrossArmAddTx": "00a2712328d30c3096185a701947d95656f22a7d4f5b0b876ee4f41815f4b1f36f"
+  },
+  "ranAt": "2026-08-29T16:23:14.080Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

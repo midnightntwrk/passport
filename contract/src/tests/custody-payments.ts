@@ -29,7 +29,7 @@ import {
 } from './flow.js';
 import { deployAccount, compiledAccountContract } from '../node/setup.js';
 import { CustodyAccount } from '../wallet/account.js';
-import { Device, challenges } from '../wallet/signer.js';
+import { K256Device, k256Challenges } from '../wallet/signer.js';
 import { generateEncKeyPair, sealInboxEntry } from '../wallet/inbox.js';
 import { inboxWalk } from '../wallet/discovery.js';
 import { candidateIndices } from '../wallet/capture.js';
@@ -47,7 +47,7 @@ await runScenario('custody-payments', async () => {
   const details: Record<string, unknown> = { accountA: s.account.address };
 
   step('deploy account B (own device and encryption key)');
-  const deviceB = Device.generate();
+  const deviceB = K256Device.generate();
   const encKeysB = generateEncKeyPair();
   const accountB = await deployAccount(s.ctx, deviceB, encKeysB);
   details.accountB = accountB.address;
@@ -124,13 +124,13 @@ await runScenario('custody-payments', async () => {
     // candidate's mt_index included), so each retry is a fresh approval.
     const heldA = await s.account.heldCoin(coin.color);
     const authA = s.device.sign(
-      challenges.withdrawShieldedToContract(ctxA, s.device.pk, accountB.addressBytes, coin.color, DIRECT, heldA),
+      k256Challenges.withdrawShieldedToContract(ctxA, s.device.pk, accountB.addressBytes, coin.color, DIRECT, heldA),
       await s.account.resolveUseCounter(s.device),
     );
     await pointAt(s.account.address);
     const callA: any = await (createUnprovenCallTx as any)(s.ctx.providers, {
       compiledContract: compiledAccountContract(),
-      circuitId: 'withdraw_shielded_to_contract',
+      circuitId: 'withdraw_shielded_to_contract_with_k256',
       contractAddress: s.account.address,
       args: [
         { bytes: accountB.addressBytes },
@@ -138,9 +138,7 @@ await runScenario('custody-payments', async () => {
         DIRECT,
         authA.pk,
         authA.use_counter,
-        authA.sig_r,
-        authA.sig_s,
-        authA.grind_nonce,
+        authA.sig,
       ],
       privateStateId: s.account.privateStateId,
     });
@@ -179,7 +177,7 @@ await runScenario('custody-payments', async () => {
     try {
       const finalized: any = await (submitTx as any)(s.ctx.providers, {
         unprovenTx: composed,
-        circuitId: ['withdraw_shielded_to_contract', 'deposit_shielded'],
+        circuitId: ['withdraw_shielded_to_contract_with_k256', 'deposit_shielded'],
       });
       composedTxId = finalized?.txId ?? finalized?.transactionHash;
       composeAttempts.push({ mtIndex: idx.toString(), outcome: `accepted: ${composedTxId}` });
