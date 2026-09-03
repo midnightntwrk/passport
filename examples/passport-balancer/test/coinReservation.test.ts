@@ -580,7 +580,7 @@ describe('padding a fee leg for size', () => {
   const crumbs = Array.from({ length: 5 }, (_, i) => dust(String(i).padStart(64, '0'), 3_968_160_000n + BigInt(i)));
   const large = dust('f'.repeat(64), 1_063_482_701_844_916_860n);
 
-  it('answers the first `padding` asks with the smallest crumbs, then the covering coin', () => {
+  it('answers the first `padding` asks with the largest crumbs, then the covering coin', () => {
     const coins = createCoinReservation({ log: () => undefined });
     const select = coins.guard(createDustFeeSelector(coins));
     const job = coins.open('grant');
@@ -588,7 +588,7 @@ describe('padding a fee leg for size', () => {
     coins.beginBalance(job);
     const inputs = balanceLike(select, [large, ...crumbs], 15_000_000_000_000_000n);
     coins.endBalance();
-    assert.deepEqual(inputs, [crumbs[0], crumbs[1], large]);
+    assert.deepEqual(inputs, [crumbs[4], crumbs[3], large], 'the largest crumbs first — the oldest');
   });
 
   it('with no padding is the one-coin selector', () => {

@@ -1973,6 +1973,12 @@ export async function openBalancerWallet(
          takes, then the coins its submission puts in flight. */
       let ticket: CoinTicket | null = null;
       let inFlightUntil = 0;
+      /* The padding a REFUSAL taught this job. The local checks are the
+         ledger's own arithmetic, but the node's verdict is the only one that
+         counts, and on 2026/09/03 at 07:18 a transaction that passed proven
+         with two crumbs was refused; each refusal now raises the floor for
+         the job's next attempt, so the attempts climb rather than repeat. */
+      let padFloor = 0;
       return {
         getCoinPublicKey: () => shieldedSecretKeys.coinPublicKey,
         getEncryptionPublicKey: () => shieldedSecretKeys.encryptionPublicKey,
@@ -2059,7 +2065,7 @@ export async function openBalancerWallet(
               ticket = opened;
               releaseWithJob(() => opened.release());
             }
-            let padRounds = 0;
+            let padRounds = padFloor;
             const balanceOnce = async (): Promise<BalancingRecipe> => {
               const mine = ticket!;
               coins.setDustPadding(padRounds);
@@ -2357,6 +2363,7 @@ export async function openBalancerWallet(
                be handed them again: its rebuild must be a different shape.
                Released when the job ends. */
             ticket?.refused();
+            padFloor = Math.min(8, padFloor + 2);
             /* The node-rejection path, and the one the two wedges of
                2026/09/02 came down. When the revert lands within the SDK's
                six-second event window it works and this finds nothing; when it

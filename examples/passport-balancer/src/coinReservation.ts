@@ -167,9 +167,11 @@ export function createDustFeeSelector(reservation: {
   return (coins, tokenType, amount, costModel) => {
     const padding = reservation.dustPadding();
     if (padding > 0 && reservation.balanceAsks() < padding) {
+      /* The LARGEST crumbs: a crumb's generated value is its age, and the
+         oldest are the ones run 3 landed with. */
       const crumbs = coins
         .filter((coin) => coin.value > 0n && coin.value < DUST_CRUMB_FLOOR)
-        .sort((a, b) => Number(a.value - b.value));
+        .sort((a, b) => Number(b.value - a.value));
       if (crumbs.length > 0) return crumbs[0];
     }
     return dustFeeFirst(coins, tokenType, amount, costModel);
