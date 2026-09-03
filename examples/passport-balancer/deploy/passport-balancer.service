@@ -41,6 +41,15 @@ Environment=BALANCER_PROVER_URL=http://127.0.0.1:6300
 Environment=BALANCER_HOST=0.0.0.0
 Environment=BALANCER_ALLOWED_ORIGINS=https://midnightpassport.com,https://raffle.midnightpassport.com,https://template.midnightpassport.com,http://localhost:5175
 Environment=NODE_OPTIONS=--max-old-space-size=4096
+# The resolver shelf is OFF pending proof that its filler is safe to leave
+# running. Until 2026/09/03 every contract job leaked its indexer client — eight
+# sockets and ninety-seven megabytes a job, measured — and the filler is the one
+# thing here that runs a contract job every minute unprompted, so it reached the
+# freeze first and reached it while nobody had asked for anything. With the
+# leak closed, the gate to lift this is three consecutive filler deploys with
+# /status answering inside one second throughout. Every registration deploys its
+# own leaf meanwhile, which is what this service did before the shelf existed.
+Environment=RESOLVER_POOL_TARGET=0
 ExecStart=/usr/bin/node dist/server.mjs
 Restart=always
 RestartSec=5

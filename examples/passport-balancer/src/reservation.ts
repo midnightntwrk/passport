@@ -164,6 +164,27 @@ export interface RunningJob {
    */
   submitted: boolean;
   /**
+   * Things to release when this job ends, however it ends.
+   *
+   * THE LEAK THIS EXISTS TO CLOSE, MEASURED. Every contract job builds its own
+   * indexer provider — an Apollo client over a graphql-ws WebSocket — and
+   * midnight-js's provider has a `dispose()` that releases both. Nothing here
+   * called it. On 2026/09/03 one resolver-leaf deploy took the sponsor from 6
+   * sockets and 276 MB resident to 14 sockets and 373 MB: eight sockets and
+   * ninety-seven megabytes PER JOB, none of it ever given back. The retained
+   * subscriptions are not idle either — `TXS_FROM_BLOCK_SUB` carries every
+   * block on chain, which each surviving client then inflates, parses, and
+   * normalises into a cache of its own, on this thread. Thirty-five jobs in,
+   * that is thirty-five copies of that work per block and 2.4 GB of heap, which
+   * is the freeze.
+   *
+   * Registered rather than wrapped in a `try`/`finally` at each call site
+   * because a job that the watchdog ABANDONS never reaches its own `finally` —
+   * and an abandoned job is exactly the one whose sockets nobody else will
+   * close.
+   */
+  release: Array<() => Promise<void> | void>;
+  /**
    * Aborted by the watchdog. Everything a job waits on that CAN be unwound —
    * the submission wrapper, the confirmation deadlines — races against it, so
    * the abort is not merely bookkeeping.
@@ -201,6 +222,21 @@ export function progress(step: string, log?: (line: string) => void): void {
   job.lastStep = step;
   if (step === 'submitted') job.submitted = true;
   (log ?? ((line: string) => console.log(line)))(`[job] ${job.label} ${step} (${job.id})`);
+}
+
+/**
+ * Registers something to be released when the running job ends, however it
+ * ends. Silent when there is no job — the long-lived readers this service opens
+ * once at start-up must not be closed by whoever happens to be running.
+ *
+ * See {@link RunningJob.release} for the eight sockets and ninety-seven
+ * megabytes a job used to keep.
+ */
+export function releaseWithJob(release: () => Promise<void> | void): boolean {
+  const job = runningJob.getStore();
+  if (!job) return false;
+  job.release.push(release);
+  return true;
 }
 
 /** What `/status` publishes, and what the droplet watchdog matches a stall on. */
@@ -443,6 +479,7 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
             lastProgressAt: startedAt,
             lastStep: 'started',
             submitted: false,
+            release: [],
             abort: new AbortController(),
             now,
           };
@@ -458,6 +495,16 @@ export function createWalletReservation(options: WalletReservationOptions = {}):
             settled = true;
             running.delete(id);
             jobs -= 1;
+            /* Released before the queue moves on, and never allowed to fail the
+               job: a socket that would not close is a thing to note, not a
+               registration to undo. */
+            for (const release of record.release.splice(0)) {
+              try {
+                void Promise.resolve(release()).catch(() => undefined);
+              } catch {
+                // As above.
+              }
+            }
             settleJob();
             drain();
           };

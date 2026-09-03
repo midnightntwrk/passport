@@ -30,7 +30,7 @@ import type { ZKConfigProvider } from '@midnight-ntwrk/midnight-js-types';
 
 import type { BalancerConfig } from './config.js';
 import { countingProof } from './proving.js';
-import { currentJob, progress } from './reservation.js';
+import { currentJob, progress, releaseWithJob } from './reservation.js';
 import type { ContractWalletProvider } from './wallet.js';
 
 /** Attempts, {@link CONFIRM_INTERVAL_MS} apart, to resolve an identifier to a hash. */
@@ -780,23 +780,61 @@ export async function contractProviders(
     walletProvider: ContractWalletProvider;
   },
 ) {
+  /* EVERY indexer client this job opens, so that every one of them is closed
+     when the job ends. `indexerPublicDataProvider` is an Apollo client over a
+     graphql-ws WebSocket and it has a `dispose()`; until 2026/09/03 nothing
+     here called it, and one leaf deploy took the sponsor from 6 sockets and
+     276 MB resident to 14 and 373 MB. See `RunningJob.release`. */
+  const opened: Array<{ dispose?: () => unknown }> = [];
+  const open = async () => {
+    const provider = await publicDataProviderFor(config);
+    opened.push(provider as { dispose?: () => unknown });
+    return provider;
+  };
+
+  const dispose = async (): Promise<void> => {
+    for (const provider of opened.splice(0)) {
+      try {
+        await provider.dispose?.();
+      } catch {
+        /* A socket that will not close is worth no more than this: the process
+           is not going to be made healthier by failing a finished job over it,
+           and the next restart closes it either way. */
+      }
+    }
+  };
+
+  const base = await open();
+  /* Registered with the RUNNING JOB rather than left to a `finally` here,
+     because a job the watchdog abandons never reaches its own `finally` — and
+     an abandoned job is precisely the one whose sockets nobody else will
+     close. A provider set built outside any job (a start-up reader) keeps the
+     old behaviour and is closed by the caller or by the restart. */
+  if (!releaseWithJob(dispose)) {
+    /* Visible rather than silent. Every contract path in this service runs
+       inside a spend job, so this line means a new one does not — and a
+       provider set nobody closes is how the sponsor reached 2.4 GB. */
+    console.warn(
+      `[job] a provider set for ${options.privateStateId} was built outside any spend job — its indexer client will not be closed until this process restarts`,
+    );
+  }
+
   return {
     privateStateProvider: inMemoryPrivateStateProvider({
       [options.privateStateId]: options.initialPrivateState,
     }),
     /* Bounded, because midnight-js waits on these three with no deadline at
        all — see `boundedPublicDataProvider`. */
-    publicDataProvider: boundedPublicDataProvider(
-      (await publicDataProviderFor(config)) as never,
-      {
-        confirmTimeoutMs: config.confirmTimeoutMs,
-        fresh: async () => (await publicDataProviderFor(config)) as never,
-        indexerHttpUrl: config.indexerHttpUrl,
-      },
-    ),
+    publicDataProvider: boundedPublicDataProvider(base as never, {
+      confirmTimeoutMs: config.confirmTimeoutMs,
+      fresh: async () => (await open()) as never,
+      indexerHttpUrl: config.indexerHttpUrl,
+    }),
     zkConfigProvider: options.zkConfigProvider,
     proofProvider: options.proofProvider,
     walletProvider: options.walletProvider,
     midnightProvider: options.walletProvider,
+    /** Closes every indexer client this set opened. Idempotent. */
+    dispose,
   };
 }

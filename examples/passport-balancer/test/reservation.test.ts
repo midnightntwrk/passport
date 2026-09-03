@@ -22,6 +22,7 @@ import {
   createWalletReservation,
   isSpendJobStalled,
   progress,
+  releaseWithJob,
   type WalletReservation,
 } from '../src/reservation.js';
 
@@ -791,5 +792,80 @@ describe('the lane ceiling', () => {
     await wait(10);
     assert.equal(reservation.counts().jobs, 1, 'ten minutes of proving is a healthy job');
     reservation.stop();
+  });
+});
+
+/**
+ * What a job releases when it ends, and the measurement behind it.
+ *
+ * Every contract job builds its own indexer provider — an Apollo client over a
+ * graphql-ws WebSocket — and midnight-js's provider has a `dispose()` that
+ * releases both. Nothing here called it. Measured on the droplet on
+ * 2026/09/03: one resolver-leaf deploy took the sponsor from 6 sockets and
+ * 276 MB resident to 14 sockets and 373 MB. Eight sockets and ninety-seven
+ * megabytes per job, and the retained subscriptions carry every block on chain,
+ * so the per-block work on this thread grew with every job the service had ever
+ * run.
+ */
+describe('releasing what a job opened', () => {
+  it('releases on the ordinary path', async () => {
+    const closed: string[] = [];
+    const reservation = createWalletReservation({ log: () => undefined });
+    await reservation.exclusive(async () => {
+      releaseWithJob(() => {
+        closed.push('indexer client');
+      });
+    }, { label: 'a resolver leaf for the shelf' });
+    assert.deepEqual(closed, ['indexer client']);
+    reservation.stop();
+  });
+
+  it('releases when the job FAILS', async () => {
+    const closed: string[] = [];
+    const reservation = createWalletReservation({ log: () => undefined });
+    await assert.rejects(
+      reservation.exclusive(async () => {
+        releaseWithJob(() => {
+          closed.push('indexer client');
+        });
+        throw new Error('the node refused it');
+      }, { label: 'a registration' }),
+    );
+    assert.deepEqual(closed, ['indexer client'], 'a failed job leaks nothing');
+    reservation.stop();
+  });
+
+  it('releases when the watchdog ABANDONS the job', async () => {
+    /* The case a try/finally at the call site cannot reach: an abandoned job
+       never returns, so its own cleanup never runs — and an abandoned job is
+       precisely the one whose sockets nobody else will close. */
+    const closed: string[] = [];
+    let clock = 1_000;
+    const reservation = createWalletReservation({
+      stallMs: 100,
+      proverIdle: () => true,
+      watchdogIntervalMs: 5,
+      now: () => clock,
+      log: () => undefined,
+    });
+
+    const abandoned = reservation
+      .exclusive(async () => {
+        releaseWithJob(() => {
+          closed.push('indexer client');
+        });
+        return new Promise<never>(() => undefined);
+      }, { label: 'the spare mUSD mint' })
+      .catch((cause: unknown) => cause);
+
+    await wait(10);
+    clock += 200;
+    assert.ok(isSpendJobStalled(await abandoned));
+    assert.deepEqual(closed, ['indexer client']);
+    reservation.stop();
+  });
+
+  it('says so when there is no job to release with', () => {
+    assert.equal(releaseWithJob(() => undefined), false);
   });
 });

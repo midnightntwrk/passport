@@ -947,6 +947,29 @@ Nothing scheduled on a blocked loop can end one. Three things close it:
   sponsor back in seconds rather than after eight minutes of silence and ninety
   more of an unanswerable stop.
 
+And a fifth, which is where the heap came from:
+
+- **Every job now closes the indexer client it opened.**
+  `indexerPublicDataProvider` is an Apollo client over a graphql-ws WebSocket
+  and it has a `dispose()`; nothing here called it. Measured on the droplet on
+  2026/09/03: one resolver-leaf deploy took the sponsor from **6 sockets and
+  276 MB** resident to **14 sockets and 373 MB**. Eight sockets and
+  ninety-seven megabytes per job, never given back — and the retained
+  subscriptions are not idle, because `TXS_FROM_BLOCK_SUB` carries every block
+  on chain for each surviving client to inflate, parse, and normalise into a
+  cache of its own, on this thread. Thirty-five jobs in, that is thirty-five
+  copies of that work per block against 2.4 GB of heap, which is the freeze.
+  Disposal is registered with the running **job** rather than written as a
+  `finally` at each call site, because a job the watchdog abandons never
+  reaches its own `finally` — and an abandoned job is precisely the one whose
+  sockets nobody else will close.
+
+  The resolver shelf is **off** (`RESOLVER_POOL_TARGET=0` in the unit) until
+  three consecutive filler deploys run with `/status` answering inside one
+  second throughout: the filler is the one thing here that starts a contract
+  job every minute unprompted, so it reached the freeze first and reached it
+  while nobody had asked for anything.
+
 And a fourth, which is the kinder one:
 
 - **The sponsor recycles before the spiral** (`BALANCER_RECYCLE_HEAP_BYTES`).
