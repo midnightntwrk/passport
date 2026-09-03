@@ -163,6 +163,7 @@ import {
   type AliasRegistration,
   type MidnamesSponsor,
 } from './midnames.js';
+import { countingProof, proofsInFlight } from './proving.js';
 import { SpendPriority } from './reservation.js';
 import {
   FEE_CAPABLE_SPECKS,
@@ -428,7 +429,10 @@ async function main(): Promise<void> {
    * on a two-vCPU droplet's single prover, and the one that suffers is the one
    * a person is waiting for.
    */
-  let proofsInFlight = 0;
+  /* A process-wide count now, not a local one: `/balance-only` is no longer
+     the only path that proves. See `./proving.ts` — the stall watchdog reads
+     the same number, and a watchdog that could not see a contract proof would
+     abort registrations that were merely mid-proof. */
 
   process.stdout.write('opening the balancer wallet\n');
   const wallet: BalancerWallet = await openBalancerWallet(config, {
@@ -951,6 +955,12 @@ async function main(): Promise<void> {
       lanes: wallet.spendLanes(),
       lanesConfigured: config.spendLanes,
       jobsRunning: wallet.jobCount(),
+      /* One entry per running job: what it is, the last step it reported, and
+         how long ago. `sinceProgressMs` next to `proofInFlight` is the pair the
+         droplet watchdog matches a wedge on — a job that has reported nothing
+         for minutes while the prover is idle is stuck, not slow. */
+      jobs: wallet.runningJobs(),
+      proofInFlight: proofsInFlight() > 0,
       /* Since this process started, and — for each `…Total` — the persisted
          once-only ledger, which survives restarts. None of these is key
          material and none of them names a user. */
@@ -1241,21 +1251,30 @@ async function main(): Promise<void> {
       target: config.resolverPoolTarget,
       floor: config.resolverPoolFloor,
       facts: async () => ({
-        verdict: healthMonitor?.snapshot().verdict ?? null,
+        /* Asked, not remembered. `snapshot()` is the last tick's word and the
+           loop's interval is minutes, so a `busy` left over from a spend that
+           finished long ago used to pause the filler for the whole gap. */
+        verdict: (await healthMonitor?.assessNow())?.verdict ?? null,
         /* Booked OR queued OR claimed. See the field's own note in
            `./resolverPool.ts`: a leaf deploy must never join a queue somebody
            is waiting in. */
         reservationBooked:
           wallet.isBusy() || wallet.isReserved() || spendAdmission.depth > 0 || dustRepairPending,
         feeCapableCoins: await feeCapableDustCoins(),
-        proofInFlight: proofsInFlight > 0,
+        /* The filler takes a lane like any other spend, so it must leave one.
+           See `MIN_FREE_LANES`. */
+        freeLanes: wallet.spendLanes() - wallet.jobCount(),
+        proofInFlight: proofsInFlight() > 0,
         lastRequestAt,
       }),
       /* Through the spend queue like every other spend, at Normal priority —
          the gate is what keeps it out of a user's way, not a priority, and a
          deploy that skipped the queue would contend for coins with the very
          registration it exists to make faster. */
-      deploy: () => wallet.exclusive(() => leafSponsor.deployPoolLeaf()),
+      deploy: () =>
+        wallet.exclusive(() => leafSponsor.deployPoolLeaf(), {
+          label: 'a resolver leaf for the shelf',
+        }),
     });
     console.log(
       `[pool] holding ${resolverLedger.countWhere((entry) => entry.consumedAt === undefined)} pre-deployed resolver leaves, target ${config.resolverPoolTarget}, floor ${config.resolverPoolFloor} — the filler deploys one at a time, at most one a minute, and only when nothing else wants this wallet`,
@@ -1295,6 +1314,14 @@ async function main(): Promise<void> {
         body: { error: why.error, message: why.message, ...(why.extra ?? {}) },
       };
     };
+
+    /* Logged on ARRIVAL, not only on the way out. Until 2026/09/02 an
+       activation that went silent left no journal line saying it had ever been
+       asked for, so reading the journal after a wedge could not tell a request
+       that hung from one that never came. */
+    console.log(
+      `[account] asked to fund ${typeof body.contractAddress === 'string' ? body.contractAddress : '(no address)'}`,
+    );
 
     /* Captured, not re-read: `accountFunder` is a `let`, and TypeScript's
        narrowing does not survive into the closures below. */
@@ -1507,7 +1534,10 @@ async function main(): Promise<void> {
              minutes an activation used to take to show its assets. */
           const result = await spendWaitingForDust(
             `the activation grant for ${contractAddress}`,
-            () => wallet.exclusive(() => funder.fund(contractAddress)),
+            () =>
+              wallet.exclusive(() => funder.fund(contractAddress), {
+                label: `the activation grant for ${contractAddress}`,
+              }),
           );
           accountsFunded += 1;
           lastSpendAt = Date.now();
@@ -1710,6 +1740,13 @@ async function main(): Promise<void> {
         body: { error: why.error, message: why.message, ...(why.extra ?? {}) },
       };
     };
+
+    /* Logged on ARRIVAL — see the same note in `fundAccount`. The alias path
+       was the worse of the two: it printed nothing at all until it ended, so
+       the 23:46 wedge had no line naming the name it was registering. */
+    console.log(
+      `[alias] asked to register ${typeof body.alias === 'string' ? body.alias : '(no alias)'} for ${typeof body.contractAddress === 'string' ? body.contractAddress : '(no address)'}`,
+    );
 
     /* Captured, not re-read: `sponsor` is a `let`, and TypeScript's narrowing
        does not survive into the closures below. */
@@ -2022,7 +2059,11 @@ async function main(): Promise<void> {
            `SpendPriority`. */
         const result = await spendWaitingForDust(
           `the registration of ${aliasDomain(label)}`,
-          () => wallet.exclusive(registerOnce, { priority: SpendPriority.Registration }),
+          () =>
+            wallet.exclusive(registerOnce, {
+              priority: SpendPriority.Registration,
+              label: `the registration of ${aliasDomain(label)}`,
+            }),
           SpendPriority.Registration,
         );
         aliasesSponsored += 1;
@@ -2391,9 +2432,8 @@ async function main(): Promise<void> {
           return;
         }
 
-        proofsInFlight += 1;
         try {
-          const result = await wallet.balanceOnly(bytes);
+          const result = await countingProof(() => wallet.balanceOnly(bytes));
           balancesServed += 1;
           lastBalanceMs = Date.now();
           lastBalanceAt = new Date(lastBalanceMs).toISOString();
@@ -2415,8 +2455,6 @@ async function main(): Promise<void> {
           const message = cause instanceof Error ? cause.message : String(cause);
           console.error('[balance] failed', cause);
           respond(request, response, 500, { error: 'BALANCE_FAILED', message });
-        } finally {
-          proofsInFlight -= 1;
         }
         return;
       }

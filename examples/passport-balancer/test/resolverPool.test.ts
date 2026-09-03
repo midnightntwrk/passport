@@ -191,9 +191,11 @@ describe('the filler gate', () => {
   });
 
   /* Every unhealthy verdict, by name. The list is the health module's own
-     union, and a new verdict added there without a decision here would
-     otherwise default to whatever the last branch happened to do. */
-  for (const verdict of ['busy', 'settling', 'degraded', 'wedged', 'dust-wedged'] as const) {
+     union MINUS `busy`, which stopped being an obstruction on 2026/09/02 — see
+     the test below it, and the note in `assessResolverPool`. A new verdict
+     added to the union without a decision here would otherwise default to
+     whatever the last branch happened to do. */
+  for (const verdict of ['settling', 'degraded', 'wedged', 'dust-wedged'] as const) {
     it(`pauses while health is ${verdict}`, () => {
       const assessment = assessResolverPool(openGates({ verdict }));
       assert.deepEqual(assessment, {
@@ -203,6 +205,30 @@ describe('the filler gate', () => {
       });
     });
   }
+
+  /* The gate that kept the shelf empty. On 2026/09/02 one wedged spend job held
+     the verdict at `busy` for thirty-seven minutes, and every name registered in
+     that window deployed its own leaf on the user's click because the filler
+     had paused itself. `busy` says a spend is running, which is a thing the
+     lane and reservation gates below already decide on properly. */
+  it('deploys while health is busy, if the queue itself is clear', () => {
+    const assessment = assessResolverPool(openGates({ verdict: 'busy' }));
+    assert.equal(assessment.deploy, true);
+    assert.equal(assessment.state, 'filling');
+  });
+
+  it('pauses while fewer than two lanes are free, so a person still finds one', () => {
+    const assessment = assessResolverPool(openGates({ verdict: 'busy', freeLanes: 1 }));
+    assert.deepEqual(assessment, {
+      state: 'paused',
+      reason: 'fewer than two lanes free',
+      deploy: false,
+    });
+  });
+
+  it('deploys with two lanes free', () => {
+    assert.equal(assessResolverPool(openGates({ freeLanes: 2 })).deploy, true);
+  });
 
   it('pauses before the watchdog has said anything at all', () => {
     const assessment = assessResolverPool(openGates({ verdict: null }));

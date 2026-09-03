@@ -778,6 +778,19 @@ export interface HealthMonitor {
   snapshot(): HealthSnapshot;
   /** Runs one tick now, and resolves once it and any remedy have finished. */
   tick(): Promise<HealthAssessment | null>;
+  /**
+   * The verdict as it stands RIGHT NOW — one probe, no remedy, no bookkeeping.
+   *
+   * `snapshot()` is the last tick's word, and the loop's interval is minutes.
+   * That is fine for `/status`, which is a report, and wrong for a gate: the
+   * resolver-pool filler reading a `busy` verdict left over from a spend that
+   * finished four minutes ago paused itself for no reason. This asks.
+   *
+   * It deliberately does NOT touch the streak counter or the snapshot: a probe
+   * taken to answer a gate must not be able to escalate a remedy or reset a
+   * fault streak that the loop is tracking.
+   */
+  assessNow(): Promise<HealthAssessment>;
   stop(): void;
 }
 
@@ -1003,6 +1016,42 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
   return {
     snapshot: () => ({ ...snapshot }),
     tick: runTick,
+    assessNow: async (): Promise<HealthAssessment> => {
+      const at = now();
+      try {
+        const reading = await options.probe();
+        return assessHealth(
+          { ...reading, now: at, lastStateChangeAt, consecutiveUnhealthy },
+          policy,
+        );
+      } catch {
+        /* An unreadable wallet, which is a real verdict rather than an error —
+           and the caller (a gate) needs an answer, not an exception. */
+        return assessHealth(
+          {
+            now: at,
+            uptimeMs: at - bootedAt,
+            stateReadable: false,
+            synced: false,
+            connected: false,
+            dustSpecks: 0n,
+            utxoCount: 0,
+            nightAtomic: 0n,
+            dustGenerating: false,
+            pendingTransactions: 0,
+            proving: 'failed',
+            reserved: false,
+            busy: false,
+            syncAhead: null,
+            lastSponsorshipAt: null,
+            orphans: 0,
+            lastStateChangeAt,
+            consecutiveUnhealthy,
+          },
+          policy,
+        );
+      }
+    },
     stop: () => {
       stopped = true;
       if (timer) clearTimeout(timer);

@@ -76,7 +76,15 @@ export const QUIET_MS = 60_000;
 export const MIN_DEPLOY_INTERVAL_MS = 60_000;
 
 /** How often the filler looks, when it is running. */
-export const DEFAULT_POOL_INTERVAL_MS = 30_000;
+/**
+ * How often the filler looks, when it is running.
+ *
+ * One stagenet block. The gate is cheap — it reads counters and one coin count
+ * — and the thing it is waiting for changes every block, so looking once every
+ * thirty seconds meant the shelf stayed empty through five blocks of a perfectly
+ * good opportunity.
+ */
+export const DEFAULT_POOL_INTERVAL_MS = 6_000;
 
 export type ResolverPoolState = 'idle' | 'filling' | 'paused';
 
@@ -107,7 +115,19 @@ export interface ResolverPoolFacts {
   lastDeployAt: number;
   /** A deploy started by an earlier tick has not finished. */
   deploying: boolean;
+  /**
+   * Spend lanes with no job in them right now.
+   *
+   * The filler wants TWO, for the same reason {@link MIN_FEE_CAPABLE_COINS} is
+   * two: the leaf deploy takes one, and the next thing a person asks for must
+   * still find one free. Absent — for the callers that predate lanes — is read
+   * as "enough", so this gate only ever tightens where it is wired up.
+   */
+  freeLanes?: number;
 }
+
+/** Lanes that must be free before the filler will take one. */
+export const MIN_FREE_LANES = 2;
 
 export interface ResolverPoolVerdict {
   state: ResolverPoolState;
@@ -139,7 +159,15 @@ export function assessResolverPool(facts: ResolverPoolFacts): ResolverPoolVerdic
       deploy: false,
     };
   }
-  if (facts.verdict !== 'healthy') {
+  /* `busy` is NOT an obstruction, and treating it as one was a real cost on
+     2026/09/02: a single wedged spend job held the health verdict at `busy` for
+     thirty-seven minutes, which paused the filler for the whole of it, so every
+     name that afternoon deployed its own leaf on the user's click instead of
+     taking one off the shelf. Busy means "a spend job is running", which is
+     exactly what `reservationBooked` and `freeLanes` below already say — and
+     they say it about the queue rather than about a verdict that lags a tick.
+     A verdict that reports something actually WRONG still pauses the filler. */
+  if (facts.verdict !== 'healthy' && facts.verdict !== 'busy') {
     return {
       state: 'paused',
       reason: facts.verdict === null ? 'no health verdict yet' : `health is ${facts.verdict}`,
@@ -156,6 +184,9 @@ export function assessResolverPool(facts: ResolverPoolFacts): ResolverPoolVerdic
         facts.feeCapableCoins === 1 ? 'one fee-capable coin' : 'no fee-capable coin',
       deploy: false,
     };
+  }
+  if (facts.freeLanes !== undefined && facts.freeLanes < MIN_FREE_LANES) {
+    return { state: 'paused', reason: 'fewer than two lanes free', deploy: false };
   }
   if (facts.proofInFlight) {
     return { state: 'paused', reason: 'a proof is in flight', deploy: false };
