@@ -1065,18 +1065,23 @@ export async function createAccountFunder(
       /* ------------------------------------------------------------------ */
 
       const privateStateId = `passport-balancer-account-${address}`;
-      const accountProviders = await contractProviders(config, {
-        privateStateId,
-        initialPrivateState: {},
-        zkConfigProvider: zkConfigProvider as never,
-        proofProvider,
-        walletProvider: wallet.contractWalletProvider(),
-      });
 
       let depositTx: string;
       try {
         depositTx = await withNodeRejectionRetry(
           () => wallet.exclusive(async () => {
+          /* Built INSIDE the job, so the job closes it — and built afresh on
+             each rebuild, which is what a rebuild is for. Built once outside,
+             as it was until 2026/09/03, its indexer client belonged to no job
+             and was never disposed; the journal named this exact private state
+             in a `built outside any spend job` line. */
+          const accountProviders = await contractProviders(config, {
+            privateStateId,
+            initialPrivateState: {},
+            zkConfigProvider: zkConfigProvider as never,
+            proofProvider,
+            walletProvider: wallet.contractWalletProvider(),
+          });
           const found = await findDeployedContract(accountProviders as never, {
             compiledContract,
             contractAddress: address,
