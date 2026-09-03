@@ -58,3 +58,80 @@ describe('the liveness watch', () => {
     await watch.stop();
   });
 });
+
+/**
+ * Recycling before the spiral, rather than freezing after it.
+ *
+ * The freeze was reproduced live at 02:10 UTC on 2026/09/03, seventeen minutes
+ * into a fresh process: the main thread running at 50% with four V8 helper
+ * threads at 30–40% each against 2.39 GB resident — a collector marking
+ * continuously, not a call waiting on anything. A restart at 1.8 GB with
+ * nothing in flight costs a second of resume-from-snapshot; the same restart
+ * once the loop has stopped cost eight minutes of a dead sponsor and ninety
+ * seconds of an unanswerable stop.
+ */
+describe('recycling on the heap', () => {
+  it('recycles once the mark is passed and nothing is in flight', async () => {
+    let recycled = 0;
+    const lines: string[] = [];
+    const watch = startLivenessWatch({
+      blockedMs: 0,
+      tickMs: 20,
+      kill: false,
+      recycleHeapBytes: 1,
+      idle: () => true,
+      recycle: () => {
+        recycled += 1;
+      },
+      log: (line) => lines.push(line),
+    });
+    await wait(120);
+    assert.equal(recycled, 1, 'once, not once per tick');
+    assert.ok(
+      lines.some((line) => /recycling now/.test(line)),
+      lines.join('\n'),
+    );
+    await watch.stop();
+  });
+
+  it('waits for a quiet moment, however large the heap', async () => {
+    let recycled = 0;
+    let busy = true;
+    const watch = startLivenessWatch({
+      blockedMs: 0,
+      tickMs: 20,
+      kill: false,
+      recycleHeapBytes: 1,
+      idle: () => !busy,
+      recycle: () => {
+        recycled += 1;
+      },
+      log: () => undefined,
+    });
+    await wait(120);
+    assert.equal(recycled, 0, 'a claim is never abandoned for a heap reading');
+    busy = false;
+    await wait(120);
+    assert.equal(recycled, 1, 'and it happens the moment the queue empties');
+    await watch.stop();
+  });
+
+  it('leaves a healthy heap alone', async () => {
+    let recycled = 0;
+    const watch = startLivenessWatch({
+      blockedMs: 0,
+      tickMs: 20,
+      kill: false,
+      recycleHeapBytes: 1_800_000_000,
+      idle: () => true,
+      recycle: () => {
+        recycled += 1;
+      },
+      log: () => undefined,
+    });
+    await wait(120);
+    assert.equal(recycled, 0);
+    assert.ok(watch.health().heapUsedBytes > 0, 'and the heap is reported for /status');
+    await watch.stop();
+  });
+});

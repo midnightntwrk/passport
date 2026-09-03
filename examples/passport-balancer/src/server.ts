@@ -970,6 +970,11 @@ async function main(): Promise<void> {
       loopLagMs: Math.round(liveness.health().lagMs),
       loopWorstLagMs: Math.round(liveness.health().worstLagMs),
       loopWatched: liveness.health().watching,
+      /* The heap, because the freeze of 2026/09/03 was a garbage collector
+         marking continuously rather than a call waiting on anything. This is
+         the number that says how close the next one is. */
+      heapUsedBytes: liveness.health().heapUsedBytes,
+      rssBytes: liveness.health().rssBytes,
       /* Since this process started, and — for each `…Total` — the persisted
          once-only ledger, which survives restarts. None of these is key
          material and none of them names a user. */
@@ -2562,7 +2567,15 @@ async function main(): Promise<void> {
 
   /* Started before the listener, because the failure it watches for has
      already happened to this service while it was answering requests. */
-  const liveness = startLivenessWatch({ blockedMs: config.loopBlockedMs });
+  const liveness = startLivenessWatch({
+    blockedMs: config.loopBlockedMs,
+    recycleHeapBytes: config.recycleHeapBytes,
+    /* Quiet means quiet: no spend job on the queue and nothing of ours at the
+       prover. A recycle mid-claim would abandon a transaction somebody is
+       watching a screen for, and the whole point of recycling early is that it
+       can be done when it costs nobody anything. */
+    idle: () => wallet.jobCount() === 0 && proofsInFlight() === 0,
+  });
 
   server.listen(config.port, config.host, () => {
     console.log(

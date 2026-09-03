@@ -148,6 +148,11 @@ export interface BalancerConfig extends BalancerNetworkEndpoints {
    */
   loopBlockedMs: number;
   /**
+   * The heap size, in bytes, past which the service recycles itself at the next
+   * quiet moment. See {@link DEFAULT_RECYCLE_HEAP_BYTES}. Zero switches it off.
+   */
+  recycleHeapBytes: number;
+  /**
    * How long one call into the wallet facade may take before this service stops
    * waiting on it. See {@link DEFAULT_WALLET_CALL_TIMEOUT_MS}.
    */
@@ -426,6 +431,26 @@ export const DEFAULT_JOB_MAX_MS = 720_000;
  * `Restart=always` returns the sponsor inside a demo's patience.
  */
 export const DEFAULT_LOOP_BLOCKED_MS = 90_000;
+
+/**
+ * The heap size past which this process recycles itself at the next quiet
+ * moment.
+ *
+ * 1.8 GB, against the 4 GB old-space limit the unit sets. The freeze of
+ * 2026/09/03 was reproduced live at 02:10 UTC seventeen minutes into a fresh
+ * process: `top -H` showed the main thread running at 50% with four V8 helper
+ * threads at 30–40% each against 2.39 GB resident, which is a garbage collector
+ * marking continuously rather than a call waiting on anything. The heavy
+ * allocation after `proved` is where the spiral starts; the heap it starts
+ * against is why.
+ *
+ * So the sponsor recycles at 1.8 GB — comfortably below where the spiral began,
+ * comfortably above the ~700 MB a healthy hour reaches — and only when no spend
+ * job is running and nothing is at the prover, so the second of
+ * resume-from-snapshot lands where nobody is waiting on it. Zero switches it
+ * off.
+ */
+export const DEFAULT_RECYCLE_HEAP_BYTES = 1_800_000_000;
 
 /**
  * How long ONE call into the wallet facade may take before this service stops
@@ -763,6 +788,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     );
   }
   const jobMaxMs = wholeNumber('BALANCER_JOB_MAX_MS', trimmed(env.BALANCER_JOB_MAX_MS), DEFAULT_JOB_MAX_MS);
+  const recycleHeapBytes = wholeNumber(
+    'BALANCER_RECYCLE_HEAP_BYTES',
+    trimmed(env.BALANCER_RECYCLE_HEAP_BYTES),
+    DEFAULT_RECYCLE_HEAP_BYTES,
+  );
+  if (recycleHeapBytes > 0 && recycleHeapBytes < 200_000_000) {
+    throw new Error(
+      'BALANCER_RECYCLE_HEAP_BYTES must be at least 200000000 (0 switches the recycle off): a lower mark would recycle a healthy sponsor continuously.',
+    );
+  }
   if (jobMaxMs > 0 && jobMaxMs <= jobStallMs) {
     throw new Error(
       'BALANCER_JOB_MAX_MS is the ceiling the stall watchdog cannot reach, so it must be greater than BALANCER_JOB_STALL_MS (0 removes the ceiling).',
@@ -848,6 +883,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BalancerConfig
     syncStallMs,
     jobMaxMs,
     loopBlockedMs,
+    recycleHeapBytes,
     walletCallTimeoutMs,
     resolverPoolTarget,
     resolverPoolFloor,

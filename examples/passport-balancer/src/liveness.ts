@@ -49,6 +49,26 @@
  *
  * The same tick measures ordinary EVENT-LOOP LAG for `/status`, which is the
  * number that would have made the freeze visible while it was happening.
+ *
+ * WHAT BLOCKS THE LOOP, MEASURED
+ * ------------------------------
+ * The freeze was reproduced live at 02:10 UTC on 2026/09/03, seventeen minutes
+ * into the next process: `[job] a resolver leaf for the shelf proved (job-5)`
+ * at 01:58:21 and then nothing, `/status` unanswered after 25 s, and — this is
+ * the diagnosis — `top -H` showing the main thread RUNNING at 50% with four
+ * V8 helper threads at 30–40% each, against 2.39 GB resident. That is not a
+ * call waiting on a socket; it is a garbage collector marking continuously
+ * because the heap has grown to where every allocation triggers a major
+ * collection. The balancing that follows `proved` allocates heavily, so it is
+ * where the spiral begins, but the cause is the heap it begins against.
+ *
+ * So there is a second rule here, and it is the kinder of the two: RECYCLE
+ * BEFORE THE SPIRAL. The heap is sampled on the same tick, and when it passes
+ * the recycle mark with no spend job running and nothing at the prover, the
+ * process exits cleanly for the supervisor to restart — which costs a second of
+ * resume-from-snapshot at a moment when nobody is waiting, instead of eight
+ * minutes of a frozen sponsor at a moment when somebody is. The `SIGKILL` above
+ * stays as the backstop for the spiral that arrives anyway.
  */
 
 import { writeSync } from 'node:fs';
@@ -66,6 +86,10 @@ export interface LoopHealth {
   lagMs: number;
   /** Whether the watching thread is running. */
   watching: boolean;
+  /** V8's live heap, in bytes, as of the last tick. */
+  heapUsedBytes: number;
+  /** The whole process's resident size, in bytes, as of the last tick. */
+  rssBytes: number;
   /**
    * The longest block the WORKER has seen, in milliseconds, or zero. Non-zero
    * only when the worker was told not to kill — in production the process does
@@ -97,6 +121,20 @@ export interface LivenessOptions {
    * the rule exists to catch stopping.
    */
   kill?: boolean;
+  /**
+   * The heap size, in bytes, past which this process recycles itself at the
+   * next quiet moment. Zero switches the recycle off.
+   */
+  recycleHeapBytes?: number;
+  /**
+   * True when no spend job is running and nothing of ours is at the prover.
+   * The recycle waits for this: a restart mid-claim would abandon a
+   * transaction, and the whole point of recycling early is that it can be done
+   * when it costs nobody anything.
+   */
+  idle?: () => boolean;
+  /** Recycles. Defaults to a clean exit, which `Restart=always` answers. */
+  recycle?: () => void;
   log?: (line: string) => void;
 }
 
@@ -154,12 +192,38 @@ export function startLivenessWatch(options: LivenessOptions): LivenessWatch {
   let previous = Date.now();
 
   Atomics.store(shared, 0, BigInt(previous));
+  const recycleHeapBytes = options.recycleHeapBytes ?? 0;
+  const idle = options.idle ?? ((): boolean => true);
+  const recycle =
+    options.recycle ??
+    ((): void => {
+      /* A clean exit rather than a kill: the shutdown handler in `./server.ts`
+         saves the sync snapshot, so the replacement resumes in under a second
+         instead of walking the chain again. */
+      process.kill(process.pid, 'SIGTERM');
+    });
+  let heapUsedBytes = 0;
+  let rssBytes = 0;
+  let recycling = false;
+
   const ticker = setInterval(() => {
     const at = Date.now();
     lagMs = Math.max(0, at - previous - tickMs);
     if (lagMs > worstLagMs) worstLagMs = lagMs;
     previous = at;
     Atomics.store(shared, 0, BigInt(at));
+
+    const memory = process.memoryUsage();
+    heapUsedBytes = memory.heapUsed;
+    rssBytes = memory.rss;
+    if (recycling || recycleHeapBytes <= 0) return;
+    if (heapUsedBytes < recycleHeapBytes) return;
+    if (!idle()) return;
+    recycling = true;
+    log(
+      `[loop] the heap has reached ${Math.round(heapUsedBytes / 1e6)} MB and nothing is in flight — recycling now, while it costs nobody anything, rather than freezing later`,
+    );
+    recycle();
   }, tickMs);
   /* Unreferenced: a liveness ticker must never be the reason the process stays
      up, and it runs regardless for as long as anything else does. */
@@ -195,6 +259,8 @@ export function startLivenessWatch(options: LivenessOptions): LivenessWatch {
       lagMs,
       watching: worker !== null,
       blockedMs: Number(Atomics.load(shared, 1)),
+      heapUsedBytes,
+      rssBytes,
     }),
     stop: async () => {
       clearInterval(ticker);

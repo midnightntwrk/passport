@@ -947,8 +947,25 @@ Nothing scheduled on a blocked loop can end one. Three things close it:
   sponsor back in seconds rather than after eight minutes of silence and ninety
   more of an unanswerable stop.
 
-`/status` publishes `loopLagMs`, `loopWorstLagMs`, and `loopWatched`, which is
-the measurement that would have made the freeze visible while it was happening.
+And a fourth, which is the kinder one:
+
+- **The sponsor recycles before the spiral** (`BALANCER_RECYCLE_HEAP_BYTES`).
+  The freeze was reproduced live at 02:10 UTC on 2026/09/03, seventeen minutes
+  into a fresh process: `[job] a resolver leaf for the shelf proved (job-5)` at
+  01:58:21 and then nothing, `/status` unanswered after 25 s, and `top -H`
+  showing the main thread **running** at 50% with four V8 helper threads at
+  30–40% each against **2.39 GB** resident. That is a garbage collector marking
+  continuously, not a call waiting on a socket: the heavy allocation after
+  `proved` is where the spiral starts and the heap it starts against is why. So
+  the heap is sampled twice a second, and at 1.8 GB — with **no spend job
+  running and nothing at the prover** — the service exits cleanly for
+  `Restart=always` to replace it. That costs a second of resume-from-snapshot at
+  a moment when nobody is waiting, instead of eight minutes of a frozen sponsor
+  at a moment when somebody is.
+
+`/status` publishes `loopLagMs`, `loopWorstLagMs`, `loopWatched`,
+`heapUsedBytes`, and `rssBytes` — the measurements that would have made the
+freeze visible while it was happening rather than afterwards.
 
 ### Rebuilding a transaction the node refused
 
@@ -1136,6 +1153,7 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_JOB_MAX_MS` | `720000` | How long a spend job may hold a lane in total, **prover or no prover**. Past every bound underneath it, the ten-minute proof bound included. `0` removes the ceiling. |
 | `BALANCER_WALLET_CALL_TIMEOUT_MS` | `120000` | How long one call into the wallet facade — the fee estimate, the balancing, the signing — may take before the service stops waiting on it and rebuilds. |
 | `BALANCER_LOOP_BLOCKED_MS` | `90000` | How long the main thread may stop running before the liveness worker kills the process for the supervisor to restart. `0` switches the worker off and leaves only the lag measurement. |
+| `BALANCER_RECYCLE_HEAP_BYTES` | `1800000000` | The heap size past which the service exits cleanly, at the next moment with no spend job running and nothing at the prover, for the supervisor to replace it. `0` switches the recycle off. |
 | `BALANCER_SYNC_STALL_MS` | `600000` | How long the background chain walk may stall before it is reported and the health loop's rewarm is left to act. |
 | `BALANCER_TRUSTED_PROXIES` | `127.0.0.1,::1` | The peers whose `X-Forwarded-For` is believed. Everything else is keyed on its socket address. |
 | `BALANCER_CLIENT_KEY` | — | When set, the three spend endpoints require it in an `X-Passport-Key` header. Unset leaves them open. |
