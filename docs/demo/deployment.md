@@ -113,3 +113,7 @@ precisely the incoherence between `main` and production this page exists to end.
 
 If you use it, say so in the pull request or the channel, and cut a release from
 `main` afterwards so the two agree again.
+
+## Every deploy is backed by a release tag
+
+Every production deploy must be backed by a GitHub release (Hector, 2026/09/03: "nothing fancy, just the release tag"). `deploy:passport:manual` ends by running `scripts/tag-release.mjs`, which reads the service-worker build id from `examples/passport-demo/dist/sw.js`, refuses a dirty tree, and creates a pre-release named `demo-YYYY.MM.DD-<first 8 of the build id>` on `midnightntwrk/passport` (override with `PASSPORT_RELEASE_REPO`) targeting the deployed commit, with the build id, commit, and production URL in the notes (`PASSPORT_RELEASE_NOTES` adds a gate summary). It is idempotent: an existing tag is reported and left alone. `--dry-run` prints the command without creating anything. When the branch is carried into `midnightntwrk/passport-demo`, tag that repository the same way at the carried commit.
