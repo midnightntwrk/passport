@@ -181,6 +181,20 @@ export class TokenBucket {
   }
 
   /** Spends one token for `key`, or says how long until there is one. */
+  /**
+   * Gives one token back. For an answer that cost the service nothing and
+   * that the client is TOLD to repeat — `429 grant-retrying` says "ask again
+   * in fifteen seconds", and a client that does so must not be rate-limited
+   * for obeying. Measured 2026/09/03: the client polled `/fund-account` past
+   * the 3-a-minute limit while the sponsor was retrying its own grant.
+   */
+  refund(key: string): void {
+    if (!this.enabled) return;
+    const state = this.states.get(key);
+    if (!state) return;
+    this.states.set(key, { tokens: Math.min(this.capacity, state.tokens + 1), seenAt: state.seenAt });
+  }
+
   take(key: string): RateVerdict {
     if (!this.enabled) return { allowed: true, retryAfterMs: 0 };
     const now = this.clock();

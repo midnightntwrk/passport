@@ -2466,8 +2466,9 @@ async function main(): Promise<void> {
          watch this service while costing an abuser nothing, because neither one
          spends a Speck. */
       const guard = request.method === 'POST' ? spendGuards[path] : undefined;
+      let who = '';
       if (guard) {
-        const who = clientAddress({
+        who = clientAddress({
           socketAddress: request.socket.remoteAddress,
           forwardedFor: request.headers['x-forwarded-for'],
           trustedProxies: config.trustedProxies,
@@ -2597,6 +2598,12 @@ async function main(): Promise<void> {
           return;
         }
         const outcome = await fundAccount(body);
+        /* A probe answered "the sponsor is retrying this itself, ask again in
+           fifteen seconds" cost nothing and must not count against the
+           client that obeys it — see `TokenBucket.refund`. */
+        if (guard && (outcome.body as { error?: unknown }).error === 'grant-retrying') {
+          guard.bucket.refund(who);
+        }
         respond(request, response, outcome.status, outcome.body);
         return;
       }
