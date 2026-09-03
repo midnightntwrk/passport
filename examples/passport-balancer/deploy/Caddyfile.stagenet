@@ -116,7 +116,7 @@ funder.midnightpassport.com, 67-205-177-162.sslip.io {
 
 			fail_duration 30s
 			max_fails 1
-			unhealthy_status 502 503 504
+			unhealthy_status 429 500 502 503 504
 
 			health_uri /health
 			health_interval 15s
