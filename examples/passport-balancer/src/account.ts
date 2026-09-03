@@ -343,6 +343,20 @@ export function isRebuildable(cause: unknown): boolean {
  * a `1010` is refused before any block — so the caller supplies the chain's
  * height at the moment of refusal instead (`chainHeight`).
  */
+/**
+ * Crumb DUST inputs a grant's fee leg carries from its FIRST attempt.
+ *
+ * `deposit_night` is a small transaction that costs real compute, and the
+ * node's fee rule (`FeeCalculation.OutsideTimeToDismiss`, `231`) refuses it
+ * with one DUST input: too little size for its processing time. The
+ * threshold was found by climbing on 2026/09/03 — the grant for `a6f08aff…`
+ * was refused with two and three DUST inputs and landed with four, at 07:28:03,
+ * on its third submission. Four crumbs plus the covering coin, one crumb of
+ * margin over what landed, so the first submission is the one that lands.
+ * The climb in `./wallet.ts` remains behind it.
+ */
+export const GRANT_DUST_PADDING = 4;
+
 export function landedHeight(cause: unknown): number | null {
   let current: unknown = cause;
   for (let depth = 0; depth < 8 && current; depth += 1) {
@@ -961,7 +975,10 @@ export async function createAccountFunder(
              never be the one that holds a lane waiting for a coin. If there is
              no DUST free when the mint reaches its fee estimate, it gives the
              lane back within a second and the next minute tick asks again. */
-          walletProvider: wallet.contractWalletProvider({ waitForDustMs: 0 }),
+          walletProvider: wallet.contractWalletProvider({
+            waitForDustMs: 0,
+            initialDustPadding: GRANT_DUST_PADDING,
+          }),
         });
         const found = await findDeployedContract(faucetProviders as never, {
           compiledContract: compiledFaucet,

@@ -961,6 +961,14 @@ export interface ContractWalletProviderOptions {
    * `./coinReservation.ts`.
    */
   waitForReservedCoinMs?: number;
+  /**
+   * How many crumb DUST inputs the first attempt carries, before the ledger
+   * has said anything. For `deposit_night` — see `GRANT_DUST_PADDING` in
+   * `./account.ts` — the node's threshold was found by climbing on
+   * 2026/09/03: the grant that landed on its third submission carried four
+   * DUST inputs. Zero for everything else; the climb stays as the fallback.
+   */
+  initialDustPadding?: number;
 }
 
 export interface BalancerWallet {
@@ -1978,7 +1986,7 @@ export async function openBalancerWallet(
          counts, and on 2026/09/03 at 07:18 a transaction that passed proven
          with two crumbs was refused; each refusal now raises the floor for
          the job's next attempt, so the attempts climb rather than repeat. */
-      let padFloor = 0;
+      let padFloor = Math.max(0, Math.floor(options.initialDustPadding ?? 0));
       return {
         getCoinPublicKey: () => shieldedSecretKeys.coinPublicKey,
         getEncryptionPublicKey: () => shieldedSecretKeys.encryptionPublicKey,
@@ -2137,7 +2145,7 @@ export async function openBalancerWallet(
                     createdNow.length === 0
                       ? ''
                       : `; creates ${createdNow.map((coin) => describeCoin(coin)).join(', ')} (spendable once this lands)`
-                  }`,
+                  }${padRounds > 0 ? ` [padded with ${padRounds} crumb DUST inputs for size]` : ''}`,
                 );
               } catch {
                 // A state that cannot be read leaves the created set empty; the consumed coins are held regardless.

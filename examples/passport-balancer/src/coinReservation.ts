@@ -576,7 +576,9 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
       padding = Math.max(0, Math.floor(count));
     },
     dustPadding: () => padding,
-    balanceAsks: () => active?.selected.length ?? 0,
+    /* DUST hand-outs only: the NIGHT payload is handed out first in the same
+       balance, and counting it made `padding` N yield N−1 crumbs. */
+    balanceAsks: () => active?.selected.filter((coin) => coin.token !== undefined).length ?? 0,
 
     open(label) {
       const consumed = new Set<string>();
