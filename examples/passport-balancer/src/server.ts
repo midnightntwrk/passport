@@ -152,7 +152,13 @@ import {
   type AliasEntry,
   type ResolverEntry,
 } from './ledgers.js';
-import { SpendAdmission, TokenBucket, clientAddress, clientKeyAccepted } from './limits.js';
+import {
+  RefusalCounts,
+  SpendAdmission,
+  TokenBucket,
+  clientAddress,
+  clientKeyAccepted,
+} from './limits.js';
 import {
   AliasSponsorError,
   aliasCostAtomicNight,
@@ -507,10 +513,13 @@ async function main(): Promise<void> {
    * Counted rather than merely logged because the question an operator asks
    * during a demo is "is anybody hammering this?", and that is a number, not a
    * grep. They are per-process for the same reason the buckets are.
+   *
+   * See `./limits.js#RefusalCounts` for why the hourly ceilings are counted
+   * here at all: they refuse in the route handlers rather than in the guard,
+   * and until 2026/09/04 they went uncounted — `/status` read 0 through six
+   * genuine 429s in that day's sponsor soak.
    */
-  let refusedRateLimited = 0;
-  let refusedQueueFull = 0;
-  let refusedUnauthorised = 0;
+  const refusals = new RefusalCounts();
   /** Asset legs completed since this process started, counted apart from NIGHT. */
   let assetsFunded = 0;
   /**
@@ -1047,9 +1056,11 @@ async function main(): Promise<void> {
          on and it stays inside the process. `clientKeyRequired` is a boolean
          and never the key. */
       limits: {
-        refusedRateLimited,
-        refusedQueueFull,
-        refusedUnauthorised,
+        /* `refusedCeiling` is a SUBSET of `refusedRateLimited`, not a sibling
+           of it: both gates answer the one wire code, and an operator reading
+           this wants the total a client saw and the half only a bigger ceiling
+           would fix. */
+        ...refusals.snapshot(),
         balancePerMinute: config.balanceRate.perMinute,
         balanceBurst: config.balanceRate.burst,
         aliasPerMinute: config.aliasRate.perMinute,
@@ -1513,6 +1524,10 @@ async function main(): Promise<void> {
 
       /* 6. The hourly ceiling, looked at without consuming a slot. */
       if (accountLimiter.atCeiling()) {
+        /* Counted, since 2026/09/04. This refusal answers `rate-limited` on the
+           wire and never went near the guard that owned the counter, so
+           `/status` said 0 while the journal showed six of them. */
+        refusals.countCeiling();
         return fail(
           refusal(
             429,
@@ -1537,6 +1552,7 @@ async function main(): Promise<void> {
          spent nothing, and an hourly ceiling exists to cap what the balancer
          SPENDS. */
       if (!accountLimiter.take()) {
+        refusals.countCeiling();
         return fail(
           refusal(
             429,
@@ -2081,6 +2097,10 @@ async function main(): Promise<void> {
 
       /* 6. The hourly ceiling, looked at without consuming a slot. */
       if (aliasLimiter.atCeiling()) {
+        /* The refusal the 2026/09/04 soak hit twice, and the one an operator
+           most needs to see on `/status` — it is the whole hour's budget for
+           everybody, not one caller asking too fast. */
+        refusals.countCeiling();
         return fail(
           refusal(
             429,
@@ -2101,6 +2121,7 @@ async function main(): Promise<void> {
          spent nothing, and an hourly ceiling exists to cap what the balancer
          SPENDS. */
       if (!aliasLimiter.take()) {
+        refusals.countCeiling();
         return fail(
           refusal(
             429,
@@ -2498,7 +2519,7 @@ async function main(): Promise<void> {
     }
     const verdict = guard.bucket.take(who);
     if (!verdict.allowed) {
-      refusedRateLimited += 1;
+      refusals.countRateLimited();
       const seconds = Math.max(1, Math.round(verdict.retryAfterMs / 1_000));
       return {
         refusal: refusal(
@@ -2511,7 +2532,7 @@ async function main(): Promise<void> {
       };
     }
     if (!clientKeyAccepted(config.clientKey, request.headers['x-passport-key'])) {
-      refusedUnauthorised += 1;
+      refusals.countUnauthorised();
       return {
         refusal: refusal(
           401,
@@ -2561,7 +2582,7 @@ async function main(): Promise<void> {
           return;
         }
         if (!spendAdmission.enter()) {
-          refusedQueueFull += 1;
+          refusals.countQueueFull();
           refuseSpend(
             request,
             response,

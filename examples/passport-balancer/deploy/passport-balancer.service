@@ -93,6 +93,28 @@ Environment=RESOLVER_POOL_FLOOR=0
 # limit that remains is this box's two vCPUs against the wallet leg, and four
 # is the setting that matches it.
 Environment=BALANCER_SPEND_LANES=4
+# The global hourly ceilings, raised from the 20/30 defaults after the
+# 2026/09/04 sponsor soak. They are GLOBAL, not per client, and they were the
+# binding constraint on the hour: 18 signups with one other tester on the same
+# service exhausted both, and the last two signups were refused a name they
+# were never going to get back — about 20 people an hour across everybody, with
+# two demos running at once halving each other.
+#
+# Nothing else in that hour was near its limit. Spend lanes never fell below 3
+# after the first burst, DUST recovered to 90% of its start within 16-56 s of
+# every burst and its UTxO count ended at 313 against 318 at baseline, RSS was
+# flat, and every one of the 30 grant coins spent was a distinct UTxO of
+# exactly 2000. /status answered 200 on all 672 samples with a worst latency of
+# 0.881 s. Sixty and eighty is the headroom that measurement supports for a
+# week of stakeholder use.
+#
+# The per-client limits are deliberately UNCHANGED: they are what bounds one
+# caller, and raising a global ceiling without them would hand the hour to
+# whoever asks fastest. Note also that this service holds ONE wallet, so a
+# ceiling raised far past this would move the bottleneck to that rather than
+# remove it.
+Environment=BALANCER_ALIAS_MAX_PER_HOUR=60
+Environment=BALANCER_ACCOUNT_MAX_PER_HOUR=80
 ExecStart=/usr/bin/node dist/server.mjs
 Restart=always
 RestartSec=5

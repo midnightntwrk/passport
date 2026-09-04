@@ -261,6 +261,86 @@ export class SpendAdmission {
 }
 
 /* -------------------------------------------------------------------------- */
+/* What was turned away, and by which gate                                    */
+/* -------------------------------------------------------------------------- */
+
+/** The shape `/status` publishes under `limits`. */
+export interface RefusalSnapshot {
+  /**
+   * Every refusal this service answered `rate-limited` to — the per-client
+   * bucket above AND the global hourly ceilings. It is the count of one WIRE
+   * code, so it matches what a client saw.
+   */
+  refusedRateLimited: number;
+  /**
+   * The subset of those that were an hourly ceiling: the service's own budget
+   * for everybody, gone for the rest of the window. Always less than or equal
+   * to {@link refusedRateLimited}, and deliberately not disjoint from it.
+   */
+  refusedCeiling: number;
+  refusedQueueFull: number;
+  refusedUnauthorised: number;
+}
+
+/**
+ * Refusals since this process started.
+ *
+ * WHY THIS IS A CLASS AND NOT FOUR `let`s IN THE SERVER (2026/09/04)
+ * ------------------------------------------------------------------
+ * It was four `let`s, and `refusedRateLimited` read 0 through six genuine 429s
+ * in the sponsor soak of that day. Nothing was broken in the counter: the
+ * hourly ceilings refuse in the ROUTE handlers, several hundred lines away
+ * from the guard that owns the variable, and they simply never touched it. So
+ * `/status` could not be used to detect the one refusal an operator most needs
+ * to see during a demo — only the journal showed them — and the counter that
+ * looked like it answered the question quietly did not.
+ *
+ * Two gates, two classes, one wire code between them. A caller refused by the
+ * per-client bucket is being told they personally are asking too fast; a
+ * caller refused at the ceiling is being told the hour is spent for everybody,
+ * and no amount of patience from that one caller changes it. Both answer
+ * `rate-limited`, so both count there, and the ceiling half is broken out
+ * because the operator's action is different: raise the ceiling, or wait.
+ */
+export class RefusalCounts {
+  private rateLimited = 0;
+  private ceiling = 0;
+  private queueFull = 0;
+  private unauthorised = 0;
+
+  /** One per-client token-bucket refusal. */
+  countRateLimited(): void {
+    this.rateLimited += 1;
+  }
+
+  /**
+   * One global hourly-ceiling refusal. It counts in BOTH: the client was
+   * answered `rate-limited`, and the reason was the ceiling.
+   */
+  countCeiling(): void {
+    this.ceiling += 1;
+    this.rateLimited += 1;
+  }
+
+  countQueueFull(): void {
+    this.queueFull += 1;
+  }
+
+  countUnauthorised(): void {
+    this.unauthorised += 1;
+  }
+
+  snapshot(): RefusalSnapshot {
+    return {
+      refusedRateLimited: this.rateLimited,
+      refusedCeiling: this.ceiling,
+      refusedQueueFull: this.queueFull,
+      refusedUnauthorised: this.unauthorised,
+    };
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* The optional shared secret                                                 */
 /* -------------------------------------------------------------------------- */
 

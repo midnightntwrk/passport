@@ -27,6 +27,7 @@ import {
   loadConfig,
 } from '../src/config.js';
 import {
+  RefusalCounts,
   SpendAdmission,
   TokenBucket,
   UNKNOWN_CLIENT,
@@ -321,5 +322,87 @@ describe('the guard configuration', () => {
     const config = loadConfig(env());
     assert.equal(config.aliasMaxPerHour, 20);
     assert.equal(config.accountMaxPerHour, 30);
+  });
+
+  it('lets the deployment raise those ceilings without touching the per-client ones', () => {
+    /* What `deploy/passport-balancer.service` sets after the 2026/09/04 sponsor
+       soak. The ceilings are GLOBAL, and they were the binding constraint on
+       that hour — 18 signups with one other tester on the same service
+       exhausted both, and the last two were refused a name. The per-client
+       limits are what bounds ONE caller and must survive the raise: a global
+       ceiling lifted without them hands the hour to whoever asks fastest. */
+    const config = loadConfig(
+      env({ BALANCER_ALIAS_MAX_PER_HOUR: '60', BALANCER_ACCOUNT_MAX_PER_HOUR: '80' }),
+    );
+    assert.equal(config.aliasMaxPerHour, 60);
+    assert.equal(config.accountMaxPerHour, 80);
+    assert.equal(config.aliasRate.perMinute, DEFAULT_SPEND_MAX_PER_MIN);
+    assert.equal(config.aliasRate.burst, DEFAULT_SPEND_BURST);
+    assert.equal(config.accountRate.perMinute, DEFAULT_SPEND_MAX_PER_MIN);
+    assert.equal(config.accountRate.burst, DEFAULT_SPEND_BURST);
+  });
+});
+
+describe('what /status says was turned away', () => {
+  /* THE BLIND SPOT THIS CLOSES. Through the 2026/09/04 sponsor soak
+     `/status.refusedRateLimited` read 0 while the journal carried six genuine
+     429s — two alias ceilings and six account ceilings — because the hourly
+     ceilings refuse in the route handlers, hundreds of lines from the guard
+     that owned the counter, and never touched it. An operator watching a demo
+     had a number that looked like an answer and was not one. */
+
+  it('starts at zero on every counter', () => {
+    assert.deepEqual(new RefusalCounts().snapshot(), {
+      refusedRateLimited: 0,
+      refusedCeiling: 0,
+      refusedQueueFull: 0,
+      refusedUnauthorised: 0,
+    });
+  });
+
+  it('counts a ceiling refusal as rate-limited, because that is what the caller was told', () => {
+    const counts = new RefusalCounts();
+    counts.countCeiling();
+    counts.countCeiling();
+    const snapshot = counts.snapshot();
+    assert.equal(snapshot.refusedRateLimited, 2);
+    assert.equal(snapshot.refusedCeiling, 2);
+  });
+
+  it('keeps the two gates apart, and the ceiling is always a subset', () => {
+    /* The per-client bucket says "you are asking too fast"; the ceiling says
+       "the hour is spent for everybody". Both answer `rate-limited` on the
+       wire, and the operator's action differs: wait, or raise the ceiling. */
+    const counts = new RefusalCounts();
+    counts.countRateLimited();
+    counts.countRateLimited();
+    counts.countCeiling();
+    const snapshot = counts.snapshot();
+    assert.equal(snapshot.refusedRateLimited, 3);
+    assert.equal(snapshot.refusedCeiling, 1);
+    assert.ok(snapshot.refusedCeiling <= snapshot.refusedRateLimited);
+  });
+
+  it('counts the other two gates without touching either rate figure', () => {
+    const counts = new RefusalCounts();
+    counts.countQueueFull();
+    counts.countUnauthorised();
+    counts.countUnauthorised();
+    assert.deepEqual(counts.snapshot(), {
+      refusedRateLimited: 0,
+      refusedCeiling: 0,
+      refusedQueueFull: 1,
+      refusedUnauthorised: 2,
+    });
+  });
+
+  it('hands back a snapshot, not the live counters', () => {
+    /* `/status` serialises what it is given. A live object handed out would
+       change under a response already being written. */
+    const counts = new RefusalCounts();
+    const before = counts.snapshot();
+    counts.countCeiling();
+    assert.equal(before.refusedCeiling, 0);
+    assert.equal(counts.snapshot().refusedCeiling, 1);
   });
 });
