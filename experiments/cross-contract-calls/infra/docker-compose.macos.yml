@@ -19,11 +19,13 @@ services:
     ports:
       - "8088:8088"
     environment:
-      APP__INFRA__NODE__URL: 'ws://node:9944'
+      # Plaintext ws is intentional: container-to-container on the private
+      # compose bridge network; the localnet node terminates no TLS.
+      APP__INFRA__NODE__URL: 'ws://node:9944' # nosemgrep
       # indexer ≥4.3 runs a second (SPO) node connection with its own URL;
       # without this it dials localhost inside the bridge network and the
       # whole indexer exits once its reconnect budget runs out (~5 min).
-      APP__INFRA__SPO_NODE__URL: 'ws://node:9944'
+      APP__INFRA__SPO_NODE__URL: 'ws://node:9944' # nosemgrep
     depends_on:
       node:
         condition: service_healthy
