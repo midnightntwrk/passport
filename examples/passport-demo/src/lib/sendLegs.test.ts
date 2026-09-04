@@ -30,6 +30,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyLegError,
   pendingSendsStorageKey,
+  pendingSendAmountLabel,
   pendingSendStepLine,
   planOfRecord,
   planShieldedSend,
@@ -884,6 +885,53 @@ describe('pendingSendStepLine', () => {
     ).toBe('Step 1 done. Paying alice.night has not finished.');
     expect(pendingSendStepLine(shieldedSend({ leg: 'deposit' }))).toBe(
       'Step 1 done. Step 2 — paying it into alice.night’s account — has not finished.',
+    );
+  });
+});
+
+describe('pendingSendAmountLabel', () => {
+  const MUSD = { symbol: 'mUSD', decimals: 0 };
+  const NIGHT = { symbol: 'NIGHT', decimals: 6 };
+
+  it('names the asset instead of the word "units"', () => {
+    /* THE 2026/09/04 STABILITY AUDIT read the card back: "SENDING 1 UNITS TO
+       SBMTN702YEJFH.NIGHT" over a payment of one mUSD. "Units" names nothing,
+       and the one surface that appears when something has gone wrong was the
+       one that would not say which asset was in flight. */
+    const said = pendingSendAmountLabel(shieldedSend({ amount: '1' }), MUSD);
+    expect(said).toBe('1 mUSD');
+    expect(said).not.toMatch(/units?/i);
+  });
+
+  it('leaves a shielded amount as the whole count it is', () => {
+    /* A shielded colour publishes no decimal scale anywhere on the ledger, so
+       its amount IS a whole count and any scale applied would be invented. */
+    expect(pendingSendAmountLabel(shieldedSend({ amount: '100' }), MUSD)).toBe('100 mUSD');
+  });
+
+  it('puts NIGHT on its own six-decimal scale', () => {
+    expect(pendingSendAmountLabel(nightSend({ amount: '1000000' }), NIGHT)).toBe('1 NIGHT');
+    expect(pendingSendAmountLabel(nightSend({ amount: '2000' }), NIGHT)).toBe('0.002 NIGHT');
+    expect(pendingSendAmountLabel(nightSend({ amount: '1500000' }), NIGHT)).toBe('1.5 NIGHT');
+    expect(pendingSendAmountLabel(nightSend({ amount: '0' }), NIGHT)).toBe('0 NIGHT');
+  });
+
+  it('carries a colour nothing can name under its own handle', () => {
+    /* `Token · 1a29…` at least identifies the asset. It is what the balance
+       list shows for the same colour, so the two surfaces agree. */
+    expect(
+      pendingSendAmountLabel(shieldedSend({ amount: '3' }), {
+        symbol: 'Token · 1a29…',
+        decimals: 0,
+      }),
+    ).toBe('3 Token · 1a29…');
+  });
+
+  it('hands back a figure it cannot scale rather than turning it into NaN', () => {
+    /* A record written by a build that is not this one is not worth destroying
+       on a card whose whole job is to say what is outstanding. */
+    expect(pendingSendAmountLabel(nightSend({ amount: 'nonsense' }), NIGHT)).toBe(
+      'nonsense NIGHT',
     );
   });
 });

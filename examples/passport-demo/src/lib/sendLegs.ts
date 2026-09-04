@@ -453,6 +453,56 @@ export function pendingSendStepLine(record: PendingSend): string {
     : `Step 1 done. Step 2 — paying it into ${record.recipient.label}’s account — has not finished.`;
 }
 
+/** What names the colour a run is denominated in, as a screen already has it. */
+export interface PendingSendAsset {
+  /** The asset's own ticker — `mUSD`, `NIGHT`, or `Token · 1a29…`. */
+  symbol: string;
+  /** How many decimal places its amount is quoted with. Zero for a shielded colour. */
+  decimals: number;
+}
+
+/**
+ * The amount on the recovery card, in the asset's own name (2026/09/04).
+ *
+ * This read `${amount} units` for everything that was not NIGHT, and the
+ * 2026/09/04 stability audit read the result back: "SENDING 1 UNITS TO
+ * SBMTN702YEJFH.NIGHT" over a payment of one mUSD. "Units" names nothing — the
+ * Send sheet that opened the payment said `mUSD`, the balance above the card
+ * says `mUSD`, and the one surface that appears when something has gone wrong
+ * was the one that would not say which asset was in flight.
+ *
+ * So the ticker comes in, from the same `describeColour` both balance lists are
+ * painted from, and the amount is put on that colour's own scale. Six decimals
+ * for NIGHT, zero for a shielded colour — which is not a rounding but the
+ * ledger's own truth, since a shielded colour publishes no decimal scale
+ * anywhere and its amount IS a whole count. A colour nothing can name still
+ * gets its `Token · 1a29…`, which at least identifies the asset rather than
+ * denying that it has one.
+ *
+ * Scaled here rather than by a caller because this module is the one that holds
+ * the record, and it takes no imports on purpose — see the header.
+ */
+export function pendingSendAmountLabel(record: PendingSend, asset: PendingSendAsset): string {
+  return `${scaledAmount(record.amount, asset.decimals)} ${asset.symbol}`;
+}
+
+/**
+ * An atomic amount on its colour's own scale, with no trailing zeroes.
+ *
+ * `0` decimals is the identity, which is every shielded colour. A figure that
+ * does not parse comes back untouched: a record written by a build that is not
+ * this one is not worth turning into `NaN` on a card whose whole job is to say
+ * what is outstanding.
+ */
+function scaledAmount(amount: string, decimals: number): string {
+  if (decimals <= 0) return amount;
+  if (!/^\d+$/.test(amount)) return amount;
+  const digits = amount.padStart(decimals + 1, '0');
+  const whole = digits.slice(0, digits.length - decimals);
+  const fraction = digits.slice(digits.length - decimals).replace(/0+$/, '');
+  return fraction ? `${whole}.${fraction}` : whole;
+}
+
 /**
  * WHETHER THIS RUN CAN BE CARRIED ON WITHOUT ASKING ANYBODY (2026/09/04).
  *

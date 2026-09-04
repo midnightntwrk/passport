@@ -33,7 +33,7 @@ import {
   type NameRecoveryOutcome,
 } from './lib/nameRecovery.js';
 import { holdCriticalWork } from './lib/appBusy.js';
-import { normalisedColourHex, shortColour } from './lib/colour.js';
+import { describeColour, normalisedColourHex, shortColour } from './lib/colour.js';
 import {
   isMidSessionWayOut,
   KEYLESS_PASSKEY_MESSAGE,
@@ -70,6 +70,7 @@ import {
   pendingSendStepLine,
   planOfRecord,
   planShieldedSend,
+  pendingSendAmountLabel,
   readPendingSends,
   resumesWithoutPrompt,
   retryDelayMs,
@@ -78,6 +79,7 @@ import {
   serialisePendingSends,
   watchForSettlement,
   type PendingSend,
+  type PendingSendAsset,
   type PendingSendKind,
 } from './lib/sendLegs.js';
 /* The note a shielded transfer's two legs are joined by. Type-only, so the rule
@@ -1164,19 +1166,6 @@ const SETTLE_DEADLINE_MS = 180_000;
  */
 const PENDING_SEND_AUTO_RESUME_DELAY_MS = 3_000;
 
-/**
- * What one unfinished send is called, in the sender's own units.
- *
- * A shielded colour publishes no decimal scale on the ledger, so its amount is
- * a whole count and the word beside it is `units` — the same words the Send
- * sheet uses, so the card on Home and the sheet that opened it agree.
- */
-function pendingSendAmountLabel(record: PendingSend): string {
-  return record.kind === 'night'
-    ? `${formatNightUnits(BigInt(record.amount))} NIGHT`
-    : `${record.amount} units`;
-}
-
 /** A run, as it is written down before anything is submitted. */
 function newPendingSend(input: {
   kind: PendingSendKind;
@@ -1451,6 +1440,30 @@ export default function PassportDemo() {
    * rather than empty.
    */
   const [stablecoin, setStablecoin] = useState<{ symbol: string; colourHex: string } | null>(null);
+  /* The same answer, readable from inside the send orchestrator without making
+     it depend on the sponsor having replied yet. */
+  const stablecoinRef = useRef<{ symbol: string; colourHex: string } | null>(null);
+  stablecoinRef.current = stablecoin;
+
+  /**
+   * What to call the asset one unfinished payment moves.
+   *
+   * The same `describeColour` every balance list is painted from, so the
+   * recovery card, the token shelf, and the Send sheet that opened the payment
+   * all name the colour the same way — which is what "SENDING 1 UNITS TO
+   * SBMTN702YEJFH.NIGHT" was not doing until 2026/09/04. The sponsor's own
+   * answer outranks the table, because it mints that asset.
+   *
+   * A NIGHT run is NIGHT whatever spelling of the native colour this network
+   * turns out to quote, so the record's `kind` has the last word when the table
+   * cannot name what it is holding.
+   */
+  const pendingSendAsset = useCallback((record: PendingSend): PendingSendAsset => {
+    const identity = describeColour(record.colourHex, stablecoinRef.current);
+    return record.kind === 'night' && !identity.known
+      ? { symbol: 'NIGHT', decimals: 6 }
+      : identity;
+  }, []);
   /** True while the one-time sweep of legacy wallet funds is running. */
   const [depositBusy, setDepositBusy] = useState(false);
   /**
@@ -5945,7 +5958,7 @@ export default function PassportDemo() {
       const { findArrivedNote, shieldedNoteIds } = await import('./lib/shieldedNote.js');
 
       const amount = BigInt(initial.amount);
-      const amountText = pendingSendAmountLabel(initial);
+      const amountText = pendingSendAmountLabel(initial, pendingSendAsset(initial));
       let record = initial;
       /* THE PLAN, re-read from the record after every save, because leg one is
          what settles it: a shielded run asks for the whole coin and only then
@@ -6556,6 +6569,7 @@ export default function PassportDemo() {
     [
       addActivity,
       dropPendingSend,
+      pendingSendAsset,
       refreshLocalBalances,
       requireAccount,
       updateActivity,
@@ -7183,7 +7197,7 @@ export default function PassportDemo() {
         id: record.id,
         label: record.leg === 'change'
           ? `Your change from paying ${record.recipient.label}`
-          : `Sending ${pendingSendAmountLabel(record)} to ${record.recipient.label}`,
+          : `Sending ${pendingSendAmountLabel(record, pendingSendAsset(record))} to ${record.recipient.label}`,
         step: pendingSendStepLine(record),
         reason: record.lastError?.message ?? null,
         /* Carrying on by itself, so the card says so. The step line above it
@@ -7194,7 +7208,7 @@ export default function PassportDemo() {
           ? {}
           : { onGiveUp: () => dropPendingSend(record.id) }),
       })),
-    [continuePendingSend, dropPendingSend, pendingSends, resumingSendId],
+    [continuePendingSend, dropPendingSend, pendingSendAsset, pendingSends, resumingSendId],
   );
 
   const homeLegacyFunds =
