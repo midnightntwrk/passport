@@ -15,7 +15,8 @@
     "test:pwa": "npm run build && npm run check:pwa",
     "dev": "npm run prepare:zk && vite",
     "preview": "vite preview --host localhost",
-    "build": "npm run prepare:zk && tsc --noEmit && vite build"
+    "build": "npm run prepare:zk && tsc --noEmit && vite build",
+    "test:e2e:metamask": "RUN_LIVE=1 playwright test --project=chromium e2e/metamask.live.spec.ts"
   },
   "dependencies": {
     "@fontsource/space-grotesk": "^5.2.10",
@@ -43,6 +44,7 @@
     "ws": "^8.19.0"
   },
   "devDependencies": {
+    "@noble/curves": "2.3.0",
     "@playwright/test": "^1.62.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
