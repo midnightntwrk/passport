@@ -1,0 +1,101 @@
+{
+  "testId": "P5",
+  "name": "passport-callee",
+  "description": "The k1-arm passport account contract as a cross-contract callee: a counterparty contract drives an owner-authorised, seam-gated, coinless operation atomically with its own state",
+  "verdict": "PASS",
+  "note": "The passport account contract participates as a cross-contract callee: gate.compose_gated forwarded the owner's bundle, the seam verified it inside the callee (kernel.self() and auth_nonce bind as on the direct path — the challenge was signed over the ACCOUNT's address), enc_key rotated and gate.composed advanced in ONE transaction (001ac12c6fd56562523ab47275836147bcead28f2775a224fe88591c517de5661b), and a corrupted bundle failed at construction-rejected with neither contract's state changed. Observer: 2 contract calls, entry points [compose_gated, rotate_enc_key_with_jubjub].",
+  "txHash": "001ac12c6fd56562523ab47275836147bcead28f2775a224fe88591c517de5661b",
+  "details": {
+    "artefacts": {
+      "accountCompileMs": "already keyed",
+      "gateCompileMs": "already keyed",
+      "zkirVersions": {
+        "account_rotate_enc_key_with_jubjub": "3.0",
+        "gate_compose_gated": "2.0"
+      },
+      "provenance": "account.compact vendored from arc-passport nicolasdp/ecdsa-k1-arm commit 2b0b55d"
+    },
+    "accountAddress": "a3a3d60a9536a27439309e414e384df6218e1022b1cf8ccb37ebe598a6437154",
+    "controlTx": "007049cac2473ba2a947bef613ab6a9ec006e315e19e37abceb6d6587ed6bd3cd9",
+    "gateAddress": "cc69d35f7fccc891ab36765212976f01a8e409d8bf9b5afe87e5b2b92c46b7f4",
+    "composedTx": "001ac12c6fd56562523ab47275836147bcead28f2775a224fe88591c517de5661b",
+    "composedResult": {
+      "encKeyRotated": true,
+      "gateComposed": "1",
+      "authNonce": "1 -> 2"
+    },
+    "composedObserver": {
+      "hash": "e95fa52035d498feb7d683948fc3df4bb926778876adef2836b65aeb363aaea2",
+      "transactionResult": {
+        "status": "SUCCESS"
+      },
+      "contractActions": [
+        {
+          "__typename": "ContractCall",
+          "address": "cc69d35f7fccc891ab36765212976f01a8e409d8bf9b5afe87e5b2b92c46b7f4",
+          "entryPoint": "compose_gated"
+        },
+        {
+          "__typename": "ContractCall",
+          "address": "a3a3d60a9536a27439309e414e384df6218e1022b1cf8ccb37ebe598a6437154",
+          "entryPoint": "rotate_enc_key_with_jubjub"
+        }
+      ]
+    },
+    "composedObserverSummary": {
+      "contractCalls": 2,
+      "entryPoints": [
+        "compose_gated",
+        "rotate_enc_key_with_jubjub"
+      ]
+    },
+    "negative": {
+      "rejected": true,
+      "stage": "construction-rejected",
+      "errorCode": "runtime-guard",
+      "error": {
+        "name": "Error",
+        "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature",
+        "stack": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature\n    at scoped (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/node_modules/@midnight-ntwrk/midnight-js-contracts/src/internal/transaction.ts:246:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async callCircuit (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/src/node/setup.ts:99:18)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/src/tests/p5-passport-callee.ts:333:17)\n    at async runScenario (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/src/tests/runner.ts:7:5)\n    at async <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/src/tests/p5-passport-callee.ts:146:1)",
+        "causeChain": [
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid signature"
+          },
+          {
+            "name": "Error",
+            "tag": null,
+            "message": "failed assert: invalid signature"
+          },
+          {
+            "name": "ContractRuntimeError",
+            "tag": "ContractRuntimeError",
+            "message": "Error executing circuit 'compose_gated'"
+          },
+          {
+            "name": "CompactError",
+            "tag": null,
+            "message": "failed assert: invalid signature"
+          }
+        ]
+      }
+    },
+    "negativeStateCheck": {
+      "encKeyUnchanged": true,
+      "authNonceUnchanged": true,
+      "gateComposedUnchanged": true
+    }
+  },
+  "ranAt": "2026-09-03T18:51:08.090Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6",
+    "compactc": "0.34.0",
+    "compactRuntime": "0.19.0",
+    "compactJs": "2.5.5-rc.8",
+    "midnightJs": "5.0.0-beta.7",
+    "ledgerV9": "1.0.0-rc.3"
+  }
+}

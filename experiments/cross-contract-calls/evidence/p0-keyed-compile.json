@@ -1,0 +1,88 @@
+{
+  "testId": "P0",
+  "name": "keyed-compile",
+  "description": "Keyed (no --skip-zk) compile of the Tally/Caller cross-contract pair on compactc 0.34.0",
+  "verdict": "PASS",
+  "note": "Both contracts compiled with real proving keys (Tally 248 ms, Caller 383 ms); expectedVk fingerprints present for all 5 circuits, communications commitment on by default, zkir v2.0. The implementation-binding guard and tx assembly have real keys to check.",
+  "details": {
+    "toolchain": "0.34.0",
+    "compiles": {
+      "tally": {
+        "command": "compact compile +0.34.0 contracts/tally.compact contracts/managed/Tally",
+        "wallMs": 248
+      },
+      "caller": {
+        "command": "compact compile +0.34.0 --compact-path contracts/managed contracts/caller.compact contracts/managed/Caller",
+        "wallMs": 383
+      }
+    },
+    "tallyCircuits": {
+      "set": {
+        "proverKeyBytes": 41427,
+        "verifierKeyBytes": 1351,
+        "zkirVersion": "2.0",
+        "communicationsCommitment": true
+      },
+      "get": {
+        "proverKeyBytes": 22436,
+        "verifierKeyBytes": 1351,
+        "zkirVersion": "2.0",
+        "communicationsCommitment": true
+      },
+      "set_guarded": {
+        "proverKeyBytes": 74976,
+        "verifierKeyBytes": 1351,
+        "zkirVersion": "2.0",
+        "communicationsCommitment": true
+      }
+    },
+    "callerCircuits": {
+      "write_then_read": {
+        "proverKeyBytes": 280164,
+        "verifierKeyBytes": 1351,
+        "zkirVersion": "2.0",
+        "communicationsCommitment": true
+      },
+      "compose_guarded": {
+        "proverKeyBytes": 280048,
+        "verifierKeyBytes": 1351,
+        "zkirVersion": "2.0",
+        "communicationsCommitment": true
+      }
+    },
+    "expectedVk": {
+      "tally": {
+        "get": "ea0442871fd83cda0b6eb00de3f81de8b99c8f39fd9341ac7fe15d7169142418",
+        "set": "b1625eea59c83e763a1eca7d60348c391e059fff2b6456f90f5177571c3d0e5d",
+        "set_guarded": "f2a6f4c249f8aedc9a4bc6f3abf36185a6f4799a5426f1ce8e145d924af1d788"
+      },
+      "caller": {
+        "compose_guarded": "5571eebae3c3b4bb00741bd2a1acd6ca4997ef06e5530089440518fa410f9acb",
+        "write_then_read": "973816b561a3bd2513a00f2ef1e977bfa416ad2e8a92d924a541b409c34e550f"
+      }
+    },
+    "versions": {
+      "compiler": "0.34.0",
+      "language": "0.26.0",
+      "runtime": "0.19.0"
+    },
+    "callerContractDependencies": [
+      "Tally"
+    ],
+    "tallyLedger": [
+      "total",
+      "writes"
+    ]
+  },
+  "ranAt": "2026-09-03T18:27:55.687Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6",
+    "compactc": "0.34.0",
+    "compactRuntime": "0.19.0",
+    "compactJs": "2.5.5-rc.8",
+    "midnightJs": "5.0.0-beta.7",
+    "ledgerV9": "1.0.0-rc.3"
+  }
+}

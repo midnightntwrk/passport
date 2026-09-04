@@ -1,0 +1,54 @@
+pragma language_version 0.26;
+
+// Caller — the ROOT contract of the toy cross-contract pair.
+//
+// Declares the structural contract type 'Tally' (CoIP-0002), holds a
+// contract reference to a deployed Tally in its ledger (set from the
+// constructor argument — application code passes the deployed callee's
+// ContractAddress as { bytes }), and exercises the two call shapes the
+// experiment probes:
+//
+//   write_then_read  P1/P3: write into the callee, read it back in the SAME
+//                    transaction (read-your-writes across the call
+//                    boundary), assert the round trip in-circuit, and store
+//                    the observed value.
+//   compose_guarded  P4: compose with the callee's guarded write so a
+//                    staleness fault injected between composition and
+//                    submission must fail on-node, atomically for both
+//                    contracts.
+//
+// Compile SECOND, with --compact-path contracts/managed so the declared
+// type name 'Tally' resolves to the callee's compiled artefact directory.
+
+import CompactStandardLibrary;
+
+contract Tally {
+  circuit set(x: Uint<64>): [];
+  circuit get(): Uint<64>;
+  circuit set_guarded(expected: Uint<64>, x: Uint<64>): [];
+}
+
+export ledger tally: Tally;
+export ledger last_observed: Uint<64>;
+export ledger calls: Counter;
+
+constructor(t: Tally) {
+  tally = disclose(t);
+  last_observed = 0 as Uint<64>;
+}
+
+export circuit write_then_read(x: Uint<64>): Uint<64> {
+  calls.increment(1);
+  const written = disclose(x);
+  tally.set(written);
+  const observed = tally.get();
+  assert(observed == written, "read-your-writes violated across the call boundary");
+  last_observed = observed;
+  return observed;
+}
+
+export circuit compose_guarded(expected: Uint<64>, x: Uint<64>): [] {
+  calls.increment(1);
+  tally.set_guarded(disclose(expected), disclose(x));
+  last_observed = tally.get();
+}

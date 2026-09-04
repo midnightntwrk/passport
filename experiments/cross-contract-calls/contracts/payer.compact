@@ -1,0 +1,189 @@
+pragma language_version 0.26;
+
+// Payer — the value-sending ROOT contract of the P6/P7 pair.
+//
+// Funds itself by in-circuit MINT of its own color (isolating the value
+// question from the node 2.1.0 fee wall on small call+offer transactions:
+// no user-funded deposit is needed anywhere on the P6 path), then moves
+// value to the Till contract across an in-circuit call boundary:
+//
+//   fund_unshielded  P6 funding: mintUnshieldedToken to kernel.self()
+//                    (auto-received per the stdlib), mirror credited.
+//   pay_unshielded   P6: mirror debited, sendUnshielded to the Till's
+//                    ContractAddress, then till.take_unshielded in the SAME
+//                    circuit so the callee claims the value — one atomic
+//                    transaction moving unshielded value contract to
+//                    contract.
+//   fund_shielded    P7 funding: mintShieldedToken to kernel.self()
+//                    (auto-received per the stdlib); returns the minted
+//                    coin so the client can capture the qualified
+//                    description (mt_index from the indexer, MIP-0012
+//                    §6.5 style).
+//   pay_shielded     P7: the coin enters through the payer_coin WITNESS —
+//                    this is deliberately a witness-consuming ROOT circuit
+//                    containing a call site (closing that open question;
+//                    only CALLEES must be witness-free) — sendShielded to
+//                    the Till's ContractAddress, then till.take_shielded
+//                    (result.sent) so the callee claims the sent coin in
+//                    the same transaction. Returns [sent, change]: change
+//                    handling follows the k1-arm surviving-coin rule
+//                    (sendShielded already routes change back to this
+//                    contract as a live, self-owned output; the client
+//                    re-captures it).
+//
+// The Till is named TWICE in the constructor: as the callable contract
+// reference the cross-contract claims go through, and as the raw
+// ContractAddress the send targets — there is no cast between a contract
+// type and ContractAddress in the language.
+//
+// On 0.34.0 every argument forwarded through a call boundary must pass
+// disclose(); witness-derived values (the coin, the send result) are
+// disclosed at their public uses exactly as the k1-arm account contract
+// does in its withdraw circuits.
+//
+// Compile SECOND, with --compact-path contracts/managed so the declared
+// type name 'Till' resolves to the callee's compiled artefact directory.
+
+import CompactStandardLibrary;
+
+contract Till {
+  circuit take_unshielded(color: Bytes<32>, amount: Uint<128>): [];
+  circuit take_shielded(coin: ShieldedCoinInfo): [];
+}
+
+export ledger till: Till;
+export ledger till_addr: ContractAddress;
+
+// Unshielded custody mirror (MIP-0012 §5 pattern: credited by funding,
+// debited by pay_unshielded). Aggregate, not per-color — the probes move
+// exactly one color at a time.
+export ledger unshielded_mirror: Uint<128>;
+
+// Public record of shielded self-funding and spends (the coin itself stays
+// out of public state; only totals are mirrored for the probe's evidence).
+export ledger shielded_funded: Uint<128>;
+export ledger shielded_spent: Uint<128>;
+
+export ledger ops: Counter;
+export ledger checks: Counter;
+
+// The wallet-local coin store (MIP-0012 §6.5): the qualified description of
+// the coin this contract holds enters proof generation as a private input.
+// Root circuits MAY use witnesses; only callees must be witness-free.
+witness payer_coin(color: Bytes<32>): QualifiedShieldedCoinInfo;
+
+constructor(t: Till, t_addr: ContractAddress) {
+  till = disclose(t);
+  till_addr = disclose(t_addr);
+  unshielded_mirror = 0 as Uint<128>;
+  shielded_funded = 0 as Uint<128>;
+  shielded_spent = 0 as Uint<128>;
+}
+
+// ── P6: unshielded value across the call boundary ───────────────────────────
+
+// Mint this contract's own color to itself. Minting to kernel.self()
+// auto-receives (stdlib), so the balance later sent is genuinely in
+// custody. Returns the minted color for the client's bookkeeping.
+export circuit fund_unshielded(domain: Bytes<32>, amount: Uint<64>): Bytes<32> {
+  const color = mintUnshieldedToken(
+    disclose(domain),
+    disclose(amount),
+    left<ContractAddress, UserAddress>(kernel.self())
+  );
+  unshielded_mirror = ((unshielded_mirror + disclose(amount)) as Uint<128>);
+  ops.increment(1);
+  return color;
+}
+
+// Fallback funding: a user-funded permissionless deposit (the k1-arm
+// deposit_unshielded pattern). Used only if the in-circuit mint path fails
+// at run time; a user deposit carries a wallet offer, which is exactly the
+// shape the node 2.1.0 fee wall rejects, so the probe records whichever
+// outcome it observes.
+export circuit deposit_unshielded(color: Bytes<32>, amount: Uint<128>): [] {
+  const c = disclose(color);
+  const a = disclose(amount);
+  receiveUnshielded(c, a);
+  unshielded_mirror = ((unshielded_mirror + a) as Uint<128>);
+  ops.increment(1);
+}
+
+// Send unshielded value to the Till and drive its claim in the same
+// transaction. Both halves are required: sendUnshielded alone declares a
+// contract-addressed output nobody collects and the ledger rejects the
+// transaction (custom error 186 class), so a landed transaction proves the
+// value moved and was claimed atomically.
+export circuit pay_unshielded(color: Bytes<32>, amount: Uint<128>): [] {
+  const c = disclose(color);
+  const value = disclose(amount);
+  assert(unshielded_mirror >= value, "insufficient mirrored unshielded balance");
+  unshielded_mirror = ((unshielded_mirror - value) as Uint<128>);
+  sendUnshielded(c, value, left<ContractAddress, UserAddress>(till_addr));
+  till.take_unshielded(c, value);
+  ops.increment(1);
+}
+
+// On-node custody proof for the payer side, run in a later transaction
+// (unshieldedBalance() reads custody as of transaction start).
+export circuit assert_unshielded_balance(color: Bytes<32>, expected: Uint<128>): [] {
+  assert(
+    unshieldedBalance(disclose(color)) == disclose(expected),
+    "payer unshielded balance does not match the expectation"
+  );
+  checks.increment(1);
+}
+
+// ── P7: shielded value across the call boundary ─────────────────────────────
+
+// Mint a shielded coin of this contract's own color to itself
+// (auto-received per the stdlib; the coin's nonce is the argument, its
+// color tokenType(domain, self)). Returned so the client can store the
+// description and capture mt_index from the indexer.
+export circuit fund_shielded(domain: Bytes<32>, amount: Uint<64>, nonce: Bytes<32>): ShieldedCoinInfo {
+  const coin = mintShieldedToken(
+    disclose(domain),
+    disclose(amount),
+    disclose(nonce),
+    right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+  );
+  shielded_funded = ((shielded_funded + disclose(amount)) as Uint<128>);
+  ops.increment(1);
+  return coin;
+}
+
+// Fallback funding: a user shielded deposit (the k1-arm deposit_shielded
+// pattern, minus the inbox — the probe's client keeps the description).
+// Only reachable if the wallet holds a shielded coin, which a fresh
+// localnet genesis does not provide; present so the fallback needs no
+// contract change.
+export circuit deposit_shielded(coin: ShieldedCoinInfo): [] {
+  const c = disclose(coin);
+  receiveShielded(c);
+  shielded_funded = ((shielded_funded + c.value) as Uint<128>);
+  ops.increment(1);
+}
+
+// Spend the witness-held coin to the Till contract and drive the callee's
+// claim of result.sent in the same transaction. result.sent's nonce is the
+// deterministic evolution of the input coin's nonce (stdlib sendShielded),
+// so the Till's ledger read-back of the claimed coin lets the probe verify
+// the evolution survived the boundary. Returns [sent, change] to the
+// client; change is already a live, self-owned output of this contract
+// (surviving-coin rule) and only needs re-capture.
+export circuit pay_shielded(color: Bytes<32>, amount: Uint<128>): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = payer_coin(color);
+  const value = disclose(amount);
+  const result = sendShielded(
+    disclose(coin),
+    right<ZswapCoinPublicKey, ContractAddress>(till_addr),
+    value
+  );
+  till.take_shielded(disclose(result.sent));
+  shielded_spent = ((shielded_spent + value) as Uint<128>);
+  ops.increment(1);
+  if (disclose(result.change.is_some)) {
+    return [disclose(result.sent), some<ShieldedCoinInfo>(disclose(result.change.value))];
+  }
+  return [disclose(result.sent), none<ShieldedCoinInfo>()];
+}

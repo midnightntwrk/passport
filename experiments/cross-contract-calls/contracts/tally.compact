@@ -1,0 +1,45 @@
+pragma language_version 0.26;
+
+// Tally — the CALLEE of the toy cross-contract pair.
+//
+// Modelled on the canonical upstream regression case
+// compact-end-2-end/regression/contracts/cross-contract-calls/write-then-read
+// (callee.compact), extended with a guarded write for the atomic-failure
+// probe (P4) and a write counter so every circuit changes public state
+// (a zero-public-state-effect call can hang the wallet SDK finalisation
+// watch on this stack).
+//
+// Compiled WITHOUT --no-communications-commitment: the default emits the
+// communications commitment that makes this contract callable as a
+// cross-contract callee. Compile FIRST, to contracts/managed/Tally — the
+// artefact directory name is part of the ABI (the caller's generated code
+// resolves the declared contract type name 'Tally' to ../Tally/ beside its
+// own artefacts).
+
+import CompactStandardLibrary;
+
+export ledger total: Uint<64>;
+export ledger writes: Counter;
+
+constructor() {
+  total = 0 as Uint<64>;
+}
+
+export circuit set(x: Uint<64>): [] {
+  total = disclose(x);
+  writes.increment(1);
+}
+
+export circuit get(): Uint<64> {
+  return total;
+}
+
+// The guarded write for P4: asserts the caller's expectation about the
+// CURRENT total before writing. A transaction composed against one state
+// and landed against another must fail this assertion's recorded ledger
+// read on-node — the atomic-failure evidence.
+export circuit set_guarded(expected: Uint<64>, x: Uint<64>): [] {
+  assert(total == disclose(expected), "tally total does not match the expectation");
+  total = disclose(x);
+  writes.increment(1);
+}

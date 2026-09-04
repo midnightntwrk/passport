@@ -1,0 +1,90 @@
+{
+  "testId": "P3",
+  "name": "live-call",
+  "description": "The two-contract call transaction proven and submitted for real (proof server + node)",
+  "verdict": "PASS",
+  "txHash": "002cbb5488cb5b64dbcd4437f685df2d18fd947de775450916f663474f2488de37",
+  "note": "write_then_read(42) landed: tally.total 0 → 42 and caller.last_observed → 42 in ONE transaction. Proving 292 ms for the call tree (P1 measured one proof per source-level call: set, get, root); tx 10285 bytes proven. Observer sees 3 contract calls with entry points [write_then_read, set, get] — both contract addresses visible, paired.",
+  "details": {
+    "tallyAddress": "cc147a4641f624d75fa39d489294da2de8f68cd4a00fe6fe2d9874c412677aa3",
+    "callerAddress": "543818d13a1f19d794583e6bb93ede201e4f6788487d280853d84a34c9c3759b",
+    "before": {
+      "tally": {
+        "total": "0",
+        "writes": "0"
+      },
+      "caller": {
+        "calls": "0",
+        "last_observed": "0"
+      }
+    },
+    "txId": "002cbb5488cb5b64dbcd4437f685df2d18fd947de775450916f663474f2488de37",
+    "endToEndMs": 16998,
+    "provingMetrics": {
+      "unprovenTxBytes": 2878,
+      "proveWallMs": 292,
+      "provenTxBytes": 10285
+    },
+    "finalized": {
+      "status": "SucceedEntirely",
+      "blockHeight": 209
+    },
+    "after": {
+      "tally": {
+        "total": "42",
+        "writes": "1"
+      },
+      "caller": {
+        "calls": "1",
+        "last_observed": "42"
+      }
+    },
+    "observer": {
+      "hash": "920354bf737ff93a6a5719945563b3b47c1a3f4287d0158e91c23fcad79ffc7b",
+      "identifiers": [
+        "008cede201df00de435bfba232a896fdcf10b259f63f7eec3db0bbe005dc08b524",
+        "002cbb5488cb5b64dbcd4437f685df2d18fd947de775450916f663474f2488de37"
+      ],
+      "transactionResult": {
+        "status": "SUCCESS"
+      },
+      "contractActions": [
+        {
+          "__typename": "ContractCall",
+          "address": "543818d13a1f19d794583e6bb93ede201e4f6788487d280853d84a34c9c3759b",
+          "entryPoint": "write_then_read"
+        },
+        {
+          "__typename": "ContractCall",
+          "address": "cc147a4641f624d75fa39d489294da2de8f68cd4a00fe6fe2d9874c412677aa3",
+          "entryPoint": "set"
+        },
+        {
+          "__typename": "ContractCall",
+          "address": "cc147a4641f624d75fa39d489294da2de8f68cd4a00fe6fe2d9874c412677aa3",
+          "entryPoint": "get"
+        }
+      ]
+    },
+    "observerSummary": {
+      "contractCalls": 3,
+      "entryPoints": [
+        "write_then_read",
+        "set",
+        "get"
+      ],
+      "bothAddressesVisible": true
+    }
+  },
+  "ranAt": "2026-09-03T18:46:56.403Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6",
+    "compactc": "0.34.0",
+    "compactRuntime": "0.19.0",
+    "compactJs": "2.5.5-rc.8",
+    "midnightJs": "5.0.0-beta.7",
+    "ledgerV9": "1.0.0-rc.3"
+  }
+}
