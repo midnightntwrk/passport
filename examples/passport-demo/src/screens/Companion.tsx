@@ -1,6 +1,6 @@
 import { MessageCircle } from 'lucide-react'
 
-import { COMPANION_LABEL, companionUrl } from '../lib/companionLink.js'
+import { COMPANION_LABEL, companionEnabled, companionUrl } from '../lib/companionLink.js'
 import './companion.css'
 
 /**
@@ -31,7 +31,9 @@ export interface CompanionLinkProps {
 }
 
 export default function CompanionLink({ variant = 'row' }: CompanionLinkProps) {
-  const href = companionUrl(import.meta.env.VITE_COMPANION_URL)
+  const configured = import.meta.env.VITE_COMPANION_URL
+  if (!companionEnabled(configured)) return null
+  const href = companionUrl(configured)
 
   if (variant === 'icon') {
     return (

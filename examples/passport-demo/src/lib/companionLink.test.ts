@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { COMPANION_DEFAULT_URL, COMPANION_LABEL, companionUrl } from './companionLink.js';
+import { COMPANION_DEFAULT_URL, COMPANION_LABEL, companionEnabled, companionUrl } from './companionLink.js';
 
 describe('companionUrl', () => {
   it('uses a configured https address exactly as it was given', () => {
@@ -51,5 +51,17 @@ describe('companionUrl', () => {
   it('ships a placeholder default until the real handle is issued', () => {
     expect(COMPANION_DEFAULT_URL).toBe('https://t.me/MidnightCompanionBot');
     expect(new URL(COMPANION_DEFAULT_URL).protocol).toBe('https:');
+  });
+});
+
+describe('companionEnabled', () => {
+  it('is off until a real https handle is configured', () => {
+    expect(companionEnabled(undefined)).toBe(false);
+    expect(companionEnabled('')).toBe(false);
+    expect(companionEnabled('http://t.me/Nope')).toBe(false);
+    expect(companionEnabled(COMPANION_DEFAULT_URL)).toBe(false);
+  });
+  it('is on for a configured https handle', () => {
+    expect(companionEnabled('https://t.me/SomeRealHandleBot')).toBe(true);
   });
 });

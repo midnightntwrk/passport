@@ -40,6 +40,13 @@ export const COMPANION_DEFAULT_URL = 'https://t.me/MidnightCompanionBot';
  * @returns the configured URL when it is an https one, and
  *   {@link COMPANION_DEFAULT_URL} otherwise.
  */
+/* Shown only when a real handle is configured. The placeholder handle does
+   not exist on Telegram, and a button that opens a failed chat is worse than
+   no button; the demo video sets VITE_COMPANION_URL, the public link does not. */
+export function companionEnabled(configured: unknown): boolean {
+  return companionUrl(configured) !== COMPANION_DEFAULT_URL;
+}
+
 export function companionUrl(configured: unknown): string {
   if (typeof configured !== 'string') return COMPANION_DEFAULT_URL;
   const candidate = configured.trim();
