@@ -225,6 +225,22 @@
  * call between its parse and its writer is two lines in `App.tsx` and stays out
  * with the rest of the app shell.
  *
+ * `src/lib/activationHold.ts` went IN on 2026/09/04, the day it was written,
+ * and it is in the denominator because it is the rule that decides whether a
+ * grant coin is spent. The sponsor soak of that day recorded the defect it
+ * closes: a registration refused at the sponsor's hourly ceiling at 17:38:02
+ * and a `/fund-account` posted for the same account a second later, which
+ * succeeded — leaving a Passport holding NIGHT and a stablecoin balance with no
+ * name against it, and a grant that is once per account for ever spent on it.
+ * Every branch in it is a way of getting that wrong in one of the two
+ * directions: a refusal code read as harmless funds a nameless account, and a
+ * hold that never lifts leaves a Passport that has its name unfunded for good.
+ * It holds no DOM, no React, and no clock — a code in, a decision out, and
+ * three `window.localStorage` calls whose every failure mode is drilled against
+ * an in-memory store in `src/lib/activationHold.test.ts`. The sequencing that
+ * consults it is four lines in `App.tsx` and stays out with the rest of the app
+ * shell.
+ *
  * `src/lib/recipientName.ts` went IN on 2026/08/30, the day it was written. It
  * decides which of two completely different things happens to what somebody
  * typed into the recipient field — a `.night` registry read, or a bech32m
@@ -471,6 +487,7 @@ export default mergeConfig(
         include: [
           'src/lib/accountOnPasskey.ts',
           'src/lib/activation.ts',
+          'src/lib/activationHold.ts',
           'src/lib/activityFeed.ts',
           'src/lib/address.ts',
           'src/lib/appBusy.ts',
