@@ -1274,26 +1274,37 @@ describe('failover, end to end through the client', () => {
     expect(slept).toEqual([SPONSOR_PROBE_RETRY_DELAY_MS]);
   });
 
-  it('waits out a pending transaction only after every sponsor has refused', async () => {
-    /* Falling through FIRST and waiting SECOND is the whole point: waiting ten
-       minutes on a busy sponsor is right when it is the only one and wrong
-       when another is idle. */
+  /* -------------------------------------------------------------------- */
+  /* The busy hint (2026/09/04)                                            */
+  /* -------------------------------------------------------------------- */
+
+  /** `429 PENDING_TRANSACTION` — a queue position, with the wait it asks for. */
+  const busy = (retryAfterMs?: number) =>
+    new Response(
+      JSON.stringify({
+        error: 'PENDING_TRANSACTION',
+        message: 'This balancer wallet already has a transaction pending. Try again shortly.',
+        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+      }),
+      { status: 429 },
+    );
+  const balanced = () =>
+    new Response(JSON.stringify({ txHash: 'ab', txBytes: 'cd' }), { status: 200 });
+
+  it('waits out a busy sponsor on the SAME endpoint before falling through', async () => {
+    /* THE 2026/09/04 STABILITY AUDIT. The balancer answered
+       `429 {"error":"PENDING_TRANSACTION","retryAfterMs":2000}` — it was about
+       to be free — and the client posted the same transaction to the 1AM
+       gateway instead. A queue position is not a refusal, so it is waited out
+       where it was given, and the second sponsor is never contacted at all. */
     let clock = 0;
     const slept: number[] = [];
-    /* The gateway is mid-transaction for one round and free the next; the
-       balancer never frees up. So round one refuses twice, and only THEN is
-       there anything to wait for. */
-    let gatewayCalls = 0;
-    const pending = () =>
-      new Response(JSON.stringify({ error: 'PENDING_TRANSACTION', retryAfterMs: 1_000 }), {
-        status: 429,
-      });
+    const asked: string[] = [];
+    let calls = 0;
     const fetchSpy = vi.fn(async (url: string) => {
-      if (!url.startsWith(GATEWAY)) return pending();
-      gatewayCalls += 1;
-      return gatewayCalls === 1
-        ? pending()
-        : new Response(JSON.stringify({ txHash: 'ab', txBytes: 'cd' }), { status: 200 });
+      asked.push(url);
+      calls += 1;
+      return calls === 1 ? busy(2_000) : balanced();
     });
     const result = await sponsorBalanceOnly(bytes, {
       configs,
@@ -1305,9 +1316,136 @@ describe('failover, end to end through the client', () => {
       },
     });
     expect(result.servedBy).toBe(GATEWAY);
-    /* Round one: both refused. One wait — floored to the 2 s minimum, since
-       the service asked for less than the balancer's own change takes to
-       settle. Round two: the first sponsor served. */
+    expect(slept).toEqual([2_000]);
+    expect(asked).toEqual([`${GATEWAY}/balance-only`, `${GATEWAY}/balance-only`]);
+    expect(asked.some((url) => url.startsWith(BALANCER))).toBe(false);
+  });
+
+  it('waits as long as the sponsor asked, inside the clamp', async () => {
+    /* The hint is honoured, not replaced by a fixed poll: five seconds sits
+       between the 2 s floor and the 10 s ceiling, so it is used as given. */
+    let clock = 0;
+    const slept: number[] = [];
+    let calls = 0;
+    const fetchSpy = vi.fn(async () => {
+      calls += 1;
+      return calls === 1 ? busy(5_000) : balanced();
+    });
+    await sponsorBalanceOnly(bytes, {
+      configs,
+      fetch: fetchSpy as never,
+      now: () => clock,
+      sleep: async (ms) => {
+        slept.push(ms);
+        clock += ms;
+      },
+    });
+    expect(slept).toEqual([5_000]);
+  });
+
+  it('falls through to the next sponsor when the busy one stays busy', async () => {
+    /* Three waits, and then the fall-through happens after all: a sponsor that
+       is genuinely stuck costs a few seconds, never the whole send. */
+    let clock = 0;
+    const slept: number[] = [];
+    const asked: string[] = [];
+    const fetchSpy = vi.fn(async (url: string) => {
+      asked.push(url);
+      return url.startsWith(GATEWAY) ? busy(2_000) : balanced();
+    });
+    const result = await sponsorBalanceOnly(bytes, {
+      configs,
+      fetch: fetchSpy as never,
+      now: () => clock,
+      sleep: async (ms) => {
+        slept.push(ms);
+        clock += ms;
+      },
+    });
+    expect(result.servedBy).toBe(BALANCER);
+    expect(slept).toEqual([2_000, 2_000, 2_000]);
+    /* Four posts to the busy one — the first, and one after each wait — then
+       the second sponsor, once. */
+    expect(asked.filter((url) => url.startsWith(GATEWAY))).toHaveLength(4);
+    expect(asked.filter((url) => url.startsWith(BALANCER))).toHaveLength(1);
+  });
+
+  it('does not wait on a busy sponsor at all when the window is disabled', async () => {
+    const asked: string[] = [];
+    const slept: number[] = [];
+    const fetchSpy = vi.fn(async (url: string) => {
+      asked.push(url);
+      return url.startsWith(GATEWAY) ? busy(2_000) : balanced();
+    });
+    const result = await sponsorBalanceOnly(bytes, {
+      configs,
+      fetch: fetchSpy as never,
+      pendingRetryWindowMs: 0,
+      sleep: async (ms) => {
+        slept.push(ms);
+      },
+    });
+    expect(result.servedBy).toBe(BALANCER);
+    expect(slept).toEqual([]);
+    expect(asked.filter((url) => url.startsWith(GATEWAY))).toHaveLength(1);
+  });
+
+  it('stops waiting on the busy sponsor the moment the budget is spent', async () => {
+    /* The window is the bound on ALL of this waiting, and honouring a hint
+       spends it rather than adding to it. A one-millisecond budget buys one
+       one-millisecond wait and nothing more. */
+    let clock = 0;
+    const slept: number[] = [];
+    const asked: string[] = [];
+    const fetchSpy = vi.fn(async (url: string) => {
+      asked.push(url);
+      return url.startsWith(GATEWAY) ? busy(2_000) : balanced();
+    });
+    const result = await sponsorBalanceOnly(bytes, {
+      configs,
+      fetch: fetchSpy as never,
+      pendingRetryWindowMs: 1,
+      now: () => clock,
+      sleep: async (ms) => {
+        slept.push(ms);
+        clock += ms;
+      },
+    });
+    expect(result.servedBy).toBe(BALANCER);
+    expect(slept).toEqual([1]);
+    expect(asked.filter((url) => url.startsWith(GATEWAY))).toHaveLength(2);
+  });
+
+  it('waits out a refusal that is not a busy hint only after every sponsor has refused', async () => {
+    /* Falling through FIRST and waiting SECOND is still the rule for every
+       OTHER retryable refusal: a sponsor whose own change is settling cannot
+       serve anybody right now, so an idle second sponsor is the better answer.
+       Only the queue position is waited out where it was given. */
+    let clock = 0;
+    const slept: number[] = [];
+    /* The gateway's change is settling for one round and clear the next; the
+       balancer never frees up. So round one refuses twice, and only THEN is
+       there anything to wait for. */
+    let gatewayCalls = 0;
+    const settling = () =>
+      new Response(JSON.stringify({ error: 'INSUFFICIENT_DUST' }), { status: 503 });
+    const fetchSpy = vi.fn(async (url: string) => {
+      if (!url.startsWith(GATEWAY)) return settling();
+      gatewayCalls += 1;
+      return gatewayCalls === 1 ? settling() : balanced();
+    });
+    const result = await sponsorBalanceOnly(bytes, {
+      configs,
+      fetch: fetchSpy as never,
+      now: () => clock,
+      sleep: async (ms) => {
+        slept.push(ms);
+        clock += ms;
+      },
+    });
+    expect(result.servedBy).toBe(GATEWAY);
+    /* Round one: both refused. One wait, at the default the service named no
+       figure for. Round two: the first sponsor served. */
     expect(slept).toEqual([2_000]);
     expect(fetchSpy).toHaveBeenCalledTimes(3);
   });

@@ -140,6 +140,18 @@ const SPONSOR_PENDING_RETRY_MIN_DELAY_MS = 2_000;
 const SPONSOR_PENDING_RETRY_MAX_DELAY_MS = 10_000;
 /** Fallback delay when the service names no `retryAfterMs`. */
 const SPONSOR_PENDING_RETRY_DEFAULT_DELAY_MS = 2_000;
+/**
+ * How many times a `429 PENDING_TRANSACTION` is waited out on the SAME endpoint
+ * before the client falls through to the next one.
+ *
+ * Three, which at the two-second floor is about six seconds of waiting — long
+ * enough to cover the balancer finishing the transaction it is already on, and
+ * short enough that a sponsor which is genuinely stuck does not hold a send up
+ * while an idle second sponsor sits there. The window as a whole still bounds
+ * it: these sleeps are drawn from the caller's budget, so honouring the hint
+ * spends waiting time rather than adding it.
+ */
+const SPONSOR_PENDING_SAME_ENDPOINT_RETRIES = 3;
 /** A readiness probe must not hold a send hostage. */
 const SPONSOR_STATUS_TIMEOUT_MS = 6_000;
 /**
@@ -1045,8 +1057,10 @@ export async function sponsorBalanceOnly(
       signal: AbortSignal.timeout(SPONSOR_BALANCE_TIMEOUT_MS),
     });
 
-  /** One endpoint, one round: a balanced transaction, or a throw. */
-  const balanceAt = async (config: SponsorConfig): Promise<SponsorBalanceResult> => {
+  /** One POST to one endpoint: a balanced transaction, or the refusal it gave. */
+  const postOnce = async (
+    config: SponsorConfig,
+  ): Promise<{ value: SponsorBalanceResult } | { error: SponsorError }> => {
     let response: Response;
     try {
       response = await post(config);
@@ -1061,8 +1075,60 @@ export async function sponsorBalanceOnly(
       response = await post(config);
     }
     const body = await response.json().catch(() => null);
-    if (response.ok) return validateSponsorBalanceResult(body);
-    throw createSponsorError(response.status, body);
+    /* A thrown fetch on the retry, and a `200` whose body is not a balanced
+       transaction, both still leave this function by throwing. Only a REFUSAL
+       the service named is handed back, because a refusal is the one thing the
+       caller below has a decision to make about. */
+    if (response.ok) return { value: validateSponsorBalanceResult(body) };
+    return { error: createSponsorError(response.status, body) };
+  };
+
+  /**
+   * One endpoint, one round: a balanced transaction, or a throw — and, since
+   * 2026/09/04, THE BUSY HINT HONOURED BEFORE FALLING THROUGH.
+   *
+   * A `429 PENDING_TRANSACTION` is not a refusal, it is a queue position: the
+   * balancer serialises balancing and answers `retryAfterMs` saying when it
+   * will be free. Until this date the client read that and immediately posted
+   * the same transaction to the NEXT endpoint instead — the 2026/09/04
+   * stability audit caught exactly that, `429 {"retryAfterMs":2000}` from the
+   * balancer followed by the 1AM gateway covering the fee — which throws away
+   * a sponsor that was about to say yes, and builds the leg somewhere else
+   * against a contract state the first one was already moving.
+   *
+   * So the hint is waited out ON THE SAME ENDPOINT first, up to
+   * {@link SPONSOR_PENDING_SAME_ENDPOINT_RETRIES} times and never past the
+   * caller's window, which is the bound that already governs all this waiting.
+   * Falling through is what happens when the endpoint is STILL busy after
+   * that, so a genuinely stuck sponsor costs a few seconds rather than the
+   * whole send — and the sleeps count against the same budget the round loop
+   * below spends, so the total wait is unchanged.
+   *
+   * ONLY the busy hint. Every other retryable refusal — `INSUFFICIENT_DUST`,
+   * `WALLET_SYNCING` — means this endpoint cannot serve anybody right now, so
+   * a second endpoint that CAN is the better answer and the round loop's
+   * fall-through-then-wait is left to handle it exactly as before.
+   */
+  const balanceAt = async (config: SponsorConfig): Promise<SponsorBalanceResult> => {
+    let waited = 0;
+    for (;;) {
+      const attempt = await postOnce(config);
+      if ('value' in attempt) return attempt.value;
+      const remainingMs = remainingBudgetMs();
+      if (
+        waited < SPONSOR_PENDING_SAME_ENDPOINT_RETRIES &&
+        attempt.error.isPendingTransaction &&
+        retryWindowMs > 0 &&
+        remainingMs > 0
+      ) {
+        waited += 1;
+        const delayMs = sponsorRetryDelayMs(attempt.error.retryAfterMs, remainingMs);
+        sleptMs += delayMs;
+        await sleep(delayMs);
+        continue;
+      }
+      throw attempt.error;
+    }
   };
 
   for (;;) {
