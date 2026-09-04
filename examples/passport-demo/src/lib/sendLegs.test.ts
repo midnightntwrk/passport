@@ -37,6 +37,7 @@ import {
   SEND_REFUSED_TEXT,
   sendRefusalText,
   readPendingSends,
+  resumesWithoutPrompt,
   retryDelayMs,
   SEND_LEG_ATTEMPTS,
   SETTLE_LOOK_AFTER_LANDING_MS,
@@ -884,6 +885,50 @@ describe('pendingSendStepLine', () => {
     expect(pendingSendStepLine(shieldedSend({ leg: 'deposit' }))).toBe(
       'Step 1 done. Step 2 — paying it into alice.night’s account — has not finished.',
     );
+  });
+});
+
+describe('resumesWithoutPrompt', () => {
+  it('carries on every leg the first one already paid for', () => {
+    /* THE 2026/09/04 STABILITY AUDIT. A reload 33 seconds into a mUSD send left
+       the card on Home for three minutes waiting for `Continue`; pressing it
+       then finished the payment. Leg one's assertion covered the whole run, and
+       what is left — the wait, the paying leg, the change going back — is
+       permissionless, so there is nothing left to ask anybody. */
+    for (const leg of ['withdraw', 'settle', 'deposit', 'change'] as const) {
+      expect(resumesWithoutPrompt(shieldedSend({ leg }))).toBe(true);
+    }
+  });
+
+  it('needs the reader for a run that has not spent anything yet', () => {
+    /* Leg one raises the account's own assertion, which is a passkey prompt,
+       and a prompt nobody asked for is exactly what this must not produce. */
+    expect(
+      resumesWithoutPrompt(shieldedSend({ leg: 'withdraw', withdrawTxHash: undefined })),
+    ).toBe(false);
+    expect(resumesWithoutPrompt(shieldedSend({ leg: 'withdraw', withdrawTxHash: '' }))).toBe(
+      false,
+    );
+  });
+
+  it('leaves a run that stopped with a reason on it alone', () => {
+    /* The card is showing why it did not work. Starting again underneath
+       somebody reading that is the screen acting on a decision they have not
+       made — so `Continue` stays theirs to press. */
+    expect(
+      resumesWithoutPrompt(
+        shieldedSend({ leg: 'failed', lastError: { message: 'no', retryable: true } }),
+      ),
+    ).toBe(false);
+  });
+
+  it('has nothing to carry on for a finished run', () => {
+    expect(resumesWithoutPrompt(shieldedSend({ leg: 'done' }))).toBe(false);
+  });
+
+  it('reads a NIGHT run by the same rule', () => {
+    expect(resumesWithoutPrompt(nightSend())).toBe(true);
+    expect(resumesWithoutPrompt(nightSend({ withdrawTxHash: undefined }))).toBe(false);
   });
 });
 

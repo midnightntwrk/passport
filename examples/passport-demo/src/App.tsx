@@ -49,6 +49,12 @@ import {
 } from './lib/activation.js';
 import type { FundAccountAnswer } from './lib/activation.js';
 import {
+  activationGrantHeld,
+  holdActivationGrant,
+  refusalHoldsActivation,
+  releaseActivationGrant,
+} from './lib/activationHold.js';
+import {
   ACTIVITY_KEEP,
   activityStorageKey,
   readStoredActivity,
@@ -65,6 +71,7 @@ import {
   planOfRecord,
   planShieldedSend,
   readPendingSends,
+  resumesWithoutPrompt,
   retryDelayMs,
   SEND_LEG_ATTEMPTS,
   sendRefusalText,
@@ -1146,6 +1153,16 @@ function formatNightUnits(units: bigint): string {
  * record stays at `settle` and Home offers to look again.
  */
 const SETTLE_DEADLINE_MS = 180_000;
+
+/**
+ * How long after the session is ready an unfinished payment carries itself on.
+ *
+ * A page that has just loaded is still opening its wallet and reading its first
+ * balances, and a leg submitted into that fails for a reason that has nothing
+ * to do with the payment. Three seconds after the account is there is the beat
+ * that costs nobody anything and saves a leg built against a wallet mid-sync.
+ */
+const PENDING_SEND_AUTO_RESUME_DELAY_MS = 3_000;
 
 /**
  * What one unfinished send is called, in the sender's own units.
@@ -3748,11 +3765,20 @@ export default function PassportDemo() {
    * ONCE PER CONTRACT, ACROSS SESSIONS. The marker is written only on evidence
    * the grant exists, so a Passport whose activation never landed is still
    * PENDING on the next launch — and the wallet-open effect below finishes it.
+   *
+   * NOT WHILE THE NAME IS QUEUED (2026/09/04). A registration the sponsor
+   * refused leaves this account without a name, and a grant is once per account
+   * for ever: spending it now is a half-provisioned Passport and a coin that
+   * cannot be recovered by asking again. So the hold is read HERE, before every
+   * attempt rather than only at the call site, because the refusal and the
+   * account's landing race — see `lib/activationHold.ts` for both orders and
+   * for what lifts it.
    */
   const fundAccountOnce = useCallback(
     async (contractAddress: string): Promise<void> => {
       if (!FUNDER_URL) return;
       if (accountFundingAttempted(contractAddress)) return;
+      if (activationGrantHeld(contractAddress)) return;
       if (accountFundingInFlight.current.has(contractAddress)) return;
       accountFundingInFlight.current.add(contractAddress);
       try {
@@ -3774,6 +3800,10 @@ export default function PassportDemo() {
           await pause(delayMs);
           // Another surface — or another tab — may have finished it meanwhile.
           if (accountFundingAttempted(contractAddress)) return;
+          /* And the registration may have been refused while this schedule was
+             waiting, which is the order where the grant is already in flight.
+             The attempts that have not been made yet are the ones this stops. */
+          if (activationGrantHeld(contractAddress)) return;
         }
       } finally {
         accountFundingInFlight.current.delete(contractAddress);
@@ -4230,6 +4260,16 @@ export default function PassportDemo() {
                than as the registry being unhelpful. */
             if (accountDeployFailure !== null) throw accountDeployFailure;
             if (!(cause instanceof AliasSponsorRefusal)) throw cause;
+            /* NO NAME, NO GRANT (2026/09/04). The refusal is in hand and the
+               account has one; the grant is once per account for ever, and
+               spending it now buys a Passport nobody can send to by name. The
+               soak of 2026/09/04 did exactly that: refused at the sponsor's
+               hourly ceiling at 17:38:02, funded at 17:38:03. The hold is
+               placed before the throw so it is in place whichever way the race
+               went, and it is lifted where the name registers below. */
+            if (refusalHoldsActivation(cause.code)) {
+              holdActivationGrant(contractAddress, cause.code);
+            }
             if (cause.code === 'name-taken') {
               throw new AliasClaimError('taken', cause.message);
             }
@@ -4270,11 +4310,22 @@ export default function PassportDemo() {
           );
         }
 
-        /* (5) The opening balance is NOT fired here. It was started the moment
-           the account landed (see the `void fundAccountOnce(deployment.address)`
-           above), and a reused account that never passes through that landing
-           is covered by the wallet-ready effect. Firing it again here bought
-           nothing but a second schedule to reason about. */
+        /* (5) The opening balance is normally NOT started here. It was fired
+           the moment the account landed (see the
+           `void fundAccountOnce(deployment.address)` above), and a reused
+           account that never passes through that landing is covered by the
+           wallet-ready effect.
+
+           What IS here is the release. A name that failed to register holds
+           this account's grant — see the refusal above — and a name that has
+           now registered lifts it, which is the whole of what makes the hold
+           safe to place: the queued name's "Register now" runs this same
+           claim, so the retry that finally lands the name is also the thing
+           that funds the account. Asking again costs nothing anywhere else:
+           `fundAccountOnce` is once per contract and returns immediately on a
+           contract already marked, already held, or already in flight. */
+        releaseActivationGrant(contractAddress);
+        void fundAccountOnce(contractAddress);
 
         /* (6) REMEMBER the account, so a device that has never seen this
            Passport can find the contract again — and remember it WITHOUT
@@ -5737,6 +5788,16 @@ export default function PassportDemo() {
      need the current list without re-subscribing when it changes. */
   const pendingSendsRef = useRef<PendingSend[]>([]);
   const pendingSendsLoadedFor = useRef<string | null>(null);
+  /* Which unfinished payment is being carried on right now, so its card says
+     so instead of offering a button that is already being answered. The ref is
+     what the resume itself reads: two runs walking the same legs at once would
+     each prove against a state the other is moving. */
+  const [resumingSendId, setResumingSendId] = useState<string | null>(null);
+  const resumingSendIdRef = useRef<string | null>(null);
+  /* The records this session has already tried by itself. One attempt each:
+     after that the card is back with its Continue and the next move is the
+     reader's. */
+  const autoResumedSends = useRef<Set<string>>(new Set());
 
   const persistPendingSends = useCallback((next: PendingSend[]) => {
     pendingSendsRef.current = next;
@@ -6504,21 +6565,34 @@ export default function PassportDemo() {
   );
 
   /**
-   * Carrying on a run that stopped — the Home card's Continue.
+   * Carrying on a run that stopped — the Home card's Continue, and the resume
+   * that no longer waits for it.
    *
-   * A PRESENCE CEREMONY stands in front of it, because a resume moves money and
-   * nothing that moves money in Passport is promptless. Which ceremony depends
-   * on what is left to do: leg two is permissionless and needs only the
+   * A PRESENCE CEREMONY stands in front of a PRESSED continue, because a resume
+   * the reader started is one they should be asked to confirm. Which ceremony
+   * depends on what is left to do: leg two is permissionless and needs only the
    * confirmation, while a run that never spent has to raise the account's own
    * assertion — and the orchestrator raises that one itself, so asking for a
    * confirmation first would be two prompts for one press.
+   *
+   * `prompt: false` is the automatic resume below, and it asks for nothing: the
+   * assertion that sent leg one covered the whole run, and there is nobody
+   * there to confirm anything to. See `resumesWithoutPrompt` for which records
+   * qualify.
+   *
+   * One at a time, whichever way it started. Two runs walking the same legs at
+   * once would each build a transaction against a contract state the other is
+   * moving, and the second would be refused by the node for it.
    */
   const continuePendingSend = useCallback(
-    async (id: string): Promise<void> => {
+    async (id: string, options: { prompt?: boolean } = {}): Promise<void> => {
       const record = pendingSendsRef.current.find((entry) => entry.id === id);
       if (!record) return;
+      if (resumingSendIdRef.current !== null) return;
+      resumingSendIdRef.current = id;
+      setResumingSendId(id);
       try {
-        if (record.withdrawTxHash) {
+        if ((options.prompt ?? true) && record.withdrawTxHash) {
           await confirmLocalApproval(`Continue sending to ${record.recipient.label}`);
         }
         await runNameSend(record, { resumed: true });
@@ -6526,10 +6600,53 @@ export default function PassportDemo() {
         /* The trail row and the toast are the orchestrator's, and a refused
            ceremony has its own. Nothing here says any of it twice. */
         console.info('[send] carrying the payment on did not finish', cause);
+      } finally {
+        resumingSendIdRef.current = null;
+        setResumingSendId(null);
       }
     },
     [confirmLocalApproval, runNameSend],
   );
+
+  /**
+   * THE RESUME NOBODY HAS TO PRESS (2026/09/04).
+   *
+   * A reload mid-send used to leave the card sitting on Home behind
+   * `Continue`. The 2026/09/04 stability audit reloaded 33 seconds into a mUSD
+   * send and the card waited three minutes, doing nothing, until the button was
+   * pressed — at which point the payment finished exactly as it would have. The
+   * money was at the sender's own Passport the whole time and every leg left
+   * was permissionless, so the wait bought nothing and cost the recipient three
+   * minutes.
+   *
+   * So a record that can be carried on without asking anybody is carried on.
+   * `resumesWithoutPrompt` decides which — a run whose first leg landed, which
+   * is one the sender already authorised — and the card shows it working rather
+   * than offering a button.
+   *
+   * THE SHORT DELAY IS NOT COSMETIC. A page that has just loaded is still
+   * opening its wallet, and a leg submitted against a wallet mid-sync is a leg
+   * that fails for a reason that has nothing to do with the payment. The gate
+   * is the session and the account contract both being there; the delay is the
+   * beat after that for the first balances to land.
+   *
+   * ONCE PER RECORD PER SESSION. If the automatic attempt does not finish the
+   * run, the card is back with its `Continue` and the next move is the
+   * reader's — retrying by itself forever would be a screen that never admits
+   * something is wrong.
+   */
+  useEffect(() => {
+    if (!localSessionActive || !accountContractAddress) return;
+    const record = pendingSends.find(
+      (entry) => resumesWithoutPrompt(entry) && !autoResumedSends.current.has(entry.id),
+    );
+    if (!record) return;
+    autoResumedSends.current.add(record.id);
+    const handle = window.setTimeout(() => {
+      void continuePendingSend(record.id, { prompt: false });
+    }, PENDING_SEND_AUTO_RESUME_DELAY_MS);
+    return () => window.clearTimeout(handle);
+  }, [accountContractAddress, continuePendingSend, localSessionActive, pendingSends]);
 
   const executeSendToName = useCallback(
     async (params: {
@@ -7069,12 +7186,15 @@ export default function PassportDemo() {
           : `Sending ${pendingSendAmountLabel(record)} to ${record.recipient.label}`,
         step: pendingSendStepLine(record),
         reason: record.lastError?.message ?? null,
+        /* Carrying on by itself, so the card says so. The step line above it
+           advances as each leg is written down, which is the progress. */
+        busy: resumingSendId === record.id,
         onContinue: () => void continuePendingSend(record.id),
         ...(record.withdrawTxHash
           ? {}
           : { onGiveUp: () => dropPendingSend(record.id) }),
       })),
-    [continuePendingSend, dropPendingSend, pendingSends],
+    [continuePendingSend, dropPendingSend, pendingSends, resumingSendId],
   );
 
   const homeLegacyFunds =

@@ -453,6 +453,42 @@ export function pendingSendStepLine(record: PendingSend): string {
     : `Step 1 done. Step 2 — paying it into ${record.recipient.label}’s account — has not finished.`;
 }
 
+/**
+ * WHETHER THIS RUN CAN BE CARRIED ON WITHOUT ASKING ANYBODY (2026/09/04).
+ *
+ * A reload in the middle of a send leaves the record on Home behind a
+ * `Continue`, and the 2026/09/04 stability audit sat in front of one for three
+ * minutes: the first leg had landed, the money was at the sender's own
+ * Passport, and the only thing between it and the recipient was a button
+ * nobody had told the reader to press. Pressing it then finished the payment
+ * exactly as it would have without the reload.
+ *
+ * A run whose first leg is ALREADY SUBMITTED is one the sender has already
+ * authorised: raising the account's assertion is what leg one costs, and that
+ * ceremony covered the whole run. What is left — waiting for the amount to
+ * clear, the permissionless call that pays the recipient, the permissionless
+ * call that puts the change back — needs no signature from anybody. So it is
+ * carried on by itself, and `Continue` stays for the runs that do need a
+ * person. `withdrawTxHash` is the whole test of that: its presence is what
+ * says the first leg was accepted.
+ *
+ * TWO STATES ARE DELIBERATELY REFUSED, and both would be worse than a button:
+ *
+ *   `failed` — the run stopped with a reason on it, and the card is showing
+ *              that reason. Starting again underneath somebody who is reading
+ *              why it did not work is the screen acting on a decision they
+ *              have not made.
+ *   `done`   — there is nothing to carry on.
+ *
+ * A run that never spent — no `withdrawTxHash` — needs the account's own
+ * assertion for its first leg, which is a passkey prompt, and a prompt nobody
+ * asked for is exactly what this must not produce.
+ */
+export function resumesWithoutPrompt(record: PendingSend): boolean {
+  if (record.leg === 'done' || record.leg === 'failed') return false;
+  return typeof record.withdrawTxHash === 'string' && record.withdrawTxHash.length > 0;
+}
+
 /* -------------------------------------------------------------------------- */
 /* What a failure means                                                        */
 /* -------------------------------------------------------------------------- */

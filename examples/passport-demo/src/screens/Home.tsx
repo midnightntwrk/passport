@@ -193,6 +193,15 @@ export interface HomeScreenProps {
     step: string
     /** Why it stopped, when there is a reason worth reading. */
     reason?: string | null
+    /**
+     * Being carried on right now — by the reader's press, or by itself.
+     *
+     * A run whose first leg has landed needs no signature for what is left, so
+     * since 2026/09/04 it resumes without anybody pressing anything. The card
+     * then has to SAY that: a `Continue` sitting under a payment that is
+     * already moving is a button offering to start what has started.
+     */
+    busy?: boolean
     onContinue: () => void
     /**
      * Offered ONLY for a run that never spent anything — there is nothing to
@@ -885,14 +894,24 @@ export default function HomeScreen(props: HomeScreenProps) {
               <p className="mnhome-pending-send-reason">{pending.reason}</p>
             ) : null}
             <div className="mnhome-pending-send-actions">
-              <button type="button" className="mnhome-send-primary" onClick={pending.onContinue}>
-                <span>Continue</span>
+              {/* Rendered and disabled rather than removed, so the card does
+                  not change shape underneath somebody reaching for it. The
+                  step line above says which leg is running. */}
+              <button
+                type="button"
+                className="mnhome-send-primary"
+                onClick={pending.onContinue}
+                disabled={pending.busy === true}
+                aria-busy={pending.busy === true}
+              >
+                <span>{pending.busy === true ? 'Carrying on…' : 'Continue'}</span>
               </button>
               {pending.onGiveUp ? (
                 <button
                   type="button"
                   className="mnhome-send-secondary"
                   onClick={pending.onGiveUp}
+                  disabled={pending.busy === true}
                 >
                   <span>Forget it</span>
                 </button>
