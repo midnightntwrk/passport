@@ -173,17 +173,24 @@ test.describe('@live MetaMask as a device on stagenet', () => {
   });
 
   test('the MetaMask device sends NIGHT to a name', async () => {
-    await page.getByRole('button', { name: /^Send$/ }).click();
-    await page.getByLabel(/Send to/i).fill(RECIPIENT_NAME);
-    await expect(page.getByText(RECIPIENT_NAME).first()).toBeVisible({ timeout: 120_000 });
-    await page.getByLabel(/Amount/i).fill(SEND_NIGHT);
+    await page.getByRole('button', { name: /^Send$/ }).first().click();
+    await expect(page.locator('.mnhome-send')).toBeVisible({ timeout: 60_000 });
 
+    /* The recipient is the sheet's first textbox, and the amount its one
+       `0.0` placeholder — the same handles `e2e/send-assets.spec.ts` uses,
+       because the sheet's fields have no labels of their own. */
+    await page.getByRole('textbox').first().fill(RECIPIENT_NAME);
+    await page.getByPlaceholder('0.0').fill(SEND_NIGHT);
+
+    /* The name has to RESOLVE before Review will enable: the registry is asked,
+       and what it answers with is the account this payment is aimed at. */
+    const review = page.getByRole('button', { name: /^Review$/ });
+    await expect(review).toBeEnabled({ timeout: 180_000 });
+    await review.click();
     await page.getByRole('button', { name: /^Send$/ }).last().click();
 
     /* Two legs, both authorised by a `personal_sign` and nothing else. */
-    await expect(page.getByText(/Sent NIGHT|arrived|complete/i).first()).toBeVisible({
-      timeout: 900_000,
-    });
+    await expect(page.getByText(/Sent NIGHT/i).first()).toBeVisible({ timeout: 1_200_000 });
     const fresh = await recordNewHashes();
     expect(fresh.length).toBeGreaterThan(0);
   });
