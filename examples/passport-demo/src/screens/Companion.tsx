@@ -1,5 +1,8 @@
 import { MessageCircle } from 'lucide-react'
 
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
+
 import { COMPANION_LABEL, companionEnabled, companionUrl } from '../lib/companionLink.js'
 import './companion.css'
 
@@ -32,11 +35,58 @@ export interface CompanionLinkProps {
 
 export default function CompanionLink({ variant = 'row' }: CompanionLinkProps) {
   const configured = import.meta.env.VITE_COMPANION_URL
-  if (!companionEnabled(configured)) return null
+  const enabled = companionEnabled(configured)
   const href = companionUrl(configured)
+  const [open, setOpen] = useState(false)
+
+  /* Until the Companions team has an address, the button stays exactly where
+     it is and looks exactly as it will, and a press says "coming soon" rather
+     than opening a chat that does not exist. With a real handle configured it
+     is a plain link out and nothing else. */
+  const soon = !enabled
+
+  const modal = open
+    ? createPortal(
+        <div className="mnid-scrim" role="presentation" onMouseDown={() => setOpen(false)}>
+          <div
+            className="mnid-modal mncompanion-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Midnight Companion"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <p className="mnid-kicker">Coming soon</p>
+            <h2 className="mnid-modal-title">Your Midnight Companion is on its way</h2>
+            <p className="mnid-lede">
+              A chat with your own Midnight agent, from inside your Passport. It is not open yet;
+              this is where it will live.
+            </p>
+            <div className="mnid-actions">
+              <button type="button" className="mnid-primary" onClick={() => setOpen(false)} autoFocus>
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null
 
   if (variant === 'icon') {
-    return (
+    return soon ? (
+      <>
+        <button
+          type="button"
+          className="mnhome-icon-button mncompanion-icon"
+          aria-label={COMPANION_LABEL}
+          title={COMPANION_LABEL}
+          onClick={() => setOpen(true)}
+        >
+          <MessageCircle size={15} aria-hidden="true" />
+        </button>
+        {modal}
+      </>
+    ) : (
       <a
         className="mnhome-icon-button mncompanion-icon"
         href={href}
@@ -50,20 +100,28 @@ export default function CompanionLink({ variant = 'row' }: CompanionLinkProps) {
     )
   }
 
-  return (
-    <a
-      className="mncompanion-row"
-      href={href}
-      target="_blank"
-      rel="noreferrer noopener"
-    >
+  const inner = (
+    <>
       <span className="mncompanion-mark" aria-hidden="true">
         <MessageCircle size={16} strokeWidth={2} />
       </span>
       <span className="mncompanion-copy">
         <span className="mncompanion-label">{COMPANION_LABEL}</span>
-        <span className="mncompanion-hint">Opens a chat in a new tab</span>
+        <span className="mncompanion-hint">{soon ? 'Coming soon' : 'Opens a chat in a new tab'}</span>
       </span>
+    </>
+  )
+
+  return soon ? (
+    <>
+      <button type="button" className="mncompanion-row" onClick={() => setOpen(true)}>
+        {inner}
+      </button>
+      {modal}
+    </>
+  ) : (
+    <a className="mncompanion-row" href={href} target="_blank" rel="noreferrer noopener">
+      {inner}
     </a>
   )
 }

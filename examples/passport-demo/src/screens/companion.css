@@ -52,3 +52,7 @@
   font-size: 12px;
   line-height: 1.35;
 }
+
+/* The row is a button until a real chat address exists; it must look the same. */
+button.mncompanion-row { font: inherit; text-align: left; width: 100%; cursor: pointer; }
+.mncompanion-modal .mnid-actions { margin-top: 14px; }
