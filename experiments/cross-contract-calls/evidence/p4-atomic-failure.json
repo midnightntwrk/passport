@@ -1,0 +1,78 @@
+{
+  "testId": "P4",
+  "name": "atomic-failure",
+  "description": "A composed call transaction made stale between proving and submission must fail atomically on-node (with a matched-delay control that lands)",
+  "verdict": "PASS",
+  "errorCode": "submission-refused",
+  "note": "Atomic failure held on-node: the composed compose_guarded(92, 192) transaction, proven before a direct set(99) interleaved, did not take effect — the node refused it at submission (node-rejected: submission-refused). The matched-delay CONTROL landed, so the refusal is the staleness, not TTL or delay. tally.total stayed at the interleaved 99; caller.calls and last_observed untouched: neither half of the composed pair applied.",
+  "details": {
+    "tallyAddress": "cc147a4641f624d75fa39d489294da2de8f68cd4a00fe6fe2d9874c412677aa3",
+    "callerAddress": "543818d13a1f19d794583e6bb93ede201e4f6788487d280853d84a34c9c3759b",
+    "control": {
+      "expected": "42",
+      "target": "92",
+      "proveMs": 242,
+      "outcome": {
+        "accepted": true,
+        "txId": "004ec8499247c64e53596f04c43ecaa87c95dce115a8499991bb01a4dd33233b3d",
+        "status": "SucceedEntirely",
+        "blockHeight": 221
+      }
+    },
+    "before": {
+      "tally": {
+        "total": "92",
+        "writes": "2"
+      },
+      "caller": {
+        "calls": "2",
+        "last_observed": "92"
+      }
+    },
+    "staleProveMs": 137,
+    "interleaveTx": "00606aa9189d13cf778b951a132ab2704fad1fc7b2cda465f94a631b55f5ba6d29",
+    "staleSubmission": {
+      "accepted": false,
+      "stage": "node-rejected",
+      "errorCode": "submission-refused",
+      "error": {
+        "name": "(FiberFailure) SubmissionError",
+        "message": "Transaction submission error",
+        "stack": "SubmissionError: Transaction submission error\n    at file:///Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/node_modules/@midnightntwrk/wallet-sdk-capabilities/dist/submission/submissionService.js:31:279\n    at /Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/node_modules/effect/src/internal/core.ts:1078:35\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)\n    at FiberRuntime.evaluateEffect (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:950:27)\n    at FiberRuntime.evaluateMessageWhileSuspended (/Users/nicolasdiprima/work/iog/midnight/passport/arc-passport/experiments/cross-contract-calls/node_modules/effect/src/internal/fiberRuntime.ts:918:14)",
+        "causeChain": [
+          {
+            "name": "(FiberFailure) SubmissionError",
+            "tag": null,
+            "message": "Transaction submission error"
+          }
+        ]
+      }
+    },
+    "after": {
+      "tally": {
+        "total": "99",
+        "writes": "3"
+      },
+      "caller": {
+        "calls": "2",
+        "last_observed": "92"
+      }
+    },
+    "stateCheck": {
+      "tallyClean": true,
+      "callerClean": true,
+      "staleApplied": false
+    }
+  },
+  "ranAt": "2026-09-03T18:48:42.647Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6",
+    "compactc": "0.34.0",
+    "compactRuntime": "0.19.0",
+    "compactJs": "2.5.5-rc.8",
+    "midnightJs": "5.0.0-beta.7",
+    "ledgerV9": "1.0.0-rc.3"
+  }
+}

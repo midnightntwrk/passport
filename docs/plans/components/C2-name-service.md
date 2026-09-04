@@ -75,11 +75,29 @@ policy; what does Passport recommend (brand protection, offensive-name
 policy, dispute handling)?
 
 **Contract-owned-arm activation.** The forward-looking arm that lets
-the account contract own its name is availability-gated on
-cross-contract calls, which arrive with the next toolchain generation.
-Until then: which owner commitment holds Passport names (a designated
-device key? a dedicated naming key?), and what the migration ceremony
-to contract ownership looks like when the arm activates.
+the account contract own its name was availability-gated on
+cross-contract calls. That gate is now half open: the toolchain
+generation carrying them has shipped (Compact 0.34.0 stable, ledger-9
+wave), and `experiments/cross-contract-calls` validated the arm's whole
+mechanism on a localnet on 2026/09/03 (eight probes, all passing). The
+evidence covers exactly what the arm needs: a seam-gated account
+circuit driven through the call boundary (the registry-to-account
+authorisation direction), and registration fees payable atomically in
+the same transaction (unshielded and shielded value both cross the
+call boundary with a same-transaction claim). Three constraints carry
+into the arm's design: the registry must record the owner from an
+explicit `ContractAddress` argument, never `ownPublicKey()`, which
+names the transaction submitter inside a callee; the inverse direction
+(the account calling the registry and the registry trusting the caller
+identity) stays unimplementable until `kernel.caller()` ships in a
+release; and static binding means one account implementation per
+registry compile until dynamic binding (draft CoIP-3) lands. Still
+open: the network gate (no public Midnight network runs ledger 9 yet),
+the account-side registry-facing authorisation circuit (an ABI
+addition, to land only after the weak-key and revocation errata), the
+owner commitment that holds Passport names until then (a designated
+device key? a dedicated naming key?), and the migration ceremony to
+contract ownership when the arm activates.
 
 ## Failure modes
 

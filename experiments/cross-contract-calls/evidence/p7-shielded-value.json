@@ -1,0 +1,110 @@
+{
+  "testId": "P7",
+  "name": "shielded-value",
+  "description": "Shielded value across the call boundary: a callee executing receiveShielded on the published 0.19.0 runtime (the issue #658 verdict), driven by a witness-consuming root circuit",
+  "verdict": "PASS",
+  "txHash": "0098af566ba129ec1f70e33780718c9d109068e10d725acd46ea3ffa64a6bc0542",
+  "note": "Shielded value MOVED across the call boundary on the published 0.19.0 runtime — the issue #658 verdict: till.take_shielded (a CALLEE) executed receiveShielded and claimed the sent coin in the SAME transaction as the payer's witness-driven sendShielded (a witness-consuming ROOT circuit holds a call site — question closed). Deterministic nonce evolution survived the boundary (till.held.nonce == result.sent.nonce: true); the till claimed 100 (claims → 1); change followed the surviving-coin rule (900 = 1000 - 100: true). Proving 6290 ms, tx 25974 bytes proven.",
+  "details": {
+    "tillAddress": "96e1db51aaf687313361e7f6b2ed818642ed5eddb9ecb1be8dd242e3f66de770",
+    "payerAddress": "bc92522d1ea94813f3a75624112acdde254c451f595c0b41c622761e34240080",
+    "fundTxId": "00b942d9773c752c4a2e1f5867a4c933c6e200536c66f8588758fd27092a4edf6e",
+    "mintedCoin": {
+      "nonceHex": "c88de18ecc3191c40d737dbe34403c7520eec9ffa2e297abca2802b5faf70b8a",
+      "colorHex": "abc4b99968ff0b74b1646c2272feed9e144ac219c31ef696fe8a802c0a492956",
+      "value": "1000",
+      "nonceMatchesArgument": true
+    },
+    "mtIndexCapture": {
+      "mtIndex": "28",
+      "window": [
+        28,
+        29
+      ]
+    },
+    "payTxId": "0098af566ba129ec1f70e33780718c9d109068e10d725acd46ea3ffa64a6bc0542",
+    "usedMtIndex": "28",
+    "endToEndMs": 24036,
+    "provingMetrics": {
+      "unprovenTxBytes": 5837,
+      "proveWallMs": 6290,
+      "provenTxBytes": 25974
+    },
+    "sent": {
+      "nonceHex": "e1a862f3aa2b2b43685aa74d3f18948a58851e8a95a7caf408cdda69c8dbad00",
+      "colorHex": "abc4b99968ff0b74b1646c2272feed9e144ac219c31ef696fe8a802c0a492956",
+      "value": "100"
+    },
+    "change": {
+      "nonceHex": "c3d048cddddf0267769f039dc1f09c60489b76b4baa893f88a6f8d4d9d5dc400",
+      "colorHex": "abc4b99968ff0b74b1646c2272feed9e144ac219c31ef696fe8a802c0a492956",
+      "value": "900"
+    },
+    "changeCandidates": [
+      "29",
+      "30"
+    ],
+    "afterPay": {
+      "payer": {
+        "shielded_funded": "1000",
+        "shielded_spent": "100"
+      },
+      "till": {
+        "shielded_received": "100",
+        "shielded_claims": "1",
+        "held": {
+          "nonceHex": "e1a862f3aa2b2b43685aa74d3f18948a58851e8a95a7caf408cdda69c8dbad00",
+          "colorHex": "abc4b99968ff0b74b1646c2272feed9e144ac219c31ef696fe8a802c0a492956",
+          "value": "100",
+          "mt_index": "29"
+        }
+      },
+      "heldNonceMatchesSent": true,
+      "heldValueMatchesPay": true,
+      "heldColorMatchesMint": true
+    },
+    "observer": {
+      "hash": "a7f62e4b108bd230c3ce020874c32de0ec4a6af134f1a201d1df31addb64a20c",
+      "identifiers": [
+        "00c0689b282d0b1534173dc2ddbbcee0ca4b68ad88b60ece2ff3bbc25b6ebdfa17",
+        "00c336f8444905c17321e2a15d86c5d3b3438bde370cf75996c80e2be2ebfa89a0",
+        "0063ad1d0059219c77fa7b7a912afbfd41bd84c6df7b78cfe550f9258e8fa01245",
+        "00d17e5d0bc65a2a41558fc2ee7fef711f9e434827ce08b004b888f39ccbd374d6",
+        "0098af566ba129ec1f70e33780718c9d109068e10d725acd46ea3ffa64a6bc0542"
+      ],
+      "transactionResult": {
+        "status": "SUCCESS"
+      },
+      "contractActions": [
+        {
+          "__typename": "ContractCall",
+          "address": "bc92522d1ea94813f3a75624112acdde254c451f595c0b41c622761e34240080",
+          "entryPoint": "pay_shielded"
+        },
+        {
+          "__typename": "ContractCall",
+          "address": "96e1db51aaf687313361e7f6b2ed818642ed5eddb9ecb1be8dd242e3f66de770",
+          "entryPoint": "take_shielded"
+        }
+      ]
+    },
+    "observerSummary": {
+      "contractCalls": 2,
+      "entryPoints": [
+        "pay_shielded",
+        "take_shielded"
+      ]
+    }
+  },
+  "ranAt": "2026-09-03T19:49:50.292Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6",
+    "compactc": "0.34.0",
+    "compactRuntime": "0.19.0",
+    "compactJs": "2.5.5-rc.8",
+    "midnightJs": "5.0.0-beta.7",
+    "ledgerV9": "1.0.0-rc.3"
+  }
+}
