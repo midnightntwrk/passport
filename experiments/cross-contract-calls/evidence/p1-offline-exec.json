@@ -1,0 +1,51 @@
+{
+  "testId": "P1",
+  "name": "offline-exec",
+  "description": "compact-runtime 0.19.0 executes Caller.write_then_read cross-contract against a local state provider (no network, no proving)",
+  "verdict": "PASS",
+  "note": "Trace: [set@tally(present), get@tally(present), write_then_read@caller(absent)] — sub-calls carry the communication commitment, the root does not; 2 callee entries for the 2 source-level calls; callee ledger advanced (total=42, writes=1) and read-your-writes held in-circuit (returned 42).",
+  "details": {
+    "contractRefEncoding": "{ bytes: Uint8Array(32) } via encodeContractAddress",
+    "trace": [
+      {
+        "circuitId": "set",
+        "at": "tally",
+        "commCommData": "present",
+        "publicTranscriptOps": 6
+      },
+      {
+        "circuitId": "get",
+        "at": "tally",
+        "commCommData": "present",
+        "publicTranscriptOps": 3
+      },
+      {
+        "circuitId": "write_then_read",
+        "at": "caller",
+        "commCommData": "absent",
+        "publicTranscriptOps": 30
+      }
+    ],
+    "perCallEntries": "2 callee entries for 2 source-level calls (set, get) — one trace entry (and hence one proof) PER CALL, not per callee contract",
+    "tallyAfter": {
+      "total": "42",
+      "writes": "1"
+    },
+    "callerAfter": {
+      "last_observed": "42",
+      "calls": "1"
+    },
+    "circuitResult": "42"
+  },
+  "ranAt": "2026-09-03T18:27:56.008Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6",
+    "compactc": "0.34.0",
+    "compactRuntime": "0.19.0",
+    "compactJs": "2.5.5-rc.8",
+    "midnightJs": "5.0.0-beta.7",
+    "ledgerV9": "1.0.0-rc.3"
+  }
+}

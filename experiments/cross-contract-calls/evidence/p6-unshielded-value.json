@@ -1,0 +1,79 @@
+{
+  "testId": "P6",
+  "name": "unshielded-value",
+  "description": "Contract-to-contract unshielded token flow driven by an in-circuit call: mint-funded payer, send plus same-transaction cross-contract claim, on-node balance attestation",
+  "verdict": "PASS",
+  "txHash": "0074a178af20f6679db4c1e7efa6e38e4ec415563573030c2bb4ce8e528498959d",
+  "note": "Unshielded value MOVED across the call boundary (mint-funded): pay_unshielded(100) debited the payer mirror 1000 → 900 and till.take_unshielded claimed 100 (claims 0 → 1) in ONE transaction — send and cross-contract claim atomic, proving 92 ms, tx 3545 bytes proven. The node itself then attested the settled balances on both contracts (assert_unshielded_balance: till 100, payer 900).",
+  "details": {
+    "tillAddress": "4e7a83bcb359f0e67c7fa0a3204a468d8e8b4353a2d86f8e3ae6d6d3b5b659bf",
+    "payerAddress": "df364638f5c736ae3275c5c6d9fedf34ba85994f7fa943626948de8ba4d73418",
+    "fundTxId": "006832349e22167eed702ac289a253744164e998bd35a9f58f78491497bcea3137",
+    "fundMode": "mint-funded",
+    "colorHex": "b3ef85ee943af4a85f701a948055e4ef99c746c0da97fdda42eb338fbf3ae5ed",
+    "afterFund": {
+      "payerMirror": "1000"
+    },
+    "beforePay": {
+      "payerMirror": "1000",
+      "tillReceived": "0",
+      "tillClaims": "0"
+    },
+    "payTxId": "0074a178af20f6679db4c1e7efa6e38e4ec415563573030c2bb4ce8e528498959d",
+    "endToEndMs": 18689,
+    "provingMetrics": {
+      "unprovenTxBytes": 1037,
+      "proveWallMs": 92,
+      "provenTxBytes": 3545
+    },
+    "afterPay": {
+      "payerMirror": "900",
+      "tillReceived": "100",
+      "tillClaims": "1"
+    },
+    "observer": {
+      "hash": "5e1637d76c04a0586b472a5c9cacbee74ea6501e64bc257da4ce8ba0c3b34076",
+      "identifiers": [
+        "0093340fed8d7a0f6a27565a5e8ae9dcfc9a03e67fc0cad8ef7296fc41b7a4fdee",
+        "0074a178af20f6679db4c1e7efa6e38e4ec415563573030c2bb4ce8e528498959d"
+      ],
+      "transactionResult": {
+        "status": "SUCCESS"
+      },
+      "contractActions": [
+        {
+          "__typename": "ContractCall",
+          "address": "df364638f5c736ae3275c5c6d9fedf34ba85994f7fa943626948de8ba4d73418",
+          "entryPoint": "pay_unshielded"
+        },
+        {
+          "__typename": "ContractCall",
+          "address": "4e7a83bcb359f0e67c7fa0a3204a468d8e8b4353a2d86f8e3ae6d6d3b5b659bf",
+          "entryPoint": "take_unshielded"
+        }
+      ]
+    },
+    "observerSummary": {
+      "contractCalls": 2,
+      "entryPoints": [
+        "pay_unshielded",
+        "take_unshielded"
+      ]
+    },
+    "assertTxIds": {
+      "till": "0079280a46f42a3dd9bbdfb61367589a7be870c10b4799305daef109fb16a7844b",
+      "payer": "00e2764532fc1da73f67dfda67ba69b29c650d1707763d0b5d98385267318fbcca"
+    }
+  },
+  "ranAt": "2026-09-03T19:47:49.805Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6",
+    "compactc": "0.34.0",
+    "compactRuntime": "0.19.0",
+    "compactJs": "2.5.5-rc.8",
+    "midnightJs": "5.0.0-beta.7",
+    "ledgerV9": "1.0.0-rc.3"
+  }
+}

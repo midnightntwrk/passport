@@ -1,0 +1,38 @@
+{
+  "testId": "P2",
+  "name": "deploy",
+  "description": "Deploy Tally, deploy Caller with a contract-typed constructor argument, and probe the block-pinned indexer state query cross-contract resolution depends on",
+  "verdict": "PASS",
+  "note": "Both contracts deployed (tally cc147a4641f6…, caller 543818d13a1f…); the contract reference round-trips through the constructor and ledger; indexer-standalone 4.4.0-rc.2 ANSWERS the block-pinned contract(address:, offset:) query — the upstream mainline-indexer weak link is not present here.",
+  "details": {
+    "tallyAddress": "cc147a4641f624d75fa39d489294da2de8f68cd4a00fe6fe2d9874c412677aa3",
+    "tallyInitial": {
+      "total": "0",
+      "writes": "0"
+    },
+    "constructorArg": "{ bytes: Uint8Array(32) }",
+    "callerAddress": "543818d13a1f19d794583e6bb93ede201e4f6788487d280853d84a34c9c3759b",
+    "storedReference": "cc147a4641f624d75fa39d489294da2de8f68cd4a00fe6fe2d9874c412677aa3",
+    "pinnedBlock": {
+      "hash": "d6863e5511bbb476d0e70f1c9f63f77dabc76baa7e33dbd5b708621585e0a851",
+      "height": 201
+    },
+    "providerPinnedQuery": "returned contract state (decoded)",
+    "rawPinnedQuery": {
+      "httpStatus": 200,
+      "errors": null,
+      "state": "6d69646e696768743a636f6e74726163742d73746174655b76385d3a6c000840… (8690 hex chars)"
+    }
+  },
+  "ranAt": "2026-09-03T18:46:08.285Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6",
+    "compactc": "0.34.0",
+    "compactRuntime": "0.19.0",
+    "compactJs": "2.5.5-rc.8",
+    "midnightJs": "5.0.0-beta.7",
+    "ledgerV9": "1.0.0-rc.3"
+  }
+}

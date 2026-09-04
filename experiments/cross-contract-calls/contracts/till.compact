@@ -1,0 +1,89 @@
+pragma language_version 0.26;
+
+// Till — the value-receiving CALLEE of the P6/P7 pair.
+//
+// Modelled on the upstream QA dynamic-calls recipients
+// (compact-end-2-end regression/qa/contracts/dynamic-calls/
+// unshielded-contract-recipient/recipient.compact and
+// shielded-contract-recipient/recipient.compact), trimmed to the claim
+// question: value addressed to a ContractAddress is not credited on its
+// own — it must be claimed by a circuit of the recipient running in the
+// SAME transaction, or the transaction does not balance and the ledger
+// rejects it. The Payer therefore reaches these circuits through a
+// cross-contract call, and a landed transaction is itself the proof that
+// value crossed the call boundary.
+//
+// Witness-free by necessity: callees may not invoke witnesses (directly or
+// indirectly), so the claimed shielded coin is held in a LEDGER cell via
+// writeCoin (the upstream recipient pattern), not in private state. Every
+// circuit changes public state (mirror or counter): a zero-effect call can
+// hang the wallet SDK finalisation watch on this stack.
+//
+// Compile FIRST, to contracts/managed/Till — the artefact directory name is
+// part of the ABI (the Payer's generated code resolves the declared
+// contract type name 'Till' to ../Till/ beside its own artefacts).
+
+import CompactStandardLibrary;
+
+// Unshielded custody mirror: total value claimed through take_unshielded.
+export ledger unshielded_received: Uint<128>;
+export ledger unshielded_claims: Counter;
+
+// Shielded custody: the claimed coin itself (contract-owned, public cell —
+// the callee cannot use private state) plus a value mirror.
+export ledger held: QualifiedShieldedCoinInfo;
+export ledger held_has_coin: Boolean;
+export ledger shielded_received: Uint<128>;
+export ledger shielded_claims: Counter;
+
+// assert_* probe circuits count here so they have a public effect.
+export ledger checks: Counter;
+
+constructor() {
+  unshielded_received = 0 as Uint<128>;
+  shielded_received = 0 as Uint<128>;
+  held_has_coin = false;
+}
+
+// P6: claim incoming unshielded value. Without this claim the Payer's
+// sendUnshielded declares an output nobody collects and the ledger rejects
+// the whole transaction — the claim is what makes the transfer land.
+export circuit take_unshielded(color: Bytes<32>, amount: Uint<128>): [] {
+  const c = disclose(color);
+  const a = disclose(amount);
+  receiveUnshielded(c, a);
+  unshielded_received = ((unshielded_received + a) as Uint<128>);
+  unshielded_claims.increment(1);
+}
+
+// P7: claim an incoming shielded coin (the LFDT-Minokawa/compact#658
+// surface — receiveShielded executed by a CALLEE). The claimed coin is
+// retained in contract custody; its ledger read-back exposes the nonce, so
+// the probe can verify the sender-side deterministic nonce evolution
+// survived the call boundary.
+export circuit take_shielded(coin: ShieldedCoinInfo): [] {
+  const c = disclose(coin);
+  receiveShielded(c);
+  if (!held_has_coin) {
+    held.writeCoin(c, right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));
+    held_has_coin = true;
+  } else {
+    const merged = mergeCoinImmediate(held, c);
+    held.writeCoin(merged, right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));
+  }
+  shielded_received = ((shielded_received + c.value) as Uint<128>);
+  shielded_claims.increment(1);
+}
+
+// On-node custody proof, run in a LATER transaction: unshieldedBalance()
+// reports custody as of the start of the transaction, so the claiming
+// circuit cannot observe its own receive; asserting here makes the node
+// itself attest the settled balance. The counter gives the circuit a
+// public effect.
+export circuit assert_unshielded_balance(color: Bytes<32>, expected: Uint<128>): [] {
+  assert(
+    unshieldedBalance(disclose(color)) == disclose(expected),
+    "till unshielded balance does not match the expectation"
+  );
+  checks.increment(1);
+}
