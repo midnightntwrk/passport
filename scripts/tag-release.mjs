@@ -68,6 +68,8 @@ const serviceWorker = path.join(repositoryRoot, 'examples/passport-demo/dist/sw.
 const releaseRepository = process.env.PASSPORT_RELEASE_REPO || 'midnightntwrk/passport';
 const productionUrl = process.env.PASSPORT_RELEASE_URL || 'https://midnightpassport.com';
 const gateSummary = process.env.PASSPORT_RELEASE_NOTES;
+const dryRun = process.argv.includes('--dry-run');
+
 /* Every release must say which issues it fixes. The notes are written by hand
    in RELEASE-NOTES.md at the repository root before deploying — one "Fixed"
    entry per issue, who reported it, what the cause was, and the commits — and
@@ -82,7 +84,6 @@ try {
 if (!dryRun && !/##\s*Fixed/i.test(issueNotes)) {
   fail('RELEASE-NOTES.md is missing or has no "## Fixed" section. Write one entry per issue fixed, then tag.');
 }
-const dryRun = process.argv.includes('--dry-run');
 
 function fail(message) {
   console.error(`tag-release: ${message}`);
