@@ -27,7 +27,7 @@ import { openingBalanceOnTheWay } from '../lib/activation.js'
 /* When to read the account again, so a figure that moves on the chain moves on
    this screen without a reload. Rules in `lib/balanceWatch.ts`, wiring in
    `useBalanceWatch.ts`. */
-import { accountHoldsSomething, holdingsSignature } from '../lib/balanceWatch.js'
+import { holdingsSignature, openingBalanceLegsHeld } from '../lib/balanceWatch.js'
 import { useBalanceWatch } from './useBalanceWatch.js'
 import './assets.css'
 
@@ -123,11 +123,14 @@ export default function AssetsScreen(props: AssetsScreenProps) {
   /* What has been announced and has not landed. One line under the token
      shelf, from the trail, gone the moment the balances themselves say it —
      plus the opening balance, which is on its way from the moment this
-     Passport has an account for it to land in and nothing in it yet. */
+     Passport has an account for it to land in and stays until both halves of
+     the grant have arrived. */
+  const openingLegs = openingBalanceLegsHeld(account)
   const onTheWay = assetsOnTheWay(activity, {
     openingBalance: openingBalanceOnTheWay({
       hasAccount: Boolean(account),
-      holdsNothing: !accountHoldsSomething(account),
+      holdsOpeningNight: openingLegs.night,
+      holdsOpeningStablecoin: openingLegs.stablecoin,
       entries: activity ?? [],
     }),
   })

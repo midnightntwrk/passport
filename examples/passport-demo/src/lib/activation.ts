@@ -373,14 +373,28 @@ export function classifyFundAccountAnswer(
  * from then until either the money shows up or the sponsor gives up, the
  * honest reading of an empty account is "it is coming", not "you have nothing".
  *
- * Three conditions, and each one is a way of misleading somebody if dropped:
+ * THE GRANT IS TWO DEPOSITS, AND THE ROW WAITS FOR BOTH (2026/09/04).
+ *
+ * This asked `holdsNothing` until that date — the row went the moment the
+ * account held ANYTHING — and the two deposits do not land together. The
+ * 2026/09/04 stability audit watched a new Passport take its opening NIGHT,
+ * lose the row on the spot, and then sit for 18.1 seconds showing `mUSD 0`
+ * beside "Your account is ready", which is the screen saying a stablecoin that
+ * was on its way had not been sent. One asset arriving is not the grant
+ * arriving, so the row now stays until BOTH legs of it are in the account.
+ *
+ * Four conditions, and each one is a way of misleading somebody if dropped:
  *
  *   `hasAccount`   — no account, nothing has been asked for, and a line
  *                    promising an opening balance would be a promise nobody
  *                    made.
- *   `holdsNothing` — the moment the account holds ANYTHING the balance itself
- *                    is the answer, and a line saying it is still on its way
- *                    would be contradicting the figure printed above it.
+ *   `holdsOpeningNight`      — both together are the grant. Either one on its
+ *   `holdsOpeningStablecoin`   own leaves the other still coming, and the row
+ *                              names both figures, so retiring it on the first
+ *                              turns the second into a zero nothing explains.
+ *                              Once both are held the balances above ARE the
+ *                              answer, and a line still saying they are on
+ *                              their way would contradict them.
  *   no failure row — the sponsor refusing, or its ten minutes running out,
  *                    ends the wait. The trail already says so in the sponsor's
  *                    own words and carries the control to ask again; a line
@@ -388,13 +402,18 @@ export function classifyFundAccountAnswer(
  *                    telling two stories at once.
  *
  * Pure over the trail the screens already hold, so Home and Assets cannot
- * disagree about whether a Passport is still waiting for its first money.
+ * disagree about whether a Passport is still waiting for its first money. What
+ * counts as each leg being HELD is `openingBalanceLegsHeld` in
+ * `lib/balanceWatch.ts`, which reads it off the same snapshot both screens
+ * paint their balances from.
  */
 export function openingBalanceOnTheWay(input: {
   hasAccount: boolean;
-  holdsNothing: boolean;
+  holdsOpeningNight: boolean;
+  holdsOpeningStablecoin: boolean;
   entries: readonly { label: string }[];
 }): boolean {
-  if (!input.hasAccount || !input.holdsNothing) return false;
+  if (!input.hasAccount) return false;
+  if (input.holdsOpeningNight && input.holdsOpeningStablecoin) return false;
   return !input.entries.some((entry) => ACTIVATION_FAILURE_LABELS.has(entry.label));
 }

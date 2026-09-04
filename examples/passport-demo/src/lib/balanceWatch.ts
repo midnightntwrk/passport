@@ -175,19 +175,41 @@ export function holdingsSignature(account: HoldingsSnapshot | null): string {
   return `night=${account.nightBalance ?? '?'}|${colours.join(',')}`;
 }
 
+/** Which legs of the sponsor's opening grant this account is already holding. */
+export interface OpeningBalanceLegs {
+  /** The opening NIGHT. */
+  night: boolean;
+  /** The opening stablecoin. */
+  stablecoin: boolean;
+}
+
 /**
- * Whether this account holds anything at all.
+ * Which halves of the opening balance have landed.
  *
- * The question the opening-balance line asks: an account with nothing in it
- * and no failure recorded is one whose grant is still on its way. A `null`
- * NIGHT figure is NOT nothing — it is a figure nobody has read yet — so it
- * answers false here for the same reason it fingerprints as `?` above.
+ * The question the opening-balance line asks, and until 2026/09/04 it asked a
+ * coarser one — "does this account hold anything at all" — which went true on
+ * whichever of the two deposits arrived first and retired the row while the
+ * other was still coming. See `openingBalanceOnTheWay` in `lib/activation.ts`
+ * for what the audit watched that do.
+ *
+ * A `null` NIGHT figure is NOT a zero — it is a figure nobody has read yet — so
+ * it answers false here for the same reason it fingerprints as `?` above.
+ *
+ * A `null` stablecoin answers TRUE, and that is deliberate: `null` means this
+ * build's sponsor has named no stablecoin colour, so there is no second deposit
+ * to wait for and the NIGHT leg is the whole grant. A colour that IS named but
+ * sits at zero is a deposit that has not arrived, and answers false.
+ *
+ * Other shielded colours are not consulted at all. The grant is these two
+ * assets; a colour somebody else sent is not one of them, and counting it would
+ * retire the row on money that has nothing to do with the sponsor.
  */
-export function accountHoldsSomething(account: HoldingsSnapshot | null): boolean {
-  if (!account) return false;
-  if (account.nightBalance !== null && account.nightBalance !== '0') return true;
-  if (account.stablecoin && account.stablecoin.amount > 0n) return true;
-  return account.otherShielded.some((held) => held.amount > 0n);
+export function openingBalanceLegsHeld(account: HoldingsSnapshot | null): OpeningBalanceLegs {
+  if (!account) return { night: false, stablecoin: false };
+  return {
+    night: account.nightBalance !== null && account.nightBalance !== '0',
+    stablecoin: account.stablecoin === null || account.stablecoin.amount > 0n,
+  };
 }
 
 export interface BalanceWatchOptions {

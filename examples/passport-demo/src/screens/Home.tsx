@@ -28,7 +28,7 @@ import { openingBalanceOnTheWay } from '../lib/activation.js'
 /* When to read the account again, so a figure that moves on the chain moves on
    this screen without a reload. Rules in `lib/balanceWatch.ts`, wiring in
    `useBalanceWatch.ts`. */
-import { accountHoldsSomething, holdingsSignature } from '../lib/balanceWatch.js'
+import { holdingsSignature, openingBalanceLegsHeld } from '../lib/balanceWatch.js'
 import { useBalanceWatch } from './useBalanceWatch.js'
 /* Naming a colour, and the order a balance list puts colours in. Pure, drilled,
    and free of the wallet SDK — see `lib/colour.ts`. */
@@ -448,13 +448,16 @@ export default function HomeScreen(props: HomeScreenProps) {
 
   /* One line under the balances for whatever has been announced and has not
      landed — including the opening balance, which is on its way from the
-     moment this Passport HAS an account for it to land in and has nothing in
-     it yet. It is never a settled figure: the line says something is coming,
-     the balance above it keeps saying what is actually there. */
+     moment this Passport HAS an account for it to land in and stays there
+     until BOTH halves of the grant have arrived. It is never a settled figure:
+     the line says something is coming, the balance above it keeps saying what
+     is actually there. */
+  const openingLegs = openingBalanceLegsHeld(account ?? null)
   const onTheWay = assetsOnTheWay(activity, {
     openingBalance: openingBalanceOnTheWay({
       hasAccount: Boolean(account),
-      holdsNothing: !accountHoldsSomething(account ?? null),
+      holdsOpeningNight: openingLegs.night,
+      holdsOpeningStablecoin: openingLegs.stablecoin,
       entries: activity ?? [],
     }),
   })

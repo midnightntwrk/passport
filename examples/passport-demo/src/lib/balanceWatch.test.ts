@@ -15,7 +15,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  accountHoldsSomething,
+  openingBalanceLegsHeld,
   BALANCE_WATCH_BUSY_STANDOFF_MS,
   BALANCE_WATCH_CHASE_CEILING_MS,
   BALANCE_WATCH_CHASE_FIRST_MS,
@@ -184,42 +184,72 @@ describe('holdingsSignature', () => {
   });
 });
 
-describe('accountHoldsSomething', () => {
-  it('is false for no account, and for one holding nothing', () => {
-    expect(accountHoldsSomething(null)).toBe(false);
-    expect(accountHoldsSomething(EMPTY)).toBe(false);
+describe('openingBalanceLegsHeld', () => {
+  it('holds neither leg with no account at all', () => {
+    expect(openingBalanceLegsHeld(null)).toEqual({ night: false, stablecoin: false });
   });
 
-  it('is false while the NIGHT figure has not been read', () => {
+  it('reads the two legs of the grant independently', () => {
+    /* THE 2026/09/04 STABILITY AUDIT. The two deposits do not land together, so
+       the answer has to be two facts rather than one: the caller retires the
+       "on the way" row only when both are true, and the audit watched a row
+       retired on the NIGHT leg alone leave `mUSD 0` unexplained for 18.1 s. */
     expect(
-      accountHoldsSomething({ nightBalance: null, stablecoin: null, otherShielded: [] }),
-    ).toBe(false);
-  });
-
-  it('is true for NIGHT, for a stablecoin, and for any other colour', () => {
-    expect(
-      accountHoldsSomething({ nightBalance: '1', stablecoin: null, otherShielded: [] }),
-    ).toBe(true);
-    expect(accountHoldsSomething(WITH_STABLECOIN)).toBe(true);
-    expect(
-      accountHoldsSomething({
-        nightBalance: '0',
-        stablecoin: null,
-        otherShielded: [{ colourHex: '0xcc', amount: 7n }],
+      openingBalanceLegsHeld({
+        nightBalance: '0.002',
+        stablecoin: { colourHex: '0xaa', amount: 0n },
+        otherShielded: [],
       }),
-    ).toBe(true);
+    ).toEqual({ night: true, stablecoin: false });
+    expect(
+      openingBalanceLegsHeld({
+        nightBalance: '0',
+        stablecoin: { colourHex: '0xaa', amount: 100n },
+        otherShielded: [],
+      }),
+    ).toEqual({ night: false, stablecoin: true });
+    expect(openingBalanceLegsHeld(WITH_STABLECOIN).stablecoin).toBe(true);
   });
 
-  it('is false for a stablecoin row the account holds none of', () => {
-    /* The row is rendered at a real zero because the sponsor named the colour;
-       that is not the same as holding any of it. */
+  it('holds neither leg on an account the grant has not reached', () => {
     expect(
-      accountHoldsSomething({
+      openingBalanceLegsHeld({
         nightBalance: '0',
         stablecoin: { colourHex: '0xaa', amount: 0n },
-        otherShielded: [{ colourHex: '0xcc', amount: 0n }],
+        otherShielded: [],
       }),
+    ).toEqual({ night: false, stablecoin: false });
+    expect(openingBalanceLegsHeld(EMPTY).night).toBe(false);
+  });
+
+  it('does not call the NIGHT leg held while its figure is unread', () => {
+    /* A read nobody has made is not a zero, for the same reason it
+       fingerprints as `?`: it must not end the wait by looking like an arrival. */
+    expect(
+      openingBalanceLegsHeld({ nightBalance: null, stablecoin: null, otherShielded: [] }).night,
     ).toBe(false);
+  });
+
+  it('treats a build with no stablecoin colour as having nothing to wait for', () => {
+    /* `null` is not "a stablecoin at zero" — it is a sponsor that has named no
+       colour, so the NIGHT leg is the whole grant and the row must not hang on
+       a second deposit nobody is sending. */
+    expect(
+      openingBalanceLegsHeld({ nightBalance: '0', stablecoin: null, otherShielded: [] }).stablecoin,
+    ).toBe(true);
+  });
+
+  it('ignores every other colour the account holds', () => {
+    /* The grant is NIGHT and the sponsor's stablecoin. A colour somebody else
+       sent is not one of them, and counting it would retire the row on money
+       that has nothing to do with the sponsor. */
+    expect(
+      openingBalanceLegsHeld({
+        nightBalance: '0',
+        stablecoin: { colourHex: '0xaa', amount: 0n },
+        otherShielded: [{ colourHex: '0xcc', amount: 7n }],
+      }),
+    ).toEqual({ night: false, stablecoin: false });
   });
 });
 

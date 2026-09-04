@@ -461,26 +461,49 @@ describe('the trail row that carries a retry', () => {
 
 describe('openingBalanceOnTheWay', () => {
   const entry = (label: string) => ({ label });
+  /** An account holding neither half of the grant yet. */
+  const waiting = { holdsOpeningNight: false, holdsOpeningStablecoin: false };
 
   it('is on its way from the moment there is an account holding nothing', () => {
     /* Asked for on 2026/09/02: the opening balance should read as pending from
        the moment activation begins, not from whenever the sponsor answers. */
-    expect(
-      openingBalanceOnTheWay({ hasAccount: true, holdsNothing: true, entries: [] }),
-    ).toBe(true);
+    expect(openingBalanceOnTheWay({ hasAccount: true, ...waiting, entries: [] })).toBe(true);
   });
 
   it('is nothing without an account for it to land in', () => {
-    expect(
-      openingBalanceOnTheWay({ hasAccount: false, holdsNothing: true, entries: [] }),
-    ).toBe(false);
+    expect(openingBalanceOnTheWay({ hasAccount: false, ...waiting, entries: [] })).toBe(false);
   });
 
-  it('goes the moment the account holds anything', () => {
-    /* The balance itself is then the answer, and a line still saying it is
-       coming would contradict the figure printed above it. */
+  it('goes only once BOTH halves of the grant are held', () => {
+    /* THE 2026/09/04 STABILITY AUDIT. The grant is two deposits and they do not
+       land together: the audit watched the opening NIGHT arrive, the row go on
+       the spot, and the screen then show `mUSD 0` beside "Your account is
+       ready" for 18.1 seconds. Either half on its own leaves the other still
+       coming, and the row names both figures. */
     expect(
-      openingBalanceOnTheWay({ hasAccount: true, holdsNothing: false, entries: [] }),
+      openingBalanceOnTheWay({
+        hasAccount: true,
+        holdsOpeningNight: true,
+        holdsOpeningStablecoin: false,
+        entries: [],
+      }),
+    ).toBe(true);
+    expect(
+      openingBalanceOnTheWay({
+        hasAccount: true,
+        holdsOpeningNight: false,
+        holdsOpeningStablecoin: true,
+        entries: [],
+      }),
+    ).toBe(true);
+    /* Both held: the balances above ARE the answer now. */
+    expect(
+      openingBalanceOnTheWay({
+        hasAccount: true,
+        holdsOpeningNight: true,
+        holdsOpeningStablecoin: true,
+        entries: [],
+      }),
     ).toBe(false);
   });
 
@@ -489,18 +512,31 @@ describe('openingBalanceOnTheWay', () => {
       expect(
         openingBalanceOnTheWay({
           hasAccount: true,
-          holdsNothing: true,
+          ...waiting,
           entries: [entry('Passport created'), entry(label)],
         }),
       ).toBe(false);
     }
   });
 
+  it('goes on a refusal even when one half of the grant did land', () => {
+    /* The half that arrived does not make the other one still coming: the
+       sponsor has said it is not sending it, and the trail carries the retry. */
+    expect(
+      openingBalanceOnTheWay({
+        hasAccount: true,
+        holdsOpeningNight: true,
+        holdsOpeningStablecoin: false,
+        entries: [entry(ACTIVATION_EXHAUSTED_LABEL)],
+      }),
+    ).toBe(false);
+  });
+
   it('survives a trail of rows about anything else', () => {
     expect(
       openingBalanceOnTheWay({
         hasAccount: true,
-        holdsNothing: true,
+        ...waiting,
         entries: [entry('Passport created'), entry('Your name is registered')],
       }),
     ).toBe(true);
@@ -554,7 +590,8 @@ describe('the opening balance copy', () => {
     expect(
       openingBalanceOnTheWay({
         hasAccount: true,
-        holdsNothing: true,
+        holdsOpeningNight: false,
+        holdsOpeningStablecoin: false,
         entries: [{ label: OPENING_BALANCE_ON_THE_WAY_LABEL }],
       }),
     ).toBe(true);
