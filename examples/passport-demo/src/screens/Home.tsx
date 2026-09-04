@@ -57,6 +57,10 @@ import NotificationToggle from './NotificationToggle.js'
 import PassportContractCard, { type PassportContractCardProps } from './PassportContract.js'
 import SendSheet, { type SendSheetHolding, type SendSheetProps } from './SendSheet.js'
 import ThemeToggle from './ThemeToggle.js'
+/* The back gesture, which on a phone is how anything gets dismissed. Without
+   it a sheet over Home is the one thing a back swipe does not close — see
+   `lib/sheetHistory.ts` for what it closed instead. */
+import { useSheetBackButton } from './useSheetBackButton.js'
 import './home.css'
 
 /* NO FAUCET ON RECEIVE, and no dead branch for one either (2026/08/25). A
@@ -514,6 +518,14 @@ export default function HomeScreen(props: HomeScreenProps) {
     }
     return held.filter((entry) => entry.amount > 0n)
   }, [account])
+
+  /* And the back gesture closes whichever sheet is on top, which is what a
+     phone user reaches for before either of them. One entry per sheet, taken
+     back off the stack when the sheet closes some other way: `lib/sheetHistory.ts`.
+     Only one of these can be open at a time — both are opened from the same
+     row and each covers the screen — so the two entries never nest. */
+  useSheetBackButton('send', sendOpen, useCallback(() => setSendOpen(false), []))
+  useSheetBackButton('receive', receiveOpen, useCallback(() => setReceiveOpen(false), []))
 
   // Escape closes the Receive sheet, mirroring the scrim click.
   useEffect(() => {

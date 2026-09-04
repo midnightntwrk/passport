@@ -56,6 +56,20 @@
  * here to render a hook into. That file holds the watch's lifetime, a
  * `visibilitychange` listener, and two refs — no decisions.
  *
+ * `src/lib/sheetHistory.ts` went IN on 2026/09/04, the day it was written. It
+ * decides which history entry belongs to which of Passport's sheets, and
+ * whether a closing sheet still owes the stack an entry — three answers, and
+ * each of the wrong ones is a way of taking somebody out of the app. A mark it
+ * read too loosely closes a sheet on a `popstate` that belonged to somebody
+ * else; an entry it unwound after the back gesture had already popped it
+ * navigates the document away, which is the defect it was written for arrived
+ * at from the other side; an entry it failed to unwind is a back press the
+ * reader makes and sees nothing happen to. It holds no DOM and no React — the
+ * `pushState`, the listener, and the lifetime are all in
+ * `src/screens/useSheetBackButton.ts`, which stays out with the rest of
+ * `src/screens` because it imports React and there is no jsdom here to render
+ * a hook into. That file holds no decisions.
+ *
  * `src/lib/zkArtefactCache.ts` went IN on 2026/09/03, the day it was written,
  * and it is in the denominator because it is a RULE about somebody's memory
  * budget, measured rather than guessed. midnight-js asks a ZK config provider
@@ -508,6 +522,7 @@ export default mergeConfig(
           'src/lib/recipientName.ts',
           'src/lib/sendAssets.ts',
           'src/lib/sendLegs.ts',
+          'src/lib/sheetHistory.ts',
           'src/lib/shieldedNote.ts',
           'src/lib/sponsor.ts',
           'src/lib/walletProver.ts',
