@@ -111,6 +111,12 @@ implements it yet.
 **Off by default.** Built only with `VITE_METAMASK_DEVICE=1`, which production
 does not set. Read the caveat below before reading anything else here.
 
+Off means nothing runs and nothing renders — the Devices card is not built, the
+sign-in control is `undefined`, and the EIP-1193 module is never fetched. It does
+not mean the code is absent from the bundle: a flag-off build was grepped on
+2026/09/04 and the strings are still in it, because the flag is a runtime
+comparison rather than a literal the minifier can fold.
+
 ### What it does
 
 A Passport's account is an `account.compact` instance, and it already admits a

@@ -68,8 +68,8 @@ import {
 import type { WalletShieldedNote } from './lib/shieldedNote.js';
 /* MetaMask as a second device — EXPERIMENT, `VITE_METAMASK_DEVICE=1`. The
    rules are here (pure, 100% drilled); the extension conversation is in
-   `./lib/metamaskConnect.js`, imported dynamically so a flag-off build never
-   pays for it. */
+   `./lib/metamaskConnect.js`, imported dynamically so that a flag-off build
+   never FETCHES it. Its chunk is still emitted — see `METAMASK_DEVICE`. */
 import {
   metamaskDeviceEnabled,
   metamaskDeviceMessage,
@@ -261,11 +261,18 @@ const APP_ID = 'org.midnight.passport.demo';
 /**
  * Whether this build offers MetaMask as a second device.
  *
- * Read once, at module scope, because `import.meta.env` is a build-time
- * substitution and a production build that never sets `VITE_METAMASK_DEVICE`
- * has every control below constant-folded away. Default OFF: the scheme carries
- * a phishing caveat (`lib/metamaskDevice.ts`) that has to be answered before it
- * is anything but an experiment.
+ * Read once, at module scope. Default OFF: the scheme carries a phishing caveat
+ * (`lib/metamaskDevice.ts`) that has to be answered before it is anything but an
+ * experiment.
+ *
+ * WHAT "OFF" IS AND IS NOT, measured rather than assumed (2026/09/04). Off means
+ * NOTHING RUNS AND NOTHING RENDERS: the Devices card is not built, the sign-in
+ * control is `undefined`, the pairing store is never read, and
+ * `./lib/metamaskConnect.js` is never fetched. It does NOT mean the code is
+ * absent from the bundle — a flag-off build was grepped, and the strings are
+ * still in it. Rollup cannot drop the branches, because the flag is a runtime
+ * comparison rather than a literal the minifier can fold, and the honest thing
+ * to say about a shipped artefact is what is in it.
  */
 const METAMASK_DEVICE = metamaskDeviceEnabled(
   (import.meta.env ?? {}) as Record<string, string | undefined>,
