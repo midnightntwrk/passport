@@ -72,7 +72,12 @@ than authoring a parallel standard. The fit assessment's number-one
 condition is satisfied: MIP-0007 now carries normative
 **forward-looking authorisation arms** — contract-owned names via
 cross-contract authorisation (the arm a multi-key account contract
-needs) and ECDSA owners, both availability-gated. What remains
+needs) and ECDSA owners, both availability-gated. The contract-owned
+arm's mechanism is no longer hypothetical:
+`experiments/cross-contract-calls` validated seam-gated account
+circuits driven through the call boundary and atomic value transfer
+across it on the ledger-9 toolchain (2026/09/03); the remaining gate
+is a public network on that ledger. What remains
 Passport-side is the `passport.night` sub-domain layer: issuance
 mechanics, squat resistance, and Foundation policy. See
 [C2](components/C2-name-service.md).
