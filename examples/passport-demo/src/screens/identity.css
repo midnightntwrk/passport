@@ -501,6 +501,30 @@
   gap: 10px;
 }
 
+/* The quiet way out of the name step, for the reader who is not naming a new
+   Passport but returning to one — the only route back on a platform whose
+   passkeys carry no largeBlob. Under the primary action and typographically
+   below it: the common reader really is naming something new. */
+.mnid-alt {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--mn-text-muted);
+  font-family: var(--mn-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color .15s ease;
+}
+.mnid-alt:hover { color: var(--mn-text-primary); }
+.mnid-alt:disabled { opacity: .5; cursor: default; }
+
 .mnid-primary {
   width: 100%;
   min-height: 54px;

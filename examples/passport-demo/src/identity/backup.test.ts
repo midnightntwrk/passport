@@ -57,8 +57,12 @@ function contents(): PassportBackupContents {
   return {
     version: PASSPORT_BACKUP_VERSION,
     createdAt: '2026-08-19T09:00:00.000Z',
+    /* Keyed by credential and network since 2026/09/04, and under the SAME
+       credential the contract below is, because that is what a real Passport
+       holds: the name and the account it resolves to were claimed together. */
     aliases: {
-      preview: {
+      'AQIDBA==::preview': {
+        credentialId: 'AQIDBA==',
         alias: 'alice',
         domain: 'night',
         network: 'preview',
@@ -95,6 +99,15 @@ function contents(): PassportBackupContents {
       },
     ],
   };
+}
+
+/**
+ * The store key a record keys under, spelled out for the mocked stores — the
+ * same rule `aliasRecordKey` keeps: compound for a record that names its
+ * credential, the bare network for one written before 2026/09/04 that does not.
+ */
+function aliasKeyOf(record: AliasRecord): string {
+  return record.credentialId ? `${record.credentialId}::${record.network}` : record.network;
 }
 
 /** The smallest thing that behaves like `window.localStorage`. */
@@ -218,7 +231,7 @@ describe('collect and apply against the real stores', () => {
 
     // What the stores now hold is what a fresh export must carry.
     const collected = await collectPassportBackup();
-    expect(collected.aliases.preview?.alias).toBe('alice');
+    expect(collected.aliases['AQIDBA==::preview']?.alias).toBe('alice');
     expect(collected.passportContracts['AQIDBA==::preview']?.address).toBe('cc'.repeat(32));
     expect(collected.incentives).toHaveLength(1);
 
@@ -235,7 +248,7 @@ describe('collect and apply against the real stores', () => {
   it('keeps a newer local record instead of overwriting it, and says so', async () => {
     await applyPassportBackup(contents());
     const stale = contents();
-    stale.aliases.preview!.updatedAt = '2020-01-01T00:00:00.000Z';
+    stale.aliases['AQIDBA==::preview']!.updatedAt = '2020-01-01T00:00:00.000Z';
     stale.passportContracts['AQIDBA==::preview']!.updatedAt = '2020-01-01T00:00:00.000Z';
     const summary = await applyPassportBackup(stale);
     expect(summary.aliases.restored).toBe(0);
@@ -248,7 +261,7 @@ describe('collect and apply against the real stores', () => {
     const broken = contents();
     // A 'registered' alias with no registration transaction: the store refuses
     // it, and the summary carries the store's own words.
-    delete broken.aliases.preview!.registerTxId;
+    delete broken.aliases['AQIDBA==::preview']!.registerTxId;
     const summary = await applyPassportBackup(broken);
     expect(summary.aliases.restored).toBe(0);
     expect(summary.aliases.skipped[0]?.reason).toMatch(/must carry both/);
@@ -324,7 +337,7 @@ describe('reading a file that claims to be a backup', () => {
   it('opens an envelope handed over as text, not only as an object', async () => {
     const envelope = await sealPassportBackup(contents(), PASSWORD);
     const opened = await openPassportBackup(JSON.stringify(envelope), PASSWORD);
-    expect(opened.aliases.preview?.alias).toBe('alice');
+    expect(opened.aliases['AQIDBA==::preview']?.alias).toBe('alice');
   });
 });
 
@@ -428,9 +441,12 @@ describe('a store that reports a record was not written', () => {
   it('carries each store’s own reason into the summary', async () => {
     vi.resetModules();
     vi.doMock('./aliasStore.js', () => ({
+      aliasRecordKey: (credentialId: string | undefined, network: string) =>
+        credentialId ? `${credentialId}::${network}` : network,
       loadAliasRecords: () => ({}),
-      restoreAliasRecords: (records: { network: string }[]) =>
+      restoreAliasRecords: (records: AliasRecord[]) =>
         records.map((record) => ({
+          key: aliasKeyOf(record),
           network: record.network,
           written: false,
           reason: 'the alias store said no',
@@ -472,9 +488,15 @@ describe('a store that reports a record was not written', () => {
   it('still gives a reason for a store that refuses without one', async () => {
     vi.resetModules();
     vi.doMock('./aliasStore.js', () => ({
+      aliasRecordKey: (credentialId: string | undefined, network: string) =>
+        credentialId ? `${credentialId}::${network}` : network,
       loadAliasRecords: () => ({}),
-      restoreAliasRecords: (records: { network: string }[]) =>
-        records.map((record) => ({ network: record.network, written: false })),
+      restoreAliasRecords: (records: AliasRecord[]) =>
+        records.map((record) => ({
+          key: aliasKeyOf(record),
+          network: record.network,
+          written: false,
+        })),
     }));
     vi.doMock('./passportContractStore.js', () => ({
       loadPassportContractRecords: () => ({}),
@@ -521,23 +543,29 @@ describe('which record wins on a restore', () => {
     /* A record from an older build: no `updatedAt` at all. The backup's copy
        cannot be shown to be OLDER than it, so the backup wins — the rule
        protects a demonstrably newer local record, not any local record. */
-    const undated = { ...contents().aliases.preview!, alias: 'older' };
+    const undated = { ...contents().aliases['AQIDBA==::preview']!, alias: 'older' };
     delete (undated as { updatedAt?: string }).updatedAt;
     /* And unconfirmed, so this drills the timestamp rule alone: a name the
        REGISTRY has confirmed in this browser is a separate rule below, and
        nothing in a file may overwrite one. */
     delete (undated as { registryConfirmed?: boolean }).registryConfirmed;
-    window.localStorage.setItem('passport-alias:v1', JSON.stringify({ preview: undated }));
+    /* Under the key the record's own credential gives it — a seed filed under
+       a bare network would be a LEGACY record, which no reader reaches, and
+       the comparison this test is about would never be made. */
+    window.localStorage.setItem(
+      'passport-alias:v1',
+      JSON.stringify({ 'AQIDBA==::preview': undated }),
+    );
 
     const summary = await applyPassportBackup(contents());
     expect(summary.aliases.restored).toBe(1);
     const collected = await collectPassportBackup();
-    expect(collected.aliases.preview?.alias).toBe('alice');
+    expect(collected.aliases['AQIDBA==::preview']?.alias).toBe('alice');
   });
 
   it('restores a record the local browser holds with no timestamp of its own', async () => {
     const undated = contents();
-    delete (undated.aliases.preview as { updatedAt?: string }).updatedAt;
+    delete (undated.aliases['AQIDBA==::preview'] as { updatedAt?: string }).updatedAt;
     // Nothing local yet: an undated record is still newer than nothing.
     const first = await applyPassportBackup(undated);
     expect(first.aliases.restored).toBe(1);
@@ -897,12 +925,12 @@ describe('reading a backup sealed with different KDF parameters', () => {
        of the file, which is safe because the descriptor is authenticated. */
     const envelope = await sealWith('SHA-256', 700_000, PASSWORD);
     const opened = await openPassportBackup(envelope, PASSWORD);
-    expect(opened.aliases.preview?.alias).toBe('alice');
+    expect(opened.aliases['AQIDBA==::preview']?.alias).toBe('alice');
   });
 
   it('opens a file sealed under another hash in the same family', async () => {
     const envelope = await sealWith('SHA-512', 210_000, PASSWORD);
-    expect((await openPassportBackup(envelope, PASSWORD)).aliases.preview?.alias).toBe('alice');
+    expect((await openPassportBackup(envelope, PASSWORD)).aliases['AQIDBA==::preview']?.alias).toBe('alice');
   });
 
   it('still refuses a count below the floor, above the ceiling, or unreadable', async () => {
@@ -939,7 +967,7 @@ describe('the fields a payload may carry', () => {
   it('refuses key names a blocklist of likely words would miss', () => {
     for (const field of ['privKey', 'sk', 'signing_key', 'entropy', 'xprv', 'viewingKey']) {
       const poisoned = contents() as unknown as Record<string, unknown>;
-      poisoned.aliases = { preview: { ...contents().aliases.preview, [field]: 'aa' } };
+      poisoned.aliases = { preview: { ...contents().aliases['AQIDBA==::preview'], [field]: 'aa' } };
       expect(() => assertNoKeyMaterial(poisoned)).toThrow(/state, never keys/);
     }
   });
@@ -960,7 +988,7 @@ describe('the fields a payload may carry', () => {
 
   it('refuses a nested object where a record field takes a plain value', () => {
     const poisoned = contents() as unknown as Record<string, unknown>;
-    poisoned.aliases = { preview: { ...contents().aliases.preview, alias: { hidden: 'aa' } } };
+    poisoned.aliases = { preview: { ...contents().aliases['AQIDBA==::preview'], alias: { hidden: 'aa' } } };
     expect(() => assertNoKeyMaterial(poisoned)).toThrow(/nested object where a plain value belongs/);
   });
 
@@ -1062,24 +1090,24 @@ describe('a file that claims more than a file can know', () => {
     const summary = await applyPassportBackup(contents());
     expect(summary.aliases.restored).toBe(1);
     // The file said `registryConfirmed: true`. Only a registry read may.
-    expect((await collectPassportBackup()).aliases.preview?.registryConfirmed).toBe(false);
+    expect((await collectPassportBackup()).aliases['AQIDBA==::preview']?.registryConfirmed).toBe(false);
   });
 
   it('never overwrites a name the registry has confirmed here', async () => {
     const { saveAliasRecord } = await import('./aliasStore.js');
-    saveAliasRecord({ ...contents().aliases.preview!, updatedAt: '2026-08-20T00:00:00.000Z' });
+    saveAliasRecord({ ...contents().aliases['AQIDBA==::preview']!, updatedAt: '2026-08-20T00:00:00.000Z' });
     const forged = contents();
-    forged.aliases.preview!.alias = 'attacker';
-    forged.aliases.preview!.updatedAt = '9999-12-31T00:00:00.000Z';
+    forged.aliases['AQIDBA==::preview']!.alias = 'attacker';
+    forged.aliases['AQIDBA==::preview']!.updatedAt = '9999-12-31T00:00:00.000Z';
     const summary = await applyPassportBackup(forged);
     expect(summary.aliases.restored).toBe(0);
     expect(summary.aliases.skipped[0]?.reason).toMatch(/the registry itself confirmed/);
-    expect((await collectPassportBackup()).aliases.preview?.alias).toBe('alice');
+    expect((await collectPassportBackup()).aliases['AQIDBA==::preview']?.alias).toBe('alice');
   });
 
   it('refuses a record whose status is not one a store has', async () => {
     const forged = contents();
-    (forged.aliases.preview as { status: string }).status = 'confirmed';
+    (forged.aliases['AQIDBA==::preview'] as { status: string }).status = 'confirmed';
     (forged.passportContracts['AQIDBA==::preview'] as { status: string }).status = 'live';
     (forged.incentives[0] as { label?: string }).label = undefined;
     const summary = await applyPassportBackup(forged);
@@ -1092,7 +1120,7 @@ describe('a file that claims more than a file can know', () => {
 
   it('refuses a name or a reward id that is not the shape of one', async () => {
     const nameless = contents();
-    (nameless.aliases.preview as { alias?: string }).alias = '';
+    (nameless.aliases['AQIDBA==::preview'] as { alias?: string }).alias = '';
     const second = await applyPassportBackup(nameless);
     expect(second.aliases.skipped[0]?.reason).toMatch(/no name to restore/);
 
@@ -1106,7 +1134,7 @@ describe('a file that claims more than a file can know', () => {
 
 /** Puts ids that are not transaction ids into a payload, in one place. */
 function forgeTxIds(payload: PassportBackupContents): void {
-  payload.aliases.preview!.registerTxId = 'not-a-txid';
+  payload.aliases['AQIDBA==::preview']!.registerTxId = 'not-a-txid';
   payload.incentives[0]!.txId = 'nope';
 }
 
@@ -1146,7 +1174,7 @@ function manyRecords(count: number): PassportBackupContents {
   payload.incentives = [];
   for (let index = 0; index < count; index += 1) {
     payload.aliases[`net-${index}`] = {
-      ...contents().aliases.preview!,
+      ...contents().aliases['AQIDBA==::preview']!,
       network: `net-${index}`,
     };
     payload.passportContracts[`key-${index}`] = {
@@ -1288,7 +1316,11 @@ describe('timestamps that cannot be compared', () => {
     window.localStorage.setItem(
       'passport-alias:v1',
       JSON.stringify({
-        preview: { ...contents().aliases.preview, registryConfirmed: false, updatedAt: 'whenever' },
+        'AQIDBA==::preview': {
+          ...contents().aliases['AQIDBA==::preview'],
+          registryConfirmed: false,
+          updatedAt: 'whenever',
+        },
       }),
     );
     const summary = await applyPassportBackup(contents());
@@ -1363,7 +1395,7 @@ describe('a restored name, against the registry that would know', () => {
       otherNetworks: 0,
       notRegistered: 0,
     });
-    const stored = (await module.collectPassportBackup()).aliases.preview;
+    const stored = (await module.collectPassportBackup()).aliases['AQIDBA==::preview'];
     expect(stored?.registryConfirmed).toBe(true);
     expect(stored?.resolverTargetHex).toBe('cc'.repeat(32));
   });
@@ -1379,7 +1411,7 @@ describe('a restored name, against the registry that would know', () => {
       unconfirmed: 1,
       unconfirmedReasons: [{ network: 'preview', reason: 'the registry had no answer for this name' }],
     });
-    expect((await module.collectPassportBackup()).aliases.preview?.registryConfirmed).toBe(false);
+    expect((await module.collectPassportBackup()).aliases['AQIDBA==::preview']?.registryConfirmed).toBe(false);
   });
 
   it('treats a name pointing somewhere else as unconfirmed, not as agreement', async () => {
@@ -1404,13 +1436,13 @@ describe('a restored name, against the registry that would know', () => {
       confirmed: 0,
       unconfirmed: 1,
     });
-    expect((await module.collectPassportBackup()).aliases.preview?.registryConfirmed).toBe(false);
+    expect((await module.collectPassportBackup()).aliases['AQIDBA==::preview']?.registryConfirmed).toBe(false);
   });
 
   it('leaves a name claimed on a network it cannot read alone, and counts it', async () => {
     const module = await withRegistry(null);
     const payload = contents();
-    payload.aliases = { localnet: { ...contents().aliases.preview!, network: 'localnet' } };
+    payload.aliases = { localnet: { ...contents().aliases['AQIDBA==::preview']!, network: 'localnet' } };
     const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
     expect((await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice)).registryCheck).toMatchObject({
       ran: true,
@@ -1432,15 +1464,21 @@ describe('a restored name, against the registry that would know', () => {
     const held: Record<string, unknown> = {};
     let writes = 0;
     vi.doMock('./aliasStore.js', () => ({
+      aliasRecordKey: (credentialId: string | undefined, network: string) =>
+        credentialId ? `${credentialId}::${network}` : network,
       loadAliasRecords: () => held,
-      restoreAliasRecords: (records: { network: string }[]) =>
+      /* Keyed the way the real store keys, by credential and network, because
+         `confirmRestoredAliases` looks a restored name up by the store key the
+         write reported rather than by its network. */
+      restoreAliasRecords: (records: AliasRecord[]) =>
         records.map((record) => {
+          const key = aliasKeyOf(record);
           writes += 1;
           if (writes > 1) {
-            return { network: record.network, written: false, reason: 'storage went away' };
+            return { key, network: record.network, written: false, reason: 'storage went away' };
           }
-          held[record.network] = record;
-          return { network: record.network, written: true };
+          held[key] = record;
+          return { key, network: record.network, written: true };
         }),
     }));
 
@@ -1475,8 +1513,8 @@ describe('a restored name, against the registry that would know', () => {
       target: { kind: 'contract', hex: 'cc'.repeat(32) },
     });
     const payload = contents();
-    payload.aliases.preview = {
-      ...contents().aliases.preview!,
+    payload.aliases['AQIDBA==::preview'] = {
+      ...contents().aliases['AQIDBA==::preview']!,
       status: 'queued',
       queuedReason: 'the registry was unreachable',
     };
@@ -1524,7 +1562,7 @@ describe('a restored name, against the registry that would know', () => {
         { network: 'preview', reason: expect.stringContaining('registered to a different account') },
       ],
     });
-    expect((await module.collectPassportBackup()).aliases.preview?.registryConfirmed).toBe(false);
+    expect((await module.collectPassportBackup()).aliases['AQIDBA==::preview']?.registryConfirmed).toBe(false);
   });
 
   it('does not confirm a name when this browser holds no contract on that network', async () => {
@@ -1543,13 +1581,63 @@ describe('a restored name, against the registry that would know', () => {
     });
   });
 
+  it('says a LEGACY name has no contract here without naming a credential', async () => {
+    /* The same state as the test above — nothing on this network for the name
+       to be bound to — reached by a record written before 2026/09/04, which
+       names no credential at all.
+
+       It earns its own test because the SENTENCE differs, and the difference is
+       the only honest one available: an owned record can be told that this
+       browser holds no contract for ITS credential, because the record says
+       which credential that is. A legacy record does not, so the reason may
+       only speak about the network. Naming a credential there would be the
+       restore inventing an owner for a record whose owner nobody wrote down —
+       which is the whole defect the credential key closes. */
+    const module = await withRegistry({
+      resolverAddress: '0200beef',
+      target: { kind: 'contract', hex: 'cc'.repeat(32) },
+    });
+    const payload = contents();
+    const legacy = { ...contents().aliases['AQIDBA==::preview']! };
+    delete legacy.credentialId;
+    payload.aliases = { preview: legacy };
+    payload.passportContracts = {};
+    const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
+    const summary = await module.importPassportBackup(
+      envelope,
+      PASSWORD,
+      undefined,
+      holdsThisDevice,
+    );
+
+    expect(summary.registryCheck).toMatchObject({
+      ran: true,
+      confirmed: 0,
+      unconfirmed: 1,
+      unconfirmedReasons: [
+        {
+          network: 'preview',
+          reason:
+            'this browser holds no Passport contract on that network, so there is nothing here for the name to be bound to',
+        },
+      ],
+    });
+    /* And explicitly NOT the owned sentence, which would be claiming to know
+       whose name this is. */
+    expect(summary.registryCheck).not.toMatchObject({
+      unconfirmedReasons: [
+        { network: 'preview', reason: expect.stringContaining('for this credential') },
+      ],
+    });
+  });
+
   it('refuses to confirm a name claimed under a domain Passport does not register', async () => {
     const module = await withRegistry({
       resolverAddress: '0200beef',
       target: { kind: 'contract', hex: 'cc'.repeat(32) },
     });
     const payload = contents();
-    payload.aliases.preview = { ...contents().aliases.preview!, domain: 'day' };
+    payload.aliases['AQIDBA==::preview'] = { ...contents().aliases['AQIDBA==::preview']!, domain: 'day' };
     const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
     expect((await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice)).registryCheck).toMatchObject({
       confirmed: 0,
@@ -1559,15 +1647,23 @@ describe('a restored name, against the registry that would know', () => {
     });
   });
 
-  it('compares against every contract this browser holds on that network', async () => {
+  it('compares a LEGACY name against every contract this browser holds on that network', async () => {
     /* Two credentials, two contracts, one network — and a failed record that
-       is no address at all. The name is bound to the second one. */
+       is no address at all. The name is bound to the second one.
+
+       The name here names no credential, which is what a record written before
+       2026/09/04 looks like: there is nobody to narrow the comparison to, so
+       it is put to every contract on the network, exactly as it always was.
+       An OWNED record is narrowed to its own credential — the test below. */
     const module = await withRegistry({
       resolverAddress: '0200beef',
       target: { kind: 'contract', hex: 'ab'.repeat(32) },
     });
     const template = contents().passportContracts['AQIDBA==::preview']!;
     const payload = contents();
+    const legacy = { ...contents().aliases['AQIDBA==::preview']! };
+    delete legacy.credentialId;
+    payload.aliases = { preview: legacy };
     payload.passportContracts = {
       first: { ...template, credentialId: 'one', address: 'cc'.repeat(32) },
       second: { ...template, credentialId: 'two', address: 'ab'.repeat(32) },
@@ -1589,6 +1685,40 @@ describe('a restored name, against the registry that would know', () => {
     });
   });
 
+  it('compares an OWNED name against its own credential\u2019s contract, and no other', async () => {
+    /* The narrowing of 2026/09/04. A phone that holds two Passports holds two
+       contracts on one network, and the name belongs to whichever credential
+       claimed it — the name and the account it resolves to were deployed in
+       one ceremony. Answering an owned record with "somebody here holds that
+       contract" is the per-network looseness the credential key exists to
+       remove: it confirmed one Passport's restored name against the OTHER
+       Passport's account, on a device where both are enrolled. */
+    const module = await withRegistry({
+      resolverAddress: '0200beef',
+      target: { kind: 'contract', hex: 'ab'.repeat(32) },
+    });
+    const template = contents().passportContracts['AQIDBA==::preview']!;
+    const payload = contents();
+    payload.passportContracts = {
+      mine: { ...template, credentialId: 'AQIDBA==', address: 'cc'.repeat(32) },
+      theirs: { ...template, credentialId: 'the-other-passkey', address: 'ab'.repeat(32) },
+    };
+    const envelope = JSON.stringify(await module.sealPassportBackup(payload, PASSWORD));
+    const summary = await module.importPassportBackup(envelope, PASSWORD, undefined, holdsThisDevice);
+
+    expect(summary.registryCheck).toMatchObject({
+      ran: true,
+      confirmed: 0,
+      unconfirmed: 1,
+      unconfirmedReasons: [
+        { network: 'preview', reason: expect.stringContaining('registered to a different account') },
+      ],
+    });
+    expect((await module.collectPassportBackup()).aliases['AQIDBA==::preview']?.registryConfirmed).toBe(
+      false,
+    );
+  });
+
   it('matches an address the file shouted in upper case', async () => {
     const module = await withRegistry({
       resolverAddress: '0200beef',
@@ -1601,7 +1731,7 @@ describe('a restored name, against the registry that would know', () => {
     expect(summary.registryCheck).toMatchObject({ confirmed: 1 });
     const stored = await module.collectPassportBackup();
     expect(stored.passportContracts['AQIDBA==::preview']?.address).toBe('cc'.repeat(32));
-    expect(stored.aliases.preview?.resolverTargetHex).toBe('cc'.repeat(32));
+    expect(stored.aliases['AQIDBA==::preview']?.resolverTargetHex).toBe('cc'.repeat(32));
   });
 });
 
@@ -1808,21 +1938,21 @@ describe('the fields a record may leave out', () => {
        registry re-check writes both fields back when it can confirm the name,
        and until then the pair is simply absent. */
     const payload = contents();
-    delete payload.aliases.preview!.resolverTarget;
-    payload.aliases.preview!.resolverTargetHex = 'ff'.repeat(32);
+    delete payload.aliases['AQIDBA==::preview']!.resolverTarget;
+    payload.aliases['AQIDBA==::preview']!.resolverTargetHex = 'ff'.repeat(32);
     const summary = await applyPassportBackup(payload);
     expect(summary.aliases.restored).toBe(1);
-    const stored = (await collectPassportBackup()).aliases.preview;
+    const stored = (await collectPassportBackup()).aliases['AQIDBA==::preview'];
     expect(stored?.resolverTargetHex).toBeUndefined();
     expect(stored?.resolverTarget).toBeUndefined();
 
     // …and a well-formed one from an attacker's file fares exactly the same.
     const crafted = contents();
-    crafted.aliases.preview!.resolverTarget = 'contract';
-    crafted.aliases.preview!.resolverTargetHex = 'ab'.repeat(32);
-    crafted.aliases.preview!.updatedAt = '2027-01-01T00:00:00.000Z';
+    crafted.aliases['AQIDBA==::preview']!.resolverTarget = 'contract';
+    crafted.aliases['AQIDBA==::preview']!.resolverTargetHex = 'ab'.repeat(32);
+    crafted.aliases['AQIDBA==::preview']!.updatedAt = '2027-01-01T00:00:00.000Z';
     await applyPassportBackup(crafted);
-    const after = (await collectPassportBackup()).aliases.preview;
+    const after = (await collectPassportBackup()).aliases['AQIDBA==::preview'];
     expect(after?.resolverTargetHex).toBeUndefined();
     expect(after?.resolverTarget).toBeUndefined();
   });
@@ -1902,8 +2032,8 @@ describe('a value that is the size of a key, under a name the allow-list justifi
        any device. It was a guess that destroyed data and could not keep a
        determined secret out either way. */
     const payload = contents();
-    payload.aliases.preview!.status = 'queued';
-    payload.aliases.preview!.queuedReason = 'ab'.repeat(32);
+    payload.aliases['AQIDBA==::preview']!.status = 'queued';
+    payload.aliases['AQIDBA==::preview']!.queuedReason = 'ab'.repeat(32);
     payload.incentives[0]!.label = Buffer.alloc(32, 7).toString('base64');
     const summary = await applyPassportBackup(payload);
 
@@ -1919,7 +2049,7 @@ describe('a value that is the size of a key, under a name the allow-list justifi
        word that refusal. */
     const poisoned = contents() as unknown as Record<string, unknown>;
     poisoned.aliases = {
-      preview: { ...contents().aliases.preview, note: 'ab'.repeat(32) },
+      preview: { ...contents().aliases['AQIDBA==::preview'], note: 'ab'.repeat(32) },
     };
     expect(() => assertNoKeyMaterial(poisoned)).toThrow(/is the size of one/);
   });
@@ -1970,7 +2100,7 @@ describe('a record key that is not a key a store may hold', () => {
   function aliasesKeyedBy(key: string): PassportBackupContents {
     const payload = contents();
     payload.aliases = JSON.parse(
-      `{${JSON.stringify(key)}:${JSON.stringify(contents().aliases.preview)}}`,
+      `{${JSON.stringify(key)}:${JSON.stringify(contents().aliases['AQIDBA==::preview'])}}`,
     ) as PassportBackupContents['aliases'];
     return payload;
   }
@@ -2022,9 +2152,19 @@ describe('a record key that is not a key a store may hold', () => {
     /* The belt to the file guard's braces: whatever reaches the store, the
        count it reports is the count it can read back as an OWN property. */
     const { restoreAliasRecords, loadAliasRecords } = await import('./aliasStore.js');
-    const outcomes = restoreAliasRecords([
-      { ...contents().aliases.preview!, network: '__proto__' },
+    /* The store key is compound since 2026/09/04, so the dangerous name can
+       arrive as the network half of one — and, on a record that names no
+       credential, as the whole key. Both are drilled, because both are keys
+       the bulk write really sets. */
+    const owned = restoreAliasRecords([
+      { ...contents().aliases['AQIDBA==::preview']!, network: '__proto__' },
     ]);
+    expect(Object.hasOwn(loadAliasRecords(), 'AQIDBA==::__proto__')).toBe(owned[0]?.written);
+    expect(owned[0]?.written).toBe(true);
+
+    const legacy = { ...contents().aliases['AQIDBA==::preview']!, network: '__proto__' };
+    delete legacy.credentialId;
+    const outcomes = restoreAliasRecords([legacy]);
     expect(Object.hasOwn(loadAliasRecords(), '__proto__')).toBe(outcomes[0]?.written);
     expect(outcomes[0]?.written).toBe(true);
   });
@@ -2323,8 +2463,8 @@ describe('the three fields that hold free text', () => {
        full, and no arithmetic on the length of a sentence is allowed to decide
        otherwise — see the module header. */
     const payload = contents();
-    payload.aliases.preview!.status = 'queued';
-    payload.aliases.preview!.queuedReason = 'ab'.repeat(32);
+    payload.aliases['AQIDBA==::preview']!.status = 'queued';
+    payload.aliases['AQIDBA==::preview']!.queuedReason = 'ab'.repeat(32);
     payload.passportContracts['AQIDBA==::preview']!.status = 'failed';
     payload.passportContracts['AQIDBA==::preview']!.failureReason = 'cd'.repeat(32);
     payload.passportContracts['AQIDBA==::preview']!.address = undefined;
@@ -2344,7 +2484,7 @@ describe('the three fields that hold free text', () => {
 
   it('lets free text that reads as free text through', async () => {
     const payload = contents();
-    payload.aliases.preview!.queuedReason = 'the registry was unreachable';
+    payload.aliases['AQIDBA==::preview']!.queuedReason = 'the registry was unreachable';
     payload.incentives[0]!.label = 'One free entry';
     const summary = await applyPassportBackup(payload);
     expect(summary.aliases.restored).toBe(1);
@@ -2367,8 +2507,8 @@ describe('a file that shouts its identifiers in upper case', () => {
     const payload = contents();
     payload.passportContracts['AQIDBA==::preview']!.address = 'CC'.repeat(32);
     payload.passportContracts['AQIDBA==::preview']!.deployTxId = 'DD'.repeat(32);
-    payload.aliases.preview!.resolverDeployTxId = 'AA'.repeat(32);
-    payload.aliases.preview!.registerTxId = 'BB'.repeat(32);
+    payload.aliases['AQIDBA==::preview']!.resolverDeployTxId = 'AA'.repeat(32);
+    payload.aliases['AQIDBA==::preview']!.registerTxId = 'BB'.repeat(32);
     payload.incentives[0]!.txId = 'EE'.repeat(32);
 
     await applyPassportBackup(payload);
@@ -2376,8 +2516,8 @@ describe('a file that shouts its identifiers in upper case', () => {
 
     expect(stored.passportContracts['AQIDBA==::preview']?.address).toBe('cc'.repeat(32));
     expect(stored.passportContracts['AQIDBA==::preview']?.deployTxId).toBe('dd'.repeat(32));
-    expect(stored.aliases.preview?.resolverDeployTxId).toBe('aa'.repeat(32));
-    expect(stored.aliases.preview?.registerTxId).toBe('bb'.repeat(32));
+    expect(stored.aliases['AQIDBA==::preview']?.resolverDeployTxId).toBe('aa'.repeat(32));
+    expect(stored.aliases['AQIDBA==::preview']?.registerTxId).toBe('bb'.repeat(32));
     expect(stored.incentives[0]?.txId).toBe('ee'.repeat(32));
   });
 });
@@ -2457,12 +2597,12 @@ describe('what a restore may not take away', () => {
     const nonsense = contents();
     // `2026-13-01` passes the pattern and is not a date. It must not be
     // treated as newer than what this browser holds.
-    nonsense.aliases.preview!.updatedAt = '2026-13-01T00:00:00.000Z';
-    nonsense.aliases.preview!.alias = 'shouldnotwin';
+    nonsense.aliases['AQIDBA==::preview']!.updatedAt = '2026-13-01T00:00:00.000Z';
+    nonsense.aliases['AQIDBA==::preview']!.alias = 'shouldnotwin';
     const summary = await applyPassportBackup(nonsense);
     expect(summary.aliases.restored).toBe(0);
     const stored = await collectPassportBackup();
-    expect(stored.aliases.preview?.alias).toBe('alice');
+    expect(stored.aliases['AQIDBA==::preview']?.alias).toBe('alice');
   });
 });
 
@@ -2583,7 +2723,7 @@ describe('a contract address a file merely claims', () => {
     ).toMatch(
       /does not hold this Passport as a device/,
     );
-    const stored = (await module.collectPassportBackup()).aliases.preview;
+    const stored = (await module.collectPassportBackup()).aliases['AQIDBA==::preview'];
     expect(stored?.registryConfirmed).not.toBe(true);
     // The resolver target is the field Home reads for the Receive sheet.
     expect(stored?.resolverTargetHex).toBeUndefined();
@@ -2700,7 +2840,7 @@ describe('the name a record really carries', () => {
        registry for good; only the fixtures, carrying `domain: 'night'`, agreed
        with it. */
     const payload = contents();
-    payload.aliases.preview!.domain = 'alice.night';
+    payload.aliases['AQIDBA==::preview']!.domain = 'alice.night';
     const module = await withRegistry({
       resolverAddress: '0200beef',
       target: { kind: 'contract', hex: 'cc'.repeat(32) },
@@ -2715,14 +2855,14 @@ describe('the name a record really carries', () => {
       otherNetworks: 0,
       notRegistered: 0,
     });
-    const stored = (await module.collectPassportBackup()).aliases.preview;
+    const stored = (await module.collectPassportBackup()).aliases['AQIDBA==::preview'];
     expect(stored?.registryConfirmed).toBe(true);
     expect(stored?.domain).toBe('alice.night');
   });
 
   it('still refuses a whole name under a domain Passport does not register', async () => {
     const payload = contents();
-    payload.aliases.preview!.domain = 'alice.example';
+    payload.aliases['AQIDBA==::preview']!.domain = 'alice.example';
     const module = await withRegistry({
       resolverAddress: '0200beef',
       target: { kind: 'contract', hex: 'cc'.repeat(32) },
@@ -2809,6 +2949,7 @@ describe('what a restore may never take away from a name', () => {
        address, and all — for a name that is live on chain. */
     const { saveAliasRecord, loadAliasRecord } = await import('./aliasStore.js');
     saveAliasRecord({
+      credentialId: 'AQIDBA==',
       alias: 'alice',
       domain: 'alice.night',
       network: 'preview',
@@ -2821,7 +2962,8 @@ describe('what a restore may never take away from a name', () => {
     });
 
     const payload = contents();
-    payload.aliases.preview = {
+    payload.aliases['AQIDBA==::preview'] = {
+      credentialId: 'AQIDBA==',
       alias: 'alice',
       domain: 'alice.night',
       network: 'preview',
@@ -2831,7 +2973,7 @@ describe('what a restore may never take away from a name', () => {
     };
     const summary = await applyPassportBackup(payload);
 
-    const stored = loadAliasRecord('preview');
+    const stored = loadAliasRecord('AQIDBA==', 'preview');
     expect(stored?.status).toBe('registered');
     expect(stored?.registerTxId).toBe('bb'.repeat(32));
     expect(stored?.resolverDeployTxId).toBe('aa'.repeat(32));
@@ -2842,6 +2984,7 @@ describe('what a restore may never take away from a name', () => {
   it('still takes a newer registered claim from the file', async () => {
     const { saveAliasRecord, loadAliasRecord } = await import('./aliasStore.js');
     saveAliasRecord({
+      credentialId: 'AQIDBA==',
       alias: 'alice',
       domain: 'alice.night',
       network: 'preview',
@@ -2851,7 +2994,112 @@ describe('what a restore may never take away from a name', () => {
     });
     const summary = await applyPassportBackup(contents());
     expect(summary.aliases.restored).toBe(1);
-    expect(loadAliasRecord('preview')?.status).toBe('registered');
+    expect(loadAliasRecord('AQIDBA==', 'preview')?.status).toBe('registered');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The credential a name was claimed under                                     */
+/* -------------------------------------------------------------------------- */
+
+describe('the credential a restored name belongs to', () => {
+  beforeEach(() => installStorage());
+  afterEach(() => Reflect.deleteProperty(globalThis, 'window'));
+
+  it('carries the credential through an export and back', async () => {
+    /* `credentialId` is on the export allow-list for the reason the field
+       exists at all: a file that dropped it would restore every name UNOWNED,
+       under a bare network key no reader reaches, and the Passport that took
+       the backup would come back nameless — the 2026/09/04 defect arriving by
+       the one path meant to recover from it. */
+    await applyPassportBackup(contents());
+    const collected = await collectPassportBackup();
+    expect(collected.aliases['AQIDBA==::preview']?.credentialId).toBe('AQIDBA==');
+
+    const reopened = await openPassportBackup(
+      await sealPassportBackup(collected, PASSWORD),
+      PASSWORD,
+    );
+    installStorage(); // a browser that has never seen this Passport
+    const summary = await applyPassportBackup(reopened);
+    expect(summary.aliases.restored).toBe(1);
+    expect(summary.aliases.restoredKeys).toEqual(['AQIDBA==::preview']);
+
+    const { loadAliasRecord, loadAliasRecords } = await import('./aliasStore.js');
+    expect(loadAliasRecord('AQIDBA==', 'preview')?.alias).toBe('alice');
+    expect(loadAliasRecord('AQIDBA==', 'preview')?.credentialId).toBe('AQIDBA==');
+    // …and nothing was left under a bare network key on the way through.
+    expect(Object.keys(loadAliasRecords())).toEqual(['AQIDBA==::preview']);
+  });
+
+  it('files a name under the credential the RECORD names, not the one the file filed it under', async () => {
+    /* The alias half of the rule the contract store has always kept: the store
+       key is derived from the record. A file that files somebody's name under
+       another credential's key would otherwise be able to put a name on a
+       Passport that never claimed it — which is the shape of the bug being
+       fixed, arriving from a file instead of from a key scheme. */
+    const payload = contents();
+    payload.aliases = { 'the-other-passkey::preview': contents().aliases['AQIDBA==::preview']! };
+    const summary = await applyPassportBackup(payload);
+
+    expect(summary.aliases.restored).toBe(1);
+    expect(summary.aliases.restoredKeys).toEqual(['AQIDBA==::preview']);
+    const { loadAliasRecord } = await import('./aliasStore.js');
+    expect(loadAliasRecord('AQIDBA==', 'preview')?.alias).toBe('alice');
+    expect(loadAliasRecord('the-other-passkey', 'preview')).toBeNull();
+  });
+
+  it('restores a name that names no credential as the legacy record it is', async () => {
+    /* A file written before 2026/09/04 carries records that name nobody. They
+       restore exactly as they are — under the bare network key, where no
+       reader reaches them — rather than being handed to whichever credential
+       happens to be running the restore. `adoptLegacyAliasRecords` is the only
+       thing that may give one an owner, and only where ownership can be shown;
+       a restore has shown nothing. */
+    const payload = contents();
+    const legacy = { ...contents().aliases['AQIDBA==::preview']! };
+    delete legacy.credentialId;
+    payload.aliases = { preview: legacy };
+    const summary = await applyPassportBackup(payload);
+
+    expect(summary.aliases.restored).toBe(1);
+    expect(summary.aliases.restoredKeys).toEqual(['preview']);
+    const { loadAliasRecord, loadAliasRecords } = await import('./aliasStore.js');
+    // Not adopted: the credential whose contract this same file restored reads
+    // nothing, because nobody wrote down that the name was claimed under it.
+    expect(loadAliasRecord('AQIDBA==', 'preview')).toBeNull();
+    const stored = loadAliasRecords()['preview'];
+    expect(stored?.alias).toBe('alice');
+    expect(stored?.credentialId).toBeUndefined();
+    // And it exports as it is — an owner is never invented on the way out.
+    const collected = await collectPassportBackup();
+    expect(Object.keys(collected.aliases)).toEqual(['preview']);
+    expect(collected.aliases.preview).not.toHaveProperty('credentialId');
+  });
+
+  it('reads a network off a legacy file key, and refuses to read one off a store key', async () => {
+    /* A record from before the store carried a network of its own was keyed by
+       the bare network, so that key is the only place its network survives. A
+       compound key is a STORE key rather than a network: reading
+       `"AQIDBA==::preview"` as one would hand the file back the decision about
+       where a record lands, which is the decision it may not make. */
+    const withoutNetwork = { ...contents().aliases['AQIDBA==::preview']! };
+    delete withoutNetwork.credentialId;
+    delete (withoutNetwork as Partial<AliasRecord>).network;
+
+    const legacy = contents();
+    legacy.aliases = { preview: withoutNetwork };
+    expect((await applyPassportBackup(legacy)).aliases.restoredKeys).toEqual(['preview']);
+
+    installStorage();
+    const compound = contents();
+    compound.aliases = { 'AQIDBA==::preview': { ...withoutNetwork } };
+    const summary = await applyPassportBackup(compound);
+    expect(summary.aliases.restored).toBe(0);
+    expect(summary.aliases.skipped[0]).toEqual({
+      key: 'AQIDBA==::preview',
+      reason: "the file's record names no network",
+    });
   });
 });
 
@@ -2889,7 +3137,8 @@ describe('an export this browser’s own data cannot block', () => {
     window.localStorage.setItem(
       'passport-alias:v1',
       JSON.stringify({
-        preview: {
+        'AQIDBA==::preview': {
+          credentialId: 'AQIDBA==',
           alias: 'alice',
           domain: 'alice.night',
           network: 'preview',
@@ -2910,11 +3159,11 @@ describe('an export this browser’s own data cannot block', () => {
     );
 
     const collected = await collectPassportBackup();
-    expect(collected.aliases.preview?.alias).toBe('alice');
-    expect(collected.aliases.preview).not.toHaveProperty('walletSeed');
-    expect(collected.aliases.preview).not.toHaveProperty('notes');
-    expect(collected.aliases.preview).not.toHaveProperty('resolverTarget');
-    expect(collected.aliases.preview?.resolverAddress).toBeNull();
+    expect(collected.aliases['AQIDBA==::preview']?.alias).toBe('alice');
+    expect(collected.aliases['AQIDBA==::preview']).not.toHaveProperty('walletSeed');
+    expect(collected.aliases['AQIDBA==::preview']).not.toHaveProperty('notes');
+    expect(collected.aliases['AQIDBA==::preview']).not.toHaveProperty('resolverTarget');
+    expect(collected.aliases['AQIDBA==::preview']?.resolverAddress).toBeNull();
     await expect(sealPassportBackup(collected, PASSWORD)).resolves.toBeTruthy();
   });
 
@@ -2980,6 +3229,7 @@ describe('a bulk write that must not destroy what it replaces', () => {
       './aliasStore.js'
     );
     saveAliasRecord({
+      credentialId: 'AQIDBA==',
       alias: 'alice',
       domain: 'alice.night',
       network: 'preview',
@@ -2989,8 +3239,12 @@ describe('a bulk write that must not destroy what it replaces', () => {
       updatedAt: '2026-08-19T08:00:00.000Z',
     });
 
+    /* The malformed records name the SAME credential, so they land on the same
+       store key as the good one — which is what makes this a test about
+       overwriting rather than about two records that never met. */
     const [outcome] = restoreAliasRecords([
       {
+        credentialId: 'AQIDBA==',
         alias: 123 as unknown as string,
         domain: 'm',
         network: 'preview',
@@ -3002,10 +3256,11 @@ describe('a bulk write that must not destroy what it replaces', () => {
     expect(outcome).toMatchObject({ written: false });
     expect(outcome?.reason).toMatch(/must carry the name, the domain/);
     // The record that was already here is untouched.
-    expect(loadAliasRecord('preview')?.alias).toBe('alice');
+    expect(loadAliasRecord('AQIDBA==', 'preview')?.alias).toBe('alice');
 
     const [badStatus] = restoreAliasRecords([
       {
+        credentialId: 'AQIDBA==',
         alias: 'bob',
         domain: 'bob.night',
         network: 'preview',
@@ -3015,7 +3270,7 @@ describe('a bulk write that must not destroy what it replaces', () => {
       },
     ]);
     expect(badStatus?.reason).toMatch(/status must be registered, queued, or failed/);
-    expect(loadAliasRecord('preview')?.alias).toBe('alice');
+    expect(loadAliasRecord('AQIDBA==', 'preview')?.alias).toBe('alice');
   });
 
   it('refuses a contract record its own reader would filter out, before staging it', async () => {
@@ -3172,26 +3427,26 @@ describe('a restored record that carries no date of its own', () => {
        correctly dated backup was then permanently "older" than a date the
        restore itself invented. */
     const undated = contents();
-    delete (undated.aliases.preview as Partial<AliasRecord>).updatedAt;
+    delete (undated.aliases['AQIDBA==::preview'] as Partial<AliasRecord>).updatedAt;
     delete (undated.passportContracts['AQIDBA==::preview'] as Partial<PassportContractRecord>)
       .updatedAt;
     expect((await applyPassportBackup(undated)).aliases.restored).toBe(1);
 
     const { loadAliasRecord } = await import('./aliasStore.js');
     const { loadPassportContractRecord } = await import('./passportContractStore.js');
-    expect(loadAliasRecord('preview')?.updatedAt).toBeUndefined();
+    expect(loadAliasRecord('AQIDBA==', 'preview')?.updatedAt).toBeUndefined();
     expect(loadPassportContractRecord('AQIDBA==', 'preview')?.updatedAt).toBeUndefined();
     /* A restore may record WHEN it ran — that is a fact about this browser —
        and nothing may read it as the record's own date. */
-    expect(loadAliasRecord('preview')?.restoredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(loadAliasRecord('AQIDBA==', 'preview')?.restoredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
     // …and the genuine backup, dated years earlier, still restores over it.
     const genuine = contents();
-    genuine.aliases.preview!.alias = 'bob';
-    genuine.aliases.preview!.updatedAt = '2020-01-01T00:00:00.000Z';
+    genuine.aliases['AQIDBA==::preview']!.alias = 'bob';
+    genuine.aliases['AQIDBA==::preview']!.updatedAt = '2020-01-01T00:00:00.000Z';
     const summary = await applyPassportBackup(genuine);
     expect(summary.aliases.restored).toBe(1);
-    expect(loadAliasRecord('preview')?.alias).toBe('bob');
+    expect(loadAliasRecord('AQIDBA==', 'preview')?.alias).toBe('bob');
   });
 });
 
@@ -3364,10 +3619,10 @@ describe('every name a restore wrote, accounted for', () => {
     const module = await import('./backup.js');
 
     const payload = contents();
-    payload.aliases.preview!.status = 'queued';
-    payload.aliases.preview!.queuedReason = 'the sponsor holds no NIGHT on preview right now';
+    payload.aliases['AQIDBA==::preview']!.status = 'queued';
+    payload.aliases['AQIDBA==::preview']!.queuedReason = 'the sponsor holds no NIGHT on preview right now';
     payload.aliases.preprod = {
-      ...contents().aliases.preview!,
+      ...contents().aliases['AQIDBA==::preview']!,
       network: 'preprod',
       status: 'failed',
       queuedReason: 'the registration transaction was rejected',
@@ -3376,16 +3631,29 @@ describe('every name a restore wrote, accounted for', () => {
     expect(summary.aliases.restored).toBe(2);
 
     /* `ghost` is the third case: a key the restore reported writing whose
-       record is not here to look up. All three used to `continue` in silence. */
-    const check = await module.confirmRestoredAliases([...summary.aliases.restoredKeys, 'ghost']);
+       record is not here to look up. All three used to `continue` in silence.
+
+       `AQIDBA==::mainnet` is the same case in the shape a key has had since
+       2026/09/04, and it is the one place in this function where a store key
+       has to be read for the network inside it: the record that would have
+       answered is gone. A summary entry carries the bare NETWORK the surface
+       renders, so the credential half is sliced off — reporting
+       `AQIDBA==::mainnet` as a network would put a base64 credential id in
+       front of the user. */
+    const check = await module.confirmRestoredAliases([
+      ...summary.aliases.restoredKeys,
+      'ghost',
+      'AQIDBA==::mainnet',
+    ]);
     expect(check.ran).toBe(true);
     if (!check.ran) return;
-    expect(check.notRegistered).toBe(3);
-    expect(check.confirmed + check.unconfirmed + check.otherNetworks + check.notRegistered).toBe(3);
+    expect(check.notRegistered).toBe(4);
+    expect(check.confirmed + check.unconfirmed + check.otherNetworks + check.notRegistered).toBe(4);
     expect(check.notRegisteredReasons).toEqual([
       { network: 'preview', reason: expect.stringMatching(/queued, not registered/) },
       { network: 'preprod', reason: expect.stringMatching(/claim failed/) },
       { network: 'ghost', reason: expect.stringMatching(/no name record/) },
+      { network: 'mainnet', reason: expect.stringMatching(/no name record/) },
     ]);
   });
 });

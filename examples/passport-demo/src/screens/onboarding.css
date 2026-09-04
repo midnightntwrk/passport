@@ -225,6 +225,30 @@
   transition: color .15s ease;
 }
 .mnob-alt:hover { color: var(--mn-text-primary); }
+.mnob-alt:disabled { opacity: .5; cursor: default; }
+
+/* The one text field on this screen: the .night name a returning Passport is
+   found by. See `RecoverByName.tsx` for why finding by name had to exist —
+   Android passkeys carry no largeBlob, so there is nothing else to find one
+   with. Styled from the same tokens as the card above it so the step reads as
+   part of onboarding rather than as a form bolted onto it. */
+.mnob-input {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 6px;
+  padding: 0 14px;
+  border: var(--mn-hairline) solid var(--mn-border-hairline);
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-card);
+  color: var(--mn-text-primary);
+  font-family: var(--mn-font-body);
+  font-size: 16px; /* 16px or iOS zooms the page on focus. */
+  font-weight: 600;
+  box-shadow: var(--mn-shadow-sm);
+}
+.mnob-input::placeholder { color: var(--mn-text-muted); font-weight: 500; }
+.mnob-input:focus-visible { outline: 2px solid var(--mn-text-primary); outline-offset: 2px; }
+.mnob-input:disabled { opacity: .6; }
 
 /* Working — busy state */
 .mnob-working {

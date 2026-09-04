@@ -139,6 +139,54 @@ export function pendingAccountBlob(
 }
 
 /**
+ * Whether an assertion for this profile's credential may touch the largeBlob
+ * extension AT ALL — the guard that keeps an Android passkey prompt from
+ * hanging (2026/09/04).
+ *
+ * THE FAILURE IT CLOSES. Google Password Manager's passkeys implement PRF and
+ * do not implement largeBlob. Chrome on Android narrows its account sheet to
+ * credentials that can satisfy the extensions a request asks for, so an
+ * assertion that asks for a largeBlob WRITE against a GPM passkey raises a
+ * sheet with nothing selectable in it, and the sheet does not settle. What the
+ * reviewer reported was "the passkey prompt did not finish" — and the sign-in
+ * that raised it is exactly the one that carries the ride-along write, so it
+ * struck after a name had been claimed, on the next ordinary sign-in, with no
+ * indication of what had changed.
+ *
+ * `false` is the answer whenever anything has definitely said this credential
+ * cannot hold a blob: enrolment's own `largeBlob.supported`, an attempted write
+ * that came back `'unsupported'`, or a read whose results bag had no largeBlob
+ * slice at all. Each of those is the platform answering the question directly
+ * rather than a guess made from a failure.
+ *
+ * WHAT IT COSTS WHEN IT IS WRONG, which is the reason it may be read this
+ * confidently: nothing. A credential wrongly marked unsupported loses the blob
+ * — a convenience that saves a future device one screen — and keeps its
+ * Passport, its account, its name, and every other means of recovery. A
+ * credential wrongly marked supported costs a person a prompt that never ends.
+ */
+export function mayUseLargeBlob(profile: AccountOnPasskeyProfile | null | undefined): boolean {
+  return profile?.largeBlobSupported !== false;
+}
+
+/**
+ * What to persist after an assertion REPORTED what it learnt about largeBlob
+ * support, or `null` when it learnt nothing or nothing has changed.
+ *
+ * `null` from the assertion means it never asked, which is not evidence and is
+ * never written down. A profile that already holds the same answer is left
+ * alone so a sign-in does not rewrite a record on every visit.
+ */
+export function learnedLargeBlobSupport(
+  profile: AccountOnPasskeyProfile,
+  supported: boolean | null | undefined,
+): AccountOnPasskeyPatch | null {
+  if (typeof supported !== 'boolean') return null;
+  if (profile.largeBlobSupported === supported) return null;
+  return { largeBlobSupported: supported };
+}
+
+/**
  * What to persist after an assertion that carried a write — or `null` when
  * there is nothing to learn from it.
  *
@@ -297,11 +345,17 @@ export function accountFromBlob(
  * nothing, so this says nothing.
  */
 export function aliasFromRecoveredAccount(
+  credentialId: string,
   account: AccountFromBlobAccount,
   now: string,
 ): RecoveredAliasRecord | null {
   if (!account.alias) return null;
   return {
+    /* The credential the blob was read OFF, which is the one that owns the
+       name it named. Since 2026/09/04 an alias record that does not say whose
+       it is cannot be stored at all — see `../identity/aliasStore.ts` for the
+       Android orphan that rule closes. */
+    credentialId,
     alias: account.alias,
     domain: `${account.alias}.night`,
     network: account.network,
@@ -321,6 +375,7 @@ export function aliasFromRecoveredAccount(
  * module keeps its promise of importing nothing but the blob's own types.
  */
 export interface RecoveredAliasRecord {
+  credentialId: string;
   alias: string;
   domain: string;
   network: string;

@@ -150,6 +150,24 @@ export interface AliasClaimProps {
    * screen reports a registration before one has happened.
    */
   nameSponsored?: boolean
+  /**
+   * Opens the "find my Passport by its name" step, or absent where the host
+   * cannot offer one.
+   *
+   * WHY THIS SCREEN CARRIES IT. The name step is where a returning Passport
+   * wrongly ends up, and until 2026/09/04 there was nothing on it that said so.
+   * Recovery went entirely through the passkey's own largeBlob, and Android
+   * passkeys have none — Google Password Manager implements PRF and not
+   * largeBlob — so on that platform a browser with cleared site data could
+   * recover NOTHING and was put here, in front of a naming ceremony, over a
+   * Passport that already had a name. Claiming from here would have set up a
+   * second account and paid for a second name.
+   *
+   * It is quiet, and under the primary action, because the common reader of
+   * this screen genuinely is naming a new Passport. It is a way out for the one
+   * who is not.
+   */
+  onFindExisting?: () => void
 }
 
 type FieldState =
@@ -237,6 +255,7 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     errorIsPasskeyWayOut,
     onSignOut,
     nameSponsored,
+    onFindExisting,
   } = props
 
   const [value, setValue] = useState('')
@@ -824,6 +843,23 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
               remains for the HOST's escape hatches (network unsupported), not
               as a user choice on this screen. */}
         </div>
+
+        {/* NOT A SKIP EITHER, and it is worth being clear about the difference:
+            a skip leaves this screen with nothing set up, which is the state
+            onboarding may not end in. This leaves it with an account that
+            already exists, proved on chain, and it is the only route back to a
+            Passport on a platform whose passkeys carry no largeBlob — which is
+            every Android passkey. See `AliasClaimProps.onFindExisting`. */}
+        {onFindExisting ? (
+          <button
+            type="button"
+            className="mnid-alt"
+            onClick={onFindExisting}
+            disabled={busy}
+          >
+            I already have a name — find my Passport
+          </button>
+        ) : null}
 
         <p className="mnid-foot">
           <Check size={13} aria-hidden="true" />

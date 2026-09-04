@@ -402,15 +402,30 @@
  * every one of these through `midnames.ts`'s re-export, which is where the rest
  * of the app still reads them from.
  *
+ * `src/identity/aliasStore.ts` went IN on 2026/09/04, and it is the clearest
+ * case yet of a file that was excluded for what it looked like rather than for
+ * what it decided. It sat with the other two thin stores above on the grounds
+ * that it was `localStorage` records with a few invariants, exercised for real
+ * by `backup.test.ts`. What that missed is that its KEY was a decision about
+ * identity: it was keyed by network alone, so the answer to "what is this
+ * Passport's name" did not depend on which passkey was asking. A credential
+ * enrolled seconds earlier read the previous one's name, the name step saw a
+ * record and skipped itself, and Home printed a name over an account that
+ * belonged to a different passkey — the Android orphan reported that day, which
+ * a user could not escape by any means the app offered. The store now decides
+ * two genuinely hard things — whose record a reader may see, and which
+ * credential may adopt a record written before any of them were labelled — and
+ * `aliasStore.test.ts` holds both at 100%.
+ *
  * `src/identity/timestamps.ts` went IN on 2026/08/26 with the module itself: it
  * is the ISO-8601 reader `backup.ts` and `incentiveStore.ts` now share, it is
  * four lines of pure decision, and both of its answers are drilled by
  * `backup.test.ts`.
  *
- *   aliasStore.ts,      Thin `window.localStorage` records. They are exercised
- *   incentiveStore.ts,  for real (not mocked) by `backup.test.ts`, which
- *   passportContract-   restores through their own save functions so their
- *   Store.ts            invariants are the ones enforced.
+ *   incentiveStore.ts,  Thin `window.localStorage` records. They are exercised
+ *   passportContract-   for real (not mocked) by `backup.test.ts`, which
+ *   Store.ts            restores through their own save functions so their
+ *                       invariants are the ones enforced.
  *   callbackLaunch.ts,  The dApp callback protocol: `window.opener`,
  *   callbackProtocol.ts `postMessage`, and cross-origin handshakes.
  *   contractRuntime.ts  Loads the compiled contract modules and the ledger
@@ -467,6 +482,7 @@ export default mergeConfig(
           'src/lib/endpoints.ts',
           'src/lib/feeReadinessPoll.ts',
           'src/lib/installPrompt.ts',
+          'src/lib/nameRecovery.ts',
           'src/lib/networks.ts',
           'src/lib/notifications.ts',
           'src/lib/passkeyRecovery.ts',
@@ -480,6 +496,7 @@ export default mergeConfig(
           'src/lib/walletProver.ts',
           'src/lib/waitingGame.ts',
           'src/lib/zkArtefactCache.ts',
+          'src/identity/aliasStore.ts',
           'src/identity/backup.ts',
           'src/identity/claimWarmup.ts',
           'src/identity/midnamesText.ts',

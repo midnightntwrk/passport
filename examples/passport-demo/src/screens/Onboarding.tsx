@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ArrowRight, Fingerprint, Loader2, X } from 'lucide-react'
+import { ArrowRight, Eraser, Fingerprint, Loader2, X } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
 import './onboarding.css'
 
@@ -89,7 +89,56 @@ export interface OnboardingProps {
    * exclusion, so a real Passport cannot be replaced.
    */
   onCreateNewPasskey?: () => void
+  /**
+   * FORGETS what this device holds for the passkey it would otherwise sign in
+   * to, and then creates a Passport from scratch.
+   *
+   * The control that did not exist until 2026/09/04, and the one a reviewer on
+   * Android needed: "there is no way I can recreate an account or create a new
+   * one. I'm stuck with the orphan key that does not contain the contract
+   * attached… Even deleting and recreating the passkeys under different accounts
+   * doesn't do the job." Every other control on this screen is a way of getting
+   * BACK INTO what this browser already holds. When what it holds is wrong, all
+   * of them lead back to the same wrong place, and the person is stuck inside an
+   * app that keeps confidently restoring a Passport they are trying to abandon.
+   *
+   * It is a separate prop from {@link OnboardingProps.onCreateNewPasskey}
+   * because they are different promises. That one makes a new passkey and
+   * leaves everything this browser holds alone — which is right when the
+   * records are fine and the passkey is not. This one clears the records. A
+   * single button that sometimes did the second thing would be the worse kind
+   * of surprise.
+   *
+   * Offered only where there is something to forget; see the render below.
+   */
+  onStartFresh?: () => void
   onDismissError?: () => void
+}
+
+/**
+ * "Set up a new Passport on this device", with the sentence that has to go
+ * under it.
+ *
+ * One component because it is offered from three places on this screen — the
+ * welcome stage's secondary path and both way-out panels — and the two fears a
+ * person pressing it has must be answered identically in all three. Those fears
+ * are the passkey and the money, in that order, and the answer to both is that
+ * this reaches neither: no web page can delete a passkey, and the account and
+ * the name are on Midnight rather than in this browser.
+ */
+function StartFresh(props: { onStartFresh: () => void }) {
+  return (
+    <>
+      <button type="button" className="mnob-alt" onClick={props.onStartFresh}>
+        <Eraser size={15} strokeWidth={2} aria-hidden="true" />
+        Set up a new Passport on this device
+      </button>
+      <p className="mnob-hint">
+        Clears what this device remembers and starts over. Your passkey stays on your device, and
+        anything already on Midnight stays there.
+      </p>
+    </>
+  )
 }
 
 /**
@@ -105,7 +154,11 @@ export interface OnboardingProps {
  * each state's own words: saying it twice on one panel — which is what this
  * looked like when both states first shared the hint — reads as protesting.
  */
-function PasskeyWayOut(props: { copy: ReactNode; onCreateNewPasskey?: () => void }) {
+function PasskeyWayOut(props: {
+  copy: ReactNode
+  onCreateNewPasskey?: () => void
+  onStartFresh?: () => void
+}) {
   return (
     <div className="mnob-unusable" role="alert">
       <p className="mnob-unusable-copy">{props.copy}</p>
@@ -120,10 +173,17 @@ function PasskeyWayOut(props: { copy: ReactNode; onCreateNewPasskey?: () => void
             Create a new passkey
           </button>
           <p className="mnob-hint">
-            Makes a new passkey on this device and opens a Passport with it.
+            Makes a new passkey on this device and opens a Passport with it — everything this device
+            already holds is left alone.
           </p>
         </>
       ) : null}
+      {/* AND THE STRONGER ONE, second because it forgets things and the one
+          above does not. A person who has reached this panel twice is exactly
+          the person who needs it: the passkey above is made afresh every time
+          and still lands on the same wrong Passport, because it was never the
+          passkey that was wrong. */}
+      {props.onStartFresh ? <StartFresh onStartFresh={props.onStartFresh} /> : null}
     </div>
   )
 }
@@ -139,8 +199,22 @@ export default function OnboardingScreen(props: OnboardingProps) {
     unusableCredential,
     keylessPasskey,
     onCreateNewPasskey,
+    onStartFresh,
     onDismissError,
   } = props
+
+  /* Offered only where this browser HOLDS something to forget. On a genuinely
+     first visit there is nothing to clear, and a control promising to clear it
+     would be describing a state the reader is not in — which is how the "Sign
+     in" advice this screen used to give became a sentence about a button that
+     was not there. `null` is "still looking", and says nothing either way. */
+  const startFresh = hasExistingPassport === true ? onStartFresh : undefined
+
+  /* A way-out panel already carries this control, so the stage below must not
+     carry a second copy of it. Two buttons with the same words on one screen
+     is not emphasis — it is the reader wondering whether they do the same
+     thing, on the screen where they are already stuck. */
+  const wayOutShown = Boolean((unusableCredential || keylessPasskey) && stage === 'welcome')
 
   const continueHint =
     hasExistingPassport === true
@@ -206,6 +280,7 @@ export default function OnboardingScreen(props: OnboardingProps) {
               </>
             }
             onCreateNewPasskey={onCreateNewPasskey}
+            onStartFresh={startFresh}
           />
         ) : null}
 
@@ -219,7 +294,11 @@ export default function OnboardingScreen(props: OnboardingProps) {
             the passkey is gone, because WebAuthn never says so; it says what
             can be seen, and offers the thing that works either way. */}
         {keylessPasskey && stage === 'welcome' ? (
-          <PasskeyWayOut copy={keylessPasskey} onCreateNewPasskey={onCreateNewPasskey} />
+          <PasskeyWayOut
+            copy={keylessPasskey}
+            onCreateNewPasskey={onCreateNewPasskey}
+            onStartFresh={startFresh}
+          />
         ) : null}
 
         {stage === 'welcome' ? (
@@ -245,6 +324,12 @@ export default function OnboardingScreen(props: OnboardingProps) {
                 Use a different passkey
               </button>
             ) : null}
+            {/* THE THIRD PATH, and the only one on this screen that goes
+                FORWARD rather than back. The two above both reopen what this
+                browser already holds; when that is an orphaned Passport —
+                a name with no account behind it — neither of them can help,
+                and until 2026/09/04 there was nothing here that could. */}
+            {startFresh && !wayOutShown ? <StartFresh onStartFresh={startFresh} /> : null}
           </div>
         ) : null}
 

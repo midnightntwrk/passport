@@ -17,11 +17,21 @@ import {
   accountRecheckDelayMs,
   accountToRemember,
   aliasFromRecoveredAccount,
+  learnedLargeBlobSupport,
+  mayUseLargeBlob,
   pendingAccountBlob,
   settledAccountOnPasskey,
   type AccountFromBlobAccount,
 } from './lib/accountOnPasskey.js';
 import { compactAddress } from './lib/address.js';
+import {
+  nameOwnershipOutcome,
+  nameRecoveryStillOpening,
+  nameResolutionOutcome,
+  registryUnavailableFor,
+  unreachableBecause,
+  type NameRecoveryOutcome,
+} from './lib/nameRecovery.js';
 import { holdCriticalWork } from './lib/appBusy.js';
 import { normalisedColourHex, shortColour } from './lib/colour.js';
 import {
@@ -68,6 +78,7 @@ import {
 import type { WalletShieldedNote } from './lib/shieldedNote.js';
 import { requestPassportStoragePersistence } from './pwa.js';
 import {
+  deleteDemoProfile,
   listLocalProfiles,
   loadLocalProfileByCredential,
   localCredentialAccountId,
@@ -92,7 +103,12 @@ import AliasClaimScreen from './screens/AliasClaim.js';
 import BackupScreen from './screens/Backup.js';
 import EcosystemScreen from './screens/Ecosystem.js';
 import AliasReclaimModal from './screens/AliasReclaimModal.js';
+import RecoverByNameScreen from './screens/RecoverByName.js';
 import {
+  adoptLegacyAliasRecords,
+  aliasRecordsForCredential,
+  forgetAliasRecordsForCredential,
+  forgetLegacyAliasRecords,
   loadAliasRecord,
   loadAliasRecords,
   removeAliasRecord,
@@ -114,6 +130,7 @@ import type {
 } from './identity/midnames.js';
 import { createClaimWarmup } from './identity/claimWarmup.js';
 import {
+  forgetPassportContractRecordsForCredential,
   loadPassportContractRecord,
   loadPassportContractRecords,
   passportContractRecordKey,
@@ -667,7 +684,7 @@ const PASSPORT_CONTRACT_SCOPE = { appId: APP_ID, accountId: 'passport-contract-v
  * this session created. See `WelcomeScreen` for what it says and why it is
  * shown once.
  */
-type IdentityStep = 'welcome' | 'alias' | 'backup' | 'ecosystem' | null;
+type IdentityStep = 'welcome' | 'alias' | 'recover' | 'backup' | 'ecosystem' | null;
 
 /**
  * An account read off a passkey that the chain has not answered for YET.
@@ -849,6 +866,18 @@ function storeNameStep(credentialId: string, resolution: NameStepResolution): vo
 }
 
 /**
+ * Forgets a credential's name-step resolution, so the Passport that replaces it
+ * is walked through naming rather than dropped on a finished Home screen.
+ */
+function forgetNameStep(credentialId: string): void {
+  try {
+    window.localStorage.removeItem(`${NAME_STEP_STORAGE_PREFIX}${credentialId}`);
+  } catch {
+    // Best-effort: the step may then be skipped once more.
+  }
+}
+
+/**
  * Whether this browser has already shown the welcome screen for a credential.
  *
  * Its own key rather than a widened `NameStepResolution`, because the two
@@ -878,6 +907,15 @@ function storeWelcomeSeen(credentialId: string): void {
   } catch {
     // Best-effort. Without it the introduction may be offered once more, which
     // is the harmless direction to fail in.
+  }
+}
+
+/** Forgets that this credential was welcomed. Its replacement is new here. */
+function forgetWelcomeSeen(credentialId: string): void {
+  try {
+    window.localStorage.removeItem(`${WELCOME_STORAGE_PREFIX}${credentialId}`);
+  } catch {
+    // Best-effort. The introduction may then be offered once more.
   }
 }
 
@@ -1285,7 +1323,33 @@ export default function PassportDemo() {
   /* ---------------------------------------------------------------------- */
   /* Identity — the .night name, per network                                */
   /* ---------------------------------------------------------------------- */
+  /**
+   * THE RAW STORE MAP, keyed by `credentialId::network` — and almost nothing
+   * should read it directly. {@link aliasByNetwork} below is what every surface
+   * wants.
+   */
   const [aliasRecords, setAliasRecords] = useState<Record<string, AliasRecord>>(loadAliasRecords);
+  /** The credential this session is signed in as, or null before it is. */
+  const activeCredentialId = profile?.passkey.credentialId ?? null;
+  /**
+   * The names THIS Passport holds, by network — and the whole of the fix of
+   * 2026/09/04 on the reading side.
+   *
+   * Every surface used to index the store by network alone, so a credential
+   * enrolled seconds ago read whatever the last one had claimed: the name step
+   * saw a record and skipped itself, and Home printed a name over an account
+   * that belonged to a different passkey. `aliasRecordsForCredential` answers
+   * for one credential, so a new Passport reads an empty map and is walked
+   * through naming like the new Passport it is — and switching back to the
+   * older passkey shows its name again, because nothing was overwritten.
+   *
+   * Empty before sign-in. There is no Passport to have a name yet, and a screen
+   * that borrowed one from storage would be doing exactly what this replaces.
+   */
+  const aliasByNetwork = useMemo<Record<string, AliasRecord>>(
+    () => (activeCredentialId ? aliasRecordsForCredential(activeCredentialId, aliasRecords) : {}),
+    [activeCredentialId, aliasRecords],
+  );
   const [incentives, setIncentives] = useState<PassportIncentiveRecord[]>(loadIncentives);
   const [identityStep, setIdentityStep] = useState<IdentityStep>(null);
   /** See {@link AccountSearch}. `null` when nothing is being looked for. */
@@ -1898,6 +1962,20 @@ export default function PassportDemo() {
           ? await loadLocalProfileByCredential(restored.credentialId).catch(() => null)
           : await migrateLegacyLocalProfile().catch(() => null);
         if (!superseded() && stored) {
+          /* BEFORE the profile reaches state, because the name-step gate reads
+             the alias store the moment it does, and a name adopted a tick later
+             is a name adopted after somebody has been asked to choose one.
+             This is the path a returning user actually takes — a reload, no
+             ceremony — so it is the path on which most legacy records will be
+             handed back. See `adoptLegacyNamesFor`.
+
+             Deliberately NOT in this effect's dependency list: that callback
+             closes over `addActivity`, which changes with the selected network,
+             and adding it would restart the session restore on every network
+             switch. This effect runs once on mount and the mount-time closure
+             is the right one — the only thing it decides differently is which
+             network an activity line is filed under. */
+          await adoptLegacyNamesFor(stored).catch(() => {});
           setProfile(stored);
           setLocalPassportKnown(true);
         }
@@ -1916,6 +1994,12 @@ export default function PassportDemo() {
       cancelled = true;
       if (sessionRestoreCancel.current === abort) sessionRestoreCancel.current = null;
     };
+    /* `adoptLegacyNamesFor` is deliberately absent: it closes over
+       `addActivity`, which changes with the selected network, so listing it
+       would restart the session restore on every network switch. See the call
+       site above for what the mount-time closure costs, which is the network an
+       activity line is filed under and nothing else. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closeLocalWallet, refreshLocalBalances]);
 
   /* ---------------------------------------------------------------------- */
@@ -2003,6 +2087,71 @@ export default function PassportDemo() {
   );
 
   /**
+   * Hands the names written before 2026/09/04 to the Passport that owns them.
+   *
+   * Every alias record this browser held until that day was keyed by network
+   * alone and named no credential, so on this build it sits unreadable under a
+   * bare network key. This is what gives it back — to the credential that can
+   * be SHOWN to own it, and to no other. `adoptLegacyAliasRecords` holds the
+   * rule; the two things it needs are gathered here because only the app knows
+   * them: which networks this credential holds an account-custody contract on,
+   * and whether it is the only Passport in this browser.
+   *
+   * Runs on the SIGN-IN paths only. A credential enrolled a moment ago has
+   * claimed nothing, and handing it a name it did not claim is the whole defect
+   * — the rule would refuse it anyway (no contract, and not the sole profile),
+   * and not asking is clearer than being refused.
+   *
+   * Never awaited into a sign-in's outcome: a name that stays legacy for one
+   * more session costs a person nothing, and a storage read that throws must
+   * not cost them their Passport.
+   */
+  const adoptLegacyNamesFor = useCallback(
+    async (activeProfile: DemoPassportProfile): Promise<void> => {
+      const credentialId = activeProfile.passkey.credentialId;
+      const networks = Object.values(loadPassportContractRecords())
+        .filter((record) => record.credentialId === credentialId && record.status === 'deployed')
+        .map((record) => record.network);
+      const profiles = await listLocalProfiles().catch(() => []);
+      const adopted = adoptLegacyAliasRecords(credentialId, {
+        networks,
+        soleProfile: profiles.length <= 1,
+      });
+      if (adopted.length === 0) return;
+      addActivity({
+        label: 'Your name is on this Passport',
+        detail: `This device was holding ${
+          adopted.length === 1 ? 'a name' : 'names'
+        } without recording which passkey claimed ${
+          adopted.length === 1 ? 'it' : 'them'
+        }. ${adopted.length === 1 ? 'It is' : 'They are'} now filed under this one.`,
+        status: 'complete',
+        source: 'local',
+      });
+    },
+    [addActivity],
+  );
+
+  /**
+   * Records what an assertion learnt about this credential's largeBlob support.
+   *
+   * Silent, and deliberately: nothing the user did succeeded or failed, and
+   * there is nothing for them to act on. What it buys is that the NEXT sign-in
+   * — the one that would carry the write — already knows not to ask.
+   */
+  const learnLargeBlobSupport = useCallback(
+    async (
+      activeProfile: DemoPassportProfile,
+      supported: boolean | null | undefined,
+    ): Promise<void> => {
+      const patch = learnedLargeBlobSupport(activeProfile, supported);
+      if (!patch) return;
+      await patchProfile(activeProfile, patch);
+    },
+    [patchProfile],
+  );
+
+  /**
    * Writes down an account that has ANSWERED — the end of a successful
    * recovery, from the sign-in itself or from the search that followed it.
    *
@@ -2076,7 +2225,7 @@ export default function PassportDemo() {
           // The read-back can only happen against the open wallet's own indexer.
           walletNetwork: handle?.network.networkId ?? null,
           localRecord: blob ? loadPassportContractRecord(credentialId, blob.acc.network) : null,
-          hasLocalAlias: blob ? loadAliasRecord(blob.acc.network) !== null : false,
+          hasLocalAlias: blob ? loadAliasRecord(credentialId, blob.acc.network) !== null : false,
         };
         const pending = accountFromBlob(blob, context, 'unconfirmed');
         if (pending.kind === 'conflict') {
@@ -2110,7 +2259,11 @@ export default function PassportDemo() {
             written: true,
           },
         });
-        const restoredAlias = aliasFromRecoveredAccount(account, new Date().toISOString());
+        const restoredAlias = aliasFromRecoveredAccount(
+          credentialId,
+          account,
+          new Date().toISOString(),
+        );
         if (restoredAlias) saveAliasRecord(restoredAlias);
         const { confirmPassportContractOnLedger } = await import('./identity/passportContract.js');
         const confirmed = await confirmPassportContractOnLedger(indexerUrl, account.address);
@@ -2181,8 +2334,13 @@ export default function PassportDemo() {
       setLocalPassportKnown(true);
       // Held before the wallet opens: see `recoveringAccount`.
       armAccountRecovery(discovered.accountBlob);
+      await adoptLegacyNamesFor(known).catch(() => {});
       await openLocalWalletWithSeed(seed, scope, known.passkey.credentialId);
       await recoverAccountFromPasskey(known, discovered.accountBlob);
+      /* What the picker's own assertion revealed about this credential — the
+         only chance a passkey synced from another device gets to answer the
+         question before a write is owed. */
+      void learnLargeBlobSupport(known, discovered.largeBlobSupported);
       addActivity({
         label: 'Signed in',
         detail: 'Opened with a passkey chosen from this device.',
@@ -2205,6 +2363,15 @@ export default function PassportDemo() {
       },
       accountId,
       createdAt: new Date().toISOString(),
+      /* WHAT THE PICKER'S ASSERTION ALREADY TOLD US. This profile is bound to a
+         credential this browser did not enrol, so it never saw enrolment's own
+         `largeBlob.supported` — and until 2026/09/04 that left the question
+         open until the first WRITE, which on Android is the assertion that
+         hangs. The read this assertion just made answers it for free. Recorded
+         only when it is a definite answer. */
+      ...(typeof discovered.largeBlobSupported === 'boolean'
+        ? { largeBlobSupported: discovered.largeBlobSupported }
+        : {}),
     };
     const state: PassportDemoState = {
       deviceSecret: newDeviceSecret(),
@@ -2659,12 +2826,22 @@ export default function PassportDemo() {
        session that owes nothing, and the assertion then reads as it always
        has. */
     const pendingBlob = pendingAccountBlob(existing);
+    /* AND WHETHER IT MAY ASK AT ALL (2026/09/04). A credential the platform has
+       already said cannot hold a blob is asserted with no largeBlob slice in
+       either direction. On Android that is the difference between a sign-in and
+       a sheet that never settles: Chrome narrows its passkey picker to
+       credentials that can satisfy the extensions asked for, and a Google
+       Password Manager passkey cannot satisfy largeBlob, so the picker comes up
+       empty and stays there. The reviewer met it as "the passkey prompt did not
+       finish", on an ordinary sign-in, days after the claim that owed the
+       write. See `src/lib/accountOnPasskey.ts#mayUseLargeBlob`. */
+    const largeBlob = mayUseLargeBlob(existing);
     try {
       handle = await withPasskeyWatchdog(() =>
-        WebAuthnPrfKeyProvider.assertOnce(
-          existing.passkey,
-          pendingBlob ? { writeAccountBlob: pendingBlob } : {},
-        ),
+        WebAuthnPrfKeyProvider.assertOnce(existing.passkey, {
+          ...(pendingBlob ? { writeAccountBlob: pendingBlob } : {}),
+          largeBlob,
+        }),
       );
     } catch (cause) {
       throw signInCeremonyFailure(cause);
@@ -2675,6 +2852,11 @@ export default function PassportDemo() {
       setLocalPassportKnown(true);
       const seed = await handle.deriveWalletSeed(unlockScope);
       armAccountRecovery(handle.accountBlob);
+      /* BEFORE the recovery below and before the name step resolves: an adopted
+         name is one of the answers to "does this Passport already have a
+         name", and an answer that arrives late is an answer that arrives after
+         the person has been asked the question. */
+      await adoptLegacyNamesFor(existing).catch(() => {});
       await openLocalWalletWithSeed(seed, unlockScope, existing.passkey.credentialId);
       /* The blob rode in on the assertion above, so this costs no prompt. It
          does nothing at all unless this browser has no record of the account —
@@ -2685,6 +2867,11 @@ export default function PassportDemo() {
          the sign-in's own outcome: a blob is a nicety, and a signed-in
          Passport does not depend on one. */
       void settleAccountOnPasskey(existing, handle.accountBlobWritten);
+      /* And what the READ revealed about whether this credential could ever
+         hold one. It is the cheap half of the Android fix: a sign-in that only
+         reads still learns the answer, so by the time a claim owes a write the
+         profile already knows whether asking for it would hang. */
+      void learnLargeBlobSupport(existing, handle.largeBlobSupported);
       return existing;
     } finally {
       handle.dispose();
@@ -3164,10 +3351,11 @@ export default function PassportDemo() {
     const search = accountSearch;
     const active = profileRef.current;
     setAccountSearch(null);
-    if (search) {
-      const restored = loadAliasRecord(search.network);
+    if (search && active) {
+      const credentialId = active.passkey.credentialId;
+      const restored = loadAliasRecord(credentialId, search.network);
       // Only the name THIS search restored; never one this browser watched.
-      if (restored?.recovered === true) removeAliasRecord(search.network);
+      if (restored?.recovered === true) removeAliasRecord(credentialId, search.network);
     }
     if (active) await patchProfile(active, { accountOnPasskey: undefined });
     setIdentityStep('alias');
@@ -3357,7 +3545,14 @@ export default function PassportDemo() {
   /** Records a name as queued — never as registered — with its reason. */
   const queueAlias = useCallback(
     (alias: string, network: PassportNetwork, reason: string) => {
+      /* A queued name belongs to the Passport that picked it, exactly as a
+         registered one does. No signed-in credential means there is nobody to
+         file it under, and filing it under nobody is what put one passkey's
+         name on another's Home screen. */
+      const credentialId = profileRef.current?.passkey.credentialId;
+      if (!credentialId) return;
       saveAliasRecord({
+        credentialId,
         alias,
         domain: aliasDomainOf(alias),
         network,
@@ -4145,6 +4340,7 @@ export default function PassportDemo() {
       try {
         const result = await claimAliasBoundToAccount(handle, activeProfile, alias, setClaimPhase);
         saveAliasRecord({
+          credentialId: activeProfile.passkey.credentialId,
           alias: result.alias,
           domain: result.domain,
           network: result.network,
@@ -4208,6 +4404,7 @@ export default function PassportDemo() {
            path had nothing to pick up. Persist it queued, carrying the failure
            as the reason, exactly as the requeue in `registerQueuedAlias` does. */
         saveAliasRecord({
+          credentialId: activeProfile.passkey.credentialId,
           alias,
           domain: aliasDomainOf(alias),
           network: localWalletNetworkId ?? configuredWalletNetwork ?? selectedNetwork,
@@ -4282,10 +4479,12 @@ export default function PassportDemo() {
    */
   const registerQueuedAlias = useCallback(async (): Promise<void> => {
     if (registerNowBusy) return;
-    const record = loadAliasRecords()[selectedNetwork];
+    const activeProfile = profile;
+    const record = activeProfile
+      ? loadAliasRecord(activeProfile.passkey.credentialId, selectedNetwork)
+      : null;
     if (!record || record.status === 'registered') return;
     const handle = localWalletRef.current;
-    const activeProfile = profile;
     if (!handle || !activeProfile) return; // The card disables the action first.
     setRegisterNowBusy(true);
     setAliasFailure(null);
@@ -4341,6 +4540,7 @@ export default function PassportDemo() {
         setClaimPhase,
       );
       saveAliasRecord({
+        credentialId: activeProfile.passkey.credentialId,
         alias: result.alias,
         domain: result.domain,
         network: result.network,
@@ -4518,7 +4718,10 @@ export default function PassportDemo() {
          from the store rather than from render state, because this callback
          must not be rebuilt every time a record changes. It is only a fallback
          link target. */
-      const deployedDomain = loadAliasRecord(deployment.network)?.domain ?? null;
+      const deployedCredentialId = profileRef.current?.passkey.credentialId ?? null;
+      const deployedDomain = deployedCredentialId
+        ? loadAliasRecord(deployedCredentialId, deployment.network)?.domain ?? null
+        : null;
       const deployLink = explorerTxLink(
         deployment.deployTxId,
         deployment.network,
@@ -4606,11 +4809,11 @@ export default function PassportDemo() {
       setSelectedNetwork(next);
       if (next === previous) return;
       const held =
-        aliasRecords[previous] ??
-        Object.values(aliasRecords).find((record) => record.status === 'registered') ??
-        Object.values(aliasRecords)[0];
+        aliasByNetwork[previous] ??
+        Object.values(aliasByNetwork).find((record) => record.status === 'registered') ??
+        Object.values(aliasByNetwork)[0];
       if (!held) return;
-      if (aliasRecords[next]) return;
+      if (aliasByNetwork[next]) return;
       void (async () => {
         const availability = await probeAlias(next, held.alias);
         if (availability.status === 'taken') {
@@ -4629,7 +4832,7 @@ export default function PassportDemo() {
         await claimOrQueueAlias(held.alias, next);
       })();
     },
-    [aliasRecords, claimOrQueueAlias, probeAlias, queueAlias, selectedNetwork],
+    [aliasByNetwork, claimOrQueueAlias, probeAlias, queueAlias, selectedNetwork],
   );
 
   const handleReclaimPick = useCallback(
@@ -4683,7 +4886,7 @@ export default function PassportDemo() {
        the wallet this effect waits on has opened. */
     const passportJustCreated = identityStepArmed.current;
     identityStepArmed.current = false;
-    if (loadAliasRecords()[selectedNetwork]) return;
+    if (loadAliasRecord(profile.passkey.credentialId, selectedNetwork)) return;
     /* A name recovered from the passkey, before any of it reaches the alias
        store — a second reading of the same fact, because the cost of getting
        this wrong is asking somebody to claim a name they already own. */
@@ -4705,6 +4908,20 @@ export default function PassportDemo() {
   }, [localSurfaces, localWalletStatus, profile, recoveringAccount, selectedNetwork]);
 
   const signOutPassport = async () => {
+    /* THE SILENT RESTORE IS STOPPED FIRST (2026/09/04).
+       The §2.2 restore runs on mount and is several awaits long — reading the
+       wrapped seed, building a wallet, opening a socket — and it ends by
+       setting the profile and the wallet handle. A sign-out pressed while it
+       was still in flight tore down state the restore then put straight back,
+       and the user was returned to the Home screen they had just left. Caught
+       in a browser on 2026/09/04, on the very journey somebody stuck on an
+       orphaned Passport takes to escape it: Sign out, and nothing happens.
+
+       Every user-initiated ceremony already does this — see
+       `runLocalOnboarding` — and sign-out is one. `superseded()` inside the
+       restore reads the same flag, so the restore abandons itself rather than
+       racing. */
+    cancelSessionRestore();
     // Sign-out is the boundary of the §2.2 session stopgap: the wrapped seed
     // and its wrapping key are removed before anything else is torn down.
     await clearPersistedWalletSession();
@@ -4755,6 +4972,214 @@ export default function PassportDemo() {
     // sign-in, and lands on the dashboard. The stored per-credential
     // resolution is deliberately left in place for the same reason.
     identityStepArmed.current = false;
+  };
+
+  /**
+   * SET UP A NEW PASSPORT ON THIS DEVICE — the way out of an orphaned Passport,
+   * and the control that did not exist (2026/09/04).
+   *
+   * THE STATE IT ANSWERS. A reviewer on Android could not get out of a Passport
+   * that was half made: "there is no way I can recreate an account or create a
+   * new one. I'm stuck with the orphan key that does not contain the contract
+   * attached… Even deleting and recreating the passkeys under different
+   * accounts doesn't do the job." Every record that made the app believe this
+   * browser's Passport was already set up outlived the passkey it belonged to,
+   * so a new passkey inherited the old name, found no account behind it, and
+   * had nothing on any screen that could clear it. The per-credential keying
+   * that landed alongside this stops NEW Passports being made that way; this is
+   * the control for the ones already in that state, and for every future state
+   * nobody has thought of, because "start again on this device" is the answer to
+   * all of them.
+   *
+   * WHAT IT REMOVES, and it is only ever THIS DEVICE'S MEMORY of one credential:
+   * that credential's names, its account records, its profile and encrypted
+   * state, its name-step and welcome markers, and the open session.
+   *
+   * WHAT IT CANNOT AND DOES NOT TOUCH, said plainly because a person pressing
+   * this is afraid of exactly these two things:
+   *
+   *   - THE PASSKEY. No web page can delete a passkey, and this one does not
+   *     try. It stays in the keychain, and signing in with it later is still a
+   *     way back to the account it holds — the blob and the name are both still
+   *     on it.
+   *   - THE CHAIN. The account contract and the registered name are on Midnight.
+   *     They are not this browser's to release and nothing here releases them.
+   *
+   * Another credential's records are untouched, which is what makes this safe on
+   * a phone holding two Passports.
+   *
+   * It ends by running the create path, so the person lands where they were
+   * trying to get to rather than on an empty landing screen having pressed a
+   * button that appeared to do nothing.
+   */
+  const startFreshPassportOnThisDevice = async (): Promise<void> => {
+    if (onboardingRunning.current) return;
+    /* The credential to forget: the one signed in, or — on the landing screen,
+       which is where this is offered — the one the single button would have
+       tried. Null means this browser holds nothing to forget, and the create
+       path below is then simply a create. */
+    const target =
+      profileRef.current ?? (await resolveDefaultLocalProfile().catch(() => null));
+    /* Whether any OTHER Passport in this browser could own an unlabelled
+       record. Read before the profile is deleted, because deleting it is what
+       would otherwise make the answer trivially yes. */
+    const others = (await listLocalProfiles().catch(() => []))
+      .filter((candidate) => candidate.subjectId !== target?.subjectId);
+    if (target) {
+      const credentialId = target.passkey.credentialId;
+      forgetAliasRecordsForCredential(credentialId);
+      /* AND THE RECORDS THAT NAME NOBODY, when nobody else could own them.
+         `forgetAliasRecordsForCredential` only removes records naming this
+         credential, so a name claimed before 2026/09/04 survived it — and the
+         new passkey that follows is then the only Passport here, which is one
+         of the two claims `adoptLegacyAliasRecords` accepts. The person who
+         asked to start clean would have been handed the old name straight
+         back. Left alone where another Passport is present: an unlabelled
+         record's owner is unknown, and it might be theirs. */
+      if (others.length === 0) forgetLegacyAliasRecords();
+      forgetPassportContractRecordsForCredential(credentialId);
+      forgetNameStep(credentialId);
+      forgetWelcomeSeen(credentialId);
+      await deleteDemoProfile(target.subjectId).catch(() => {});
+      try {
+        if (window.localStorage.getItem(LAST_PASSKEY_STORAGE_KEY) === credentialId) {
+          window.localStorage.removeItem(LAST_PASSKEY_STORAGE_KEY);
+        }
+      } catch {
+        // The preference is a convenience; it cannot hold this up.
+      }
+    }
+    /* Everything the session was holding goes with it. `signOutPassport`
+       deliberately keeps names and notes — the same passkey re-derives the
+       same Passport — so it cannot be the whole of this, but it is exactly the
+       right teardown once the records are already gone. */
+    await signOutPassport();
+    setLocalPassportKnown(false);
+    addActivity({
+      label: 'Starting again on this device',
+      detail:
+        'This device has forgotten what it held for that passkey. The passkey itself is still on your device, and anything already on Midnight is still there.',
+      status: 'complete',
+      source: 'local',
+    });
+    /* Enrol DELIBERATELY. Not the one-button path: that discovers first, and
+       discovery would offer the very passkey whose records were just cleared —
+       which would rebind a profile to it and put the person back where they
+       started. */
+    startPasskeyOnboarding('enrol-new');
+  };
+
+  /**
+   * FINDING AN EXISTING PASSPORT BY ITS `.night` NAME, and the platform that
+   * made it compulsory (2026/09/04).
+   *
+   * Every recovery this app had went through the WebAuthn largeBlob extension:
+   * a claim writes the account's address onto the credential, and a browser
+   * that holds nothing reads it back on the next sign-in. Android does not
+   * implement it. Google Password Manager's passkeys give PRF — which is where
+   * the wallet seed comes from, so the Passport works perfectly — and no
+   * largeBlob at all, so on the platform the reviewers were actually holding
+   * there was never a blob to write, nothing to read back, and consequently NO
+   * way to return to an existing Passport on a browser that had forgotten it.
+   * What that person met was the name step, over a Passport that already had a
+   * name.
+   *
+   * So there is a second door, and it needs nothing from the credential but the
+   * one thing every platform gives: the PRF output.
+   *
+   *   1. THE NAME IS THE QUESTION. It is resolved against the registry to the
+   *      account-custody contract it points at. A name is public and proves
+   *      nothing — anybody can resolve anybody's — so nothing is restored on
+   *      the strength of it.
+   *   2. THE ACCOUNT IS THE ANSWER. This passkey's device secret is derived
+   *      from its PRF output and the contract is asked, on chain, whether that
+   *      device is one of its active devices. That is `accountHoldsDevice`, the
+   *      same proof a restored backup file must pass, and for the same reason:
+   *      the device set inside the contract is the only thing that answers "can
+   *      this Passport spend from it".
+   *
+   * ONE CEREMONY, and it is asked for. `withAccountDeviceSecret` raises a
+   * single assertion, and only after somebody has typed a name and pressed a
+   * button — nothing here prompts a user who asked for nothing.
+   *
+   * A name that resolves to anything other than a contract is treated as not
+   * ours rather than as an error: Passport binds names to account-custody
+   * contracts, and a name pointing at a bare wallet address is somebody else's
+   * arrangement whatever the registry says about it.
+   */
+  const recoverPassportByName = async (name: string): Promise<NameRecoveryOutcome> => {
+    const activeProfile = profileRef.current;
+    const network = localWalletNetworkId ?? configuredWalletNetwork ?? selectedNetwork;
+    const handle = localWalletRef.current;
+    const indexerHttpUrl = handle?.network.indexerHttpUrl ?? null;
+    if (!activeProfile || !indexerHttpUrl) return nameRecoveryStillOpening();
+    const { MIDNAMES_INDEXER_URLS, resolveAliasTarget } = await import('./identity/midnames.js');
+    const noRegistry = registryUnavailableFor(network, Object.keys(MIDNAMES_INDEXER_URLS));
+    if (noRegistry) return noRegistry;
+    let resolved: Awaited<ReturnType<typeof resolveAliasTarget>>;
+    try {
+      resolved = await resolveAliasTarget(network as keyof typeof MIDNAMES_INDEXER_URLS, name);
+    } catch (cause) {
+      return unreachableBecause(cause);
+    }
+    const settled = nameResolutionOutcome(resolved);
+    if (settled) return settled;
+    /* Non-null past `nameResolutionOutcome`, which ends the flow for every
+       answer that is not a contract this app could open. */
+    const found = resolved!;
+    const address = found.target.hex;
+    let holds: boolean;
+    try {
+      const { accountHoldsDevice } = await import('./identity/accountCustody.js');
+      holds = await withAccountDeviceSecret((deviceSecret) =>
+        accountHoldsDevice({ indexerHttpUrl }, address, deviceSecret),
+      );
+    } catch (cause) {
+      /* "We could not ask" must never look like "it is not yours". The first is
+         a bad minute on somebody's train; the second tells a person their
+         Passport is gone. */
+      return unreachableBecause(cause);
+    }
+    const ownership = nameOwnershipOutcome(found, holds);
+    if (ownership.kind !== 'found') return ownership;
+
+    /* PROVED. The record may now say what a recovery is allowed to say: an
+       address this device has confirmed on chain, no deployment transaction —
+       because this device did not watch one — and `recovered` to mark it. */
+    const credentialId = activeProfile.passkey.credentialId;
+    saveRecoveredAccount(credentialId, { address, network, alias: name });
+    saveAliasRecord({
+      credentialId,
+      alias: name,
+      domain: aliasDomainOf(name),
+      network,
+      status: 'registered',
+      /* Read out of the registry rather than watched being registered, so it
+         carries no transaction ids and says why — the same honesty
+         `aliasFromRecoveredAccount` keeps for a name read off a passkey. */
+      recovered: true,
+      registryConfirmed: true,
+      resolverAddress: found.resolverAddress,
+      resolverTarget: 'contract',
+      resolverTargetHex: address,
+      updatedAt: new Date().toISOString(),
+    });
+    /* The note the next sign-in reads, so this device does not have to be asked
+       the name a second time. It is already on the credential's own terms —
+       nothing is owed to a future largeBlob write, and on Android there could
+       not be one. */
+    await patchProfile(activeProfile, {
+      accountOnPasskey: { address, network, alias: name, written: true },
+    });
+    storeNameStep(credentialId, 'done');
+    setIdentityStep(null);
+    setAccountSearch(null);
+    pushToast({
+      tone: 'success',
+      title: 'Your Passport is back',
+      body: `Midnight confirmed this passkey is part of ${aliasDomainOf(name)}.`,
+    });
+    return ownership;
   };
 
   /* ---------------------------------------------------------------------- */
@@ -6862,7 +7287,7 @@ export default function PassportDemo() {
      public network at all — there is then no per-network record to read, and
      the enrolled passkey's label is the honest answer. */
   const passkeyDisplayName =
-    (configuredWalletNetwork ? aliasRecords[configuredWalletNetwork]?.domain : null) ??
+    (configuredWalletNetwork ? aliasByNetwork[configuredWalletNetwork]?.domain : null) ??
     profile?.passkey.label ??
     null;
   const sessionDisplayName = passkeyDisplayName;
@@ -6883,7 +7308,7 @@ export default function PassportDemo() {
    * greeting falls back to the display name, because claiming a name on
    * preview says nothing about who holds it on pre-production.
    */
-  const activeAliasRecord = aliasRecords[selectedNetwork] ?? null;
+  const activeAliasRecord = aliasByNetwork[selectedNetwork] ?? null;
   const aliasLabel = activeAliasRecord?.alias ?? null;
   /**
    * Why "Register now" cannot run right now, or null when it can. The demo
@@ -7132,6 +7557,13 @@ export default function PassportDemo() {
           unusableCredential={unusableCredential}
           keylessPasskey={keylessPasskey}
           onCreateNewPasskey={() => startPasskeyOnboarding('enrol-new')}
+          /* And the way out of a Passport that is WRONG rather than
+             unreachable — the orphaned name with no account behind it that a
+             reviewer could not escape on Android. It forgets this device's
+             records for that credential and creates from scratch; the passkey
+             and the chain are untouched. See
+             `startFreshPassportOnThisDevice`. */
+          onStartFresh={() => void startFreshPassportOnThisDevice()}
         />
       ) : accountSearch?.phase === 'not-found' ? (
         /* THE END OF THE SEARCH, and the reason it has one. A passkey named an
@@ -7187,6 +7619,17 @@ export default function PassportDemo() {
              can be. See `midSessionCeremonyFailure`. */
           errorIsPasskeyWayOut={aliasFailure?.wayOut === true}
           onSignOut={() => void signOutPassport()}
+          /* THE OTHER DOOR, and on Android the only one. A passkey there
+             carries no largeBlob, so a browser that has forgotten this
+             Passport can recover nothing from the credential and lands
+             here — on a naming ceremony the person has already been
+             through. See `recoverPassportByName`. */
+          onFindExisting={() => setIdentityStep('recover')}
+        />
+      ) : identityStep === 'recover' ? (
+        <RecoverByNameScreen
+          onFind={recoverPassportByName}
+          onBack={() => setIdentityStep('alias')}
         />
       ) : identityStep === 'backup' ? (
         /* Off the onboarding chain since 2026/08/06 — reached on demand from

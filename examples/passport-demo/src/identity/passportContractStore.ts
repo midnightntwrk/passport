@@ -290,6 +290,40 @@ export function restorePassportContractRecords(
   return outcomes;
 }
 
+/**
+ * Forgets every contract ONE credential holds — the contract half of "set up a
+ * new Passport on this device".
+ *
+ * IT DEPLOYS NOTHING AND DESTROYS NOTHING. A contract record is this browser's
+ * memory of a deployment; the account itself is on Midnight, where it stays,
+ * and a later sign-in with the same passkey that can see it will find it again
+ * through the blob or through the name. What this removes is the local record
+ * that makes the app believe this credential already has an account — which is
+ * precisely what a person stuck on an orphaned Passport is trying to be rid of.
+ *
+ * Records belonging to any other credential are untouched, so starting again on
+ * a phone that holds two Passports costs the other one nothing.
+ *
+ * Returns the keys it forgot, so a caller can say what it did.
+ */
+export function forgetPassportContractRecordsForCredential(credentialId: string): string[] {
+  const forgotten: string[] = [];
+  try {
+    const records = readAll();
+    for (const [key, record] of Object.entries(records)) {
+      if (record.credentialId !== credentialId) continue;
+      delete records[key];
+      forgotten.push(key);
+    }
+    if (forgotten.length === 0) return forgotten;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  } catch {
+    // Storage denied: the records outlive this, which is the safe direction.
+  }
+  publish();
+  return forgotten;
+}
+
 /** Subscribes to record changes. Returns an unsubscribe function. */
 export function subscribePassportContractRecords(
   listener: (records: Record<string, PassportContractRecord>) => void,

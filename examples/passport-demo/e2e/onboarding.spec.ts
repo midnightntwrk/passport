@@ -157,7 +157,23 @@ test('a passkey is welcomed, and the welcome leads to the name step', async () =
      would leave, not merely of the word "Skip". */
   await expect(page.getByRole('button', { name: /skip|later|not now|maybe/i })).toHaveCount(0);
   const buttons = await page.getByRole('button').allInnerTexts();
-  expect(buttons.filter((label) => label.trim().length > 0)).toEqual(['Claim your name']);
+  /* TWO CONTROLS SINCE 2026/09/04, and the second one is not a skip — it is
+     the opposite of one. "Find my Passport" leads to a step that RESTORES an
+     account that already exists, proving ownership on chain before it does, so
+     it can only end on a Home that has an account. The rule this list enforces
+     is that nothing here reaches Home WITHOUT one, and both of these honour it.
+
+     It is on this screen because this screen is where a returning Passport
+     wrongly ends up. Recovery went entirely through the passkey's largeBlob,
+     and an Android passkey has none — Google Password Manager implements PRF
+     and not largeBlob — so on that platform a browser with cleared site data
+     recovered nothing and was put here, in front of a naming ceremony, over a
+     Passport that already had a name. Claiming from here would have set up a
+     second account and paid for a second name. See `e2e/android-recovery.spec.ts`. */
+  expect(buttons.filter((label) => label.trim().length > 0)).toEqual([
+    'Claim your name',
+    'I already have a name — find my Passport',
+  ]);
 
   // And the wallet has not been asked for a transaction: only reads so far.
   expect(network.calls.filter((call) => call.includes('register-alias'))).toHaveLength(0);

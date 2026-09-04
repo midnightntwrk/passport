@@ -293,7 +293,11 @@ export interface PassportBackupContents {
   version: number;
   /** ISO-8601. Inside the ciphertext on purpose — see the header. */
   createdAt: string;
-  /** Alias claims, keyed by network. Verbatim `loadAliasRecords()`. */
+  /**
+   * Alias claims, keyed by `credentialId::network` — and by the bare network
+   * for a record written before 2026/09/04, which names no credential.
+   * Verbatim `loadAliasRecords()`.
+   */
   aliases: Record<string, AliasRecord>;
   /** Contract records, keyed by `credentialId::network`. */
   passportContracts: Record<string, PassportContractRecord>;
@@ -600,6 +604,14 @@ const FORBIDDEN_KEYS = [
  */
 const BACKUP_FIELDS = ['version', 'createdAt', 'aliases', 'passportContracts', 'incentives'];
 const ALIAS_FIELDS = [
+  /* The credential the name was claimed under, on the list for exactly the
+     reason `recovered` is below: without it an export drops the field, and
+     every record the file carries then restores UNOWNED, under a bare network
+     key no reader can reach. That is the state the credential half of the
+     store's key exists to get records out of — see `./aliasStore.ts` on the
+     Android report of 2026/09/04 — so a backup that quietly put them back into
+     it would undo the fix on every restore. */
+  'credentialId',
   'alias',
   'domain',
   'network',
@@ -1337,13 +1349,30 @@ function normaliseHex(value: string | undefined): string | undefined {
  * `registryConfirmed` is FORCED to false — see this module's header. Everything
  * else is type-checked and the transaction ids are shape-checked, so a claim
  * cannot arrive carrying a plausible-looking name and an id that is not one.
+ *
+ * `fileKey` is the key the FILE filed the entry under, and it is read for one
+ * thing only: a record written before 2026/09/04 may carry no network of its
+ * own, and back then the key WAS the network, so that key is the only place
+ * such a record's network survives. A compound key is a store key rather than
+ * a network, so it is not read as one — `./aliasStore.ts` derives its keys from
+ * the record precisely so that a file cannot decide where a record lands, and
+ * reading `"someone-else::preview"` as a network here would hand that decision
+ * straight back.
  */
-function prepareAliasRecord(value: AliasRecord, network: string): Prepared<AliasRecord> {
+function prepareAliasRecord(value: AliasRecord, fileKey: string): Prepared<AliasRecord> {
   if (!isNonEmptyString(value.alias) || !isNonEmptyString(value.domain)) {
     return { ok: false, reason: 'the file\'s record carries no name to restore' };
   }
   if (value.status !== 'registered' && value.status !== 'queued' && value.status !== 'failed') {
     return { ok: false, reason: `"${String(value.status)}" is not a status an alias record has` };
+  }
+  const network = isNonEmptyString(value.network)
+    ? value.network
+    : fileKey.includes('::')
+      ? null
+      : fileKey;
+  if (!network) {
+    return { ok: false, reason: 'the file\'s record names no network' };
   }
   for (const [field, id] of [
     ['resolverDeployTxId', value.resolverDeployTxId],
@@ -1362,6 +1391,14 @@ function prepareAliasRecord(value: AliasRecord, network: string): Prepared<Alias
        re-resolves the name and is the only thing that may set this true. */
     registryConfirmed: false,
   };
+  /* The credential the record NAMES, carried through — and never invented. A
+     record that names none is a record from before 2026/09/04, and it restores
+     as the unowned record it is rather than being handed to whoever happens to
+     be signed in: that hand-over is the whole of the Android defect the
+     credential half of the store's key closes. `adoptLegacyAliasRecords` is
+     the only thing that may give such a record an owner, and only where the
+     ownership can be shown. */
+  if (isNonEmptyString(value.credentialId)) record.credentialId = value.credentialId;
   /* ABSENT when the file carries none, and never invented. See
      `./aliasStore.ts`'s `updatedAt`: the store used to stamp an undated record
      with the moment of the restore, and that invented date then outranked the
@@ -1564,7 +1601,7 @@ export async function applyPassportBackup(
   assertBackupRecordContainers(contents);
   assertNoKeyMaterial(contents);
   const [
-    { loadAliasRecords, restoreAliasRecords },
+    { loadAliasRecords, restoreAliasRecords, aliasRecordKey },
     {
       loadPassportContractRecords,
       restorePassportContractRecords,
@@ -1582,16 +1619,24 @@ export async function applyPassportBackup(
   const aliases = emptyStoreSummary();
   const localAliases = loadAliasRecords();
   const aliasWrites: AliasRecord[] = [];
-  for (const [network, value] of Object.entries(contents.aliases)) {
+  /* The store key comes from the PREPARED RECORD, exactly as the contract loop
+     below derives its own — so a file that files one Passport's name under
+     another credential's key restores it to the credential the record NAMES,
+     and to no other. The file's own map key is read for one thing, and one
+     thing only: the legacy network fallback in `prepareAliasRecord`. */
+  for (const [fileKey, value] of Object.entries(contents.aliases)) {
     aliases.found += 1;
-    const prepared = prepareAliasRecord(value, network);
+    const prepared = prepareAliasRecord(value, fileKey);
     if (!prepared.ok) {
-      aliases.skipped.push({ key: network, reason: prepared.reason });
+      /* There is no prepared record to key this by, so the entry is named as
+         the FILE named it — which is the thing a reader can go and look at. */
+      aliases.skipped.push({ key: fileKey, reason: prepared.reason });
       continue;
     }
-    const refusal = refuseAgainstLocalAlias(prepared.record, localAliases[network]);
+    const key = aliasRecordKey(prepared.record.credentialId, prepared.record.network);
+    const refusal = refuseAgainstLocalAlias(prepared.record, localAliases[key]);
     if (refusal) {
-      aliases.skipped.push({ key: network, reason: refusal });
+      aliases.skipped.push({ key, reason: refusal });
       continue;
     }
     aliasWrites.push(prepared.record);
@@ -1599,9 +1644,9 @@ export async function applyPassportBackup(
   for (const outcome of restoreAliasRecords(aliasWrites)) {
     if (outcome.written) {
       aliases.restored += 1;
-      aliases.restoredKeys.push(outcome.network);
+      aliases.restoredKeys.push(outcome.key);
     } else {
-      aliases.skipped.push({ key: outcome.network, reason: outcome.reason ?? 'the store refused it' });
+      aliases.skipped.push({ key: outcome.key, reason: outcome.reason ?? 'the store refused it' });
     }
   }
 
@@ -1792,27 +1837,38 @@ export type PassportContractOwnershipProver = (
 ) => Promise<boolean>;
 
 export async function confirmRestoredAliases(
-  restoredNetworks: string[],
+  restoredKeys: string[],
   provesOwnership?: PassportContractOwnershipProver,
 ): Promise<PassportBackupRegistryCheck> {
-  if (restoredNetworks.length === 0) {
+  if (restoredKeys.length === 0) {
     return { ran: false, reason: 'the backup wrote no name claims, so there was nothing to check.' };
   }
   const [
     { MIDNAMES_INDEXER_URLS, resolveAliasTarget },
     { loadAliasRecords, restoreAliasRecords },
-    { loadPassportContractRecords },
+    { loadPassportContractRecords, passportContractRecordKey },
   ] = await Promise.all([
     import('./midnames.js'),
     import('./aliasStore.js'),
     import('./passportContractStore.js'),
   ]);
   const records = loadAliasRecords();
-  /* Every account-custody address this browser holds, per network. An alias
-     record does not name a credential, so the comparison is against the
-     contracts this Passport holds on that network — which is the same set,
-     because a browser holds one Passport contract per credential and network
-     and the name was bound to one of them. */
+  /* Every account-custody address this browser holds, indexed BOTH by the
+     credential and network that hold it and by the network alone, because the
+     two answer different records.
+
+     An owned record — one written since 2026/09/04 — names the credential the
+     name was claimed under, so the comparison is against THAT credential's own
+     contract on that network: the name and the account it resolves to were
+     claimed in one ceremony, so any other credential's contract is somebody
+     else's account, even on a phone that holds both. Narrowing to it is a
+     genuine tightening — a browser holding two Passports used to confirm one
+     Passport's restored name against the other's contract.
+
+     A record that names no credential can only be answered by the wider set,
+     and it is the older, looser question on purpose: there is no credential to
+     narrow to, and refusing every legacy record outright would leave a real
+     name permanently awaiting a registry that has already answered for it. */
   const contractAddresses = new Map<string, Set<string>>();
   /* Addresses that arrived in the file rather than from a deployment this
      browser watched. They are NOT evidence of anything by themselves: a
@@ -1828,9 +1884,16 @@ export async function confirmRestoredAliases(
     if (contract.status !== 'deployed' || !contract.address) continue;
     const fromFile = contract.restoredFromBackup === true && contract.ledgerConfirmed !== true;
     const bucket = fromFile ? restoredAddresses : contractAddresses;
-    const forNetwork = bucket.get(contract.network) ?? new Set<string>();
-    forNetwork.add(contract.address.toLowerCase());
-    bucket.set(contract.network, forNetwork);
+    /* Both scopes, from one pass. A network never contains `::`, so the two
+       kinds of index can share a map without ever colliding. */
+    for (const scope of [
+      contract.network,
+      passportContractRecordKey(contract.credentialId, contract.network),
+    ]) {
+      const forScope = bucket.get(scope) ?? new Set<string>();
+      forScope.add(contract.address.toLowerCase());
+      bucket.set(scope, forScope);
+    }
   }
   let confirmed = 0;
   let unconfirmed = 0;
@@ -1846,18 +1909,27 @@ export async function confirmRestoredAliases(
     notRegistered += 1;
     notRegisteredReasons.push({ network, reason });
   };
-  for (const network of restoredNetworks) {
-    const record = records[network];
+  /* The one place a store key has to be read back for the network inside it:
+     the record the key named is gone, so there is nothing left to read the
+     network OFF. Everywhere below, the record answers — a `{network, reason}`
+     entry carries the bare network the surface renders, never a store key. */
+  const networkOfKey = (key: string): string => {
+    const separator = key.indexOf('::');
+    return separator === -1 ? key : key.slice(separator + 2);
+  };
+  for (const key of restoredKeys) {
+    const record = Object.hasOwn(records, key) ? records[key] : undefined;
     /* COUNTED, not skipped. Both of these used to `continue` in silence, and
        the summary's three buckets then failed to account for a name the
        restore had just reported writing. */
     if (!record) {
       nothingToLookUp(
-        network,
+        networkOfKey(key),
         'this browser holds no name record for that network any more, so there was nothing to look up',
       );
       continue;
     }
+    const network = record.network;
     if (record.status !== 'registered') {
       nothingToLookUp(
         network,
@@ -1901,12 +1973,20 @@ export async function confirmRestoredAliases(
       );
       continue;
     }
-    const mine = contractAddresses.get(network);
-    const restored = restoredAddresses.get(network);
+    /* WHOSE contracts this name is compared against — see the note on the two
+       indexes above. An owned record narrows to its own credential; a legacy
+       one, which names nobody, falls back to the network. */
+    const scope = record.credentialId
+      ? passportContractRecordKey(record.credentialId, network)
+      : network;
+    const mine = contractAddresses.get(scope);
+    const restored = restoredAddresses.get(scope);
     if (!mine && !restored) {
       leaveUnconfirmed(
         network,
-        'this browser holds no Passport contract on that network, so there is nothing here for the name to be bound to',
+        record.credentialId
+          ? 'this browser holds no Passport contract for this credential on that network, so there is nothing here for the name to be bound to'
+          : 'this browser holds no Passport contract on that network, so there is nothing here for the name to be bound to',
       );
       continue;
     }

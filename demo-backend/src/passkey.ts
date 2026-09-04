@@ -195,6 +195,32 @@ export interface DiscoveredPassportPasskey {
    * {@link PassportAccountBlobWriteOutcome}.
    */
   accountBlobWritten: PassportAccountBlobWriteOutcome | null;
+  /**
+   * What THIS assertion revealed about whether the credential can hold a blob:
+   * `true` when the platform answered for largeBlob, `false` when it did not
+   * answer at all, and `null` when this assertion never asked.
+   *
+   * WHY AN ASSERTION IS ASKED THIS AND NOT JUST ENROLMENT (2026/09/04).
+   * Enrolment reports `largeBlob.supported` and that is the cheapest answer
+   * there is — but only the browser that enrolled the credential ever sees it.
+   * A passkey synced from another device, or one picked out of the platform's
+   * own account picker, arrives here with the question unanswered, and the
+   * app then had no way to learn the answer except by attempting a WRITE. On
+   * Android that attempt is the failure being fixed: Chrome filters the
+   * account picker down to credentials that can satisfy the extension, a
+   * Google Password Manager passkey cannot, and the sheet comes up with
+   * nothing selectable in it and never settles. What the user reports is that
+   * "the passkey prompt did not finish".
+   *
+   * A READ answers the same question for free and cannot filter anything out.
+   * By specification the client omits the whole `largeBlob` output when the
+   * authenticator does not implement the extension, and returns `largeBlob:
+   * {}` when it does and simply has nothing stored — which is the same rule
+   * {@link accountBlobWriteOutcome} has always read a write by. So every
+   * ordinary sign-in now learns the answer before anything is ever owed to a
+   * write, and the write that would have hung is never raised.
+   */
+  largeBlobSupported: boolean | null;
   /** Same bytes {@link WebAuthnPrfKeyProvider.deriveWalletSeed} would produce for `scope`. */
   deriveWalletSeed(scope: PassportStateScope): Promise<Uint8Array>;
   /** Same key {@link WebAuthnPrfKeyProvider.getKey} would derive for `scope` (uncached). */
@@ -505,6 +531,7 @@ function oneShotFromPrf(
   prfResult: ArrayBuffer,
   accountBlob: PassportAccountBlob | null = null,
   accountBlobWritten: PassportAccountBlobWriteOutcome | null = null,
+  largeBlobSupported: boolean | null = null,
 ): DiscoveredPassportPasskey {
   let output: Uint8Array | null = new Uint8Array(prfResult);
   const take = (): Uint8Array => {
@@ -515,6 +542,7 @@ function oneShotFromPrf(
     credentialId,
     accountBlob,
     accountBlobWritten,
+    largeBlobSupported,
     deriveWalletSeed: async (scope) => deriveWalletSeedBytes(take(), scope),
     deriveStateKey: async (scope) => deriveKey(take(), scope),
     dispose: () => {
@@ -543,11 +571,35 @@ type PrfExtensionResults = AuthenticationExtensionsClientOutputs & {
  * one assertion, which is why {@link WebAuthnPrfKeyProvider.writeAccountBlob}
  * is a ceremony of its own.
  */
-function readExtensions(): AuthenticationExtensionsClientInputs {
+function readExtensions(largeBlob = true): AuthenticationExtensionsClientInputs {
   return {
     prf: { eval: { first: asArrayBuffer(PRF_SALT) } },
-    largeBlob: { read: true },
+    /* OMITTED ENTIRELY, not sent as `read: false`, when the caller already
+       knows this credential has no largeBlob. An extension the client has to
+       reconcile against the authenticator's capabilities is one more thing
+       that can narrow a picker; an extension that was never sent cannot. */
+    ...(largeBlob ? { largeBlob: { read: true } } : {}),
   } as AuthenticationExtensionsClientInputs;
+}
+
+/**
+ * What an assertion that asked for a READ revealed about largeBlob support.
+ *
+ * The same rule {@link accountBlobWriteOutcome} reads a write by, and it is the
+ * specification's: a client that finds no largeBlob support omits the output
+ * altogether, and one that finds support but no stored blob returns an empty
+ * slice. So an absent slice is a definite no about this credential, and an
+ * empty one is a definite yes — the difference between "cannot" and "has not".
+ *
+ * `null` where the assertion never asked, which is the one case in which
+ * nothing at all was learnt and nothing may be written down.
+ */
+function accountBlobReadSupport(
+  extension: PrfExtensionResults,
+  asked: boolean,
+): boolean | null {
+  if (!asked) return null;
+  return extension.largeBlob !== undefined;
 }
 
 /**
@@ -608,6 +660,20 @@ export interface AssertPassportPasskeyOptions {
    * already knows its own contract.
    */
   writeAccountBlob?: PassportAccountBlob | null;
+  /**
+   * Whether this assertion may touch the largeBlob extension AT ALL. Defaults
+   * to `true`; pass `false` where the caller has already learnt that this
+   * credential cannot hold a blob.
+   *
+   * It suppresses the read AND the write, and the write is the one that
+   * matters: on Android, Chrome narrows the passkey sheet to credentials that
+   * can satisfy the extensions asked for, a Google Password Manager passkey
+   * cannot satisfy largeBlob, and the sheet then has nothing in it and never
+   * settles. That is the "the passkey prompt did not finish" report of
+   * 2026/09/04. Suppressing the read as well costs nothing on such a
+   * credential — there is by definition no blob on it to read.
+   */
+  largeBlob?: boolean;
 }
 
 /**
@@ -863,9 +929,16 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
     options: AssertPassportPasskeyOptions = {},
   ): Promise<DiscoveredPassportPasskey> {
     const navigator = getNavigator();
-    /* Null both when nothing was offered and when what was offered will not
-       encode; either way this assertion reads, exactly as it always did. */
-    const write = options.writeAccountBlob ? writeExtensions(options.writeAccountBlob) : null;
+    /* A credential the caller has already learnt cannot hold a blob is asserted
+       with no largeBlob slice at all — neither half. See
+       {@link AssertPassportPasskeyOptions.largeBlob} for the Android sheet that
+       never settles. */
+    const largeBlob = options.largeBlob !== false;
+    /* Null both when nothing was offered, when the caller has ruled largeBlob
+       out, and when what was offered will not encode; in every one of them this
+       assertion reads, exactly as it always did. */
+    const write =
+      largeBlob && options.writeAccountBlob ? writeExtensions(options.writeAccountBlob) : null;
     try {
       const assertion = (await navigator.credentials.get({
         publicKey: {
@@ -874,7 +947,7 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
             { type: 'public-key', id: asArrayBuffer(fromBase64(reference.credentialId)) },
           ],
           userVerification: 'required',
-          extensions: write ?? readExtensions(),
+          extensions: write ?? readExtensions(largeBlob),
           ...(reference.rpId ? { rpId: reference.rpId } : {}),
         },
       })) as PublicKeyCredential | null;
@@ -889,6 +962,11 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
         // An assertion that wrote read nothing — the two are exclusive.
         write ? null : decodeAccountBlob(extension.largeBlob?.blob),
         write ? accountBlobWriteOutcome(extension) : null,
+        /* Learnt from whichever half this assertion actually sent. A write
+           already answers it through its own outcome, so only the read has to
+           be interrogated separately; an assertion that sent neither learnt
+           nothing and says so with `null`. */
+        write ? null : accountBlobReadSupport(extension, largeBlob),
       );
     } catch (error) {
       throw new Error(errorMessage(error));
@@ -920,6 +998,11 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
           // makes the authenticator offer every resident credential for this
           // rpId instead of demanding one we name in advance.
           userVerification: 'required',
+          /* A discoverable assertion always reads. It is the one ceremony that
+             can meet a credential this browser has never seen — the passkey
+             synced from another device — so the blob is the only thing that can
+             tell it which account to look for, and the answer about support is
+             the only one it will ever get for free. */
           extensions: readExtensions(),
           ...(rpId ? { rpId } : {}),
         },
@@ -942,6 +1025,8 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
         toBase64(new Uint8Array(assertion.rawId)),
         result,
         decodeAccountBlob(extension.largeBlob?.blob),
+        null,
+        accountBlobReadSupport(extension, true),
       );
     } catch (error) {
       if (error instanceof PassportPasskeyDiscoveryError) throw error;

@@ -25,6 +25,8 @@ import {
   accountRecheckDelayMs,
   accountToRemember,
   aliasFromRecoveredAccount,
+  learnedLargeBlobSupport,
+  mayUseLargeBlob,
   pendingAccountBlob,
   settledAccountOnPasskey,
   type AccountOnPasskeyProfile,
@@ -133,6 +135,74 @@ describe('pendingAccountBlob', () => {
         accountOnPasskey: { ...ACCOUNT, written: false },
       }),
     ).toBeNull();
+  });
+});
+
+describe('mayUseLargeBlob', () => {
+  /* THE ANDROID PROMPT THAT NEVER FINISHED (2026/09/04).
+     Google Password Manager's passkeys implement PRF and not largeBlob, and
+     Chrome on Android narrows its account sheet to credentials that can satisfy
+     the extensions a request asks for. An assertion that asks for a largeBlob
+     slice against such a passkey therefore raises a sheet with nothing
+     selectable in it, and the sheet does not settle — which is what the
+     reviewer met, on an ordinary sign-in, days after the claim that owed the
+     write. This rule is what stops the app asking. */
+
+  it('lets an assertion ask when nothing has said otherwise', () => {
+    /* Absent is "nobody has told us", not "no". A browser that has never seen
+       an answer must still be allowed to find one out — that is how the
+       credential's own read discovers it. */
+    expect(mayUseLargeBlob({})).toBe(true);
+    expect(mayUseLargeBlob(null)).toBe(true);
+    expect(mayUseLargeBlob(undefined)).toBe(true);
+  });
+
+  it('lets an assertion ask when the platform said the credential can hold one', () => {
+    expect(mayUseLargeBlob({ largeBlobSupported: true })).toBe(true);
+  });
+
+  it('refuses to ask once the platform has said the credential cannot', () => {
+    /* The one answer that stops it, and it is a definite answer rather than an
+       inference from a failure: enrolment's own `largeBlob.supported`, a write
+       that came back unsupported, or a read whose results bag had no largeBlob
+       slice at all. */
+    expect(mayUseLargeBlob({ largeBlobSupported: false })).toBe(false);
+  });
+});
+
+describe('learnedLargeBlobSupport', () => {
+  it('writes down a definite answer the profile did not have', () => {
+    expect(learnedLargeBlobSupport({}, false)).toEqual({ largeBlobSupported: false });
+    expect(learnedLargeBlobSupport({}, true)).toEqual({ largeBlobSupported: true });
+  });
+
+  it('learns nothing from an assertion that never asked', () => {
+    /* `null` is the assertion saying it did not send a largeBlob slice, which
+       is not evidence about the credential and must never be recorded as any.
+       Writing it down as `false` would retire the capability on the strength of
+       a question nobody put. */
+    expect(learnedLargeBlobSupport({}, null)).toBeNull();
+    expect(learnedLargeBlobSupport({}, undefined)).toBeNull();
+  });
+
+  it('does not rewrite an answer the profile already holds', () => {
+    /* A sign-in happens on every visit and this answer never changes, so a
+       patch here would be a storage write and a re-render per session for a
+       value nobody read differently. */
+    expect(learnedLargeBlobSupport({ largeBlobSupported: false }, false)).toBeNull();
+    expect(learnedLargeBlobSupport({ largeBlobSupported: true }, true)).toBeNull();
+  });
+
+  it('lets a later answer correct an earlier one', () => {
+    /* Not symmetrical with the rule above and deliberately so: the two answers
+       come from different ceremonies, and a credential that has just PROVED it
+       can hold a blob outranks whatever enrolment guessed. */
+    expect(learnedLargeBlobSupport({ largeBlobSupported: false }, true)).toEqual({
+      largeBlobSupported: true,
+    });
+    expect(learnedLargeBlobSupport({ largeBlobSupported: true }, false)).toEqual({
+      largeBlobSupported: false,
+    });
   });
 });
 
@@ -269,14 +339,20 @@ describe('accountFromBlob', () => {
 
 describe('aliasFromRecoveredAccount', () => {
   const NOW = '2026-09-03T12:00:00.000Z';
+  const CREDENTIAL = 'cred-a';
 
   it('restores the name against the account it was read beside, unconfirmed', () => {
     expect(
       aliasFromRecoveredAccount(
+        CREDENTIAL,
         { address: 'b'.repeat(64), network: 'stagenet', alias: 'passportwalk' },
         NOW,
       ),
     ).toEqual({
+      /* The credential the blob was read off. Since 2026/09/04 an alias record
+         that does not say whose it is cannot be stored at all — see
+         `../identity/aliasStore.ts` for the orphaned Passport that closes. */
+      credentialId: CREDENTIAL,
       alias: 'passportwalk',
       domain: 'passportwalk.night',
       network: 'stagenet',
@@ -294,6 +370,7 @@ describe('aliasFromRecoveredAccount', () => {
        with a restore's sentence — including a promise to re-check that nothing
        re-checks a recovered record. Absent is the state this record is in. */
     const record = aliasFromRecoveredAccount(
+      CREDENTIAL,
       { address: 'b'.repeat(64), network: 'stagenet', alias: 'passportwalk' },
       NOW,
     );
@@ -302,7 +379,7 @@ describe('aliasFromRecoveredAccount', () => {
 
   it('restores nothing for an account with no name', () => {
     expect(
-      aliasFromRecoveredAccount({ address: 'b'.repeat(64), network: 'stagenet' }, NOW),
+      aliasFromRecoveredAccount(CREDENTIAL, { address: 'b'.repeat(64), network: 'stagenet' }, NOW),
     ).toBeNull();
   });
 });

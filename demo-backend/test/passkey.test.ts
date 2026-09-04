@@ -432,6 +432,90 @@ describe('WebAuthn largeBlob account metadata', () => {
     expect(await outcomeFor(undefined)).toBe('unsupported');
   });
 
+  it('sends no largeBlob slice at all for a credential known not to hold one', async () => {
+    /* THE ANDROID PROMPT THAT NEVER FINISHED (2026/09/04).
+       Google Password Manager's passkeys implement PRF and do not implement
+       largeBlob, and Chrome on Android narrows its account sheet to the
+       credentials that can satisfy the extensions a request asks for. An
+       assertion asking for a largeBlob write against a GPM passkey therefore
+       raises a sheet with nothing selectable in it, and it does not settle —
+       reported as "the passkey prompt did not finish", on an ordinary sign-in,
+       days after the claim that owed the write.
+
+       So `largeBlob: false` OMITS the slice rather than sending `read: false`.
+       An extension the client must reconcile against the authenticator is one
+       more thing that can narrow a picker; one that was never sent cannot. */
+    let capturedOptions: CredentialRequestOptions | undefined;
+    replaceNavigator({
+      credentials: {
+        get: async (options: CredentialRequestOptions) => {
+          capturedOptions = options;
+          return {
+            rawId: new Uint8Array([1, 2, 3, 4]).buffer,
+            getClientExtensionResults: () => ({
+              prf: { results: { first: new Uint8Array(32).fill(4).buffer } },
+            }),
+          };
+        },
+      },
+    });
+
+    const once = await WebAuthnPrfKeyProvider.assertOnce(reference, {
+      writeAccountBlob: blob,
+      largeBlob: false,
+    });
+    const extensions = assertionExtensions(capturedOptions);
+    // Not `{ read: false }`, and not `{ write: … }`. Absent.
+    expect('largeBlob' in extensions).toBe(false);
+    // The PRF is untouched: the sign-in itself must still work, and on Android
+    // it is the only extension that ever did.
+    expect(extensions.prf).toBeDefined();
+    expect(await once.deriveWalletSeed(scope)).toHaveLength(32);
+    // Nothing was written and nothing was read, and neither is claimed.
+    expect(once.accountBlobWritten).toBeNull();
+    expect(once.accountBlob).toBeNull();
+    /* And nothing was LEARNT. An assertion that did not ask has no evidence
+       about the credential, and recording one would retire a capability on the
+       strength of a question nobody put. */
+    expect(once.largeBlobSupported).toBeNull();
+    once.dispose();
+  });
+
+  it('learns from an ordinary read whether the credential can hold a blob at all', async () => {
+    /* THE CHEAP HALF OF THE SAME FIX. Only the browser that ENROLLED a
+       credential ever sees `largeBlob.supported`; a passkey synced from another
+       device, or picked out of the platform's own account picker, arrives with
+       the question open — and the app then had no way to answer it except by
+       attempting the write that hangs. A read answers it for free and cannot
+       narrow a picker. By specification the client omits the whole output when
+       the authenticator has no largeBlob, and returns an empty slice when it
+       has one and simply holds nothing: "cannot" against "has not". */
+    const supportFor = async (largeBlob: unknown): Promise<boolean | null> => {
+      replaceNavigator({
+        credentials: {
+          get: async () => ({
+            rawId: new Uint8Array([1, 2, 3, 4]).buffer,
+            getClientExtensionResults: () => ({
+              prf: { results: { first: new Uint8Array(32).fill(4).buffer } },
+              ...(largeBlob === undefined ? {} : { largeBlob }),
+            }),
+          }),
+        },
+      });
+      const once = await WebAuthnPrfKeyProvider.assertOnce(reference);
+      const supported = once.largeBlobSupported;
+      once.dispose();
+      return supported;
+    };
+
+    // Supported, and holding nothing yet.
+    expect(await supportFor({})).toBe(true);
+    // Supported, and holding something.
+    expect(await supportFor({ blob: new Uint8Array([1]).buffer })).toBe(true);
+    // The slice is absent altogether: this credential will never hold a blob.
+    expect(await supportFor(undefined)).toBe(false);
+  });
+
   it('falls back to the read rather than failing a sign-in over an unencodable blob', async () => {
     /* An oversize payload is a programming error. It must not be the reason
        somebody cannot get into their Passport, so the assertion sends exactly
