@@ -130,6 +130,33 @@ describe('passkeySignInRecovery', () => {
     expect(passkeySignInRecovery({ stage: 'credential', timedOut: false })).toBe('keyless');
     expect(passkeySignInRecovery({ stage: 'credential', reason: null })).toBe('keyless');
   });
+
+  it('never answers a PRF-less ENROLMENT with another enrolment', () => {
+    /* The Android shape, found by `e2e/android-shapes.spec.ts` on 2026/09/04.
+       The platform made the passkey it was asked for and left out the
+       extension the wallet seed derives from, so the passkey it makes next
+       time is the same passkey — and "create a new passkey" is a button that
+       returns the reader to this panel for ever. It is the same `prf-missing`
+       the discoverable path reports, and it must NOT reach the same answer. */
+    expect(passkeySignInRecovery({ stage: 'enrolment', reason: 'prf-missing' })).toBe(
+      'unusable-device',
+    );
+    expect(passkeySignInRecovery({ stage: 'credential', reason: 'prf-missing' })).toBe(
+      'unusable-credential',
+    );
+  });
+
+  it('leaves every other enrolment failure to the button that was just pressed', () => {
+    /* A dismissed sheet or a keystore that was busy has said nothing about
+       what this platform can do, so there is nothing to explain and nothing to
+       offer that is not already on the screen. */
+    expect(passkeySignInRecovery({ stage: 'enrolment', reason: 'cancelled' })).toBe('none');
+    expect(passkeySignInRecovery({ stage: 'enrolment', reason: 'failed' })).toBe('none');
+    expect(passkeySignInRecovery({ stage: 'enrolment' })).toBe('none');
+    /* And the watchdog does not change it either way: an enrolment nobody
+       answered is not evidence about the platform's extensions. */
+    expect(passkeySignInRecovery({ stage: 'enrolment', timedOut: true })).toBe('none');
+  });
 });
 
 describe('KEYLESS_PASSKEY_MESSAGE', () => {

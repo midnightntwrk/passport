@@ -80,6 +80,22 @@ export interface OnboardingProps {
    */
   keylessPasskey?: string | null
   /**
+   * The passkey this device MADE cannot open a Passport, or null when that has
+   * not happened. Holds the sentence to show.
+   *
+   * The third dead end, and the only one whose way out is not a button on this
+   * screen. The platform was asked for the extension Passport derives keys
+   * from, it made the passkey without it, and it will do the same next time —
+   * so there is nothing to press here that would change the answer, and a
+   * "Create a new passkey" control would be a loop wearing the clothes of a
+   * remedy. What the copy points at instead is a passkey held somewhere else,
+   * which "Use a different passkey" below reaches through the platform's own
+   * cross-device sheet, and another device.
+   *
+   * Found on Android by `e2e/android-shapes.spec.ts`, 2026/09/04.
+   */
+  unusableDevice?: string | null
+  /**
    * Enrols a NEW passkey, deliberately. Offered only alongside
    * {@link OnboardingProps.unusableCredential} or
    * {@link OnboardingProps.keylessPasskey}, because those are the states in
@@ -198,6 +214,7 @@ export default function OnboardingScreen(props: OnboardingProps) {
     onUseDifferentPasskey,
     unusableCredential,
     keylessPasskey,
+    unusableDevice,
     onCreateNewPasskey,
     onStartFresh,
     onDismissError,
@@ -214,7 +231,9 @@ export default function OnboardingScreen(props: OnboardingProps) {
      carry a second copy of it. Two buttons with the same words on one screen
      is not emphasis — it is the reader wondering whether they do the same
      thing, on the screen where they are already stuck. */
-  const wayOutShown = Boolean((unusableCredential || keylessPasskey) && stage === 'welcome')
+  const wayOutShown = Boolean(
+    (unusableCredential || keylessPasskey || unusableDevice) && stage === 'welcome',
+  )
 
   const continueHint =
     hasExistingPassport === true
@@ -299,6 +318,19 @@ export default function OnboardingScreen(props: OnboardingProps) {
             onCreateNewPasskey={onCreateNewPasskey}
             onStartFresh={startFresh}
           />
+        ) : null}
+
+        {/* DEAD END THREE, AND THE ONE WITH NO BUTTON OF ITS OWN (2026/09/04).
+            A passkey was made here and came back unable to derive a key. Every
+            control this screen could offer that MAKES something would ask the
+            same platform the same question and get the same passkey, so none
+            is offered: the sentence names the two things that do lead
+            somewhere, and "Use a different passkey" beneath it is the one of
+            them this screen can run. `onStartFresh` still appears where this
+            browser holds records, because forgetting them is a real thing to
+            want here and is never a loop. */}
+        {unusableDevice && stage === 'welcome' ? (
+          <PasskeyWayOut copy={unusableDevice} onStartFresh={startFresh} />
         ) : null}
 
         {stage === 'welcome' ? (

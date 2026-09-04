@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ENROLMENT_PRF_MISSING_MESSAGE,
   EncryptedPassportPrivateStateStore,
   IndexedDbPassportEncryptedRecordStore,
   PassportEnrolmentConflictError,
@@ -1300,6 +1301,26 @@ export default function PassportDemo() {
    * panel shows.
    */
   const [keylessPasskey, setKeylessPasskey] = useState<string | null>(null);
+  /**
+   * Set when the passkey this app JUST MADE came back without a PRF result —
+   * the Android shape, and a different fact from either state above.
+   *
+   * `unusableCredential` is somebody else's passkey answering a picker, and
+   * the answer to it is a passkey of our own. This is the platform answering
+   * about itself: it was asked for the extension the wallet seed derives from,
+   * it made the credential and left the extension out, and it will do exactly
+   * that again. So the panel this state raises carries no "create" control —
+   * the only doors that lead anywhere are a passkey held somewhere else,
+   * through the platform's own cross-device sheet, or another device.
+   *
+   * Found on 2026/09/04 by `e2e/android-shapes.spec.ts`. What the screen said
+   * before it was a state at all: "Passport passkeys require a valid HTTPS
+   * origin or localhost relying-party domain" — a banner, on `localhost`,
+   * about a thing that was not wrong, with no control under it. See
+   * `demo-backend/src/passkey.ts#errorMessage` for how that sentence was
+   * reached.
+   */
+  const [unusableDevice, setUnusableDevice] = useState<string | null>(null);
   const [localSurfaces, setLocalSurfaces] = useState<LocalWalletSurfaces | null>(null);
   const [localWalletStatus, setLocalWalletStatus] = useState<LocalWalletStatus>('idle');
   const [localSyncPercent, setLocalSyncPercent] = useState<number | null>(null);
@@ -2494,6 +2515,40 @@ export default function PassportDemo() {
     return new PasskeyWayOutError(KEYLESS_PASSKEY_MESSAGE, detail);
   };
 
+  /**
+   * The same wiring for the ceremony that MAKES a credential, and the reason
+   * it cannot be the function above.
+   *
+   * `signInCeremonyFailure` answers every unexplained failure with "make a new
+   * passkey", which is right when the thing that failed was an assertion. It
+   * is the loop when the thing that failed was a creation: a platform that
+   * returns a passkey with no PRF returns the same passkey next time, and the
+   * button would put the reader back on the panel that offered it. So the rule
+   * is asked with `stage: 'enrolment'`, which is the one stage that may answer
+   * `unusable-device` — a state with no create control at all.
+   *
+   * Every other enrolment failure is handed straight back. A dismissed sheet
+   * and a busy keystore are the button that was pressed not working this time,
+   * and the banner plus the button already on the screen is the whole of the
+   * honest response.
+   */
+  const enrolmentCeremonyFailure = (cause: unknown): unknown => {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    const recovery = passkeySignInRecovery({
+      stage: 'enrolment',
+      reason: cause instanceof PassportPasskeyDiscoveryError ? cause.reason : null,
+      timedOut: cause instanceof PasskeyCeremonyTimeout,
+    });
+    if (recovery !== 'unusable-device') return cause;
+    setUnusableDevice(detail);
+    /* Thrown as a way-out failure so the banner stands down and the panel is
+       the only thing saying this — the same rule the other two panels follow.
+       The message and the detail are the same sentence here because the
+       backend's account of this failure IS the sentence a reader needs; there
+       is no platform jargon to keep out of the way. */
+    return new PasskeyWayOutError(ENROLMENT_PRF_MISSING_MESSAGE, detail);
+  };
+
   const knownLocalCredentialIds = async (): Promise<string[]> =>
     (await listLocalProfiles().catch(() => []))
       .map((candidate) => candidate.passkey.credentialId)
@@ -2664,7 +2719,7 @@ export default function PassportDemo() {
         }),
       );
     } catch (cause) {
-      if (!(cause instanceof PassportEnrolmentConflictError)) throw cause;
+      if (!(cause instanceof PassportEnrolmentConflictError)) throw enrolmentCeremonyFailure(cause);
       return signInAfterEnrolmentConflict();
     }
     return { profile: await adoptEnrolledPasskey(enrolled), created: true };
@@ -2766,7 +2821,7 @@ export default function PassportDemo() {
             })),
       );
     } catch (cause) {
-      if (!(cause instanceof PassportEnrolmentConflictError)) throw cause;
+      if (!(cause instanceof PassportEnrolmentConflictError)) throw enrolmentCeremonyFailure(cause);
       return signInAfterEnrolmentConflict();
     }
     if (onboarding.outcome === 'unusable-credential') {
@@ -2924,6 +2979,7 @@ export default function PassportDemo() {
        of these panels put there. */
     setUnusableCredential(null);
     setKeylessPasskey(null);
+    setUnusableDevice(null);
     setError(null);
     // Provisional intent so the screen flips to its working stage at once;
     // the resolved journey below corrects the label.
@@ -3044,6 +3100,7 @@ export default function PassportDemo() {
        try is never read against the first try's explanation. */
     setUnusableCredential(null);
     setKeylessPasskey(null);
+    setUnusableDevice(null);
     setError(null);
     setOnboardingIntent('local-signin');
     setOnboardingBusyLabel('Choose a passkey on this device');
@@ -5018,6 +5075,7 @@ export default function PassportDemo() {
     setOnboardingError(null);
     setUnusableCredential(null);
     setKeylessPasskey(null);
+    setUnusableDevice(null);
     // The identity steps re-decide on the next sign-in. The alias records
     // themselves are NOT cleared: the same passkey re-derives the same wallet,
     // so the name it registered is still that wallet's name.
@@ -7691,6 +7749,11 @@ export default function PassportDemo() {
           unusableCredential={unusableCredential}
           keylessPasskey={keylessPasskey}
           onCreateNewPasskey={() => startPasskeyOnboarding('enrol-new')}
+          /* And the third, which is deliberately NOT wired to
+             `onCreateNewPasskey`: the passkey this device makes is the thing
+             that failed, so making another is the loop rather than the
+             remedy. The panel explains and points off the device. */
+          unusableDevice={unusableDevice}
           /* And the way out of a Passport that is WRONG rather than
              unreachable — the orphaned name with no account behind it that a
              reviewer could not escape on Android. It forgets this device's

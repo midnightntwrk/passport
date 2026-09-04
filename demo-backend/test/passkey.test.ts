@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  ENROLMENT_PRF_MISSING_MESSAGE,
   MAX_ACCOUNT_BLOB_BYTES,
   PassportEnrolmentConflictError,
   PassportPasskeyDiscoveryError,
@@ -900,6 +901,73 @@ describe('enrolment overwrite guard', () => {
     });
     await expect(enrolment).rejects.not.toBeInstanceOf(PassportEnrolmentConflictError);
     await expect(enrolment).rejects.toThrow('The user cancelled.');
+  });
+
+  it('reports a passkey it MADE with no PRF as itself, in words about the device', async () => {
+    /* THE ANDROID SHAPE, found by `examples/passport-demo/e2e/android-shapes.
+       spec.ts` on 2026/09/04. The platform honours the create, honours the
+       largeBlob preference, and returns no PRF at all — so the credential
+       exists and can derive nothing.
+
+       TWO THINGS ARE ASSERTED, AND THE SECOND IS THE DEFECT. It travels as a
+       typed failure carrying `prf-missing`, so the surface can tell it from an
+       assertion's `prf-missing` and refuse to offer a create that would loop.
+       And its sentence arrives INTACT: the message it used to throw ended
+       "…or PRF-capable security key", `errorMessage`'s substring sniff matched
+       the word "security", and a reviewer on `localhost` was told their origin
+       was not a valid HTTPS one. */
+    replaceNavigator({
+      credentials: {
+        create: async () => ({
+          rawId: new Uint8Array([9, 9]).buffer,
+          getClientExtensionResults: () => ({}),
+        }),
+      },
+    });
+    const enrolment = WebAuthnPrfKeyProvider.enrollWithPrf({
+      label: 'Midnight Passport',
+      userId: 'local-no-prf',
+    });
+    await expect(enrolment).rejects.toBeInstanceOf(PassportPasskeyDiscoveryError);
+    await expect(enrolment).rejects.toMatchObject({ reason: 'prf-missing' });
+    await expect(enrolment).rejects.toThrow(ENROLMENT_PRF_MISSING_MESSAGE);
+    /* And it says nothing a reader cannot act on. */
+    expect(ENROLMENT_PRF_MISSING_MESSAGE).not.toMatch(/PRF|WebAuthn|extension/i);
+    await expect(enrolment).rejects.not.toThrow(/HTTPS origin/);
+  });
+
+  it('rewrites a relying-party refusal by its NAME, never by its wording', async () => {
+    /* The origin message is worth keeping — "The operation is insecure" tells
+       a reader nothing — but it is earned by `SecurityError`, which is what a
+       browser raises for an RP id the origin cannot claim. Deciding it by
+       matching words over free text is how Passport's own sentences got
+       rewritten into a false diagnosis. */
+    replaceNavigator({
+      credentials: {
+        create: async () => {
+          const error = new Error('The operation is insecure.');
+          error.name = 'SecurityError';
+          throw error;
+        },
+      },
+    });
+    await expect(
+      WebAuthnPrfKeyProvider.enrollWithPrf({ label: 'Midnight Passport', userId: 'local-rp' }),
+    ).rejects.toThrow(/valid HTTPS origin/);
+
+    replaceNavigator({
+      credentials: {
+        create: async () => {
+          throw new Error('The security key was removed before it answered.');
+        },
+      },
+    });
+    const unnamed = WebAuthnPrfKeyProvider.enrollWithPrf({
+      label: 'Midnight Passport',
+      userId: 'local-plain',
+    });
+    await expect(unnamed).rejects.toThrow('The security key was removed before it answered.');
+    await expect(unnamed).rejects.not.toThrow(/HTTPS origin/);
   });
 
   it('signs in to a resident credential instead of creating one', async () => {

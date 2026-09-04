@@ -58,6 +58,18 @@ export type PasskeyCeremonyContext = 'sign-in' | 'mid-session';
 export type PasskeySignInStage =
   /** The WebAuthn ceremony that was supposed to hand back a credential. */
   | 'credential'
+  /**
+   * The ceremony that MADE a credential — a create, not an assertion.
+   *
+   * Separate from `credential` because the same reason means a different thing
+   * on each. A credential that answers an assertion without a PRF is somebody
+   * else's passkey, and a new one of our own is the way past it. A credential
+   * this app just created that comes back without a PRF is the platform's
+   * answer about ITSELF, and creating a second one asks the same platform the
+   * same question — which is a loop, and is what an Android reviewer walked
+   * into on 2026/09/04.
+   */
+  | 'enrolment'
   /** Anything after it: decrypting the record, deriving the seed, opening the wallet. */
   | 'open';
 
@@ -67,6 +79,13 @@ export type PasskeySignInRecovery =
   | 'keyless'
   /** A credential answered and cannot open a Passport. Offer to enrol a new one. */
   | 'unusable-credential'
+  /**
+   * A credential MADE here cannot open a Passport, so no credential this
+   * platform makes can. Explain it, and offer the doors that lead off this
+   * platform — a passkey held elsewhere, or another device. Never an
+   * enrolment: that is the thing that has just failed.
+   */
+  | 'unusable-device'
   /**
    * A ceremony inside an open session could not be completed. Offer the same
    * action again, and a way out of the session — never an enrolment, which
@@ -91,7 +110,15 @@ export interface PasskeySignInFailure {
 }
 
 /**
- * The rule, and the reason behind each of its five answers.
+ * The rule, and the reason behind each of its six answers.
+ *
+ * `enrolment` with `prf-missing` → `unusable-device`, and it is the first
+ * branch because it is the only one that must NOT offer to make a passkey. The
+ * passkey has just been made: the platform was asked for the extension the
+ * wallet seed comes from, it made the credential and left the extension out,
+ * and it will do the same next time. Every other enrolment failure → `none`:
+ * a dismissed sheet or a busy keystore has said nothing about the platform,
+ * and the button that was pressed is still the right one to press again.
  *
  * `mid-session` at the `credential` stage → `retry-or-sign-out`, whatever the
  * platform said and whether or not the watchdog fired. This is the one branch
@@ -130,6 +157,16 @@ export interface PasskeySignInFailure {
  * offers to make one — which is the honest response to all three.
  */
 export function passkeySignInRecovery(failure: PasskeySignInFailure): PasskeySignInRecovery {
+  /* THE ENROLMENT ANSWER, first because it is the only one that may not offer
+     an enrolment. A passkey this app just made, on this device, that came back
+     with no PRF is the platform saying what it can do; asking it again is the
+     loop the Android-shape suite found on 2026/09/04. Any OTHER enrolment
+     failure has said nothing about the platform — a dismissed sheet, a
+     keystore that was busy — so the retry already on the screen is the offer,
+     which is what `none` means. */
+  if (failure.stage === 'enrolment') {
+    return failure.reason === 'prf-missing' ? 'unusable-device' : 'none';
+  }
   if (failure.stage !== 'credential') return 'none';
   if (failure.context === 'mid-session') return 'retry-or-sign-out';
   if (failure.timedOut === true) return 'none';

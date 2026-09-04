@@ -112,6 +112,25 @@ export class PassportPasskeyDiscoveryError extends Error {
 }
 
 /**
+ * What a passkey JUST CREATED here says when it cannot answer with a PRF, and
+ * why it is a sentence about the device rather than about the credential.
+ *
+ * The discoverable path's `prf-missing` means somebody ELSE'S passkey answered
+ * and cannot open a Passport, and the answer to that is to make one that can.
+ * This is the other case, and it is the Android one: the platform made the
+ * passkey Passport asked for, with the extension Passport asked for, and the
+ * passkey came back without it. Making a second one on the same platform
+ * produces the same passkey again, so "create a new passkey" is a loop, and
+ * the only doors that lead anywhere are a passkey held somewhere else — a
+ * phone, through the platform's own cross-device sheet — or another device.
+ *
+ * It names neither WebAuthn nor PRF. A reader cannot act on either word, and
+ * the sentence has to be true on a phone whose owner has never heard them.
+ */
+export const ENROLMENT_PRF_MISSING_MESSAGE =
+  'This passkey cannot be used for Passport on this device — try a different passkey or device.';
+
+/**
  * What {@link WebAuthnPrfKeyProvider.discoverOrEnroll} did: signed in to a
  * resident credential that already existed, or enrolled a new one. Exactly
  * one of the two handles is non-null, and the caller owns disposing it.
@@ -449,9 +468,31 @@ function assertAnsweredAsRequested(expectedCredentialId: string, rawId: ArrayBuf
   return answered;
 }
 
+/**
+ * The platform's account of a ceremony, in words a caller may show.
+ *
+ * IT REWRITES ONE THING AND GUESSES AT NOTHING. A relying-party id the origin
+ * cannot claim is the one WebAuthn failure whose own message is useless to a
+ * reader ("The operation is insecure"), and the browser reports it as a
+ * `SecurityError` — so that name, and only that name, earns the replacement.
+ *
+ * It used to decide by SUBSTRING, on `/invalid domain|relying party|rp id|
+ * security/i` over the message text, and on 2026/09/04 the Android-shape suite
+ * caught what that costs: Passport's own sentence about a passkey with no PRF
+ * ended "…or PRF-capable security key", the word "security" matched, and the
+ * screen told a reviewer on `localhost` that their origin was not a valid
+ * HTTPS one. A sniff over free text will always eventually match a message
+ * somebody wrote for another purpose; the error's NAME is the fact.
+ */
 function errorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  if (/invalid domain|relying party|rp id|security/i.test(message)) {
+  /* Read the way `isUserCancellation` reads a `NotAllowedError`: off the
+     object, not through `instanceof`, because what arrives here is a
+     `DOMException` and its relationship to `Error` is not something to depend
+     on across engines. */
+  const name =
+    typeof error === 'object' && error !== null ? (error as { name?: unknown }).name : undefined;
+  if (name === 'SecurityError') {
     return 'Passport passkeys require a valid HTTPS origin or localhost relying-party domain.';
   }
   return message;
@@ -770,8 +811,9 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
       // A returned result proves the extension is live even on a platform that
       // omits the `enabled` flag when it evaluates eagerly.
       if (!extension.prf?.enabled && !evaluated) {
-        throw new Error(
-          'This authenticator does not support the WebAuthn PRF extension. Use a recent platform passkey or PRF-capable security key.',
+        throw new PassportPasskeyDiscoveryError(
+          'prf-missing',
+          ENROLMENT_PRF_MISSING_MESSAGE,
         );
       }
       const credentialId = toBase64(new Uint8Array(credential.rawId));
@@ -784,6 +826,18 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
             : null,
       };
     } catch (error) {
+      /* A CREDENTIAL WITH NO PRF TRAVELS AS ITSELF, and this rethrow is the
+         whole reason it can. Flattened through `errorMessage` below it became
+         a string, and a string is a thing a surface has to pattern-match; what
+         actually happened on 2026/09/04 was worse than that. The sentence this
+         used to throw contained the word "security", `errorMessage`'s
+         substring sniff matched it, and an Android reviewer on a PRF-less
+         passkey was told "Passport passkeys require a valid HTTPS origin or
+         localhost relying-party domain" — a diagnosis that was false, about a
+         thing that was fine, with nothing to do about it. Typed, the caller
+         reads the reason and puts the right words and the right way out on the
+         screen. */
+      if (error instanceof PassportPasskeyDiscoveryError) throw error;
       // The exclusion list doing its job is a distinct, catchable outcome —
       // never a generic message the caller has to pattern-match, and never a
       // failure toast. It means the user's Passport is still there.

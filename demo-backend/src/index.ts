@@ -18,6 +18,7 @@
 
 export { PassportStateInjection, joinWithPassportState } from './injection.js';
 export {
+  ENROLMENT_PRF_MISSING_MESSAGE,
   MAX_ACCOUNT_BLOB_BYTES,
   PassportEnrolmentConflictError,
   PassportPasskeyDiscoveryError,
