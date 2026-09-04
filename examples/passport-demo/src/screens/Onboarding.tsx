@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { ArrowRight, Fingerprint, Loader2, X } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { ArrowRight, Fingerprint, Loader2, Wallet, X } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
 import './onboarding.css'
 
@@ -90,6 +90,22 @@ export interface OnboardingProps {
    */
   onCreateNewPasskey?: () => void
   onDismissError?: () => void
+  /**
+   * Opens an existing Passport with MetaMask instead of a passkey.
+   *
+   * EXPERIMENT — omitted entirely unless the build was made with
+   * `VITE_METAMASK_DEVICE=1`, and omitted too where MetaMask is not in this
+   * browser, so nobody is offered a route that cannot work. It is deliberately
+   * NOT the primary control: MetaMask can only OPEN a Passport that already
+   * added it as a device, so offering it first to a reader who has neither is
+   * a dead end wearing the top button's clothes.
+   *
+   * The argument is the name the person typed, or `null` where they typed
+   * none. A browser that already paired this MetaMask account needs no name;
+   * one that has not is asked for it, because the account has to be found
+   * before MetaMask can be asked to sign for it.
+   */
+  onSignInWithMetamask?: (name: string | null) => void
 }
 
 /**
@@ -140,7 +156,14 @@ export default function OnboardingScreen(props: OnboardingProps) {
     keylessPasskey,
     onCreateNewPasskey,
     onDismissError,
+    onSignInWithMetamask,
   } = props
+
+  /* The MetaMask route asks for a name only where it needs one, and it does not
+     know whether it needs one until MetaMask has answered — so the field is
+     offered rather than demanded, and an empty one is a real answer. */
+  const [metamaskOpen, setMetamaskOpen] = useState(false)
+  const [metamaskName, setMetamaskName] = useState('')
 
   const continueHint =
     hasExistingPassport === true
@@ -244,6 +267,48 @@ export default function OnboardingScreen(props: OnboardingProps) {
               >
                 Use a different passkey
               </button>
+            ) : null}
+            {onSignInWithMetamask ? (
+              <div className="mnob-metamask">
+                {metamaskOpen ? (
+                  <>
+                    <label className="mnob-metamask-label" htmlFor="mnob-metamask-name">
+                      Your name, if this browser has not seen your MetaMask before
+                    </label>
+                    <input
+                      id="mnob-metamask-name"
+                      className="mnob-metamask-input"
+                      type="text"
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="alice.night"
+                      value={metamaskName}
+                      onChange={(event) => setMetamaskName(event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="mnob-alt"
+                      onClick={() => onSignInWithMetamask(metamaskName.trim() || null)}
+                    >
+                      <Wallet size={15} strokeWidth={2} aria-hidden="true" />
+                      Open with MetaMask
+                    </button>
+                    <p className="mnob-hint">
+                      Opens a Passport that already added this MetaMask as a device. It cannot
+                      create one.
+                    </p>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="mnob-alt"
+                    onClick={() => setMetamaskOpen(true)}
+                  >
+                    <Wallet size={15} strokeWidth={2} aria-hidden="true" />
+                    Sign in with MetaMask
+                  </button>
+                )}
+              </div>
             ) : null}
           </div>
         ) : null}

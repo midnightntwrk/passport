@@ -1607,3 +1607,92 @@ export async function addGrantByCommitment(
     onPhase,
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Devices                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export interface DeviceRequest {
+  contractAddress: string;
+  /**
+   * The commitment, not the secret. `derive_device_commitment` is a pure
+   * circuit and the caller has already run it — see
+   * {@link deriveDeviceCommitment} — so this API takes the public half for the
+   * same reason {@link addGrantByCommitment} does: a device being ADDED may
+   * belong to a holder who never shares their secret with this browser.
+   */
+  deviceCommitment: GrantCommitment;
+}
+
+/**
+ * Admits a second device to this account.
+ *
+ * `add_device` calls `require_device()` first, so the caller must already BE a
+ * device: an account admits its own next device and nobody else can. That is
+ * the whole of the trust model here, and it is why pairing a phone, a second
+ * passkey, or a MetaMask account is one shape rather than three — the contract
+ * only ever sees a `Field`, and where that field came from is the client's
+ * business.
+ *
+ * The commitment is written into the `devices` map at the CURRENT device epoch,
+ * so a later `recover()` invalidates it along with every other device. Adding a
+ * commitment the account already holds in this epoch is refused by the circuit,
+ * which surfaces as `call-rejected` carrying the circuit's own words.
+ */
+export async function addDevice(
+  handle: LocalMidnightWallet,
+  deviceSecret: Uint8Array,
+  request: DeviceRequest,
+  onPhase?: (progress: AccountCustodyProgress) => void,
+): Promise<AccountCustodyTxResult> {
+  onPhase?.({ phase: 'checking' });
+  const commitment = grantCommitmentField(request.deviceCommitment);
+  await requireFees();
+
+  return callAccountCircuit(
+    handle,
+    {
+      contractAddress: request.contractAddress,
+      circuit: 'add_device',
+      args: [commitment],
+      secrets: { deviceSecret },
+    },
+    onPhase,
+  );
+}
+
+/**
+ * Strikes a device off this account.
+ *
+ * Also `require_device()`-gated, and deliberately NOT guarded here against
+ * removing the last one: `device_count` is the contract's own number and the
+ * circuit is the only place that can decide what it will allow. A client-side
+ * guess about what the ledger holds — read a moment ago, over a network — is
+ * exactly the kind of check that reads as a rule and behaves as a race. What
+ * this module owes the caller is the contract's answer, whatever it is.
+ *
+ * A device removing ITSELF is permitted by the circuit and is a real thing a
+ * user might do; the caller is the one that knows whether the secret it holds
+ * is the commitment it is removing, and the screens that offer this say so.
+ */
+export async function removeDevice(
+  handle: LocalMidnightWallet,
+  deviceSecret: Uint8Array,
+  request: DeviceRequest,
+  onPhase?: (progress: AccountCustodyProgress) => void,
+): Promise<AccountCustodyTxResult> {
+  onPhase?.({ phase: 'checking' });
+  const commitment = grantCommitmentField(request.deviceCommitment);
+  await requireFees();
+
+  return callAccountCircuit(
+    handle,
+    {
+      contractAddress: request.contractAddress,
+      circuit: 'remove_device',
+      args: [commitment],
+      secrets: { deviceSecret },
+    },
+    onPhase,
+  );
+}

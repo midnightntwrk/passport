@@ -288,3 +288,43 @@
   .mnob-stage { margin-top: clamp(48px, 12svh, 160px); }
   .mnob-primary { width: auto; min-width: 280px; }
 }
+
+/* ---------------------------------------------------------------------------
+   Sign in with MetaMask — EXPERIMENT, and rendered only by a build made with
+   `VITE_METAMASK_DEVICE=1` on a browser that has MetaMask.
+
+   Deliberately below "Use a different passkey" and in the same secondary
+   button: MetaMask can only OPEN a Passport that already added it, so it is
+   never the first thing a new reader is offered.
+   --------------------------------------------------------------------------- */
+
+.mnob-metamask {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.mnob-metamask-label {
+  font-size: 0.75rem;
+  opacity: 0.75;
+  text-align: left;
+}
+
+.mnob-metamask-input {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--mn-border, rgba(127, 127, 127, 0.35));
+  border-radius: 0.6rem;
+}
+
+.mnob-metamask .mnob-alt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}

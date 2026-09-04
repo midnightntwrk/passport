@@ -1445,3 +1445,57 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
 }
+
+/* ---------------------------------------------------------------------------
+   Devices — MetaMask as a second way into an account. EXPERIMENT, and rendered
+   only by a build made with `VITE_METAMASK_DEVICE=1`.
+
+   No new vocabulary: the shell is `mnhome-card`, the label `mnhome-card-head`,
+   the explanation `mnhome-card-unit`, and both controls are the Send sheet's
+   own buttons. What is here is the row list and the caveat line, which nothing
+   else on this screen has.
+   --------------------------------------------------------------------------- */
+
+.mnhome-device-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mnhome-device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--mn-border, rgba(127, 127, 127, 0.28));
+  border-radius: 0.6rem;
+}
+
+.mnhome-device-name {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.mnhome-device .mnhome-send-secondary {
+  flex: 0 0 auto;
+  width: auto;
+  padding-inline: 0.85rem;
+}
+
+.mnhome-devices .mnhome-send-primary {
+  margin-top: 0.75rem;
+}
+
+/* The warning is part of the feature, not a footnote to it — see the phishing
+   caveat in `src/lib/metamaskDevice.ts`. Muted, but never hidden. */
+.mnhome-device-caveat {
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  opacity: 0.72;
+}

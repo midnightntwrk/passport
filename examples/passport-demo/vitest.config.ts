@@ -467,6 +467,7 @@ export default mergeConfig(
           'src/lib/endpoints.ts',
           'src/lib/feeReadinessPoll.ts',
           'src/lib/installPrompt.ts',
+          'src/lib/metamaskDevice.ts',
           'src/lib/networks.ts',
           'src/lib/notifications.ts',
           'src/lib/passkeyRecovery.ts',

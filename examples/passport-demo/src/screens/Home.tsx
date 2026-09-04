@@ -10,6 +10,7 @@ import {
   Moon,
   RefreshCw,
   Send,
+  Smartphone,
   SendHorizontal,
   ShieldCheck,
   X,
@@ -300,6 +301,25 @@ export interface HomeScreenProps {
    * appears.
    */
   onOpenBackup?: () => void
+  /**
+   * The devices that can open this account, and the two controls that change
+   * the set. EXPERIMENT — omitted entirely unless the build was made with
+   * `VITE_METAMASK_DEVICE=1`, so a production build renders no card at all
+   * rather than one that explains itself away.
+   *
+   * `available: false` means MetaMask is not in this browser. The card still
+   * appears where devices are already paired, because a person who paired one
+   * on their phone should be able to SEE it here even if they cannot add
+   * another; it renders no add control.
+   */
+  devices?: {
+    available: boolean
+    paired: readonly { address: string; short: string; pairedAt: string }[]
+    /** The address whose row is working, or `'connect'`, or null. */
+    busy: string | null
+    onConnect: () => void
+    onRemove: (address: string) => void
+  } | null
   onSignOut: () => void
 }
 
@@ -339,6 +359,7 @@ export default function HomeScreen(props: HomeScreenProps) {
     onIncentiveRedeemed,
     supportUrl,
     onOpenBackup,
+    devices,
     onSignOut,
   } = props
 
@@ -918,6 +939,56 @@ export default function HomeScreen(props: HomeScreenProps) {
         {/* Whether the account behind the name is ready — one line, directly
             beneath the name it belongs to. */}
         {passportContract ? <PassportContractCard {...passportContract} /> : null}
+
+        {/* THE DEVICES THAT CAN OPEN THIS ACCOUNT — experiment, flag-gated.
+            Sits directly under the account's own readiness line, because that
+            is the thing these devices open. Nothing here names machinery: a
+            person adds a device, sees it, and removes it. */}
+        {devices && (devices.available || devices.paired.length > 0) ? (
+          <article className="mnhome-card mnhome-devices">
+            <p className="mnhome-card-head">
+              <Smartphone size={14} aria-hidden="true" />
+              <span className="mnhome-micro">Devices</span>
+            </p>
+            <p className="mnhome-card-unit">
+              Your passkey opens this Passport. You can add MetaMask as a second way in, so you
+              can open the same account and send from it without your passkey.
+            </p>
+            {devices.paired.length > 0 ? (
+              <ul className="mnhome-device-list">
+                {devices.paired.map((paired) => (
+                  <li className="mnhome-device" key={paired.address}>
+                    <span className="mnhome-device-name">MetaMask {paired.short}</span>
+                    <button
+                      type="button"
+                      className="mnhome-send-secondary"
+                      onClick={() => devices.onRemove(paired.address)}
+                      disabled={devices.busy !== null}
+                    >
+                      <span>{devices.busy === paired.address ? 'Removing…' : 'Remove'}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {devices.available ? (
+              <button
+                type="button"
+                className="mnhome-send-primary"
+                onClick={devices.onConnect}
+                disabled={devices.busy !== null}
+              >
+                <span>{devices.busy === 'connect' ? 'Adding…' : 'Connect MetaMask'}</span>
+              </button>
+            ) : null}
+            {/* Said on the screen, not only in a comment: anyone who can get
+                this MetaMask account to sign for Passport holds the device. */}
+            <p className="mnhome-device-caveat">
+              Anyone who gets this MetaMask account to sign for Passport can open your account.
+              Only sign when you asked Passport for it.
+            </p>
+          </article>
+        ) : null}
 
         {/* The applications, directly below the wallet summary — the same
             registry, cards, and in-Passport browser as the Apps tab. */}

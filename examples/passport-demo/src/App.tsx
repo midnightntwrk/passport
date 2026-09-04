@@ -66,6 +66,25 @@ import {
 /* The note a shielded transfer's two legs are joined by. Type-only, so the rule
    itself is still loaded beside the account module at the moment of the send. */
 import type { WalletShieldedNote } from './lib/shieldedNote.js';
+/* MetaMask as a second device — EXPERIMENT, `VITE_METAMASK_DEVICE=1`. The
+   rules are here (pure, 100% drilled); the extension conversation is in
+   `./lib/metamaskConnect.js`, imported dynamically so a flag-off build never
+   pays for it. */
+import {
+  metamaskDeviceEnabled,
+  metamaskDeviceMessage,
+  metamaskSeedProvider,
+  pairedDeviceFor,
+  pairedDevicesForAccount,
+  parsePairedDevices,
+  personalSignatureBytes,
+  serialisePairedDevices,
+  shortEthereumAddress,
+  withPairedDevice,
+  withoutPairedDevice,
+  type MetamaskSeedProvider,
+  type PairedMetamaskDevice,
+} from './lib/metamaskDevice.js';
 import { requestPassportStoragePersistence } from './pwa.js';
 import {
   listLocalProfiles,
@@ -234,6 +253,124 @@ interface PassportDemoState {
 }
 
 const APP_ID = 'org.midnight.passport.demo';
+
+/* -------------------------------------------------------------------------- */
+/* MetaMask as a device — EXPERIMENT, flag-gated, default off                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Whether this build offers MetaMask as a second device.
+ *
+ * Read once, at module scope, because `import.meta.env` is a build-time
+ * substitution and a production build that never sets `VITE_METAMASK_DEVICE`
+ * has every control below constant-folded away. Default OFF: the scheme carries
+ * a phishing caveat (`lib/metamaskDevice.ts`) that has to be answered before it
+ * is anything but an experiment.
+ */
+const METAMASK_DEVICE = metamaskDeviceEnabled(
+  (import.meta.env ?? {}) as Record<string, string | undefined>,
+);
+
+/** Where this browser remembers which Passport a MetaMask account is paired to. */
+const METAMASK_PAIRINGS_STORAGE_KEY = 'mn-passport:metamask-devices:v1';
+
+function loadMetamaskPairings(): PairedMetamaskDevice[] {
+  try {
+    return parsePairedDevices(window.localStorage.getItem(METAMASK_PAIRINGS_STORAGE_KEY));
+  } catch {
+    return [];
+  }
+}
+
+function storeMetamaskPairings(devices: readonly PairedMetamaskDevice[]): void {
+  try {
+    window.localStorage.setItem(METAMASK_PAIRINGS_STORAGE_KEY, serialisePairedDevices(devices));
+  } catch {
+    // The device is still on the account; only this browser's shortcut to it is lost.
+  }
+}
+
+/**
+ * A session signed in with MetaMask rather than with the passkey.
+ *
+ * No secret, by construction — see the state declaration for why.
+ */
+interface MetamaskSession {
+  /** The MetaMask account that signs, lower-cased. */
+  address: string;
+  /** The account contract every circuit call is made against. */
+  accountAddress: string;
+  /** The Midnight network id in the signed message. */
+  network: string;
+  /** The name this Passport answers to, where the browser knows one. */
+  name: string | null;
+}
+
+/**
+ * The scope a MetaMask device's own wallet seed is derived under.
+ *
+ * DIFFERENT from the passkey's local scope, and per MetaMask account. The
+ * MetaMask device is a device in its own right: it holds its own Zswap viewing
+ * key, so it can SEE a shielded note addressed to it between the two legs of a
+ * name send, and its own unshielded address for the same reason. Sharing the
+ * passkey's scope would mean sharing a persisted session record, and a reload
+ * would then rebuild one device's wallet believing it was the other's.
+ */
+function metamaskWalletScope(address: string): { appId: string; accountId: string } {
+  return { appId: APP_ID, accountId: `metamask-${address}` };
+}
+
+/**
+ * The local passkey profile that owns `accountAddress`, or `null`.
+ *
+ * A MetaMask sign-in on the browser that also holds the passkey Passport should
+ * keep that Passport's name, activity trail, and records — they are the same
+ * account, opened by a different device. On a browser that holds neither, `null`
+ * is the honest answer and the session runs on the account address alone.
+ *
+ * The match is on the CONTRACT ADDRESS, which is the only thing the two sides
+ * genuinely share. Matching on anything else would be guessing.
+ */
+async function localProfileForAccount(
+  accountAddress: string,
+): Promise<DemoPassportProfile | null> {
+  const records = Object.values(loadPassportContractRecords()).filter(
+    (record) => record.status === 'deployed' && record.address === accountAddress,
+  );
+  for (const record of records) {
+    const found = await loadLocalProfileByCredential(record.credentialId).catch(() => null);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * The one thing a MetaMask device is asked for, done once and disposed.
+ *
+ * One `personal_sign` — MetaMask's own confirmation sheet, which is the
+ * approval — turned into a seed provider that answers for any scope, so the
+ * device secret and the wallet seed both come from THAT ONE prompt. It is the
+ * exact shape `withAccountDeviceSecret` gives the passkey path with
+ * `assertOnce`, and it keeps the same rule: one prompt per user-approved
+ * action, and nothing retained afterwards.
+ */
+async function withMetamaskDeviceSeed<T>(
+  session: { address: string; accountAddress: string; network: string },
+  run: (provider: MetamaskSeedProvider) => Promise<T>,
+): Promise<T> {
+  const { signMetamaskMessage } = await import('./lib/metamaskConnect.js');
+  const signature = await signMetamaskMessage(
+    session.address,
+    metamaskDeviceMessage({ network: session.network, accountAddress: session.accountAddress }),
+  );
+  const provider = metamaskSeedProvider(personalSignatureBytes(signature));
+  try {
+    return await run(provider);
+  } finally {
+    provider.dispose();
+  }
+}
+
 /**
  * The public network this build's passkey wallet signs on, and its label.
  * `null` on a devnet build, where the wallet signs on nothing public and every
@@ -1220,6 +1357,20 @@ export default function PassportDemo() {
   const subjectId = LOCAL_ACCOUNT_ID;
   const scope = useMemo(() => ({ appId: APP_ID, accountId: subjectId }), [subjectId]);
   const [profile, setProfile] = useState<DemoPassportProfile | null>(null);
+  /**
+   * The MetaMask device this session is signed in as, or `null` for the passkey.
+   *
+   * EXPERIMENT, flag-gated — see `lib/metamaskDevice.ts` for the whole scheme
+   * and, first of all, for the phishing caveat that is the reason it is one.
+   *
+   * It holds NO SECRET. What it holds is which MetaMask account signs, which
+   * account contract it signs for, and the name that account answers to. Every
+   * spend re-derives the device secret from a fresh `personal_sign`, which is
+   * MetaMask's own confirmation sheet and therefore the approval — the same
+   * one-prompt-per-user-action rule the passkey path keeps, and the reason
+   * nothing here is worth retaining between actions.
+   */
+  const [metamaskSession, setMetamaskSession] = useState<MetamaskSession | null>(null);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>('home');
@@ -1468,6 +1619,15 @@ export default function PassportDemo() {
    */
   const profileRef = useRef<DemoPassportProfile | null>(null);
   /**
+   * The MetaMask session, readable from callbacks that must not re-identify
+   * when it changes — `withAccountDeviceSecret` and `accountContractOf` are
+   * both stable callbacks, and both have to know which device is signing.
+   */
+  const metamaskSessionRef = useRef<MetamaskSession | null>(null);
+  useEffect(() => {
+    metamaskSessionRef.current = metamaskSession;
+  }, [metamaskSession]);
+  /**
    * Has the open wallet finished walking the chain at least once?
    *
    * Only the incoming-transfer watch reads it, and it has to: while the walk is
@@ -1701,6 +1861,14 @@ export default function PassportDemo() {
     address: string;
   } | null => {
     const handle = localWalletRef.current;
+    /* A MetaMask session carries the account contract itself, because it may be
+       signed in on a browser that holds no passkey profile and therefore no
+       contract record to look one up in. The address came from a pairing this
+       browser stored, or from a name the user typed and the registry answered
+       for — never from the device, which cannot name an account it does not
+       already belong to. */
+    const metamask = metamaskSessionRef.current;
+    if (handle && metamask) return { handle, address: metamask.accountAddress };
     const activeProfile = profileRef.current;
     if (!handle || !activeProfile) return null;
     const record = loadPassportContractRecord(
@@ -1798,16 +1966,35 @@ export default function PassportDemo() {
       seed: Uint8Array,
       scope: { appId: string; accountId: string },
       credentialId: string | null,
+      options?: {
+        /**
+         * Whether a reload may silently rebuild this wallet.
+         *
+         * `false` for a MetaMask session, and not merely as a precaution: the
+         * persisted record carries a seed and a credential id but no record of
+         * WHICH device derived it, so a silent restore would rebuild the
+         * MetaMask device's wallet and then reach for the passkey to authorise
+         * its circuits — the wrong device secret, and a rejection nobody could
+         * read. A MetaMask sign-in is therefore explicit every time, which it
+         * has to be regardless: the signature is the device, and it is never
+         * kept.
+         */
+        persist?: boolean;
+      },
     ) => {
       const { createLocalMidnightWallet } = await import('./lib/localWallet.js');
       setLocalWalletStatus('opening');
       // §2.2 stopgap (see the banner near LOCAL_SCOPE): persist the wrapped
       // seed so a reload silently reopens this session without a passkey
       // prompt. Best-effort — a storage failure never blocks the live session.
-      try {
-        await persistWalletSession(scope, seed, credentialId);
-      } catch {
-        // No persisted session, then; the next reload asks for the passkey.
+      if (options?.persist === false) {
+        await clearPersistedWalletSession().catch(() => {});
+      } else {
+        try {
+          await persistWalletSession(scope, seed, credentialId);
+        } catch {
+          // No persisted session, then; the next reload asks for the passkey.
+        }
       }
       let wallet: LocalMidnightWallet;
       try {
@@ -4729,6 +4916,10 @@ export default function PassportDemo() {
     setAccountPhase(null);
     passportKeyProviders.current.clear();
     setProfile(null);
+    /* The MetaMask session goes with it. It holds no secret, but leaving it
+       set would point `accountContractOf` at an account nothing is open for. */
+    setMetamaskSession(null);
+    metamaskSessionRef.current = null;
     setActivity([]);
     setError(null);
     setMobileTab('home');
@@ -4886,6 +5077,33 @@ export default function PassportDemo() {
    */
   const withAccountDeviceSecret = useCallback(
     async <T,>(run: (deviceSecret: Uint8Array) => Promise<T>): Promise<T> => {
+      /* THE ONE SUBSTITUTION. A session signed in with MetaMask takes exactly
+         this path with a different prompt: `personal_sign` instead of an
+         assertion, the same HKDF ladder under the same
+         `PASSPORT_CONTRACT_SCOPE`, and the same `deriveAccountDeviceSecret`
+         split at the end of it — so the bytes `run` receives are a device
+         secret the account contract holds a commitment for, and every circuit
+         below this line is unchanged. A decline throws before anything is
+         derived, built, proved, or submitted. See `lib/metamaskDevice.ts`. */
+      const metamask = metamaskSessionRef.current;
+      if (metamask) {
+        return withMetamaskDeviceSeed(metamask, async (seedProvider) => {
+          const { deriveWalletSeed } = await import('./lib/localWallet.js');
+          const rootSecret = await deriveWalletSeed(seedProvider, PASSPORT_CONTRACT_SCOPE);
+          let deviceSecret: Uint8Array;
+          try {
+            const { deriveAccountDeviceSecret } = await import('./identity/accountCustody.js');
+            deviceSecret = await deriveAccountDeviceSecret(rootSecret);
+          } finally {
+            rootSecret.fill(0);
+          }
+          try {
+            return await run(deviceSecret);
+          } finally {
+            deviceSecret.fill(0);
+          }
+        });
+      }
       const passkey = profile?.passkey;
       if (!passkey?.credentialId) {
         throw new PasskeyPresenceError(
@@ -5019,6 +5237,309 @@ export default function PassportDemo() {
       };
     },
     [selectedNetwork],
+  );
+
+  /* ---------------------------------------------------------------------- */
+  /* MetaMask as a second device — EXPERIMENT, `VITE_METAMASK_DEVICE=1`     */
+  /*                                                                        */
+  /* Three callbacks, and NO CONTRACT CHANGE behind any of them. The account */
+  /* already admits a second device through `add_device`; all that was       */
+  /* missing was a second way to hold one. Read `lib/metamaskDevice.ts`      */
+  /* before this section — in particular the phishing caveat, which is why   */
+  /* the whole thing is behind a flag that is off by default.                */
+  /* ---------------------------------------------------------------------- */
+
+  /** Every MetaMask account this browser has paired, for the Devices card. */
+  const [metamaskPairings, setMetamaskPairings] = useState<PairedMetamaskDevice[]>(() =>
+    METAMASK_DEVICE ? loadMetamaskPairings() : [],
+  );
+  /** Set while a pair or an unpair is in flight, so the card can say so. */
+  const [metamaskBusy, setMetamaskBusy] = useState<string | null>(null);
+
+  /**
+   * Pairs the MetaMask account the extension offers as a device on this
+   * account.
+   *
+   * TWO PROMPTS, AND BOTH ARE REAL. MetaMask signs first — that signature IS
+   * the new device, and the person holding it has to agree to that — and then
+   * the passkey authorises `add_device`, because the contract lets an account
+   * admit its own next device and nobody else. Neither prompt can stand in for
+   * the other: one is the new device consenting to exist, the other is the
+   * existing device consenting to admit it. Everything after the first prompt
+   * is derivation; nothing is submitted before the second.
+   *
+   * The commitment is derived through the contract's own `pureCircuits`, so the
+   * client and the circuit cannot disagree about what the device secret hashes
+   * to.
+   */
+  const connectMetamaskDevice = useCallback(async (): Promise<void> => {
+    const account = accountContractOf();
+    if (!account) {
+      setError('This Passport has no account on this network yet, so there is nothing to add a device to.');
+      return;
+    }
+    const network = account.handle.network.networkId;
+    setMetamaskBusy('connect');
+    try {
+      const { requestMetamaskAccount } = await import('./lib/metamaskConnect.js');
+      const address = await requestMetamaskAccount();
+
+      /* The new device's own consent, and the only thing it is asked for. */
+      const commitment = await withMetamaskDeviceSeed(
+        { address, accountAddress: account.address, network },
+        async (seedProvider) => {
+          const { deriveWalletSeed } = await import('./lib/localWallet.js');
+          const rootSecret = await deriveWalletSeed(seedProvider, PASSPORT_CONTRACT_SCOPE);
+          try {
+            const { deriveAccountDeviceSecret, deriveDeviceCommitment, formatFieldHex } =
+              await import('./identity/accountCustody.js');
+            const deviceSecret = await deriveAccountDeviceSecret(rootSecret);
+            try {
+              return formatFieldHex(await deriveDeviceCommitment(deviceSecret));
+            } finally {
+              deviceSecret.fill(0);
+            }
+          } finally {
+            rootSecret.fill(0);
+          }
+        },
+      );
+
+      /* The existing device's consent, and the transaction. Raised only now,
+         so a MetaMask decline above submits nothing and writes no row. */
+      await withAccountDeviceSecret(async (deviceSecret) => {
+        const entry = addActivity({
+          label: 'Adding a device',
+          detail: `MetaMask ${shortEthereumAddress(address)} is being added to your account.`,
+          status: 'pending',
+          source: 'wallet',
+        });
+        try {
+          const { addDevice } = await import('./identity/accountCustody.js');
+          const result = await addDevice(
+            account.handle,
+            deviceSecret,
+            { contractAddress: account.address, deviceCommitment: BigInt(`0x${commitment}`) },
+            (progress) => setAccountPhase(progress.phase),
+          );
+          updateActivity(entry.id, {
+            status: 'complete',
+            label: 'Device added',
+            detail: `MetaMask ${shortEthereumAddress(address)} can now open this account.`,
+            source: 'chain',
+            txHash: result.txId,
+          });
+          const paired: PairedMetamaskDevice = {
+            address,
+            accountAddress: account.address,
+            network,
+            commitmentHex: commitment,
+            name: loadAliasRecord(network)?.alias ?? null,
+            pairedAt: new Date().toISOString(),
+          };
+          setMetamaskPairings((current) => {
+            const next = withPairedDevice(current, paired);
+            storeMetamaskPairings(next);
+            return next;
+          });
+          pushToast({
+            tone: 'success',
+            title: 'MetaMask added to your account',
+            body: 'You can now open this Passport with MetaMask instead of your passkey.',
+            link: explorerTxLink(result.txId, result.network),
+          });
+        } catch (cause) {
+          updateActivity(entry.id, {
+            status: 'error',
+            detail: cause instanceof Error ? cause.message : String(cause),
+            source: 'local',
+          });
+          throw cause;
+        }
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAccountPhase(null);
+      setMetamaskBusy(null);
+    }
+  }, [accountContractOf, addActivity, updateActivity, withAccountDeviceSecret]);
+
+  /**
+   * Strikes a paired MetaMask device off the account.
+   *
+   * The circuit decides, not this function: there is no client-side guard
+   * against removing the last device, because `device_count` is the contract's
+   * number and a check made here against a read taken a moment ago over a
+   * network reads as a rule and behaves as a race. See `removeDevice`.
+   */
+  const removeMetamaskDevice = useCallback(
+    async (paired: PairedMetamaskDevice): Promise<void> => {
+      const account = accountContractOf();
+      if (!account) return;
+      setMetamaskBusy(paired.address);
+      try {
+        await withAccountDeviceSecret(async (deviceSecret) => {
+          const entry = addActivity({
+            label: 'Removing a device',
+            detail: `MetaMask ${shortEthereumAddress(paired.address)} is being removed from your account.`,
+            status: 'pending',
+            source: 'wallet',
+          });
+          try {
+            const { removeDevice } = await import('./identity/accountCustody.js');
+            const result = await removeDevice(
+              account.handle,
+              deviceSecret,
+              {
+                contractAddress: account.address,
+                deviceCommitment: BigInt(`0x${paired.commitmentHex}`),
+              },
+              (progress) => setAccountPhase(progress.phase),
+            );
+            updateActivity(entry.id, {
+              status: 'complete',
+              label: 'Device removed',
+              detail: `MetaMask ${shortEthereumAddress(paired.address)} can no longer open this account.`,
+              source: 'chain',
+              txHash: result.txId,
+            });
+            setMetamaskPairings((current) => {
+              const next = withoutPairedDevice(current, paired.address, paired.accountAddress);
+              storeMetamaskPairings(next);
+              return next;
+            });
+            pushToast({
+              tone: 'success',
+              title: 'Device removed',
+              body: 'That MetaMask account can no longer open this Passport.',
+              link: explorerTxLink(result.txId, result.network),
+            });
+          } catch (cause) {
+            updateActivity(entry.id, {
+              status: 'error',
+              detail: cause instanceof Error ? cause.message : String(cause),
+              source: 'local',
+            });
+            throw cause;
+          }
+        });
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        setAccountPhase(null);
+        setMetamaskBusy(null);
+      }
+    },
+    [accountContractOf, addActivity, pushToast, updateActivity, withAccountDeviceSecret],
+  );
+
+  /**
+   * Opens a Passport with MetaMask instead of the passkey.
+   *
+   * ONE `personal_sign`, and everything the session needs comes out of it: the
+   * device secret the contract's circuits are gated on, and the wallet seed
+   * that gives this device its own Zswap viewing key. The wallet half is not a
+   * flourish — a send to a NAME lands its first leg on the SIGNING device's own
+   * address, and a device that cannot see that note cannot finish the payment.
+   *
+   * WHICH ACCOUNT. Never the device's word for it. Either this browser stored
+   * the pairing, or the person types their name and the `.night` registry
+   * answers — and then the account is asked whether it actually holds this
+   * device, on chain, before anything claims to be signed in. A MetaMask
+   * account that was never paired gets a refusal naming that, not a session
+   * that fails at the first spend.
+   */
+  const signInWithMetamask = useCallback(
+    async (typedName: string | null): Promise<void> => {
+      if (onboardingRunning.current) return;
+      onboardingRunning.current = true;
+      cancelSessionRestore();
+      setOnboardingError(null);
+      setError(null);
+      setOnboardingIntent('local-signin');
+      setOnboardingBusyLabel('Opening your Passport with MetaMask');
+      try {
+        const { requestMetamaskAccount } = await import('./lib/metamaskConnect.js');
+        const address = await requestMetamaskAccount();
+        const { localWalletNetworkConfig } = await import('./lib/localWallet.js');
+        const configuredNetwork = localWalletNetworkConfig().networkId;
+
+        const stored = pairedDeviceFor(loadMetamaskPairings(), address);
+        let accountAddress = stored?.accountAddress ?? null;
+        let network = stored?.network ?? configuredNetwork;
+        let name = stored?.name ?? null;
+        if (!accountAddress) {
+          if (!typedName) {
+            throw new Error(
+              'This browser has not seen that MetaMask account before. Type your name below and Passport will look it up.',
+            );
+          }
+          setOnboardingBusyLabel('Looking up your name');
+          const lookup = await resolveRecipientName(typedName);
+          if (!lookup.found) throw new Error(lookup.reason);
+          accountAddress = lookup.accountAddress;
+          network = configuredNetwork;
+          name = lookup.domain;
+        }
+
+        setOnboardingBusyLabel('Waiting for MetaMask to sign');
+        await withMetamaskDeviceSeed({ address, accountAddress, network }, async (seedProvider) => {
+          const { deriveWalletSeed } = await import('./lib/localWallet.js');
+          const rootSecret = await deriveWalletSeed(seedProvider, PASSPORT_CONTRACT_SCOPE);
+          const {
+            accountHoldsDevice,
+            deriveAccountDeviceSecret,
+          } = await import('./identity/accountCustody.js');
+          let holds: boolean;
+          try {
+            const deviceSecret = await deriveAccountDeviceSecret(rootSecret);
+            try {
+              setOnboardingBusyLabel('Checking your account knows this device');
+              holds = await accountHoldsDevice(
+                { indexerHttpUrl: localWalletNetworkConfig().indexerHttpUrl },
+                accountAddress,
+                deviceSecret,
+              );
+            } finally {
+              deviceSecret.fill(0);
+            }
+          } finally {
+            rootSecret.fill(0);
+          }
+          if (!holds) {
+            throw new Error(
+              'That MetaMask account is not a device on this Passport. Open the Passport with its passkey and add MetaMask from the Devices card first.',
+            );
+          }
+          const walletScope = metamaskWalletScope(address);
+          const seed = await deriveWalletSeed(seedProvider, walletScope);
+          await openLocalWalletWithSeed(seed, walletScope, null, { persist: false });
+        });
+
+        /* The profile is a convenience, never authority: where this browser
+           still holds the passkey Passport, the session keeps its name and its
+           trail; where it does not, the session is the MetaMask device and the
+           account address alone, which is all any circuit needs. */
+        setProfile(await localProfileForAccount(accountAddress));
+        setMetamaskSession({ address, accountAddress, network, name });
+        metamaskSessionRef.current = { address, accountAddress, network, name };
+        addActivity({
+          label: 'Signed in with MetaMask',
+          detail: `Opened with MetaMask ${shortEthereumAddress(address)}.`,
+          status: 'complete',
+          source: 'local',
+        });
+      } catch (cause) {
+        setLocalWalletStatus('error');
+        setOnboardingError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        setOnboardingIntent(null);
+        setOnboardingBusyLabel(null);
+        onboardingRunning.current = false;
+      }
+    },
+    [addActivity, cancelSessionRestore, openLocalWalletWithSeed, resolveRecipientName],
   );
 
   /**
@@ -7044,6 +7565,63 @@ export default function PassportDemo() {
     setIdentityStep(null);
   };
 
+  /* ---------------------------------------------------------------------- */
+  /* MetaMask device — the two view models. EXPERIMENT, flag-gated.          */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Whether this build offers MetaMask AND this browser has it.
+   *
+   * Both halves, on purpose. A control that appears and then explains that
+   * MetaMask is not installed is worse than one that never appeared, and the
+   * flag alone cannot know what is in the browser.
+   */
+  const [metamaskAvailable, setMetamaskAvailable] = useState(false);
+  useEffect(() => {
+    if (!METAMASK_DEVICE) return;
+    let cancelled = false;
+    void (async () => {
+      const { injectedProvider } = await import('./lib/metamaskConnect.js');
+      if (!cancelled) setMetamaskAvailable(injectedProvider() !== null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * The Devices card's props, or `null` for a build that does not offer them.
+   *
+   * Only the devices paired to THIS account are listed: one MetaMask account
+   * may be a device on two Passports, and showing another Passport's pairing
+   * here would offer a Remove that removes nothing this account holds.
+   */
+  const accountAddressForDevices = accountContractOf()?.address ?? null;
+  const homeDevices = useMemo(() => {
+    if (!METAMASK_DEVICE || !accountAddressForDevices) return null;
+    return {
+      available: metamaskAvailable,
+      paired: pairedDevicesForAccount(metamaskPairings, accountAddressForDevices).map((paired) => ({
+        address: paired.address,
+        short: shortEthereumAddress(paired.address),
+        pairedAt: paired.pairedAt,
+      })),
+      busy: metamaskBusy,
+      onConnect: () => void connectMetamaskDevice(),
+      onRemove: (address: string) => {
+        const paired = pairedDeviceFor(metamaskPairings, address);
+        if (paired) void removeMetamaskDevice(paired);
+      },
+    };
+  }, [
+    accountAddressForDevices,
+    connectMetamaskDevice,
+    metamaskAvailable,
+    metamaskBusy,
+    metamaskPairings,
+    removeMetamaskDevice,
+  ]);
+
   const appsProfile = sessionActive
     ? {
         displayName: sessionDisplayName,
@@ -7132,6 +7710,12 @@ export default function PassportDemo() {
           unusableCredential={unusableCredential}
           keylessPasskey={keylessPasskey}
           onCreateNewPasskey={() => startPasskeyOnboarding('enrol-new')}
+          /* EXPERIMENT, flag-gated and provider-gated: undefined in a
+             production build, and undefined in a browser with no MetaMask, so
+             the control never appears where it could not work. */
+          onSignInWithMetamask={
+            metamaskAvailable ? (name) => void signInWithMetamask(name) : undefined
+          }
         />
       ) : accountSearch?.phase === 'not-found' ? (
         /* THE END OF THE SEARCH, and the reason it has one. A passkey named an
@@ -7257,6 +7841,9 @@ export default function PassportDemo() {
                  Passport exists here, because restoring is exactly what a
                  browser with no records needs. */
               onOpenBackup={profile ? () => setIdentityStep('backup') : undefined}
+              /* The devices that can open this account. `null` in a production
+                 build, so Home renders no card. */
+              devices={homeDevices}
               onSignOut={() => void signOutPassport()}
             />
           ) : mobileTab === 'assets' ? (
