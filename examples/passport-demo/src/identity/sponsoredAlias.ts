@@ -113,12 +113,29 @@ export class AliasSponsorRefusal extends Error {
 /**
  * Refusal codes whose whole meaning to a READER is "not right now".
  *
- * All three are the service saying it cannot pay for this transaction at this
- * moment — no NIGHT free, no DUST free, or too many requests in the window —
- * and every one of them clears on its own. None of them is a fact about the
+ * All of them are the service saying it cannot pay for THIS transaction at
+ * this moment — no NIGHT free, no DUST free, a spend of its own still
+ * settling, or a wallet still walking the chain — and every one of them clears
+ * on its own without anybody doing anything. None of them is a fact about the
  * name, and none of them is anything a person could act on.
+ *
+ * `rate-limited` LEFT THIS SET on 2026/09/04, and it is the reason the set has
+ * a header — see {@link SPONSOR_RATE_LIMITED_SENTENCE}. It is the one refusal
+ * here that clears because OTHER PEOPLE stop asking rather than because this
+ * service finishes something, and the difference is exactly what the reader
+ * needs to know.
  */
-const SPONSOR_BUSY_CODES = new Set(['funder-empty', 'funder-no-dust', 'rate-limited']);
+const SPONSOR_BUSY_CODES = new Set([
+  'funder-empty',
+  'funder-no-dust',
+  /* The two the service answers while a spend of its own is in the way, and
+     the only two the busy sentence is now written for. */
+  'PENDING_TRANSACTION',
+  'WALLET_SYNCING',
+  /* The balancer spells its own readiness refusal in lower case; the funder
+     and the fee path use the upper-case one. The same fact either way. */
+  'wallet-syncing',
+]);
 
 /**
  * The one sentence for a sponsor that cannot pay right now.
@@ -130,6 +147,44 @@ const SPONSOR_BUSY_CODES = new Set(['funder-empty', 'funder-no-dust', 'rate-limi
  */
 const SPONSOR_BUSY_SENTENCE =
   'The sponsor is busy — your name is queued and will register on its own.';
+
+/**
+ * The sentence for a registration refused because too many names have been
+ * registered lately — the sponsor's hourly ceiling, or its per-caller one.
+ *
+ * WHAT WAS WRONG WITH THE BUSY SENTENCE HERE (sponsor soak, 2026/09/04)
+ * ---------------------------------------------------------------------
+ * Two signups were refused at the ceiling and both readers were told "The
+ * sponsor is busy — your name is queued and will register on its own." Every
+ * clause of that was false at that moment. The sponsor was not busy: it was
+ * answering `/status` in 60 ms, it had 4 spend lanes open, and it refused in
+ * 25 ms without attempting anything. The name was not queued anywhere but in
+ * the reader's own browser. And nothing registers it on its own — the only
+ * thing that ever will is somebody pressing Register now.
+ *
+ * A reader told that waits for something that is never going to happen. So
+ * this sentence names the real cause, keeps the one promise that is true, and
+ * says what to do and roughly when. It is two sentences rather than the one
+ * every other branch keeps, and deliberately: the fact, and the action. See
+ * `sponsoredAlias.test.ts` for that carve-out held explicitly.
+ *
+ * "Passport", not "the sponsor": at the ceiling the thing that ran out is the
+ * service's budget for everybody, which from the reader's side is Passport
+ * itself being popular. There is no machinery in it and no party to blame.
+ */
+const SPONSOR_RATE_LIMITED_SENTENCE =
+  'Passport is registering a lot of names right now. Yours is kept for you — try again in a few minutes.';
+
+/**
+ * Refusals that prove a cached "the sponsor is available" answer stale.
+ *
+ * Every busy code, and `rate-limited` as well — which is why this is its own
+ * set rather than {@link SPONSOR_BUSY_CODES}, whose membership is a question
+ * about a SENTENCE. A refusal at the ceiling dates the probe harder than any
+ * of them: the sponsor is up and will go on refusing for the rest of the hour,
+ * so a cached "available" would send the next claim straight back into it.
+ */
+const PROBE_DATING_CODES = new Set([...SPONSOR_BUSY_CODES, 'rate-limited']);
 
 /**
  * The sentence a PERSON reads when the service will not register their name.
@@ -148,6 +203,12 @@ const SPONSOR_BUSY_SENTENCE =
  *
  * So the code is mapped, and the mapping is the decision:
  *
+ *   - Too many names, too recently. `rate-limited` — the hourly ceiling for
+ *     everybody, or the per-caller bucket. It clears, but not because this
+ *     service finishes anything, and nothing registers the name in the
+ *     meantime, so it gets {@link SPONSOR_RATE_LIMITED_SENTENCE} and is read
+ *     BEFORE the busy branches below, whose `retryAfterMs` condition would
+ *     otherwise swallow the per-caller half of it.
  *   - The sponsor could not pay. `DustUnavailable` inside the service's own
  *     diagnostic, a `retryAfterMs` beside the refusal, or one of
  *     {@link SPONSOR_BUSY_CODES}. This is the measured fault, it clears on its
@@ -184,6 +245,13 @@ export function aliasRefusalMessage(refusal: {
 }): string {
   if (refusal.code === 'name-taken') {
     return `${refusal.domain} has already been taken — choose another name.`;
+  }
+  /* BEFORE the busy branches, and it has to be: the per-caller half of this
+     refusal carries a `retryAfterMs`, which the next condition reads as the
+     sponsor asking for time. It is not — it is the sponsor asking this caller
+     for time, which is a different sentence. */
+  if (refusal.code === 'rate-limited') {
+    return SPONSOR_RATE_LIMITED_SENTENCE;
   }
   if (
     SPONSOR_BUSY_CODES.has(refusal.code) ||
@@ -410,7 +478,7 @@ export async function sponsorAliasRegistration(
       typeof refusal.message === 'string'
         ? refusal.message
         : `The sponsorship service refused with status ${response.status}.`;
-    if (SPONSOR_BUSY_CODES.has(code)) {
+    if (PROBE_DATING_CODES.has(code)) {
       // The probe's cached "available" is now demonstrably stale.
       invalidateSponsorshipProbe(funderUrl);
     }

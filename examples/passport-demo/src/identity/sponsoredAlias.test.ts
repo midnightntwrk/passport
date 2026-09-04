@@ -463,8 +463,19 @@ describe('sponsorAliasRegistration — refusals', () => {
     expect(refusal.serviceMessage).toBe('The sponsorship service refused with status 400.');
   });
 
-  it('drops the cached probe for the three refusals that date it', async () => {
-    for (const error of ['funder-empty', 'funder-no-dust', 'rate-limited']) {
+  it('drops the cached probe for every refusal that dates it', async () => {
+    /* `rate-limited` is in this list although it no longer shares the busy
+       SENTENCE: a ceiling refusal dates the probe harder than any of the
+       others, because the sponsor is up and will go on refusing for the rest
+       of the hour. The two questions are separate sets in the module for
+       exactly this reason. */
+    for (const error of [
+      'funder-empty',
+      'funder-no-dust',
+      'rate-limited',
+      'PENDING_TRANSACTION',
+      'wallet-syncing',
+    ]) {
       const spy = installFetch(async (url) =>
         url.endsWith('/status')
           ? json({ network: 'stagenet', aliasSponsorship: 'available' })
@@ -604,6 +615,8 @@ describe('sponsorAliasRegistration — the independent read-back', () => {
 
 describe('aliasRefusalMessage', () => {
   const BUSY = 'The sponsor is busy — your name is queued and will register on its own.';
+  const RATE_LIMITED =
+    'Passport is registering a lot of names right now. Yours is kept for you — try again in a few minutes.';
   const KEPT = 'alice.night was not registered, and your name is kept for you.';
   const base = { code: 'register-rejected', domain: 'alice.night', detail: null, retryAfterMs: null };
 
@@ -630,10 +643,60 @@ describe('aliasRefusalMessage', () => {
     expect(aliasRefusalMessage({ ...base, retryAfterMs: 0 })).toBe(BUSY);
   });
 
-  it('says the same of the three codes that mean “cannot pay right now”', () => {
-    for (const code of ['funder-empty', 'funder-no-dust', 'rate-limited']) {
+  it('says the same of every code that means “cannot pay right now”', () => {
+    for (const code of [
+      'funder-empty',
+      'funder-no-dust',
+      'PENDING_TRANSACTION',
+      'WALLET_SYNCING',
+      'wallet-syncing',
+    ]) {
       expect(aliasRefusalMessage({ ...base, code })).toBe(BUSY);
     }
+  });
+
+  it('does NOT call a ceiling refusal a busy sponsor', () => {
+    /* THE COPY DEFECT OF 2026/09/04. Two signups in the sponsor soak were
+       refused at the hourly ceiling and both readers were told the sponsor was
+       busy and their name would register on its own. The sponsor was answering
+       `/status` in 60 ms with four spend lanes open and refused in 25 ms
+       without attempting anything; the name was queued in the reader's own
+       browser and nowhere else; and nothing was ever going to register it. A
+       reader who believes that sentence waits for something that cannot
+       happen. */
+    const limited = aliasRefusalMessage({ ...base, code: 'rate-limited' });
+    expect(limited).toBe(RATE_LIMITED);
+    expect(limited).not.toBe(BUSY);
+    expect(limited).not.toMatch(/busy/i);
+    expect(limited).not.toMatch(/on its own/i);
+  });
+
+  it('keeps that sentence when the refusal names a delay, which the per-caller half does', () => {
+    /* The ceiling refusal carries no `retryAfterMs`; the per-client token
+       bucket's carries one. Both are `rate-limited`, both mean too many names
+       too recently, and the `retryAfterMs` branch below would otherwise
+       recapture the second one into the busy sentence. */
+    expect(aliasRefusalMessage({ ...base, code: 'rate-limited', retryAfterMs: 7_000 })).toBe(
+      RATE_LIMITED,
+    );
+    expect(
+      aliasRefusalMessage({
+        ...base,
+        code: 'rate-limited',
+        detail: 'DustUnavailable: no DUST coin was free',
+      }),
+    ).toBe(RATE_LIMITED);
+  });
+
+  it('tells the reader the name is kept, and what to do about it', () => {
+    /* The two things the busy sentence got wrong. The promise that survives is
+       the one that is true — the record is queued locally, see
+       `claimOrQueueAlias` — and the action replaces the promise that was not.
+       The controls beside it are unchanged: Try again, and Continue to Home,
+       which `lib/claimFailure.ts` decides from the failure rather than from
+       its wording. */
+    expect(RATE_LIMITED).toMatch(/kept for you/i);
+    expect(RATE_LIMITED).toMatch(/try again/i);
   });
 
   it('keeps a taken name as its own plain sentence, and promises no queue', () => {
@@ -664,11 +727,17 @@ describe('aliasRefusalMessage', () => {
       aliasRefusalMessage(base),
       aliasRefusalMessage({ ...base, code: 'name-taken' }),
       aliasRefusalMessage({ ...base, code: 'funder-no-dust' }),
+      aliasRefusalMessage({ ...base, code: 'rate-limited' }),
       aliasRefusalMessage({ ...base, retryAfterMs: 1 }),
       aliasRefusalMessage({ ...base, detail: 'DustUnavailable' }),
     ];
     for (const sentence of every) {
       expect(sentence).not.toMatch(/registry|resolver|indexer|contract|wallet|DUST|ledger|tx\b/i);
+      /* And no rate, no limit, no ceiling, and no quota. The sponsor's own 429
+         says "the balancer has reached its ceiling of 20 sponsored
+         registrations per hour", which is an operator's sentence in every
+         word. */
+      expect(sentence).not.toMatch(/rate.?limit|ceiling|quota|429|balancer|sponsor\w*ed\b/i);
     }
   });
 
@@ -697,5 +766,19 @@ describe('aliasRefusalMessage', () => {
       expect(sentence.match(/\.(?=\s|$)/g) ?? [], sentence).toHaveLength(1);
       expect(sentence.match(/\bkept\b/gi) ?? [], sentence).not.toHaveLength(2);
     }
+  });
+
+  it('spends its second sentence, once, on the one refusal that needs an action', () => {
+    /* THE ONE CARVE-OUT from the rule above, held here rather than left as a
+       gap in the list. The 2026/09/03 ruling was against three sentences
+       saying the SAME fact; this is two sentences saying two — why the name is
+       not registered, and what to do — and the second exists because the
+       branch it replaced promised something would happen on its own and
+       nothing would. The rest of the rule still binds it: the fact is said
+       once, and there is no third sentence describing the buttons. */
+    const limited = aliasRefusalMessage({ ...base, code: 'rate-limited' });
+    expect(limited).toMatch(/\.$/);
+    expect(limited.match(/\.(?=\s|$)/g) ?? []).toHaveLength(2);
+    expect(limited.match(/\bkept\b/gi) ?? []).toHaveLength(1);
   });
 });
