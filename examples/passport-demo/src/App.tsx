@@ -41,6 +41,9 @@ import {
   markMidSessionWayOut,
   midSessionPasskeyMessage,
   PASSKEY_CEREMONY_TIMEOUT_MESSAGE,
+  PASSKEY_CONFIRM_ACTION,
+  PASSKEY_CONFIRM_MESSAGE,
+  passkeyConfirmationNeeded,
   passkeySignInRecovery,
 } from './lib/passkeyRecovery.js';
 import {
@@ -1283,6 +1286,21 @@ export default function PassportDemo() {
    * Holds the authenticator's own account of what happened.
    */
   const [unusableCredential, setUnusableCredential] = useState<string | null>(null);
+  /**
+   * Set while onboarding is waiting for a PRESS before it runs the one
+   * assertion a creation-time PRF did not provide.
+   *
+   * Safari does not evaluate the PRF during `credentials.create`, so a
+   * Passport made there needs one assertion afterwards to derive the same
+   * output. Firing it off the back of the create is a ceremony with no fresh
+   * gesture behind it — the gesture that authorised the creation is spent —
+   * and Safari is the strictest browser there is about that. So the assertion
+   * waits behind the panel below, and the press is what raises the prompt.
+   * See `src/lib/passkeyRecovery.ts#passkeyConfirmationNeeded`.
+   */
+  const [awaitingPasskeyConfirmation, setAwaitingPasskeyConfirmation] = useState(false);
+  /** Resolves the promise `adoptEnrolledPasskey` is parked on. */
+  const passkeyConfirmation = useRef<(() => void) | null>(null);
   /**
    * Set when a sign-in ceremony ended with NO credential in hand — the dead
    * end reported on 2026/08/30 and the reason this state exists.
@@ -2593,6 +2611,28 @@ export default function PassportDemo() {
    * below reaches the SAME Passport a first-time create reaches, rather than a
    * second, subtly different transcription of these twenty lines.
    */
+  /**
+   * Puts the confirmation question on the screen and resolves when the reader
+   * presses the button — the fresh gesture the assertion after it needs.
+   *
+   * A no-op where the platform already evaluated the PRF at creation, so it is
+   * safe to call from any enrolment path: nothing is shown, nothing waits, and
+   * that Passport is opened on the one ceremony it cost. See
+   * `src/lib/passkeyRecovery.ts#passkeyConfirmationNeeded`.
+   */
+  const confirmWithPasskey = (
+    enrolled: import('./backend.js').EnrolledPassportPasskey,
+  ): Promise<void> => {
+    if (!passkeyConfirmationNeeded(enrolled)) return Promise.resolve();
+    /* The spinner stands down: what is on the screen now is a question, and a
+       question under a spinner reads as something already happening. */
+    setOnboardingBusyLabel(null);
+    return new Promise<void>((resolve) => {
+      passkeyConfirmation.current = resolve;
+      setAwaitingPasskeyConfirmation(true);
+    });
+  };
+
   const adoptEnrolledPasskey = async (
     enrolled: import('./backend.js').EnrolledPassportPasskey,
   ): Promise<DemoPassportProfile> => {
@@ -2605,7 +2645,16 @@ export default function PassportDemo() {
     let handle = enrolled.prf;
     try {
       if (!handle) {
-        setOnboardingBusyLabel('Confirm with your passkey to finish setting up');
+        /* THE THIRD CEREMONY, AND THE ONLY FORM IT MAY TAKE (2026/09/05).
+           This used to run on its own, one line after the create resolved.
+           Safari evaluates no PRF at creation, so that second `credentials.get`
+           went out with the creating gesture already spent — a prompt arriving
+           unbidden at best, refused for want of transient activation at worst,
+           leaving onboarding holding a passkey it could derive nothing from.
+           It is now a question on the screen with a button under it, and the
+           press is the gesture. One press, one prompt. */
+        await confirmWithPasskey(enrolled);
+        setOnboardingBusyLabel('Finishing your Passport');
         handle = await withPasskeyWatchdog(() => WebAuthnPrfKeyProvider.assertOnce(passkey));
       }
       const nextProfile: DemoPassportProfile = {
@@ -3088,6 +3137,11 @@ export default function PassportDemo() {
          the state would not decrypt — must not leave the name step held open
          for a recovery that is not coming. */
       setRecoveringAccount(false);
+      /* Nothing may be left parked behind a question the screen is no longer
+         showing: a run that ended while the confirmation was armed would
+         otherwise leave the panel over a landing screen it does not belong to. */
+      passkeyConfirmation.current = null;
+      setAwaitingPasskeyConfirmation(false);
       onboardingRunning.current = false;
     }
   };
@@ -5345,6 +5399,23 @@ export default function PassportDemo() {
     onboardingIntent !== null || localWalletStatus === 'opening' ? 'working' : 'welcome';
   const onboardingLabel =
     onboardingBusyLabel ?? 'Follow the passkey prompt on this device';
+  /**
+   * The press that finishes an enrolment the platform could not finish on its
+   * own — and the gesture the assertion behind it is spent from.
+   *
+   * It resolves synchronously inside the click handler, so the
+   * `credentials.get` that follows runs inside the transient activation this
+   * press just granted. That is the whole point: Safari refuses a ceremony
+   * without one, and the gesture that authorised the creation was spent by the
+   * time the creation resolved.
+   */
+  const confirmPasskeyNow = () => {
+    const resume = passkeyConfirmation.current;
+    passkeyConfirmation.current = null;
+    setAwaitingPasskeyConfirmation(false);
+    resume?.();
+  };
+
   /** The one onboarding route, plus the `unusable-credential` recovery. */
   const startPasskeyOnboarding = (intent: 'create' | 'signin' | 'auto' | 'enrol-new') => {
     void runLocalOnboarding(intent);
@@ -7743,6 +7814,34 @@ export default function PassportDemo() {
   return (
     <div className="passport-experience is-mobile">
       {showOnboarding ? (
+        <>
+        {/* THE ONE QUESTION ONBOARDING IS ALLOWED TO ASK MID-FLIGHT
+            (2026/09/05). A platform that evaluates no PRF at creation leaves a
+            passkey that exists and a Passport that is not yet derivable, and
+            the assertion that closes the gap needs a gesture of its own. It is
+            asked here rather than fired silently: the sentence says what is
+            true, and the button is the gesture. See
+            `src/lib/passkeyRecovery.ts#passkeyConfirmationNeeded`. */}
+        {awaitingPasskeyConfirmation ? (
+          <div className="passkey-confirm-backdrop">
+            <section
+              className="passkey-confirm"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="passkey-confirm-title"
+            >
+              <p id="passkey-confirm-title">{PASSKEY_CONFIRM_MESSAGE}</p>
+              <button
+                type="button"
+                className="passkey-confirm-action"
+                onClick={confirmPasskeyNow}
+                autoFocus
+              >
+                {PASSKEY_CONFIRM_ACTION}
+              </button>
+            </section>
+          </div>
+        ) : null}
         <OnboardingScreen
           stage={onboardingStage}
           busyLabel={onboardingLabel}
@@ -7772,6 +7871,7 @@ export default function PassportDemo() {
              `startFreshPassportOnThisDevice`. */
           onStartFresh={() => void startFreshPassportOnThisDevice()}
         />
+        </>
       ) : accountSearch?.phase === 'not-found' ? (
         /* THE END OF THE SEARCH, and the reason it has one. A passkey named an
            account, the chain never answered for it, and what used to happen at

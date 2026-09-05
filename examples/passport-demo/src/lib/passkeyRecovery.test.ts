@@ -18,6 +18,9 @@ import {
   MID_SESSION_PASSKEY_MESSAGE,
   midSessionPasskeyMessage,
   PASSKEY_CEREMONY_TIMEOUT_MESSAGE,
+  PASSKEY_CONFIRM_ACTION,
+  PASSKEY_CONFIRM_MESSAGE,
+  passkeyConfirmationNeeded,
   passkeySignInRecovery,
   type PasskeyCeremonyReason,
 } from './passkeyRecovery.js';
@@ -257,5 +260,47 @@ describe('the mid-session way-out mark', () => {
     expect(isMidSessionWayOut(undefined)).toBe(false);
     expect(isMidSessionWayOut('cancelled')).toBe(false);
     expect(isMidSessionWayOut(new Error('ordinary'))).toBe(false);
+  });
+});
+
+/**
+ * The rule that stops onboarding raising a second ceremony on its own.
+ *
+ * Safari evaluates no PRF during `credentials.create`, so a Passport made
+ * there is a passkey plus one assertion — and that assertion used to be fired
+ * off the back of the creation, with the creating gesture already spent. This
+ * is the fact the screen consults before it prompts anybody.
+ */
+describe('passkeyConfirmationNeeded', () => {
+  it('is false where the platform already evaluated the PRF at creation', () => {
+    /* Chrome and the platforms that behave like it: one ceremony, one prompt,
+       and nothing further asked of the reader. */
+    expect(passkeyConfirmationNeeded({ prf: { dispose: () => {} } })).toBe(false);
+  });
+
+  it('is true where enrolment came back without one — the Safari case', () => {
+    expect(passkeyConfirmationNeeded({ prf: null })).toBe(true);
+    expect(passkeyConfirmationNeeded({ prf: undefined })).toBe(true);
+  });
+
+  it('asks for nothing where there is no enrolment to finish', () => {
+    /* A sign-in that reopened an existing Passport enrolled nothing, so there
+       is no gap to close and no question to put on the screen. */
+    expect(passkeyConfirmationNeeded(null)).toBe(false);
+    expect(passkeyConfirmationNeeded(undefined)).toBe(false);
+  });
+
+  it('says what is true in words a reader can act on', () => {
+    /* The sentence a person meets on their first Passport. It may not name the
+       extension, the ceremony, or the browser: none of the three is a thing
+       they can do anything about, and the button is. */
+    expect(PASSKEY_CONFIRM_MESSAGE).toBe(
+      'Your passkey is ready. This device needs to see it once more to finish setting up your Passport.',
+    );
+    expect(PASSKEY_CONFIRM_ACTION).toBe('Confirm with your passkey');
+    for (const word of ['PRF', 'WebAuthn', 'extension', 'assertion', 'ceremony', 'Safari']) {
+      expect(PASSKEY_CONFIRM_MESSAGE).not.toContain(word);
+      expect(PASSKEY_CONFIRM_ACTION).not.toContain(word);
+    }
   });
 });

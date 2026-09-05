@@ -272,3 +272,48 @@ export function isMidSessionWayOut(cause: unknown): boolean {
     (cause as Record<string, unknown>)[MID_SESSION_WAY_OUT] === true
   );
 }
+
+/* ---------------------------------------------------------------------------
+ * The confirmation a creation-time PRF cannot give
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Whether enrolment left anything still to do, and why the answer decides
+ * whether a person is prompted or merely asked.
+ *
+ * Some platforms evaluate the PRF during `credentials.create` and hand back
+ * the output there and then: one ceremony, one prompt, the whole profile
+ * derivable. Safari does not — it reports only that the extension is enabled —
+ * so a Passport made there needs one assertion after the creation to obtain
+ * the same output.
+ *
+ * WHY THAT ASSERTION MAY NOT BE FIRED AUTOMATICALLY. It used to be, `await`ed
+ * straight off the back of the create, and Safari is the strictest browser
+ * about transient activation: the gesture that authorised the creation has
+ * been spent by the time the creation resolves, so the second `credentials.get`
+ * is a ceremony with no fresh press behind it. At best it is a prompt the
+ * reader did not ask for arriving on its own; at worst the platform refuses it
+ * and onboarding ends holding a passkey it cannot derive a key from.
+ *
+ * So the missing output is not an error and not a silent retry — it is a
+ * question, put on the screen with the sentence below and answered by a press.
+ * One gesture, one prompt.
+ */
+export function passkeyConfirmationNeeded(
+  enrolled: { prf: unknown } | null | undefined,
+): boolean {
+  return Boolean(enrolled) && !enrolled?.prf;
+}
+
+/**
+ * The one line the confirmation panel puts above its button.
+ *
+ * It names no extension, no ceremony, and no browser. What a reader can act on
+ * is that their passkey exists, that this device wants to see it once more,
+ * and that pressing the button is what does it.
+ */
+export const PASSKEY_CONFIRM_MESSAGE =
+  'Your passkey is ready. This device needs to see it once more to finish setting up your Passport.';
+
+/** The button beneath {@link PASSKEY_CONFIRM_MESSAGE}. Pressing it prompts. */
+export const PASSKEY_CONFIRM_ACTION = 'Confirm with your passkey';

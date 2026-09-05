@@ -259,3 +259,52 @@ to { transform: rotate(360deg); }
 .modal-actions { align-items: stretch; flex-direction: column; }
 .modal-actions .modal-copy, .modal-actions .modal-secondary { width: 100%; }
 }
+
+/* The confirmation an enrolment sometimes still owes — one sentence and one
+   button, over the onboarding screen it interrupts.
+
+   It borrows the consent sheet's proportions deliberately: a modal that asks
+   for a passkey should look like the other modal that asks for a passkey, and
+   this one appears rarely enough that a second visual idiom for it would read
+   as a different app. See `passkeyConfirmationNeeded` in
+   `src/lib/passkeyRecovery.ts` for when it is raised.
+
+   `100dvh` and not `100vh`: on iOS the two differ by the height of a toolbar
+   that comes and goes, and a backdrop measured against the larger one leaves
+   the button under the fold on the shorter one. */
+.passkey-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top)) 24px
+    max(24px, env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, .72);
+  backdrop-filter: blur(12px);
+}
+.passkey-confirm {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 20px;
+  padding: 28px;
+  border: 1px solid #272727;
+  color: #111;
+  background: #f8f8f6;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .34);
+}
+.passkey-confirm p { margin: 0; font-size: 15px; line-height: 1.55; }
+.passkey-confirm-action {
+  /* 44px is the smallest target a thumb hits reliably, and this button is the
+     only thing on the screen. */
+  min-height: 46px;
+  padding: 0 18px;
+  border: 1px solid #111;
+  color: #fff;
+  background: #111;
+  font-size: 14px;
+  font-weight: 700;
+}
+.passkey-confirm-action:hover { background: #000; }
+.passkey-confirm-action:active { background: #333; }
