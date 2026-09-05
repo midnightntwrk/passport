@@ -148,6 +148,18 @@ export type PassportPasskeyOnboarding =
       enrolled: null;
       reason: PassportPasskeyDiscoveryFailure;
       message: string;
+    }
+  /* THE USER SAID NO, AND THAT IS AN ANSWER (2026/09/05). A dismissed picker
+     used to fall straight through to `create`: dismiss the Face ID sheet and
+     iOS raised a make-a-passkey sheet nobody had asked for, one gesture after
+     the gesture that meant "not now". Nothing was created and nothing is
+     wrong; the ceremony simply ended. */
+  | {
+      outcome: 'cancelled';
+      discovered: null;
+      enrolled: null;
+      reason: 'cancelled';
+      message: string;
     };
 
 export interface DiscoverPassportPasskeyOptions {
@@ -986,8 +998,14 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
    * that produced no usable credential is an answer, not an exception.
    *
    * The user dismissing the picker, and a picker with nothing in it, both
-   * surface as `NotAllowedError` (reason `cancelled`) and proceed to
-   * enrolment, as they always did. Any other failure has told us nothing
+   * surface as `NotAllowedError` (reason `cancelled`), and since 2026/09/05
+   * that ENDS the ceremony with `outcome: 'cancelled'` rather than proceeding
+   * to enrolment. Falling through was how a dismissed Face ID sheet became an
+   * unasked-for create sheet one gesture later. The two cases are
+   * indistinguishable to WebAuthn, so the safe reading is the one that makes
+   * nothing: an empty picker's way forward is the landing screen's own
+   * "Continue with Passport", which enrols where this browser knows of no
+   * credential. Any other failure has told us nothing
    * about what the device holds, so it is RETRIED once — a transient error
    * should not lead to a create — and then proceeds to enrolment as well.
    * Every create carries `knownCredentialIds` in `excludeCredentials`, which
@@ -1047,6 +1065,22 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
             discovered: null,
             enrolled: null,
             reason: error.reason,
+            message: error.message,
+          };
+        }
+        /* A DISMISSED PICKER IS A STOP, NOT A LICENCE TO ENROL (2026/09/05).
+           This used to fall through to `create`, so dismissing the Face ID
+           sheet raised a make-a-passkey sheet immediately after — a second
+           ceremony charged for the gesture that meant "not now", and on a
+           browser whose site data was cleared it is how somebody ends up with
+           a second, empty Passport beside the one they were trying to reopen.
+           The user has answered. */
+        if (error.reason === 'cancelled') {
+          return {
+            outcome: 'cancelled',
+            discovered: null,
+            enrolled: null,
+            reason: 'cancelled',
             message: error.message,
           };
         }

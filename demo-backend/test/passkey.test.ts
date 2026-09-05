@@ -1006,8 +1006,13 @@ describe('enrolment overwrite guard', () => {
     outcome.discovered?.dispose();
   });
 
-  it('enrols only when discovery finds nothing, cancellation included', async () => {
-    for (const failure of [
+  it('never creates behind a picker the user dismissed', async () => {
+    /* A DISMISSED SHEET IS AN ANSWER (found by the Safari review, 2026/09/05).
+       Both of these are what WebAuthn reports for "the user said no", and both
+       used to fall straight through to `create` — so dismissing the Face ID
+       sheet raised a make-a-passkey sheet immediately after it, charged to the
+       gesture that meant "not now". */
+    for (const refusal of [
       async () => null,
       async () => {
         const error = new Error('The user cancelled.');
@@ -1016,17 +1021,12 @@ describe('enrolment overwrite guard', () => {
       },
     ]) {
       let creations = 0;
-      let capturedOptions: CredentialCreationOptions | undefined;
       replaceNavigator({
         credentials: {
-          get: failure,
-          create: async (options: CredentialCreationOptions) => {
+          get: refusal,
+          create: async () => {
             creations += 1;
-            capturedOptions = options;
-            return {
-              rawId: new Uint8Array([3, 3]).buffer,
-              getClientExtensionResults: () => ({ prf: { enabled: true } }),
-            };
+            throw new Error('a dismissed picker must never lead to a create');
           },
         },
       });
@@ -1037,14 +1037,51 @@ describe('enrolment overwrite guard', () => {
         rpId: 'localhost',
         knownCredentialIds: ['AQID'],
       });
-      expect(outcome.outcome).toBe('enrolled');
+      expect(outcome.outcome).toBe('cancelled');
+      expect(outcome).toMatchObject({ reason: 'cancelled' });
       expect(outcome.discovered).toBeNull();
-      expect(creations).toBe(1);
-      // The second line of defence still rides along on the create.
-      const publicKey = capturedOptions?.publicKey as Record<string, unknown>;
-      expect(publicKey.excludeCredentials).toHaveLength(1);
-      outcome.enrolled?.prf?.dispose();
+      expect(outcome.enrolled).toBeNull();
+      expect(creations).toBe(0);
     }
+  });
+
+  it('still enrols where discovery failed for a reason that is not a refusal', async () => {
+    /* The other half of the same rule: an authenticator that errored has told
+       us nothing about what it holds, so enrolment still proceeds — guarded,
+       as it always was, by the exclusion list. */
+    let capturedOptions: CredentialCreationOptions | undefined;
+    let creations = 0;
+    replaceNavigator({
+      credentials: {
+        get: async () => {
+          const error = new Error('The operation is insecure.');
+          error.name = 'SecurityError';
+          throw error;
+        },
+        create: async (options: CredentialCreationOptions) => {
+          creations += 1;
+          capturedOptions = options;
+          return {
+            rawId: new Uint8Array([3, 3]).buffer,
+            getClientExtensionResults: () => ({ prf: { enabled: true } }),
+          };
+        },
+      },
+    });
+
+    const outcome = await WebAuthnPrfKeyProvider.discoverOrEnroll({
+      label: 'Midnight Passport',
+      userId: 'local-empty',
+      rpId: 'localhost',
+      knownCredentialIds: ['AQID'],
+    });
+    expect(outcome.outcome).toBe('enrolled');
+    expect(outcome.discovered).toBeNull();
+    expect(creations).toBe(1);
+    // The second line of defence still rides along on the create.
+    const publicKey = capturedOptions?.publicKey as Record<string, unknown>;
+    expect(publicKey.excludeCredentials).toHaveLength(1);
+    outcome.enrolled?.prf?.dispose();
   });
 
   it('refuses to create over a passkey that answered without a PRF result', async () => {
@@ -1169,10 +1206,7 @@ describe('enrolment overwrite guard', () => {
         },
         create: async () => {
           creations += 1;
-          return {
-            rawId: new Uint8Array([6, 6]).buffer,
-            getClientExtensionResults: () => ({ prf: { enabled: true } }),
-          };
+          throw new Error('a cancellation must never lead to a create');
         },
       },
     });
@@ -1182,10 +1216,10 @@ describe('enrolment overwrite guard', () => {
       userId: 'local-cancelled-once',
       rpId: 'localhost',
     });
+    // Asked once, because the answer was the user's; and nothing made.
     expect(gets).toBe(1);
-    expect(creations).toBe(1);
-    expect(outcome.outcome).toBe('enrolled');
-    outcome.enrolled?.prf?.dispose();
+    expect(creations).toBe(0);
+    expect(outcome.outcome).toBe('cancelled');
   });
 
   it('reports a dismissed picker as cancelled, with the reason preserved', async () => {

@@ -2824,6 +2824,16 @@ export default function PassportDemo() {
       if (!(cause instanceof PassportEnrolmentConflictError)) throw enrolmentCeremonyFailure(cause);
       return signInAfterEnrolmentConflict();
     }
+    if (onboarding.outcome === 'cancelled') {
+      /* THE PICKER WAS DISMISSED, so the ceremony is over (2026/09/05). It
+         used to fall through to enrolment, which meant a dismissed Face ID
+         sheet was answered by a make-a-passkey sheet nobody had asked for.
+         Nothing was created and nothing is wrong; the screen says so and
+         leaves the same button under it. */
+      throw new Error(
+        'The passkey prompt was closed, so nothing was set up. Choose "Continue with Passport" when you are ready.',
+      );
+    }
     if (onboarding.outcome === 'unusable-credential') {
       /* A passkey for this site answered and cannot open a Passport: it
          returned no PRF output. Creating one under the same handle could
