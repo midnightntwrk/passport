@@ -1,0 +1,8 @@
+// P4 probe B: is SHA-256 available in-circuit? BIP-340's tagged challenge
+// hash is SHA-256; without it the challenge cannot be computed in-circuit.
+pragma language_version 0.26;
+import CompactStandardLibrary;
+
+export circuit digest(data: Bytes<64>): Bytes<32> {
+  return sha256(data);
+}

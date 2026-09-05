@@ -1,0 +1,16 @@
+{
+  "connector": {
+    "message_is_sha256_of_signed_bytes": true,
+    "rejects_corrupted_payload": true,
+    "rejects_unhashed_message": true,
+    "verify_over_signed_bytes": true
+  },
+  "k256_version": "0.13 (workspace pin, same line midnight-curves wraps)",
+  "note": "independent Rust verification of the wallet-SDK-produced vectors",
+  "sdk": {
+    "message_is_sha256_of_signed_bytes": true,
+    "rejects_corrupted_payload": true,
+    "rejects_unhashed_message": true,
+    "verify_over_signed_bytes": true
+  }
+}

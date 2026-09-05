@@ -1,0 +1,12 @@
+// P4 probe C: the point-arithmetic surface BIP-340's R = s*G - e*P needs.
+pragma language_version 0.26;
+import CompactStandardLibrary;
+
+export circuit combine(
+  s: Secp256k1Scalar,
+  e: Secp256k1Scalar,
+  p: Secp256k1Point
+): Secp256k1Base {
+  const r = secp256k1Add(secp256k1MulGenerator(s), secp256k1Mul(p, e));
+  return secp256k1PointX(r);
+}
