@@ -37,12 +37,27 @@
  * here does not find a bug, it finds a prover.
  */
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { installVirtualAuthenticator, uniqueAlias } from './passkey.js';
 
 /** Only runs deliberately. Every run spends stagenet NIGHT and claims a name. */
 const live = process.env.RUN_LIVE === '1';
+
+/**
+ * The ticker the stablecoin is named by everywhere the person sending can see
+ * it — the picker, the heading, the unit beside the amount, and the review.
+ *
+ * It is the same name from two agreeing sources: `KNOWN_COLOURS` in
+ * `src/lib/colour.ts` holds it for this colour, and the sponsor publishes it as
+ * `assetSymbol` over `/status`. A build where those two disagree is a build
+ * where the picker and the balance list would name the same money differently,
+ * which is worth a red test.
+ *
+ * Out here rather than beside the figures below because {@link chooseStablecoin}
+ * names the asset too, and one ticker in one place is the point of it.
+ */
+const MUSD_SYMBOL = 'mUSD';
 
 test.describe('@live the account model on stagenet', () => {
   test.skip(!live, 'Set RUN_LIVE=1 to run against https://midnightpassport.com and stagenet.');
@@ -75,8 +90,21 @@ test.describe('@live the account model on stagenet', () => {
    * It is checked here rather than trusted: `decodeShieldedRecipient` in
    * `src/identity/accountCustody.ts` and `classifyRecipient` in
    * `src/screens/SendSheet.tsx` both run it through the wallet SDK's own
-   * `ShieldedAddress` codec, and the sheet's title turning into "Send a
-   * shielded token" is that codec having accepted it.
+   * `ShieldedAddress` codec, and the sheet accepting it beside a shielded asset
+   * — rather than refusing the pair in words — is that codec having said so.
+   *
+   * IT IS AN ADDRESS AND NOT A NAME, and that is the one thing this test needs
+   * from it. A `.night` name is the recipient Passport recommends and the NIGHT
+   * send above exercises it; but paying a name in mUSD is the two-transaction
+   * account route, and the assertion at the foot of this test is that
+   * `withdraw_shielded` — the single circuit that moves a shielded colour to an
+   * address — was recorded. Only a raw `mn_shield-addr…` puts the app on it.
+   *
+   * NOTHING ABOUT THE TITLE IS INFERRED FROM IT any more. Until 2026/08/31 the
+   * sheet read the recipient to decide what was being sent, and pasting this
+   * turned the heading into "Send a shielded token". The asset is now chosen
+   * first, in the picker, and the heading names that choice — so what is
+   * asserted below is the choice, never the address's effect on it.
    */
   const SHIELDED_RECIPIENT =
     'mn_shield-addr_stagenet1vgzgswr3hh63g4kjgymcupyugl9jy75j9w73kr4dr6m0crkrxgrvmmq4969xqusmk8q3wrlsej3p7ev8r4jl9g4fnxg5dqewc9dw5ns5e03lu';
@@ -430,44 +458,77 @@ test.describe('@live the account model on stagenet', () => {
     await waitForSponsor();
     /* The colour the sponsor named, so a Passport that happens to hold more
        than one shielded token still sends the stablecoin rather than whichever
-       colour sorted first. `null` when the service cannot be read — the sheet
-       then keeps its own default and the balance assertions still decide. */
+       colour sorted first. `null` when the service cannot be read, and then
+       {@link chooseStablecoin} falls back to the option the picker names mUSD —
+       which is a weaker identification, and is why the colour is asked for
+       first rather than instead. */
     const colour = await sponsorStablecoinColour();
 
     const attempts = 2;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       await page.getByRole('button', { name: /^Send$/ }).first().click();
-      /* Choosing mUSD over NIGHT is not a control on this sheet — it is the
-         ADDRESS. The recipient field is the same textarea the NIGHT send uses,
-         carrying the network's unshielded prefix as its placeholder, and what
-         decides the ledger is the wallet SDK's codec reading what was pasted
-         into it. The title changing is that codec having said "shielded". */
-      await page.getByPlaceholder(/alice\.night|^mn_addr_stagenet1/).fill(SHIELDED_RECIPIENT);
-      await expect(page.locator('#mnhome-send-title')).toHaveText('Send a shielded token');
 
-      /* The account's own colours, read from the contract when a shielded
-         recipient first turns up. This line appearing IS that read having
-         returned something — an account holding nothing shielded says so
-         instead, and takes the Send control with it. */
-      await expect(page.getByText(/units of this token available/)).toBeVisible({
-        timeout: 3 * 60_000,
-      });
-      const tokenSelect = page.locator('.mnhome-send-form select');
-      if (colour !== null && (await tokenSelect.count()) > 0) {
-        await tokenSelect.selectOption(colour);
-      }
-      await expect(page.getByText(`${GRANT_MUSD} units of this token available`)).toBeVisible();
+      /* WHAT IS BEING SENT IS THE FIRST FIELD, and since 2026/08/31 it is a
+         CHOICE. The sheet opens on NIGHT every time — including on the second
+         attempt, which reopens it — so mUSD is picked here rather than arrived
+         at by pasting an address, which is what this test used to do.
+
+         The picker only exists once the account is known to hold something
+         besides NIGHT: with one asset the sheet states it instead of offering a
+         control with a single option in it. So waiting for it IS waiting for
+         the contract read that the "units of this token available" line used to
+         stand in for. */
+      const picker = page.locator('.mnhome-send-asset');
+      await expect(picker).toBeVisible({ timeout: 3 * 60_000 });
+      await chooseStablecoin(picker, colour);
+
+      /* The heading names the CHOSEN asset. It is asserted after the choice and
+         before the recipient, deliberately: nothing typed below may change it,
+         and a heading that still said NIGHT here would mean the send about to
+         be confirmed is not the send this test is about. */
+      await expect(page.locator('#mnhome-send-title')).toHaveText(`Send ${MUSD_SYMBOL}`);
+      /* The unit beside the amount says which ledger is being spent from — the
+         asset's own ticker, where this once read the fixed word "units" and
+         named nothing on a sheet that can send several things. */
+      await expect(page.locator('.mnhome-send-unit')).toHaveText(MUSD_SYMBOL);
+      /* The whole grant, quoted in the asset's own name: the account really
+         holds the hundred the poll above watched arrive, and this is the sheet
+         saying the same figure back before ten of them are spent. */
+      await expect(
+        page.locator('.mnhome-send-form').getByText(`${GRANT_MUSD} ${MUSD_SYMBOL} available`),
+      ).toBeVisible();
+
+      /* THEN the recipient, which is the order the sheet now asks in. The field
+         is the sheet's one mono textarea; its placeholder follows the chosen
+         asset, so matching on that would be matching on the thing just chosen.
+         What is asserted about the address is that the pair is ACCEPTED — the
+         codec placed it on the shielded ledger, which is where mUSD goes — and
+         a refusal under the field would be the sheet saying it is not. */
+      await page.locator('.mnhome-send-input-mono').fill(SHIELDED_RECIPIENT);
+      await expect(page.locator('#mnhome-send-recipient-error')).toHaveCount(0);
 
       await page.locator('.mnhome-send-amount input').fill(SEND_MUSD);
-      // Whole units, not NIGHT: the unit beside the field says which ledger.
-      await expect(page.locator('.mnhome-send-unit')).toHaveText('units');
       // The fee sentence still names who pays, never which token it costs.
       expect(await page.locator('body').innerText()).not.toMatch(/dust/i);
 
       await page.getByRole('button', { name: /^Review$/ }).click();
       const sheet = page.locator('[aria-labelledby="mnhome-send-title"]');
       await expect(sheet).toBeVisible();
-      await expect(sheet.getByText(`${SEND_MUSD} units`)).toBeVisible();
+      /* The review step names the transfer rather than the asset — the asset is
+         a row inside it now, and it leads, because it is what was chosen
+         first. Both are asserted: an amount with no asset beside it is the
+         ambiguity the whole inversion removed.
+
+         The Asset row is found through the LIST rather than through a class on
+         the value. This is a Tier 2 spec, so it runs against whatever is
+         deployed, and the class that value carries has changed inside the
+         window between a deploy and a merge at least once — a term and its
+         definition have not, because they are what a `dl` is. */
+      await expect(page.locator('#mnhome-send-title')).toHaveText('Review this transfer');
+      await expect(sheet.locator('dt:text-is("Asset") + dd strong')).toHaveText(MUSD_SYMBOL);
+      await expect(sheet.locator('dt:text-is("Amount") + dd strong')).toHaveText(
+        `${SEND_MUSD} ${MUSD_SYMBOL}`,
+      );
 
       /* Armed BEFORE the submit. The success toast lives twelve seconds and is
          pushed on the same tick the sheet closes, so a wait started afterwards
@@ -687,6 +748,55 @@ async function sponsorStablecoinColour(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Chooses the sponsor's stablecoin in the Send sheet's asset picker.
+ *
+ * BY COLOUR FIRST, because the colour is what the ledger keys the withdrawal
+ * by and it is the only identification that cannot name the wrong money. The
+ * option's value is the colour exactly as the contract read reported it, and
+ * the service publishes its own; the two are compared through the same
+ * normalisation `normalisedColourHex` applies — trimmed, lower-cased, and with
+ * a leading `0x` removed — so a difference of presentation is not mistaken for
+ * a difference of colour.
+ *
+ * BY TICKER SECOND, and only when the service could not be read at all. The
+ * label carries the balance beside the ticker, so this matches the ticker at
+ * the head of it and never the figure, which moves. It is the weaker witness —
+ * a name is what a build believes about a colour rather than the colour — which
+ * is why it is a fallback and not the rule.
+ *
+ * Neither found is a failure with the whole list in it: silently leaving NIGHT
+ * selected would send the wrong asset and then fail somewhere that says nothing
+ * about why.
+ */
+async function chooseStablecoin(picker: Locator, colour: string | null): Promise<void> {
+  const options = await picker
+    .locator('option')
+    .evaluateAll((nodes) =>
+      (nodes as HTMLOptionElement[]).map((node) => ({
+        value: node.value,
+        label: (node.textContent ?? '').trim(),
+      })),
+    );
+  const normalise = (value: string): string => value.trim().toLowerCase().replace(/^0x/, '');
+  const wanted = colour === null ? null : normalise(colour);
+  const byColour =
+    wanted === null ? undefined : options.find((option) => normalise(option.value) === wanted);
+  const byTicker = options.find((option) => option.label.startsWith(`${MUSD_SYMBOL} `));
+  const chosen = byColour ?? byTicker;
+  expect(
+    chosen,
+    `no ${MUSD_SYMBOL} option in the asset picker (sponsor colour ${
+      colour ?? 'unread'
+    }); it offered [${options.map((option) => option.label).join(' | ')}]`,
+  ).toBeDefined();
+  const option = chosen as { value: string; label: string };
+  await picker.selectOption(option.value);
+  console.log(
+    `[live] sending ${option.label} — chosen by ${byColour ? 'the sponsor’s colour' : 'ticker'}`,
+  );
 }
 
 /** One action the indexer records against a contract. */
