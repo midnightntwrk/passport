@@ -20,6 +20,10 @@ import {
   type PassportTxResponseBody,
 } from './lib/txApproval.js';
 import { holdCriticalWork } from './lib/appBusy.js';
+import {
+  CONSENT_NO_CHANNEL_MESSAGE,
+  consentReplyChannel,
+} from './profileConsent.js';
 
 /**
  * The popup transaction-approval surface — deliberate sibling of
@@ -119,7 +123,12 @@ function launchParameters(): { requestId: string; nonce: string } | null {
   const parameters = new URLSearchParams(window.location.search);
   const requestId = parameters.get('passportTxRequestId');
   const nonce = parameters.get('passportTxNonce');
-  if (!requestId || !nonce || !window.opener) return null;
+  /* No opener test here either, and for the reason set out in
+     `profileConsent.tsx#consentReplyChannel`: a pop-up opened from an
+     installed iOS Passport lands in a Safari tab with no opener at all, and
+     reading that as "no launch" is what left an app waiting three minutes on a
+     window showing an ordinary sign-in page. */
+  if (!requestId || !nonce) return null;
   return { requestId, nonce };
 }
 
@@ -129,6 +138,20 @@ export function PassportTxConsent({
   transferContext,
 }: TxConsentProps) {
   const launch = useMemo(launchParameters, []);
+  /* The same rule the profile sheet decides by, with one difference that is a
+     fact about the protocol rather than a choice: the signed redirect channel
+     carries a PROFILE reply, and this demo answers no payment over it. So a
+     payment launch that has lost its opener has nowhere to send an answer, and
+     says so at once. */
+  const channel = useMemo(
+    () =>
+      consentReplyChannel({
+        launched: launch !== null,
+        hasOpener: Boolean(window.opener),
+        redirectArmed: false,
+      }),
+    [launch],
+  );
   const [pending, setPending] = useState<PendingTxRequest | null>(null);
   /** Set once the ladder has passed: the one bigint sheet and send agree on. */
   const [amount, setAmount] = useState<bigint | null>(null);
@@ -170,7 +193,7 @@ export function PassportTxConsent({
      payment, so an app matching replies against the pairs it is waiting on can
      never mistake this for the answer to a profile question. */
   useEffect(() => {
-    if (!launch || !window.opener) return;
+    if (!launch || channel !== 'opener') return;
     const opener = window.opener as Window;
     /* `'*'` only here, and only for the pair the opener itself chose: this
        window does not learn the opener's origin until a message arrives from
@@ -225,7 +248,7 @@ export function PassportTxConsent({
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [launch]);
+  }, [launch, channel]);
 
   const reply = useCallback(
     (target: PendingTxRequest, body: PassportTxResponseBody) => {
@@ -340,7 +363,36 @@ export function PassportTxConsent({
     }
   }, [amount, pending, reply, signing]);
 
-  if (!launch || !pending) return null;
+  /* THE FAST FAIL, word for word the profile sheet's: a payment launch that
+     cannot be answered says so now rather than in three minutes. Nothing was
+     signed and nothing moved — this window never held a request. */
+  if (channel === 'none') {
+    return (
+      <div className="profile-consent-backdrop">
+        <section
+          className="profile-consent"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tx-consent-title"
+        >
+          <header>
+            <span className="profile-consent-mark">
+              <Wallet size={20} />
+            </span>
+            <div>
+              <p>Passport payment</p>
+              <h2 id="tx-consent-title">This window cannot answer.</h2>
+            </div>
+          </header>
+          <div className="profile-consent-outcome unavailable">
+            <X size={22} />
+            <p>{CONSENT_NO_CHANNEL_MESSAGE} Nothing has been sent.</p>
+          </div>
+        </section>
+      </div>
+    );
+  }
+  if (!launch || channel !== 'opener' || !pending) return null;
   /* Neither refused nor ready to show: the wallet is still arriving, and the
      grace timer above is the only thing that may end that wait. */
   if (amount === null && !outcome) return null;

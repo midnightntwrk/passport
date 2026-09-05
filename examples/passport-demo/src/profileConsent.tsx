@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ExternalLink, ShieldCheck, X } from 'lucide-react';
+import { passportCallbackLaunch } from './identity/callbackLaunch.js';
 import {
   createPassportProfileReady,
   createPassportProfileResponse,
@@ -74,9 +75,65 @@ function launchParameters(): { requestId: string; nonce: string } | null {
   const parameters = new URLSearchParams(window.location.search);
   const requestId = parameters.get('passportRequestId');
   const nonce = parameters.get('passportNonce');
-  if (!requestId || !nonce || !window.opener) return null;
+  /* THE OPENER IS NO LONGER PART OF THIS TEST (2026/09/05). It used to be, and
+     the effect was that a launch WITH an opener and a launch that had LOST one
+     were the same thing to this file — nothing. See
+     {@link consentReplyChannel} for what the difference is now worth. */
+  if (!requestId || !nonce) return null;
   return { requestId, nonce };
 }
+
+/**
+ * Which channel, if any, can carry this window's answer back to the app that
+ * asked — and the reason a Passport installed to an iPhone home screen needs
+ * to be asked the question at all.
+ *
+ * `window.open` from a standalone iOS web app opens a SAFARI tab, and that tab
+ * gets `window.opener === null`. Both consent surfaces read that as "there is
+ * no launch here", so the ready handshake was never posted, the request never
+ * arrived, and Passport rendered as an ordinary sign-in page over a request
+ * nobody could see. The app on the other side polls `opened.closed`, which
+ * reads `false` on a handle it cannot reach, so nothing there noticed either:
+ * the only exit was the client's three-minute timeout, spent in silence.
+ *
+ * The three answers:
+ *
+ *   - `opener` — an ordinary pop-up. Post the handshake and serve the request,
+ *     exactly as before.
+ *   - `redirect` — no opener, but this load ALSO carries the signed redirect
+ *     launch (`org.midnight.passport.callback/v1`), which is a channel that
+ *     survives a navigation and does not depend on a window handle. That
+ *     surface owns the reply, so this one shows nothing rather than a second
+ *     sheet asking the same question.
+ *   - `none` — a launch with no way home. Say so at once, in one sentence,
+ *     rather than showing a sign-in page for three minutes.
+ *
+ * `null` where this load carries no launch at all, which is every ordinary
+ * visit to Passport.
+ *
+ * `txConsent.tsx` decides by the same rule, for the same reason.
+ */
+export type PassportConsentChannel = 'opener' | 'redirect' | 'none';
+
+export function consentReplyChannel(input: {
+  launched: boolean;
+  hasOpener: boolean;
+  redirectArmed: boolean;
+}): PassportConsentChannel | null {
+  if (!input.launched) return null;
+  if (input.hasOpener) return 'opener';
+  return input.redirectArmed ? 'redirect' : 'none';
+}
+
+/**
+ * What a window with no way home says, and why it is one sentence.
+ *
+ * It names neither the opener, the channel, nor the transport. What a reader
+ * can act on is where to go back to and what to do differently, and both are
+ * in the sentence.
+ */
+export const CONSENT_NO_CHANNEL_MESSAGE =
+  'Passport has no way to send an answer back to the app that opened this. Return to the app and try again, or open its link in Safari.';
 
 export function PassportProfileConsent({
   sessionActive,
@@ -84,6 +141,21 @@ export function PassportProfileConsent({
   passportContract,
 }: ProfileConsentProps) {
   const launch = useMemo(launchParameters, []);
+  /* Pinned on first render alongside the launch: an opener that disappears
+     later must not change which channel this window decided to answer on. */
+  const channel = useMemo(
+    () =>
+      consentReplyChannel({
+        launched: launch !== null,
+        hasOpener: Boolean(window.opener),
+        /* The signed redirect launch, captured at import time by
+           `identity/callbackLaunch.ts` and answered by
+           `screens/callbackConsent.tsx`. An app that sends both survives an
+           installed iOS Passport with no change on this side. */
+        redirectArmed: passportCallbackLaunch.parse.kind === 'ok',
+      }),
+    [launch],
+  );
   const [pending, setPending] = useState<PendingRequest | null>(null);
   const [outcome, setOutcome] = useState<'approved' | 'denied' | 'unavailable' | null>(null);
 
@@ -113,7 +185,7 @@ export function PassportProfileConsent({
   }
 
   useEffect(() => {
-    if (!launch || !window.opener) return;
+    if (!launch || channel !== 'opener') return;
     const opener = window.opener;
     /* The wildcard is deliberate, and it is the only origin this line can
        name. A window opened by an app learns that app's origin only when a
@@ -161,7 +233,7 @@ export function PassportProfileConsent({
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [launch]);
+  }, [launch, channel]);
 
   const profileReady =
     !pending ||
@@ -185,7 +257,36 @@ export function PassportProfileConsent({
     return () => window.clearTimeout(timer);
   }, [pending, sessionActive, profileReady, outcome]);
 
-  if (!launch || !pending) return null;
+  /* THE FAST FAIL. A launch arrived, and nothing in this window can answer it.
+     Three minutes of a sign-in page is not an answer, and it is what a reader
+     used to get. */
+  if (channel === 'none') {
+    return (
+      <div className="profile-consent-backdrop">
+        <section
+          className="profile-consent"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="profile-consent-title"
+        >
+          <header>
+            <span className="profile-consent-mark">
+              <ShieldCheck size={20} />
+            </span>
+            <div>
+              <p>Passport connection</p>
+              <h2 id="profile-consent-title">This window cannot answer.</h2>
+            </div>
+          </header>
+          <div className="profile-consent-outcome unavailable">
+            <X size={22} />
+            <p>{CONSENT_NO_CHANNEL_MESSAGE}</p>
+          </div>
+        </section>
+      </div>
+    );
+  }
+  if (!launch || channel !== 'opener' || !pending) return null;
   /* Not ready and not yet answered: the grace timer above is running. */
   if (!profileReady && !outcome) return null;
 
