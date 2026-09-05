@@ -40,9 +40,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { isNodeRejection } from '../src/account.js';
 import {
+  isSocketFailure,
   isSubmissionTimeout,
+  isUnsentSocketFailure,
+  polkadotConnection,
   serialiseSubmissions,
   SubmissionTimeout,
+  type MidnightApi,
   type NodeConnection,
 } from '../src/submission.js';
 
@@ -260,5 +264,321 @@ describe('what the wrapper must not change', () => {
 
     await wrapped.submitTransaction(tx('one'));
     assert.deepEqual(steps, ['waiting to submit', 'submitting']);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The dead socket, and the rebuild that ends it                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * THE OUTAGE THESE PIN DOWN. On 2026/09/05 the wallet's node websocket died at
+ * 14:48 UTC. At 15:28 the health loop said `degraded: the wallet's sync indices
+ * have not moved in 40 min` and remedied it with `refresh`, which re-read the
+ * wallet and never touched this connection. From 15:30:27 until an operator
+ * restarted the unit at 20:12, EVERY submission failed instantly — 520 of them
+ * — with `RPC-CORE: submitAndWatchExtrinsic … WebSocket is not connected` and
+ * `Failed WS Request author_submitAndWatchExtrinsic`, while `/status` reported
+ * `synced: true`, `busy: false`, and both sponsorships `available`. The public
+ * node was healthy throughout.
+ *
+ * The provider's auto-reconnect had wedged and `connect()` on a provider in
+ * that state rejects — which this module used to swallow as "the provider is
+ * doing exactly what is wanted". These are the cases that say it no longer
+ * waits on a reconnect it cannot see.
+ *
+ * The socket is otherwise the one part of this module a unit test cannot reach,
+ * which is what `createApi` is for: everything below drives the REAL
+ * `polkadotConnection`, with only the `ApiPromise` factory replaced.
+ */
+
+/** A polkadot-js api under this test's control. */
+function fakeApi(options: {
+  connected: boolean;
+  /** Rejects, like a provider with a reconnect already in flight. */
+  connectRejects?: boolean;
+  /** What `.send()` does. Defaults to acknowledging with a hash. */
+  send?: (payload: string) => Promise<string>;
+  name: string;
+}): MidnightApi & { sends: string[]; disconnected: () => boolean; connects: () => number } {
+  const sends: string[] = [];
+  let wasDisconnected = false;
+  let connects = 0;
+  const api = {
+    isConnected: options.connected,
+    sends,
+    disconnected: () => wasDisconnected,
+    connects: () => connects,
+    async connect(): Promise<void> {
+      connects += 1;
+      if (options.connectRejects) throw new Error('WebSocket is not connected');
+    },
+    async disconnect(): Promise<void> {
+      wasDisconnected = true;
+    },
+    rpc: { chain: { getHeader: async () => ({ number: { toNumber: () => 1 } }) } },
+    tx: {
+      midnight: {
+        sendMnTransaction(payload: string) {
+          return {
+            async send(callback: (result: never) => void): Promise<() => void> {
+              sends.push(payload);
+              const behaviour = options.send ?? (async () => `0x${options.name}`);
+              const hash = await behaviour(payload);
+              (callback as unknown as (r: unknown) => void)({
+                txHash: { toString: () => hash },
+                status: {
+                  type: 'Ready',
+                  isReady: true,
+                  isBroadcast: false,
+                  isFuture: false,
+                  isInBlock: false,
+                  isFinalized: false,
+                  isRetracted: false,
+                  isInvalid: false,
+                  isDropped: false,
+                  isUsurped: false,
+                },
+              });
+              return () => undefined;
+            },
+          };
+        },
+      },
+    },
+  };
+  return api as unknown as ReturnType<typeof fakeApi>;
+}
+
+describe('recognising a failure of the transport rather than of the transaction', () => {
+  it('matches both forms the 520 failures of 2026/09/05 arrived in', () => {
+    for (const message of [
+      'RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: WebSocket is not connected',
+      'Failed WS Request author_submitAndWatchExtrinsic',
+    ]) {
+      assert.ok(isSocketFailure(new Error(message)), message);
+      assert.ok(
+        isUnsentSocketFailure(new Error(message)),
+        'and both are refusals to queue the request, so the bytes never left',
+      );
+    }
+  });
+
+  it('counts a mid-flight disconnect as a socket failure but never as a resendable one', () => {
+    /* The older defect. The request HAD gone out when the close event errored
+       its handler, so resending it would be this service putting the same
+       transaction on chain twice. Rebuilt, reported, not retried. */
+    const cause = new Error('disconnected from wss://rpc.stagenet.shielded.tools/: 1000:: Normal Closure');
+    assert.equal(isSocketFailure(cause), true);
+    assert.equal(isUnsentSocketFailure(cause), false);
+  });
+
+  it('leaves a node refusal alone — that is a rebuild for the caller, not for the socket', () => {
+    const refusal = new Error(
+      'RPC-CORE: submitAndWatchExtrinsic: 1010: Invalid Transaction: Custom error: 231',
+    );
+    assert.equal(isSocketFailure(refusal), false);
+    assert.ok(isNodeRejection(refusal), 'and it is still what `withNodeRejectionRetry` matches');
+  });
+
+  it('walks the cause chain, because the SDK wraps its failures several deep', () => {
+    const wrapped = new Error('the mint could not be submitted', {
+      cause: new Error('WebSocket is not connected'),
+    });
+    assert.equal(isSocketFailure(wrapped), true);
+  });
+});
+
+describe('rebuilding a submission connection that has died', () => {
+  it('builds a fresh api when the socket is down and `connect()` rejects', async () => {
+    /* Exactly the state the deployed provider was in for five hours:
+       `isConnected` false, and `connect()` rejecting because it believes a
+       reconnect is already in flight. The old code awaited that rejection,
+       swallowed it, and submitted on the dead socket anyway. */
+    const dead = fakeApi({ name: 'dead', connected: false, connectRejects: true });
+    const fresh = fakeApi({ name: 'fresh', connected: true });
+    const built: string[] = [];
+    let next = 0;
+    const connection = polkadotConnection(
+      { relayURL: new URL('wss://rpc.stagenet.shielded.tools') },
+      {
+        log: () => undefined,
+        createApi: async () => {
+          const api = next++ === 0 ? dead : fresh;
+          built.push(next === 1 ? 'dead' : 'fresh');
+          return api;
+        },
+      },
+    );
+
+    const hash = await connection.send(new TextEncoder().encode('one'));
+
+    assert.deepEqual(built, ['dead', 'fresh'], 'a second api was built, not a second connect()');
+    assert.equal(dead.connects(), 1, 'the cheap repair was tried exactly once');
+    assert.equal(dead.disconnected(), true, 'and the old one was disconnected and discarded');
+    assert.deepEqual(dead.sends, [], 'nothing was submitted on the dead socket');
+    assert.equal(fresh.sends.length, 1, 'the submission went out on the new api');
+    assert.equal(hash, '0xfresh');
+  });
+
+  it('retries once on a rebuilt connection when a submission fails on the socket', async () => {
+    /* The 15:30:27-to-20:12 case seen from one submission's point of view: the
+       api believes it is connected, and the send is refused by the transport. */
+    let failNext = true;
+    const first = fakeApi({
+      name: 'first',
+      connected: true,
+      send: async () => {
+        if (failNext) {
+          failNext = false;
+          throw new Error(
+            'RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: WebSocket is not connected',
+          );
+        }
+        return '0xfirst';
+      },
+    });
+    const second = fakeApi({ name: 'second', connected: true });
+    let next = 0;
+    const connection = polkadotConnection(
+      { relayURL: new URL('wss://rpc.stagenet.shielded.tools') },
+      { log: () => undefined, createApi: async () => (next++ === 0 ? first : second) },
+    );
+
+    const hash = await connection.send(new TextEncoder().encode('one'));
+
+    assert.equal(hash, '0xsecond', 'the second attempt’s answer is the one returned');
+    assert.equal(first.disconnected(), true, 'the socket that refused was thrown away');
+    assert.equal(second.sends.length, 1, 'and the retry went out on the rebuilt one');
+    const health = connection.socketHealth?.();
+    assert.equal(health?.nodeSocket, 'connected');
+    assert.equal(health?.consecutiveSocketFailures, 0, 'a submission that goes out clears the count');
+    assert.equal(health?.rebuilds, 1);
+  });
+
+  it('retries once and no more', async () => {
+    /* A socket that is genuinely gone must not turn one submission into an
+       unbounded loop of proofs and rebuilds. */
+    const refuse = (name: string) =>
+      fakeApi({
+        name,
+        connected: true,
+        send: async () => {
+          throw new Error('Failed WS Request author_submitAndWatchExtrinsic');
+        },
+      });
+    const apis = [refuse('a'), refuse('b'), refuse('c')];
+    let next = 0;
+    const connection = polkadotConnection(
+      { relayURL: new URL('wss://rpc.stagenet.shielded.tools') },
+      { log: () => undefined, createApi: async () => apis[Math.min(next++, 2)]! },
+    );
+
+    const failure = await connection.send(new TextEncoder().encode('one')).catch((c: unknown) => c);
+
+    assert.ok(failure instanceof Error);
+    assert.equal(apis[0]!.sends.length, 1);
+    assert.equal(apis[1]!.sends.length, 1, 'one retry');
+    assert.equal(apis[2]!.sends.length, 0, 'and not a second');
+    const health = connection.socketHealth?.();
+    assert.equal(health?.nodeSocket, 'dead');
+    assert.equal(health?.consecutiveSocketFailures, 2);
+  });
+
+  it('does not resend a submission whose bytes had already gone out', async () => {
+    /* `disconnected from …` reaches a request that was already on the wire.
+       Resending it would risk the same transaction landing twice, which is a
+       far worse fault than the failure being repaired. */
+    const first = fakeApi({
+      name: 'first',
+      connected: true,
+      send: async () => {
+        throw new Error('disconnected from wss://rpc.stagenet.shielded.tools/: 1000:: Normal Closure');
+      },
+    });
+    const second = fakeApi({ name: 'second', connected: true });
+    let next = 0;
+    const connection = polkadotConnection(
+      { relayURL: new URL('wss://rpc.stagenet.shielded.tools') },
+      { log: () => undefined, createApi: async () => (next++ === 0 ? first : second) },
+    );
+
+    const failure = await connection.send(new TextEncoder().encode('one')).catch((c: unknown) => c);
+
+    assert.match((failure as Error).message, /Normal Closure/, 'the caller hears the real fault');
+    assert.equal(second.sends.length, 0, 'and nothing was put on chain a second time');
+    assert.equal(
+      connection.socketHealth?.().rebuilds,
+      1,
+      'the connection was still rebuilt for whatever comes next',
+    );
+  });
+
+  it('passes a node refusal straight out without rebuilding anything', async () => {
+    /* The property the whole module rests on: `withNodeRejectionRetry` matches
+       on this message, and a socket that rebuilt itself on every `1010` would
+       throw the connection away on the service's most ordinary failure. */
+    const only = fakeApi({
+      name: 'only',
+      connected: true,
+      send: async () => {
+        throw new Error('1010: Invalid Transaction: Custom error: 231');
+      },
+    });
+    const connection = polkadotConnection(
+      { relayURL: new URL('wss://rpc.stagenet.shielded.tools') },
+      { log: () => undefined, createApi: async () => only },
+    );
+
+    const failure = await connection.send(new TextEncoder().encode('one')).catch((c: unknown) => c);
+
+    assert.ok(isNodeRejection(failure));
+    assert.equal(connection.socketHealth?.().rebuilds, 0, 'no rebuild');
+    assert.equal(connection.socketHealth?.().consecutiveSocketFailures, 0, 'and nothing counted');
+  });
+
+  it('counts rebuilds that fail, which is what the health loop escalates on', async () => {
+    let next = 0;
+    const connection = polkadotConnection(
+      { relayURL: new URL('wss://rpc.stagenet.shielded.tools') },
+      {
+        log: () => undefined,
+        createApi: async () => {
+          if (next++ === 0) return fakeApi({ name: 'first', connected: false, connectRejects: true });
+          throw new Error('connect ECONNREFUSED');
+        },
+      },
+    );
+
+    await connection.send(new TextEncoder().encode('one')).catch(() => undefined);
+    await connection.rebuild?.('a second attempt').catch(() => undefined);
+
+    const health = connection.socketHealth?.();
+    assert.equal(health?.nodeSocket, 'dead');
+    assert.equal(health?.consecutiveRebuildFailures, 2, 'two in a row, which is the escalation fact');
+  });
+
+  it('bounds a rebuild that never finishes', async () => {
+    /* A rebuild that hangs is the outage again with a different shape: the
+       submission would be abandoned on its own ceiling and the next one would
+       find the same half-built connection waiting. */
+    let next = 0;
+    const connection = polkadotConnection(
+      { relayURL: new URL('wss://rpc.stagenet.shielded.tools') },
+      {
+        log: () => undefined,
+        rebuildTimeoutMs: 40,
+        createApi: async () => {
+          if (next++ === 0) return fakeApi({ name: 'first', connected: false, connectRejects: true });
+          return await new Promise<never>(() => undefined);
+        },
+      },
+    );
+
+    const started = Date.now();
+    await connection.send(new TextEncoder().encode('one')).catch(() => undefined);
+
+    assert.ok(Date.now() - started < 1_000, 'the rebuild gave up on its own clock');
+    assert.equal(connection.socketHealth?.().consecutiveRebuildFailures, 1);
   });
 });

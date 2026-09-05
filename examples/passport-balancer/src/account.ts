@@ -532,6 +532,90 @@ export interface EnsureSpareCoinOptions {
    * start-up call use.
    */
   queueIdle?: () => boolean;
+  /**
+   * Whether transactions can reach the node at all right now.
+   *
+   * Absent means "do not ask". Present and false is a FULL STOP: see
+   * {@link createSpareMintSchedule} for the five hours of prover quota this
+   * exists to stop being burnt.
+   */
+  socketAlive?: () => boolean;
+}
+
+/* -------------------------------------------------------------------------- */
+/* When the spare mint may be attempted again                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The retry schedule for the spare mUSD pre-mint, and the reason it is no
+ * longer a fixed cadence.
+ *
+ * WHAT A FIXED CADENCE COST. On 2026/09/05 the submission socket died at 14:48
+ * UTC and stayed dead until 20:12. Every minute of that, the housekeeping tick
+ * in `./server.ts` asked for a spare coin; every attempt proved a
+ * `mint_shielded` circuit against the 1AM prover — about 7.4 seconds of
+ * somebody else's quota — and then failed at the submission, because every
+ * submission was failing. 249 `[asset] no spare mUSD coin` lines, 249 proofs,
+ * five hours, and not one of them could have succeeded: the transport was gone
+ * and the pre-mint had no way to know or to slow down.
+ *
+ * So two rules, and the second matters more than the first:
+ *
+ *   - a failure backs the next attempt off exponentially, 15 s doubling to an
+ *     8-minute ceiling, and one success clears it. The pre-mint is
+ *     housekeeping — nobody is waiting on it, and an activation that finds no
+ *     spare mints its own — so there is no cost to being patient and a real one
+ *     to being eager;
+ *   - a dead submission socket stops it altogether, whatever the backoff says.
+ *     Not a longer wait: a stop. An attempt made while nothing can be submitted
+ *     is guaranteed to fail, and it spends a proof to find out.
+ *
+ * Pure and injectable-clock, so `test/account.test.ts` can put five hours of
+ * outage wherever it likes.
+ */
+export interface SpareMintSchedule {
+  /**
+   * May a mint be attempted now? `socketAlive` false is a full stop —
+   * it does not advance, extend, or shorten the backoff.
+   */
+  due(now: number, socketAlive: boolean): boolean;
+  /** One failed attempt: back the next one off. */
+  failed(now: number): void;
+  /** One that worked: the schedule goes back to unrestricted. */
+  succeeded(): void;
+  snapshot(): { failures: number; nextAttemptAt: number | null };
+}
+
+/** 15 seconds, doubling, to an eight-minute ceiling. */
+export const SPARE_MINT_BACKOFF_BASE_MS = 15_000;
+export const SPARE_MINT_BACKOFF_CAP_MS = 480_000;
+
+export function createSpareMintSchedule(
+  options: { baseMs?: number; capMs?: number } = {},
+): SpareMintSchedule {
+  const baseMs = options.baseMs ?? SPARE_MINT_BACKOFF_BASE_MS;
+  const capMs = options.capMs ?? SPARE_MINT_BACKOFF_CAP_MS;
+  let failures = 0;
+  let nextAttemptAt: number | null = null;
+
+  return {
+    due(now: number, socketAlive: boolean): boolean {
+      if (!socketAlive) return false;
+      return nextAttemptAt === null || now >= nextAttemptAt;
+    },
+    failed(now: number): void {
+      failures += 1;
+      /* `2 ** (failures - 1)` and not a running double, so the schedule is a
+         function of the count rather than of the order calls arrived in. */
+      const wait = Math.min(capMs, baseMs * 2 ** (failures - 1));
+      nextAttemptAt = now + wait;
+    },
+    succeeded(): void {
+      failures = 0;
+      nextAttemptAt = null;
+    },
+    snapshot: () => ({ failures, nextAttemptAt }),
+  };
 }
 
 export class AccountFundingError extends Error {
@@ -950,6 +1034,10 @@ export async function createAccountFunder(
    */
   let spareCoin: { nonce: string; value: bigint; mintTx: string } | null = null;
   let spareInFlight: Promise<void> | null = null;
+  /* 15 s doubling to 8 min after a failure, and a full stop while nothing can
+     be submitted. See `createSpareMintSchedule` for the 249 proofs against the
+     1AM prover this replaces. */
+  const spareSchedule = createSpareMintSchedule();
 
   /** Mints one grant-sized coin to this wallet and waits for it to be spendable. */
   const mintAssetCoin = async (): Promise<{ nonce: string; value: bigint; mintTx: string }> => {
@@ -1038,6 +1126,14 @@ export async function createAccountFunder(
    */
   const ensureSpareCoin = async (options: EnsureSpareCoinOptions = {}): Promise<boolean> => {
     if (!assetAvailable || spareCoin || spareInFlight) return false;
+    /* Asked FIRST, ahead of every other gate, because it is the cheapest and
+       the only one that was missing on 2026/09/05: a mint attempted while the
+       submission socket is dead spends 7.4 s of prover time to discover what
+       this service already knows. A backoff still in force is the same
+       question with a clock behind it. */
+    if (!spareSchedule.due(Date.now(), options.socketAlive ? options.socketAlive() : true)) {
+      return false;
+    }
     /* Never in front of somebody's fee or somebody's grant. There is always a
        next call — the next minute tick, or the end of the next activation. */
     if (wallet.isBusy()) return false;
@@ -1062,10 +1158,13 @@ export async function createAccountFunder(
       try {
         const minted = await mintAssetCoin();
         spareCoin = minted;
+        spareSchedule.succeeded();
         console.log(`[asset] spare ${ASSET_SYMBOL} coin ready (mint ${minted.mintTx})`);
       } catch (cause) {
+        spareSchedule.failed(Date.now());
+        const { failures, nextAttemptAt } = spareSchedule.snapshot();
         console.warn(
-          `[asset] no spare ${ASSET_SYMBOL} coin: ${cause instanceof Error ? cause.message : String(cause)} — the next activation will mint its own`,
+          `[asset] no spare ${ASSET_SYMBOL} coin: ${cause instanceof Error ? cause.message : String(cause)} — the next activation will mint its own; this is failure ${failures} in a row, so the next attempt is not before ${new Date(nextAttemptAt ?? Date.now()).toISOString()}`,
         );
       } finally {
         spareInFlight = null;

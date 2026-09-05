@@ -95,6 +95,7 @@ import {
   polkadotConnection,
   serialiseSubmissions,
   type NodeConnection,
+  type NodeSocketHealth,
 } from './submission.js';
 import {
   assertNoDuplicateInputs,
@@ -1080,6 +1081,23 @@ export interface BalancerWallet {
    * the height the indexer must reach after a `1010` refusal.
    */
   nodeHeight(): Promise<number | null>;
+  /**
+   * The submission socket as it stands — how it is, how many submissions have
+   * failed on it in a row, and how many rebuilds have failed in a row.
+   *
+   * The fact `/status` did not carry on 2026/09/05, which is why five hours of
+   * every-submission-fails looked like a healthy sponsor from outside. `null`
+   * before the first submission has opened a connection at all.
+   */
+  socketHealth(): NodeSocketHealth | null;
+  /**
+   * Throw the submission socket away and open a fresh one.
+   *
+   * The health loop's `reconnect` remedy, and part of its `refresh` rung: a
+   * refresh that re-reads the wallet while the connection underneath it is dead
+   * repairs nothing, which is exactly what the 15:28 remedy did.
+   */
+  reconnectNode(reason: string): Promise<void>;
   /** Coins no job may currently be handed, as keys — for `/status` and the journal. */
   excludedCoins(): string[];
   /**
@@ -1988,6 +2006,21 @@ export async function openBalancerWallet(
       } catch {
         return null;
       }
+    },
+
+    socketHealth: (): NodeSocketHealth | null => nodeConnection?.socketHealth?.() ?? null,
+
+    async reconnectNode(reason: string): Promise<void> {
+      const connection = nodeConnection;
+      if (!connection?.rebuild) return;
+      /* Bounded here as well as inside the connection: this is called from the
+         health loop, and a remedy that hangs stops the next tick from running
+         and so stops the escalation that follows it. */
+      await withDeadline(
+        () => connection.rebuild!(reason),
+        30_000,
+        (waitedMs) => new WalletCallTimeout('rebuilding the submission connection', waitedMs),
+      );
     },
 
     excludedCoins: () => coins.excluded(),

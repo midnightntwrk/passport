@@ -57,6 +57,36 @@
  * by another submission's clean-up, and no submission waits for ever, because
  * {@link SubmissionTimeout} bounds it whatever the socket does.
  *
+ * THE THIRD PROPERTY, ADDED AFTER 2026/09/05
+ * ------------------------------------------
+ * "`WsProvider` keeps its own auto-reconnect, so a socket that drops comes back
+ * without any of this having to notice" was measured false, and it cost five
+ * hours. At 14:48 UTC the wallet's node websocket died. At 15:28 the health
+ * loop said `degraded: the wallet's sync indices have not moved in 40 min` and
+ * remedied it with `refresh`, which re-reads the wallet and does not so much as
+ * look at this connection. From 15:30:27 until an operator restarted the unit
+ * at 20:12, EVERY submission failed instantly — 520 of them — with
+ * `RPC-CORE: submitAndWatchExtrinsic … WebSocket is not connected` and
+ * `Failed WS Request author_submitAndWatchExtrinsic`, while `/status` reported
+ * `synced: true`, `busy: false`, and both sponsorships `available`. Every name
+ * registration, every activation grant, and every mUSD mint in those five hours
+ * failed. The public node was healthy throughout, and the restart fixed it at
+ * once.
+ *
+ * The provider's reconnect had wedged, and `connect()` on a provider in that
+ * state rejects — which the branch below used to swallow as "the provider is
+ * doing exactly what is wanted". It was not. So this module no longer waits on
+ * a reconnect it cannot see: a socket that reports itself disconnected, or a
+ * submission that fails with the `WebSocket is not connected` / `Failed WS
+ * Request` family, gets a BUILT-FRESH connection — a new `WsProvider` and a new
+ * `ApiPromise`, with the old one disconnected and thrown away — before the next
+ * submission, and the failing submission is retried once on it. The rebuild is
+ * bounded, consecutive failures are counted, and `/status` publishes both
+ * ({@link NodeConnection.socketHealth}) so the same outage cannot be invisible
+ * twice. When the rebuild itself keeps failing, `./health.ts` escalates to a
+ * process exit and systemd brings the service back — which is the remedy the
+ * operator applied by hand.
+ *
  * And one consequence worth stating plainly: this takes the node's FIRST status
  * rather than finality. A node REFUSAL still arrives, as the rejection of the
  * `.send()` call itself — which is what `isNodeRejection` and
@@ -93,7 +123,87 @@ export interface NodeConnection {
    * the refused transaction is worth building again.
    */
   height?(): Promise<number | null>;
+  /**
+   * Throw the current socket away and open a fresh one.
+   *
+   * Called by this module whenever a submission proves the socket dead, and
+   * from outside by the health loop's `reconnect` remedy — including the
+   * `refresh` rung, which on 2026/09/05 re-read the wallet while the connection
+   * underneath it stayed dead for another four and a half hours.
+   */
+  rebuild?(reason: string): Promise<void>;
+  /** What the socket looks like right now. Published on `/status`. */
+  socketHealth?(): NodeSocketHealth;
   close(): Promise<void>;
+}
+
+/**
+ * The submission socket as `/status` and `./health.ts` see it.
+ *
+ * `connected` means no failure stands against it — which is also its state
+ * before the first submission has opened anything.
+ */
+export type NodeSocketState = 'connected' | 'reconnecting' | 'dead';
+
+export interface NodeSocketHealth {
+  nodeSocket: NodeSocketState;
+  /** Submissions that have failed on the socket since the last one that did not. */
+  consecutiveSocketFailures: number;
+  /** Rebuilds that have failed since the last one that did not. */
+  consecutiveRebuildFailures: number;
+  /** Rebuilds attempted since this process started. */
+  rebuilds: number;
+  lastSocketFailureAt: string | null;
+  /** The message of the most recent socket failure, for the journal. */
+  lastSocketFailure: string | null;
+}
+
+/**
+ * The socket-failure family: a submission that failed because the transport
+ * under it was not there, rather than because the node said anything about the
+ * transaction.
+ *
+ * Every one of the 520 failures of 2026/09/05 was one of the first two forms.
+ * The third — `disconnected from wss://…: 1000:: Normal Closure` — is the older
+ * defect this module was written for, and it belongs here because the remedy is
+ * the same; it is deliberately NOT in {@link isUnsentSocketFailure}.
+ */
+const SOCKET_FAILURE =
+  /websocket is not connected|failed ws request|disconnected from wss?:|websocket (?:is )?(?:closed|not open)/i;
+
+/**
+ * The subset of {@link SOCKET_FAILURE} in which the bytes provably never left
+ * this process, so the submission may be retried on a fresh socket without any
+ * risk of putting the same transaction on chain twice.
+ *
+ * polkadot-js raises both of these BEFORE it writes anything: `WebSocket is not
+ * connected` is `WsProvider.send` refusing to queue a request on a socket that
+ * is not open, and `Failed WS Request` is the same refusal named by the RPC
+ * layer above it. A `disconnected from …` error, by contrast, reaches handlers
+ * whose request had already gone out — that one is rebuilt and reported, never
+ * resent.
+ */
+const UNSENT_SOCKET_FAILURE = /websocket is not connected|failed ws request/i;
+
+const matchesAlongCauses = (pattern: RegExp, cause: unknown): boolean => {
+  let current: unknown = cause;
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    const message =
+      current instanceof Error ? `${current.name}: ${current.message}` : String(current);
+    if (pattern.test(message)) return true;
+    current = current instanceof Error ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return false;
+};
+
+/** Did this failure come from the transport rather than from the node? */
+export function isSocketFailure(cause: unknown): boolean {
+  return matchesAlongCauses(SOCKET_FAILURE, cause);
+}
+
+/** Is it the kind of socket failure whose bytes provably never went out? */
+export function isUnsentSocketFailure(cause: unknown): boolean {
+  return matchesAlongCauses(UNSENT_SOCKET_FAILURE, cause);
 }
 
 /**
@@ -150,7 +260,7 @@ interface Serialisable {
 /* The extrinsic is reached through the chain's own metadata, which is why none
    of this needs generated types: the node publishes the `midnight` pallet and
    polkadot-js builds `api.tx.midnight.sendMnTransaction` from it. */
-interface MidnightApi {
+export interface MidnightApi {
   isConnected: boolean;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -180,33 +290,203 @@ interface ExtrinsicStatusResult {
   };
 }
 
-/**
- * The real connection: one `ApiPromise`, opened once and never disconnected by
- * a submission.
- *
- * `WsProvider` keeps its own auto-reconnect, which is the whole point — a
- * socket that drops comes back by itself, and nothing in here calls
- * `disconnect()` except {@link NodeConnection.close}.
- */
-export function polkadotConnection(config: { relayURL: URL }): NodeConnection {
-  let opening: Promise<MidnightApi> | null = null;
+export interface PolkadotConnectionOptions {
+  /**
+   * Builds one fresh connection: a new `WsProvider` and a new `ApiPromise`.
+   *
+   * Injected only by `test/submission.test.ts`, which is what makes the rebuild
+   * path testable at all — the socket is otherwise the one part of this module
+   * a unit test cannot reach.
+   */
+  createApi?: () => Promise<MidnightApi>;
+  /**
+   * How long one rebuild may take before it is abandoned and counted as
+   * failed. Bounded because a rebuild that hangs is the outage again with a
+   * different shape: `serialiseSubmissions` would abandon the submission on its
+   * own ceiling and the next one would find the same half-built connection.
+   */
+  rebuildTimeoutMs?: number;
+  log?: (line: string) => void;
+  now?: () => number;
+}
 
-  const connected = async (): Promise<MidnightApi> => {
-    if (!opening) {
-      opening = ApiPromise.create({
+const describeCause = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause);
+
+/**
+ * The real connection: one `ApiPromise`, never disconnected by a submission —
+ * and REBUILT, rather than waited on, the moment it is shown to be dead.
+ *
+ * Nothing here trusts `WsProvider`'s auto-reconnect any more. It is what the
+ * service relied on until 2026/09/05, when a provider whose reconnect had
+ * wedged failed 520 consecutive submissions over five hours while every other
+ * signal this process publishes said the sponsor was well.
+ */
+export function polkadotConnection(
+  config: { relayURL: URL },
+  options: PolkadotConnectionOptions = {},
+): NodeConnection {
+  const createApi =
+    options.createApi ??
+    ((): Promise<MidnightApi> =>
+      ApiPromise.create({
         provider: new WsProvider(config.relayURL.toString()),
         throwOnConnect: false,
         noInitWarn: true,
-      }) as unknown as Promise<MidnightApi>;
+      }) as unknown as Promise<MidnightApi>);
+  const rebuildTimeoutMs = options.rebuildTimeoutMs ?? 20_000;
+  const log = options.log ?? ((line: string) => console.warn(line));
+  const now = options.now ?? Date.now;
+
+  let opening: Promise<MidnightApi> | null = null;
+  let socket: NodeSocketState = 'connected';
+  let consecutiveSocketFailures = 0;
+  let consecutiveRebuildFailures = 0;
+  let rebuilds = 0;
+  let lastSocketFailureAt: string | null = null;
+  let lastSocketFailure: string | null = null;
+
+  /** Bounds one wait without leaving the loser of the race unhandled. */
+  const bounded = async <T>(work: Promise<T>, ms: number, what: string): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      return await Promise.race([
+        work,
+        new Promise<never>((_, fail) => {
+          timer = setTimeout(
+            () => fail(new Error(`${what} did not finish within ${Math.round(ms / 1_000)} s`)),
+            ms,
+          );
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    const api = await opening;
-    if (!api.isConnected) {
-      /* `connect()` rejects when a reconnect is already in flight, which is not
-         an error here — the provider is doing exactly what is wanted. */
-      await api.connect().catch(() => undefined);
-    }
-    return api;
   };
+
+  const noteSocketFailure = (cause: unknown): void => {
+    consecutiveSocketFailures += 1;
+    lastSocketFailureAt = new Date(now()).toISOString();
+    lastSocketFailure = describeCause(cause);
+  };
+
+  /**
+   * Throw the socket away and open another.
+   *
+   * The old one is DISCARDED, not reconnected: a provider that has decided it
+   * is reconnecting cannot be talked out of it — `connect()` on one rejects,
+   * which is what the old code read as "the provider is doing exactly what is
+   * wanted" for five hours.
+   */
+  const rebuild = async (reason: string): Promise<MidnightApi> => {
+    const previous = opening;
+    opening = null;
+    socket = 'reconnecting';
+    rebuilds += 1;
+    log(`[node] rebuilding the submission connection — ${reason} (rebuild ${rebuilds})`);
+    if (previous) {
+      const stale = await previous.catch(() => null);
+      /* Not awaited: `WsProvider.disconnect()` resolves before the close event
+         either way, and a socket nothing will submit on again is not worth
+         holding the next submission for. */
+      void stale?.disconnect().catch(() => undefined);
+    }
+    const fresh = bounded(createApi(), rebuildTimeoutMs, 'the submission connection rebuild');
+    opening = fresh;
+    try {
+      const api = await fresh;
+      consecutiveRebuildFailures = 0;
+      socket = 'connected';
+      log('[node] the submission connection is rebuilt');
+      return api;
+    } catch (cause) {
+      consecutiveRebuildFailures += 1;
+      socket = 'dead';
+      if (opening === fresh) opening = null;
+      log(
+        `[node] the submission connection could NOT be rebuilt (${consecutiveRebuildFailures} in a row): ${describeCause(cause)}`,
+      );
+      throw cause;
+    }
+  };
+
+  const connected = async (): Promise<MidnightApi> => {
+    if (!opening) opening = createApi();
+    let api: MidnightApi;
+    try {
+      api = await opening;
+    } catch (cause) {
+      opening = null;
+      return await rebuild(`the connection could not be opened: ${describeCause(cause)}`);
+    }
+    if (api.isConnected) return api;
+    /* One bounded attempt at the cheap repair, and then a fresh connection
+       whatever it says. `connect()` rejecting is not evidence that a reconnect
+       is under way, and neither is it resolving: what counts is whether the
+       socket is connected afterwards. */
+    const reachable = await bounded(api.connect(), rebuildTimeoutMs, 'the socket reconnect').then(
+      () => api.isConnected,
+      () => false,
+    );
+    if (reachable) return api;
+    return await rebuild('the node socket reports itself disconnected');
+  };
+
+  const sendOn = async (api: MidnightApi, payload: string): Promise<string> =>
+    await new Promise<string>((settle, fail) => {
+      let unsubscribe: (() => void) | null = null;
+      let done = false;
+      const finish = (): void => {
+        done = true;
+        /* Ours alone. Unsubscribing ends this watch and touches no other, and
+           it is the only teardown this module performs per submission. */
+        try {
+          unsubscribe?.();
+        } catch {
+          // A subscription the node has already closed is not a failure.
+        }
+      };
+      api.tx.midnight
+        .sendMnTransaction(payload)
+        .send((result) => {
+          if (done) return;
+          const status = result.status;
+          if (
+            status.isReady ||
+            status.isBroadcast ||
+            status.isFuture ||
+            status.isRetracted ||
+            status.isInBlock ||
+            status.isFinalized
+          ) {
+            settle(result.txHash.toString());
+            finish();
+          } else if (status.isInvalid || status.isDropped || status.isUsurped) {
+            /* Worded so `isNodeRejection` matches it. These are the node
+               refusing a transaction it had already taken over RPC, and the
+               remedy is the rebuild a `1010` gets. */
+            fail(
+              new Error(
+                `1010: Invalid Transaction: the node reported this transaction as ${status.type}`,
+              ),
+            );
+            finish();
+          }
+        })
+        .then(
+          (thunk) => {
+            unsubscribe = thunk;
+            /* The status callback can fire before the subscription handle
+               arrives, so the watch may already be over by now. */
+            if (done) finish();
+          },
+          (cause: unknown) => {
+            /* A refusal at the RPC itself: `1010: Invalid Transaction: Custom
+               error: 231` and its kin. Passed out untouched. */
+            fail(cause);
+          },
+        );
+    });
 
   return {
     async height(): Promise<number | null> {
@@ -219,62 +499,65 @@ export function polkadotConnection(config: { relayURL: URL }): NodeConnection {
       }
     },
 
+    async rebuild(reason: string): Promise<void> {
+      await rebuild(reason);
+    },
+
+    socketHealth(): NodeSocketHealth {
+      return {
+        nodeSocket: socket,
+        consecutiveSocketFailures,
+        consecutiveRebuildFailures,
+        rebuilds,
+        lastSocketFailureAt,
+        lastSocketFailure,
+      };
+    },
+
     async send(transaction: Uint8Array): Promise<string> {
-      const api = await connected();
-      return await new Promise<string>((settle, fail) => {
-        let unsubscribe: (() => void) | null = null;
-        let done = false;
-        const finish = (): void => {
-          done = true;
-          /* Ours alone. Unsubscribing ends this watch and touches no other, and
-             it is the only teardown this module performs per submission. */
-          try {
-            unsubscribe?.();
-          } catch {
-            // A subscription the node has already closed is not a failure.
+      const payload = u8aToHex(transaction);
+      try {
+        const txHash = await sendOn(await connected(), payload);
+        consecutiveSocketFailures = 0;
+        socket = 'connected';
+        return txHash;
+      } catch (cause) {
+        /* Anything the NODE said about this transaction travels out untouched —
+           a `1010` is a rebuild for the caller, not for the socket. */
+        if (!isSocketFailure(cause)) throw cause;
+        noteSocketFailure(cause);
+        log(
+          `[node] a submission failed on a dead socket (${consecutiveSocketFailures} in a row): ${describeCause(cause)}`,
+        );
+        /* Retried only when the bytes provably never left this process. A
+           `disconnected from …` failure reaches a request that had already gone
+           out, and resending that would be this service putting the same
+           transaction on chain twice. */
+        const resendable = isUnsentSocketFailure(cause);
+        let api: MidnightApi;
+        try {
+          api = await rebuild('a submission failed on a dead socket');
+        } catch {
+          /* The original failure is the one the caller's classifier reads, and
+             it names the real fault. The rebuild's own failure is counted and
+             logged above, and `./health.ts` escalates on the count. */
+          throw cause;
+        }
+        if (!resendable) throw cause;
+        try {
+          const txHash = await sendOn(api, payload);
+          consecutiveSocketFailures = 0;
+          socket = 'connected';
+          log('[node] the retried submission went out on the rebuilt connection');
+          return txHash;
+        } catch (second) {
+          if (isSocketFailure(second)) {
+            noteSocketFailure(second);
+            socket = 'dead';
           }
-        };
-        api.tx.midnight
-          .sendMnTransaction(u8aToHex(transaction))
-          .send((result) => {
-            if (done) return;
-            const status = result.status;
-            if (
-              status.isReady ||
-              status.isBroadcast ||
-              status.isFuture ||
-              status.isRetracted ||
-              status.isInBlock ||
-              status.isFinalized
-            ) {
-              settle(result.txHash.toString());
-              finish();
-            } else if (status.isInvalid || status.isDropped || status.isUsurped) {
-              /* Worded so `isNodeRejection` matches it. These are the node
-                 refusing a transaction it had already taken over RPC, and the
-                 remedy is the rebuild a `1010` gets. */
-              fail(
-                new Error(
-                  `1010: Invalid Transaction: the node reported this transaction as ${status.type}`,
-                ),
-              );
-              finish();
-            }
-          })
-          .then(
-            (thunk) => {
-              unsubscribe = thunk;
-              /* The status callback can fire before the subscription handle
-                 arrives, so the watch may already be over by now. */
-              if (done) finish();
-            },
-            (cause: unknown) => {
-              /* A refusal at the RPC itself: `1010: Invalid Transaction: Custom
-                 error: 231` and its kin. Passed out untouched. */
-              fail(cause);
-            },
-          );
-      });
+          throw second;
+        }
+      }
     },
 
     async close(): Promise<void> {
@@ -373,6 +656,7 @@ export function serialiseSubmissions<TTransaction>(
 export function serialisedSubmissionService<TTransaction>(
   config: { relayURL: URL },
   options: SerialisedSubmissionOptions<TTransaction>,
+  connectionOptions: PolkadotConnectionOptions = {},
 ): SubmissionLike<TTransaction> {
-  return serialiseSubmissions(polkadotConnection(config), options);
+  return serialiseSubmissions(polkadotConnection(config, connectionOptions), options);
 }

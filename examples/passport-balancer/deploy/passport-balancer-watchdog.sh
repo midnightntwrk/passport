@@ -61,6 +61,28 @@
 # ten seconds — falling back to moving the snapshot aside for a cold walk, which
 # is the 89.5 s the operator measured by hand at 16:24 on 2026/09/02.
 #
+# THE THIRD RULE: A SUBMISSION SOCKET THAT IS NOT THERE
+# ----------------------------------------------------
+# On 2026/09/05 the balancer's node websocket died at 14:48 UTC and every
+# submission from 15:30:27 to the operator's restart at 20:12 failed instantly —
+# 520 of them, every name registration, every activation grant, and every mUSD
+# mint — while /wallet-status answered ready:true and /status answered
+# synced:true, busy:false, and both sponsorships available. Neither rule above
+# can see that, and neither could the in-process ladder, whose `refresh` remedy
+# re-read the wallet and never touched the connection.
+#
+# The service now rebuilds that socket itself and exits when it cannot. This is
+# the backstop, and its evidence is the one place the fault was always plain:
+#
+#     journalctl  >= SOCKET_STRIKES 'WebSocket is not connected' lines inside
+#                 SOCKET_WINDOW, with NO 'the node acknowledged this
+#                 transaction' line among them
+#
+# The acknowledgement is written by `src/submission.ts` on every submission the
+# node takes, so its absence across the window is what separates a socket that
+# is gone from one that dropped and came back. A restart under this rule writes
+# a `logger -t passport-ops` marker as well as its own journal line.
+#
 # Every decision is written to the journal under `passport-balancer-watchdog`,
 # so `journalctl -u passport-balancer-watchdog` is the whole audit trail.
 
@@ -94,6 +116,17 @@ DUST_COOLDOWN="${BALANCER_WATCHDOG_DUST_COOLDOWN:-300}"
 # only an operator ended them — /status now publishes enough to see that from
 # out here.
 JOB_STALL="${BALANCER_WATCHDOG_JOB_STALL:-300}"
+# The journal window the dead-submission-socket leg reads, and how many
+# transport failures in it are enough. Three in two minutes with not one
+# submission acknowledged between them is the signature of 2026/09/05, where the
+# real figure was 520 failures and no acknowledgements at all in five hours.
+SOCKET_WINDOW="${BALANCER_WATCHDOG_SOCKET_WINDOW:-2 min}"
+SOCKET_STRIKES="${BALANCER_WATCHDOG_SOCKET_STRIKES:-3}"
+# Seconds between two restarts by this leg. Its own clock, and shorter than the
+# general one: the fault is proved by the journal rather than inferred from
+# silence, and every minute of it is every registration failing.
+SOCKET_COOLDOWN="${BALANCER_WATCHDOG_SOCKET_COOLDOWN:-600}"
+SOCKET_RESTART_FILE="$STATE_DIR/watchdog-last-socket-restart"
 
 log() { echo "[watchdog] $*"; }
 
@@ -101,6 +134,10 @@ log() { echo "[watchdog] $*"; }
 # this script against a stub HTTP server without a systemd on the box.
 SYSTEMCTL="${BALANCER_WATCHDOG_SYSTEMCTL:-systemctl}"
 NODE="${BALANCER_WATCHDOG_NODE:-node}"
+# Likewise `journalctl` and `logger`, so the socket leg can be driven against a
+# canned journal.
+JOURNALCTL="${BALANCER_WATCHDOG_JOURNALCTL:-journalctl}"
+LOGGER="${BALANCER_WATCHDOG_LOGGER:-logger}"
 
 mkdir -p "$STATE_DIR"
 
@@ -173,6 +210,55 @@ if dust_wedged; then
   "$SYSTEMCTL" start "$UNIT"
   echo 0 > "$STRIKES_FILE"
   log "$UNIT started again after the DUST repair"
+  exit 0
+fi
+
+# --------------------------------------------------------------------------
+# A DEAD SUBMISSION SOCKET.
+#
+# Asked before the readiness check for the same reason as the wedge: on
+# 2026/09/05 this failure was invisible from both endpoints. /wallet-status
+# answered ready:true and /status answered synced:true, busy:false, and both
+# sponsorships available, for the four and a half hours in which every single
+# transaction the service submitted failed instantly on a websocket that was not
+# there — 520 of them, every name registration, every activation grant, and
+# every mUSD mint. The service now rebuilds that socket itself and exits when it
+# cannot; this is the backstop for the case where neither happens, and its
+# evidence is the one place the fault was always visible: the journal.
+#
+# Three transport failures inside the window with NO submission acknowledged
+# between them. The acknowledgement line is `./src/submission.ts`'s, written on
+# every submission the node takes, so its absence across the window is what
+# separates a socket that is gone from one that dropped and came back.
+# --------------------------------------------------------------------------
+
+journal=$("$JOURNALCTL" -u "$UNIT" --since "-$SOCKET_WINDOW" --no-pager -o cat 2>/dev/null)
+
+socket_dead() {
+  [ -n "$journal" ] || return 1
+  ws_failures=$(printf '%s\n' "$journal" | grep -c 'WebSocket is not connected')
+  [ "$ws_failures" -ge "$SOCKET_STRIKES" ] || return 1
+  # Not one submission got through in the same window. A socket that dropped and
+  # recovered has acknowledgements among the failures; this one has none.
+  printf '%s\n' "$journal" | grep -q 'the node acknowledged this transaction' && return 1
+  return 0
+}
+
+if socket_dead; then
+  now=$(date +%s)
+  last_socket=$(cat "$SOCKET_RESTART_FILE" 2>/dev/null || echo 0)
+  case "$last_socket" in ''|*[!0-9]*) last_socket=0 ;; esac
+  if [ $((now - last_socket)) -lt "$SOCKET_COOLDOWN" ]; then
+    log "the submission socket looks dead ($ws_failures failures), but the last socket restart was $((now - last_socket)) s ago and the cooldown is ${SOCKET_COOLDOWN} s"
+    exit 0
+  fi
+  log "THE SUBMISSION SOCKET IS DEAD: $ws_failures 'WebSocket is not connected' line(s) in the last $SOCKET_WINDOW with nothing acknowledged — restarting $UNIT"
+  # The one marker an operator greps for after the fact, and the only line this
+  # script writes outside its own unit's journal.
+  "$LOGGER" -t passport-ops "balancer restarted: submission socket dead, $ws_failures WebSocket failures in the last $SOCKET_WINDOW with no acknowledged submission"
+  echo "$now" > "$SOCKET_RESTART_FILE"
+  echo 0 > "$STRIKES_FILE"
+  "$SYSTEMCTL" restart "$UNIT"
   exit 0
 fi
 

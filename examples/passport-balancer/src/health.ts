@@ -58,7 +58,16 @@
  *                   read off the facade's state observable (which carries a
  *                   30-second timeout of its own). It fixes nothing by itself;
  *                   it is how a transient is distinguished from a fault, and it
- *                   costs nothing.
+ *                   costs nothing — except that it now also rebuilds the
+ *                   submission socket when that socket is not answering, which
+ *                   is the one thing this rung was missing on 2026/09/05.
+ *   1b. `reconnect` — `wallet.reconnectNode()`. A fresh `WsProvider` and a
+ *                   fresh `ApiPromise` for SUBMISSIONS, the old pair
+ *                   disconnected and discarded. Off the ladder rather than on
+ *                   it: a socket that has failed N submissions in a row takes
+ *                   this rung on the first tick, because no amount of patience
+ *                   repairs a transport and every second of it is somebody's
+ *                   registration failing.
  *   2. `rewarm`   — `wallet.warmProvingKeys()` and `wallet.saveSnapshot()`.
  *                   The first is a real repair, not a probe: `warmProvingKeys`
  *                   re-attempts the fetch whenever readiness is `warming` or
@@ -100,6 +109,7 @@
  *   - Never twice without an intervening healthy tick, likewise persisted.
  */
 
+import type { NodeSocketState } from './submission.js';
 import type { ProvingState } from './availability.js';
 
 /* -------------------------------------------------------------------------- */
@@ -224,6 +234,30 @@ export interface HealthFacts {
    * against the current time and therefore moves even on a dead wallet.
    */
   lastStateChangeAt: number;
+  /**
+   * The submission socket, as `./submission.ts` reports it.
+   *
+   * THE FACT THIS VERDICT DID NOT HAVE ON 2026/09/05. From 15:30:27 to 20:12
+   * UTC every submission this service made failed instantly on a dead
+   * websocket — 520 of them — and not one fact above moves when that happens.
+   * The wallet reads its state from the INDEXER, which was fine; the socket
+   * that carries transactions to the NODE is a different connection entirely,
+   * and nothing in this classifier could see it. So the verdict was `healthy`
+   * or, once the indices went quiet, `degraded: … indices have not moved`, with
+   * a `refresh` remedy that re-read the wallet and left the socket dead.
+   */
+  nodeSocket: NodeSocketState;
+  /** Submissions that have failed on the socket since the last one that did not. */
+  consecutiveSocketFailures: number;
+  /**
+   * Rebuilds of that socket that have failed since the last one that did not.
+   *
+   * The escalation signal. A rebuild is a fresh `WsProvider` and a fresh
+   * `ApiPromise`, so several failing in a row means the fault is not the
+   * provider's state — it is this process's, and the operator's remedy of
+   * 2026/09/05 (restart the unit) is the one that is left.
+   */
+  consecutiveRebuildFailures: number;
   /** Unhealthy ticks BEFORE this one, so the first bad tick sees zero. */
   consecutiveUnhealthy: number;
 }
@@ -240,6 +274,15 @@ export interface HealthAssessment {
    * or should not be risked on (a soft staleness signal).
    */
   restartEligible: boolean;
+  /**
+   * This verdict is about the SUBMISSION SOCKET, not the wallet.
+   *
+   * Carried rather than re-derived because the remedy is a different one —
+   * `reconnect`, and then a restart on the rebuild count rather than on the
+   * unhealthy streak — and a `chooseRemedy` that had to guess which `degraded`
+   * it was looking at would be guessing from a sentence.
+   */
+  socketFault?: true;
 }
 
 export interface HealthPolicy {
@@ -275,6 +318,25 @@ export interface HealthPolicy {
    * sweeper has either seen the transaction land or taken the coin back.
    */
   orphanMs: number;
+  /**
+   * Consecutive submission failures on the socket before the verdict is
+   * `degraded` — N.
+   *
+   * Three, and not one: a single failure is what a node restart or a momentary
+   * drop looks like, and the connection retries that one itself on a fresh
+   * socket. Three in a row is a socket that is not coming back, and on
+   * 2026/09/05 the count reached three within four minutes of the first
+   * failure and then ran to 520.
+   */
+  socketFailuresForDegraded: number;
+  /**
+   * Consecutive REBUILD failures before the verdict escalates to a restart — M.
+   *
+   * Each rebuild is already a fresh `WsProvider` and a fresh `ApiPromise`, so
+   * three of those failing means the fault is not in the connection that was
+   * thrown away.
+   */
+  rebuildFailuresForRestart: number;
 }
 
 export const DEFAULT_HEALTH_POLICY: HealthPolicy = {
@@ -283,6 +345,8 @@ export const DEFAULT_HEALTH_POLICY: HealthPolicy = {
   stallMs: 1_800_000,
   wedgeTicks: 2,
   orphanMs: 120_000,
+  socketFailuresForDegraded: 3,
+  rebuildFailuresForRestart: 3,
 };
 
 const seconds = (ms: number): string => `${Math.round(ms / 1_000)} s`;
@@ -361,7 +425,37 @@ export function assessHealth(
     };
   }
 
-  /* 3. THE WEDGE, and the one DUST reading that is neither settling nor a
+  /* 3. THE SUBMISSION SOCKET, which is not the wallet and is not the indexer.
+
+        Decided here — after the two "in use" branches and the unreadable one,
+        and BEFORE everything that reasons about DUST, the start-up grace, and
+        the staleness of the sync indices — because every one of those branches
+        can return a verdict on a service that cannot submit a transaction, and
+        on 2026/09/05 several of them did. `healthy: synced, connected, 2 DUST
+        UTxO(s), able to prove` was true of the wallet, and false of the
+        sponsor, for four and a half hours.
+
+        A sponsor that cannot submit is not sponsoring, whatever else is well.
+        There is no innocent explanation to rule out here: these are failures on
+        this service's own socket, counted by the module that owns it, cleared
+        by the first submission that goes out. */
+  if (facts.consecutiveSocketFailures >= policy.socketFailuresForDegraded) {
+    const dead = facts.consecutiveRebuildFailures >= policy.rebuildFailuresForRestart;
+    return {
+      verdict: 'degraded',
+      reason: dead
+        ? `the submission socket has failed ${facts.consecutiveSocketFailures} submission(s) in a row and ${facts.consecutiveRebuildFailures} rebuilds of it have failed too — nothing this service submits is reaching the node`
+        : `the submission socket has failed ${facts.consecutiveSocketFailures} submission(s) in a row (${facts.nodeSocket}) — every registration, grant, and mint is failing while the wallet still reads well`,
+      act: true,
+      /* Only once the rebuild itself has been shown not to work. A restart
+         while a fresh connection would do is a chain walk bought for nothing —
+         and the rebuild is seconds. */
+      restartEligible: dead,
+      socketFault: true,
+    };
+  }
+
+  /* 4. THE WEDGE, and the one DUST reading that is neither settling nor a
         funding problem.
 
         Everything in the conjunction is here to rule an innocent explanation
@@ -411,7 +505,7 @@ export function assessHealth(
     };
   }
 
-  /* 4. Still starting. A cold start walks the chain and then waits for the DUST
+  /* 5. Still starting. A cold start walks the chain and then waits for the DUST
         registration to be affordable; both are minutes and neither is a fault. */
   if (facts.uptimeMs < policy.startupGraceMs && (!facts.synced || noDust)) {
     return {
@@ -422,7 +516,7 @@ export function assessHealth(
     };
   }
 
-  /* 5. The DUST case, and the reason this whole module leans towards inaction.
+  /* 6. The DUST case, and the reason this whole module leans towards inaction.
         Deliberately NOT gated on `synced`: a spend puts the wallet through a
         syncing flap of up to about two minutes as well as nullifying its DUST,
         and both halves of that are the same expected event. */
@@ -451,7 +545,7 @@ export function assessHealth(
     }
   }
 
-  /* 6. Genuinely degraded, in the order the causes are worth reporting. */
+  /* 7. Genuinely degraded, in the order the causes are worth reporting. */
   if (!facts.synced) {
     return {
       verdict: 'degraded',
@@ -498,15 +592,29 @@ export function assessHealth(
     };
   }
   if (facts.now - facts.lastStateChangeAt >= policy.stallMs) {
+    /* THE SOCKET IS ASKED ABOUT HERE TOO, and that is the whole lesson of
+       15:28 UTC on 2026/09/05. This branch fired then — `the wallet's sync
+       indices have not moved in 40 min` — and its `refresh` remedy re-read the
+       wallet in 0 s and touched nothing else, while the submission socket that
+       had died forty minutes earlier stayed dead for another four and a half
+       hours. The counter above was still zero because nothing had been
+       submitted since the socket died, so a count is not enough on its own: the
+       socket's own STATE has to be read, and a stalled wallet is exactly the
+       reading that should make this service suspect it. */
+    const socketSuspect = facts.nodeSocket !== 'connected' || facts.consecutiveSocketFailures > 0;
     return {
       verdict: 'degraded',
       /* Soft, and so never a reason to bounce a live sponsor by itself: a very
          quiet stagenet could in principle produce nothing this wallet considers
          relevant for half an hour. It earns a refresh and a re-warm, and if the
          cause is real one of the hard branches above will catch it too. */
-      reason: `the wallet’s sync indices have not moved in ${minutes(facts.now - facts.lastStateChangeAt)}`,
+      reason: socketSuspect
+        ? `the wallet’s sync indices have not moved in ${minutes(facts.now - facts.lastStateChangeAt)}, and the submission socket reads ${facts.nodeSocket} with ${facts.consecutiveSocketFailures} failure(s) against it — the socket is rebuilt before anything else is concluded`
+        : `the wallet’s sync indices have not moved in ${minutes(facts.now - facts.lastStateChangeAt)} (the submission socket is answering)`,
       act: true,
-      restartEligible: false,
+      restartEligible:
+        socketSuspect && facts.consecutiveRebuildFailures >= policy.rebuildFailuresForRestart,
+      ...(socketSuspect ? { socketFault: true as const } : {}),
     };
   }
 
@@ -522,7 +630,13 @@ export function assessHealth(
 /* The remedy ladder                                                          */
 /* -------------------------------------------------------------------------- */
 
-export type HealthRemedy = 'none' | 'refresh' | 'rewarm' | 'resyncDust' | 'restart';
+export type HealthRemedy =
+  | 'none'
+  | 'refresh'
+  | 'reconnect'
+  | 'rewarm'
+  | 'resyncDust'
+  | 'restart';
 
 export interface RemedyPolicy {
   /** Unhealthy ticks, this one included, before the re-warm rung is reached. */
@@ -543,6 +657,17 @@ export interface RemedyPolicy {
    * the sponsor down for an hour twice in one afternoon.
    */
   resyncDustCooldownMs: number;
+  /**
+   * The floor between two restarts requested because the SOCKET could not be
+   * rebuilt, and it is five minutes rather than the general thirty.
+   *
+   * Like the DUST wedge's own cooldown, this is a PROVED fault rather than an
+   * inferred one: M bounded rebuilds, each a fresh `WsProvider` and a fresh
+   * `ApiPromise`, have all failed, and until one succeeds this service cannot
+   * put a single transaction on chain. Making that wait out the soft ladder's
+   * half-hour patience is how 15:30 to 20:12 happened.
+   */
+  socketRestartCooldownMs: number;
 }
 
 export const DEFAULT_REMEDY_POLICY: RemedyPolicy = {
@@ -551,6 +676,7 @@ export const DEFAULT_REMEDY_POLICY: RemedyPolicy = {
   restartAfterTicks: 3,
   restartCooldownMs: 1_800_000,
   resyncDustCooldownMs: 120_000,
+  socketRestartCooldownMs: 300_000,
 };
 
 /**
@@ -636,6 +762,58 @@ export function chooseRemedy(
     };
   }
 
+  /* The submission socket, and — like the DUST wedge — it takes its rung on the
+     FIRST tick rather than climbing the soft ladder.
+
+     The soft ladder exists to keep a possibly-transient signal from acting on a
+     live sponsor. This signal is neither: N submissions in a row have failed on
+     the transport, or the socket says outright that it is not connected, and
+     every second of it is a registration or a grant a person is watching fail.
+     `refresh` cannot repair it — that is what was tried at 15:28 on 2026/09/05
+     — and `rewarm` touches the prover, which is a different subsystem again.
+
+     The in-use gate is NOT bypassed at the restart rung, for the reason it
+     never is. A RECONNECT while a job is in flight is allowed, and deliberately
+     so: the job's own submission is the thing that is failing, and a rebuilt
+     socket is what its retry needs. */
+  if (assessment.socketFault) {
+    if (assessment.restartEligible) {
+      if (facts.reserved || facts.busy) {
+        return {
+          remedy: 'reconnect',
+          reason:
+            'the socket cannot be rebuilt and a restart is warranted, but the wallet is in use — rebuilding once more instead',
+        };
+      }
+      const last = state.record.lastRestartRequestAt
+        ? Date.parse(state.record.lastRestartRequestAt)
+        : null;
+      if (
+        last !== null &&
+        Number.isFinite(last) &&
+        facts.now - last < policy.socketRestartCooldownMs
+      ) {
+        return {
+          remedy: 'reconnect',
+          reason: `the socket cannot be rebuilt, but the last restart was ${minutes(facts.now - last)} ago — ${seconds(policy.socketRestartCooldownMs - (facts.now - last))} of the cooldown left`,
+        };
+      }
+      return {
+        remedy: 'restart',
+        reason: `${facts.consecutiveRebuildFailures} rebuilds of the submission socket have failed in a row — a fresh process is the only connection left to try`,
+      };
+    }
+    /* No cooldown, and that is deliberate. Every other rung here has one
+       because it is expensive or destructive; a rebuild is one websocket, it is
+       bounded, and the thing that bounds how often it can be worth doing is the
+       rebuild-failure count that escalates past it. A cooldown on this rung
+       would only ever be a delay between a broken sponsor and its repair. */
+    return {
+      remedy: 'reconnect',
+      reason: `${facts.consecutiveSocketFailures} submission(s) have failed on the socket in a row and it reads ${facts.nodeSocket}`,
+    };
+  }
+
   /* A wedged facade needs no patience: by construction it has already failed
      `wedgeTicks` consecutive checks, and no in-process remedy can reach it. A
      merely degraded one waits out `restartAfterTicks` first. */
@@ -713,8 +891,25 @@ export type HealthProbeReading = Omit<
 export type HealthProbe = () => Promise<HealthProbeReading>;
 
 export interface HealthRemedies {
-  /** Re-read the wallet's state. Rejects if it cannot. */
+  /**
+   * Re-read the wallet's state, and rebuild the submission socket if it is not
+   * answering. Rejects if it cannot.
+   *
+   * The second half is new, and it is the correction to 15:28 UTC on
+   * 2026/09/05: this rung ran, reported `refreshed the wallet state in 0 s`,
+   * and left the dead connection under it untouched.
+   */
   refresh(): Promise<void>;
+  /**
+   * Throw the submission socket away and open a fresh one — a new `WsProvider`
+   * and a new `ApiPromise`, the old one disconnected and discarded.
+   *
+   * The rung the ladder had no answer for. `refresh` reads the wallet, which is
+   * a different connection; `rewarm` fetches proving keys, which is a different
+   * subsystem; and a restart is thirty seconds of chain walk for a fault a
+   * socket would fix.
+   */
+  reconnect(reason: string): Promise<void>;
   /** Re-fetch the proving key material, and checkpoint the sync snapshot. */
   rewarm(): Promise<void>;
   /**
@@ -887,6 +1082,12 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
           syncAhead: null,
           lastSponsorshipAt: null,
           orphans: 0,
+          /* A wallet that cannot be read says nothing about the socket, and
+             claiming it is dead would escalate a wallet fault into a restart
+             for the wrong reason. The `wedged` branch above owns this case. */
+          nodeSocket: 'connected',
+          consecutiveSocketFailures: 0,
+          consecutiveRebuildFailures: 0,
           lastStateChangeAt,
           consecutiveUnhealthy,
         };
@@ -937,6 +1138,12 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
         if (choice.remedy === 'refresh') {
           await options.remedies.refresh();
           log(`[health] refreshed the wallet state in ${seconds(now() - startedAt)}`);
+        } else if (choice.remedy === 'reconnect') {
+          warn(
+            `[health] REBUILDING THE SUBMISSION SOCKET — ${assessment.reason}. Nothing this service submits reaches the node until it is back.`,
+          );
+          await options.remedies.reconnect(assessment.reason);
+          log(`[health] rebuilt the submission socket in ${seconds(now() - startedAt)}`);
         } else if (choice.remedy === 'rewarm') {
           await options.remedies.rewarm();
           lastRewarmAt = now();
@@ -1045,6 +1252,9 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
             syncAhead: null,
             lastSponsorshipAt: null,
             orphans: 0,
+            nodeSocket: 'connected',
+            consecutiveSocketFailures: 0,
+            consecutiveRebuildFailures: 0,
             lastStateChangeAt,
             consecutiveUnhealthy,
           },

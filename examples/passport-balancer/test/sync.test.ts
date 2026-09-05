@@ -136,6 +136,9 @@ const facts = (overrides: Partial<HealthFacts> = {}): HealthFacts => ({
   orphans: 0,
   lastStateChangeAt: 1_800_000_000_000 - 60_000,
   consecutiveUnhealthy: 0,
+  nodeSocket: 'connected',
+  consecutiveSocketFailures: 0,
+  consecutiveRebuildFailures: 0,
   ...overrides,
 });
 

@@ -74,7 +74,18 @@ cat > "$WORK/node" <<'SH2'
 echo "node $*" >> "$WATCHDOG_TEST_CALLS"
 exit "${WATCHDOG_TEST_ROLLBACK_RC:-0}"
 SH2
-chmod +x "$WORK/systemctl" "$WORK/node"
+# A canned journal, so the dead-socket leg can be driven without systemd. Whatever
+# is in $WATCHDOG_TEST_JOURNAL is what `journalctl -u ...` returns.
+cat > "$WORK/journalctl" <<'SH2'
+#!/usr/bin/env bash
+cat "${WATCHDOG_TEST_JOURNAL:-/dev/null}" 2>/dev/null
+SH2
+cat > "$WORK/logger" <<'SH2'
+#!/usr/bin/env bash
+echo "logger $*" >> "$WATCHDOG_TEST_CALLS"
+SH2
+chmod +x "$WORK/systemctl" "$WORK/node" "$WORK/journalctl" "$WORK/logger"
+: > "$WORK/journal"
 
 failures=0
 pass() { echo "  ok   $1"; }
@@ -121,6 +132,9 @@ run() {
   BALANCER_WATCHDOG_STATE="$state" \
   BALANCER_WATCHDOG_SYSTEMCTL="$WORK/systemctl" \
   BALANCER_WATCHDOG_NODE="$WORK/node" \
+  BALANCER_WATCHDOG_JOURNALCTL="$WORK/journalctl" \
+  BALANCER_WATCHDOG_LOGGER="$WORK/logger" \
+  WATCHDOG_TEST_JOURNAL="$WORK/journal" \
   BALANCER_WATCHDOG_ROLLBACK="/opt/passport-balancer/dist/dust-rollback.mjs" \
     bash "$SCRIPT" > "$WORK/out-$1" 2>&1
   LAST_STATE="$state"
@@ -157,6 +171,9 @@ BALANCER_WATCHDOG_BASE="http://127.0.0.1:$PORT" \
 BALANCER_WATCHDOG_STATE="$LAST_STATE" \
 BALANCER_WATCHDOG_SYSTEMCTL="$WORK/systemctl" \
 BALANCER_WATCHDOG_NODE="$WORK/node" \
+BALANCER_WATCHDOG_JOURNALCTL="$WORK/journalctl" \
+BALANCER_WATCHDOG_LOGGER="$WORK/logger" \
+WATCHDOG_TEST_JOURNAL="$WORK/journal" \
   bash "$SCRIPT" > "$WORK/out-cooldown" 2>&1
 if grep -q 'cooldown' "$WORK/out-cooldown"; then
   pass "holds its own 300 s cooldown rather than resyncing every two minutes"
@@ -258,6 +275,97 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+echo
+echo "the watchdog's dead-submission-socket leg"
+
+# The journal of 15:30 to 20:12 UTC on 2026/09/05, in the words it really used:
+# every submission refused by a websocket that was not there, and not one
+# acknowledgement among them.
+dead_socket_journal() {
+  cat > "$WORK/journal" <<'JOURNAL'
+[job] job-41 the registration of rvmtkqu91rwsk.night — submitting
+[alias] the registration failed: RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: WebSocket is not connected
+[job] job-42 the activation grant — submitting
+[account] deposit-failed: RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: WebSocket is not connected
+[asset] no spare mUSD coin: RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: WebSocket is not connected
+JOURNAL
+}
+
+# Every other signal said the sponsor was well, which is the whole point of
+# reading the journal instead.
+healthy_bodies
+dead_socket_journal
+run dead-socket
+if calls | grep -q 'systemctl restart passport-balancer' \
+  && calls | grep -q 'logger -t passport-ops'; then
+  pass "restarts on three WebSocket failures in two minutes with nothing acknowledged"
+else
+  fail "restarts on a dead submission socket" "$(calls)"
+fi
+
+if grep -q 'THE SUBMISSION SOCKET IS DEAD' "$WORK/out-dead-socket"; then
+  pass "names the fault, on a /status that reads perfectly healthy"
+else
+  fail "names the fault" "$(cat "$WORK/out-dead-socket")"
+fi
+
+# ---------------------------------------------------------------------------
+# A socket that dropped and came back has acknowledgements among the failures.
+# Restarting that one would take a working sponsor down for a transient.
+healthy_bodies
+cat > "$WORK/journal" <<'JOURNAL'
+[alias] the registration failed: WebSocket is not connected
+[node] rebuilding the submission connection — a submission failed on a dead socket (rebuild 1)
+[job] the node acknowledged this transaction
+[account] deposit-failed: WebSocket is not connected
+[job] the node acknowledged this transaction
+[asset] no spare mUSD coin: WebSocket is not connected
+JOURNAL
+run recovered-socket
+if [ -z "$(calls)" ]; then
+  pass "leaves a socket alone that dropped and recovered — a submission got through"
+else
+  fail "leaves a recovered socket alone" "$(calls)"
+fi
+
+# ---------------------------------------------------------------------------
+# Two failures is not three.
+healthy_bodies
+cat > "$WORK/journal" <<'JOURNAL'
+[alias] the registration failed: WebSocket is not connected
+[account] deposit-failed: WebSocket is not connected
+JOURNAL
+run two-socket-failures
+if [ -z "$(calls)" ]; then
+  pass "holds at two failures in the window"
+else
+  fail "holds at two failures" "$(calls)"
+fi
+
+# ---------------------------------------------------------------------------
+# Its own cooldown, so a restart loop cannot be built out of a node that is
+# genuinely down.
+healthy_bodies
+dead_socket_journal
+run socket-cooldown
+: > "$WORK/calls"
+WATCHDOG_TEST_CALLS="$WORK/calls" PATH="$WORK:$PATH" \
+BALANCER_WATCHDOG_BASE="http://127.0.0.1:$PORT" \
+BALANCER_WATCHDOG_STATE="$LAST_STATE" \
+BALANCER_WATCHDOG_SYSTEMCTL="$WORK/systemctl" \
+BALANCER_WATCHDOG_NODE="$WORK/node" \
+BALANCER_WATCHDOG_JOURNALCTL="$WORK/journalctl" \
+BALANCER_WATCHDOG_LOGGER="$WORK/logger" \
+WATCHDOG_TEST_JOURNAL="$WORK/journal" \
+  bash "$SCRIPT" > "$WORK/out-socket-cooldown" 2>&1
+if [ -z "$(calls)" ] && grep -q 'cooldown' "$WORK/out-socket-cooldown"; then
+  pass "holds its own 600 s cooldown rather than restarting every two minutes"
+else
+  fail "holds the socket cooldown" "$(calls); $(cat "$WORK/out-socket-cooldown")"
+fi
+
+# ---------------------------------------------------------------------------
+: > "$WORK/journal"
 healthy_bodies
 run healthy
 if [ -z "$(calls)" ]; then

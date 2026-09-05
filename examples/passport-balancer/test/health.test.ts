@@ -66,6 +66,12 @@ const healthy = (overrides: Partial<HealthFacts> = {}): HealthFacts => ({
   orphans: 0,
   lastStateChangeAt: T0 - MINUTE,
   consecutiveUnhealthy: 0,
+  /* The submission socket, healthy by default: `./submission.ts` reports
+     `connected` whenever no failure stands against it, which includes the state
+     before the first submission has opened anything. */
+  nodeSocket: 'connected',
+  consecutiveSocketFailures: 0,
+  consecutiveRebuildFailures: 0,
   ...overrides,
 });
 
@@ -626,6 +632,9 @@ function harness(readings: HealthProbeReading[]) {
       refresh: async () => {
         calls.push('refresh');
       },
+      reconnect: async () => {
+        calls.push('reconnect');
+      },
       rewarm: async () => {
         calls.push('rewarm');
       },
@@ -823,6 +832,7 @@ describe('the health loop', () => {
         refresh: async () => {
           throw new Error('the wallet did not answer');
         },
+        reconnect: async () => undefined,
         rewarm: async () => undefined,
         resyncDust: async () => undefined,
         restart: async () => undefined,
@@ -849,6 +859,7 @@ describe('the health loop', () => {
       store: { read: () => record, write: async (next) => { record = next; } },
       remedies: {
         refresh: async () => undefined,
+        reconnect: async () => undefined,
         rewarm: async () => undefined,
         resyncDust: async () => undefined,
         restart: async () => undefined,
@@ -857,5 +868,225 @@ describe('the health loop', () => {
     assert.equal((await monitor.tick())?.verdict, 'degraded');
     assert.equal((await monitor.tick())?.verdict, 'wedged');
     monitor.stop();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The submission socket                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * THE OUTAGE THIS LADDER IS THE ANSWER TO. On 2026/09/05 the wallet's node
+ * websocket died at 14:48 UTC. At 15:28 this classifier said `degraded: the
+ * wallet's sync indices have not moved in 40 min` and `chooseRemedy` answered
+ * `refresh`, which re-read the wallet in 0 s and did not touch the connection.
+ * From 15:30:27 until an operator restarted the unit at 20:12, EVERY submission
+ * failed instantly — 520 of them — while `/status` reported `synced: true`,
+ * `busy: false`, and both sponsorships `available`. Five hours in which every
+ * name registration, activation grant, and mUSD mint failed, and nothing in
+ * this module could see it, because the wallet is read from the INDEXER and
+ * transactions go to the NODE over a different connection entirely.
+ *
+ * The facts are now in `HealthFacts`, so the cases below are the whole of what
+ * this service concluded then and what it concludes now.
+ */
+describe('the verdict on a dead submission socket', () => {
+  it('refuses to call a sponsor that cannot submit anything healthy', () => {
+    /* Every other fact is the deployed sponsor's at 16:00 UTC: synced,
+       connected, DUST in hand, able to prove, nothing in flight. The verdict
+       then was `healthy`. */
+    const verdict = assessHealth(healthy({ consecutiveSocketFailures: 12, nodeSocket: 'dead' }));
+    assert.equal(verdict.verdict, 'degraded');
+    assert.equal(verdict.act, true);
+    assert.equal(verdict.socketFault, true);
+    assert.match(verdict.reason, /submission socket has failed 12 submission\(s\) in a row/);
+  });
+
+  it('holds its tongue below N, because one failure is a socket the connection retries itself', () => {
+    for (let failures = 0; failures < DEFAULT_HEALTH_POLICY.socketFailuresForDegraded; failures += 1) {
+      assert.equal(
+        assessHealth(healthy({ consecutiveSocketFailures: failures })).verdict,
+        'healthy',
+        `${failures} failure(s) is not yet a fault`,
+      );
+    }
+    assert.equal(
+      assessHealth(
+        healthy({ consecutiveSocketFailures: DEFAULT_HEALTH_POLICY.socketFailuresForDegraded }),
+      ).verdict,
+      'degraded',
+    );
+  });
+
+  it('is decided ahead of the DUST branches, which can all answer on a sponsor that cannot submit', () => {
+    /* A submission outage nullifies nothing and settles nothing, so the DUST
+       facts go on reading exactly as they did — and any of these branches
+       would happily return a verdict about coins on a service whose real fault
+       is that it cannot put a transaction on chain. */
+    const cases: Array<[string, Partial<HealthFacts>]> = [
+      ['the DUST settle', { dustSpecks: 0n, utxoCount: 0, lastSponsorshipAt: T0 - 30_000 }],
+      ['a balanced transaction outstanding', { dustSpecks: 0n, utxoCount: 0, orphans: 2 }],
+      ['the start-up grace', { uptimeMs: 60_000, synced: false }],
+      ['the sync-index stall', { lastStateChangeAt: T0 - 40 * MINUTE }],
+    ];
+    for (const [name, reading] of cases) {
+      const verdict = assessHealth(healthy({ ...reading, consecutiveSocketFailures: 6 }));
+      assert.equal(verdict.socketFault, true, name);
+      assert.match(verdict.reason, /submission socket/, name);
+    }
+  });
+
+  it('still leaves a wallet that is in use alone', () => {
+    /* The one order that must not change. A remedy taken mid-spend abandons a
+       proof somebody is waiting on, and this verdict is not worth that. */
+    for (const inUse of [{ reserved: true }, { busy: true }]) {
+      const verdict = assessHealth(healthy({ ...inUse, consecutiveSocketFailures: 20 }));
+      assert.equal(verdict.verdict, 'busy');
+      assert.equal(verdict.act, false);
+    }
+  });
+
+  it('escalates to a restart only once the rebuilds themselves have failed M times', () => {
+    const rebuildable = assessHealth(healthy({ consecutiveSocketFailures: 9 }));
+    assert.equal(rebuildable.restartEligible, false, 'a fresh socket is cheaper than a chain walk');
+
+    const hopeless = assessHealth(
+      healthy({
+        consecutiveSocketFailures: 9,
+        consecutiveRebuildFailures: DEFAULT_HEALTH_POLICY.rebuildFailuresForRestart,
+        nodeSocket: 'dead',
+      }),
+    );
+    assert.equal(hopeless.restartEligible, true);
+    assert.match(hopeless.reason, /rebuilds of it have failed too/);
+  });
+
+  it('checks the socket when the sync indices stop moving — the 15:28 verdict, corrected', () => {
+    /* The exact reading of 15:28 UTC: the socket had been dead for forty
+       minutes and NOTHING had been submitted since, so the failure count was
+       still zero. A count alone would have missed it, which is why the socket's
+       own state is read here too. */
+    const verdict = assessHealth(
+      healthy({ lastStateChangeAt: T0 - 40 * MINUTE, nodeSocket: 'dead' }),
+    );
+    assert.equal(verdict.verdict, 'degraded');
+    assert.equal(verdict.socketFault, true, 'so the remedy is a rebuild, not another wallet read');
+    assert.match(verdict.reason, /indices have not moved in 40 min, and the submission socket reads dead/);
+  });
+
+  it('says so plainly when a stalled wallet’s socket is fine', () => {
+    const verdict = assessHealth(healthy({ lastStateChangeAt: T0 - 40 * MINUTE }));
+    assert.equal(verdict.verdict, 'degraded');
+    assert.equal(verdict.socketFault, undefined);
+    assert.match(verdict.reason, /the submission socket is answering/);
+    assert.equal(verdict.restartEligible, false, 'a quiet chain is still too soft to restart on');
+  });
+});
+
+describe('the remedy for a dead submission socket', () => {
+  it('rebuilds on the FIRST unhealthy tick rather than climbing the ladder', () => {
+    /* `refresh` was tried on the deployed service and repairs nothing — it
+        reads the wallet, which is a different connection. `rewarm` fetches
+        proving keys, which is a different subsystem again. Every tick spent on
+        either is registrations failing. */
+    const facts = healthy({ consecutiveSocketFailures: 5, consecutiveUnhealthy: 0 });
+    const choice = chooseRemedy(assessHealth(facts), facts, state());
+    assert.equal(choice.remedy, 'reconnect');
+    assert.match(choice.reason, /5 submission\(s\) have failed on the socket in a row/);
+  });
+
+  it('rebuilds even while a job is in flight, because that job’s submission is the thing failing', () => {
+    /* The one remedy that is safe mid-spend, and the only one: it opens a
+       socket. It abandons no proof and drops no transaction — and the job
+       waiting on it is waiting on exactly this. */
+    const assessment: HealthAssessment = {
+      verdict: 'degraded',
+      reason: 'contrived',
+      act: true,
+      restartEligible: false,
+      socketFault: true,
+    };
+    for (const inUse of [{ reserved: true }, { busy: true }]) {
+      const facts = healthy({ ...inUse, consecutiveSocketFailures: 5 });
+      assert.equal(chooseRemedy(assessment, facts, state()).remedy, 'reconnect');
+    }
+  });
+
+  it('exits the process once M rebuilds in a row have failed', () => {
+    const facts = healthy({
+      consecutiveSocketFailures: 9,
+      consecutiveRebuildFailures: DEFAULT_HEALTH_POLICY.rebuildFailuresForRestart,
+      nodeSocket: 'dead',
+    });
+    const choice = chooseRemedy(assessHealth(facts), facts, state());
+    assert.equal(choice.remedy, 'restart');
+    assert.match(choice.reason, /3 rebuilds of the submission socket have failed in a row/);
+  });
+
+  it('will not exit mid-spend, and rebuilds once more instead', () => {
+    const facts = healthy({
+      busy: true,
+      consecutiveSocketFailures: 9,
+      consecutiveRebuildFailures: 5,
+      nodeSocket: 'dead',
+    });
+    const assessment: HealthAssessment = {
+      verdict: 'degraded',
+      reason: 'contrived',
+      act: true,
+      restartEligible: true,
+      socketFault: true,
+    };
+    const choice = chooseRemedy(assessment, facts, state());
+    assert.equal(choice.remedy, 'reconnect');
+    assert.match(choice.reason, /the wallet is in use/);
+  });
+
+  it('holds a five-minute floor between two restarts asked for by the socket', () => {
+    /* Five minutes and not the general thirty: M bounded rebuilds have all
+       failed, so this is proved rather than inferred, and every minute of it is
+       a sponsor that cannot put a transaction on chain. */
+    const facts = healthy({
+      consecutiveSocketFailures: 9,
+      consecutiveRebuildFailures: 4,
+      nodeSocket: 'dead',
+    });
+    const recent = state({ lastRestartRequestAt: new Date(T0 - MINUTE).toISOString() });
+    assert.equal(chooseRemedy(assessHealth(facts), facts, recent).remedy, 'reconnect');
+
+    const elapsed = state({
+      lastRestartRequestAt: new Date(
+        T0 - DEFAULT_REMEDY_POLICY.socketRestartCooldownMs,
+      ).toISOString(),
+    });
+    assert.equal(chooseRemedy(assessHealth(facts), facts, elapsed).remedy, 'restart');
+  });
+
+  it('drives the whole outage through the loop, from first failure to exit', async () => {
+    /* Tick by tick: the socket starts failing, the loop rebuilds it, the
+       rebuilds fail too, and the process asks systemd for a new one — which is
+       what an operator did by hand at 20:12, four and a half hours late. */
+    const dead = (rebuildFailures: number) =>
+      reading({
+        nodeSocket: 'dead' as const,
+        consecutiveSocketFailures: 6,
+        consecutiveRebuildFailures: rebuildFailures,
+        fingerprint: `f${rebuildFailures}`,
+      });
+    const h = harness([dead(0), dead(1), dead(3), reading({})]);
+
+    assert.equal((await h.monitor.tick())?.verdict, 'degraded');
+    assert.deepEqual(h.calls, ['reconnect'], 'no refresh-then-rewarm ladder in front of it');
+    await h.monitor.tick();
+    assert.deepEqual(h.calls, ['reconnect', 'reconnect']);
+    await h.monitor.tick();
+    assert.deepEqual(h.calls, ['reconnect', 'reconnect', 'restart']);
+    assert.equal(h.record().awaitingHealthyTick, true, 'and the restart is recorded before the exit');
+    assert.match(h.record().lastRestartReason ?? '', /submission socket/);
+
+    /* And a socket that comes back is simply healthy again. */
+    h.advance(MINUTE);
+    assert.equal((await h.monitor.tick())?.verdict, 'healthy');
+    h.monitor.stop();
   });
 });

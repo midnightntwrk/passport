@@ -826,7 +826,24 @@ async function main(): Promise<void> {
              that never happened would make a genuinely empty wallet claim to be
              recovering, minute after minute. */
           if (
-            await accountFunder.ensureSpareCoin({ queueIdle: () => spendAdmission.depth === 0 })
+            await accountFunder.ensureSpareCoin({
+              queueIdle: () => spendAdmission.depth === 0,
+              /* A mint that cannot be submitted is 7.4 s of the 1AM prover's
+                 quota spent to learn what this line already knows. On
+                 2026/09/05 this tick spent it 249 times in five hours. */
+              socketAlive: () => {
+                const socket = wallet.socketHealth();
+                if (!socket) return true;
+                /* Dead, or failing every submission put through it: the same
+                   count `./health.ts` calls degraded on. A socket that is
+                   merely `reconnecting` is not stopped — the rebuild under it
+                   takes seconds and the mint's own submission waits for it. */
+                return (
+                  socket.nodeSocket !== 'dead' &&
+                  socket.consecutiveSocketFailures < DEFAULT_HEALTH_POLICY.socketFailuresForDegraded
+                );
+              },
+            })
           ) {
             lastSpendAt = Date.now();
           }
@@ -951,6 +968,10 @@ async function main(): Promise<void> {
       dust > 0n &&
       !wallet.isReserved() &&
       ['ready', 'server'].includes(wallet.provingReadiness().state);
+    /* Read from `./submission.ts`'s own bookkeeping, which needs neither the
+       wallet nor the indexer — so it is still true on a status the try above
+       could not fill in. */
+    const socketHealth = wallet.socketHealth();
     return {
       network: config.networkId,
       address: wallet.address,
@@ -1083,6 +1104,17 @@ async function main(): Promise<void> {
          can be watched working — and, more to the point, watched NOT firing —
          without an SSH session. `null` only when it is switched off. */
       health: healthMonitor ? healthMonitor.snapshot() : null,
+      /* The submission socket, which is a different connection from the indexer
+         subscriptions `synced` and `connected` describe. Published because its
+         absence is what made the outage of 2026/09/05 invisible: this endpoint
+         reported `synced: true`, `busy: false`, and both sponsorships
+         `available` for the four and a half hours in which every single
+         transaction this service submitted failed on a dead websocket. */
+      nodeSocket: socketHealth?.nodeSocket ?? 'connected',
+      consecutiveSocketFailures: socketHealth?.consecutiveSocketFailures ?? 0,
+      consecutiveRebuildFailures: socketHealth?.consecutiveRebuildFailures ?? 0,
+      nodeSocketRebuilds: socketHealth?.rebuilds ?? 0,
+      lastSocketFailureAt: socketHealth?.lastSocketFailureAt ?? null,
       /* The shelf of pre-deployed resolver leaves: how many are on it, what it
          is aiming at, and — when it is not filling — the one reason it is not.
          `paused` is the normal reading on a sponsor with two DUST coins, and
@@ -1150,6 +1182,10 @@ async function main(): Promise<void> {
       // Reported as `stateReadable: false`, which is what `wedged` reads.
     }
     const lastSponsorship = Math.max(lastSpendAt, lastBalanceMs);
+    /* Read outside the try above deliberately: the socket's own bookkeeping is
+       held by `./submission.ts` and needs neither the wallet state nor the
+       indexer, so a wallet that cannot be read must not take it down with it. */
+    const socket = wallet.socketHealth();
     return {
       uptimeMs: Date.now() - startedAt,
       stateReadable,
@@ -1172,6 +1208,12 @@ async function main(): Promise<void> {
       busy: wallet.isBusy(),
       lastSponsorshipAt: lastSponsorship > 0 ? lastSponsorship : null,
       orphans: wallet.orphanStats().watching,
+      /* The connection this service SUBMITS on, which is not the one it reads
+         its wallet from. Nothing above moves when it dies — which is how five
+         hours of every-submission-fails read as `healthy` on 2026/09/05. */
+      nodeSocket: socket?.nodeSocket ?? 'connected',
+      consecutiveSocketFailures: socket?.consecutiveSocketFailures ?? 0,
+      consecutiveRebuildFailures: socket?.consecutiveRebuildFailures ?? 0,
       fingerprint,
     };
   };
@@ -1195,6 +1237,31 @@ async function main(): Promise<void> {
         refresh: async () => {
           const state = await wallet.currentState();
           await wallet.progress(state);
+          /* And the connection underneath it, when that connection is not
+             answering. On 2026/09/05 this rung ran at 15:28, logged `refreshed
+             the wallet state in 0 s`, and left a submission socket that had
+             been dead for forty minutes exactly as it found it — every
+             registration, grant, and mint then failed for another four and a
+             half hours. A refresh that re-reads the wallet and ignores the
+             socket is a refresh of the half that was working. */
+          const socket = wallet.socketHealth();
+          if (socket && socket.nodeSocket !== 'connected') {
+            console.warn(
+              `[health] the submission socket reads ${socket.nodeSocket} — rebuilding it as part of the refresh`,
+            );
+            await wallet.reconnectNode('a refresh found the submission socket down');
+          }
+        },
+        /* The rung the ladder had no answer for: a fresh `WsProvider` and a
+           fresh `ApiPromise` for submissions, the old pair disconnected and
+           thrown away. Cheap enough to take on the first unhealthy tick, which
+           is what `chooseRemedy` does with it. */
+        reconnect: async (reason: string) => {
+          await wallet.reconnectNode(reason);
+          const socket = wallet.socketHealth();
+          console.warn(
+            `[health] the submission socket now reads ${socket?.nodeSocket ?? 'unknown'} after ${socket?.rebuilds ?? 0} rebuild(s)`,
+          );
         },
         /* Rung two, and the one that actually repairs something in place:
            `warmProvingKeys()` re-attempts the key-material fetch whenever
