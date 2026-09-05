@@ -2874,13 +2874,28 @@ export default function PassportDemo() {
       return signInAfterEnrolmentConflict();
     }
     if (onboarding.outcome === 'cancelled') {
-      /* THE PICKER WAS DISMISSED, so the ceremony is over (2026/09/05). It
-         used to fall through to enrolment, which meant a dismissed Face ID
-         sheet was answered by a make-a-passkey sheet nobody had asked for.
-         Nothing was created and nothing is wrong; the screen says so and
-         leaves the same button under it. */
-      throw new Error(
-        'The passkey prompt was closed, so nothing was set up. Choose "Continue with Passport" when you are ready.',
+      /* THE PICKER WAS DISMISSED, so nothing is created — and the screen has to
+         offer more than the button that just failed.
+
+         The first version of this branch threw a plain sentence naming
+         "Continue with Passport", which recreated the Android orphan loop
+         exactly: this browser holds records, so `discoverFirst` is true, so
+         Continue runs the same discovery, and a passkey deleted from Google
+         Password Manager still produces an empty sheet the user dismisses
+         again. Hector's case, in a new place.
+
+         A dismissed sheet and an empty one are ONE indistinguishable
+         `NotAllowedError` to WebAuthn — which is precisely the fact
+         `passkeySignInRecovery` already reasons about at the `credential`
+         stage, and it answers `keyless`: the panel that says the passkey could
+         not be loaded and offers to make one, with "Use a different passkey"
+         beneath it. So this failure goes through the same funnel every other
+         ceremony failure goes through, rather than growing a second opinion
+         about the same fact. Reported as a DISCOVERY failure, not an enrolment
+         one: `stage: 'enrolment'` answers `none`, which is the bare banner
+         this branch has just been corrected out of. */
+      throw signInCeremonyFailure(
+        new PassportPasskeyDiscoveryError('cancelled', onboarding.message),
       );
     }
     if (onboarding.outcome === 'unusable-credential') {

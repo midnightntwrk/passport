@@ -248,6 +248,51 @@ describe('midSessionPasskeyMessage', () => {
   });
 });
 
+/**
+ * THE ORPHAN LOOP, AND THE TWO STAGES THAT DECIDE WHETHER IT REOPENS.
+ *
+ * The create journey asks the authenticator first wherever this browser knows
+ * of a credential, so a dismissed picker is reached from the CREATE button as
+ * well as from "Use a different passkey". Reporting that as an enrolment
+ * failure answers `none` — a banner over the same button, which on Hector's
+ * Android case (passkey deleted from Google Password Manager, records still
+ * local, Chrome's sheet empty) is a loop with no exit: press, empty sheet,
+ * dismiss, banner, press. Reporting it as the credential failure it actually
+ * is answers `keyless`, which is the panel with a way out on it.
+ *
+ * The two assertions below are the same fact from both sides, and the pair is
+ * the guard: whichever stage a caller passes has to be the one that matches
+ * what failed.
+ */
+describe('a dismissed picker on the create journey', () => {
+  it('reaches the keyless panel, because a picker is a credential ceremony', () => {
+    expect(passkeySignInRecovery({ stage: 'credential', reason: 'cancelled' })).toBe('keyless');
+    /* Explicitly NOT `none`. `none` means "the banner and the button already
+       on the screen are the whole answer", and the button is the thing that
+       just failed. */
+    expect(passkeySignInRecovery({ stage: 'credential', reason: 'cancelled' })).not.toBe('none');
+  });
+
+  it('would answer with a bare banner if it were reported as an enrolment', () => {
+    /* Kept as the contrast rather than left implicit: this IS the wrong
+       answer, and the only thing standing between it and the screen is which
+       stage the caller names. A creation that was dismissed is genuinely
+       `none` — the button that was pressed is the right one to press again,
+       because nothing has been learnt about the platform. A picker that was
+       dismissed is not, because something has: no passkey could be loaded. */
+    expect(passkeySignInRecovery({ stage: 'enrolment', reason: 'cancelled' })).toBe('none');
+  });
+
+  it('offers to make a passkey, and says what that does to the ones already here', () => {
+    /* The panel's copy, which is what the reader actually meets. It has to
+       carry the offer — otherwise the loop is unbroken — and it has to say
+       that creating leaves an existing Passport alone, because a reader who
+       still holds one has every right to fear otherwise. */
+    expect(KEYLESS_PASSKEY_MESSAGE).toMatch(/create a new one/);
+    expect(KEYLESS_PASSKEY_MESSAGE).toMatch(/stays untouched/);
+  });
+});
+
 describe('the mid-session way-out mark', () => {
   it('travels on the error the surfaces already receive', () => {
     /* The mark cannot be a new error class: the failure has to keep arriving as
