@@ -16,6 +16,26 @@ interface NavigatorWithStandalone extends Navigator {
   standalone?: boolean;
 }
 
+/**
+ * What the install sheet promises, and why there are two of them.
+ *
+ * WHERE THE BROWSER OFFERS THE INSTALL ITSELF — Chrome, Edge — the installed
+ * app shares the browser's storage, so a Passport signed in before the install
+ * is signed in after it and {@link INSTALL_LEDE} is simply true.
+ *
+ * ON iOS IT IS NOT. An installed web app gets a storage container of its own:
+ * the passkey follows, through iCloud Keychain, but the profile and the
+ * encrypted state stay behind in Safari, so the first thing the new app does is
+ * ask for the passkey. Promising otherwise and then showing a sign-in screen
+ * is the app telling somebody it is broken, in its own words, one tap after
+ * they trusted it. {@link INSTALL_LEDE_IOS} says what happens instead.
+ */
+export const INSTALL_LEDE =
+  'It opens full-screen, keeps you signed in, and is one tap away next time.';
+
+export const INSTALL_LEDE_IOS =
+  'It opens full-screen and is one tap away next time. You will sign in once more with your passkey.';
+
 function isStandaloneDisplay(): boolean {
   return (
     window.matchMedia('(display-mode: standalone)').matches ||
@@ -497,10 +517,18 @@ export function PassportPwaShell({ children }: { children: ReactNode }) {
               </span>
               <div>
                 <h2 id="pwainstall-title">Add Passport to your home screen</h2>
-                <p>
-                  It opens full-screen, keeps you signed in, and is one tap away
-                  next time.
-                </p>
+                {/* WHAT IS TRUE ON EACH PLATFORM, AND NOT A WORD MORE
+                    (2026/09/05). This used to promise "keeps you signed in" to
+                    everybody. On iOS it is false: an installed web app gets a
+                    storage container of its own, so the passkey follows through
+                    iCloud Keychain but every local record — the profile, the
+                    encrypted state — stays behind in Safari, and the first
+                    thing the new app does is ask for the passkey. Somebody who
+                    read that sentence and then met a sign-in screen has been
+                    told the app is broken by the app itself. Where the browser
+                    offers the install itself, the app shares the browser's
+                    storage and the original sentence was true, so it stands. */}
+                <p>{iosInstructional && !installPrompt ? INSTALL_LEDE_IOS : INSTALL_LEDE}</p>
               </div>
             </header>
 

@@ -222,7 +222,16 @@ describe('PASSKEY_CEREMONY_TIMEOUT_MESSAGE', () => {
     expect(PASSKEY_CEREMONY_TIMEOUT_MESSAGE).toMatch(/QR code/);
     expect(PASSKEY_CEREMONY_TIMEOUT_MESSAGE).toMatch(/leave the prompt open/);
     expect(PASSKEY_CEREMONY_TIMEOUT_MESSAGE).toMatch(/extension/);
-    expect(PASSKEY_CEREMONY_TIMEOUT_MESSAGE).toMatch(/private window/);
+  });
+
+  it('sends nobody to a private window, where a Passport cannot be saved', () => {
+    /* Found by the Safari review, 2026/09/05. The sentence used to end "a
+       private window rules that out", which is sound on Chrome and harmful on
+       Safari: a Safari private window has no usable IndexedDB, so a reader who
+       followed the advice reached the one context where onboarding cannot
+       finish — at the moment they were already stuck. */
+    expect(PASSKEY_CEREMONY_TIMEOUT_MESSAGE).not.toMatch(/private/i);
+    expect(PASSKEY_CEREMONY_TIMEOUT_MESSAGE).not.toMatch(/incognito/i);
   });
 });
 

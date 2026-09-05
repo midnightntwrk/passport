@@ -227,9 +227,17 @@ export const MID_SESSION_PASSKEY_MESSAGE =
  * hint survives, because a wallet extension holding the dialog is a real and
  * observed cause (Lace, 2026/08/06) — it is just no longer the only story
  * offered.
+ *
+ * THE PRIVATE-WINDOW ADVICE IS GONE (2026/09/05). It used to end "a private
+ * window rules that out", which is sound on Chrome and actively harmful on
+ * Safari: a Safari private window has no usable IndexedDB, so a reader who
+ * followed it landed in the one context where a Passport cannot be saved at
+ * all — and did so at the exact moment they were already stuck. A remedy that
+ * is wrong on one of the two browsers this runs on is not a remedy, and the
+ * sentence is no worse for ending at the observation.
  */
 export const PASSKEY_CEREMONY_TIMEOUT_MESSAGE =
-  'The passkey prompt did not finish. If your device showed a QR code, signing with your phone can take a minute — try again and leave the prompt open. A browser extension can also block the prompt; a private window rules that out.';
+  'The passkey prompt did not finish. If your device showed a QR code, signing with your phone can take a minute — try again and leave the prompt open. A browser extension can also block the prompt.';
 
 /**
  * The sentence a mid-session way-out panel puts above its two controls.
