@@ -33,6 +33,7 @@ vi.mock('@midnight-ntwrk/midnight-js-types', () => ({
 import {
   PROOF_UNFINISHED_MESSAGE,
   PROOF_WORKER_IDLE_MS,
+  PROOF_WORKER_PROVE_IDLE_MS,
   setProofWorkerSpawn,
   wasmWalletProvingService,
 } from './wasmProver.js';
@@ -127,7 +128,13 @@ describe('the proof worker channel', () => {
 
     // Silence. No error event, no close — exactly what a jettisoned worker
     // looks like from the page.
+    /* Past the `check` bound and NOT restarted: a proof is silent while the
+       maths runs, and this is the stretch a short bound would have killed. */
     await vi.advanceTimersByTimeAsync(PROOF_WORKER_IDLE_MS + 1);
+    expect(first.terminated).toBe(false);
+    expect(FakeWorker.live).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(PROOF_WORKER_PROVE_IDLE_MS + 1);
     expect(first.terminated).toBe(true);
     expect(FakeWorker.live).toHaveLength(2);
     const second = FakeWorker.live[1];
@@ -149,8 +156,8 @@ describe('the proof worker channel', () => {
     const settled = service
       .prove(transactionCalling((provider) => provider.prove(new Uint8Array([9]), 'x')))
       .catch((cause: Error) => cause.message);
-    await vi.advanceTimersByTimeAsync(PROOF_WORKER_IDLE_MS + 1);
-    await vi.advanceTimersByTimeAsync(PROOF_WORKER_IDLE_MS + 1);
+    await vi.advanceTimersByTimeAsync(PROOF_WORKER_PROVE_IDLE_MS + 1);
+    await vi.advanceTimersByTimeAsync(PROOF_WORKER_PROVE_IDLE_MS + 1);
 
     await expect(settled).resolves.toBe(PROOF_UNFINISHED_MESSAGE);
     // No third worker: one restart, one replay, then an answer.
@@ -175,9 +182,9 @@ describe('the proof worker channel', () => {
 
     // Two thirds of the bound, a word from the worker, two thirds again. A
     // total-time bound would have killed this; an idle bound does not.
-    await vi.advanceTimersByTimeAsync(Math.floor(PROOF_WORKER_IDLE_MS * 0.7));
+    await vi.advanceTimersByTimeAsync(Math.floor(PROOF_WORKER_PROVE_IDLE_MS * 0.7));
     worker.requestKey(id, 'lookupKey', 'not/a/system/circuit');
-    await vi.advanceTimersByTimeAsync(Math.floor(PROOF_WORKER_IDLE_MS * 0.7));
+    await vi.advanceTimersByTimeAsync(Math.floor(PROOF_WORKER_PROVE_IDLE_MS * 0.7));
     expect(worker.terminated).toBe(false);
     expect(FakeWorker.live).toHaveLength(1);
 
@@ -270,5 +277,45 @@ describe('the proof worker channel', () => {
       data: { id: worker.posted[0].message.id, err: 'the key never arrived' },
     } as MessageEvent);
     await expect(settled).rejects.toThrow('the key never arrived');
+  });
+});
+
+/**
+ * The two bounds, and the failure mode that made them two.
+ *
+ * A proof is silent by construction: once the wasm holds every key it needs it
+ * runs synchronous PLONK arithmetic with nothing to report until it finishes,
+ * and a shielded leg on an iPhone can plausibly take several minutes of that.
+ * A single 90-second bound restarts a proof that was going to succeed, doubles
+ * the wait, and then fails it — strictly worse than the hang it replaced.
+ */
+describe('the idle bounds', () => {
+  it('gives a proof several minutes of silence and a check ninety seconds', () => {
+    expect(PROOF_WORKER_IDLE_MS).toBe(90_000);
+    expect(PROOF_WORKER_PROVE_IDLE_MS).toBe(360_000);
+    expect(PROOF_WORKER_PROVE_IDLE_MS).toBeGreaterThan(PROOF_WORKER_IDLE_MS);
+  });
+
+  it('holds a check to the shorter bound, since a check is never silent for long', async () => {
+    vi.useFakeTimers();
+    setProofWorkerSpawn(spawnFake as unknown as () => Worker);
+    const service = wasmWalletProvingService();
+
+    const settled = service
+      .prove({
+        prove: (provider: any) => provider.check(new Uint8Array([1]), 'x'),
+      })
+      .catch((cause: Error) => cause.message);
+    await vi.advanceTimersByTimeAsync(0);
+    const first = FakeWorker.live[0];
+    expect(first.posted[0].message.op).toBe('check');
+
+    await vi.advanceTimersByTimeAsync(PROOF_WORKER_IDLE_MS + 1);
+    // Restarted on the SHORT bound — a check does not get the proof's minutes.
+    expect(first.terminated).toBe(true);
+    expect(FakeWorker.live).toHaveLength(2);
+
+    await vi.advanceTimersByTimeAsync(PROOF_WORKER_IDLE_MS + 1);
+    await expect(settled).resolves.toBe(PROOF_UNFINISHED_MESSAGE);
   });
 });

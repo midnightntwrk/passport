@@ -153,17 +153,31 @@ async function lookupSystemKey(keyLocation: string): Promise<KeyMaterial | undef
 
 /**
  * How long a request may go without a WORD from the worker before the worker
- * is presumed dead.
+ * is presumed dead — and why there are two of these rather than one.
  *
- * It is an IDLE bound, not a total one, and that distinction is the whole
- * design. A first shielded send legitimately takes minutes: roughly 54 MB of
- * proving keys comes down before any arithmetic starts, and the proof itself
- * runs 20–60 seconds on a phone. But none of that is silent — every key the
- * wasm needs arrives as a `km` request on this channel, and finishing produces
- * a result. So progress is observable, and a channel that says nothing at all
- * for this long is not slow, it is gone.
+ * It is an IDLE bound, not a total one. A first shielded send legitimately
+ * takes minutes, but almost none of that is silent: roughly 54 MB of proving
+ * keys comes down first, and every one of them arrives as a `km` request on
+ * this channel, so the download restarts the clock over and over.
  *
- * WHAT IT IS FOR. iOS reclaims memory by killing the WebContent process or
+ * THE SILENT STRETCH IS THE PROOF ITSELF, and it is silent by construction.
+ * Once the wasm has every key it needs it runs synchronous PLONK arithmetic
+ * inside the worker with nothing to report until it is finished — no
+ * progress messages, no yields, no way for this side to tell "still working"
+ * from "gone". So the bound has to be long enough to cover the whole of that
+ * stretch on the slowest device Passport runs on, and a shielded leg on an
+ * iPhone can plausibly take several minutes. A bound that is merely generous
+ * for a laptop restarts a proof that was going to succeed, doubles the wait,
+ * and then fails it — strictly worse than the hang it replaced.
+ *
+ * `check` has no such stretch: it is a validation pass, and 90 seconds of
+ * silence from one is already a dead worker.
+ *
+ * The elapsed time of every request is logged by the worker
+ * (`proofWorker.ts`), so these two numbers can be replaced by measurements
+ * from real devices rather than left as estimates.
+ *
+ * WHAT THEY ARE FOR. iOS reclaims memory by killing the WebContent process or
  * jettisoning a worker outright, and neither produces an `error` event: the
  * worker simply stops answering. `callWorker` had no timeout, no signal, and
  * no cancellation, so a proof interrupted by the user switching apps left a
@@ -171,6 +185,14 @@ async function lookupSystemKey(keyLocation: string): Promise<KeyMaterial | undef
  * may already have moved.
  */
 export const PROOF_WORKER_IDLE_MS = 90_000;
+
+/** The same bound for `prove`, which is silent for as long as the maths takes. */
+export const PROOF_WORKER_PROVE_IDLE_MS = 360_000;
+
+/** The bound this request is held to. See both constants above. */
+function idleBoundFor(op: 'prove' | 'check'): number {
+  return op === 'prove' ? PROOF_WORKER_PROVE_IDLE_MS : PROOF_WORKER_IDLE_MS;
+}
 
 /**
  * What the user is told when the proof did not come back, in words that name
@@ -243,7 +265,7 @@ function markProgress(id: number): void {
   const request = pending.get(id);
   if (!request) return;
   if (request.timer) clearTimeout(request.timer);
-  request.timer = setTimeout(() => stalled(id), PROOF_WORKER_IDLE_MS);
+  request.timer = setTimeout(() => stalled(id), idleBoundFor(request.request.op));
 }
 
 /**
@@ -256,7 +278,11 @@ function markProgress(id: number): void {
  * a terminated channel is the hang this exists to end.
  */
 function stalled(id: number): void {
-  console.debug(`[wasm-prover] proof worker went quiet on req ${id}; restarting`);
+  console.debug(
+    `[wasm-prover] proof worker went quiet on req ${id} (bound ${
+      pending.get(id) ? idleBoundFor(pending.get(id)!.request.op) : '—'
+    } ms); restarting`,
+  );
   disposeWorker();
   const stranded = [...pending.entries()];
   for (const [requestId, request] of stranded) {

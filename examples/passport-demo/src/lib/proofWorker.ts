@@ -87,6 +87,13 @@ ctx.onmessage = async (e: MessageEvent) => {
   }
 
   const { id, op, preimage, obi } = msg;
+  /* MEASURED, NOT ESTIMATED. The main thread holds this request to an idle
+     bound (`wasmProver.ts#PROOF_WORKER_PROVE_IDLE_MS`), and the stretch that
+     bound has to cover — synchronous PLONK arithmetic, silent from start to
+     finish — is exactly what is timed here. A bound guessed too short restarts
+     a proof that was going to succeed and then fails it, so the number wants
+     replacing with figures from real phones rather than defending. */
+  const startedAt = Date.now();
   console.debug(`[proof-worker] ${op} request ${id} (${preimage?.length} bytes)`);
   // The preimage embeds its own key location; the wasm calls lookupKey with it.
   const kmProxy: any = {
@@ -102,10 +109,14 @@ ctx.onmessage = async (e: MessageEvent) => {
     // Copy before posting: wasm-bindgen may hand back a view over wasm
     // memory, and structured clone would clone the entire backing buffer.
     const ok = result instanceof Uint8Array ? new Uint8Array(result) : result;
-    console.debug(`[proof-worker] ${op} request ${id} done`);
+    console.debug(`[proof-worker] ${op} request ${id} done in ${Date.now() - startedAt} ms`);
     ctx.postMessage({ id, ok });
   } catch (err: any) {
-    console.debug(`[proof-worker] ${op} request ${id} FAILED: ${err?.message ?? err}`);
+    console.debug(
+      `[proof-worker] ${op} request ${id} FAILED after ${Date.now() - startedAt} ms: ${
+        err?.message ?? err
+      }`,
+    );
     ctx.postMessage({ id, err: String(err?.message ?? err) });
   }
 };
