@@ -55,6 +55,7 @@ import {
   normalisedColourHex,
   sortTokenHoldings,
   type HoldingClass,
+  type TokenMarkArt,
 } from './colour.js';
 
 /**
@@ -79,6 +80,13 @@ export interface SendAsset {
   symbol: string;
   /** The line beside it: what kind of thing this is, or the shortened colour. */
   name: string;
+  /**
+   * The asset's own mark, where this build has one, straight off the naming
+   * authority — so the sheet cannot show a colour under different artwork from
+   * the balance list the person just chose it from. Absent for a colour
+   * nothing can name, and for every item. See `colour.ts`.
+   */
+  mark?: TokenMarkArt;
   /** How many decimal places an amount of it is quoted with. */
   decimals: number;
   mode: SendAssetMode;
@@ -165,6 +173,7 @@ export function buildSendAssets(input: BuildSendAssetsInput): SendAsset[] {
       id: NIGHT_ASSET_ID,
       symbol: night.symbol,
       name: night.name,
+      mark: night.mark,
       decimals: night.decimals,
       mode: 'unshielded',
       kind: 'token',
@@ -184,6 +193,11 @@ export function buildSendAssets(input: BuildSendAssetsInput): SendAsset[] {
          characters everywhere else in Passport. */
       symbol: kind === 'nft' ? nftTitle(identity.symbol) : identity.symbol,
       name: identity.name,
+      /* An ITEM never carries one: `classifyHolding` only files a holding as an
+         item when nothing could name its colour, and an unnamed colour has no
+         mark by construction. Passed through rather than special-cased, so the
+         two rules cannot drift apart. */
+      mark: identity.mark,
       decimals: identity.decimals,
       mode: 'shielded',
       kind,

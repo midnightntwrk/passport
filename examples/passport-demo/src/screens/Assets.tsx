@@ -16,6 +16,9 @@ import {
 } from '../lib/colour.js'
 import { type PassportNetwork } from './NetworkSwitcher.js'
 import ThemeToggle from './ThemeToggle.js'
+/* The colour's own mark, where this build has one. Falls back to the glyph
+   each row already carried — see `TokenMark.tsx`. */
+import { tokenMarkFor } from './TokenMark.js'
 import type { HomeScreenProps } from './Home.js'
 import {
   assetsOnTheWay,
@@ -228,25 +231,32 @@ export default function AssetsScreen(props: AssetsScreenProps) {
          `null` is the ordinary answer and the generic card below is the
          ordinary card. See `describeItem`. */
       const art = row.item ? describeItem(row.colourHex) : null
+      const identity = identities[index]
       return {
       key: row.colourHex,
-      icon: row.icon,
+      /* The colour's OWN mark where this build has one — the Midnight symbol,
+         the dollar coin — and the generic glyph above for everything else. It
+         is the same call Home's strip makes off the same authority, so a token
+         does not change artwork between the two screens. Items are unaffected:
+         nothing on the item shelf carries a nameable colour, so `mark` is
+         always absent there and the gem stays. See `TokenMark.tsx`. */
+      icon: tokenMarkFor(identity, row.icon),
       art,
       /* A known item leads with its own name. Everything else is re-nouned off
          the SAME handle the naming authority gave the colour: on a card whose
          job is to say "one of a kind", the first word must not be "Token".
          See `nftTitle`. */
-      label: art ? art.title : row.item ? nftTitle(identities[index].symbol) : identities[index].symbol,
+      label: art ? art.title : row.item ? nftTitle(identity.symbol) : identity.symbol,
       value: row.value,
       /* Both shelves take their subtitle from the naming authority: a ticker
          gets "stablecoin", a colour nobody can name gets the shortened colour,
          and NOTHING gets the 64 characters. A known item overrides it with a
          sentence about the thing, which is the same kind of answer the ticker
          rows get and a better one than four characters of colour. */
-      unit: art ? art.description : identities[index].name,
+      unit: art ? art.description : identity.name,
       /* Which of those two the subtitle is, so the card can set a WORD like a
          label and DATA like data. See `.mnassets-card-unit-colour`. */
-      unitIsColour: !art && !identities[index].known,
+      unitIsColour: !art && !identity.known,
       item: row.item,
       }
     })

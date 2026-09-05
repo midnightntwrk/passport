@@ -36,6 +36,10 @@ import { startFeeReadinessPoll, type FeeReadinessPoll } from '../lib/feeReadines
    drilled, and imports nothing — see `lib/passkeyRecovery.ts`. */
 import { isMidSessionWayOut } from '../lib/passkeyRecovery.js'
 import { PasskeyWayOutActions } from './PasskeyWayOut.js'
+/* The chosen asset's own mark, where this build has one. Rendered beside the
+   ticker rather than instead of it: the ticker is what the refusal sentences,
+   the hint, and the review step all name. See `TokenMark.tsx`. */
+import TokenMark from './TokenMark.js'
 
 /* Reading the recipient field's two vocabularies, and remembering what each
    name resolved to. Pure, drilled, and free of the wallet SDK — which is why
@@ -1353,6 +1357,9 @@ export default function SendSheet(props: SendSheetProps) {
               <div className="mnhome-send-field">
                 <span className="mnhome-send-label">Asset</span>
                 <span className="mnhome-send-hint">
+                  {asset.mark ? (
+                    <TokenMark mark={asset.mark} symbol={asset.symbol} size={16} />
+                  ) : null}{' '}
                   <strong>{asset.symbol}</strong>
                   {holdingsPending
                     ? ' — still checking what else this Passport’s account holds.'
@@ -1524,7 +1531,18 @@ export default function SendSheet(props: SendSheetProps) {
                     label rather than a unit, and it is already on the field
                     above and on the review step. */}
                 <span className="mnhome-send-unit">
-                  {asset.kind === 'nft' ? 'item' : asset.symbol}
+                  {/* The mark leads the chip where there is one. Hidden from
+                      assistive technology: the ticker it stands for is the very
+                      next thing in the same element, and announcing both is
+                      announcing the asset twice. */}
+                  {asset.kind === 'nft' || !asset.mark ? null : (
+                    <span aria-hidden="true">
+                      <TokenMark mark={asset.mark} symbol={asset.symbol} size={14} />
+                    </span>
+                  )}
+                  <span className="mnhome-send-unit-text">
+                    {asset.kind === 'nft' ? 'item' : asset.symbol}
+                  </span>
                 </span>
               </span>
               {amountError ? (
@@ -1600,7 +1618,14 @@ export default function SendSheet(props: SendSheetProps) {
                       characters underneath the shortened form, which is the one
                       place on the review step a reader could mistake a colour
                       for something they should check. */}
-                  <strong>{asset.symbol}</strong>
+                  <strong className="mnhome-send-asset-name">
+                    {asset.mark ? (
+                      <span aria-hidden="true">
+                        <TokenMark mark={asset.mark} symbol={asset.symbol} size={18} />
+                      </span>
+                    ) : null}
+                    <span>{asset.symbol}</span>
+                  </strong>
                   <small>{asset.kind === 'nft' ? `A one-of-a-kind item — ${asset.name}` : asset.name}</small>
                 </dd>
               </div>

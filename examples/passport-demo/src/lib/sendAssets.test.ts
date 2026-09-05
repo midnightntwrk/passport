@@ -182,6 +182,31 @@ describe('buildSendAssets — items', () => {
   });
 });
 
+describe('buildSendAssets — the mark the picker shows', () => {
+  it('carries each named asset’s own artwork through from the naming authority', () => {
+    /* The picker, the amount row, and the review step all draw the mark off
+       this field, so a colour cannot change artwork between the balance list a
+       person chose it from and the sheet they chose it in. */
+    const assets = fullAccount();
+    expect(assetFor(assets, NIGHT_ASSET_ID).mark).toEqual({
+      light: '/midnight-symbol.svg',
+      dark: '/midnight-symbol-white.svg',
+    });
+    expect(assetFor(assets, MUSD_COLOUR_HEX).mark).toEqual({
+      light: '/usd.svg',
+      dark: '/usd.svg',
+    });
+  });
+
+  it('leaves an item and an unnamed colour unmarked', () => {
+    /* Not a special case in `buildSendAssets`: an item is filed as one only
+       because nothing could name its colour, and only a nameable colour has a
+       mark. The two rules cannot drift apart because there is one of them. */
+    const assets = fullAccount();
+    expect(assetFor(assets, ITEM).mark).toBeUndefined();
+  });
+});
+
 describe('recipientRuleFor', () => {
   const assets = fullAccount();
   const night = assetFor(assets, NIGHT_ASSET_ID);

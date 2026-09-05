@@ -242,7 +242,7 @@ export function App() {
           <div className="panel-row">
             <div className="amount">{quote ? quote.receive : '0'}</div>
             <div className="token pill accent">
-              <img className="coin" src="/usd.svg" alt="" />
+              <img className="coin coin-bare" src="/usd.svg" alt="" />
               {quote ? quote.to : 'sUSD'}
             </div>
           </div>

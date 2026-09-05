@@ -71,12 +71,14 @@ describe('describeColour', () => {
       name: 'native token',
       decimals: 6,
       known: true,
+      mark: { light: '/midnight-symbol.svg', dark: '/midnight-symbol-white.svg' },
     });
     expect(describeColour(MUSD_COLOUR_HEX)).toEqual({
       symbol: 'mUSD',
       name: 'stablecoin',
       decimals: 0,
       known: true,
+      mark: { light: '/usd.svg', dark: '/usd.svg' },
     });
     // The swap desk's own colour — a currency, so it belongs on the token
     // table however little of it is held, not on the item shelf.
@@ -85,6 +87,7 @@ describe('describeColour', () => {
       name: 'Swap dollar',
       decimals: 0,
       known: true,
+      mark: { light: '/usd.svg', dark: '/usd.svg' },
     });
   });
 
@@ -421,5 +424,82 @@ describe('the swap desk’s colour', () => {
 
   it('is a different colour from mUSD, which is the whole point of it', () => {
     expect(SUSD_COLOUR_HEX).not.toBe(MUSD_COLOUR_HEX);
+  });
+});
+
+describe('the mark a colour is shown under', () => {
+  it('gives each of the three named colours its own artwork', () => {
+    /* The three colours this build can name carry a real mark: the brand
+       pack's Midnight symbol for NIGHT, and the dollar coin for both demo
+       stablecoins. Pinned as PATHS rather than as "something truthy", because
+       a mark that silently resolved to nothing is a blank square in the middle
+       of a balance row and nothing in this file would have noticed. */
+    expect(describeColour(NIGHT_COLOUR_HEX).mark).toEqual({
+      light: '/midnight-symbol.svg',
+      dark: '/midnight-symbol-white.svg',
+    });
+    expect(describeColour(MUSD_COLOUR_HEX).mark).toEqual({
+      light: '/usd.svg',
+      dark: '/usd.svg',
+    });
+    expect(describeColour(SUSD_COLOUR_HEX).mark).toEqual({
+      light: '/usd.svg',
+      dark: '/usd.svg',
+    });
+  });
+
+  it('gives NIGHT two colour ways and the dollar coin one', () => {
+    /* The Midnight symbol is a monochrome artwork and the pack supplies both
+       halves; the dollar coin is not monochrome and does not change. That
+       difference is the whole reason `mark` is a pair rather than a string. */
+    const night = describeColour(NIGHT_COLOUR_HEX).mark;
+    expect(night?.light).not.toBe(night?.dark);
+    const dollar = describeColour(MUSD_COLOUR_HEX).mark;
+    expect(dollar?.light).toBe(dollar?.dark);
+  });
+
+  it('gives a colour nothing can name no mark at all', () => {
+    /* Absent, not a placeholder. Every surface that draws a mark already has a
+       generic glyph for this case, and inventing artwork for an anonymous
+       colour would make two colours nobody can tell apart look recognisable. */
+    expect(describeColour('ab'.repeat(32)).mark).toBeUndefined();
+    expect(describeColour('not a colour').mark).toBeUndefined();
+  });
+
+  it('keeps the mark when a whole screenful is disambiguated', () => {
+    /* `describeColours` appends four characters of colour to a repeated
+       ticker. The artwork is unaffected: it is the same asset, shown twice. */
+    const sponsored = { colourHex: 'aa'.repeat(32), symbol: 'mUSD' };
+    const described = describeColours([MUSD_COLOUR_HEX, 'aa'.repeat(32)], sponsored);
+    expect(described[0].symbol).toBe('mUSD · 1a29…');
+    expect(described[0].mark).toEqual({ light: '/usd.svg', dark: '/usd.svg' });
+  });
+
+  it('looks the sponsor’s asset up by COLOUR, not by the name it gave it', () => {
+    /* The sponsor renames the colour; it does not change which colour it is.
+       So the stablecoin this build already knows keeps the dollar coin even
+       under the sponsor's own ticker — and a sponsor minting something this
+       build has never seen gets no mark rather than borrowing that artwork. */
+    const known = describeColour(MUSD_COLOUR_HEX, {
+      colourHex: MUSD_COLOUR_HEX,
+      symbol: 'sponsorUSD',
+    });
+    expect(known).toMatchObject({ symbol: 'sponsorUSD', known: true });
+    expect(known.mark).toEqual({ light: '/usd.svg', dark: '/usd.svg' });
+
+    const stranger = describeColour('ab'.repeat(32), {
+      colourHex: 'ab'.repeat(32),
+      symbol: 'demoUSD',
+    });
+    expect(stranger).toMatchObject({ symbol: 'demoUSD', known: true });
+    expect(stranger.mark).toBeUndefined();
+  });
+
+  it('never marks an item, because an item’s colour has no name', () => {
+    /* The item rule and the mark table cannot disagree: a holding is filed as
+       an item only when nothing could name its colour, and only a nameable
+       colour carries a mark. */
+    expect(classifyHolding({ colourHex: GENESIS_PASS_COLOUR_HEX, amount: 1n })).toBe('nft');
+    expect(describeColour(GENESIS_PASS_COLOUR_HEX).mark).toBeUndefined();
   });
 });

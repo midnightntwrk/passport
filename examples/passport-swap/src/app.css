@@ -136,7 +136,12 @@ body {
   white-space: nowrap;
 }
 .pill.accent { background: var(--violet); border-color: transparent; color: #fff; }
+/* The Midnight symbol is a black artwork on transparent, so it needs the white
+   disc under it to read on a dark panel. */
 .coin { width: 26px; height: 26px; border-radius: 50%; display: block; background: #fff; padding: 2px; }
+/* The dollar mark is already a coin — a solid blue disc — so a white disc under
+   it would only draw a ring around it. See `public/usd.svg`. */
+.coin-bare { background: none; padding: 0; }
 .pill.accent { background: var(--pill); border-color: var(--line); color: var(--paper); }
 .powered {
   margin: 0.5rem 0 0; align-self: center;

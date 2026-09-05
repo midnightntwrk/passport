@@ -867,21 +867,35 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
    ("mUSD · aaaa…") when two colours on this account claim the same name. The
    reservation is sized for that, and the chip is capped and elided so the
    longest imaginable one can never sit over the digits. */
-.mnhome-send-amount .mnhome-send-input { padding-right: 124px; }
+.mnhome-send-amount .mnhome-send-input { padding-right: 136px; }
 .mnhome-send-unit {
   position: absolute;
   top: 50%;
   right: 13px;
-  max-width: 110px;
+  /* Sized for the longest chip the picker can produce — a disambiguated ticker
+     ("mUSD · aaaa…") behind a 14 px mark — so neither can ever sit over the
+     digits. The input's reservation above matches. */
+  max-width: 122px;
   transform: translateY(-50%);
+  /* A row rather than a bare string since 2026/09/05, so the asset's own mark
+     can lead it. The chip still elides — the TEXT does the eliding now, which
+     is what keeps the mark whole while a disambiguated ticker is cut. */
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   overflow: hidden;
   color: var(--mn-text-muted);
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: .06em;
   white-space: nowrap;
-  text-overflow: ellipsis;
   pointer-events: none;
+}
+.mnhome-send-unit-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 /* A locked amount is stated, not typed. It keeps the field's box so the three
    rows stay aligned, and reads as settled rather than as a control that has
@@ -1017,6 +1031,13 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
   line-height: 1.45;
 }
 .mnhome-send-row dd strong { display: block; font-size: 15px; font-weight: 700; }
+/* The Asset row leads with the asset's mark, so the review step names what was
+   chosen the same way the picker above it did. */
+.mnhome-send-row dd strong.mnhome-send-asset-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .mnhome-send-row dd small {
   display: block;
   margin-top: 2px;

@@ -80,6 +80,54 @@ export const MUSD_COLOUR_HEX =
 export const SUSD_COLOUR_HEX =
   'a62e273dda9a4a288068dec91c3b6ce8ca10fd085703469ac371b7c415884d3b';
 
+/* -------------------------------------------------------------------------- */
+/* The mark a colour is shown under (2026/09/05)                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where a token's own mark lives, per surface.
+ *
+ * TWO FILES, NOT ONE TINTED FILE. The Midnight symbol is supplied by the brand
+ * pack as a black artwork and a white one, and both are the SAME geometry —
+ * recolouring either in CSS would be redrawing somebody else's mark. A mark
+ * that is not monochrome (the dollar coin) names the same file twice, which is
+ * the honest way to say "this one does not change".
+ *
+ * Every path is under `public/`, never a remote URL, for the reason
+ * {@link ItemArt.image} gives: an installed Passport still has to render its
+ * own balances offline, and a mark that waited on a CDN would be a hole in the
+ * row.
+ */
+export interface TokenMarkArt {
+  /** The file for a light surface. */
+  light: string;
+  /** The file for a dark surface — the same one where the mark is not mono. */
+  dark: string;
+}
+
+/**
+ * The Midnight symbol, from the brand pack, in its two supplied colour ways.
+ *
+ * The geometry is the pack's, unchanged. It is not `currentColor`: the symbol
+ * is a mark rather than an icon, and taking the row's muted text colour would
+ * make it a grey shape that happens to be circular.
+ */
+const NIGHT_MARK: TokenMarkArt = {
+  light: '/midnight-symbol.svg',
+  dark: '/midnight-symbol-white.svg',
+};
+
+/**
+ * The dollar coin — the mark both demo stablecoins are shown under.
+ *
+ * ONE mark for two colours, deliberately. mUSD and sUSD are separate colours
+ * for a ledger reason (see {@link SUSD_COLOUR_HEX}) and neither of them is a
+ * different KIND of thing: they are both a dollar, and giving them different
+ * artwork would invent a distinction the reader would then have to decode. The
+ * ticker beside the mark is what tells them apart, and it always does.
+ */
+const USD_MARK: TokenMarkArt = { light: '/usd.svg', dark: '/usd.svg' };
+
 /** What a colour is called on screen. */
 export interface TokenIdentity {
   /** What leads the row — a ticker, or `Token · 1a29…` for a colour we cannot name. */
@@ -99,6 +147,17 @@ export interface TokenIdentity {
   decimals: number;
   /** False when nothing could name it, which is what the `Token · …` form means. */
   known: boolean;
+  /**
+   * The token's own mark, where there is one — ABSENT rather than a
+   * placeholder for a colour nothing can name.
+   *
+   * Absent is the ordinary answer and the caller already has an answer for it:
+   * every surface that draws a mark drew a generic glyph before this field
+   * existed, and it keeps drawing that one. An invented mark for an unnamed
+   * colour would be the same mistake as an invented ticker — it would make two
+   * colours nobody can tell apart look like a thing somebody could recognise.
+   */
+  mark?: TokenMarkArt;
 }
 
 /**
@@ -108,12 +167,13 @@ export interface TokenIdentity {
  * {@link TokenIdentity.decimals} gives: a shielded colour carries no decimal
  * scale anywhere on the ledger, so an amount is a whole count of its own units.
  */
-const KNOWN_COLOURS: Readonly<Record<string, { symbol: string; name: string; decimals: number }>> =
-  {
-    [NIGHT_COLOUR_HEX]: { symbol: 'NIGHT', name: 'native token', decimals: 6 },
-    [MUSD_COLOUR_HEX]: { symbol: 'mUSD', name: 'stablecoin', decimals: 0 },
-    [SUSD_COLOUR_HEX]: { symbol: 'sUSD', name: 'Swap dollar', decimals: 0 },
-  };
+const KNOWN_COLOURS: Readonly<
+  Record<string, { symbol: string; name: string; decimals: number; mark: TokenMarkArt }>
+> = {
+  [NIGHT_COLOUR_HEX]: { symbol: 'NIGHT', name: 'native token', decimals: 6, mark: NIGHT_MARK },
+  [MUSD_COLOUR_HEX]: { symbol: 'mUSD', name: 'stablecoin', decimals: 0, mark: USD_MARK },
+  [SUSD_COLOUR_HEX]: { symbol: 'sUSD', name: 'Swap dollar', decimals: 0, mark: USD_MARK },
+};
 
 /**
  * What to call a colour.
@@ -134,7 +194,18 @@ export function describeColour(
 ): TokenIdentity {
   const normalised = normalisedColourHex(colourHex) ?? colourHex.trim().toLowerCase();
   if (sponsored && normalisedColourHex(sponsored.colourHex) === normalised) {
-    return { symbol: sponsored.symbol, name: 'stablecoin', decimals: 0, known: true };
+    /* The sponsor renames the colour; it does not change WHICH colour it is.
+       So the mark is still looked up by colour: a sponsor that names the
+       stablecoin this build already knows shows the dollar coin, and a sponsor
+       minting something this build has never seen shows no mark at all rather
+       than borrowing another asset's artwork. */
+    return {
+      symbol: sponsored.symbol,
+      name: 'stablecoin',
+      decimals: 0,
+      known: true,
+      mark: KNOWN_COLOURS[normalised]?.mark,
+    };
   }
   const known = KNOWN_COLOURS[normalised];
   if (known) return { ...known, known: true };

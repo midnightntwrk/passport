@@ -1,0 +1,21 @@
+/* The token mark — see `TokenMark.tsx`.
+ *
+ * No box of its own. Every surface that draws one already decided whether the
+ * mark sits on a disc: the balance rows on Home and Assets put it inside the
+ * 30 px `…-token-icon` disc they already had, and the Send sheet sets it inline
+ * beside a ticker with nothing behind it. A background here would either
+ * duplicate that disc or add one where the design deliberately has none.
+ *
+ * `object-fit: contain` is what keeps the artwork square inside whatever box a
+ * caller gives it, so a mark whose two colour ways ever differed in aspect
+ * could not stretch. */
+.mn-token-mark {
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: middle;
+  object-fit: contain;
+  /* A mark is artwork, not a glyph: it must not pick up the row's text colour,
+     and it must not be dragged out of the page as a stray image. */
+  user-select: none;
+  -webkit-user-drag: none;
+}

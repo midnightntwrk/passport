@@ -57,6 +57,9 @@ import NotificationToggle from './NotificationToggle.js'
 import PassportContractCard, { type PassportContractCardProps } from './PassportContract.js'
 import SendSheet, { type SendSheetHolding, type SendSheetProps } from './SendSheet.js'
 import ThemeToggle from './ThemeToggle.js'
+/* The colour's own mark, where this build has one. Falls back to the glyph
+   each row already carried — see `TokenMark.tsx`. */
+import { tokenMarkFor } from './TokenMark.js'
 /* The back gesture, which on a phone is how anything gets dismissed. Without
    it a sheet over Home is the one thing a back swipe does not close — see
    `lib/sheetHistory.ts` for what it closed instead. */
@@ -442,19 +445,27 @@ export default function HomeScreen(props: HomeScreenProps) {
       held.map((row) => row.colourHex),
       sponsored,
     )
-    return held.map((row, index) => ({
+    return held.map((row, index) => {
+      const identity = identities[index]
+      return {
       key: row.colourHex,
-      icon: row.icon,
-      label: identities[index].symbol,
+      /* The colour's OWN mark where this build has one — the Midnight symbol,
+         the dollar coin — and the generic glyph above for everything else.
+         `lib/colour.ts` decides which, so this strip, the Assets shelf, and
+         the Send sheet cannot show the same holding under different artwork.
+         See `TokenMark.tsx`. */
+      icon: tokenMarkFor(identity, row.icon),
+      label: identity.symbol,
       value: row.value,
       /* The line beneath: what kind of thing this is, or the shortened colour
          for one nothing can name. */
-      unit: identities[index].name,
+      unit: identity.name,
       /* Which of those two it is, so a WORD is set like a label and DATA is
          set like data. The Assets tab has made this distinction since it was
          written; the strip had not, and upper-cased a hex tail. */
-      unitIsColour: !identities[index].known,
-    }))
+      unitIsColour: !identity.known,
+      }
+    })
   }, [account])
 
   const visibleTokens = showAllTokens ? tokenRows : tokenRows.slice(0, TOKENS_VISIBLE)
