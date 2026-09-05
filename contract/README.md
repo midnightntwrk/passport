@@ -41,10 +41,36 @@ once, below every arm.
   (the verify reduces the digest mod n natively); keys bind as
   little-endian affine coordinate bytes; both S forms are accepted (real
   P-256 authenticators emit high-S; single-use entries make a malleated
-  twin non-replayable). Gated ABIs are `(…args, pk, use_counter, sig)`.
+  twin non-replayable). Gated ABIs are
+  `(…args, pk, use_counter, sig, envelope)`.
   Its signer is software only (`@noble/curves` in TypeScript, `k256` in
   Rust): WebAuthn passkeys are hardware-locked to P-256, which is
   precisely what the r1 landing enables.
+
+  ECDSA signs a 32-byte digest, and signers wrap the challenge
+  differently before hashing it, so the arm carries a per-device
+  **envelope**: an enumerated id fixed at enrolment, with the signature
+  always covering `SHA-256(prefix(envelope) || challenge)` (exported as
+  `envelope_digest`, recomputable in-circuit because `persistentHash` IS
+  SHA-256 and a tuple of `Bytes` hashes as the raw concatenation).
+
+  | id | envelope | prefix | who signs it |
+  |---|---|---|---|
+  | 0 | none | (empty) | software, HSM, and MPC signers driven directly: ordinary ECDSA-SHA256 over the challenge bytes as the message |
+  | 1 | connector | `midnight_signed_message:32:` | keys behind the dApp-connector `signData` surface (the `ecdsa_secp256k1_sha256` scheme), which never signs caller bytes as-is |
+
+  No envelope signs the challenge itself as a prehash: one rule, one hash
+  per id. The id is an enumeration rather than the prefix bytes because
+  Compact has no variable-length `Bytes`: a `Bytes<N>` parameter hashes
+  at its full width, padding included, so an empty prefix cannot be a
+  shorter value of the same field, and a prefix of another length would
+  be another type and so another ABI. The id selects among fixed hash
+  shapes instead. The id is bound into the device's entry
+  and boot derivations (DST families `midnight:account:device:k1:v2`,
+  `midnight:account:boot:k1:v2`; v2 appends the one-byte id after the
+  key coordinates), so the caller can present only the envelope the
+  device was enrolled with. Unknown ids abort. The challenge preimages
+  (`midnight:account:auth:k1:v1:*`) are unchanged.
 
 Per-arm circuits instead of one circuit with an in-circuit scheme
 conditional: Compact compiles every exported circuit to its own proof, so

@@ -10,7 +10,7 @@
 // against a node (auth-conformance.ts); this file guards the
 // vacuous-verifier hazard (MIP-0013 S10) cheaply on every change.
 
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
   ecAdd,
@@ -36,6 +36,8 @@ import {
   SECP256K1_N,
   bytesToBigIntLE,
   type CallContext,
+  K256_ENVELOPE_CONNECTOR,
+  K256_ENVELOPE_NONE,
 } from '../wallet/signer.js';
 import { generateEncKeyPair, sealInboxEntry, openInboxEntry, ENTRY_SIZE } from '../wallet/inbox.js';
 
@@ -199,23 +201,37 @@ await runScenario('unit-offline', async () => {
       { bytes: addr }, { x, y }, 0n, 0n,
     );
     const asK256 = pureCircuits.derive_device_entry_with_k256(
-      { bytes: addr }, { x, y, identity: false }, 0n, 0n,
+      { bytes: addr }, { x, y, identity: false }, K256_ENVELOPE_NONE, 0n, 0n,
     );
     assert(
       !Buffer.from(asJubjub).equals(Buffer.from(asK256)),
       '[both arms] identical coordinates derive different entries under each arm',
     );
     const bootJ = pureCircuits.derive_boot_commitment_with_jubjub(addr, { x, y });
-    const bootK = pureCircuits.derive_boot_commitment_with_k256(addr, { x, y, identity: false });
+    const bootK = pureCircuits.derive_boot_commitment_with_k256(addr, { x, y, identity: false }, K256_ENVELOPE_NONE);
     assert(
       !Buffer.from(bootJ).equals(Buffer.from(bootK)),
       '[both arms] the boot commitment is arm-marked, so only one arm can activate',
     );
   }
 
-  step('[k256] signing pipeline: ECDSA over the challenge digest');
+  step('[k256] signing pipeline: ECDSA over the envelope digest (envelope 0)');
   const kH = k256Challenges.withdrawUnshielded(ctx, kDevice.pk, color, 100n, recipient);
   const kAuth = kDevice.sign(kH, 0n);
+  // The signature covers the envelope digest, never the challenge itself.
+  // Envelope 0 has no prefix: the digest is plain SHA-256 of the challenge
+  // bytes, which is what ordinary ECDSA-SHA256 over the challenge as a
+  // message computes.
+  const kDigest = kDevice.signedDigest(kH);
+  assert(kAuth.envelope === K256_ENVELOPE_NONE, '[k256] the authorisation carries envelope 0');
+  assert(
+    Buffer.from(kDigest).equals(createHash('sha256').update(Buffer.from(kH)).digest()),
+    '[k256] envelope_digest(0, h) == SHA-256(h), recomputed independently',
+  );
+  assert(
+    !nobleVerify(kAuth.sig, kH, kDevice.pk),
+    '[k256] the signature does NOT verify over the raw challenge (no prehash mode exists)',
+  );
   assert(kAuth.sig.r > 0n && kAuth.sig.r < SECP256K1_N, '[k256] r in [1, n)');
   assert(kAuth.sig.s > 0n && kAuth.sig.s < SECP256K1_N, '[k256] s in [1, n)');
   assert(kAuth.sig.s <= SECP256K1_N >> 1n, '[k256] signer emits low-S (the circuit accepts both forms)');
@@ -223,11 +239,11 @@ await runScenario('unit-offline', async () => {
     Buffer.from(kH).equals(Buffer.from(k256Challenges.withdrawUnshielded(ctx, kDevice.pk, color, 100n, recipient))),
     '[k256] challenge deterministic',
   );
-  assert(nobleVerify(kAuth.sig, kH, kDevice.pk), '[k256] signature verifies on an independent stack (noble)');
+  assert(nobleVerify(kAuth.sig, kDigest, kDevice.pk), '[k256] signature verifies on an independent stack (noble)');
   // Replicate the in-circuit verify with the runtime's own curve built-ins
-  // (the same functions the generated verifier calls): z = BE(challenge)
+  // (the same functions the generated verifier calls): z = BE(digest)
   // mod n, w = s⁻¹, then x(z·w·G + r·w·pk) mod n == r.
-  const z = bytesToBigIntBE(kH) % SECP256K1_N;
+  const z = bytesToBigIntBE(kDigest) % SECP256K1_N;
   const w = secp256k1ScalarInv(kAuth.sig.s);
   const point = secp256k1Add(
     secp256k1MulGenerator(secp256k1ScalarMul(z, w)),
@@ -238,14 +254,14 @@ await runScenario('unit-offline', async () => {
     '[k256] x(u1·G + u2·pk) mod n == r (the verify equation, off-circuit)',
   );
   assert(
-    !nobleVerify(kAuth.sig, kH, kOther.pk),
+    !nobleVerify(kAuth.sig, kDigest, kOther.pk),
     '[k256] verification fails for a different pk (non-vacuous verifier, S10)',
   );
-  const hBad = new Uint8Array(kH);
+  const hBad = new Uint8Array(kDigest);
   hBad[0] ^= 0x01;
-  assert(!nobleVerify(kAuth.sig, hBad, kDevice.pk), '[k256] verification fails for a tampered challenge');
+  assert(!nobleVerify(kAuth.sig, hBad, kDevice.pk), '[k256] verification fails for a tampered digest');
   assert(
-    !nobleVerify({ r: kAuth.sig.r, s: (kAuth.sig.s + 1n) % SECP256K1_N }, kH, kDevice.pk),
+    !nobleVerify({ r: kAuth.sig.r, s: (kAuth.sig.s + 1n) % SECP256K1_N }, kDigest, kDevice.pk),
     '[k256] verification fails for a tampered s',
   );
   // Malleability, deliberately accepted (see the contract header): the
@@ -253,9 +269,83 @@ await runScenario('unit-offline', async () => {
   // regardless because the device entry is consumed (AUTH-9) and
   // auth_nonce advances (AUTH-8).
   assert(
-    nobleVerify({ r: kAuth.sig.r, s: SECP256K1_N - kAuth.sig.s }, kH, kDevice.pk),
+    nobleVerify({ r: kAuth.sig.r, s: SECP256K1_N - kAuth.sig.s }, kDigest, kDevice.pk),
     '[k256] the high-S twin verifies too (accepted; replay-dead via AUTH-8/9)',
   );
+
+  step('[k256/connector] envelope 1: the connector signData digest; envelopes are enrolled, not chosen');
+  // A connector device: its key sits behind the connector's `signData`
+  // surface (the `ecdsa_secp256k1_sha256` scheme), which signs the
+  // mandatory envelope digest SHA-256("midnight_signed_message:32:" || data)
+  // and never the data itself.
+  const cDevice = K256Device.generateConnector();
+  const cH = k256Challenges.withdrawUnshielded(ctx, cDevice.pk, color, 100n, recipient);
+  const envelopePrefix = Buffer.from('midnight_signed_message:32:', 'utf8');
+  const envelopeByHand = createHash('sha256')
+    .update(Buffer.concat([envelopePrefix, Buffer.from(cH)]))
+    .digest();
+  const envelopeViaCircuit = pureCircuits.envelope_digest(K256_ENVELOPE_CONNECTOR, cH);
+  assert(
+    Buffer.from(envelopeViaCircuit).equals(envelopeByHand),
+    '[k256/connector] envelope_digest(1, h) == SHA-256(prefix || h), recomputed independently',
+  );
+  const cAuth = cDevice.sign(cH, 0n);
+  assert(cAuth.envelope === K256_ENVELOPE_CONNECTOR, '[k256/connector] the authorisation carries envelope 1');
+  assert(
+    nobleVerify(cAuth.sig, envelopeViaCircuit, cDevice.pk),
+    '[k256/connector] the signature verifies over the connector envelope digest (independent stack)',
+  );
+  assert(
+    !nobleVerify(cAuth.sig, pureCircuits.envelope_digest(K256_ENVELOPE_NONE, cH), cDevice.pk),
+    '[k256/connector] the same signature does NOT verify under envelope 0 (envelopes cannot alias)',
+  );
+  // The envelope is part of the enrolled identity: the same key derives
+  // disjoint entries and boot commitments under each envelope, so a device
+  // can never be driven under an envelope it was not enrolled with.
+  const noneTwin = new K256Device(cDevice.sk, K256_ENVELOPE_NONE);
+  const envAddr = new Uint8Array(randomBytes(32));
+  assert(
+    !Buffer.from(cDevice.entryAt(envAddr, 0n, 0n)).equals(
+      Buffer.from(noneTwin.entryAt(envAddr, 0n, 0n)),
+    ),
+    '[k256/connector] entries are disjoint across envelopes for the same key',
+  );
+  assert(
+    !Buffer.from(cDevice.bootCommitment(envAddr)).equals(
+      Buffer.from(noneTwin.bootCommitment(envAddr)),
+    ),
+    '[k256/connector] boot commitments are envelope-marked too',
+  );
+  // Unknown envelope ids abort the pure circuit.
+  let unknownAborted = false;
+  try { pureCircuits.envelope_digest(2n, cH); } catch { unknownAborted = true; }
+  assert(unknownAborted, '[k256] envelope_digest aborts on an unknown envelope id');
+
+  step('[k256] v2 derivation vectors (pinned; shared with signer-rs, recomputed with hashlib)');
+  // sk = 1 (pk = G), self = 0x11*32, salt = 0x22*32, epoch 0, counter 0.
+  // Preimages: entry = DST32 || self || x_le || y_le || envelope(1) || epoch(4) || counter(8);
+  //            boot  = DST32 || salt || x_le || y_le || envelope(1).
+  const gPk = pureCircuits.compute_public_point_with_k256(1n);
+  const pinAddr = new Uint8Array(32).fill(0x11);
+  const pinSalt = new Uint8Array(32).fill(0x22);
+  const pins = [
+    [K256_ENVELOPE_NONE,
+      'f88e6a3085478879ae9e3859c59493a60b2d443c1608f6bcedbdb7ee1a8f5d66',
+      'bec19e88c6ea0afb279841ca7bfca1aa50a0c046cfff30ea29c819b41d564e63'],
+    [K256_ENVELOPE_CONNECTOR,
+      'ae28feb6281f2e2f9d9a0fcda699bb2b3e349d1f20eff7b578afb489b3115d51',
+      '14697f9fb98a39cf19fae28e53dd556109237ae719599198937988939f75463b'],
+  ] as const;
+  for (const [env, entryHex, bootHex] of pins) {
+    assert(
+      Buffer.from(pureCircuits.derive_device_entry_with_k256({ bytes: pinAddr }, gPk, env, 0n, 0n)).toString('hex') === entryHex,
+      `[k256] derive_device_entry_with_k256 v2 vector, envelope ${env}`,
+    );
+    assert(
+      Buffer.from(pureCircuits.derive_boot_commitment_with_k256(pinSalt, gPk, env)).toString('hex') === bootHex,
+      `[k256] derive_boot_commitment_with_k256 v2 vector, envelope ${env}`,
+    );
+  }
 
   step('[k256] challenge domain separation (AUTH-3) and witness binding (AUTH-10)');
   const kShieldedH = k256Challenges.withdrawShielded(ctx, kDevice.pk, recipient, color, 100n, witnessCoin);

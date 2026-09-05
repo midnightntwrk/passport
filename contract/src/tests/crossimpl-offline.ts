@@ -15,7 +15,10 @@ import { ecAdd, ecMul, ecMulGenerator } from '@midnight-ntwrk/compact-runtime';
 
 import { runScenario, step } from './runner.js';
 import { pureCircuits, type JubjubPoint, type Secp256k1Point } from '../wallet/contract.js';
-import { SECP256K1_N, JUBJUB_R, bytesToBigIntLE, type EcdsaSignature } from '../wallet/signer.js';
+import {
+  SECP256K1_N, JUBJUB_R, bytesToBigIntLE, type EcdsaSignature,
+  K256_ENVELOPE_CONNECTOR, K256_ENVELOPE_NONE,
+} from '../wallet/signer.js';
 import { bytesToHex } from '../wallet/hex.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -32,7 +35,7 @@ export interface CallParams {
   authNonce: bigint;
 }
 
-function signRequest(arm: 'jubjub' | 'k256', req: CallParams): any {
+function signRequest(arm: 'jubjub' | 'k256', req: CallParams, envelope = 0): any {
   return JSON.parse(
     execFileSync(SIGNER_BIN, [], {
       input: JSON.stringify({
@@ -45,6 +48,7 @@ function signRequest(arm: 'jubjub' | 'k256', req: CallParams): any {
         amount: req.amount.toString(),
         recipient: bytesToHex(req.recipient),
         auth_nonce: req.authNonce.toString(),
+        envelope,
       }),
       encoding: 'utf-8',
     }),
@@ -57,6 +61,9 @@ export interface K256RustSignature {
   pk: Secp256k1Point;
   sig: EcdsaSignature;
   challenge: string;
+  /** hex; the envelope digest the signature covers (envelope 0 here). */
+  digest: string;
+  envelope: number;
 }
 
 export function rustKeygenK256(): { sk: string; pk: Secp256k1Point } {
@@ -72,6 +79,8 @@ export function rustSignWithdrawUnshieldedK256(req: CallParams): K256RustSignatu
     pk: { x: BigInt(out.pk.x), y: BigInt(out.pk.y), identity: false },
     sig: { r: BigInt(out.sig.r), s: BigInt(out.sig.s) },
     challenge: out.challenge,
+    digest: out.digest,
+    envelope: out.envelope,
   };
 }
 
@@ -158,16 +167,39 @@ if (isMain) {
     }
     console.log(`  ✓ identical: ${kSig.challenge.slice(0, 32)}…`);
 
-    step('[k256] the ECDSA signature verifies over the digest');
+    step('[k256] envelope 0: Rust digest vs the contract pure circuit, and the signature');
     if (!(kSig.sig.r > 0n && kSig.sig.r < SECP256K1_N)) throw new Error('r outside [1, n)');
     if (!(kSig.sig.s > 0n && kSig.sig.s < SECP256K1_N)) throw new Error('s outside [1, n)');
+    const kDigest = pureCircuits.envelope_digest(K256_ENVELOPE_NONE, kExpected);
+    if (kSig.digest !== Buffer.from(kDigest).toString('hex')) {
+      throw new Error('Rust envelope-0 digest differs from envelope_digest(0, challenge)');
+    }
+    console.log(`  ✓ identical: ${kSig.digest.slice(0, 32)}…`);
     const ok = secp256k1.verify(
       new secp256k1.Signature(kSig.sig.r, kSig.sig.s).toBytes('compact'),
-      kExpected,
+      kDigest,
       secp256k1.Point.fromAffine({ x: kSig.pk.x, y: kSig.pk.y }).toBytes(false),
       { prehash: false, lowS: false }, // the circuit accepts both S forms
     );
-    if (!ok) throw new Error('Rust signature does not verify over the challenge digest');
-    console.log('  ✓ verify(challenge, (r, s), pk) with the Rust-produced signature');
+    if (!ok) throw new Error('Rust signature does not verify over the envelope-0 digest');
+    console.log('  ✓ verify(envelope_digest(0, challenge), (r, s), pk) with the Rust-produced signature');
+
+    step('[k256/connector] envelope 1: Rust digest vs the contract pure circuit, and the signature');
+    const cOut = signRequest(
+      'k256', { sk: k.sk, contractAddress, color, amount, recipient, authNonce }, 1,
+    );
+    const cExpectedDigest = pureCircuits.envelope_digest(K256_ENVELOPE_CONNECTOR, kExpected);
+    if (cOut.digest !== Buffer.from(cExpectedDigest).toString('hex')) {
+      throw new Error('Rust envelope-1 digest differs from envelope_digest(1, challenge)');
+    }
+    console.log(`  ✓ identical: ${cOut.digest.slice(0, 32)}…`);
+    const cOk = secp256k1.verify(
+      new secp256k1.Signature(BigInt(cOut.sig.r), BigInt(cOut.sig.s)).toBytes('compact'),
+      cExpectedDigest,
+      secp256k1.Point.fromAffine({ x: BigInt(cOut.pk.x), y: BigInt(cOut.pk.y) }).toBytes(false),
+      { prehash: false, lowS: false },
+    );
+    if (!cOk) throw new Error('Rust connector signature does not verify over the envelope digest');
+    console.log('  ✓ verify(envelope digest, (r, s), pk) with the Rust-produced connector signature');
   });
 }

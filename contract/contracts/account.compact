@@ -78,8 +78,37 @@ import CompactStandardLibrary;
 //     cannot replay, and signatures are never used as identifiers. No low-S
 //     constraint is imposed — deliberately, because real P-256
 //     authenticators emit high-S signatures and the r1 arm must accept
-//     them. DST families: "midnight:account:device:k1:v1",
-//     "midnight:account:auth:k1:v1:*", "midnight:account:boot:k1:v1".
+//     them. DST families: "midnight:account:device:k1:v2",
+//     "midnight:account:auth:k1:v1:*", "midnight:account:boot:k1:v2".
+//
+//     ECDSA signs a 32-byte digest, and different signers wrap the
+//     challenge differently before hashing it. The arm therefore carries a
+//     per-device ENVELOPE, an enumerated id fixed at enrolment, and the
+//     signature always covers SHA-256(prefix(envelope) || challenge):
+//       0  none       prefix = ""; the digest is plain SHA-256 of the
+//                     challenge, i.e. ordinary ECDSA-SHA256 over the
+//                     challenge bytes as the message (software signers,
+//                     HSMs, MPC signers driven directly).
+//       1  connector  prefix = "midnight_signed_message:32:"; the mandatory
+//                     envelope of the dApp-connector `signData` surface
+//                     (the `ecdsa_secp256k1_sha256` scheme of the connector
+//                     specification), which never signs caller-supplied
+//                     bytes as-is.
+//     There is no mode that signs the challenge itself as a prehash: one
+//     rule, one hash, per envelope. The digest is recomputable in-circuit
+//     because persistentHash IS SHA-256 and a tuple of Bytes hashes as the
+//     raw concatenation. The envelope is an id rather than the prefix
+//     bytes because Compact has no variable-length Bytes: a Bytes<N>
+//     parameter hashes at its full width, padding included, so an empty
+//     prefix cannot be a shorter value of the same field, and a prefix of
+//     another length would be another type and so another ABI. The id
+//     selects among fixed hash shapes instead. It is bound into the
+//     device's entry and boot derivations (the v2 preimages carry it), so
+//     the caller can present only the envelope the device was enrolled
+//     with: a wrong id fails the membership assert before any signature
+//     is examined. The gated ABI is the same for every envelope: (…args,
+//     pk, use_counter, sig, envelope). Cost: one extra persistentHash per
+//     k256 authorisation.
 //
 // Per-arm circuits instead of one circuit with an in-circuit scheme choice:
 // Compact compiles every exported circuit to its own proof, so a proof
@@ -253,12 +282,17 @@ export circuit activate_initial_device_with_jubjub(pk: JubjubPoint, salt: Bytes<
   ));
 }
 
-export circuit activate_initial_device_with_k256(pk: Secp256k1Point, salt: Bytes<32>): [] {
+export circuit activate_initial_device_with_k256(
+  pk:       Secp256k1Point,
+  salt:     Bytes<32>,
+  envelope: Uint<8>,
+): [] {
   assert(!booted, "already activated");
   require_live_k256_key(pk);
-  assert(derive_boot_commitment_with_k256(salt, pk) == boot, "boot commitment mismatch");
+  assert(derive_boot_commitment_with_k256(salt, pk, envelope) == boot,
+         "boot commitment mismatch");
   do_activate_initial_device(derive_device_entry_with_k256(
-    kernel.self(), pk, device_epoch, 0 as Uint<64>
+    kernel.self(), pk, envelope, device_epoch, 0 as Uint<64>
   ));
 }
 
@@ -272,13 +306,20 @@ export pure circuit derive_boot_commitment_with_jubjub(salt: Bytes<32>, pk: Jubj
   );
 }
 
-// Arm k256: DST_BOOT = "midnight:account:boot:k1:v1". The key is bound as
+// Arm k256: DST_BOOT = "midnight:account:boot:k1:v2". The key is bound as
 // its little-endian affine coordinate bytes, the same encoding the arm's
-// device entries use.
-export pure circuit derive_boot_commitment_with_k256(salt: Bytes<32>, pk: Secp256k1Point): Bytes<32> {
-  return persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>(
-    [pad(32, "midnight:account:boot:k1:v1"), salt,
-     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>]
+// device entries use, followed by the device's envelope id (v2 adds it: the
+// envelope is part of the committed identity, so it cannot be equivocated
+// at activation).
+export pure circuit derive_boot_commitment_with_k256(
+  salt:     Bytes<32>,
+  pk:       Secp256k1Point,
+  envelope: Uint<8>,
+): Bytes<32> {
+  return persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Uint<8>]>(
+    [pad(32, "midnight:account:boot:k1:v2"), salt,
+     secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
+     envelope]
   );
 }
 
@@ -304,10 +345,14 @@ export pure circuit derive_device_entry_with_jubjub(
   );
 }
 
-// Arm k256: DST_DEVICE = "midnight:account:device:k1:v1" zero-padded to
+// Arm k256: DST_DEVICE = "midnight:account:device:k1:v2" zero-padded to
 // 32 bytes. The key is bound as the little-endian 32-byte encodings of its
 // affine coordinates — an explicit byte encoding independent signers
-// reproduce without the compiler's field-aligned point layout.
+// reproduce without the compiler's field-aligned point layout — followed by
+// the device's envelope id (the v2 addition, one byte), then epoch and
+// counter. Binding the envelope here is what makes it a property of the
+// enrolled device rather than of one call: the same key enrolled under two
+// envelopes owns two disjoint entry sets.
 //
 // The identity flag of Secp256k1Point is deliberately NOT bound: both entry
 // points that admit a k256 key (the seam and the bootstrap) reject the point
@@ -317,13 +362,14 @@ export pure circuit derive_device_entry_with_jubjub(
 export pure circuit derive_device_entry_with_k256(
   self_addr: ContractAddress,
   pk:        Secp256k1Point,
+  envelope:  Uint<8>,
   epoch:     Uint<32>,
   counter:   Uint<64>,
 ): Bytes<32> {
-  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<32>, Uint<64>]>(
-    [pad(32, "midnight:account:device:k1:v1"), self_addr,
+  return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<8>, Uint<32>, Uint<64>]>(
+    [pad(32, "midnight:account:device:k1:v2"), self_addr,
      secp256k1PointX(pk) as Bytes<32>, secp256k1PointY(pk) as Bytes<32>,
-     epoch, counter]
+     envelope, epoch, counter]
   );
 }
 
@@ -349,6 +395,26 @@ circuit require_live_k256_key(pk: Secp256k1Point): [] {
       && (secp256k1PointY(pk) as Bytes<32>) == pad(32, "")),
     "device key is the point at infinity"
   );
+}
+
+// The digest a k256 device signs for a challenge, by envelope id:
+//   0  SHA-256(challenge)
+//   1  SHA-256("midnight_signed_message:32:" || challenge), the mandatory
+//      envelope of the dApp-connector `signData` surface (connector
+//      specification, section "Signing").
+// persistentHash over Bytes is exactly SHA-256 of the raw concatenation
+// (the field-aligned encoding of a Bytes atom is the bytes themselves), so
+// both digests are recomputable in-circuit from the challenge. Unknown ids
+// abort. Both candidates are hashed on every call (a circuit conditional
+// is a select, not a branch). Exported, like the challenge constructions,
+// so independent signers reproduce the digest bit-exactly.
+export pure circuit envelope_digest(envelope: Uint<8>, challenge: Bytes<32>): Bytes<32> {
+  assert(envelope <= 1, "unknown envelope");
+  const none = persistentHash<Bytes<32>>(challenge);
+  const connector = persistentHash<[Bytes<27>, Bytes<32>]>(
+    [pad(27, "midnight_signed_message:32:"), challenge]
+  );
+  return (envelope == 1 ? connector : none);
 }
 
 // Scalar-to-point helpers: R = r·G, pk = sk·G. Exposed so signers use the
@@ -687,19 +753,28 @@ circuit require_authorised_with_k256(
   use_counter: Uint<64>,
   sig:         Secp256k1EcdsaSignature,
   challenge:   Bytes<32>,
+  envelope:    Uint<8>,
 ): [] {
   require_live_k256_key(pk);
-  const entry = disclose(derive_device_entry_with_k256(kernel.self(), pk, device_epoch, use_counter));
+  const entry = disclose(derive_device_entry_with_k256(
+    kernel.self(), pk, envelope, device_epoch, use_counter
+  ));
   assert(devices.member(entry), "unknown device entry");
   devices.remove(entry);
   devices.insert(disclose(derive_device_entry_with_k256(
-    kernel.self(), pk, device_epoch, ((use_counter + (1 as Uint<64>)) as Uint<64>)
+    kernel.self(), pk, envelope, device_epoch,
+    ((use_counter + (1 as Uint<64>)) as Uint<64>)
   )));
-  // The verify interprets the challenge as a big-endian integer and reduces
-  // it mod the curve order internally; both low-S and high-S signature
-  // forms are accepted (see the malleability note in the header).
+  // The signature covers the envelope digest of the challenge, never the
+  // challenge itself. The envelope cannot be equivocated per call: the
+  // entry derivation above binds it, so a wrong id fails the membership
+  // assert before any signature is examined. The verify interprets its
+  // digest as a big-endian integer and reduces it mod the curve order
+  // internally; both low-S and high-S signature forms are accepted (see
+  // the malleability note in the header).
+  const digest = envelope_digest(envelope, challenge);
   assert(
-    secp256k1EcdsaVerify(challenge, sig, pk),
+    secp256k1EcdsaVerify(digest, sig, pk),
     "invalid signature"
   );
   auth_nonce = ((auth_nonce + (1 as Uint<64>)) as Uint<64>);
@@ -870,11 +945,12 @@ export circuit withdraw_unshielded_with_k256(
   pk:          Secp256k1Point,
   use_counter: Uint<64>,
   sig:         Secp256k1EcdsaSignature,
+  envelope:    Uint<8>,
 ): [] {
   const challenge = challenge_withdraw_unshielded_with_k256(
     kernel.self(), pk, color, amount, recipient, auth_nonce
   );
-  require_authorised_with_k256(pk, use_counter, sig, challenge);
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
   do_withdraw_unshielded(color, amount, recipient);
 }
 
@@ -915,11 +991,12 @@ export circuit append_inbox_with_k256(
   pk:          Secp256k1Point,
   use_counter: Uint<64>,
   sig:         Secp256k1EcdsaSignature,
+  envelope:    Uint<8>,
 ): [] {
   const challenge = challenge_append_inbox_with_k256(
     kernel.self(), pk, entry, auth_nonce
   );
-  require_authorised_with_k256(pk, use_counter, sig, challenge);
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
   do_append_inbox(entry);
 }
 
@@ -954,12 +1031,13 @@ export circuit withdraw_shielded_with_k256(
   pk:          Secp256k1Point,
   use_counter: Uint<64>,
   sig:         Secp256k1EcdsaSignature,
+  envelope:    Uint<8>,
 ): Maybe<ShieldedCoinInfo> {
   const coin = held_coin(color);
   const challenge = challenge_withdraw_shielded_with_k256(
     kernel.self(), pk, recipient, color, amount, coin, auth_nonce
   );
-  require_authorised_with_k256(pk, use_counter, sig, challenge);
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
   return do_withdraw_shielded(recipient, amount, coin);
 }
 
@@ -1002,12 +1080,13 @@ export circuit withdraw_shielded_to_contract_with_k256(
   pk:          Secp256k1Point,
   use_counter: Uint<64>,
   sig:         Secp256k1EcdsaSignature,
+  envelope:    Uint<8>,
 ): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
   const coin = held_coin(color);
   const challenge = challenge_withdraw_shielded_to_contract_with_k256(
     kernel.self(), pk, recipient, color, amount, coin, auth_nonce
   );
-  require_authorised_with_k256(pk, use_counter, sig, challenge);
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
   return do_withdraw_shielded_to_contract(recipient, amount, coin);
 }
 
@@ -1037,11 +1116,12 @@ export circuit rotate_enc_key_with_k256(
   pk:          Secp256k1Point,
   use_counter: Uint<64>,
   sig:         Secp256k1EcdsaSignature,
+  envelope:    Uint<8>,
 ): [] {
   const challenge = challenge_rotate_enc_key_with_k256(
     kernel.self(), pk, new_key, auth_nonce
   );
-  require_authorised_with_k256(pk, use_counter, sig, challenge);
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
   do_rotate_enc_key(new_key);
 }
 
@@ -1131,11 +1211,12 @@ export circuit add_device_with_k256(
   pk:          Secp256k1Point,
   use_counter: Uint<64>,
   sig:         Secp256k1EcdsaSignature,
+  envelope:    Uint<8>,
 ): [] {
   const challenge = challenge_add_device_with_k256(
     kernel.self(), pk, new_entry, auth_nonce
   );
-  require_authorised_with_k256(pk, use_counter, sig, challenge);
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
   do_add_device(new_entry);
 }
 
@@ -1169,13 +1250,15 @@ export circuit remove_device_with_k256(
   pk:          Secp256k1Point,
   use_counter: Uint<64>,
   sig:         Secp256k1EcdsaSignature,
+  envelope:    Uint<8>,
 ): [] {
   const challenge = challenge_remove_device_with_k256(
     kernel.self(), pk, entry, auth_nonce
   );
-  require_authorised_with_k256(pk, use_counter, sig, challenge);
+  require_authorised_with_k256(pk, use_counter, sig, challenge, envelope);
   // As above: the caller's post-roll entry is off limits.
   do_remove_device(entry, derive_device_entry_with_k256(
-    kernel.self(), pk, device_epoch, ((use_counter + (1 as Uint<64>)) as Uint<64>)
+    kernel.self(), pk, envelope, device_epoch,
+    ((use_counter + (1 as Uint<64>)) as Uint<64>)
   ));
 }

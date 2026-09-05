@@ -26,8 +26,11 @@
 //! "midnight:account:auth:k1:v1:<circuit>". There is no signature term (an
 //! ECDSA message must not depend on its own signature) and no grinding
 //! nonce (secp256k1EcdsaVerify reduces the 32-byte challenge mod the curve
-//! order natively). The signature is ECDSA over the challenge as a prehash;
-//! k256 emits the low-S normalised form by default and the contract accepts
+//! order natively). The signature is ECDSA over the ENVELOPE digest
+//! SHA-256(prefix(envelope) || challenge), never the challenge itself
+//! (`envelope_digest` below: envelope 0 has an empty prefix, envelope 1 the
+//! dApp-connector `signData` prefix), passed to k256 as a prehash; k256
+//! emits the low-S normalised form by default and the contract accepts
 //! both S forms (see the malleability note in account.compact).
 //!
 //! persistentHash is SHA-256 over the compiler's field-aligned binary
@@ -265,6 +268,33 @@ struct SignRequest {
     amount: String,
     recipient: String,
     auth_nonce: String,
+    /// k256 envelope id (see `envelope_digest`): 0 = no prefix (default),
+    /// 1 = the dApp-connector `signData` envelope (the
+    /// `ecdsa_secp256k1_sha256` scheme of the connector specification).
+    /// Ignored by the jubjub arm.
+    #[serde(default)]
+    envelope: u8,
+}
+
+/// The connector's mandatory signing prefix for a 32-byte payload
+/// (connector specification, section "Signing").
+const CONNECTOR_ENVELOPE_PREFIX: &[u8; 27] = b"midnight_signed_message:32:";
+
+/// The digest a k256 device signs for a challenge, by envelope id. Mirrors
+/// the contract's exported `envelope_digest` pure circuit:
+///   0  SHA-256(challenge)
+///   1  SHA-256("midnight_signed_message:32:" || challenge)
+/// persistentHash over Bytes is SHA-256 of the raw concatenation, so both
+/// are plain SHA-256 and bit-equal to the circuit's output.
+fn envelope_digest(envelope: u8, challenge: &[u8; 32]) -> Result<[u8; 32]> {
+    match envelope {
+        0 => persistent_hash(&[el_bytes(32, challenge)]),
+        1 => persistent_hash(&[
+            el_bytes(27, CONNECTOR_ENVELOPE_PREFIX),
+            el_bytes(32, challenge),
+        ]),
+        other => bail!("unknown k256 envelope id {other}"),
+    }
 }
 
 fn main() -> Result<()> {
@@ -386,14 +416,19 @@ fn sign_k256(req: &SignRequest) -> Result<serde_json::Value> {
         el_uint(8, u128::from(p.auth_nonce)),
     ])?;
 
-    // ECDSA over the challenge as a prehash (RFC 6979 deterministic nonce).
+    // The signature covers the envelope digest, never the challenge itself.
+    let digest = envelope_digest(req.envelope, &challenge)?;
+
+    // ECDSA over the digest as a prehash (RFC 6979 deterministic nonce).
     // k256 emits the low-S normalised form; the contract's verifier accepts
     // either form, so the signature travels as produced.
-    let sig: Signature = sk.sign_prehash(&challenge).map_err(|_| anyhow!("signing failed"))?;
+    let sig: Signature = sk
+        .sign_prehash(&digest)
+        .map_err(|_| anyhow!("signing failed"))?;
 
     // Local verification before emitting (k256's verifier, which insists on
     // the low-S form its signer produces).
-    vk.verify_prehash(&challenge, &sig)
+    vk.verify_prehash(&digest, &sig)
         .map_err(|_| anyhow!("self-verification failed"))?;
 
     let (sig_r, sig_s) = sig.split_bytes();
@@ -404,6 +439,8 @@ fn sign_k256(req: &SignRequest) -> Result<serde_json::Value> {
             "s": format!("0x{}", hex::encode(sig_s)),
         },
         "challenge": hex::encode(challenge),
+        "digest": hex::encode(digest),
+        "envelope": req.envelope,
     }))
 }
 
@@ -467,10 +504,8 @@ mod tests {
             circuit_dst(&Arm::K256, "withdraw_unshielded").unwrap(),
             k256_by_hand
         );
-        let jubjub_by_hand = sha256_concat(&[pad_to(
-            64,
-            b"midnight:account:auth:v1:withdraw_unshielded",
-        )]);
+        let jubjub_by_hand =
+            sha256_concat(&[pad_to(64, b"midnight:account:auth:v1:withdraw_unshielded")]);
         assert_eq!(
             circuit_dst(&Arm::Jubjub, "withdraw_unshielded").unwrap(),
             jubjub_by_hand
@@ -478,36 +513,96 @@ mod tests {
     }
 
     #[test]
-    fn k256_device_entry_matches_the_by_hand_derivation() {
-        // derive_device_entry_with_k256(self, pk, epoch, counter) for the
-        // sk = 1 key:
-        // [DST_DEVICE(32), self(32), x_le(32), y_le(32), epoch(4), counter(8)].
+    fn k256_device_entry_v2_matches_the_by_hand_derivation_for_both_envelopes() {
+        // derive_device_entry_with_k256(self, pk, envelope, epoch, counter)
+        // for the sk = 1 key:
+        // [DST_DEVICE(32), self(32), x_le(32), y_le(32), envelope(1), epoch(4), counter(8)].
+        // Vectors recomputed externally (Python hashlib over the same
+        // concatenation) and asserted against the compiled circuit in
+        // unit-offline.ts, pinning the encoding against joint drift.
         let self_addr = [0x11u8; 32];
         let (x_le, y_le) = (coord_le(GX_BE), coord_le(GY_BE));
-        let via_fab = persistent_hash(&[
-            el_bytes(32, &pad_to(32, b"midnight:account:device:k1:v1")),
-            el_bytes(32, &self_addr),
-            el_bytes(32, &x_le),
-            el_bytes(32, &y_le),
-            el_uint(4, 0),
-            el_uint(8, 0),
-        ])
-        .unwrap();
-        let by_hand = sha256_concat(&[
-            pad_to(32, b"midnight:account:device:k1:v1"),
-            self_addr.to_vec(),
-            x_le.to_vec(),
-            y_le.to_vec(),
-            vec![0u8; 4],
-            vec![0u8; 8],
-        ]);
-        assert_eq!(via_fab, by_hand);
-        // Vector recomputed externally (Python hashlib over the same
-        // concatenation), pinning the encoding against joint drift.
+        for (envelope, pinned) in [
+            (0u8, "f88e6a3085478879ae9e3859c59493a60b2d443c1608f6bcedbdb7ee1a8f5d66"),
+            (1u8, "ae28feb6281f2e2f9d9a0fcda699bb2b3e349d1f20eff7b578afb489b3115d51"),
+        ] {
+            let via_fab = persistent_hash(&[
+                el_bytes(32, &pad_to(32, b"midnight:account:device:k1:v2")),
+                el_bytes(32, &self_addr),
+                el_bytes(32, &x_le),
+                el_bytes(32, &y_le),
+                el_uint(1, u128::from(envelope)),
+                el_uint(4, 0),
+                el_uint(8, 0),
+            ])
+            .unwrap();
+            let by_hand = sha256_concat(&[
+                pad_to(32, b"midnight:account:device:k1:v2"),
+                self_addr.to_vec(),
+                x_le.to_vec(),
+                y_le.to_vec(),
+                vec![envelope],
+                vec![0u8; 4],
+                vec![0u8; 8],
+            ]);
+            assert_eq!(via_fab, by_hand);
+            assert_eq!(hex::encode(via_fab), pinned, "envelope {envelope}");
+        }
+    }
+
+    #[test]
+    fn k256_boot_commitment_v2_matches_the_by_hand_derivation_for_both_envelopes() {
+        // derive_boot_commitment_with_k256(salt, pk, envelope) for sk = 1:
+        // [DST_BOOT(32), salt(32), x_le(32), y_le(32), envelope(1)].
+        let salt = [0x22u8; 32];
+        let (x_le, y_le) = (coord_le(GX_BE), coord_le(GY_BE));
+        for (envelope, pinned) in [
+            (0u8, "bec19e88c6ea0afb279841ca7bfca1aa50a0c046cfff30ea29c819b41d564e63"),
+            (1u8, "14697f9fb98a39cf19fae28e53dd556109237ae719599198937988939f75463b"),
+        ] {
+            let via_fab = persistent_hash(&[
+                el_bytes(32, &pad_to(32, b"midnight:account:boot:k1:v2")),
+                el_bytes(32, &salt),
+                el_bytes(32, &x_le),
+                el_bytes(32, &y_le),
+                el_uint(1, u128::from(envelope)),
+            ])
+            .unwrap();
+            let by_hand = sha256_concat(&[
+                pad_to(32, b"midnight:account:boot:k1:v2"),
+                salt.to_vec(),
+                x_le.to_vec(),
+                y_le.to_vec(),
+                vec![envelope],
+            ]);
+            assert_eq!(via_fab, by_hand);
+            assert_eq!(hex::encode(via_fab), pinned, "envelope {envelope}");
+        }
+    }
+
+    #[test]
+    fn envelope_digests_match_by_hand_and_the_runtime() {
+        // Both envelope digests are plain SHA-256 of the raw concatenation
+        // (a Bytes atom carries no framing). Pinned vectors are recomputed
+        // externally (Python hashlib) and match the compiled circuit's
+        // `envelope_digest`, asserted in unit-offline.ts.
+        let challenge = [0xc7u8; 32];
+        let none = envelope_digest(0, &challenge).unwrap();
+        assert_eq!(none, sha256_concat(&[challenge.to_vec()]));
         assert_eq!(
-            hex::encode(via_fab),
-            "f03ab3c9483be2397f3cadb399a72e8e451a73d96bcde3bba3039a9605530840"
+            hex::encode(none),
+            "fdd64f7423a9bc064e56a085573bf51ff5ea77e8d99322ca7afb7bb58c2b72c1"
         );
+        let connector = envelope_digest(1, &challenge).unwrap();
+        assert_eq!(
+            connector,
+            sha256_concat(&[CONNECTOR_ENVELOPE_PREFIX.to_vec(), challenge.to_vec()])
+        );
+        assert_eq!(
+            hex::encode(connector),
+            "0b389c2c1700fac274dc17f4ec007f807238d66600d14333e6f2f21ae3695364"
+        );
+        assert!(envelope_digest(2, &challenge).is_err());
     }
 
     #[test]
@@ -569,13 +664,13 @@ mod tests {
             amount: "500".into(),
             recipient: hex::encode([0x33u8; 32]),
             auth_nonce: "3".into(),
+            envelope: 0,
         };
         let out = sign_jubjub(&req).unwrap();
         assert!(out.get("sig_s").is_some());
         assert!(out.get("grind_nonce").is_some());
         let challenge = out.get("challenge").unwrap().as_str().unwrap();
-        let challenge_bytes: [u8; 32] =
-            hex::decode(challenge).unwrap().try_into().unwrap();
+        let challenge_bytes: [u8; 32] = hex::decode(challenge).unwrap().try_into().unwrap();
         assert!(hash_below_r(&challenge_bytes));
     }
 }
