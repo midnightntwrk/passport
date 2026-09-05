@@ -42,3 +42,65 @@ describe('the install sheet', () => {
     }
   });
 });
+
+/**
+ * The persistent-storage request may not hold onboarding open.
+ *
+ * Firefox answers `navigator.storage.persist()` with a permission doorhanger
+ * and leaves the promise pending until it is pressed; onboarding awaited it,
+ * so a reader who ignored the doorhanger stayed at "Encrypting your Passport
+ * state on this device" for ever (found by the cross-browser suite,
+ * 2026/09/05).
+ */
+import { afterEach, vi } from 'vitest';
+
+import { requestPassportStoragePersistence, STORAGE_PERSISTENCE_TIMEOUT_MS } from './pwa.js';
+
+describe('the persistent-storage request', () => {
+  const original = Object.getOwnPropertyDescriptor(navigator, 'storage');
+  const install = (storage: unknown) =>
+    Object.defineProperty(navigator, 'storage', { value: storage, configurable: true });
+  afterEach(() => {
+    vi.useRealTimers();
+    if (original) Object.defineProperty(navigator, 'storage', original);
+    else Reflect.deleteProperty(navigator, 'storage');
+  });
+
+  it('gives up on a browser that never answers, leaving the request to settle on its own', async () => {
+    vi.useFakeTimers();
+    install({ persisted: async () => false, persist: () => new Promise<boolean>(() => {}) });
+    const outcome = requestPassportStoragePersistence();
+    await vi.advanceTimersByTimeAsync(STORAGE_PERSISTENCE_TIMEOUT_MS);
+    await expect(outcome).resolves.toBeNull();
+  });
+
+  it('takes a prompt answer as it is', async () => {
+    install({ persisted: async () => false, persist: async () => true });
+    await expect(requestPassportStoragePersistence()).resolves.toBe(true);
+  });
+
+  it('reports storage already persisted without asking again', async () => {
+    let asked = 0;
+    install({
+      persisted: async () => true,
+      persist: async () => {
+        asked += 1;
+        return true;
+      },
+    });
+    await expect(requestPassportStoragePersistence()).resolves.toBe(true);
+    expect(asked).toBe(0);
+  });
+
+  it('treats a refusal or a browser without the API as no answer', async () => {
+    install({
+      persisted: async () => false,
+      persist: async () => {
+        throw new Error('no');
+      },
+    });
+    await expect(requestPassportStoragePersistence()).resolves.toBeNull();
+    install(undefined);
+    await expect(requestPassportStoragePersistence()).resolves.toBeNull();
+  });
+});

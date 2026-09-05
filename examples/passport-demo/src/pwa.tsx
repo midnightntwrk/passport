@@ -140,13 +140,40 @@ function isSafariBrowser(): boolean {
   return /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|Chrome|Chromium|Android/.test(ua);
 }
 
-export async function requestPassportStoragePersistence(): Promise<boolean | null> {
+/**
+ * How long the persistent-storage request may hold onboarding before it is
+ * treated as unanswered.
+ *
+ * Firefox answers `navigator.storage.persist()` with a permission doorhanger,
+ * and the promise stays pending until somebody presses it — for ever, if the
+ * reader ignores it or the browser is headless. Onboarding awaited that
+ * promise, so every Firefox walk stopped at "Encrypting your Passport state on
+ * this device" (found by the cross-browser suite, 2026/09/05). Persistence is
+ * a nicety: nothing about the passkey, the account, or the state just written
+ * depends on it, so it may not hold the critical path open.
+ */
+export const STORAGE_PERSISTENCE_TIMEOUT_MS = 3_000;
+
+export async function requestPassportStoragePersistence(
+  timeoutMs = STORAGE_PERSISTENCE_TIMEOUT_MS,
+): Promise<boolean | null> {
   if (!navigator.storage?.persist) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const unanswered = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs);
+  });
   try {
-    if (await navigator.storage.persisted?.()) return true;
-    return navigator.storage.persist();
+    const answer = (async () => {
+      if (await navigator.storage.persisted?.()) return true;
+      return navigator.storage.persist();
+    })();
+    /* The request itself is left running: a doorhanger answered later still
+       takes effect, and nothing is waiting on it any more. */
+    return await Promise.race([answer, unanswered]);
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

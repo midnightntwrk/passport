@@ -40,11 +40,6 @@ import { installNetworkBoundary } from './mocks.js';
 import { installVirtualAuthenticator } from './passkey.js';
 import { walkContextOptions } from './walkContext.js';
 
-test.fixme(
-  true,
-  'Passport hangs at "Encrypting your Passport state on this device" when navigator.storage.persist() does not settle — src/pwa.tsx:147, awaited at src/App.tsx:2681 and :2456. Not a file this suite owns; the firefox project grants the permission so the rest of the walks can run.',
-);
-
 test('onboarding finishes even when the browser never answers about persistent storage', async ({
   browser,
 }) => {
