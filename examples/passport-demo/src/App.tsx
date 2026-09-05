@@ -2604,14 +2604,6 @@ export default function PassportDemo() {
   };
 
   /**
-   * Turns a freshly enrolled credential into an open Passport: per-credential
-   * scope, encrypted state, wallet.
-   *
-   * Extracted on 2026/08/26 so the deliberate "create a new passkey" recovery
-   * below reaches the SAME Passport a first-time create reaches, rather than a
-   * second, subtly different transcription of these twenty lines.
-   */
-  /**
    * Puts the confirmation question on the screen and resolves when the reader
    * presses the button — the fresh gesture the assertion after it needs.
    *
@@ -2633,6 +2625,14 @@ export default function PassportDemo() {
     });
   };
 
+  /**
+   * Turns a freshly enrolled credential into an open Passport: per-credential
+   * scope, encrypted state, wallet.
+   *
+   * Extracted on 2026/08/26 so the deliberate "create a new passkey" recovery
+   * below reaches the SAME Passport a first-time create reaches, rather than a
+   * second, subtly different transcription of these twenty lines.
+   */
   const adoptEnrolledPasskey = async (
     enrolled: import('./backend.js').EnrolledPassportPasskey,
   ): Promise<DemoPassportProfile> => {
