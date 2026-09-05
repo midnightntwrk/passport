@@ -15,17 +15,74 @@
  * It creates a real passkey, claims a real name, and spends real (test) NIGHT,
  * so it is skipped unless `RUN_LIVE=1`, and it does not want a local server.
  *
- * Both tiers drive WebAuthn through a CDP VIRTUAL AUTHENTICATOR
- * (`WebAuthn.addVirtualAuthenticator`), which is the only way to run a passkey
- * ceremony unattended. That fixes the browser to Chromium: Firefox and WebKit
- * have no equivalent, and a Passport with no passkey has no wallet, no account
- * contract, and nothing to test.
+ * WEBAUTHN, AND WHY THE ENGINE LIST IS NO LONGER ONE.
+ * Both tiers need a passkey ceremony that no human attends. Chromium gives one
+ * through CDP's `WebAuthn` domain (`WebAuthn.addVirtualAuthenticator`), and
+ * until 2026/09/05 that fixed the whole suite to Chromium, because a Passport
+ * with no passkey has no wallet, no account contract, and nothing to test.
+ *
+ * What that reasoning missed is that the ceremony is a small part of Passport.
+ * Everything after it — the PRF derivation, the wallet, the WASM prover, the
+ * storage, the layout — is the part users actually spend their time in, and
+ * none of it was ever run in Safari's engine. `e2e/webauthnStub.ts` supplies
+ * the ceremony on the engines that cannot be given a virtual authenticator, so
+ * the rest can be asked the question. Chromium still uses the real thing;
+ * `e2e/passkey.ts` picks between them off the browser type.
+ *
+ * THE PROJECTS.
+ *   `chromium`        the reference run, unchanged, on a phone-shaped viewport.
+ *   `chromium-pixel`  the same engine as a real Android handset reports itself:
+ *                     device pixel ratio, touch, and an Android user agent.
+ *   `webkit`          Safari's engine on a desktop Mac.
+ *   `webkit-iphone`   Safari's engine as an iPhone — the platform most of
+ *                     Passport's reviewers hold, and the one no automated run
+ *                     had ever touched.
+ *   `firefox`         a third engine, as a check that nothing has quietly come
+ *                     to depend on a Blink or a WebKit detail.
+ *
+ * Specs that drive the AUTHENTICATOR rather than the app — planting a resident
+ * credential, reading a largeBlob back off it, removing one mid-run — are CDP
+ * by nature and skip themselves on the other projects with a stated reason.
  */
+
+import os from 'node:os';
 
 import { defineConfig, devices } from '@playwright/test';
 
 /** True when this run is pointed at the deployed site and a real chain. */
 const live = process.env.RUN_LIVE === '1';
+
+/**
+ * WEBKIT CANNOT BE LAUNCHED ON macOS 26, and this is where that is admitted.
+ *
+ * Playwright's bundled WebKit segfaults the instant it opens a page on this
+ * OS — headless and headed alike, in `-[WKWebView(WKImplementationMac)
+ * _viewDidChangeEffectiveCornerRadii]`, a KVO callback against the corner
+ * geometry AppKit gained in macOS 26. Measured on 2026/09/05 against
+ * `webkit-2336` (Playwright 1.62.1), `webkit-2359` (1.63.0) and `webkit-2360`
+ * (the 1.64 alpha): all three, same frame. It is upstream and it is not
+ * something this repository can fix.
+ *
+ * Leaving the projects in regardless would make `npm run test:e2e` red for
+ * everybody on this OS, on a browser that never started — a failure that says
+ * nothing about Passport and buries the ones that do. Dropping them silently
+ * would be worse: a suite that quietly tests four engines while its README
+ * claims five. So they are dropped WITH A LINE ON THE CONSOLE saying which
+ * projects went and why, and `PW_WEBKIT=1` forces them back in for anyone who
+ * wants to check whether a newer WebKit has fixed it.
+ *
+ * Darwin 25 is macOS 26. On CI — Linux, or a Mac on an earlier OS — this is
+ * false and both WebKit projects run.
+ */
+const darwinMajor =
+  process.platform === 'darwin' ? Number.parseInt(os.release().split('.')[0] ?? '0', 10) : 0;
+const webkitRuns = process.env.PW_WEBKIT === '1' || darwinMajor < 25;
+if (!webkitRuns) {
+  console.warn(
+    '[playwright] Skipping the `webkit` and `webkit-iphone` projects: Playwright\'s bundled ' +
+      'WebKit crashes on launch on macOS 26 (see playwright.config.ts). Set PW_WEBKIT=1 to run them anyway.',
+  );
+}
 
 /**
  * The build tier 1 serves. These are the same values the deployment builds
@@ -84,6 +141,63 @@ export default defineConfig({
         /* A phone-shaped viewport: the demo ships `is-mobile` layout and the
            Home screen's tab bar only exists there. */
         viewport: { width: 420, height: 900 },
+      },
+    },
+    {
+      /* An Android handset as Chrome reports one, device scale factor and all.
+         Same engine as `chromium`, so a difference between the two is a
+         difference the VIEWPORT and the touch input made — which is the class
+         of bug a desktop-shaped run cannot see. */
+      name: 'chromium-pixel',
+      use: { ...devices['Pixel 7'] },
+    },
+    ...(webkitRuns
+      ? [
+          {
+            name: 'webkit',
+            use: {
+              ...devices['Desktop Safari'],
+              /* Deliberately the same 420×900 as `chromium`, so a failure here
+                 is about the ENGINE and not about a layout the reference run
+                 never rendered at either. */
+              viewport: { width: 420, height: 900 },
+            },
+          },
+          {
+            /* The one that matters most: Safari's engine at an iPhone's width,
+               with touch and a mobile user agent. The safe-area insets a real
+               handset reports are not emulated by Playwright, so a spec that
+               cares about them has to assert on the CSS rather than on the
+               rendered inset. */
+            name: 'webkit-iphone',
+            use: { ...devices['iPhone 14'] },
+          },
+        ]
+      : []),
+    {
+      name: 'firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        viewport: { width: 420, height: 900 },
+        /* THE PERSISTENT-STORAGE PERMISSION, GRANTED — and a note about what
+           that is hiding. Firefox answers `navigator.storage.persist()` by
+           raising a doorhanger, and a headless Firefox has nowhere to raise
+           one, so the promise never settles. Passport AWAITS it on the
+           enrolment path, which meant the very first Firefox run stopped dead
+           at "Encrypting your Passport state on this device" and every one of
+           the 80 walks failed on the same line.
+           That is a real defect, not a harness problem: a user who ignores the
+           doorhanger meets the same frozen screen. It is recorded and asserted
+           on by `e2e/storage-persistence.spec.ts`, currently `fixme` because
+           the fix belongs in `src/pwa.tsx:147`. These two prefs are what a person
+           pressing "Allow" does, and granting them here is what lets the rest
+           of the suite say anything about Firefox at all. */
+        launchOptions: {
+          firefoxUserPrefs: {
+            'dom.storageManager.prompt.testing': true,
+            'dom.storageManager.prompt.testing.allow': true,
+          },
+        },
       },
     },
   ],
