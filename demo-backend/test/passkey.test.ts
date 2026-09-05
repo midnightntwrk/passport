@@ -1247,3 +1247,177 @@ describe('targeted assertions verify the answering credential', () => {
     await expect(provider.deriveWalletSeed(scope)).rejects.toThrow('A different passkey answered');
   });
 });
+
+/**
+ * THE FRESH-CONTAINER CEREMONY (found by the Safari review, 2026/09/05).
+ *
+ * A discoverable assertion is the only ceremony a container with no local
+ * profile can run, and it used to be the only one that could not be told to
+ * leave largeBlob alone: the opt-out on the targeted path reads a profile, and
+ * a fresh installed PWA has none. These fix the default at "never ask", and
+ * pin the opt-in follow-up's bounds.
+ */
+describe('discovery leaves largeBlob alone unless it is asked not to', () => {
+  const answering = (results: Record<string, unknown>) => ({
+    rawId: new Uint8Array([1, 2, 3, 4]).buffer,
+    getClientExtensionResults: () => results,
+  });
+  const prfOnly = {
+    prf: { results: { first: new Uint8Array(32).fill(3).buffer } },
+  };
+  const blobFixture: PassportAccountBlob = {
+    v: 1,
+    acc: { address: 'cd'.repeat(32), network: 'preview' },
+    alias: 'alice',
+  };
+
+  it('sends no largeBlob slice at all on the discoverable assertion', async () => {
+    let capturedOptions: CredentialRequestOptions | undefined;
+    replaceNavigator({
+      credentials: {
+        get: async (options: CredentialRequestOptions) => {
+          capturedOptions = options;
+          return answering(prfOnly);
+        },
+      },
+    });
+
+    const discovered = await WebAuthnPrfKeyProvider.discover({ rpId: 'localhost' });
+    const extensions = (capturedOptions?.publicKey as { extensions?: Record<string, unknown> })
+      ?.extensions;
+    // Omitted entirely, not sent as `read: false`: an extension that was never
+    // sent cannot narrow a picker.
+    expect('largeBlob' in (extensions ?? {})).toBe(false);
+    expect(extensions?.prf).toBeDefined();
+    // Nothing was asked, so nothing was learnt — and nothing is written down.
+    expect(discovered.largeBlobSupported).toBeNull();
+    expect(discovered.accountBlob).toBeNull();
+    discovered.dispose();
+  });
+
+  it('takes a support answer the client volunteers, because it costs nothing', async () => {
+    replaceNavigator({
+      credentials: {
+        get: async () =>
+          answering({
+            ...prfOnly,
+            largeBlob: { blob: encodeAccountBlob(blobFixture).slice().buffer },
+          }),
+      },
+    });
+
+    const discovered = await WebAuthnPrfKeyProvider.discover({ rpId: 'localhost' });
+    expect(discovered.largeBlobSupported).toBe(true);
+    expect(discovered.accountBlob).toEqual(blobFixture);
+    discovered.dispose();
+  });
+
+  it('spends one extra targeted read only where the caller asked for the blob', async () => {
+    const asked: CredentialRequestOptions[] = [];
+    replaceNavigator({
+      credentials: {
+        get: async (options: CredentialRequestOptions) => {
+          asked.push(options);
+          if (asked.length === 1) return answering(prfOnly);
+          return answering({
+            largeBlob: { blob: encodeAccountBlob(blobFixture).slice().buffer },
+          });
+        },
+      },
+    });
+
+    const discovered = await WebAuthnPrfKeyProvider.discover({
+      rpId: 'localhost',
+      largeBlob: true,
+    });
+    expect(asked).toHaveLength(2);
+    const first = (asked[0].publicKey as { extensions?: Record<string, unknown> }).extensions;
+    const second = (asked[1].publicKey as {
+      extensions?: { largeBlob?: { read?: boolean } };
+      allowCredentials?: unknown[];
+    });
+    expect('largeBlob' in (first ?? {})).toBe(false);
+    // Targeted at the credential that just answered, never a second picker.
+    expect(second.allowCredentials).toHaveLength(1);
+    expect(second.extensions?.largeBlob?.read).toBe(true);
+    expect(discovered.accountBlob).toEqual(blobFixture);
+    expect(discovered.largeBlobSupported).toBe(true);
+    discovered.dispose();
+  });
+
+  it('treats a follow-up read that never settles as no blob, and signs in anyway', async () => {
+    let aborted = false;
+    replaceNavigator({
+      credentials: {
+        get: async (options: CredentialRequestOptions) => {
+          if (!options.signal) return answering(prfOnly);
+          // The sheet that never settles — the exact failure this bound exists
+          // for. It resolves only if somebody aborts it.
+          return new Promise((_resolve, reject) => {
+            options.signal?.addEventListener('abort', () => {
+              aborted = true;
+              reject(new Error('aborted'));
+            });
+          });
+        },
+      },
+    });
+
+    const discovered = await WebAuthnPrfKeyProvider.discover({
+      rpId: 'localhost',
+      largeBlob: true,
+      largeBlobTimeoutMs: 5,
+    });
+    expect(aborted).toBe(true);
+    expect(discovered.accountBlob).toBeNull();
+    // A sheet that hung is not evidence about the extension, so nothing is
+    // recorded — the credential keeps the benefit of the doubt.
+    expect(discovered.largeBlobSupported).toBeNull();
+    // And the thing that actually matters: the sign-in completed.
+    expect(discovered.credentialId).toBe('AQIDBA==');
+    discovered.dispose();
+  });
+
+  it('never lets a refused, empty, or misdirected follow-up read fail the sign-in', async () => {
+    const answers: Array<() => unknown> = [
+      () => {
+        const error = new Error('The user cancelled.');
+        error.name = 'NotAllowedError';
+        throw error;
+      },
+      () => null,
+      // A different credential answering the targeted read tells us nothing
+      // about the one that is signing in.
+      () => ({
+        rawId: new Uint8Array([9, 9]).buffer,
+        getClientExtensionResults: () => ({ largeBlob: { blob: new Uint8Array([1]).buffer } }),
+      }),
+      // A platform with no largeBlob at all: the one definite `false`.
+      () => ({
+        rawId: new Uint8Array([1, 2, 3, 4]).buffer,
+        getClientExtensionResults: () => ({}),
+      }),
+    ];
+    const support: Array<boolean | null> = [];
+    for (const answer of answers) {
+      let calls = 0;
+      replaceNavigator({
+        credentials: {
+          get: async () => {
+            calls += 1;
+            return calls === 1 ? answering(prfOnly) : answer();
+          },
+        },
+      });
+      const discovered = await WebAuthnPrfKeyProvider.discover({
+        rpId: 'localhost',
+        largeBlob: true,
+      });
+      expect(discovered.credentialId).toBe('AQIDBA==');
+      expect(discovered.accountBlob).toBeNull();
+      support.push(discovered.largeBlobSupported);
+      discovered.dispose();
+    }
+    expect(support).toEqual([null, null, null, false]);
+  });
+});

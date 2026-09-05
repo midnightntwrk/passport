@@ -153,7 +153,49 @@ export type PassportPasskeyOnboarding =
 export interface DiscoverPassportPasskeyOptions {
   /** Relying-party id. Defaults to the current hostname, matching enrolment. */
   rpId?: string;
+  /**
+   * Whether this discovery may go after the account blob AT ALL. Defaults to
+   * `false`, and the default is the whole point.
+   *
+   * WHAT IT USED TO DO. The discoverable assertion hard-coded
+   * `largeBlob: { read: true }` with no way to turn it off, and the targeted
+   * path's opt-out ({@link AssertPassportPasskeyOptions.largeBlob}) is driven
+   * by a LOCAL PROFILE — a record a fresh container does not have. So the one
+   * ceremony a brand-new install runs was the one ceremony that could not be
+   * asked to leave the extension alone. On Android that combination is already
+   * known to produce a picker with nothing in it that never settles; an
+   * installed iOS PWA has its own storage container, so it meets the same
+   * ceremony with the same empty record, against iCloud Keychain passkeys
+   * whose largeBlob support is not something this code may assume either way.
+   *
+   * WHAT IT DOES NOW. The discoverable assertion sends NO largeBlob slice, so
+   * nothing about the extension can narrow the picker or hold the sheet open.
+   * Support is still learnt for free where the client volunteers a results
+   * slice unasked. A caller that actually wants the blob may set this to
+   * `true`, which spends ONE targeted follow-up read against the credential
+   * that just answered, bounded by {@link largeBlobTimeoutMs} and aborted when
+   * it expires.
+   *
+   * PASSPORT'S SIGN-IN DOES NOT SET IT, and that is deliberate: a sign-in is
+   * one assertion, and the blob is a convenience whose absence costs a person
+   * nothing they cannot get back. Recover-by-name reaches the same account from
+   * any device, and it is offered unconditionally.
+   */
+  largeBlob?: boolean;
+  /**
+   * How long the optional follow-up read may take before it is abandoned and
+   * the credential is treated as holding no blob. Ignored unless
+   * {@link largeBlob} is `true`.
+   */
+  largeBlobTimeoutMs?: number;
 }
+
+/**
+ * The ceiling on the optional follow-up read. Long enough for a user to answer
+ * a prompt they were expecting, short enough that a sheet which never settles
+ * is a delay rather than the end of the session.
+ */
+export const DISCOVERY_LARGE_BLOB_TIMEOUT_MS = 20_000;
 
 /**
  * What {@link WebAuthnPrfKeyProvider.enrollWithPrf} returns: the enrolled
@@ -644,6 +686,80 @@ function accountBlobReadSupport(
 }
 
 /**
+ * ONE targeted, bounded, abortable read of the account blob off a credential
+ * that has just answered a discoverable assertion — and a best effort that
+ * NEVER throws and never blocks a sign-in.
+ *
+ * It exists because the discoverable assertion no longer asks for the
+ * extension at all (see {@link DiscoverPassportPasskeyOptions.largeBlob}), so a
+ * caller that genuinely wants the blob has to ask for it separately. Every
+ * failure — a refusal, a platform with no largeBlob, a sheet that never
+ * settles — comes back as "no blob", because by the time this runs the user is
+ * already signed in and the blob is a convenience.
+ *
+ * THE TIMEOUT ABORTS RATHER THAN ABANDONS. `AbortController` on
+ * `credentials.get` is what takes the platform sheet down; resolving early
+ * without it would leave a prompt on screen for a ceremony nobody is waiting
+ * on any more. A client that ignores the signal costs nothing here — this
+ * promise has already settled.
+ */
+async function readAccountBlobOnce(
+  navigator: Navigator,
+  credentialId: string,
+  rpId: string | undefined,
+  timeoutMs: number,
+): Promise<{
+  accountBlob: PassportAccountBlob | null;
+  largeBlobSupported: boolean | null;
+}> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve('timeout');
+    }, timeoutMs);
+  });
+  try {
+    const assertion = await Promise.race([
+      navigator.credentials.get({
+        publicKey: {
+          challenge: asArrayBuffer(randomChallenge()),
+          allowCredentials: [
+            { type: 'public-key' as const, id: asArrayBuffer(fromBase64(credentialId)) },
+          ],
+          userVerification: 'required',
+          extensions: { largeBlob: { read: true } } as AuthenticationExtensionsClientInputs,
+          ...(rpId ? { rpId } : {}),
+        },
+        signal: controller.signal,
+      }) as Promise<PublicKeyCredential | null>,
+      expired,
+    ]);
+    /* A sheet that never settled, a dismissal, or a credential that answered
+       as somebody else. None of them is evidence about largeBlob, so none of
+       them is written down as one. */
+    if (assertion === 'timeout' || !assertion) {
+      return { accountBlob: null, largeBlobSupported: null };
+    }
+    if (toBase64(new Uint8Array(assertion.rawId)) !== credentialId) {
+      return { accountBlob: null, largeBlobSupported: null };
+    }
+    const extension = assertion.getClientExtensionResults() as PrfExtensionResults;
+    return {
+      accountBlob: decodeAccountBlob(extension.largeBlob?.blob),
+      // This one DID ask, so an absent slice is the platform saying it has no
+      // largeBlob — a definite answer, and worth recording.
+      largeBlobSupported: accountBlobReadSupport(extension, true),
+    };
+  } catch {
+    return { accountBlob: null, largeBlobSupported: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * The same bag with the blob in place of the read — the RIDE-ALONG WRITE.
  *
  * The specification forbids `read` and `write` in one assertion, so this is a
@@ -1052,12 +1168,16 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
           // makes the authenticator offer every resident credential for this
           // rpId instead of demanding one we name in advance.
           userVerification: 'required',
-          /* A discoverable assertion always reads. It is the one ceremony that
-             can meet a credential this browser has never seen — the passkey
-             synced from another device — so the blob is the only thing that can
-             tell it which account to look for, and the answer about support is
-             the only one it will ever get for free. */
-          extensions: readExtensions(),
+          /* NO largeBlob SLICE, IN EITHER DIRECTION (2026/09/05). This is the
+             ceremony a container with no local profile runs, so it is the one
+             ceremony that cannot be told about a credential's largeBlob
+             support in advance — and until today it was also the one that
+             asked for it unconditionally. An extension the client has to
+             reconcile against the authenticator's capabilities is one more
+             thing that can narrow a picker; an extension that was never sent
+             cannot. See {@link DiscoverPassportPasskeyOptions.largeBlob} for
+             what is given up and what replaces it. */
+          extensions: readExtensions(false),
           ...(rpId ? { rpId } : {}),
         },
       })) as PublicKeyCredential | null;
@@ -1075,13 +1195,29 @@ export class WebAuthnPrfKeyProvider implements PassportStateKeyProvider, Passpor
           'A Passport passkey answered, but the authenticator did not return a PRF result.',
         );
       }
-      return oneShotFromPrf(
-        toBase64(new Uint8Array(assertion.rawId)),
-        result,
-        decodeAccountBlob(extension.largeBlob?.blob),
-        null,
-        accountBlobReadSupport(extension, true),
-      );
+      const credentialId = toBase64(new Uint8Array(assertion.rawId));
+      /* LEARNT FOR FREE WHERE IT IS THERE TO LEARN. The assertion above asked
+         for nothing, so by specification there should be no slice — but a
+         client that volunteers one has answered the question, and an answer
+         that costs no ceremony is never thrown away. Absent, nothing at all
+         has been learnt, which is `null` rather than `false`. */
+      let largeBlobSupported: boolean | null =
+        extension.largeBlob === undefined ? null : true;
+      let accountBlob = decodeAccountBlob(extension.largeBlob?.blob);
+      if (options.largeBlob === true && largeBlobSupported === null) {
+        /* THE OPT-IN FOLLOW-UP, and every way it can go wrong ends the same
+           way: no blob, sign-in unaffected. It is a ceremony of its own, which
+           is why no sign-in path sets the option. */
+        const read = await readAccountBlobOnce(
+          navigator,
+          credentialId,
+          rpId,
+          options.largeBlobTimeoutMs ?? DISCOVERY_LARGE_BLOB_TIMEOUT_MS,
+        );
+        accountBlob = read.accountBlob;
+        largeBlobSupported = read.largeBlobSupported;
+      }
+      return oneShotFromPrf(credentialId, result, accountBlob, null, largeBlobSupported);
     } catch (error) {
       if (error instanceof PassportPasskeyDiscoveryError) throw error;
       throw new PassportPasskeyDiscoveryError(
