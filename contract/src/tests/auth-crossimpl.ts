@@ -47,7 +47,7 @@ await runScenario('auth-crossimpl', async () => {
   // use counter 0) — the same path a cross-arm add takes.
   const l0 = await s.account.ledgerState();
   const rustEntry = pureCircuits.derive_device_entry_with_k256(
-    { bytes: s.account.addressBytes }, rust.pk, l0.device_epoch, 0n,
+    { bytes: s.account.addressBytes }, rust.pk, false, l0.device_epoch, 0n,
   );
   await s.account.addDeviceEntry(s.device, rustEntry);
   s.account.registerDevice(rust.pk);
@@ -76,6 +76,7 @@ await runScenario('auth-crossimpl', async () => {
     pk: sig.pk,
     use_counter: 0n,
     sig: sig.sig,
+    connector: false,
   });
   details.withdrawTx = r.txId;
   await waitForLedger(

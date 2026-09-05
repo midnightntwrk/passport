@@ -10,7 +10,7 @@
 // against a node (auth-conformance.ts); this file guards the
 // vacuous-verifier hazard (MIP-0013 S10) cheaply on every change.
 
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
   ecAdd,
@@ -199,14 +199,14 @@ await runScenario('unit-offline', async () => {
       { bytes: addr }, { x, y }, 0n, 0n,
     );
     const asK256 = pureCircuits.derive_device_entry_with_k256(
-      { bytes: addr }, { x, y, identity: false }, 0n, 0n,
+      { bytes: addr }, { x, y, identity: false }, false, 0n, 0n,
     );
     assert(
       !Buffer.from(asJubjub).equals(Buffer.from(asK256)),
       '[both arms] identical coordinates derive different entries under each arm',
     );
     const bootJ = pureCircuits.derive_boot_commitment_with_jubjub(addr, { x, y });
-    const bootK = pureCircuits.derive_boot_commitment_with_k256(addr, { x, y, identity: false });
+    const bootK = pureCircuits.derive_boot_commitment_with_k256(addr, { x, y, identity: false }, false);
     assert(
       !Buffer.from(bootJ).equals(Buffer.from(bootK)),
       '[both arms] the boot commitment is arm-marked, so only one arm can activate',
@@ -255,6 +255,50 @@ await runScenario('unit-offline', async () => {
   assert(
     nobleVerify({ r: kAuth.sig.r, s: SECP256K1_N - kAuth.sig.s }, kH, kDevice.pk),
     '[k256] the high-S twin verifies too (accepted; replay-dead via AUTH-8/9)',
+  );
+
+  step('[k256/connector] envelope digest, mode-disjoint entries (dApp-connector signData)');
+  // A connector-mode device: its key sits behind the connector's `signData`
+  // (the `ecdsa_secp256k1_sha256` scheme), so it signs the mandatory
+  // envelope digest SHA-256("midnight_signed_message:32:" || challenge),
+  // never the challenge itself.
+  const cDevice = K256Device.generateConnector();
+  const cH = k256Challenges.withdrawUnshielded(ctx, cDevice.pk, color, 100n, recipient);
+  const envelopePrefix = Buffer.from('midnight_signed_message:32:', 'utf8');
+  const envelopeByHand = createHash('sha256')
+    .update(Buffer.concat([envelopePrefix, Buffer.from(cH)]))
+    .digest();
+  const envelopeViaCircuit = pureCircuits.connector_envelope_digest(cH);
+  assert(
+    Buffer.from(envelopeViaCircuit).equals(envelopeByHand),
+    '[k256/connector] connector_envelope_digest == SHA-256(prefix || challenge), recomputed independently',
+  );
+  const cAuth = cDevice.sign(cH, 0n);
+  assert(cAuth.connector === true, '[k256/connector] the authorisation carries the mode');
+  assert(
+    nobleVerify(cAuth.sig, envelopeViaCircuit, cDevice.pk),
+    '[k256/connector] the signature verifies over the ENVELOPE digest (independent stack)',
+  );
+  assert(
+    !nobleVerify(cAuth.sig, cH, cDevice.pk),
+    '[k256/connector] the same signature does NOT verify over the raw challenge (modes cannot alias)',
+  );
+  // The mode is part of the enrolled identity: the same key derives
+  // disjoint entries and boot commitments under each mode, so a device can
+  // never be driven under the mode it was not enrolled for.
+  const rawTwin = new K256Device(cDevice.sk, false);
+  const modeAddr = new Uint8Array(randomBytes(32));
+  assert(
+    !Buffer.from(cDevice.entryAt(modeAddr, 0n, 0n)).equals(
+      Buffer.from(rawTwin.entryAt(modeAddr, 0n, 0n)),
+    ),
+    '[k256/connector] connector and raw entries are disjoint for the same key (k1c:v1 vs k1:v1)',
+  );
+  assert(
+    !Buffer.from(cDevice.bootCommitment(modeAddr)).equals(
+      Buffer.from(rawTwin.bootCommitment(modeAddr)),
+    ),
+    '[k256/connector] boot commitments are mode-marked too',
   );
 
   step('[k256] challenge domain separation (AUTH-3) and witness binding (AUTH-10)');

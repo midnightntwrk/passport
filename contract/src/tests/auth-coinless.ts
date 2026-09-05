@@ -148,7 +148,7 @@ await runScenario('auth-coinless (both arms)', async () => {
     const identity: Secp256k1Point = { x: 0n, y: 0n, identity: true };
     const lPre = await s.account.ledgerState();
     const identityEntry = pureCircuits.derive_device_entry_with_k256(
-      { bytes: s.account.addressBytes }, identity, lPre.device_epoch, 0n,
+      { bytes: s.account.addressBytes }, identity, false, lPre.device_epoch, 0n,
     );
     const planted = await s.account.addDeviceEntry(j1, identityEntry);
     const lPlanted = await waitForLedger(
@@ -169,6 +169,7 @@ await runScenario('auth-coinless (both arms)', async () => {
     const rForged = secp256k1PointX(secp256k1MulGenerator(secp256k1ScalarMul(z, w))) % SECP256K1_N;
     const forged: K256Authorisation = {
       arm: 'k256', pk: identity, use_counter: 0n, sig: { r: rForged, s: sForged },
+      connector: false,
     };
     details.identityForgeryAbort = await expectAbort('forged signature under pk = O', () =>
       s.account.addDeviceWithAuth(newEntry, forged));
@@ -183,7 +184,7 @@ await runScenario('auth-coinless (both arms)', async () => {
     // untested, which is exactly how the gap survived its first fix.
     const identityUnflagged: Secp256k1Point = { x: 0n, y: 0n, identity: false };
     const unflaggedEntry = pureCircuits.derive_device_entry_with_k256(
-      { bytes: s.account.addressBytes }, identityUnflagged, lPlanted.device_epoch, 0n,
+      { bytes: s.account.addressBytes }, identityUnflagged, false, lPlanted.device_epoch, 0n,
     );
     if (Buffer.compare(Buffer.from(unflaggedEntry), Buffer.from(identityEntry)) !== 0) {
       throw new Error('the two identity encodings no longer share an entry; revisit this test');

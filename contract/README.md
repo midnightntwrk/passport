@@ -41,10 +41,27 @@ once, below every arm.
   (the verify reduces the digest mod n natively); keys bind as
   little-endian affine coordinate bytes; both S forms are accepted (real
   P-256 authenticators emit high-S; single-use entries make a malleated
-  twin non-replayable). Gated ABIs are `(…args, pk, use_counter, sig)`.
+  twin non-replayable). Gated ABIs are
+  `(…args, pk, use_counter, sig, connector)`.
   Its signer is software only (`@noble/curves` in TypeScript, `k256` in
   Rust): WebAuthn passkeys are hardware-locked to P-256, which is
   precisely what the r1 landing enables.
+
+  The arm carries one per-device **connector mode**: a device enrolled
+  with `connector = true` is a key held behind the dApp-connector
+  `signData` surface (the connector specification's
+  `ecdsa_secp256k1_sha256` scheme — MPC and HSM signers, and wallets
+  exposing ECDSA). Its signatures cover the mandatory envelope digest
+  `SHA-256("midnight_signed_message:32:" || challenge)` — recomputable
+  in-circuit because `persistentHash` IS SHA-256 and a tuple of `Bytes`
+  hashes as the raw concatenation (exported as
+  `connector_envelope_digest`) — instead of the challenge itself. The
+  mode is bound into the device's entry derivation (DST families
+  `midnight:account:device:k1c:v1`, `midnight:account:boot:k1c:v1`), so
+  a key enrolled for one mode can never authorise under the other;
+  raw-mode entries keep the `k1:v1` family unchanged. The mode is a
+  digest convention inside the arm, not a scheme, which is why it is a
+  flag rather than a third set of exports.
 
 Per-arm circuits instead of one circuit with an in-circuit scheme
 conditional: Compact compiles every exported circuit to its own proof, so
