@@ -5,10 +5,14 @@ sign an account-contract authorisation challenge with the key it already
 holds, on every signing surface the wallet stack exposes, and that
 signature verifies inside a midnight-zk circuit at the same cost class as
 the P-256 passkey arm. No wallet-side change is needed. The missing piece
-is entirely contract-side: a third verification arm at the account seam,
-which today requires a custom midnight-zk relation because the BIP-340
-equation is not expressible in Compact 0.34.0 (the exact gaps are
-enumerated below and constitute the upstream ask).
+is entirely contract-side: a third verification arm at the account seam.
+For the wallet's default `schnorr_bip340` scheme that arm today requires
+a custom midnight-zk relation, because the BIP-340 group equation is not
+expressible in Compact 0.34.0 (the exact gap is enumerated below and
+constitutes the upstream ask); for the connector's optional
+`ecdsa_secp256k1_sha256` scheme the whole envelope arm is expressible in
+Compact today (probe G), so that variant is buildable contract-side with
+no upstream dependency.
 
 ## Probe results
 
@@ -18,7 +22,7 @@ enumerated below and constitute the upstream ask).
 | P1 | Does the wallet SDK sign a 32-byte challenge, and in what format? | PASS: x-only 32-byte key, 64-byte signature, ledger verifies |
 | P2 | Is the signature independently verifiable, and over which message? | PASS: RustCrypto k256 accepts over `SHA-256(signed bytes)` and rejects the unhashed message, on both paths |
 | P3 | What exactly does the connector path sign? | SETTLED (normative): `midnight_signed_message:<data_size>:` prefix, mandated by the connector specification; reproduced through the keystore and cross-verified |
-| P4 | Is BIP-340 expressible in Compact 0.34.0's native secp256k1 surface? | FAIL (gap): no SHA-256, no point addition, no scalar multiplication at language level |
+| P4 | Is BIP-340 expressible in Compact 0.34.0's native secp256k1 surface? | PARTIAL: the SHA-256 legs are expressible (`persistentHash` IS SHA-256, byte-exact); the group equation is not (no point addition or scalar multiplication at language level). The ECDSA connector-envelope arm IS fully expressible today (probe G) |
 | P5 | Does the wallet signature verify in a midnight-zk circuit, at what cost? | PASS: k = 15 (SDK path) and k = 16 (connector path), sub-second proving, real wallet vectors, negative controls rejected |
 | P6 | What seam shape does this imply for the account contract? | Statement below |
 
@@ -123,27 +127,45 @@ ZKIR v3 feature flag; without it even the types are unbound):
 |-------|-----------|---------|
 | A | `secp256k1EcdsaVerify(hash, sig, pk)` | compiles |
 | D | `secp256k1PointX` / `secp256k1PointY` accessors | compiles |
-| B | `sha256` in-circuit | unbound identifier |
+| B | a builtin named `sha256` | unbound identifier, but see probe G: `persistentHash` IS SHA-256 |
 | E | infix `+` on `Secp256k1Point` | invalid operand type |
 | F | `secp256k1ScalarMul(s, p)` | unbound identifier |
+| G | the whole ECDSA connector-envelope arm: `secp256k1EcdsaVerify(persistentHash<[Bytes<27>, Bytes<32>]>([envelope_tag, challenge]), sig, pk)` | compiles |
 
-So the language-level surface is: field arithmetic on `Secp256k1Base` and
-`Secp256k1Scalar`, point accessors, comparisons and identity, and the
-ECDSA verify builtin. BIP-340 needs SHA-256 and the group operation, and
-neither is exposed, so **BIP-340 is not expressible in Compact 0.34.0**.
-Notably, the compiled output of the ECDSA builtin lowers to runtime
-primitives that include point addition and scalar multiplication
-(`secp256k1Add`, `secp256k1Mul`, `secp256k1MulGenerator`), so the machinery
-exists below the language; the upstream ask is exposure, not new
-cryptography. Two shapes, smallest first:
+**SHA-256 is available in-circuit, spelled `persistentHash`.** The ledger
+source fixes the algorithm (`persistent_hash(a) = SHA-256(a)`,
+midnight-base-crypto `src/hash.rs`), and we verified against the Compact
+runtime that the encoding is byte-exact for the shapes this experiment
+needs: `persistentHash<Bytes<N>>(x) = SHA-256(x)` for N of 32, 59, 64,
+and 160, and a tuple of `Bytes` encodes as the raw concatenation, so
+`persistentHash<[Bytes<27>, Bytes<32>]>` equals `SHA-256(prefix ||
+challenge)` exactly. (An earlier draft of these findings wrongly listed
+SHA-256 itself as missing; only the *name* `sha256` is unbound.)
+
+Two consequences:
+
+- **The ECDSA connector-envelope arm is expressible in Compact today**
+  (probe G compiles): digest the envelope with `persistentHash`, feed
+  `secp256k1EcdsaVerify`. Wallets and MPC/HSM signers on the connector's
+  `ecdsa_secp256k1_sha256` scheme can therefore authorise the account
+  contract with a contract-only change, no upstream work.
+- **BIP-340 remains blocked, but only on the group equation.** Both
+  SHA-256 layers (the pre-hash and the tagged challenge over the exact
+  160-byte concatenation) are expressible; `R = s * G - e * P` is not,
+  because no point addition or scalar multiplication is exposed at
+  language level. The compiled output of the ECDSA builtin lowers to
+  runtime primitives that include exactly these operations
+  (`secp256k1Add`, `secp256k1Mul`, `secp256k1MulGenerator`), so the
+  machinery exists below the language; the upstream ask is exposure, not
+  new cryptography. Two shapes, smallest first:
 
 1. A `secp256k1SchnorrVerify(msg, sig, pk_x)` builtin implementing
    BIP-340, mirroring how ECDSA landed (with the message-construction
    convention documented, since the wallet pre-hash and the connector
    prefix are part of the verified statement).
-2. Generic exposure: in-circuit SHA-256 plus point addition and scalar
-   multiplication, from which BIP-340 (and other constructions) can be
-   built in user code.
+2. Generic exposure: point addition and scalar multiplication (SHA-256
+   already being available as `persistentHash`), from which BIP-340 and
+   other constructions can be built in user code.
 
 ## Seam statement (P6)
 
@@ -158,13 +180,16 @@ cryptography. Two shapes, smallest first:
   connector already names `schnorr_bip340` and `ecdsa_secp256k1_sha256`;
   the signature-schemes registry should adopt these identifiers rather
   than invent parallel names.
-- **The existing ECDSA-k256 arm already covers the connector's second
-  scheme, modulo the same envelope.** A wallet (or MPC/HSM signer)
-  returning `ecdsa_secp256k1_sha256` verifies against the shipped k1 arm
-  once that arm computes its digest over `prefix || challenge` instead of
-  the raw challenge. The Ethereum-wallet analogue (`personal_sign`,
-  ECDSA-k256 with the Ethereum message prefix) is the same envelope
-  pattern on the same curve.
+- **The ECDSA envelope arm is buildable now, contract-side only.** A
+  wallet (or MPC/HSM signer) returning `ecdsa_secp256k1_sha256` verifies
+  against the shipped k1 arm once that arm computes its digest as
+  `persistentHash<[Bytes<27>, Bytes<32>]>([envelope_tag, challenge])`
+  instead of using the raw challenge; probe G shows the whole shape
+  compiles on the current toolchain, so this variant needs no upstream
+  work, only the contract change and its redeploy wave. The
+  Ethereum-wallet analogue (`personal_sign`, ECDSA-k256 with the
+  Ethereum message prefix) is the same envelope pattern on the same
+  curve.
 - **The x-only arm is structurally immune to the identity-point
   forgery** found on the other two arms: the identity has no x-only
   encoding, lift_x admits only valid curve x-coordinates, and secp256k1

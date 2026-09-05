@@ -91,12 +91,16 @@ speculation:
   defines the scheme discriminator (`schnorr_bip340` default,
   `ecdsa_secp256k1_sha256` optional). Reproduced through the keystore
   (`evidence/p1-vector-connector.json`) and cross-verified.
-- **P4 · In-circuit verify, Compact-native attempt. FAIL, gap
-  recorded.** Probes under `compact-probes/`: the ECDSA verify builtin
-  and the point accessors compile (behind `--feature-zkir-v3`); `sha256`
-  and any point addition or scalar multiplication are unbound at
-  language level, so BIP-340 is not expressible in Compact 0.34.0. The
-  gap is the upstream ask (see FINDINGS.md).
+- **P4 · In-circuit verify, Compact-native attempt. PARTIAL, gap
+  narrowed.** Probes under `compact-probes/`: the ECDSA verify builtin
+  and the point accessors compile (behind `--feature-zkir-v3`); no point
+  addition or scalar multiplication exists at language level, so the
+  BIP-340 group equation is not expressible. SHA-256, however, IS
+  available as `persistentHash` (verified byte-exact against the
+  runtime for Bytes and tuples of Bytes), and probe G compiles the
+  whole ECDSA connector-envelope arm, which is therefore buildable
+  contract-side today. The remaining upstream ask is the group
+  operation or a Schnorr builtin (see FINDINGS.md).
 - **P5 · In-circuit verify, midnight-zk relation. PASS, measured.**
   `crates/bip340-gate-circuit` verifies the real wallet vectors:
   SDK path k = 15 (~470 ms), connector path k = 16 (~800 ms), 4064-byte
