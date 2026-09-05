@@ -7,8 +7,14 @@
  * that is not installed, and a person clearing "browsing data" takes it with
  * everything else. The passkey survives all of that — it is in the keychain,
  * not in the page — and it carries, in its largeBlob, the account this Passport
- * was set up for and the name registered against it. That pair is the entire
- * mechanism by which a returning Passport is still a Passport.
+ * was set up for and the name registered against it.
+ *
+ * That pair WAS the entire mechanism by which a returning Passport was still a
+ * Passport, and on 2026/09/05 it stopped being: a sign-in no longer asks for
+ * the extension, because the one ceremony a fresh container runs is the one
+ * that must not be narrowed by it. See the note above the second and third
+ * tests. The blob is still written, still survives, and is still read back off
+ * the authenticator here — what changed is that nothing waits on it.
  *
  * Both halves of it were broken, and both were reproduced in a browser before
  * either was fixed:
@@ -42,6 +48,15 @@ import { expect, test, type BrowserContext, type CDPSession, type Page } from '@
 
 import { installNetworkBoundary, PASSPORT_ACCOUNT_ADDRESS } from './mocks.js';
 
+/*
+ * CHROMIUM ONLY, and for a reason that is about the AUTHENTICATOR rather
+ * than about Passport. See `e2e/webauthnStub.ts` for what the other
+ * engines get instead, and why it does not stretch this far.
+ */
+test.skip(
+  ({ browserName }) => browserName !== 'chromium',
+  'the assertion is on bytes read back OFF the authenticator through CDP — the largeBlob a real ceremony wrote — which no other engine exposes to Playwright.',
+);
 /** A label that is free in the recorded registry snapshot. */
 const NAME = 'passportwalk';
 
@@ -253,14 +268,35 @@ test('a passkey that survives a cleared browser is never created over', async ({
   }
 });
 
-test('a Passport found on its passkey lands on Home with its name, not on the name step', async ({
+/*
+ * WHAT THESE TWO USED TO ASSERT, AND WHY THEY DO NOT ANY MORE (2026/09/05).
+ *
+ * Until `abfe848` the discoverable assertion hard-coded `largeBlob: {read:
+ * true}`, so a forgetful browser recovered the account AND the name off the
+ * passkey in the one ceremony it ran, and these tests asserted exactly that:
+ * "lands on Home with its name", and — when the blob named an account the
+ * chain would not answer for — a bounded search that ended in a way out.
+ *
+ * That read is gone, deliberately. The one ceremony a fresh container runs was
+ * the one ceremony that could not be asked to leave the extension alone, and
+ * an extension the client has to reconcile is what empties an Android picker
+ * and holds an installed iOS PWA's sheet open for ever. Passport's sign-in now
+ * sends no largeBlob slice at all, and the door back to an existing Passport is
+ * recover-by-name, which works from any device and is offered unconditionally.
+ *
+ * So the contract these two hold is the NEW one, and it is worth as much: the
+ * blob may not decide anything about a sign-in, whatever it says, and a
+ * sign-in that recovered nothing must still not have destroyed anything.
+ */
+
+test('a passkey found on a forgetful browser is signed in to, and the name is a door away', async ({
   browser,
 }) => {
-  /* THE RECOVERY. The picker finds the credential, its blob names the account
-     and the name, and both are kept — so the person arrives at the Passport
-     they already had. Before the fix the account record was written and the
-     NAME was not, and the name-step gate then sent them to "Choose your .night
-     name" over a Passport called `passportwalk.night`. */
+  /* THE MECHANISM THAT REPLACED THE BLOB READ. The picker finds the
+     credential and the person is signed in to it — the SAME credential, so the
+     same wallet seed and the same account. What this browser has lost is its
+     RECORDS, so the name step is where they land, and the way back to the name
+     they already hold is the door on that step rather than a second claim. */
   test.setTimeout(240_000);
   const h = await harness(browser);
   try {
@@ -272,27 +308,43 @@ test('a Passport found on its passkey lands on Home with its name, not on the na
 
     await h.page.getByRole('button', { name: /Use a different passkey/i }).click();
 
-    await expect(h.page.getByText(`${NAME}.night`)).toBeVisible({ timeout: 120_000 });
-    await expect(h.page.getByText(/Choose your .night name/i)).toHaveCount(0);
-    // The name came off the passkey, so nothing here may show a transaction.
-    const screen = await h.page.locator('body').innerText();
-    expect(screen).not.toContain('bb'.repeat(32));
+    await expect(h.page.getByRole('heading', { name: /Welcome to Passport/i })).toBeVisible({
+      timeout: 120_000,
+    });
+    await h.page.getByRole('button', { name: 'Choose my name' }).click();
+    await expect(h.page.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 60_000 });
+
+    /* THE DOOR, and the reason a name step here is not a dead end. */
+    await expect(h.page.getByRole('button', { name: /find my Passport/i })).toBeVisible();
+
+    /* AND NOTHING WAS DESTROYED GETTING HERE — the whole point of the file.
+       One credential, the one that was enrolled, with the blob a real
+       assertion wrote still on it. A sign-in that recovers nothing is
+       recoverable; a sign-in that CREATED over this would not be. */
+    const after = await credentials(h);
+    expect(after).toHaveLength(1);
+    expect(after[0]?.id).toBe(credentialId);
+    expect(after[0]?.blob).toContain(PASSPORT_ACCOUNT_ADDRESS);
+    expect(after[0]?.blob).toContain(NAME);
   } finally {
     await h.context.close();
   }
 });
 
-test('an account the chain will not answer for ends in a way out, never in the name step', async ({
+test('a blob naming an account the chain will not answer for holds nothing up', async ({
   browser,
 }) => {
-  /* THE OTHER HALF. The blob names an address the indexer answers `null` for —
-     a node behind, a wrong network, or an account that is genuinely not there.
-     One read used to decide it, keep nothing, and drop the person on the name
-     step with a claim in front of them that would set up a SECOND account. Now
-     the search is bounded and it ENDS somewhere: the account card says it is
-     working while the chain is asked again, and when the attempts are spent the
-     screen offers looking again or setting up a new account. */
-  test.setTimeout(300_000);
+  /* THE OTHER HALF, INVERTED BY THE SAME CHANGE. This blob names an address
+     the indexer answers `null` for. It used to be read at discovery, and one
+     read decided the whole sign-in — which is how a node a block behind could
+     drop somebody on the name step with a claim in front of them that would
+     set up a SECOND account.
+     Now the sign-in never asks for it, so what this proves is that it CANNOT:
+     the walk arrives exactly where the findable-account walk above arrives, in
+     the same one ceremony, and no amount of nonsense in the blob changes it.
+     The bounded search and its way out live on the recover-by-name path, which
+     `android-recovery.spec.ts` drills. */
+  test.setTimeout(240_000);
   const h = await harness(browser);
   try {
     const credentialId = await enrol(h);
@@ -303,23 +355,20 @@ test('an account the chain will not answer for ends in a way out, never in the n
 
     await h.page.getByRole('button', { name: /Use a different passkey/i }).click();
 
-    // Looking, and saying so, rather than silently finishing with nothing.
-    await expect(h.page.getByText(/Setting up your account/i)).toBeVisible({ timeout: 120_000 });
-    await expect(h.page.getByText(/Choose your .night name/i)).toHaveCount(0);
-
-    // The end of the search: a screen with both controls on it.
-    await expect(h.page.getByText(/We could not.*find your account/is)).toBeVisible({
-      timeout: 180_000,
+    await expect(h.page.getByRole('heading', { name: /Welcome to Passport/i })).toBeVisible({
+      timeout: 120_000,
     });
-    await expect(h.page.getByRole('button', { name: 'Try again' })).toBeVisible();
-    await expect(h.page.getByRole('button', { name: 'Set up a new account' })).toBeVisible();
-    await expect(h.page.getByText(/Choose your .night name/i)).toHaveCount(0);
-
-    /* And the way on is a CHOICE. Nothing is set up until it is pressed, and
-       pressing it leads to the name step rather than to an account nobody
-       asked for. */
-    await h.page.getByRole('button', { name: 'Set up a new account' }).click();
+    await h.page.getByRole('button', { name: 'Choose my name' }).click();
     await expect(h.page.getByText(/Choose your .night name/i)).toBeVisible({ timeout: 60_000 });
+    await expect(h.page.getByRole('button', { name: /find my Passport/i })).toBeVisible();
+
+    /* The unreachable account is still on the passkey, untouched. Nothing was
+       thrown away for being unanswerable — a node catching up later reaches
+       exactly the same bytes. */
+    const after = await credentials(h);
+    expect(after).toHaveLength(1);
+    expect(after[0]?.id).toBe(credentialId);
+    expect(after[0]?.blob).toContain(UNFINDABLE_ADDRESS);
   } finally {
     await h.context.close();
   }
