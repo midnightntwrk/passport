@@ -148,6 +148,22 @@ includes(
   "url.pathname.startsWith('/zk-params/')",
   'shared proving parameters are served cache-first',
 );
+/* THE QUOTA GUARD (found by the Safari review, 2026/09/05). The proving keys
+   are the largest thing this origin serves and the likeliest place a phone
+   meets a QuotaExceededError. An unguarded `cache.put` rejection escapes the
+   fetch handler, `respondWith` yields a network error, and a file that
+   downloaded perfectly is reported to the app as missing. Both halves of the
+   write are asserted, because either one rejecting is enough to do it. */
+includes(
+  sourceWorker,
+  'await caches.open(STATIC_CACHE).catch(() => null)',
+  'an immutable asset survives a cache that will not open',
+);
+includes(
+  sourceWorker,
+  'await cache?.put(request, response.clone()).catch(() => undefined)',
+  'an over-quota cache write never turns a successful download into a network error',
+);
 includes(sourceWorker, "'/midnight-wordmark.svg'", 'onboarding art is a precached shell asset');
 includes(sourceWorker, "url.origin !== self.location.origin", 'cross-origin requests bypass caches');
 includes(sourceWorker, "url.pathname.startsWith('/api/')", 'same-origin API requests bypass caches');

@@ -163,8 +163,21 @@ async function immutableAsset(request) {
   if (cached) return cached;
   const response = await fetch(request).catch(() => null);
   if (response?.ok && response.type === 'basic') {
-    const cache = await caches.open(STATIC_CACHE);
-    await cache.put(request, response.clone());
+    /* THE CACHE WRITE MAY NOT DECIDE WHETHER THE DOWNLOAD SUCCEEDED
+       (2026/09/05). `dist/zk` and `dist/zk-params` are 144 MB across a build
+       and a first shielded withdrawal pulls roughly 54 MB of it, so on a phone
+       `cache.put` is one of the likelier places to meet a QuotaExceededError.
+       Unguarded, that rejection escaped this handler, `respondWith` turned it
+       into a NETWORK ERROR, and the caller reported a file that had in fact
+       just arrived as missing — under `wasmProver.ts`'s "run
+       scripts/fetch-zk-params.mjs to stage …", which is advice for a developer
+       about a machine that is not the reader's.
+
+       So the write is best effort, exactly as the sibling `staticAsset` below
+       already treats it: an over-quota device pays the download again next
+       session and proves fine this one. */
+    const cache = await caches.open(STATIC_CACHE).catch(() => null);
+    await cache?.put(request, response.clone()).catch(() => undefined);
   }
   return response || Response.error();
 }
