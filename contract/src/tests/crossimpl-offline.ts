@@ -32,7 +32,7 @@ export interface CallParams {
   authNonce: bigint;
 }
 
-function signRequest(arm: 'jubjub' | 'k256', req: CallParams): any {
+function signRequest(arm: 'jubjub' | 'k256', req: CallParams, connector = false): any {
   return JSON.parse(
     execFileSync(SIGNER_BIN, [], {
       input: JSON.stringify({
@@ -45,6 +45,7 @@ function signRequest(arm: 'jubjub' | 'k256', req: CallParams): any {
         amount: req.amount.toString(),
         recipient: bytesToHex(req.recipient),
         auth_nonce: req.authNonce.toString(),
+        connector,
       }),
       encoding: 'utf-8',
     }),
@@ -169,5 +170,23 @@ if (isMain) {
     );
     if (!ok) throw new Error('Rust signature does not verify over the challenge digest');
     console.log('  ✓ verify(challenge, (r, s), pk) with the Rust-produced signature');
+
+    step('[k256/connector] Rust envelope digest vs the contract pure circuit, and the signature');
+    const cOut = signRequest(
+      'k256', { sk: k.sk, contractAddress, color, amount, recipient, authNonce }, true,
+    );
+    const cExpectedDigest = pureCircuits.connector_envelope_digest(kExpected);
+    if (cOut.digest !== Buffer.from(cExpectedDigest).toString('hex')) {
+      throw new Error('Rust envelope digest differs from connector_envelope_digest');
+    }
+    console.log(`  ✓ identical: ${cOut.digest.slice(0, 32)}…`);
+    const cOk = secp256k1.verify(
+      new secp256k1.Signature(BigInt(cOut.sig.r), BigInt(cOut.sig.s)).toBytes('compact'),
+      cExpectedDigest,
+      secp256k1.Point.fromAffine({ x: BigInt(cOut.pk.x), y: BigInt(cOut.pk.y) }).toBytes(false),
+      { prehash: false, lowS: false },
+    );
+    if (!cOk) throw new Error('Rust connector signature does not verify over the envelope digest');
+    console.log('  ✓ verify(envelope digest, (r, s), pk) with the Rust-produced connector signature');
   });
 }

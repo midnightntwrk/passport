@@ -238,13 +238,18 @@ export interface K256Authorisation {
    *  (AUTH-9). Not part of the challenge; bound by entry consumption. */
   use_counter: bigint;
   sig: EcdsaSignature;
+  /** Connector mode: the signature covers the envelope digest
+   *  SHA-256("midnight_signed_message:32:" || challenge) instead of the
+   *  challenge itself. Bound into the device's entry derivation, so the
+   *  flag is a property of the enrolled device, not of one call. */
+  connector: boolean;
 }
 
 export class K256Device {
   readonly arm = 'k256' as const;
   readonly pk: Secp256k1Point;
 
-  constructor(readonly sk: bigint) {
+  constructor(readonly sk: bigint, readonly connector = false) {
     this.pk = pureCircuits.compute_public_point_with_k256(sk);
   }
 
@@ -252,25 +257,46 @@ export class K256Device {
     return new K256Device(randomSecp256k1Scalar());
   }
 
+  /** A device whose key sits behind the dApp-connector `signData`
+   *  surface (the `ecdsa_secp256k1_sha256` scheme): signatures cover the
+   *  connector envelope digest rather than the raw challenge. */
+  static generateConnector(): K256Device {
+    return new K256Device(randomSecp256k1Scalar(), true);
+  }
+
   /** The device's rolling entry at a given account/epoch/counter. */
   entryAt(contractAddress: Uint8Array, epoch: bigint, counter: bigint): Uint8Array {
     return pureCircuits.derive_device_entry_with_k256(
-      { bytes: contractAddress }, this.pk, epoch, counter,
+      { bytes: contractAddress }, this.pk, this.connector, epoch, counter,
     );
   }
 
-  /** The boot commitment for this device's arm. */
+  /** The boot commitment for this device's arm and mode. */
   bootCommitment(salt: Uint8Array): Uint8Array {
-    return pureCircuits.derive_boot_commitment_with_k256(salt, this.pk);
+    return pureCircuits.derive_boot_commitment_with_k256(salt, this.pk, this.connector);
   }
 
-  /** ECDSA-sign the 32-byte challenge digest (prehashed — the digest IS
-   *  the message). `useCounter` is carried alongside for the seam's entry
-   *  consumption. */
+  /** The 32-byte digest this device actually signs for a challenge: the
+   *  challenge itself in raw mode, the connector envelope digest in
+   *  connector mode (recomputed through the contract's own exported pure
+   *  circuit, so wallet and circuit can never disagree). */
+  signedDigest(challenge: Uint8Array): Uint8Array {
+    return this.connector
+      ? pureCircuits.connector_envelope_digest(challenge)
+      : challenge;
+  }
+
+  /** ECDSA-sign the digest for the 32-byte challenge (prehashed — the
+   *  digest IS the message). `useCounter` is carried alongside for the
+   *  seam's entry consumption. */
   sign(challenge: Uint8Array, useCounter: bigint): K256Authorisation {
-    const sigBytes = secp256k1.sign(challenge, scalarToBytesBE(this.sk), { prehash: false });
+    const digest = this.signedDigest(challenge);
+    const sigBytes = secp256k1.sign(digest, scalarToBytesBE(this.sk), { prehash: false });
     const { r, s } = secp256k1.Signature.fromBytes(sigBytes);
-    return { arm: 'k256', pk: this.pk, use_counter: useCounter, sig: { r, s } };
+    return {
+      arm: 'k256', pk: this.pk, use_counter: useCounter, sig: { r, s },
+      connector: this.connector,
+    };
   }
 }
 
@@ -320,5 +346,5 @@ export type Authorisation = JubjubAuthorisation | K256Authorisation;
 export function authArgs(a: Authorisation): unknown[] {
   return a.arm === 'jubjub'
     ? [a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce]
-    : [a.pk, a.use_counter, a.sig];
+    : [a.pk, a.use_counter, a.sig, a.connector];
 }
