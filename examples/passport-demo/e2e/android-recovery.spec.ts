@@ -47,6 +47,15 @@ import { expect, test, type BrowserContext, type CDPSession, type Page } from '@
 
 import { installNetworkBoundary, RESOLVABLE_NAME } from './mocks.js';
 
+/*
+ * CHROMIUM ONLY, and for a reason that is about the AUTHENTICATOR rather
+ * than about Passport. See `e2e/webauthnStub.ts` for what the other
+ * engines get instead, and why it does not stretch this far.
+ */
+test.skip(
+  ({ browserName }) => browserName !== 'chromium',
+  "this file drives the AUTHENTICATOR, not the app: it plants and removes resident credentials through CDP's WebAuthn domain, which is Chromium's alone. The JavaScript stand-in in e2e/webauthnStub.ts answers ceremonies; it cannot be a device somebody lost a passkey from mid-run.",
+);
 /** Chrome on a Pixel, which is what the report came from. */
 const ANDROID_UA =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36';

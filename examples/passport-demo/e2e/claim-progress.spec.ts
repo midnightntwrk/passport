@@ -40,6 +40,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { installNetworkBoundary, type NetworkBoundary } from './mocks.js';
+import { walkContextOptions } from './walkContext.js';
 import { installVirtualAuthenticator } from './passkey.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -68,10 +69,10 @@ test.beforeAll(async ({ browser }) => {
      the page, which is where this file means to stall it. Nothing asserted here
      is about caching or offline behaviour — `check-pwa.mjs` and `pwa.tsx`'s own
      tests hold the worker to its contract. */
-  const context = await browser.newContext({
+  const context = await browser.newContext(walkContextOptions({
     viewport: { width: 420, height: 900 },
     serviceWorkers: 'block',
-  });
+  }));
   page = await context.newPage();
   network = await installNetworkBoundary(page);
 

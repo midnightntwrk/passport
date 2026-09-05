@@ -45,6 +45,7 @@ import {
   RECIPIENT_ACCOUNT_ADDRESS,
   RESOLVABLE_NAME,
 } from './mocks.js';
+import { walkContextOptions } from './walkContext.js';
 import { installVirtualAuthenticator } from './passkey.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -71,7 +72,7 @@ const SHIELDED =
   'mn_shield-addr_stagenet1zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygjyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygs74ltnl';
 
 test.beforeAll(async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  const context = await browser.newContext(walkContextOptions({ viewport: { width: 420, height: 900 } }));
   page = await context.newPage();
   await installNetworkBoundary(page);
   await installVirtualAuthenticator(context, page);

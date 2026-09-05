@@ -72,6 +72,15 @@ import {
 
 import { installNetworkBoundary, PASSPORT_ACCOUNT_ADDRESS } from './mocks.js';
 
+/*
+ * CHROMIUM ONLY, and for a reason that is about the AUTHENTICATOR rather
+ * than about Passport. See `e2e/webauthnStub.ts` for what the other
+ * engines get instead, and why it does not stretch this far.
+ */
+test.skip(
+  ({ browserName }) => browserName !== 'chromium',
+  "each shape here IS a CDP virtual authenticator built with a different combination of hasPrf and hasLargeBlob, which only Chromium can be given. The app's behaviour on those shapes is what is asserted, and the shapes themselves are Chromium's to make.",
+);
 /** Chrome on a Pixel, which is what both Android reports came from. */
 const ANDROID_UA =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36';

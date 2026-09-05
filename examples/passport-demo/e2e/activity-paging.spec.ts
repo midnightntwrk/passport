@@ -30,6 +30,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { installNetworkBoundary, PASSPORT_ACCOUNT_ADDRESS } from './mocks.js';
+import { walkContextOptions } from './walkContext.js';
 import { installVirtualAuthenticator } from './passkey.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -53,7 +54,7 @@ const SEEDED = 26;
 const TODAY_ROWS = 15;
 
 test.beforeAll(async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  const context = await browser.newContext(walkContextOptions({ viewport: { width: 420, height: 900 } }));
   page = await context.newPage();
   await installNetworkBoundary(page);
   await installVirtualAuthenticator(context, page);

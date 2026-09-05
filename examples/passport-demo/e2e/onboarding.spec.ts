@@ -62,6 +62,7 @@ import {
   sponsorRoute,
   type NetworkBoundary,
 } from './mocks.js';
+import { walkContextOptions } from './walkContext.js';
 import { installVirtualAuthenticator } from './passkey.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -77,7 +78,7 @@ const RECIPIENT =
   'mn_addr_stagenet127xnp9uuxwhh7a8an77mxv02ypt6u09xkk63c9zvdkjsrj4mj68qg7c5ad';
 
 test.beforeAll(async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  const context = await browser.newContext(walkContextOptions({ viewport: { width: 420, height: 900 } }));
   page = await context.newPage();
   network = await installNetworkBoundary(page);
   await installVirtualAuthenticator(context, page);
@@ -1128,7 +1129,12 @@ test('a send whose passkey will not answer offers a retry and a way out, in the 
 
 test('a passkey this browser does not know about never blocks the way in', async ({
   browser,
+  browserName,
 }) => {
+  test.skip(
+    browserName !== 'chromium',
+    'the fixture PLANTS a resident credential with WebAuthn.addCredential — a passkey no ceremony in this run created, which is the whole point — and only CDP can put one into an authenticator.',
+  );
   /* WHAT THIS REPLACED, AND WHY.
      Until 2026/08/27 pressing "Continue with Passport" raised a discoverable
      assertion first — the platform's "Use a saved passkey for this site"
@@ -1146,7 +1152,7 @@ test('a passkey this browser does not know about never blocks the way in', async
      be consulted, must not be replaced, and must not stand in anybody's way.
 
      Its own context: the shared page above already holds a real Passport. */
-  const context = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  const context = await browser.newContext(walkContextOptions({ viewport: { width: 420, height: 900 } }));
   const fresh = await context.newPage();
   await installNetworkBoundary(fresh);
 
@@ -1313,7 +1319,7 @@ test('a Passport whose passkey this device cannot produce is offered a new one',
      Passport" targets the stored credential, the keystore has nothing to
      answer with, and the screen that comes back offers to make one. */
   test.setTimeout(180_000);
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext(walkContextOptions({ viewport: { width: 390, height: 844 } }));
   const stranded = await context.newPage();
   await installNetworkBoundary(stranded);
   const authenticator = await installVirtualAuthenticator(context, stranded);
@@ -1377,7 +1383,7 @@ test('a picker with nothing in it offers a new passkey too, not just an apology'
      create path's advice sent people, so the advice led from one dead end to
      another. */
   test.setTimeout(180_000);
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext(walkContextOptions({ viewport: { width: 390, height: 844 } }));
   const stranded = await context.newPage();
   await installNetworkBoundary(stranded);
   const authenticator = await installVirtualAuthenticator(context, stranded);
@@ -1407,7 +1413,14 @@ test('a picker with nothing in it offers a new passkey too, not just an apology'
   }
 });
 
-test('a passkey that is still there is signed in to, never created over', async ({ browser }) => {
+test('a passkey that is still there is signed in to, never created over', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'the authenticator is built by hand through CDP so this walk can hold it across a sign-out, which no other engine lets Playwright do. The exclusion behaviour it proves is exercised on every engine by the stand-in in e2e/webauthnStub.ts, which raises the same InvalidStateError.',
+  );
   /* THE GUARD, DRIVEN THROUGH THE NEW BUTTON. The way out above enrols
      deliberately — so the question it raises is what happens when the user
      presses it and the passkey was there all along. The answer must be that
@@ -1426,7 +1439,7 @@ test('a passkey that is still there is signed in to, never created over', async 
      Chrome 140, does not turn it back on, so an authenticator crippled that
      way could not perform the enrolment this test is about. */
   test.setTimeout(240_000);
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext(walkContextOptions({ viewport: { width: 390, height: 844 } }));
   const held = await context.newPage();
   await installNetworkBoundary(held);
 
@@ -1566,7 +1579,7 @@ test('a claim whose passkey will not answer offers a retry, a way out, and a way
   browser,
 }) => {
   test.setTimeout(300_000);
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext(walkContextOptions({ viewport: { width: 390, height: 844 } }));
   const stalled = await context.newPage();
   await installNetworkBoundary(stalled);
   const authenticator = await installVirtualAuthenticator(context, stalled);
