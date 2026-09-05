@@ -1,0 +1,10 @@
+// P4 probe D: point coordinate accessors at language level.
+pragma language_version 0.26;
+import CompactStandardLibrary;
+
+export circuit x_of(p: Secp256k1Point): Secp256k1Base {
+  return secp256k1PointX(p);
+}
+export circuit y_of(p: Secp256k1Point): Secp256k1Base {
+  return secp256k1PointY(p);
+}

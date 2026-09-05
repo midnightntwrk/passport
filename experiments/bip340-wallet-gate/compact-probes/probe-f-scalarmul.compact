@@ -1,0 +1,7 @@
+// P4 probe F: language-level scalar multiplication candidates.
+pragma language_version 0.26;
+import CompactStandardLibrary;
+
+export circuit smul(s: Secp256k1Scalar, p: Secp256k1Point): Secp256k1Point {
+  return secp256k1ScalarMul(s, p);
+}

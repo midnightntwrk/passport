@@ -1,0 +1,58 @@
+# BIP-340 wallet-gate feasibility experiment.
+#
+# midnight-zk crates are pinned to the same upstream revision as
+# experiments/p256-in-circuit (the house pin). The `[patch.crates-io]`
+# section redirects the registry versions requested by midnight-zk-stdlib
+# to the same git revision, so exactly one copy of each midnight crate is
+# compiled and all types unify.
+
+[workspace]
+resolver = "2"
+members = ["crates/bip340-gate-circuit", "bin/bip340-gate-measure"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# Midnight proof system, pinned. midnight-zk-stdlib is consumed directly as a
+# git dependency; the others resolve via the crates-io patch below.
+midnight-zk-stdlib = { git = "https://github.com/midnightntwrk/midnight-zk", rev = "cd2c27b2659de157409a9b96dba0dbaf1218f00b" }
+midnight-circuits = { version = "7" }
+midnight-curves = { version = "0.3" }
+midnight-proofs = { version = "0.8", default-features = false }
+
+# Upstream-aligned crypto/utility crates.
+group = "0.13"
+ff = "0.13"
+rand = "0.8"
+blake2b_simd = "1"
+
+# RustCrypto stack for out-of-circuit verification. Same k256 0.13 line as
+# midnight-curves (its k256 module wraps these exact types), so field and
+# point types unify. The `schnorr` feature is the BIP-340 implementation the
+# wallet stack signs with (via midnight-base-crypto).
+k256 = { version = "0.13", features = ["schnorr"] }
+sha2 = "0.10"
+
+# Encoding and CLI plumbing.
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+
+# Local crates.
+bip340-gate-circuit = { path = "crates/bip340-gate-circuit" }
+
+[patch.crates-io]
+midnight-circuits = { git = "https://github.com/midnightntwrk/midnight-zk", rev = "cd2c27b2659de157409a9b96dba0dbaf1218f00b" }
+midnight-curves = { git = "https://github.com/midnightntwrk/midnight-zk", rev = "cd2c27b2659de157409a9b96dba0dbaf1218f00b" }
+# sha3-circuit (a mandatory dependency of midnight-zk-stdlib) consumes
+# midnight-proofs via `branch = "main"` of the same repository, and cargo
+# forbids patching a git source with itself at a fixed rev. Unify on the
+# `branch = "main"` source instead: the committed Cargo.lock pins it to the
+# same revision, cd2c27b2659de157409a9b96dba0dbaf1218f00b. Do not run
+# `cargo update` without re-checking the locked revision.
+midnight-proofs = { git = "https://github.com/midnightntwrk/midnight-zk", branch = "main" }

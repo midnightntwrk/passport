@@ -1,0 +1,12 @@
+// P4 probe A: baseline. The native ECDSA verify exists (mirrors the
+// artefact-only leftover experiments/secp256k1-in-compact).
+pragma language_version 0.26;
+import CompactStandardLibrary;
+
+export circuit check(
+  msg_hash: Bytes<32>,
+  sig: Secp256k1EcdsaSignature,
+  pk: Secp256k1Point
+): [] {
+  secp256k1EcdsaVerify(msg_hash, sig, pk);
+}

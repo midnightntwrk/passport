@@ -1,0 +1,19 @@
+[package]
+name = "bip340-gate-circuit"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+midnight-zk-stdlib = { workspace = true }
+midnight-circuits = { workspace = true }
+midnight-curves = { workspace = true }
+midnight-proofs = { workspace = true }
+group = { workspace = true }
+ff = { workspace = true }
+k256 = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+rand = { workspace = true }
+hex = { workspace = true }
