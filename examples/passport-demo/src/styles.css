@@ -10,7 +10,14 @@ button, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .42; }
 button:focus-visible, input:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
-.passport-experience { min-height: 100vh; background: #050505; }
+/* `svh`, matching every screen this wraps (`home.css`, `apps.css`,
+   `assets.css`, `onboarding.css`, `identity.css` are all `100svh`). It was
+   `100vh`, which on iOS is the viewport with the address bar COLLAPSED — so
+   the root was 60–90px taller than the tallest thing in it, every screen
+   scrolled when it looked like it fitted, and the fixed bottom nav appeared to
+   drift as the address bar came and went. Root and children must agree, and
+   `svh` is the one that never exceeds what is on screen. */
+.passport-experience { min-height: 100svh; background: #050505; }
 .modal-heading { display: flex; align-items: center; }
 .icon-button { width: 36px; height: 36px; display: inline-grid; flex: 0 0 auto; place-items: center; border: 1px solid #bcbcb7; border-radius: 0; color: #161616; background: transparent; }
 .icon-button:hover:not(:disabled) { border-color: #0b0b0b; background: #e1e1de; }

@@ -810,14 +810,24 @@ button.mnhome-support { font-family: inherit; cursor: pointer; }
   color: var(--mn-text-primary);
   background: var(--mn-surface-page);
   font-family: var(--mn-font-body);
-  font-size: 15px;
+  /* 16px IS THE FLOOR, and it is not a typographic preference — it is the
+     threshold below which iOS Safari zooms the whole viewport on focus and
+     never zooms it back out. The Send sheet had three fields under it (asset,
+     recipient, amount), so tapping any of them left the reader zoomed into a
+     page they then had to pinch their way out of, mid-payment. The same rule
+     is written down at `apps.css` for the same reason. Do not shrink this. */
+  font-size: 16px;
   font-variant-numeric: var(--mn-numeric);
   line-height: 1.4;
   resize: none;
 }
 .mnhome-send-input-mono {
   font-family: var(--mn-font-mono);
-  font-size: 12.5px;
+  /* The address field, and the worst offender: 12.5px zoomed the page hardest
+     and it is the field a reader is most likely to focus. A monospace address
+     at 16px wraps to more lines, which is a cost worth paying — `overflow-wrap`
+     below already expects wrapping, and the alternative is a zoomed viewport. */
+  font-size: 16px;
   letter-spacing: -.01em;
   overflow-wrap: anywhere;
 }
