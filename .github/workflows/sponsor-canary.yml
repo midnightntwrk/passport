@@ -1,0 +1,51 @@
+# .github/workflows/sponsor-canary.yml — external watch on the stagenet sponsor.
+# Runs from GitHub's network every 5 minutes, so it still fires when the droplet
+# itself is the thing that is wrong. Opens or updates one issue while unhealthy,
+# and posts to Slack when SPONSOR_ALERT_WEBHOOK is set.
+name: sponsor-canary
+on:
+  schedule: [{ cron: '*/5 * * * *' }]
+  workflow_dispatch:
+permissions: { issues: write }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe /status
+        id: probe
+        shell: bash
+        run: |
+          set -o pipefail
+          S=$(curl -sS --max-time 20 https://67-205-177-162.sslip.io/balancer/status) || { echo "reason=status unreachable" >> $GITHUB_OUTPUT; exit 1; }
+          echo "$S" | python3 - <<'PY'
+          import json,sys,os
+          d=json.load(sys.stdin); bad=[]
+          if not d.get('synced'): bad.append('not synced')
+          if d.get('nodeSocket') not in (None,'connected'): bad.append(f"node socket {d.get('nodeSocket')}")
+          if (d.get('consecutiveSocketFailures') or 0) >= 3: bad.append(f"{d['consecutiveSocketFailures']} socket failures in a row")
+          if d.get('aliasSponsorship')!='available' or d.get('accountFunding')!='available': bad.append('sponsorship not available')
+          if float(d.get('balanceNight',0)) < 500: bad.append(f"NIGHT low: {d.get('balanceNight')}")
+          if int(d.get('dustSpecks',0)) < 5*10**18: bad.append('DUST low')
+          if d.get('proving')!='server': bad.append(f"proving {d.get('proving')}")
+          open(os.environ['GITHUB_OUTPUT'],'a').write('reason='+('; '.join(bad))+'\n')
+          sys.exit(1 if bad else 0)
+          PY
+      - name: Prover health
+        if: always()
+        run: curl -sS --max-time 20 -o /dev/null -w 'prover %{http_code}\n' https://67-205-177-162.sslip.io/prover/health | grep -q 'prover 200'
+      - name: Alert
+        if: failure()
+        env: { WEBHOOK: ${{ secrets.SPONSOR_ALERT_WEBHOOK }}, GH_TOKEN: ${{ github.token }} }
+        shell: bash
+        run: |
+          R="${{ steps.probe.outputs.reason }}"; R="${R:-prover unhealthy}"
+          MSG="Passport sponsor UNHEALTHY: $R — https://67-205-177-162.sslip.io/balancer/status"
+          [ -n "$WEBHOOK" ] && curl -sS -X POST -H 'content-type: application/json' -d "{\"text\":\"$MSG\"}" "$WEBHOOK" || true
+          N=$(gh issue list --label sponsor-canary --state open --json number -q '.[0].number' -R ${{ github.repository }})
+          if [ -z "$N" ]; then gh issue create -R ${{ github.repository }} -l sponsor-canary -t "Sponsor unhealthy: $R" -b "$MSG"; else gh issue comment "$N" -R ${{ github.repository }} -b "$MSG"; fi
+      - name: Recover
+        if: success()
+        env: { GH_TOKEN: ${{ github.token }} }
+        run: |
+          N=$(gh issue list --label sponsor-canary --state open --json number -q '.[0].number' -R ${{ github.repository }})
+          [ -n "$N" ] && gh issue close "$N" -R ${{ github.repository }} -c "Sponsor healthy again." || true
