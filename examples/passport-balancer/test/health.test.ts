@@ -19,6 +19,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import type { ChainHeadProbe, ChainHeadReading } from '../src/chainHead.js';
 import {
   DEFAULT_HEALTH_POLICY,
   DEFAULT_REMEDY_POLICY,
@@ -26,6 +27,7 @@ import {
   assessHealth,
   chooseRemedy,
   startHealthLoop,
+  type ChainHeadFacts,
   type HealthAssessment,
   type HealthFacts,
   type HealthProbeReading,
@@ -610,7 +612,13 @@ describe('the remedy ladder', () => {
  * below ever run, so the ordering under test is the test's and not the event
  * loop's.
  */
-function harness(readings: HealthProbeReading[]) {
+function harness(
+  readings: HealthProbeReading[],
+  /* The second opinion, built against the harness's own clock so a test can
+     move the chain and the wallet independently — which is the one thing the
+     fast stall rule is about. `undefined` is the pre-2026/09/06 loop. */
+  makeHead?: (now: () => number) => ChainHeadProbe,
+) {
   let clock = T0;
   let record: HealthRecord = { ...EMPTY_HEALTH_RECORD };
   const calls: HealthRemedy[] = [];
@@ -622,6 +630,7 @@ function harness(readings: HealthProbeReading[]) {
     log: () => undefined,
     warn: () => undefined,
     probe: async () => readings[Math.min(index++, readings.length - 1)]!,
+    ...(makeHead ? { chainHead: makeHead(() => clock) } : {}),
     store: {
       read: () => record,
       write: async (next) => {
@@ -1087,6 +1096,306 @@ describe('the remedy for a dead submission socket', () => {
     /* And a socket that comes back is simply healthy again. */
     h.advance(MINUTE);
     assert.equal((await h.monitor.tick())?.verdict, 'healthy');
+    h.monitor.stop();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The second opinion: a head that moves while the wallet does not            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The public node's head as the classifier sees it, healthy by default: read
+ * this instant, no failures against it, and level with where it stood when this
+ * wallet last moved. Every case below is this minus exactly one thing.
+ *
+ * `342,015` is the height stagenet actually reported on 2026/09/06 — `0x537ff`
+ * — so the numbers in these assertions are the scale of the real chain rather
+ * than a convenient small integer.
+ */
+const head = (overrides: Partial<ChainHeadFacts> = {}): ChainHeadFacts => ({
+  height: 342_015,
+  at: T0,
+  ageMs: 0,
+  probeFailures: 0,
+  advancedSinceStateChange: 0,
+  ...overrides,
+});
+
+/** Fifty blocks: five minutes of a six-second chain. */
+const FIVE_MINUTES_OF_BLOCKS = 50;
+
+describe('the stall verdict with a second opinion', () => {
+  it('calls a still wallet cut off after FIVE minutes when the head has moved', () => {
+    /* The 2026/09/05 fault, an hour and a half earlier than it was found. The
+       wallet reads perfectly: synced, connected, three DUST UTxOs, nothing in
+       flight. The only thing wrong with it is that fifty blocks were produced
+       while it learned nothing, and that is a fact it could not have on its
+       own. */
+    const verdict = assessHealth(
+      healthy({
+        lastStateChangeAt: T0 - 5 * MINUTE,
+        chainHead: head({ advancedSinceStateChange: FIVE_MINUTES_OF_BLOCKS }),
+      }),
+    );
+    assert.equal(verdict.verdict, 'degraded');
+    assert.equal(verdict.act, true);
+    assert.match(verdict.reason, /head has climbed 50 block\(s\) to 342015/);
+    assert.match(verdict.reason, /the chain is not quiet, this wallet is cut off/);
+    assert.equal(verdict.socketFault, undefined, 'the socket here is answering');
+    assert.equal(
+      verdict.restartEligible,
+      false,
+      'a connection is repaired by remaking it, not by a chain walk',
+    );
+  });
+
+  it('takes the cheap rung for it — a refresh, which now rebuilds the socket too', () => {
+    const facts = healthy({
+      lastStateChangeAt: T0 - 5 * MINUTE,
+      chainHead: head({ advancedSinceStateChange: FIVE_MINUTES_OF_BLOCKS }),
+    });
+    const choice = chooseRemedy(assessHealth(facts), facts, {
+      lastRewarmAt: null,
+      lastResyncDustAt: null,
+      record: { ...EMPTY_HEALTH_RECORD },
+    });
+    assert.equal(choice.remedy, 'refresh');
+  });
+
+  it('says nothing at four minutes, however fast the head is climbing', () => {
+    /* The threshold is a threshold. A wallet whose indices went quiet a moment
+       ago is not yet evidence of anything, and the remedy would land on top of
+       whatever it was doing. */
+    const verdict = assessHealth(
+      healthy({
+        lastStateChangeAt: T0 - 4 * MINUTE,
+        chainHead: head({ advancedSinceStateChange: 400 }),
+      }),
+    );
+    assert.equal(verdict.verdict, 'healthy');
+  });
+
+  it('needs the head to be CLEARLY moving, not merely to have moved', () => {
+    /* Thirty-nine blocks in ten minutes is a chain that is barely producing,
+       and a barely-producing chain is exactly the case the fast rule must not
+       claim to have diagnosed. It falls through to the old patience. */
+    const verdict = assessHealth(
+      healthy({
+        lastStateChangeAt: T0 - 10 * MINUTE,
+        chainHead: head({ advancedSinceStateChange: 39 }),
+      }),
+    );
+    assert.equal(verdict.verdict, 'healthy');
+  });
+
+  it('leaves a busy wallet alone, whatever the chain is doing', () => {
+    /* The asymmetry this whole module is built on: acting on a wallet somebody
+       is spending from is worse than any diagnosis is worth. A claim, a queued
+       job, and a wallet catching up with its own submission each answer before
+       any of this is reached. */
+    const chain = head({ advancedSinceStateChange: 500 });
+    const still = { lastStateChangeAt: T0 - 60 * MINUTE, chainHead: chain };
+
+    const claimed = assessHealth(healthy({ ...still, reserved: true }));
+    assert.equal(claimed.verdict, 'busy');
+    assert.equal(claimed.act, false);
+
+    const queued = assessHealth(healthy({ ...still, busy: true }));
+    assert.equal(queued.verdict, 'busy');
+    assert.equal(queued.act, false);
+
+    const ahead = assessHealth(
+      healthy({ ...still, syncAhead: 'unshielded applied 9549 > highest 9521' }),
+    );
+    assert.equal(ahead.verdict, 'settling');
+    assert.equal(ahead.act, false);
+  });
+
+  it('still names the socket when a cut-off wallet has one that is not answering', () => {
+    /* The correction of 2026/09/05 is not lost to the new branch: a stalled
+       wallet is exactly the reading that should make this service suspect the
+       connection it submits on, and the count alone misses a socket nothing has
+       been submitted through. */
+    const facts = healthy({
+      lastStateChangeAt: T0 - 5 * MINUTE,
+      nodeSocket: 'dead',
+      chainHead: head({ advancedSinceStateChange: FIVE_MINUTES_OF_BLOCKS }),
+    });
+    const verdict = assessHealth(facts);
+    assert.equal(verdict.verdict, 'degraded');
+    assert.equal(verdict.socketFault, true);
+    assert.match(verdict.reason, /the submission socket reads dead/);
+    const choice = chooseRemedy(verdict, facts, {
+      lastRewarmAt: null,
+      lastResyncDustAt: null,
+      record: { ...EMPTY_HEALTH_RECORD },
+    });
+    assert.equal(choice.remedy, 'reconnect', 'a dead socket is rebuilt, not re-read');
+  });
+});
+
+describe('the stall verdict without a second opinion', () => {
+  it('waits the old half hour when the head is standing still too', () => {
+    /* A genuinely quiet chain. The wallet has learned nothing because there was
+       nothing to learn, and the fast rule must not fire on it — this is the
+       case the thirty minutes existed to protect, and it still does. */
+    for (const minutes of [5, 10, 20, 29]) {
+      const verdict = assessHealth(
+        healthy({ lastStateChangeAt: T0 - minutes * MINUTE, chainHead: head() }),
+      );
+      assert.equal(verdict.verdict, 'healthy', `fired at ${minutes} min on a quiet chain`);
+    }
+    const late = assessHealth(
+      healthy({ lastStateChangeAt: T0 - 31 * MINUTE, chainHead: head() }),
+    );
+    assert.equal(late.verdict, 'degraded');
+    assert.match(late.reason, /sync indices have not moved in 31 min/);
+  });
+
+  it('falls back to the old rule while the head probe is failing', () => {
+    /* A probe that cannot reach the public node says nothing whatever about
+       this wallet, so the correct response to losing the second opinion is to
+       go back to the first one — never to conclude something from the loss.
+       The height carried here is deliberately a stale one that WOULD trip the
+       fast rule if it were believed. */
+    const cutOff = head({ advancedSinceStateChange: 400, probeFailures: 1 });
+    assert.equal(
+      assessHealth(healthy({ lastStateChangeAt: T0 - 10 * MINUTE, chainHead: cutOff })).verdict,
+      'healthy',
+    );
+    const late = assessHealth(
+      healthy({ lastStateChangeAt: T0 - 40 * MINUTE, chainHead: cutOff }),
+    );
+    assert.equal(late.verdict, 'degraded');
+    assert.match(late.reason, /sync indices have not moved in 40 min/, 'the old wording, and the old clock');
+  });
+
+  it('falls back to the old rule on a reading that has gone stale', () => {
+    const old = head({
+      advancedSinceStateChange: 400,
+      ageMs: DEFAULT_HEALTH_POLICY.chainHeadMaxAgeMs + 1,
+    });
+    assert.equal(
+      assessHealth(healthy({ lastStateChangeAt: T0 - 10 * MINUTE, chainHead: old })).verdict,
+      'healthy',
+    );
+  });
+
+  it('behaves exactly as it did when there is no probe at all', () => {
+    /* Every existing case in this file runs without a `chainHead`, and this
+       says in one place what that absence means: no observation, not an
+       observation of nothing. */
+    assert.equal(assessHealth(healthy({ lastStateChangeAt: T0 - 10 * MINUTE })).verdict, 'healthy');
+    assert.equal(assessHealth(healthy({ lastStateChangeAt: T0 - 31 * MINUTE })).verdict, 'degraded');
+  });
+});
+
+/**
+ * A head probe under the test's control: it answers whatever the script says
+ * for the current clock, and reports a failure as the real one does — by
+ * counting it and keeping the last good height, never by throwing.
+ */
+function fakeHead(now: () => number, script: { height: () => number | null }): ChainHeadProbe {
+  const state: ChainHeadReading = {
+    height: null,
+    at: null,
+    probeFailures: 0,
+    probes: 0,
+    failures: 0,
+    lastError: null,
+  };
+  return {
+    url: 'https://rpc.stagenet.shielded.tools',
+    reading: () => ({ ...state }),
+    read: async () => {
+      state.probes += 1;
+      const height = script.height();
+      if (height === null) {
+        state.failures += 1;
+        state.probeFailures += 1;
+        state.lastError = 'fetch failed';
+      } else {
+        state.height = height;
+        state.at = now();
+        state.probeFailures = 0;
+        state.lastError = null;
+      }
+      return { ...state };
+    },
+  };
+}
+
+describe('the loop with a second opinion', () => {
+  it('acts at five minutes on a wallet the chain has left behind', async () => {
+    /* Ten blocks a minute, which is stagenet, against a fingerprint that never
+       changes — the shape of 2026/09/05 with the clock the fix gives it. */
+    const h = harness([reading({ fingerprint: 'frozen' })], (now) =>
+      fakeHead(now, { height: () => 342_015 + Math.floor((now() - T0) / MINUTE) * 10 }),
+    );
+
+    /* Tick one stamps the head against the wallet's position and finds nothing
+       wrong: no blocks have been produced since this process started looking. */
+    assert.equal((await h.monitor.tick())?.verdict, 'healthy');
+    assert.deepEqual(h.calls, []);
+    assert.equal(h.monitor.snapshot().chainHead?.height, 342_015);
+    assert.equal(h.monitor.snapshot().chainHead?.advancedSinceStateChange, 0);
+    assert.equal(h.monitor.snapshot().chainHeadProbe, 'ok');
+
+    /* Four minutes on, forty blocks: below the window, so nothing happens. */
+    h.advance(4 * MINUTE);
+    assert.equal((await h.monitor.tick())?.verdict, 'healthy');
+    assert.deepEqual(h.calls, []);
+
+    /* Five minutes, fifty blocks, and the wallet has not moved once. */
+    h.advance(MINUTE);
+    const verdict = await h.monitor.tick();
+    assert.equal(verdict?.verdict, 'degraded');
+    assert.match(verdict!.reason, /head has climbed 50 block\(s\)/);
+    assert.deepEqual(h.calls, ['refresh'], 'the cheap rung, which now rebuilds the socket too');
+
+    const published = h.monitor.snapshot();
+    assert.equal(published.chainHead?.height, 342_065);
+    assert.equal(published.chainHead?.advancedSinceStateChange, 50);
+    assert.equal(published.chainHead?.url, 'https://rpc.stagenet.shielded.tools');
+    assert.equal(published.chainHead?.ageMs, 0, 'read on this very tick');
+    h.monitor.stop();
+  });
+
+  it('re-stamps the head every time the wallet moves, so a working wallet never trips', () => {
+    /* Proved as a property of the fact rather than through the loop, because it
+       is the fact that carries it: `advancedSinceStateChange` is measured from
+       the head as it stood when the indices last moved, so a wallet that keeps
+       up resets the count every tick and can never accumulate a window. */
+    const keepingUp = assessHealth(
+      healthy({ lastStateChangeAt: T0, chainHead: head({ advancedSinceStateChange: 0 }) }),
+    );
+    assert.equal(keepingUp.verdict, 'healthy');
+  });
+
+  it('publishes a failing probe on /status and does nothing whatever about it', async () => {
+    const h = harness([reading({ fingerprint: 'frozen' })], (now) =>
+      fakeHead(now, { height: () => null }),
+    );
+    for (let n = 0; n < 10; n += 1) {
+      assert.equal((await h.monitor.tick())?.verdict, 'healthy');
+      h.advance(MINUTE);
+    }
+    const published = h.monitor.snapshot();
+    assert.equal(published.chainHeadProbe, 'failing');
+    assert.equal(published.chainHead?.probeFailures, 10);
+    assert.equal(published.chainHead?.failures, 10);
+    assert.equal(published.chainHead?.height, null);
+    assert.equal(published.chainHead?.lastError, 'fetch failed');
+    assert.deepEqual(h.calls, [], 'a public node that will not answer is not a fault in this wallet');
+    h.monitor.stop();
+  });
+
+  it('publishes nothing about a chain it was not given a probe for', async () => {
+    const h = harness([reading({})]);
+    await h.monitor.tick();
+    assert.equal(h.monitor.snapshot().chainHead, null);
+    assert.equal(h.monitor.snapshot().chainHeadProbe, 'off');
     h.monitor.stop();
   });
 });

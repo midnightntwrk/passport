@@ -50,6 +50,24 @@
  * `wedged` here is the narrower thing this process CAN see: a facade that has
  * stopped answering while the HTTP server still does.
  *
+ * THE SIXTH FAILURE, AND WHY IT NEEDED SOMEBODY ELSE TO SEE IT
+ * ------------------------------------------------------------
+ * Every fact above is read from the wallet, and there is one question a wallet
+ * cannot answer about itself: has the chain gone quiet, or have I stopped being
+ * told about it? Both read as sync indices that do not move. That is why
+ * `stallMs` waits half an hour — it has to outlast the longest quiet spell a
+ * healthy stagenet can have — and it is why on 2026/09/05, with the node
+ * websocket dead since about 14:48, the first word of trouble was at 15:28.
+ *
+ * `./chainHead.ts` asks the public node for its head over its own HTTPS
+ * request, sharing no socket and no subscription with anything under test.
+ * Blocks produced while this wallet learned nothing is a figure neither
+ * explanation survives: forty of them in five minutes and the chain is
+ * demonstrably not quiet. So there are now two staleness rules — a five-minute
+ * one when the second opinion is available, and the old thirty-minute one when
+ * it is not. Losing the probe loses the speed and nothing else; no verdict is
+ * ever reached BECAUSE the public node would not answer.
+ *
  * WHAT THE REMEDIES ACTUALLY CALL, AND WHAT THE SDK WILL NOT LET US DO
  * -------------------------------------------------------------------
  * Three rungs, cheapest first, each rate-limited:
@@ -111,6 +129,7 @@
 
 import type { NodeSocketState } from './submission.js';
 import type { ProvingState } from './availability.js';
+import type { ChainHeadProbe, ChainHeadReading } from './chainHead.js';
 
 /* -------------------------------------------------------------------------- */
 /* The verdict                                                                */
@@ -260,6 +279,48 @@ export interface HealthFacts {
   consecutiveRebuildFailures: number;
   /** Unhealthy ticks BEFORE this one, so the first bad tick sees zero. */
   consecutiveUnhealthy: number;
+  /**
+   * The PUBLIC node's head, asked over its own HTTPS connection — the second
+   * opinion, and `undefined` when there is not one.
+   *
+   * See {@link ChainHeadFacts}. Absent means exactly one thing: no independent
+   * observation is available this tick, so the classifier falls back to the old
+   * thirty-minute patience. It never means the chain has stopped.
+   */
+  chainHead?: ChainHeadFacts;
+}
+
+/**
+ * What an independent look at the chain says, reduced to the four numbers the
+ * verdict is allowed to reason about.
+ *
+ * The point of every field here is to keep the classifier from believing a
+ * reading it should not: a head that was read four minutes ago says nothing
+ * about now, and a head carried forward across failed probes says nothing at
+ * all. So the height travels with its age and with the failure count that
+ * earned that age, and the branch that uses it insists on both.
+ */
+export interface ChainHeadFacts {
+  /** The head height as last successfully read. */
+  height: number;
+  /** When that read happened, in epoch milliseconds. */
+  at: number;
+  /** How stale the reading is: `now - at`. */
+  ageMs: number;
+  /** Head probes that have failed since the last one that did not. */
+  probeFailures: number;
+  /**
+   * How far the head has climbed since the wallet's own indices last moved —
+   * the head at `now` minus the head recorded at `lastStateChangeAt`.
+   *
+   * THIS IS THE WHOLE MEASUREMENT. `lastStateChangeAt` alone cannot separate a
+   * quiet chain from a cut-off wallet, because both look like indices standing
+   * still. This number is the chain's own answer to that question, taken from a
+   * connection the wallet does not share: blocks that were produced while this
+   * wallet learned nothing. Zero on the tick the indices last moved, and on
+   * every tick before the first successful head read.
+   */
+  advancedSinceStateChange: number;
 }
 
 export interface HealthAssessment {
@@ -304,9 +365,61 @@ export interface HealthPolicy {
   settleWindowMs: number;
   /**
    * How long the wallet's sync indices may stand still before it is reported as
-   * stale. Soft, and never on its own a reason to restart.
+   * stale WITH NOTHING ELSE TO GO ON. Soft, and never on its own a reason to
+   * restart.
+   *
+   * Half an hour, and it is the right figure for a signal with one input: a
+   * wallet watching only itself cannot tell a quiet chain from a lost one, so
+   * the threshold has to be longer than the longest quiet spell a healthy
+   * stagenet can have. That is what made 2026/09/05 a forty-minute diagnosis.
+   * {@link headStallMs} is the same question asked with a second opinion, and
+   * this stays as the fallback for when there is not one.
    */
   stallMs: number;
+  /**
+   * How long the wallet's indices may stand still when the PUBLIC head is known
+   * to be climbing — five minutes, not thirty.
+   *
+   * The shorter figure is bought entirely by the independent observation. With
+   * {@link headBlocksForStall} blocks produced in the window and nothing
+   * learned from any of them, "the chain is quiet" is not on the list of
+   * explanations any more, so the patience that existed to protect that
+   * explanation is not needed either.
+   */
+  headStallMs: number;
+  /**
+   * Blocks the public head must have climbed inside {@link headStallMs} before
+   * a still wallet is called cut off.
+   *
+   * Stagenet produces a block about every six seconds, so five minutes is
+   * roughly fifty. Forty is deliberately under that: a probe that missed a tick
+   * or two, or a node that fell briefly behind its own schedule, must not turn
+   * the fast rule off — it should only ever be the case that the head is
+   * CLEARLY moving, and forty blocks in five minutes is clearly moving.
+   */
+  headBlocksForStall: number;
+  /**
+   * How stale a head reading may be and still count as a second opinion.
+   *
+   * The reading is sticky across failed probes — see `ChainHeadReading.height`
+   * in `./chainHead.ts` — so without this an old height and a running clock
+   * would eventually read as a head that had stopped climbing, which is a
+   * conclusion this probe is not entitled to. Past this age the fast rule turns
+   * itself off and {@link stallMs} is what is left.
+   */
+  chainHeadMaxAgeMs: number;
+  /**
+   * Consecutive head-probe failures before `/status` publishes the probe as
+   * `failing`.
+   *
+   * A REPORT AND NOT A VERDICT. Nothing acts on it: a public node that will not
+   * answer this service's HTTPS requests is a fault somewhere, but it is not
+   * evidence about this wallet, and the only correct response to losing the
+   * second opinion is to go back to the first one. It is published because an
+   * operator reading a thirty-minute diagnosis is entitled to know that the
+   * five-minute one was unavailable.
+   */
+  chainHeadProbeFailuresForFailing: number;
   /** Consecutive unreadable ticks before the facade is called wedged. */
   wedgeTicks: number;
   /**
@@ -343,6 +456,10 @@ export const DEFAULT_HEALTH_POLICY: HealthPolicy = {
   startupGraceMs: 900_000,
   settleWindowMs: 300_000,
   stallMs: 1_800_000,
+  headStallMs: 300_000,
+  headBlocksForStall: 40,
+  chainHeadMaxAgeMs: 120_000,
+  chainHeadProbeFailuresForFailing: 10,
   wedgeTicks: 2,
   orphanMs: 120_000,
   socketFailuresForDegraded: 3,
@@ -591,6 +708,81 @@ export function assessHealth(
       restartEligible: true,
     };
   }
+  /* 7b. THE SAME STALENESS, ASKED WITH A SECOND OPINION — and answered in five
+         minutes instead of thirty.
+
+         The branch below is the honest limit of what a wallet can conclude
+         about itself. It waits half an hour because a wallet watching its own
+         sync indices cannot tell "nothing relevant has happened" from "I have
+         stopped being told what is happening": both are indices that do not
+         move, and half an hour is how long a quiet stagenet was judged able to
+         go without producing anything this wallet cares about.
+
+         `./chainHead.ts` removes the ambiguity by asking somebody else. The
+         public node's head climbs about ten blocks a minute whatever this
+         service is doing, over an HTTPS request that shares no socket, no
+         provider, and no subscription with anything under test. Forty blocks
+         produced while this wallet learned nothing at all is not a quiet chain;
+         it is a wallet that is no longer being told, and there is no longer any
+         reason to sit on that for another twenty-five minutes.
+
+         WHAT IS AND IS NOT REQUIRED HERE, and why:
+
+           - A head reading with `probeFailures === 0` and an age inside
+             `chainHeadMaxAgeMs`. A stale or carried-forward height is not a
+             second opinion, and one that is missing is not evidence — a probe
+             that cannot reach the public node says nothing whatever about this
+             wallet, so its failure falls THROUGH to the thirty-minute rule
+             rather than concluding anything of its own.
+           - The wallet not busy syncing. Already guaranteed rather than
+             re-checked: `reserved`, `syncAhead`, and `busy` all return above,
+             and a wallet that is merely behind but still MOVING has a
+             `lastStateChangeAt` that keeps resetting, so it can never reach
+             this window. `isSynced: false` with progress is fine, and stays
+             fine.
+
+         The remedy is `refresh`, which since 2026/09/05 also rebuilds the
+         submission socket when that socket is not answering — so the cheap rung
+         is now the one that repairs the connection this verdict most often
+         means. `restartEligible` stays false for the same reason it is false
+         below: the fault this catches is a connection, and a connection is
+         repaired by remaking it, not by a chain walk.
+
+         THE RESIDUAL FALSE POSITIVE, NAMED. The shielded and DUST applied
+         indices follow chain-wide ledger activity rather than this wallet's own
+         transactions, so a stagenet with blocks but genuinely no shielded or
+         DUST traffic for five minutes could in principle reach this branch on a
+         perfectly well wallet. That is tolerated deliberately: what it costs is
+         one log line and a re-read of a wallet that is fine, and — because the
+         verdict is not `healthy` — a pause on the resolver-pool filler until
+         the indices move again. What it buys is a five-minute diagnosis of the
+         fault that cost four and a half hours of sponsorships. Nothing on this
+         branch restarts anything. */
+  const head = facts.chainHead;
+  const stillFor = facts.now - facts.lastStateChangeAt;
+  if (
+    head !== undefined &&
+    head.probeFailures === 0 &&
+    head.ageMs <= policy.chainHeadMaxAgeMs &&
+    stillFor >= policy.headStallMs &&
+    head.advancedSinceStateChange >= policy.headBlocksForStall
+  ) {
+    /* Read for the same reason it is read below: a stalled wallet is exactly
+       the state in which the submission socket deserves to be suspected, and
+       the count alone misses a socket nothing has been submitted on. */
+    const socketSuspect = facts.nodeSocket !== 'connected' || facts.consecutiveSocketFailures > 0;
+    return {
+      verdict: 'degraded',
+      reason: socketSuspect
+        ? `the public node’s head has climbed ${head.advancedSinceStateChange} block(s) to ${head.height} while this wallet’s sync indices have not moved in ${minutes(stillFor)}, and the submission socket reads ${facts.nodeSocket} with ${facts.consecutiveSocketFailures} failure(s) against it — the chain is not quiet, this wallet is cut off`
+        : `the public node’s head has climbed ${head.advancedSinceStateChange} block(s) to ${head.height} while this wallet’s sync indices have not moved in ${minutes(stillFor)} — the chain is not quiet, this wallet is cut off`,
+      act: true,
+      restartEligible:
+        socketSuspect && facts.consecutiveRebuildFailures >= policy.rebuildFailuresForRestart,
+      ...(socketSuspect ? { socketFault: true as const } : {}),
+    };
+  }
+
   if (facts.now - facts.lastStateChangeAt >= policy.stallMs) {
     /* THE SOCKET IS ASKED ABOUT HERE TOO, and that is the whole lesson of
        15:28 UTC on 2026/09/05. This branch fired then — `the wallet's sync
@@ -876,7 +1068,7 @@ export function chooseRemedy(
  */
 export type HealthProbeReading = Omit<
   HealthFacts,
-  'now' | 'consecutiveUnhealthy' | 'lastStateChangeAt'
+  'now' | 'consecutiveUnhealthy' | 'lastStateChangeAt' | 'chainHead'
 > & {
   /**
    * A cheap string over the facts that ought to move on a live chain — the sync
@@ -933,6 +1125,16 @@ export interface HealthRecordStore {
 export interface HealthLoopOptions {
   intervalMs: number;
   probe: HealthProbe;
+  /**
+   * The independent look at the chain — `./chainHead.ts`. Optional: without it
+   * the loop behaves exactly as it did, on `stallMs` alone.
+   *
+   * Read on the same tick as the wallet, because the two figures are only worth
+   * anything together: what the branch in `assessHealth` compares is blocks
+   * produced against indices learned, and reading them minutes apart would put
+   * a gap into the comparison that neither the chain nor the wallet put there.
+   */
+  chainHead?: ChainHeadProbe;
   remedies: HealthRemedies;
   store: HealthRecordStore;
   policy?: HealthPolicy;
@@ -966,6 +1168,46 @@ export interface HealthSnapshot {
   lastRestartRequestAt: string | null;
   lastRestartReason: string | null;
   awaitingHealthyTick: boolean;
+  /**
+   * The second opinion, as `/status` publishes it. `null` when no head probe is
+   * configured, which is the only case in which this service has nothing to say
+   * about the chain it is not on.
+   */
+  chainHead: ChainHeadSnapshot | null;
+  /**
+   * `ok` while the public node is answering, `failing` once it has refused
+   * `chainHeadProbeFailuresForFailing` times in a row, `off` when there is no
+   * probe.
+   *
+   * Reported and NEVER acted on — see the policy field's own note. `failing` is
+   * how an operator reading a thirty-minute stall diagnosis finds out that the
+   * five-minute one was not available to make it.
+   */
+  chainHeadProbe: 'ok' | 'failing' | 'off';
+}
+
+export interface ChainHeadSnapshot {
+  /** The HTTPS endpoint being asked. */
+  url: string;
+  /** The last height read, or `null` if none ever was. */
+  height: number | null;
+  /** When it was read, ISO-8601. */
+  at: string | null;
+  /** How old that reading was at the last tick. */
+  ageMs: number | null;
+  /** Head probes failed since the last one that did not. */
+  probeFailures: number;
+  /** Head probes attempted and failed, ever, this process. */
+  probes: number;
+  failures: number;
+  /** Why the last one failed. `null` after a success. */
+  lastError: string | null;
+  /**
+   * Blocks the head climbed while the wallet's indices stood still, as of the
+   * last tick. Zero on a wallet that is keeping up, which is the reading an
+   * operator should expect to see.
+   */
+  advancedSinceStateChange: number;
 }
 
 export interface HealthMonitor {
@@ -1023,6 +1265,22 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
   let lastResyncDustAt: number | null = null;
   let restartsSinceBoot = 0;
 
+  /* The second opinion's own two pieces of memory.
+
+     `lastHeadReading` is the last thing the probe said, kept so `assessNow()`
+     can answer a gate without opening a request of its own — a probe taken to
+     answer a gate must not be able to move any of this loop's bookkeeping.
+
+     `headAtStateChange` is the head as it stood the last time the WALLET moved,
+     and it is the whole comparison: subtracting it from the current head gives
+     blocks produced while this wallet learned nothing. It is re-stamped
+     whenever the fingerprint changes, and — for the first tick of a process,
+     which has no previous fingerprint to differ from — on the first successful
+     read, so a fresh process starts the count from zero rather than from
+     whatever the chain height happened to be. */
+  let lastHeadReading: ChainHeadReading | null = null;
+  let headAtStateChange: number | null = null;
+
   const snapshot: HealthSnapshot = {
     intervalMs: options.intervalMs,
     checks: 0,
@@ -1037,6 +1295,42 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
     lastRestartRequestAt: options.store.read().lastRestartRequestAt,
     lastRestartReason: options.store.read().lastRestartReason,
     awaitingHealthyTick: options.store.read().awaitingHealthyTick,
+    chainHead: options.chainHead
+      ? {
+          url: options.chainHead.url,
+          height: null,
+          at: null,
+          ageMs: null,
+          probeFailures: 0,
+          probes: 0,
+          failures: 0,
+          lastError: null,
+          advancedSinceStateChange: 0,
+        }
+      : null,
+    chainHeadProbe: options.chainHead ? 'ok' : 'off',
+  };
+
+  /**
+   * The head reading turned into the four-and-a-bit numbers the classifier is
+   * allowed to see, or `undefined` when there is nothing worth showing it.
+   *
+   * `undefined` is returned for a probe that has never succeeded — a height of
+   * `null` — because "no observation" and "an observation of nothing" must not
+   * be the same value here: the first falls back to `stallMs`, and the second
+   * would be a claim about the chain.
+   */
+  const headFactAt = (at: number): ChainHeadFacts | undefined => {
+    const reading = lastHeadReading;
+    if (reading === null || reading.height === null || reading.at === null) return undefined;
+    return {
+      height: reading.height,
+      at: reading.at,
+      ageMs: at - reading.at,
+      probeFailures: reading.probeFailures,
+      advancedSinceStateChange:
+        headAtStateChange === null ? 0 : Math.max(0, reading.height - headAtStateChange),
+    };
   };
 
   const publishRecord = (record: HealthRecord): void => {
@@ -1050,15 +1344,35 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
     if (inFlight || stopped) return null;
     inFlight = true;
     try {
+      /* The second opinion is asked FIRST, before the clock is stamped, so the
+         reading the classifier judges by age is a fresh one rather than one
+         aged by however long the wallet took to answer. It is bounded at five
+         seconds and it cannot reject — see `./chainHead.ts` — so nothing about
+         the tick below depends on the public node being reachable. */
+      if (options.chainHead) lastHeadReading = await options.chainHead.read();
+
       const at = now();
       let facts: HealthFacts;
       try {
         const reading = await options.probe();
-        if (lastFingerprint !== null && reading.fingerprint !== lastFingerprint) {
-          lastStateChangeAt = at;
-        }
+        const moved = lastFingerprint !== null && reading.fingerprint !== lastFingerprint;
+        if (moved) lastStateChangeAt = at;
         lastFingerprint = reading.fingerprint;
-        facts = { ...reading, now: at, lastStateChangeAt, consecutiveUnhealthy };
+        /* The head is re-stamped exactly when the wallet moves, which is what
+           makes `advancedSinceStateChange` mean "blocks produced while this
+           wallet learned nothing". Also stamped once on the first successful
+           read, so a fresh process counts from zero rather than from the
+           absolute height of a chain it has just joined. */
+        if (moved || headAtStateChange === null) {
+          headAtStateChange = lastHeadReading?.height ?? headAtStateChange;
+        }
+        facts = {
+          ...reading,
+          now: at,
+          lastStateChangeAt,
+          consecutiveUnhealthy,
+          chainHead: headFactAt(at),
+        };
       } catch (cause) {
         /* The probe itself is written not to throw — it reports an unreadable
            wallet as `stateReadable: false`. If it throws anyway, that IS an
@@ -1090,6 +1404,11 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
           consecutiveRebuildFailures: 0,
           lastStateChangeAt,
           consecutiveUnhealthy,
+          /* Carried even here, where it changes no verdict — the unreadable
+             branches return long before the stall ones — because `/status`
+             publishes this reading and an operator looking at a wedged facade
+             is entitled to know whether the chain under it was moving. */
+          chainHead: headFactAt(at),
         };
       }
 
@@ -1111,6 +1430,26 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
       snapshot.verdict = assessment.verdict;
       snapshot.reason = assessment.reason;
       snapshot.consecutiveUnhealthy = consecutiveUnhealthy;
+      if (options.chainHead && lastHeadReading !== null) {
+        const head = lastHeadReading;
+        snapshot.chainHead = {
+          url: options.chainHead.url,
+          height: head.height,
+          at: head.at === null ? null : new Date(head.at).toISOString(),
+          ageMs: head.at === null ? null : at - head.at,
+          probeFailures: head.probeFailures,
+          probes: head.probes,
+          failures: head.failures,
+          lastError: head.lastError,
+          advancedSinceStateChange: facts.chainHead?.advancedSinceStateChange ?? 0,
+        };
+        /* Published, not acted on. A public node that will not answer says
+           nothing about this wallet, so the only consequence of `failing` is
+           that the fast stall rule turns itself off — which is why an operator
+           needs to be able to see it beside a thirty-minute diagnosis. */
+        snapshot.chainHeadProbe =
+          head.probeFailures >= policy.chainHeadProbeFailuresForFailing ? 'failing' : 'ok';
+      }
 
       const record = options.store.read();
       if (assessment.verdict === 'healthy' && record.awaitingHealthyTick) {
@@ -1227,8 +1566,19 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
       const at = now();
       try {
         const reading = await options.probe();
+        /* The LAST head read rather than a fresh one, deliberately. This method
+           answers a gate and is documented not to touch the loop's bookkeeping;
+           opening a request here would also let a gate's cadence — which is
+           whatever the resolver-pool filler happens to be doing — drive how
+           often the public node is asked. */
         return assessHealth(
-          { ...reading, now: at, lastStateChangeAt, consecutiveUnhealthy },
+          {
+            ...reading,
+            now: at,
+            lastStateChangeAt,
+            consecutiveUnhealthy,
+            chainHead: headFactAt(at),
+          },
           policy,
         );
       } catch {
@@ -1257,6 +1607,7 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
             consecutiveRebuildFailures: 0,
             lastStateChangeAt,
             consecutiveUnhealthy,
+            chainHead: headFactAt(at),
           },
           policy,
         );

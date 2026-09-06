@@ -133,6 +133,7 @@ import {
   type AccountFunder,
 } from './account.js';
 import { walletAvailability } from './availability.js';
+import { createChainHeadProbe, type ChainHeadProbe } from './chainHead.js';
 import { ASSET_SYMBOL, applyEnvFile, loadConfig, type BalancerConfig } from './config.js';
 import { rawContractAddress } from './contractRuntime.js';
 import { rollbackDustSnapshot } from './dustRollback.js';
@@ -492,6 +493,16 @@ async function main(): Promise<void> {
    * `BALANCER_HEALTH_INTERVAL_MS=0` turns the in-process leg off.
    */
   let healthMonitor: HealthMonitor | null = null;
+  /**
+   * The independent look at the chain the health watchdog judges its own
+   * staleness against — one HTTPS `chain_getHeader` against the configured
+   * node, sharing nothing with the connections it is used to judge.
+   *
+   * Built unconditionally, even when the watchdog itself is switched off, so
+   * that `/status` still carries the public head beside this wallet's own
+   * figures for an operator diagnosing by hand.
+   */
+  const chainHeadProbe: ChainHeadProbe = createChainHeadProbe({ nodeUrl: config.nodeUrl });
   /**
    * The shelf of pre-deployed resolver leaves and the filler that stocks it.
    * `null` when there is no sponsor to deploy through or the target is zero.
@@ -945,6 +956,33 @@ async function main(): Promise<void> {
     };
   };
 
+  /**
+   * How far apart the public head and this wallet's own "highest" figure may be
+   * before `appliedBehindHeadBlocks` refuses to subtract one from the other.
+   *
+   * WHAT THE TWO NUMBERS ACTUALLY ARE, MEASURED RATHER THAN ASSUMED. The public
+   * head is a BLOCK height: `chain_getHeader` on stagenet answered `0x537ff` —
+   * 342,015 — on 2026/09/06. The wallet's `unshielded.highest` is
+   * `highestTransactionId`, a count of transactions relevant to this address
+   * and not a block at all; the live reading on 2026/09/02 was 9,549, and
+   * `progressOf` in `./wallet.ts` says so in as many words. The shielded and
+   * DUST legs are worse candidates still: their `highest` is a ledger merkle
+   * index, and the stagenet indexer (4.4.0-pre-alpha.16) reports it as 0.
+   *
+   * So on stagenet there is no wallet figure that is a block height, and
+   * subtracting one of these from the other would publish "332,466 blocks
+   * behind" about a wallet that is perfectly synced. The lag is therefore
+   * published only where the two figures are close enough that they could
+   * plausibly be counting the same thing — which is the case on a network whose
+   * indexer reports real heights, and is not the case on stagenet today, where
+   * the field is `null` and `appliedBehindHeadNote` says why.
+   *
+   * The staleness verdict does NOT depend on any of this: it compares the head
+   * against ITSELF over time — see `advancedSinceStateChange` in `./health.ts`
+   * — which needs no shared unit with the wallet at all.
+   */
+  const HEAD_LAG_SANITY_BLOCKS = 100_000;
+
   /** `GET /status` — the funder's human answer, for an operator and a monitor. */
   const status = async (): Promise<Record<string, unknown>> => {
     let night = 0n;
@@ -972,6 +1010,27 @@ async function main(): Promise<void> {
        wallet nor the indexer — so it is still true on a status the try above
        could not fill in. */
     const socketHealth = wallet.socketHealth();
+    /* The last thing the head probe read — not a fresh request. `/status` is
+       polled by monitors and by the droplet watchdog, and a public RPC call per
+       poll would be this service's own traffic on somebody else's node. The
+       health tick refreshes it on its own interval. */
+    const headReading = chainHeadProbe.reading();
+    const headSnapshot = healthMonitor?.snapshot().chainHead ?? null;
+    /* See `HEAD_LAG_SANITY_BLOCKS`: published only when the two figures could
+       be counting the same thing, and explained rather than fudged when they
+       cannot. */
+    const walletHighest = progress === null ? Number.NaN : Number(progress.unshielded.highest);
+    let appliedBehindHeadBlocks: number | null = null;
+    let appliedBehindHeadNote: string | null = null;
+    if (headReading.height === null) {
+      appliedBehindHeadNote = 'the public node’s head has not been read yet';
+    } else if (!Number.isFinite(walletHighest) || walletHighest <= 0) {
+      appliedBehindHeadNote = 'this wallet reports no height of its own to compare';
+    } else if (Math.abs(headReading.height - walletHighest) > HEAD_LAG_SANITY_BLOCKS) {
+      appliedBehindHeadNote = `not comparable: the wallet’s unshielded highest is ${walletHighest}, which is a transaction count rather than a block, against a head of ${headReading.height}`;
+    } else {
+      appliedBehindHeadBlocks = headReading.height - walletHighest;
+    }
     return {
       network: config.networkId,
       address: wallet.address,
@@ -1115,6 +1174,39 @@ async function main(): Promise<void> {
       consecutiveRebuildFailures: socketHealth?.consecutiveRebuildFailures ?? 0,
       nodeSocketRebuilds: socketHealth?.rebuilds ?? 0,
       lastSocketFailureAt: socketHealth?.lastSocketFailureAt ?? null,
+      /* THE SECOND OPINION. Every other figure on this endpoint is this wallet
+         describing itself, and on 2026/09/05 all of them were true and none of
+         them was the point: the wallet read well for four and a half hours
+         while nothing it submitted reached the node. This one comes from the
+         public node over its own HTTPS request and shares nothing with the
+         connections above, so it is the only line here that can contradict
+         them. `advancedWhileWalletStill` is the number the fast stall rule acts
+         on: blocks produced while this wallet's sync indices did not move. */
+      chainHead: {
+        url: chainHeadProbe.url,
+        height: headReading.height,
+        at: headReading.at === null ? null : new Date(headReading.at).toISOString(),
+        ageMs: headReading.at === null ? null : Date.now() - headReading.at,
+        probeFailures: headReading.probeFailures,
+        probes: headReading.probes,
+        failures: headReading.failures,
+        lastError: headReading.lastError,
+        advancedWhileWalletStill: headSnapshot?.advancedSinceStateChange ?? null,
+      },
+      /* Reported and never acted on: a public node that will not answer says
+         nothing about this wallet. All `failing` means is that the five-minute
+         stall rule has turned itself off and the thirty-minute one is what is
+         left — which is exactly what an operator reading a slow diagnosis needs
+         to know. */
+      chainHeadProbe:
+        headSnapshot === null
+          ? headReading.probeFailures >= DEFAULT_HEALTH_POLICY.chainHeadProbeFailuresForFailing
+            ? 'failing'
+            : 'ok'
+          : (healthMonitor?.snapshot().chainHeadProbe ?? 'ok'),
+      /* Best effort, and usually `null` on stagenet — the note says why. */
+      appliedBehindHeadBlocks,
+      appliedBehindHeadNote,
       /* The shelf of pre-deployed resolver leaves: how many are on it, what it
          is aiming at, and — when it is not filling — the one reason it is not.
          `paused` is the normal reading on a sponsor with two DUST coins, and
@@ -1222,6 +1314,13 @@ async function main(): Promise<void> {
     healthMonitor = startHealthLoop({
       intervalMs: config.healthIntervalMs,
       probe: healthProbe,
+      /* The second opinion. Without it the stall rule waits half an hour,
+         because a wallet reading only its own indices cannot tell a quiet chain
+         from a lost one — which is how the node websocket that died at 14:48
+         UTC on 2026/09/05 was not reported until 15:28. With it the same
+         staleness is called in five minutes, and a probe that cannot reach the
+         public node simply gives the old patience back. */
+      chainHead: chainHeadProbe,
       /* The floor under a wedge verdict is the sweeper's own window, so the two
          can never disagree about when a booked coin has stopped being
          explainable. */
