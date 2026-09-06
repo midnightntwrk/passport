@@ -834,7 +834,23 @@ export interface RemedyPolicy {
   /** Unhealthy ticks, this one included, before the re-warm rung is reached. */
   rewarmAfterTicks: number;
   rewarmCooldownMs: number;
-  /** Unhealthy ticks before a `degraded` cause may ask for a restart. */
+  /**
+   * Unhealthy ticks before a SOFT `degraded` cause may ask for a restart.
+   *
+   * COUNTED IN TICKS, WHICH MEANS THE CADENCE SETS IT. At the ten-minute
+   * interval this service ran until 2026/09/06 the old figure of three was
+   * thirty minutes of sustained fault before the first restart was asked for,
+   * and thirty minutes was the number that had been reasoned about — three was
+   * just how many ticks fitted in it. Dropping the interval to two minutes
+   * would have turned the same three into six minutes without anybody deciding
+   * that, so the count moves with the cadence and the wall clock stays put.
+   *
+   * The two HARD restart paths do not come through here and are deliberately
+   * left to get faster: a facade that has not answered `wedgeTicks` times runs
+   * with `ticksForRestart` of zero, and a submission socket that cannot be
+   * rebuilt escalates on `rebuildFailuresForRestart` instead. Both are proved
+   * faults with their own bounds, and both are the ones worth reaching sooner.
+   */
   restartAfterTicks: number;
   /** The hard floor between two restart requests. Persisted, not in memory. */
   restartCooldownMs: number;
@@ -850,6 +866,26 @@ export interface RemedyPolicy {
    */
   resyncDustCooldownMs: number;
   /**
+   * How long this process must have been UP before it may exit for a DUST
+   * resync again.
+   *
+   * THE COOLDOWN ABOVE CANNOT DO THIS JOB, and that is not a flaw in it. A
+   * resync ends with `process.exit(1)`; `lastResyncDustAt` is in memory, so it
+   * dies with the process it was meant to bound, and the wedge branch
+   * deliberately precedes the start-up grace — an inherited wedge lives in
+   * exactly those first minutes. A wallet still wedged after its repair
+   * therefore exits on its first tick, comes back, and exits again, and the
+   * only thing that ever set the period of that loop was the health interval.
+   * At ten minutes it was a slow, visible cycle. At two it would be a spin.
+   *
+   * So the floor is stated rather than inherited, and it is ten minutes: the
+   * cadence the deployed service has been recovering at all along, now a
+   * decision instead of a side effect. Detection is unaffected — the verdict is
+   * published on the two-minute tick as always, eight minutes before anything
+   * acts on it, which is strictly better for whoever is reading the journal.
+   */
+  resyncDustMinUptimeMs: number;
+  /**
    * The floor between two restarts requested because the SOCKET could not be
    * rebuilt, and it is five minutes rather than the general thirty.
    *
@@ -862,12 +898,43 @@ export interface RemedyPolicy {
   socketRestartCooldownMs: number;
 }
 
+/**
+ * EVERY FIGURE HERE WAS RE-CHECKED AGAINST THE TWO-MINUTE TICK on 2026/09/06,
+ * rung by rung, because a cadence change silently retunes anything counted in
+ * ticks and anything whose cooldown is shorter than the interval:
+ *
+ *   `refresh`     — no cooldown, and none wanted. One replayed state read, plus
+ *                   a socket rebuild only when the socket reads down. Firing
+ *                   every two minutes instead of every ten is cheap and is the
+ *                   repair arriving sooner.
+ *   `reconnect`   — no cooldown, deliberately (see `socketRestartCooldownMs`).
+ *                   One `WsProvider` and one `ApiPromise`. Bounded downstream
+ *                   by `rebuildFailuresForRestart`, whose restart has a clock.
+ *   `rewarm`      — `rewarmCooldownMs` is five minutes and NEVER bound anything
+ *                   at a ten-minute tick. It binds now, which is what it was
+ *                   written for; the rung is reached at four minutes instead of
+ *                   twenty, and it is a key fetch that short-circuits on a
+ *                   healthy prover plus a snapshot save this service already
+ *                   makes every sixty seconds.
+ *   `restart`     — rate bounded by `restartCooldownMs`, which is PERSISTED,
+ *                   and by `awaitingHealthyTick`, likewise. Neither depends on
+ *                   the cadence. `restartAfterTicks` did, and has been moved.
+ *   `resyncDust`  — the one rung whose bound was the interval itself. Its
+ *                   cooldown was two minutes, which at a two-minute tick
+ *                   separates nothing, and it is in-memory across a
+ *                   `process.exit`. Both halves are fixed below.
+ */
 export const DEFAULT_REMEDY_POLICY: RemedyPolicy = {
   rewarmAfterTicks: 2,
   rewarmCooldownMs: 300_000,
-  restartAfterTicks: 3,
+  /* Fifteen ticks at two minutes — the same thirty minutes of sustained soft
+     fault that three ticks at ten minutes bought. */
+  restartAfterTicks: 15,
   restartCooldownMs: 1_800_000,
-  resyncDustCooldownMs: 120_000,
+  /* Ten minutes rather than two: a cooldown shorter than the tick that consults
+     it is not a cooldown. */
+  resyncDustCooldownMs: 600_000,
+  resyncDustMinUptimeMs: 600_000,
   socketRestartCooldownMs: 300_000,
 };
 
@@ -937,6 +1004,17 @@ export function chooseRemedy(
   if (assessment.verdict === 'dust-wedged') {
     if (facts.reserved || facts.busy) {
       return { remedy: 'refresh', reason: 'the DUST is wedged, but the wallet is in use' };
+    }
+    /* The floor the cooldown below cannot enforce, because this remedy exits
+       and the cooldown is in memory. Checked against UPTIME, which is the one
+       clock that survives the exit and starts again on the other side of it —
+       so a wallet still wedged after its repair cycles at the stated period
+       rather than at whatever the health interval happens to be. */
+    if (facts.uptimeMs < policy.resyncDustMinUptimeMs) {
+      return {
+        remedy: 'refresh',
+        reason: `the DUST is wedged, but this process has only been up ${minutes(facts.uptimeMs)} — a resync exits, and one that came back wedged must not exit again for ${minutes(policy.resyncDustMinUptimeMs)}`,
+      };
     }
     if (
       state.lastResyncDustAt !== null &&

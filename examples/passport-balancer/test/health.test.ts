@@ -20,6 +20,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { ChainHeadProbe, ChainHeadReading } from '../src/chainHead.js';
+import { DEFAULT_HEALTH_INTERVAL_MS } from '../src/config.js';
 import {
   DEFAULT_HEALTH_POLICY,
   DEFAULT_REMEDY_POLICY,
@@ -440,12 +441,30 @@ describe('the remedy ladder', () => {
   });
 
   it('escalates refresh, then re-warm, then restart across consecutive ticks', () => {
+    /* The rungs are counted in TICKS, so the wall-clock time to reach the last
+       one is a function of the health cadence — which is why the figures are
+       read off the policy here rather than written out. See
+       `restartAfterTicks`: it moved from 3 to 15 when the cadence went from ten
+       minutes to two, precisely so that this ladder still takes thirty minutes
+       to reach a restart. */
     const ladder: HealthRemedy[] = [];
-    for (const ticks of [0, 1, 2]) {
+    for (const ticks of [0, 1, DEFAULT_REMEDY_POLICY.restartAfterTicks - 1]) {
       const facts = healthy({ synced: false, consecutiveUnhealthy: ticks });
       ladder.push(chooseRemedy(assessHealth(facts), facts, state()).remedy);
     }
     assert.deepEqual(ladder, ['refresh', 'rewarm', 'restart']);
+  });
+
+  it('takes half an hour of sustained soft fault to ask for a restart, at the shipped cadence', () => {
+    /* The invariant the tick count exists to hold, asserted rather than left in
+       a comment: a cadence change that forgets to move `restartAfterTicks`
+       fails HERE instead of quietly making the sponsor five times more willing
+       to bounce itself. Thirty minutes is the figure that was reasoned about;
+       the tick count is only how many checks fit inside it. */
+    assert.equal(
+      DEFAULT_HEALTH_INTERVAL_MS * DEFAULT_REMEDY_POLICY.restartAfterTicks,
+      30 * MINUTE,
+    );
   });
 
   it('resyncs the DUST on the FIRST tick of a wedge, without waiting out the restart ladder', () => {
@@ -475,11 +494,14 @@ describe('the remedy ladder', () => {
     assert.equal(chooseRemedy(assessHealth(facts), facts, barred).remedy, 'resyncDust');
   });
 
-  it('holds the DUST resync to one in any two minutes', () => {
+  it('holds the DUST resync to one in any ten minutes', () => {
+    /* Ten rather than the two it was until 2026/09/06. A cooldown shorter than
+       the interval of the tick that consults it separates nothing, and the tick
+       is now two minutes. */
     const facts = (now: number): HealthFacts =>
       healthy({ now, dustSpecks: 0n, utxoCount: 0, lastSponsorshipAt: now - 3 * MINUTE });
     const requestedAt = T0;
-    for (const elapsed of [0, 30_000, 119_999]) {
+    for (const elapsed of [0, 30_000, DEFAULT_REMEDY_POLICY.resyncDustCooldownMs - 1]) {
       const at = facts(requestedAt + elapsed);
       const choice = chooseRemedy(assessHealth(at), at, state({}, null, requestedAt));
       assert.equal(choice.remedy, 'refresh', `${elapsed} ms after a resync`);
@@ -488,6 +510,51 @@ describe('the remedy ladder', () => {
     assert.equal(
       chooseRemedy(assessHealth(after), after, state({}, null, requestedAt)).remedy,
       'resyncDust',
+    );
+  });
+
+  it('will not exit for a resync again until this process has been up long enough', () => {
+    /* THE BOUND THE COOLDOWN CANNOT PROVIDE. `resyncDust` ends in
+       `process.exit(1)` and `lastResyncDustAt` lives in memory, so it dies with
+       the process it was meant to bound; the wedge branch also deliberately
+       precedes the start-up grace, because an inherited wedge lives in exactly
+       those first minutes. A wallet still wedged after its repair therefore
+       comes back, sees the wedge on its first tick, and exits again — and until
+       2026/09/06 the only thing setting the period of that loop was the health
+       interval. At two minutes that would be a spin, so the floor is stated. */
+    const wedged = (uptimeMs: number): HealthFacts =>
+      healthy({ uptimeMs, dustSpecks: 0n, utxoCount: 0, lastSponsorshipAt: T0 - 3 * MINUTE });
+
+    const fresh = wedged(DEFAULT_REMEDY_POLICY.resyncDustMinUptimeMs - 1);
+    assert.equal(assessHealth(fresh).verdict, 'dust-wedged', 'the wedge is still DIAGNOSED at once');
+    const held = chooseRemedy(assessHealth(fresh), fresh, state());
+    assert.equal(held.remedy, 'refresh', 'but it is not acted on yet');
+    assert.match(held.reason, /a resync exits, and one that came back wedged must not exit again/);
+
+    const settled = wedged(DEFAULT_REMEDY_POLICY.resyncDustMinUptimeMs);
+    assert.equal(chooseRemedy(assessHealth(settled), settled, state()).remedy, 'resyncDust');
+  });
+
+  it('cannot be made to flap by a faster tick, on any rung that exits the process', () => {
+    /* The property the 2026/09/06 cadence change had to preserve. Both remedies
+       that end this process are bounded by a clock rather than by a tick count,
+       so halving or fifthing the interval cannot make either of them fire more
+       often than it already could. */
+    assert.ok(
+      DEFAULT_REMEDY_POLICY.resyncDustMinUptimeMs >= DEFAULT_HEALTH_INTERVAL_MS,
+      'a DUST resync must not be reachable on the first tick of every restarted process',
+    );
+    assert.ok(
+      DEFAULT_REMEDY_POLICY.resyncDustCooldownMs >= DEFAULT_HEALTH_INTERVAL_MS,
+      'a cooldown shorter than the tick that consults it separates nothing',
+    );
+    assert.ok(
+      DEFAULT_REMEDY_POLICY.socketRestartCooldownMs >= DEFAULT_HEALTH_INTERVAL_MS,
+      'the socket restart is rate-limited by its own clock, not by the cadence',
+    );
+    assert.ok(
+      DEFAULT_REMEDY_POLICY.rewarmCooldownMs >= DEFAULT_HEALTH_INTERVAL_MS,
+      'the re-warm rung likewise',
     );
   });
 
@@ -522,7 +589,7 @@ describe('the remedy ladder', () => {
   });
 
   it('never restarts for a cause a restart would not fix', () => {
-    const facts = healthy({ proving: 'failed', consecutiveUnhealthy: 9 });
+    const facts = healthy({ proving: 'failed', consecutiveUnhealthy: DEFAULT_REMEDY_POLICY.restartAfterTicks });
     const choice = chooseRemedy(assessHealth(facts), facts, state());
     assert.equal(choice.remedy, 'rewarm', 'the repair for lost key material is to fetch it again');
   });
@@ -533,7 +600,7 @@ describe('the remedy ladder', () => {
        an in-memory limit would reset on the very event it exists to rate-limit. */
     const lastRestartRequestAt = new Date(T0).toISOString();
     for (let elapsed = 0; elapsed < DEFAULT_REMEDY_POLICY.restartCooldownMs; elapsed += MINUTE) {
-      const facts = healthy({ now: T0 + elapsed, synced: false, consecutiveUnhealthy: 9 });
+      const facts = healthy({ now: T0 + elapsed, synced: false, consecutiveUnhealthy: DEFAULT_REMEDY_POLICY.restartAfterTicks });
       const choice = chooseRemedy(
         assessHealth(facts),
         facts,
@@ -545,7 +612,7 @@ describe('the remedy ladder', () => {
     const after = healthy({
       now: T0 + DEFAULT_REMEDY_POLICY.restartCooldownMs,
       synced: false,
-      consecutiveUnhealthy: 9,
+      consecutiveUnhealthy: DEFAULT_REMEDY_POLICY.restartAfterTicks,
     });
     assert.equal(
       chooseRemedy(assessHealth(after), after, state({ lastRestartRequestAt })).remedy,
@@ -559,7 +626,7 @@ describe('the remedy ladder', () => {
     const facts = healthy({
       now: T0 + 10 * DEFAULT_REMEDY_POLICY.restartCooldownMs,
       synced: false,
-      consecutiveUnhealthy: 9,
+      consecutiveUnhealthy: DEFAULT_REMEDY_POLICY.restartAfterTicks,
     });
     const choice = chooseRemedy(
       assessHealth(facts),
@@ -581,7 +648,7 @@ describe('the remedy ladder', () => {
       restartEligible: true,
     };
     for (const inUse of [{ reserved: true }, { busy: true }]) {
-      const facts = healthy({ ...inUse, consecutiveUnhealthy: 9 });
+      const facts = healthy({ ...inUse, consecutiveUnhealthy: DEFAULT_REMEDY_POLICY.restartAfterTicks });
       const choice = chooseRemedy(assessment, facts, state());
       assert.equal(choice.remedy, 'refresh');
       assert.match(choice.reason, /the wallet is in use/);
@@ -672,6 +739,24 @@ const reading = (overrides: Partial<HealthProbeReading> = {}): HealthProbeReadin
   return { ...rest, fingerprint: 'a', ...overrides };
 };
 
+/**
+ * The remedies one uninterrupted fault produces, tick by tick, on a clock that
+ * does not move between ticks: `refresh`, then the re-warm rung, then `refresh`
+ * for as long as it takes to reach the restart rung — the re-warm cooldown
+ * holds after the first one because no time has passed.
+ *
+ * Derived from the policy rather than written out. How many `refresh` ticks sit
+ * in the middle is a function of the health cadence (see `restartAfterTicks`),
+ * so a literal here would be a test that had to be edited every time the
+ * service changed how often it looks at itself.
+ */
+const ladderToRestart = (): HealthRemedy[] => [
+  'refresh',
+  'rewarm',
+  ...new Array<HealthRemedy>(DEFAULT_REMEDY_POLICY.restartAfterTicks - 3).fill('refresh'),
+  'restart',
+];
+
 describe('the health loop', () => {
   it('repairs a DUST wedge on its first tick and publishes when it did', async () => {
     const wedge = reading({
@@ -744,10 +829,10 @@ describe('the health loop', () => {
       reading({ synced: false }),
       reading({ synced: false }),
     ]);
-    await h.monitor.tick();
-    await h.monitor.tick();
-    await h.monitor.tick();
-    assert.deepEqual(h.calls, ['refresh', 'rewarm', 'restart']);
+    for (let n = 0; n < DEFAULT_REMEDY_POLICY.restartAfterTicks; n += 1) {
+      await h.monitor.tick();
+    }
+    assert.deepEqual(h.calls, ladderToRestart());
     assert.equal(h.record().restarts, 1);
     assert.equal(h.record().awaitingHealthyTick, true);
     assert.equal(h.monitor.snapshot().restartsRequestedSinceBoot, 1);
@@ -756,27 +841,30 @@ describe('the health loop', () => {
        because no healthy tick has been seen. */
     h.advance(60 * MINUTE);
     await h.monitor.tick();
-    assert.deepEqual(h.calls, ['refresh', 'rewarm', 'restart', 'refresh']);
+    assert.deepEqual(h.calls, [...ladderToRestart(), 'refresh']);
     h.monitor.stop();
   });
 
   it('lifts the bar once a healthy tick is seen, and only then', async () => {
     const h = harness([
-      reading({ synced: false }),
-      reading({ synced: false }),
-      reading({ synced: false }),
+      /* One unbroken fault for the whole of the ladder — as many readings as it
+         takes to reach the restart rung, which is a function of the cadence. */
+      ...new Array<HealthProbeReading>(DEFAULT_REMEDY_POLICY.restartAfterTicks).fill(
+        reading({ synced: false }),
+      ),
       /* Whatever went wrong has cleared — by itself, or because the process the
          restart request produced came back well. A moved fingerprint, because
          a wallet that is following the chain again is a wallet whose indices
          have moved; leaving it unchanged across half an hour would trip the
          stall branch instead, which is itself the right answer. */
       reading({ fingerprint: 'b' }),
-      reading({ synced: false }),
-      reading({ synced: false }),
+      /* And then it is back, for as long as the harness is asked to tick. */
       reading({ synced: false }),
     ]);
-    for (let n = 0; n < 3; n += 1) await h.monitor.tick();
-    assert.deepEqual(h.calls, ['refresh', 'rewarm', 'restart']);
+    for (let n = 0; n < DEFAULT_REMEDY_POLICY.restartAfterTicks; n += 1) {
+      await h.monitor.tick();
+    }
+    assert.deepEqual(h.calls, ladderToRestart());
     assert.equal(h.record().awaitingHealthyTick, true);
 
     h.advance(31 * MINUTE);
@@ -786,12 +874,15 @@ describe('the health loop', () => {
     assert.equal(h.monitor.snapshot().awaitingHealthyTick, false, 'and /status says so');
 
     /* And with the bar lifted and the cooldown spent, a fresh fault may
-       escalate all the way again. */
-    for (let n = 0; n < 3; n += 1) {
+       escalate all the way again. The exact rungs in between are not asserted
+       this time: the clock moves a minute per tick here, so the re-warm
+       cooldown lets a second and a third re-warm through, which is correct and
+       is not what this test is about. */
+    for (let n = 0; n < DEFAULT_REMEDY_POLICY.restartAfterTicks; n += 1) {
       h.advance(MINUTE);
       await h.monitor.tick();
     }
-    assert.deepEqual(h.calls, ['refresh', 'rewarm', 'restart', 'refresh', 'rewarm', 'restart']);
+    assert.equal(h.calls.at(-1), 'restart', 'a fresh fault escalates all the way again');
     assert.equal(h.record().restarts, 2);
     h.monitor.stop();
   });

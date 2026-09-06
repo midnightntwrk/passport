@@ -275,13 +275,45 @@ export const DEFAULT_ALIAS_MAX_PER_HOUR = 20;
 export const DEFAULT_ACCOUNT_GRANT_ATOMIC = 2_000n;
 export const DEFAULT_ACCOUNT_MAX_PER_HOUR = 30;
 /**
- * Ten minutes between health checks — the cadence the service owner asked for,
- * and comfortably longer than anything that self-heals. The DUST a sponsorship
- * spends is back in 20 to 60 seconds and the post-spend syncing flap clears in
- * about two minutes, so a check landing anywhere in a ten-minute cycle sees a
- * settled wallet unless something is genuinely wrong. See `../src/health.ts`.
+ * Two minutes between health checks.
+ *
+ * IT WAS TEN, AND TEN QUIETLY CAPPED EVERY THRESHOLD ABOVE IT. A rule that
+ * fires after five minutes of a stalled wallet, evaluated once every ten, is a
+ * ten-minute rule: the fast stall verdict added on 2026/09/06 could not be
+ * reached before the tick that carried it. Every duration in `../src/health.ts`
+ * is floored by this number, so it has to be smaller than the smallest of them.
+ *
+ * WHAT A TICK COSTS, CHECKED RATHER THAN ASSUMED. `healthProbe` in
+ * `./server.ts` takes `wallet.currentState()` ONCE and passes that state into
+ * every figure it needs, and the facade's state observable REPLAYS its last
+ * value — so the read resolves from memory and its 30-second timeout is a guard
+ * against a facade that has stopped emitting, not a wait anybody expects to
+ * pay. Everything derived from it is field access over that value:
+ * `progressOf` reads indices and calls `.toString()`, `dustBalance` is
+ * `state.dust.balance(new Date())`, `dustUtxoCount` and
+ * `pendingTransactionCount` are `.length` on arrays already in hand, and
+ * `isReserved`, `isBusy`, `orphanStats`, `provingReadiness`, and `socketHealth`
+ * are in-process bookkeeping. No chain query, no indexer query, no disk.
+ *
+ * The one thing that leaves the process is the head probe — a single bounded
+ * `chain_getHeader` POST, a few hundred bytes each way, five seconds at worst.
+ * At this cadence that is 30 requests an hour against the public node instead
+ * of 6, which is not a figure worth economising on.
+ *
+ * The rungs are NOT five times more eager as a result, and that was checked
+ * rung by rung: see `DEFAULT_REMEDY_POLICY` in `../src/health.ts`, where the
+ * two thresholds that were being bounded by this interval rather than by a
+ * clock of their own — the soft-degraded restart and the DUST resync — are now
+ * bounded explicitly. The watchdog also still stands off entirely while the
+ * wallet is claimed or busy, which is the branch a shorter cadence makes more
+ * important rather than less.
+ *
+ * The self-healing windows are unchanged and still comfortably clear: the DUST
+ * a sponsorship spends is back in 20 to 60 seconds and the post-spend syncing
+ * flap clears in about two minutes, both of which are named verdicts that act
+ * on nothing (`settling`), not thresholds this cadence can trip.
  */
-export const DEFAULT_HEALTH_INTERVAL_MS = 10 * 60 * 1_000;
+export const DEFAULT_HEALTH_INTERVAL_MS = 2 * 60 * 1_000;
 
 /**
  * The asset an account opens holding, and how much of it.
