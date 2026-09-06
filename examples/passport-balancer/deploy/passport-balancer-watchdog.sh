@@ -83,8 +83,55 @@
 # is gone from one that dropped and came back. A restart under this rule writes
 # a `logger -t passport-ops` marker as well as its own journal line.
 #
+# THE SUPERVISOR: THE WHOLE PATH, EVERY MINUTE
+# --------------------------------------------
+# The three rules above are named faults with matched signatures, and each one
+# was written after the fault it matches had already happened. The supervisor
+# is the general case, and it exists because on 2026/09/05 the sponsor was
+# alive and unable to submit for five hours and nothing restarted it.
+#
+# Every tick it probes the whole path a person actually walks, in both
+# directions from the front door:
+#
+#     /status            synced, nodeSocket connected (or absent),
+#     (127.0.0.1:8807)   consecutiveSocketFailures < 3, aliasSponsorship and
+#                        accountFunding available, proving == server, and
+#                        appliedBehindHeadBlocks <= 50 where it is published.
+#                        Read with python3, not grep: three of those terms are
+#                        numbers and a grep cannot tell a missing key from a
+#                        false one.
+#     127.0.0.1:6300     the proof server's /health
+#     docker             the proof server container is running
+#     systemctl          caddy is active
+#     the public name    https://<host>/balancer/status and /prover/health,
+#                        resolved to the loopback so the probe measures OUR
+#                        Caddy rather than a DNS answer
+#
+# and restarts BY UNIT rather than by hypothesis: the balancer after three
+# unhealthy ticks, Caddy when it is down or the public path fails while the
+# local probes pass, the proof server container when it is not running or its
+# /health has failed three ticks. Nothing is restarted while `/status` reports
+# a spend in flight until the unhealthy streak reaches ten, at which point the
+# job is not in flight, it is stuck.
+#
+# Every unit carries an exponential backoff of its own — 10 min, 20, 40, capped
+# at 2 h — so a dependency that is genuinely down cannot be turned into a
+# restart loop, and after three restarts of the balancer inside two hours that
+# have not fixed it the script writes a `supervisor-escalated` marker, stops
+# restarting anything at all, and says so every tick. `WATCHDOG_REBOOT=1` in
+# /etc/passport-balancer-watchdog.env adds one droplet reboot per six hours at
+# that point; it is off by default.
+#
+# `WATCHDOG_ALERT_WEBHOOK`, from the same file, receives a plain
+# `{"text": "..."}` on every action and on entering or leaving escalation, plus
+# a heartbeat at most once a day so a webhook that has quietly stopped
+# delivering is noticed on a quiet day rather than during an outage. It is
+# never logged. With nothing set, nothing is posted.
+#
 # Every decision is written to the journal under `passport-balancer-watchdog`,
-# so `journalctl -u passport-balancer-watchdog` is the whole audit trail.
+# so `journalctl -u passport-balancer-watchdog` is the whole audit trail, and
+# every tick writes exactly one `[supervisor] ok|degraded: …` line whichever
+# leg ends it.
 
 set -uo pipefail
 
@@ -101,9 +148,11 @@ ROLLBACK="${BALANCER_WATCHDOG_ROLLBACK:-/opt/passport-balancer/dist/dust-rollbac
 STRIKES="${BALANCER_WATCHDOG_STRIKES:-3}"
 # Seconds between two restarts by this script.
 COOLDOWN="${BALANCER_WATCHDOG_COOLDOWN:-1800}"
-# Per-request budget. Generous: a loaded proof server can make the event loop
-# late without the service being unwell.
-TIMEOUT="${BALANCER_WATCHDOG_TIMEOUT:-10}"
+# Per-request budget. Five seconds, and the whole tick is five probes and two
+# of these: the timer now fires every minute, so a check must finish inside it
+# or two of them overlap and both strike for the same failure. A slow /status
+# is itself a symptom, and it takes three of them in a row to restart anything.
+TIMEOUT="${BALANCER_WATCHDOG_TIMEOUT:-5}"
 # Seconds between two DUST resyncs by this script. Its own clock, and much
 # shorter than the restart cooldown: a wedge is proved rather than inferred, and
 # the repair costs the service ten seconds rather than a chain walk.
@@ -141,12 +190,445 @@ LOGGER="${BALANCER_WATCHDOG_LOGGER:-logger}"
 
 mkdir -p "$STATE_DIR"
 
+# --------------------------------------------------------------------------
+# THE SUPERVISOR: the whole path, every tick.
+#
+# Everything above is a NAMED fault with a matched signature. The supervisor is
+# the opposite: it asks whether the path a person actually walks — browser →
+# Caddy → balancer → node, and browser → Caddy → prover — answers at all, and
+# it asks it of every hop, because on 2026/09/05 the sponsor was alive and
+# unable to submit for five hours and not one of the rules above was true.
+#
+# It restarts by unit rather than by hypothesis, holds an exponential backoff
+# per unit so a dependency that is genuinely down cannot be turned into a
+# restart loop, and stops altogether — with a marker and an alert — once
+# restarting has visibly stopped helping.
+# --------------------------------------------------------------------------
+
+# Overridable for `test/watchdog.test.sh`, which drives every probe through a
+# PATH shim rather than a network.
+PYTHON="${BALANCER_WATCHDOG_PYTHON:-python3}"
+DOCKER="${BALANCER_WATCHDOG_DOCKER:-docker}"
+CURL="${BALANCER_WATCHDOG_CURL:-curl}"
+
+# The public name Caddy serves. Configurable because the droplet's sslip.io
+# name follows its IP address, and a second sponsor would have another.
+PUBLIC_HOST="${BALANCER_WATCHDOG_PUBLIC_HOST:-67-205-177-162.sslip.io}"
+# Resolved to the loopback rather than looked up, so the probe measures OUR
+# Caddy and never a DNS answer or somebody else's cache. SNI and Host stay the
+# public name, so TLS still verifies properly and the vhost still matches.
+PUBLIC_RESOLVE="${BALANCER_WATCHDOG_PUBLIC_RESOLVE:-$PUBLIC_HOST:443:127.0.0.1}"
+PROOF_HEALTH="${BALANCER_WATCHDOG_PROOF_HEALTH:-http://127.0.0.1:6300/health}"
+PROOF_CONTAINER="${BALANCER_WATCHDOG_PROOF_CONTAINER:-passport-proof-server}"
+CADDY_UNIT="${BALANCER_WATCHDOG_CADDY_UNIT:-caddy}"
+# Per-probe budget. Five seconds each, and there are five of them, so the whole
+# tick fits inside the timer's minute with room for the journal read.
+PROBE_TIMEOUT="${BALANCER_WATCHDOG_PROBE_TIMEOUT:-5}"
+
+# Consecutive unhealthy ticks before a unit is restarted. One minute apart, so
+# three is three minutes of continuous fault.
+SUPERVISOR_STRIKES="${BALANCER_WATCHDOG_SUPERVISOR_STRIKES:-3}"
+# A spend in flight blocks a restart until the streak reaches this, at which
+# point the job is not in flight, it is stuck, and the person waiting on it has
+# been waiting ten minutes.
+SUPERVISOR_BUSY_OVERRIDE="${BALANCER_WATCHDOG_BUSY_OVERRIDE:-10}"
+# The backoff ladder, per unit: 10 min, 20, 40, capped at 2 h. A dependency
+# that is down stays down, and restarting our own service into it every minute
+# only adds a cold start to somebody else's outage.
+SUPERVISOR_BACKOFF="${BALANCER_WATCHDOG_BACKOFF:-600}"
+SUPERVISOR_BACKOFF_CAP="${BALANCER_WATCHDOG_BACKOFF_CAP:-7200}"
+# Healthy for this long and the ladder is forgotten — otherwise a unit that
+# needed one restart a month ago would wait two hours for its next one.
+SUPERVISOR_HEALTHY_RESET="${BALANCER_WATCHDOG_HEALTHY_RESET:-1800}"
+# Restarts inside the window after which restarting is admitted not to work.
+SUPERVISOR_ESCALATE_RESTARTS="${BALANCER_WATCHDOG_ESCALATE_RESTARTS:-3}"
+SUPERVISOR_ESCALATE_WINDOW="${BALANCER_WATCHDOG_ESCALATE_WINDOW:-7200}"
+# A restarting service reads unhealthy for a few seconds through no fault of
+# its own, so nothing strikes it while it is coming back.
+SUPERVISOR_GRACE="${BALANCER_WATCHDOG_GRACE:-120}"
+# One reboot per six hours, and only when WATCHDOG_REBOOT=1 is set in the
+# environment file. Off by default: a reboot is the one action here that takes
+# the droplet away from an operator who may be looking at it.
+SUPERVISOR_REBOOT_INTERVAL="${BALANCER_WATCHDOG_REBOOT_INTERVAL:-21600}"
+# A line to the webhook at most this often, so a webhook that has quietly
+# stopped delivering is noticed on a quiet day rather than during an outage.
+SUPERVISOR_HEARTBEAT="${BALANCER_WATCHDOG_HEARTBEAT:-86400}"
+
+# The thresholds `/status` is judged against.
+SOCKET_FAILURES_MAX="${BALANCER_WATCHDOG_SOCKET_FAILURES_MAX:-3}"
+BEHIND_HEAD_MAX="${BALANCER_WATCHDOG_BEHIND_HEAD_MAX:-50}"
+# What `proving` must read. Empty switches the term off, for a deployment that
+# proves in-process on purpose.
+PROVING_EXPECT="${BALANCER_WATCHDOG_PROVING_EXPECT:-server}"
+
+ESCALATED_FILE="$STATE_DIR/supervisor-escalated"
+HEARTBEAT_FILE="$STATE_DIR/supervisor-last-heartbeat"
+REBOOT_FILE="$STATE_DIR/supervisor-last-reboot"
+RESTART_LOG="$STATE_DIR/supervisor-restart-log-balancer"
+
+slog() { echo "[supervisor] $*"; }
+
+# A file holding one non-negative integer, or 0 for anything else. Every clock
+# and counter below is one of these, because they must survive the restart they
+# bound and a file is the only store that does.
+read_num() {
+  local value
+  value=$(cat "$1" 2>/dev/null || echo 0)
+  case "$value" in ''|*[!0-9]*) echo 0 ;; *) echo "$value" ;; esac
+}
+
+NOW=$(date +%s)
+
+# --------------------------------------------------------------------------
+# The alerting hook.
+#
+# `WATCHDOG_ALERT_WEBHOOK` comes from /etc/passport-balancer-watchdog.env via
+# the unit's `EnvironmentFile=-`, so it is not in this repository and not on
+# any command line. It is never logged: the only thing written about it is
+# whether a post was attempted.
+# --------------------------------------------------------------------------
+
+alert() {
+  [ -n "${WATCHDOG_ALERT_WEBHOOK:-}" ] || return 0
+  local payload
+  payload=$(WATCHDOG_ALERT_TEXT="$*" "$PYTHON" -c 'import json,os;print(json.dumps({"text":os.environ["WATCHDOG_ALERT_TEXT"]}))' 2>/dev/null) || return 0
+  # `-s` and not `-sS`: an error from curl would carry the URL, and the URL is
+  # the secret. Failure to alert is never allowed to fail the tick.
+  "$CURL" -s -o /dev/null -X POST \
+    -H 'content-type: application/json' \
+    --max-time "$PROBE_TIMEOUT" \
+    -d "$payload" \
+    "$WATCHDOG_ALERT_WEBHOOK" >/dev/null 2>&1 || true
+}
+
+# --------------------------------------------------------------------------
+# Per-unit strikes, restart clocks, and the backoff ladder.
+# --------------------------------------------------------------------------
+
+sv_strike_file()  { echo "$STATE_DIR/supervisor-strikes-$1"; }
+sv_restart_file() { echo "$STATE_DIR/supervisor-last-restart-$1"; }
+sv_count_file()   { echo "$STATE_DIR/supervisor-restarts-$1"; }
+sv_healthy_file() { echo "$STATE_DIR/supervisor-healthy-since-$1"; }
+
+# The last time ANYTHING in this script restarted the balancer, not merely the
+# supervisor: the legs above have their own clocks, and a strike for a service
+# that the DUST leg stopped four seconds ago is a strike for our own doing.
+sv_last_balancer_restart() {
+  local newest=0 file value
+  for file in "$(sv_restart_file balancer)" "$RESTART_FILE" "$SOCKET_RESTART_FILE" "$DUST_RESYNC_FILE"; do
+    value=$(read_num "$file")
+    [ "$value" -gt "$newest" ] && newest=$value
+  done
+  echo "$newest"
+}
+
+# 0, then 600 s, 1200, 2400, … capped. The count is the number of restarts of
+# this unit that have not yet been followed by a settled period of health.
+sv_backoff() {
+  local count="$1" wait="$SUPERVISOR_BACKOFF" i
+  [ "$count" -le 0 ] && { echo 0; return; }
+  i=1
+  while [ "$i" -lt "$count" ]; do
+    wait=$((wait * 2))
+    [ "$wait" -ge "$SUPERVISOR_BACKOFF_CAP" ] && { wait=$SUPERVISOR_BACKOFF_CAP; break; }
+    i=$((i + 1))
+  done
+  echo "$wait"
+}
+
+# Bookkeeping for one component, given whether this tick found it healthy.
+# Returns the strike count on stdout. Healthy resets the strikes, and a long
+# enough spell of health also forgets the backoff ladder.
+sv_account() {
+  local comp="$1" healthy="$2" strikes since count last
+  if [ "$healthy" = 1 ]; then
+    echo 0 > "$(sv_strike_file "$comp")"
+    since=$(read_num "$(sv_healthy_file "$comp")")
+    if [ "$since" -eq 0 ]; then
+      echo "$NOW" > "$(sv_healthy_file "$comp")"
+    elif [ $((NOW - since)) -ge "$SUPERVISOR_HEALTHY_RESET" ]; then
+      count=$(read_num "$(sv_count_file "$comp")")
+      [ "$count" -ne 0 ] && echo 0 > "$(sv_count_file "$comp")"
+    fi
+    echo 0
+    return
+  fi
+  rm -f "$(sv_healthy_file "$comp")" 2>/dev/null
+  strikes=$(read_num "$(sv_strike_file "$comp")")
+  # Nothing strikes a unit inside the grace window after it was restarted: it
+  # is coming back, and counting that is counting our own restart against it.
+  if [ "$comp" = balancer ]; then
+    last=$(sv_last_balancer_restart)
+  else
+    last=$(read_num "$(sv_restart_file "$comp")")
+  fi
+  if [ "$last" -ne 0 ] && [ $((NOW - last)) -lt "$SUPERVISOR_GRACE" ]; then
+    echo "$strikes"
+    return
+  fi
+  strikes=$((strikes + 1))
+  echo "$strikes" > "$(sv_strike_file "$comp")"
+  echo "$strikes"
+}
+
+# Whether a restart of this component is allowed right now: enough strikes,
+# not mid-spend, and past its own backoff. The reason it is not is left in
+# `sv_hold_reason` for the summary line.
+sv_hold_reason=""
+sv_may_restart() {
+  local comp="$1" strikes="$2" last count wait
+  sv_hold_reason=""
+  [ "$strikes" -ge "$SUPERVISOR_STRIKES" ] || { sv_hold_reason="strike $strikes of $SUPERVISOR_STRIKES"; return 1; }
+  if [ "$sv_busy" = 1 ] || [ "$sv_jobs" -gt 0 ]; then
+    if [ "$strikes" -lt "$SUPERVISOR_BUSY_OVERRIDE" ]; then
+      sv_hold_reason="a spend is in flight (busy=$sv_busy jobs=$sv_jobs) and the streak is $strikes of $SUPERVISOR_BUSY_OVERRIDE"
+      return 1
+    fi
+  fi
+  if [ "$comp" = balancer ]; then
+    last=$(sv_last_balancer_restart)
+  else
+    last=$(read_num "$(sv_restart_file "$comp")")
+  fi
+  count=$(read_num "$(sv_count_file "$comp")")
+  wait=$(sv_backoff "$count")
+  if [ "$last" -ne 0 ] && [ $((NOW - last)) -lt "$wait" ]; then
+    sv_hold_reason="the last $comp restart was $((NOW - last)) s ago and the backoff after $count restart(s) is ${wait} s"
+    return 1
+  fi
+  return 0
+}
+
+# Records a restart against a component: its clock, its ladder, its strikes.
+sv_record_restart() {
+  local comp="$1" count
+  count=$(read_num "$(sv_count_file "$comp")")
+  echo "$NOW" > "$(sv_restart_file "$comp")"
+  echo $((count + 1)) > "$(sv_count_file "$comp")"
+  echo 0 > "$(sv_strike_file "$comp")"
+  rm -f "$(sv_healthy_file "$comp")" 2>/dev/null
+  if [ "$comp" = balancer ]; then
+    # The 2 h window the escalation rule reads. Trimmed to the last ten lines
+    # so the file cannot grow without bound on a droplet nobody is watching.
+    echo "$NOW" >> "$RESTART_LOG"
+    tail -10 "$RESTART_LOG" > "$RESTART_LOG.tmp" 2>/dev/null && mv "$RESTART_LOG.tmp" "$RESTART_LOG"
+  fi
+}
+
+# How many balancer restarts fall inside the escalation window.
+sv_recent_balancer_restarts() {
+  local count=0 line
+  while read -r line; do
+    case "$line" in ''|*[!0-9]*) continue ;; esac
+    [ $((NOW - line)) -le "$SUPERVISOR_ESCALATE_WINDOW" ] && count=$((count + 1))
+  done < <(cat "$RESTART_LOG" 2>/dev/null)
+  echo "$count"
+}
+
+# --------------------------------------------------------------------------
+# The summary line, and the daily heartbeat, written whichever leg exits.
+# --------------------------------------------------------------------------
+
+SV_FACTS=""
+SV_ACTIONS=""
+SV_DEGRADED=0
+sv_note() { SV_ACTIONS="${SV_ACTIONS:+$SV_ACTIONS; }$*"; }
+
+sv_summary() {
+  local last
+  if [ "$SV_DEGRADED" = 0 ]; then
+    slog "ok: ${SV_FACTS:-no probes ran}${SV_ACTIONS:+ — $SV_ACTIONS}"
+  else
+    slog "degraded: ${SV_FACTS:-no probes ran}${SV_ACTIONS:+ — $SV_ACTIONS}"
+  fi
+  last=$(read_num "$HEARTBEAT_FILE")
+  if [ $((NOW - last)) -ge "$SUPERVISOR_HEARTBEAT" ]; then
+    echo "$NOW" > "$HEARTBEAT_FILE"
+    alert "passport supervisor heartbeat — ${SV_FACTS:-no probes ran}"
+  fi
+}
+
+# --------------------------------------------------------------------------
+# The probes. Five of them, each five seconds at worst, none of them able to
+# fail the tick.
+# --------------------------------------------------------------------------
+
+
+# Prints the HTTP status code, or 000 when nothing answered at all.
+sv_http_code() {
+  local url="$1" resolve="${2:-}" code
+  if [ -n "$resolve" ]; then
+    code=$("$CURL" -s -o /dev/null -w '%{http_code}' --max-time "$PROBE_TIMEOUT" --resolve "$resolve" "$url" 2>/dev/null)
+  else
+    code=$("$CURL" -s -o /dev/null -w '%{http_code}' --max-time "$PROBE_TIMEOUT" "$url" 2>/dev/null)
+  fi
+  case "$code" in ''|*[!0-9]*) code=000 ;; esac
+  echo "$code"
+}
+
+# `/status` read whole rather than grepped: these are seven terms, three of
+# them numeric, and a `grep` for `"synced":true` cannot tell a missing key from
+# a false one. Prints `verdict|busy|jobs|reasons`.
+SV_STATUS_PY=$(cat <<'PY'
+import json, os, sys
+
+try:
+    body = json.load(sys.stdin)
+except Exception:
+    print('unreadable|0|0|status-unparseable')
+    raise SystemExit(0)
+if not isinstance(body, dict):
+    print('unreadable|0|0|status-not-an-object')
+    raise SystemExit(0)
+
+def number(value, fallback=0):
+    try:
+        return int(value)
+    except Exception:
+        return fallback
+
+reasons = []
+if body.get('synced') is not True:
+    reasons.append('synced:%s' % body.get('synced'))
+# `connected`, or the key missing altogether on a build that predates it.
+# `reconnecting` and `dead` are both the fault of 2026/09/05.
+socket = body.get('nodeSocket')
+if socket is not None and socket != 'connected':
+    reasons.append('nodeSocket:%s' % socket)
+failures = number(body.get('consecutiveSocketFailures', 0))
+if failures >= number(os.environ.get('SV_SOCKET_FAILURES_MAX'), 3):
+    reasons.append('consecutiveSocketFailures:%d' % failures)
+for key in ('aliasSponsorship', 'accountFunding'):
+    if body.get(key) != 'available':
+        reasons.append('%s:%s' % (key, body.get(key)))
+expect = os.environ.get('SV_PROVING_EXPECT') or ''
+if expect and body.get('proving') != expect:
+    reasons.append('proving:%s' % body.get('proving'))
+# Only judged where the service publishes it.
+behind = body.get('appliedBehindHeadBlocks')
+if isinstance(behind, (int, float)) and not isinstance(behind, bool):
+    if behind > number(os.environ.get('SV_BEHIND_HEAD_MAX'), 50):
+        reasons.append('appliedBehindHeadBlocks:%d' % int(behind))
+
+busy = 1 if (body.get('busy') is True or body.get('balancing') is True) else 0
+jobs = number(body.get('jobsRunning', 0))
+print('%s|%d|%d|%s' % ('ok' if not reasons else 'unhealthy', busy, jobs, ','.join(reasons)))
+PY
+)
+
+sv_read_status() {
+  printf '%s' "$status" \
+    | SV_SOCKET_FAILURES_MAX="$SOCKET_FAILURES_MAX" \
+      SV_BEHIND_HEAD_MAX="$BEHIND_HEAD_MAX" \
+      SV_PROVING_EXPECT="$PROVING_EXPECT" \
+      "$PYTHON" -c "$SV_STATUS_PY" 2>/dev/null \
+    || echo 'unreadable|0|0|status-unparseable'
+}
+
 strikes=$(cat "$STRIKES_FILE" 2>/dev/null || echo 0)
 case "$strikes" in ''|*[!0-9]*) strikes=0 ;; esac
 
 wallet_status=$(curl -fsS --max-time "$TIMEOUT" "$BASE/wallet-status" 2>/dev/null)
 curl_rc=$?
 status=$(curl -fsS --max-time "$TIMEOUT" "$BASE/status" 2>/dev/null)
+
+# --------------------------------------------------------------------------
+# The tick's probes, taken BEFORE any leg acts, so the summary line describes
+# the same droplet whichever leg exits and the strike counters keep advancing
+# even on a tick some earlier rule ends.
+# --------------------------------------------------------------------------
+
+if [ -z "$status" ]; then
+  sv_verdict=unreachable
+  sv_busy=0
+  sv_jobs=0
+  sv_reasons="/status did not answer"
+else
+  sv_parsed=$(sv_read_status)
+  sv_verdict=${sv_parsed%%|*}
+  sv_rest=${sv_parsed#*|}
+  sv_busy=${sv_rest%%|*}
+  sv_rest=${sv_rest#*|}
+  sv_jobs=${sv_rest%%|*}
+  sv_reasons=${sv_rest#*|}
+fi
+case "$sv_busy" in ''|*[!0-9]*) sv_busy=0 ;; esac
+case "$sv_jobs" in ''|*[!0-9]*) sv_jobs=0 ;; esac
+
+sv_proof_code=$(sv_http_code "$PROOF_HEALTH")
+sv_public_prover=$(sv_http_code "https://$PUBLIC_HOST/prover/health" "$PUBLIC_RESOLVE")
+sv_public_balancer=$(sv_http_code "https://$PUBLIC_HOST/balancer/status" "$PUBLIC_RESOLVE")
+
+sv_caddy=$("$SYSTEMCTL" is-active "$CADDY_UNIT" 2>/dev/null | tr -d '[:space:]')
+[ -n "$sv_caddy" ] || sv_caddy=unknown
+sv_container=$("$DOCKER" inspect -f '{{.State.Running}}' "$PROOF_CONTAINER" 2>/dev/null | tr -d '[:space:]')
+case "$sv_container" in true) sv_container=running ;; false) sv_container=stopped ;; *) sv_container=missing ;; esac
+
+# Healthy, one component at a time.
+sv_balancer_ok=0; [ "$sv_verdict" = ok ] && sv_balancer_ok=1
+sv_proof_ok=0
+[ "$sv_proof_code" = 200 ] && [ "$sv_container" = running ] && sv_proof_ok=1
+# Caddy is judged on the public path as well as on its own unit: a Caddy that
+# is `active` and answering 502 for everything is down as far as anybody
+# outside the droplet is concerned.
+sv_caddy_ok=0
+if [ "$sv_caddy" = active ] && [ "$sv_public_balancer" = 200 ]; then
+  # The prover path is allowed to be as unwell as the prover behind it — that
+  # is the proof server's fault, not Caddy's, and it has its own leg.
+  if [ "$sv_public_prover" = 200 ] || [ "$sv_proof_ok" = 0 ]; then sv_caddy_ok=1; fi
+fi
+
+sv_balancer_strikes=$(sv_account balancer "$sv_balancer_ok")
+sv_proof_strikes=$(sv_account proof "$sv_proof_ok")
+sv_caddy_strikes=$(sv_account caddy "$sv_caddy_ok")
+
+SV_FACTS="balancer=$sv_verdict${sv_reasons:+ ($sv_reasons)} busy=$sv_busy jobs=$sv_jobs; proof=$sv_proof_code container=$sv_container; caddy=$sv_caddy public=$sv_public_balancer/$sv_public_prover"
+if [ "$sv_balancer_ok" = 1 ] && [ "$sv_proof_ok" = 1 ] && [ "$sv_caddy_ok" = 1 ]; then
+  SV_DEGRADED=0
+else
+  SV_DEGRADED=1
+  SV_FACTS="$SV_FACTS; strikes balancer=$sv_balancer_strikes proof=$sv_proof_strikes caddy=$sv_caddy_strikes"
+fi
+
+# One summary line per tick, whichever leg below ends the script, and the
+# daily heartbeat with it.
+trap sv_summary EXIT
+
+# --------------------------------------------------------------------------
+# ESCALATION, asked before anything can act.
+#
+# Once restarting has been tried SUPERVISOR_ESCALATE_RESTARTS times inside the
+# window and the balancer is still unhealthy, restarting is not the repair and
+# doing it again only hides the fault from whoever has to find it. Every
+# restart path in this script — this one and the three signature legs above —
+# is off while the marker is there, and it is removed the moment the balancer
+# reads healthy again.
+# --------------------------------------------------------------------------
+
+if [ -f "$ESCALATED_FILE" ]; then
+  if [ "$sv_balancer_ok" = 1 ]; then
+    rm -f "$ESCALATED_FILE" 2>/dev/null
+    echo 0 > "$(sv_count_file balancer)"
+    : > "$RESTART_LOG"
+    sv_note "the balancer is healthy again — escalation cleared, restarts allowed"
+    slog "ESCALATION CLEARED: the balancer answers healthy again"
+    alert "passport supervisor: escalation cleared — the balancer is healthy again"
+  else
+    sv_note "ESCALATED since $(cat "$ESCALATED_FILE" 2>/dev/null | head -1) — not restarting anything; this needs a person"
+    slog "ESCALATED: $SV_FACTS — restarting has been tried and did not help, so nothing is being restarted"
+    if [ "${WATCHDOG_REBOOT:-0}" = 1 ]; then
+      sv_last_reboot=$(read_num "$REBOOT_FILE")
+      if [ $((NOW - sv_last_reboot)) -ge "$SUPERVISOR_REBOOT_INTERVAL" ]; then
+        echo "$NOW" > "$REBOOT_FILE"
+        slog "WATCHDOG_REBOOT is set and the last reboot was $((NOW - sv_last_reboot)) s ago — rebooting the droplet"
+        "$LOGGER" -t passport-ops "supervisor rebooting the droplet: escalated and WATCHDOG_REBOOT=1"
+        alert "passport supervisor: escalated and WATCHDOG_REBOOT=1 — rebooting the droplet"
+        "$SYSTEMCTL" reboot
+      fi
+    fi
+    exit 0
+  fi
+fi
 
 # --------------------------------------------------------------------------
 # The DUST wedge, asked FIRST because a wedged wallet is a synced one and the
@@ -302,6 +784,93 @@ if job_stalled; then
   echo 0 > "$STRIKES_FILE"
   "$SYSTEMCTL" restart "$UNIT"
   exit 0
+fi
+
+# --------------------------------------------------------------------------
+# THE SUPERVISOR'S ACTIONS.
+#
+# At most one restart per tick, front door first: a Caddy that is not answering
+# makes every other probe from outside the droplet look broken, so it is asked
+# first and the ones behind it are given another minute to be judged on their
+# own.
+# --------------------------------------------------------------------------
+
+# --- Caddy ----------------------------------------------------------------
+# The distinction that matters here is `reload` against `restart`. A restart
+# writes Caddy's whole environment into the journal — `ExecStart` carries
+# `--environ` — and that environment holds the 1AM gateway key. So a Caddy that
+# is running but not serving is reloaded, which does not, and only a Caddy that
+# is not running at all is restarted.
+if [ "$sv_caddy_ok" = 0 ]; then
+  if sv_may_restart caddy "$sv_caddy_strikes"; then
+    sv_record_restart caddy
+    if [ "$sv_caddy" = active ]; then
+      slog "RELOADING $CADDY_UNIT: it is active but the public path answers $sv_public_balancer/$sv_public_prover while the local probes pass"
+      sv_note "reloaded $CADDY_UNIT"
+      "$LOGGER" -t passport-ops "caddy reloaded: public path answering $sv_public_balancer/$sv_public_prover with the local balancer and prover reachable"
+      alert "passport supervisor: reloading caddy — public $sv_public_balancer/$sv_public_prover, local probes pass"
+      "$SYSTEMCTL" reload "$CADDY_UNIT"
+    else
+      slog "RESTARTING $CADDY_UNIT: systemctl reports it $sv_caddy"
+      sv_note "restarted $CADDY_UNIT"
+      "$LOGGER" -t passport-ops "caddy restarted: systemctl reported it $sv_caddy"
+      alert "passport supervisor: restarting caddy — systemctl reports it $sv_caddy"
+      "$SYSTEMCTL" restart "$CADDY_UNIT"
+    fi
+    exit 0
+  fi
+  sv_note "$CADDY_UNIT is unwell but held: $sv_hold_reason"
+fi
+
+# --- The proof server -----------------------------------------------------
+# `restart=always` already brings the container back from a crash; what it
+# cannot do is notice a prover that is up and no longer answering, which is
+# what /health is for.
+if [ "$sv_proof_ok" = 0 ]; then
+  if sv_may_restart proof "$sv_proof_strikes"; then
+    sv_record_restart proof
+    slog "RESTARTING $PROOF_CONTAINER: /health answered $sv_proof_code and the container reads $sv_container, for $sv_proof_strikes tick(s)"
+    sv_note "restarted $PROOF_CONTAINER"
+    "$LOGGER" -t passport-ops "proof server restarted: /health $sv_proof_code, container $sv_container, $sv_proof_strikes consecutive ticks"
+    alert "passport supervisor: restarting $PROOF_CONTAINER — /health $sv_proof_code, container $sv_container"
+    "$DOCKER" restart "$PROOF_CONTAINER"
+    exit 0
+  fi
+  sv_note "$PROOF_CONTAINER is unwell but held: $sv_hold_reason"
+fi
+
+# --- The balancer ---------------------------------------------------------
+# This is the leg that would have ended the five hours of 2026/09/05: the
+# service was alive, answering, and unable to submit, and every term of the
+# verdict above is one of the things it was publishing at the time.
+if [ "$sv_balancer_ok" = 0 ]; then
+  if sv_may_restart balancer "$sv_balancer_strikes"; then
+    sv_recent=$(sv_recent_balancer_restarts)
+    if [ "$sv_recent" -ge "$SUPERVISOR_ESCALATE_RESTARTS" ]; then
+      # Three restarts inside the window have not fixed it, so a fourth will
+      # not either. The marker is the whole point: it stops this script and it
+      # tells whoever reads the state directory why nothing is happening.
+      printf '%s escalated after %s restart(s) in %s s, still unhealthy: %s\n' \
+        "$(date -u +%Y/%m/%dT%H:%M:%SZ)" "$sv_recent" "$SUPERVISOR_ESCALATE_WINDOW" "$sv_reasons" \
+        > "$ESCALATED_FILE"
+      slog "ESCALATING: $sv_recent restart(s) of $UNIT inside ${SUPERVISOR_ESCALATE_WINDOW} s and it is still unhealthy ($sv_reasons) — no further restarts"
+      sv_note "escalated; no further restarts"
+      "$LOGGER" -t passport-ops "supervisor escalated: $sv_recent balancer restarts in ${SUPERVISOR_ESCALATE_WINDOW} s and still unhealthy ($sv_reasons)"
+      alert "passport supervisor: ESCALATED — $sv_recent restarts of $UNIT in ${SUPERVISOR_ESCALATE_WINDOW} s and it is still unhealthy ($sv_reasons). No further restarts; this needs a person."
+      exit 0
+    fi
+    sv_record_restart balancer
+    # Kept in step with the legs above, which share this clock.
+    echo "$NOW" > "$RESTART_FILE"
+    echo 0 > "$STRIKES_FILE"
+    slog "RESTARTING $UNIT after $sv_balancer_strikes unhealthy tick(s): $sv_reasons"
+    sv_note "restarted $UNIT"
+    "$LOGGER" -t passport-ops "balancer restarted by the supervisor: $sv_balancer_strikes unhealthy tick(s) — $sv_reasons"
+    alert "passport supervisor: restarting $UNIT — unhealthy for $sv_balancer_strikes tick(s) ($sv_reasons)"
+    "$SYSTEMCTL" restart "$UNIT"
+    exit 0
+  fi
+  sv_note "$UNIT is unwell but held: $sv_hold_reason"
 fi
 
 if [ $curl_rc -eq 0 ] && printf '%s' "$wallet_status" | grep -q '"ready":true'; then

@@ -19,6 +19,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REAL_CURL="$(command -v curl)"
 SCRIPT="$HERE/../deploy/passport-balancer-watchdog.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"; [ -n "${STUB_PID:-}" ] && kill "$STUB_PID" 2>/dev/null' EXIT
@@ -67,7 +68,53 @@ done
 # Recorders, one line per call, in the order they were made.
 cat > "$WORK/systemctl" <<'SH2'
 #!/usr/bin/env bash
+# `is-active` is a QUESTION rather than an action: it answers and is NOT
+# recorded, so the call log stays a list of the things the watchdog did.
+if [ "${1:-}" = "is-active" ]; then
+  echo "${WATCHDOG_TEST_CADDY:-active}"
+  exit 0
+fi
 echo "systemctl $*" >> "$WATCHDOG_TEST_CALLS"
+SH2
+# Same shape for docker: `inspect` answers, `restart` is recorded.
+cat > "$WORK/docker" <<'SH2'
+#!/usr/bin/env bash
+if [ "${1:-}" = "inspect" ]; then
+  state="${WATCHDOG_TEST_CONTAINER:-true}"
+  # A container that is not there at all: `docker inspect` exits non-zero and
+  # prints nothing, which is how the supervisor tells `missing` from `stopped`.
+  [ "$state" = "missing" ] && exit 1
+  echo "$state"
+  exit 0
+fi
+echo "docker $*" >> "$WATCHDOG_TEST_CALLS"
+SH2
+# The probe shim. Everything aimed at the stub above is handed to the real
+# curl; every other URL answers with whatever the case under test has asked
+# for, and a POST to the alert webhook has its body recorded instead.
+cat > "$WORK/curl" <<'SH2'
+#!/usr/bin/env bash
+url="${!#}"
+payload=""
+prev=""
+for arg in "$@"; do
+  [ "$prev" = "-d" ] && payload="$arg"
+  prev="$arg"
+done
+case "$url" in
+  *"${WATCHDOG_TEST_STUB:-127.0.0.1:18807}"*)
+    exec "${WATCHDOG_TEST_CURL_REAL:-/usr/bin/curl}" "$@" ;;
+  *127.0.0.1:6300/health*)
+    echo "${WATCHDOG_TEST_PROOF_CODE:-200}" ;;
+  */prover/health*)
+    echo "${WATCHDOG_TEST_PUBLIC_PROVER:-200}" ;;
+  */balancer/status*)
+    echo "${WATCHDOG_TEST_PUBLIC_BALANCER:-200}" ;;
+  *hooks.example.invalid*)
+    printf '%s\n' "$payload" >> "${WATCHDOG_TEST_WEBHOOK:-/dev/null}" ;;
+  *)
+    echo 000 ;;
+esac
 SH2
 cat > "$WORK/node" <<'SH2'
 #!/usr/bin/env bash
@@ -84,8 +131,35 @@ cat > "$WORK/logger" <<'SH2'
 #!/usr/bin/env bash
 echo "logger $*" >> "$WATCHDOG_TEST_CALLS"
 SH2
-chmod +x "$WORK/systemctl" "$WORK/node" "$WORK/journalctl" "$WORK/logger"
+chmod +x "$WORK/systemctl" "$WORK/node" "$WORK/journalctl" "$WORK/logger" \
+  "$WORK/docker" "$WORK/curl"
 : > "$WORK/journal"
+: > "$WORK/webhook"
+
+# Captured BEFORE $WORK reaches PATH, so the shim above has a real curl to hand
+# the stub's own requests to.
+export WATCHDOG_TEST_CURL_REAL="$REAL_CURL"
+export WATCHDOG_TEST_STUB="127.0.0.1:$PORT"
+export WATCHDOG_TEST_WEBHOOK="$WORK/webhook"
+
+# What the droplet answers, unless a case says otherwise. `GRACE=0` because
+# every tick here happens in the same second: the real script holds its strikes
+# for two minutes after a restart, which is tested on its own below and would
+# otherwise make every multi-tick case unwritable.
+sv_defaults() {
+  export WATCHDOG_TEST_PROOF_CODE=200
+  export WATCHDOG_TEST_PUBLIC_PROVER=200
+  export WATCHDOG_TEST_PUBLIC_BALANCER=200
+  export WATCHDOG_TEST_CADDY=active
+  export WATCHDOG_TEST_CONTAINER=true
+  export WATCHDOG_ALERT_WEBHOOK=""
+  export WATCHDOG_REBOOT=0
+  export BALANCER_WATCHDOG_GRACE=0
+  unset BALANCER_WATCHDOG_BACKOFF
+  unset BALANCER_WATCHDOG_SUPERVISOR_STRIKES
+  unset BALANCER_WATCHDOG_HEARTBEAT
+}
+sv_defaults
 
 failures=0
 pass() { echo "  ok   $1"; }
@@ -110,7 +184,9 @@ healthy_bodies() {
   cat > "$BODIES/status.json" <<JSON
 {"synced":true,"balanceAtomic":"4998916000","dustSpecks":"24990017628947616000",
  "pendingTransactions":0,"balancesWatched":0,"balancing":false,"busy":false,
- "settling":false,"ready":true}
+ "settling":false,"ready":true,"jobsRunning":0,"proofInFlight":false,
+ "nodeSocket":"connected","consecutiveSocketFailures":0,
+ "aliasSponsorship":"available","accountFunding":"available","proving":"server"}
 JSON
   cat > "$BODIES/wallet-status.json" <<JSON
 {"total":1,"available":1,"wallets":[{"index":0,"ready":true,"syncState":"ready",
@@ -230,6 +306,8 @@ stalled_bodies() {
 {"synced":true,"balanceAtomic":"4998916000","dustSpecks":"24990017628947616000",
  "pendingTransactions":0,"balancesWatched":0,"balancing":false,"busy":true,
  "settling":false,"ready":true,"lanes":3,"jobsRunning":1,"proofInFlight":false,
+ "nodeSocket":"connected","consecutiveSocketFailures":0,
+ "aliasSponsorship":"available","accountFunding":"available","proving":"server",
  "jobs":[{"id":"job-7","label":"the registration of rvmtkqu91rwsk.night",
  "step":"$step","ageMs":$((since + 4000)),"sinceProgressMs":$since}]}
 JSON
@@ -372,6 +450,436 @@ if [ -z "$(calls)" ]; then
   pass "does nothing at all to a working sponsor"
 else
   fail "does nothing to a working sponsor" "$(calls)"
+fi
+
+
+# ---------------------------------------------------------------------------
+echo
+echo "the supervisor's whole-path probes"
+
+# A state directory that SURVIVES between ticks, because everything the
+# supervisor does is about consecutive ticks: strikes, backoff, escalation.
+sv_new() {
+  SV_STATE="$WORK/sv-$1"
+  rm -rf "$SV_STATE"
+  mkdir -p "$SV_STATE"
+  echo '{}' > "$SV_STATE/sync-snapshot-stagenet.json"
+  : > "$WORK/webhook"
+  : > "$WORK/journal"
+  sv_defaults
+}
+
+# One tick. The call log is truncated first, so an assertion is always about
+# what THIS tick did.
+sv_tick() {
+  : > "$WORK/calls"
+  WATCHDOG_TEST_CALLS="$WORK/calls" \
+  PATH="$WORK:$PATH" \
+  BALANCER_WATCHDOG_BASE="${SV_BASE:-http://127.0.0.1:$PORT}" \
+  BALANCER_WATCHDOG_STATE="$SV_STATE" \
+  BALANCER_WATCHDOG_SYSTEMCTL="$WORK/systemctl" \
+  BALANCER_WATCHDOG_NODE="$WORK/node" \
+  BALANCER_WATCHDOG_DOCKER="$WORK/docker" \
+  BALANCER_WATCHDOG_JOURNALCTL="$WORK/journalctl" \
+  BALANCER_WATCHDOG_LOGGER="$WORK/logger" \
+  WATCHDOG_TEST_JOURNAL="$WORK/journal" \
+    bash "$SCRIPT" > "$WORK/out-sv" 2>&1
+}
+
+sv_ticks() { local n="$1"; while [ "$n" -gt 0 ]; do sv_tick; n=$((n - 1)); done; }
+sv_out() { cat "$WORK/out-sv"; }
+
+# ---------------------------------------------------------------------------
+sv_new healthy
+healthy_bodies
+sv_tick
+if [ -z "$(calls)" ] && grep -q '^\[supervisor\] ok:' "$WORK/out-sv"; then
+  pass "says ok and touches nothing when every hop answers"
+else
+  fail "ok on a healthy stack" "$(calls); $(sv_out)"
+fi
+
+if [ "$(grep -c '^\[supervisor\]' "$WORK/out-sv")" = 1 ]; then
+  pass "writes exactly one summary line per tick"
+else
+  fail "one summary line per tick" "$(sv_out)"
+fi
+
+# ---------------------------------------------------------------------------
+# Every term of the /status verdict, one at a time. Each must be named in the
+# summary and none of them may restart anything on a single tick.
+for term in synced socket failures alias funding proving behind; do
+  sv_new "term-$term"
+  healthy_bodies
+  case "$term" in
+    synced)   sed -i.bak 's/"synced":true/"synced":false/' "$BODIES/status.json"; want='synced:False' ;;
+    socket)   sed -i.bak 's/"nodeSocket":"connected"/"nodeSocket":"dead"/' "$BODIES/status.json"; want='nodeSocket:dead' ;;
+    failures) sed -i.bak 's/"consecutiveSocketFailures":0/"consecutiveSocketFailures":4/' "$BODIES/status.json"; want='consecutiveSocketFailures:4' ;;
+    alias)    sed -i.bak 's/"aliasSponsorship":"available"/"aliasSponsorship":"unavailable"/' "$BODIES/status.json"; want='aliasSponsorship:unavailable' ;;
+    funding)  sed -i.bak 's/"accountFunding":"available"/"accountFunding":"unavailable"/' "$BODIES/status.json"; want='accountFunding:unavailable' ;;
+    proving)  sed -i.bak 's/"proving":"server"/"proving":"wasm"/' "$BODIES/status.json"; want='proving:wasm' ;;
+    behind)   sed -i.bak 's/"proving":"server"/"proving":"server","appliedBehindHeadBlocks":120/' "$BODIES/status.json"; want='appliedBehindHeadBlocks:120' ;;
+  esac
+  sv_tick
+  if grep -q '^\[supervisor\] degraded:' "$WORK/out-sv" && grep -q "$want" "$WORK/out-sv" && [ -z "$(calls)" ]; then
+    pass "reads $term as unhealthy, names it ($want), and restarts nothing on one tick"
+  else
+    fail "reads $term as unhealthy" "$(calls); $(sv_out)"
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# `nodeSocket` absent is a build that predates the field, not a fault.
+sv_new socket-absent
+healthy_bodies
+sed -i.bak 's/"nodeSocket":"connected",//' "$BODIES/status.json"
+sv_tick
+if grep -q '^\[supervisor\] ok:' "$WORK/out-sv"; then
+  pass "treats a missing nodeSocket as connected rather than as a fault"
+else
+  fail "missing nodeSocket is not a fault" "$(sv_out)"
+fi
+
+# Fifty blocks behind is the allowance, not the fault.
+sv_new behind-a-little
+healthy_bodies
+sed -i.bak 's/"proving":"server"/"proving":"server","appliedBehindHeadBlocks":10/' "$BODIES/status.json"
+sv_tick
+if grep -q '^\[supervisor\] ok:' "$WORK/out-sv"; then
+  pass "allows the wallet to sit ten blocks behind the head"
+else
+  fail "ten blocks behind is allowed" "$(sv_out)"
+fi
+
+# A /status that cannot be read is never healthy — the one reading that must
+# not be mistaken for silence meaning consent.
+sv_new unreadable
+healthy_bodies
+SV_BASE="http://127.0.0.1:19999" sv_tick
+if grep -q 'balancer=unreadable\|balancer=unreachable' "$WORK/out-sv"; then
+  pass "never reads an unanswerable /status as healthy"
+else
+  fail "an unreadable /status is not healthy" "$(sv_out)"
+fi
+unset SV_BASE
+
+# ---------------------------------------------------------------------------
+echo
+echo "the supervisor's targeted restarts"
+
+sv_unhealthy_bodies() {
+  healthy_bodies
+  sed -i.bak 's/"aliasSponsorship":"available"/"aliasSponsorship":"unavailable"/' "$BODIES/status.json"
+}
+
+# ---------------------------------------------------------------------------
+sv_new balancer-two
+sv_unhealthy_bodies
+sv_ticks 2
+if [ -z "$(calls)" ]; then
+  pass "holds at two unhealthy ticks — two minutes is not a fault"
+else
+  fail "holds at two unhealthy ticks" "$(calls)"
+fi
+
+sv_tick
+if calls | grep -q 'systemctl restart passport-balancer' && calls | grep -q 'logger -t passport-ops'; then
+  pass "restarts the balancer on the third consecutive unhealthy tick, with an ops marker"
+else
+  fail "restarts the balancer at three strikes" "$(calls); $(sv_out)"
+fi
+
+if grep -q 'aliasSponsorship:unavailable' "$WORK/out-sv"; then
+  pass "says in the journal WHICH term of /status was wrong"
+else
+  fail "names the failing term" "$(sv_out)"
+fi
+
+# ---------------------------------------------------------------------------
+# A spend in flight is a person waiting on a registration. Nothing is restarted
+# under one until the streak is long enough that the job is stuck, not slow.
+sv_new balancer-busy
+sv_unhealthy_bodies
+sed -i.bak 's/"busy":false/"busy":true/' "$BODIES/status.json"
+sed -i.bak 's/"jobsRunning":0/"jobsRunning":1/' "$BODIES/status.json"
+sed -i.bak 's/"proofInFlight":false/"proofInFlight":true/' "$BODIES/status.json"
+sv_ticks 3
+if [ -z "$(calls)" ] && grep -q 'a spend is in flight' "$WORK/out-sv"; then
+  pass "will not restart a sponsor that is mid-spend, and says so"
+else
+  fail "busy blocks the restart" "$(calls); $(sv_out)"
+fi
+
+sv_ticks 7
+if calls | grep -q 'systemctl restart passport-balancer'; then
+  pass "restarts anyway at ten ticks — a job that has held a lane that long is stuck, not busy"
+else
+  fail "the busy override fires at ten ticks" "$(calls); $(sv_out)"
+fi
+
+# ---------------------------------------------------------------------------
+# Nothing strikes a service inside the grace window after it was restarted:
+# a unit that is still starting is not a unit that has failed.
+sv_new balancer-grace
+sv_unhealthy_bodies
+export BALANCER_WATCHDOG_BACKOFF=0
+sv_ticks 3
+export BALANCER_WATCHDOG_GRACE=120
+sv_ticks 3
+if [ -z "$(calls)" ] && grep -q 'strike 0 of 3' "$WORK/out-sv"; then
+  pass "holds its strikes for two minutes after a restart, while the service comes back"
+else
+  fail "the grace window holds strikes" "$(calls); $(sv_out)"
+fi
+sv_defaults
+
+# ---------------------------------------------------------------------------
+# The backoff ladder: a dependency that is genuinely down must not be turned
+# into a restart every minute.
+sv_new balancer-backoff
+sv_unhealthy_bodies
+sv_ticks 3
+sv_ticks 3
+if [ -z "$(calls)" ] && grep -q 'backoff after 1 restart(s) is 600 s' "$WORK/out-sv"; then
+  pass "waits ten minutes before a second restart of the same unit"
+else
+  fail "the backoff ladder holds the second restart" "$(calls); $(sv_out)"
+fi
+
+# ---------------------------------------------------------------------------
+# Caddy. A unit that is not running is restarted; one that is running but not
+# serving is RELOADED, because restarting it writes the 1AM key into the
+# journal and a reload does not.
+sv_new caddy-down
+healthy_bodies
+export WATCHDOG_TEST_CADDY=inactive
+export WATCHDOG_TEST_PUBLIC_BALANCER=000
+export WATCHDOG_TEST_PUBLIC_PROVER=000
+sv_ticks 3
+if calls | grep -q 'systemctl restart caddy'; then
+  pass "restarts Caddy when systemctl says it is not running"
+else
+  fail "restarts a dead Caddy" "$(calls); $(sv_out)"
+fi
+
+sv_new caddy-not-serving
+healthy_bodies
+export WATCHDOG_TEST_PUBLIC_BALANCER=502
+sv_ticks 3
+if calls | grep -q 'systemctl reload caddy' && ! calls | grep -q 'systemctl restart caddy'; then
+  pass "reloads rather than restarts a Caddy that is active but not serving — a restart writes the gateway key to the journal"
+else
+  fail "reloads a Caddy that is not serving" "$(calls); $(sv_out)"
+fi
+
+# The public prover path failing BECAUSE the prover is down is the prover's
+# fault, and Caddy must not be blamed for it.
+sv_new caddy-blameless
+healthy_bodies
+export WATCHDOG_TEST_PUBLIC_PROVER=502
+export WATCHDOG_TEST_PROOF_CODE=502
+sv_ticks 3
+if calls | grep -q 'docker restart passport-proof-server' && ! calls | grep -q 'caddy'; then
+  pass "blames the proof server rather than Caddy when only the prover path fails"
+else
+  fail "does not blame Caddy for the prover" "$(calls); $(sv_out)"
+fi
+
+# ---------------------------------------------------------------------------
+# The proof server.
+sv_new proof-health
+healthy_bodies
+export WATCHDOG_TEST_PROOF_CODE=502
+sv_ticks 2
+if [ -z "$(calls)" ]; then
+  pass "holds at two failed /health checks on the proof server"
+else
+  fail "holds at two proof-server strikes" "$(calls)"
+fi
+sv_tick
+if calls | grep -q 'docker restart passport-proof-server'; then
+  pass "restarts the proof-server container after three failed /health checks"
+else
+  fail "restarts the proof server at three strikes" "$(calls); $(sv_out)"
+fi
+
+sv_new proof-stopped
+healthy_bodies
+export WATCHDOG_TEST_CONTAINER=false
+sv_ticks 3
+if calls | grep -q 'docker restart passport-proof-server' && grep -q 'container=stopped' "$WORK/out-sv"; then
+  pass "restarts a proof-server container that is not running, and says so"
+else
+  fail "restarts a stopped container" "$(calls); $(sv_out)"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "the supervisor's escalation"
+
+# Three restarts inside the window that have not helped, and restarting is
+# admitted not to be the repair.
+sv_escalate() {
+  sv_new "$1"
+  sv_unhealthy_bodies
+  export BALANCER_WATCHDOG_BACKOFF=0
+  export BALANCER_WATCHDOG_SUPERVISOR_STRIKES=1
+  sv_ticks 3
+}
+
+sv_escalate escalation
+sv_tick
+if [ -f "$SV_STATE/supervisor-escalated" ] && [ -z "$(calls | grep 'systemctl restart passport-balancer')" ]; then
+  pass "stops restarting after three restarts in the window and writes the escalated marker"
+else
+  fail "escalates after three restarts" "$(calls); $(cat "$SV_STATE/supervisor-escalated" 2>/dev/null); $(sv_out)"
+fi
+
+sv_tick
+if [ -z "$(calls)" ] && grep -q '^\[supervisor\] ESCALATED:' "$WORK/out-sv"; then
+  pass "restarts nothing at all while escalated, and says why every tick"
+else
+  fail "does nothing while escalated" "$(calls); $(sv_out)"
+fi
+
+healthy_bodies
+sv_tick
+if [ ! -f "$SV_STATE/supervisor-escalated" ] && grep -q 'ESCALATION CLEARED' "$WORK/out-sv"; then
+  pass "leaves escalation the moment the balancer reads healthy again"
+else
+  fail "leaves escalation when healthy" "$(sv_out)"
+fi
+
+# The reboot, which is off unless the environment file switches it on.
+sv_escalate escalation-noreboot
+sv_tick
+sv_tick
+if [ -z "$(calls | grep reboot)" ]; then
+  pass "never reboots the droplet with WATCHDOG_REBOOT unset"
+else
+  fail "no reboot by default" "$(calls)"
+fi
+
+sv_escalate escalation-reboot
+sv_tick
+export WATCHDOG_REBOOT=1
+sv_tick
+if calls | grep -q 'systemctl reboot'; then
+  pass "reboots once when WATCHDOG_REBOOT=1 and the marker is set"
+else
+  fail "reboots under WATCHDOG_REBOOT=1" "$(calls); $(sv_out)"
+fi
+sv_tick
+if [ -z "$(calls | grep reboot)" ]; then
+  pass "reboots at most once every six hours, not once a minute"
+else
+  fail "one reboot per six hours" "$(calls)"
+fi
+sv_defaults
+
+# ---------------------------------------------------------------------------
+echo
+echo "the supervisor's alerting hook"
+
+SECRET_URL="https://hooks.example.invalid/services/T000/B000/xoxb-not-a-real-secret"
+
+sv_new alert-silent
+sv_unhealthy_bodies
+sv_ticks 3
+if [ ! -s "$WORK/webhook" ]; then
+  pass "posts nothing anywhere with WATCHDOG_ALERT_WEBHOOK unset"
+else
+  fail "silent when unset" "$(cat "$WORK/webhook")"
+fi
+
+sv_new alert-payload
+sv_unhealthy_bodies
+export WATCHDOG_ALERT_WEBHOOK="$SECRET_URL"
+sv_ticks 3
+if grep -q 'restarting passport-balancer' "$WORK/webhook"; then
+  pass "posts a line to the webhook when it restarts something"
+else
+  fail "posts on an action" "$(cat "$WORK/webhook")"
+fi
+
+if python3 - "$WORK/webhook" <<'PY'
+import json, sys
+lines = [line for line in open(sys.argv[1]) if line.strip()]
+assert lines, 'nothing was posted'
+for line in lines:
+    body = json.loads(line)
+    assert list(body) == ['text'], body
+    assert isinstance(body['text'], str) and body['text'], body
+PY
+then
+  pass "every payload is a plain {\"text\": \"...\"} object and nothing else"
+else
+  fail "the payload shape" "$(cat "$WORK/webhook")"
+fi
+
+if ! grep -q 'xoxb-not-a-real-secret' "$WORK/out-sv"; then
+  pass "never writes the webhook URL to the journal"
+else
+  fail "the webhook URL stays out of the journal" "$(sv_out)"
+fi
+
+# The heartbeat, so a webhook that has quietly stopped delivering is noticed on
+# a quiet day rather than during an outage.
+sv_new alert-heartbeat
+healthy_bodies
+export WATCHDOG_ALERT_WEBHOOK="$SECRET_URL"
+sv_ticks 2
+if [ "$(grep -c heartbeat "$WORK/webhook")" = 1 ]; then
+  pass "sends one heartbeat a day, not one a tick"
+else
+  fail "one heartbeat a day" "$(cat "$WORK/webhook")"
+fi
+
+sv_new alert-escalation
+sv_unhealthy_bodies
+export WATCHDOG_ALERT_WEBHOOK="$SECRET_URL"
+export BALANCER_WATCHDOG_BACKOFF=0
+export BALANCER_WATCHDOG_SUPERVISOR_STRIKES=1
+sv_ticks 4
+if grep -q 'ESCALATED' "$WORK/webhook"; then
+  pass "alerts on entering escalation, which is the one state nobody will see otherwise"
+else
+  fail "alerts on escalation" "$(cat "$WORK/webhook")"
+fi
+sv_defaults
+
+# ---------------------------------------------------------------------------
+echo
+echo "the supervisor's self-protection"
+
+sv_new duration
+healthy_bodies
+sv_started=$(date +%s)
+sv_tick
+sv_elapsed=$(( $(date +%s) - sv_started ))
+if [ "$sv_elapsed" -lt 30 ]; then
+  pass "finishes a tick in ${sv_elapsed} s, inside the timer's minute"
+else
+  fail "finishes inside the timer's minute" "took ${sv_elapsed} s"
+fi
+
+if grep -q 'PROBE_TIMEOUT="${BALANCER_WATCHDOG_PROBE_TIMEOUT:-5}"' "$SCRIPT" \
+  && grep -q 'TIMEOUT="${BALANCER_WATCHDOG_TIMEOUT:-5}"' "$SCRIPT"; then
+  pass "gives every request a five-second budget, so seven of them fit in a minute"
+else
+  fail "five-second request budgets" "$(grep TIMEOUT= "$SCRIPT")"
+fi
+
+# Idempotent: the same droplet, twice, decides the same thing.
+sv_new idempotent
+healthy_bodies
+sv_tick
+cp "$WORK/out-sv" "$WORK/out-sv-first"
+sv_tick
+if [ "$(sed 's/[0-9]//g' "$WORK/out-sv-first")" = "$(sed 's/[0-9]//g' "$WORK/out-sv")" ]; then
+  pass "decides the same thing twice about the same droplet"
+else
+  fail "idempotent" "$(diff "$WORK/out-sv-first" "$WORK/out-sv")"
 fi
 
 echo
