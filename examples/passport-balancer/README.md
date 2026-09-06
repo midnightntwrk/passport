@@ -686,7 +686,7 @@ inside the process it happens to.
 
 ### Leg A — the in-process health loop (`src/health.ts`)
 
-A tick every ten minutes (`BALANCER_HEALTH_INTERVAL_MS`), jittered by ±5 % so it
+A tick every two minutes (`BALANCER_HEALTH_INTERVAL_MS`), jittered by ±5 % so it
 never lands on the same second as the sixty-second snapshot save or the DUST
 registration retry. One tick at a time, remedy included.
 
@@ -1233,7 +1233,7 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_FEE_BLOCKS_MARGIN` | `5` | Fee-estimate margin. A wallet with only a few blocks of DUST refuses its own transactions under a larger one. |
 | `BALANCER_BALANCE_TTL_MS` | `1800000` | TTL on every balanced transaction, and the `expiresAt` handed back. |
 | `BALANCER_BALANCE_ORPHAN_MS` | `120000` | How long a balanced transaction may go unseen on chain before the DUST it booked is handed back. See "Booked DUST" below. |
-| `BALANCER_HEALTH_INTERVAL_MS` | `600000` | How often the in-process watchdog evaluates the wallet. Minimum `5000`; **`0` turns it off**, and the external timer is unaffected. |
+| `BALANCER_HEALTH_INTERVAL_MS` | `120000` | How often the in-process watchdog evaluates the wallet. Minimum `5000`; **`0` turns it off**, and the external timer is unaffected. |
 | `BALANCER_MIDNAMES_TLD_ADDRESS` | our stagenet TLD | The `.night` registry names go to. Unset **and** no known default disables `/register-alias`. |
 | `BALANCER_ALIAS_MAX_PER_HOUR` | `20` | Sponsored registrations per rolling hour. |
 | `RESOLVER_POOL_TARGET` | `100` | Pre-deployed resolver leaves to hold. **`0` turns the pool off**, and every name deploys its own leaf. |
