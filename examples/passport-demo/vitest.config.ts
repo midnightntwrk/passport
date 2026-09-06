@@ -507,6 +507,7 @@ export default mergeConfig(
           'src/lib/appBusy.ts',
           'src/lib/balanceWatch.ts',
           'src/lib/claimFailure.ts',
+          'src/lib/claimRetry.ts',
           'src/lib/claimSteps.ts',
           'src/lib/companionLink.ts',
           'src/lib/colour.ts',

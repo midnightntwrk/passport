@@ -104,6 +104,16 @@ export class AliasSponsorRefusal extends Error {
      * name would put these words back on the screen by another route.
      */
     readonly serviceMessage: string = message,
+    /**
+     * The `retryAfterMs` the service named beside this refusal, or `null`.
+     *
+     * Carried rather than only classified-on since 2026/09/05, when the claim
+     * became patient: `lib/claimRetry.ts` waits out a transient refusal, and a
+     * service that has said WHEN it will be free knows better than any backoff
+     * this client could guess. Read for a delay and never rendered — like
+     * `detail`, and for the same reason.
+     */
+    readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = 'AliasSponsorRefusal';
@@ -482,19 +492,24 @@ export async function sponsorAliasRegistration(
       // The probe's cached "available" is now demonstrably stale.
       invalidateSponsorshipProbe(funderUrl);
     }
+    /* Read once, for two purposes: it decides which SENTENCE this refusal gets,
+       and — since 2026/09/05 — how long the retry schedule waits before asking
+       again. See `lib/claimRetry.ts`. */
+    const retryAfterMs =
+      typeof refusal.retryAfterMs === 'number' && Number.isFinite(refusal.retryAfterMs)
+        ? refusal.retryAfterMs
+        : null;
     throw new AliasSponsorRefusal(
       code,
       aliasRefusalMessage({
         code,
         domain: aliasDomain(request.alias),
         detail: typeof refusal.detail === 'string' ? refusal.detail : null,
-        retryAfterMs:
-          typeof refusal.retryAfterMs === 'number' && Number.isFinite(refusal.retryAfterMs)
-            ? refusal.retryAfterMs
-            : null,
+        retryAfterMs,
       }),
       !NO_FALLBACK_CODES.has(code),
       serviceMessage,
+      retryAfterMs,
     );
   }
 

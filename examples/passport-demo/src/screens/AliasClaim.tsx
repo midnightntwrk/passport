@@ -23,6 +23,7 @@ import {
   type AliasClaimProgress,
 } from '../identity/midnamesText.js'
 import { claimFailureCard } from '../lib/claimFailure.js'
+import { CLAIM_RETRYING_SENTENCE, claimRetryLine, type ClaimRetryNotice } from '../lib/claimRetry.js'
 import {
   claimSteps,
   claimSubStages,
@@ -110,6 +111,35 @@ export interface AliasClaimProps {
    */
   onContinueHome: () => void
   claimPhase: AliasClaimProgress['phase'] | null
+  /**
+   * Set while the name service has refused for its OWN reasons and Passport is
+   * asking again — a progress state, not a failure.
+   *
+   * THE WAIT THAT WAS A DEAD END (2026/09/05). The service failed to deploy the
+   * resolver leaf, answered `deploy-failed`, and this screen showed the failure
+   * card and stopped: "The claim did not complete… your name is kept for you",
+   * two buttons, and Passport waiting for a human. Nothing in that refusal was
+   * a fact about the reader or the name — the next attempt a minute later
+   * usually lands — and the opening balance, refused by the same service the
+   * same afternoon, quietly asked again for ten minutes.
+   *
+   * So the claim waits too, and this is what it says while it does: the stepper
+   * stays up, {@link CLAIM_RETRYING_SENTENCE} says the name service is busy,
+   * and a line beneath it counts down to the next attempt. The failure card is
+   * for a refusal that is genuinely final, or a window that ran out; the host
+   * clears this before it sets {@link AliasClaimProps.error}, so the two are
+   * never on screen together.
+   *
+   * `dueAt` is `null` while an attempt is actually being made, which is why the
+   * panel — and the way to Home on it — stays put across both states.
+   */
+  claimRetry?: ClaimRetryNotice | null
+  /**
+   * Ends the wait and asks now. This is what "Try again" BECOMES while a
+   * schedule is running: the claim is already in hand, so the control must not
+   * start a second one, and it is a different verb — "Try now".
+   */
+  onRetryNow?: () => void
   error: string | null
   /**
    * True when {@link AliasClaimProps.error} is a PASSKEY ceremony that could
@@ -251,6 +281,8 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     onSkip,
     onContinueHome,
     claimPhase,
+    claimRetry,
+    onRetryNow,
     error,
     errorIsPasskeyWayOut,
     onSignOut,
@@ -397,6 +429,25 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
     }, 1_000)
     return () => window.clearInterval(timer)
   }, [activeStepId])
+
+  /* ---------------------------------------------------------------- */
+  /* THE COUNTDOWN TO THE NEXT ATTEMPT (2026/09/05)                     */
+  /*                                                                    */
+  /* Its own tick rather than the clock above, because the two measure  */
+  /* different things and one of them is not always running: the step   */
+  /* timer counts UP from the start of a step, and this counts DOWN to  */
+  /* a moment the host has named. Keyed on that moment, so a wait that  */
+  /* is ended early — "Try now", or the schedule moving on — clears the */
+  /* interval rather than counting into a wait that is over.            */
+  /* ---------------------------------------------------------------- */
+  const retryDueAt = claimRetry?.dueAt ?? null
+  const [retryNow, setRetryNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (retryDueAt === null) return undefined
+    setRetryNow(Date.now())
+    const timer = window.setInterval(() => setRetryNow(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [retryDueAt])
 
   /* ---------------------------------------------------------------- */
   /* THE OFFER OF SOMETHING TO DO (2026/09/03)                          */
@@ -709,6 +760,50 @@ export default function AliasClaimScreen(props: AliasClaimProps) {
               Play while you wait
             </button>
           )
+        ) : null}
+
+        {/* THE CLAIM BEING PATIENT (2026/09/05), and it is deliberately NOT the
+            failure card: nothing has failed, the name is still being
+            registered, and the stepper above is still saying where the claim
+            has got to. `role="status"`, not `alert`, for the same reason.
+
+            One sentence, from `lib/claimRetry.ts` so the words a person reads
+            here cannot drift from the rule that produced them, and no
+            machinery in it — no resolver, no contract, no sponsor, no DUST, no
+            indexer. Beneath it the countdown, which is what makes the wait
+            legible rather than indistinguishable from a hang, and the same two
+            controls the failure card carries: the retry, now reading "Try now"
+            because a claim is already in hand and this only ends its wait, and
+            the way to Home for somebody who would rather not watch. */}
+        {claimRetry && !error ? (
+          <div className="mnid-panel" role="status" aria-live="polite">
+            <p className="mnid-panel-head">
+              <Loader2 className="mnid-spin" size={15} aria-hidden="true" />
+              Still registering {claimDomain ?? 'your name'}
+            </p>
+            <p>{CLAIM_RETRYING_SENTENCE}</p>
+            {/* `aria-live="off"`: the panel around it is polite, and a value
+                that changes every second would otherwise be read aloud every
+                second. The number is for the eye. */}
+            <p className="mnid-stepper-timing" aria-live="off">
+              {claimRetryLine(retryDueAt === null ? null : retryDueAt - retryNow)}
+            </p>
+            <div className="mnwo-actions">
+              <button
+                type="button"
+                className="mnwo-action mnwo-action-primary"
+                onClick={onRetryNow}
+                disabled={retryDueAt === null}
+              >
+                <RotateCcw size={15} strokeWidth={2} aria-hidden="true" />
+                Try now
+              </button>
+              <button type="button" className="mnwo-action" onClick={onContinueHome}>
+                <Home size={15} strokeWidth={2} aria-hidden="true" />
+                Continue to Home
+              </button>
+            </div>
+          </div>
         ) : null}
 
         {/* The promise, until it is being kept. "Press claim" is advice about a

@@ -58,6 +58,8 @@ import {
   refusalHoldsActivation,
   releaseActivationGrant,
 } from './lib/activationHold.js';
+import { startClaimRetry, withClaimRetry } from './lib/claimRetry.js';
+import type { ClaimRetryNotice, ClaimRetryRun } from './lib/claimRetry.js';
 import {
   ACTIVITY_KEEP,
   activityStorageKey,
@@ -1412,6 +1414,26 @@ export default function PassportDemo() {
    */
   const [recoveringAccount, setRecoveringAccount] = useState(false);
   const [claimPhase, setClaimPhase] = useState<AliasClaimProgress['phase'] | null>(null);
+  /**
+   * The claim is being patient rather than failing — see `lib/claimRetry.ts`.
+   *
+   * Non-null only while a registration the service refused for its OWN reasons
+   * is being asked again, which is a progress state and not a failure: the
+   * screen keeps its stepper, says the name service is busy, counts down to the
+   * next attempt, and offers Try now beside the Continue to Home it already
+   * had. It is cleared the moment the schedule ends, whichever way it ends, so
+   * the failure card and this panel can never be on screen together.
+   */
+  const [claimRetry, setClaimRetry] = useState<ClaimRetryNotice | null>(null);
+  /**
+   * The running schedule, so "Try now" can end its wait early.
+   *
+   * A ref rather than state because nothing renders from it and a click must
+   * reach the run that is actually waiting, not the one a stale closure
+   * remembers. Set where the schedule starts and cleared in the same `finally`
+   * that clears the notice above.
+   */
+  const claimRetryRun = useRef<ClaimRetryRun | null>(null);
   /**
    * Why the last claim did not complete, and whether the screen owes the user
    * a WAY OUT as well as a sentence.
@@ -4044,6 +4066,12 @@ export default function PassportDemo() {
       activeProfile: DemoPassportProfile,
       alias: string,
       onPhase: (phase: AliasClaimProgress['phase']) => void,
+      /**
+       * Where the patient-registration notice goes — see `lib/claimRetry.ts`.
+       * Optional so a caller that has no surface for it (a test harness, a
+       * future headless path) simply does not hear about the waiting.
+       */
+      onRetryNotice: (notice: ClaimRetryNotice | null) => void = () => {},
     ): Promise<AliasClaimResult> => {
       const credentialId = activeProfile.passkey.credentialId;
       const network = handle.network.networkId;
@@ -4370,55 +4398,94 @@ export default function PassportDemo() {
         let claimed: AliasClaimResult | null = null;
         if (sponsored && FUNDER_URL) {
           onPhase('registering');
+          /* Derived ONCE, outside the retry loop below: it is the same 32 bytes
+             every time, and a second attempt must send byte-identically what
+             the first did — that sameness is what makes the service's
+             per-name-per-account idempotence hold. */
+          const ownerKey = await deriveMidnamesOwnerKey(ownerSecret);
+          /* AS PATIENT AS THE OPENING BALANCE (2026/09/05). A service that
+             refuses for its own reasons — it could not deploy the leaf, it
+             could not read the registry, it had no NIGHT or no DUST free, its
+             socket was gone — is asked again on a backoff rather than handed
+             to the reader as a failure. `lib/claimRetry.ts` owns which
+             refusals earn that and how long the asking may go on for; the two
+             things that stay HERE are the hold on the grant and the deploy's
+             own failure outranking the name service's, both below. */
+          const retryRun = startClaimRetry();
+          claimRetryRun.current = retryRun;
           try {
-            claimed = await sponsorAliasRegistration(
-              FUNDER_URL,
-              {
-                alias,
-                ownerKey: await deriveMidnamesOwnerKey(ownerSecret),
-                contractAddress,
-                /* No payment address: the leaf's owner-address half used to
-                   carry the wallet's address, which a resolver honouring it
-                   would PAY — outside the account model. The service zero-fills
-                   it; the registry's authority is the owner key, and the target
-                   is the account (audit finding, 2026/08/25). */
-                network: registryNetwork,
-                /* Set only where this claim submitted the deploy and is not
-                   waiting for it: the service is being told to check the target
-                   before it REGISTERS rather than before it accepts, which is
-                   the whole of what buys the time. A claim reusing an account
-                   that was already on the record sends nothing, because there
-                   is nothing pending about it. */
-                targetPending: awaitAccountOnChain !== undefined,
+            claimed = await withClaimRetry({
+              run: retryRun,
+              onNotice: onRetryNotice,
+              onRefusal: (cause) => {
+                /* THE DEPLOY'S OWN FAILURE OUTRANKS THE NAME SERVICE'S. Read
+                   synchronously — the flag is set by the landing handler
+                   attached before this request went out — so a name refused for
+                   its own reasons never waits on a deploy, and a name refused
+                   BECAUSE the account never landed is reported as the account
+                   failing rather than as the registry being unhelpful. Thrown
+                   from here, so it also ends the schedule: there is nothing for
+                   a patient retry to wait for when the account is gone. */
+                if (accountDeployFailure !== null) throw accountDeployFailure;
+                if (!(cause instanceof AliasSponsorRefusal)) throw cause;
+                /* NO NAME, NO GRANT (2026/09/04). The refusal is in hand and
+                   the account has one; the grant is once per account for ever,
+                   and spending it now buys a Passport nobody can send to by
+                   name. The soak of 2026/09/04 did exactly that: refused at the
+                   sponsor's hourly ceiling at 17:38:02, funded at 17:38:03. The
+                   hold goes on at the FIRST refusal, retry or not — the race it
+                   settles is with an activation already in flight, which does
+                   not wait for this schedule to finish — and it is lifted where
+                   the name registers below, which a retry that lands reaches
+                   exactly as a first attempt does. */
+                if (refusalHoldsActivation(cause.code)) {
+                  holdActivationGrant(contractAddress, cause.code);
+                }
+                return {
+                  code: cause.code,
+                  worthRetrying: cause.selfPayWorthTrying,
+                  retryAfterMs: cause.retryAfterMs,
+                };
               },
-              {
-                /* The compatibility half, and the correctness one: a service
-                   that has never heard of `targetPending` refuses
-                   `target-missing`, and a service that has may still be asked
-                   about an account whose deploy is genuinely slow. Either way
-                   the answer is to wait for the chain and ask once more. */
-                awaitTarget: awaitAccountOnChain,
-              },
-            );
+              attempt: () =>
+                sponsorAliasRegistration(
+                  FUNDER_URL,
+                  {
+                    alias,
+                    ownerKey,
+                    contractAddress,
+                    /* No payment address: the leaf's owner-address half used to
+                       carry the wallet's address, which a resolver honouring it
+                       would PAY — outside the account model. The service
+                       zero-fills it; the registry's authority is the owner key,
+                       and the target is the account (audit, 2026/08/25). */
+                    network: registryNetwork,
+                    /* Set only where this claim submitted the deploy and is not
+                       waiting for it: the service is being told to check the
+                       target before it REGISTERS rather than before it accepts,
+                       which is the whole of what buys the time. A claim reusing
+                       an account that was already on the record sends nothing,
+                       because there is nothing pending about it. */
+                    targetPending: awaitAccountOnChain !== undefined,
+                  },
+                  {
+                    /* The compatibility half, and the correctness one: a
+                       service that has never heard of `targetPending` refuses
+                       `target-missing`, and a service that has may still be
+                       asked about an account whose deploy is genuinely slow.
+                       Either way the answer is to wait for the chain and ask
+                       once more. */
+                    awaitTarget: awaitAccountOnChain,
+                  },
+                ),
+            });
           } catch (cause) {
-            /* THE DEPLOY'S OWN FAILURE OUTRANKS THE NAME SERVICE'S. Read
-               synchronously — the flag is set by the landing handler attached
-               before this request went out — so a name refused for its own
-               reasons never waits on a deploy, and a name refused BECAUSE the
-               account never landed is reported as the account failing rather
-               than as the registry being unhelpful. */
+            /* WHAT THE READER IS TOLD, and it is unchanged: the schedule above
+               re-throws the refusal that ended it exactly as it caught it, so a
+               claim that is genuinely over lands on the same card, with the
+               same sentence, that it did before any of this was patient. */
             if (accountDeployFailure !== null) throw accountDeployFailure;
             if (!(cause instanceof AliasSponsorRefusal)) throw cause;
-            /* NO NAME, NO GRANT (2026/09/04). The refusal is in hand and the
-               account has one; the grant is once per account for ever, and
-               spending it now buys a Passport nobody can send to by name. The
-               soak of 2026/09/04 did exactly that: refused at the sponsor's
-               hourly ceiling at 17:38:02, funded at 17:38:03. The hold is
-               placed before the throw so it is in place whichever way the race
-               went, and it is lifted where the name registers below. */
-            if (refusalHoldsActivation(cause.code)) {
-              holdActivationGrant(contractAddress, cause.code);
-            }
             if (cause.code === 'name-taken') {
               throw new AliasClaimError('taken', cause.message);
             }
@@ -4443,6 +4510,14 @@ export default function PassportDemo() {
                  The card is a heading, one sentence, and two controls. */
               cause.message,
             );
+          } finally {
+            /* The schedule is over, whichever way it went. Both are cleared
+               here rather than at each exit so a "Retrying in 40 s" line can
+               never outlive the run it counts down for — including on the
+               success path, where the next thing on screen is the registered
+               name. */
+            claimRetryRun.current = null;
+            onRetryNotice(null);
           }
         }
         if (!claimed) {
@@ -4538,7 +4613,13 @@ export default function PassportDemo() {
          until the account deploy. `claimAliasBoundToAccount` advances it. */
       setClaimPhase('checking');
       try {
-        const result = await claimAliasBoundToAccount(handle, activeProfile, alias, setClaimPhase);
+        const result = await claimAliasBoundToAccount(
+          handle,
+          activeProfile,
+          alias,
+          setClaimPhase,
+          setClaimRetry,
+        );
         saveAliasRecord({
           credentialId: activeProfile.passkey.credentialId,
           alias: result.alias,
@@ -4620,6 +4701,7 @@ export default function PassportDemo() {
         });
       } finally {
         setClaimPhase(null);
+        setClaimRetry(null);
       }
     },
     [
@@ -4738,6 +4820,7 @@ export default function PassportDemo() {
         activeProfile,
         record.alias,
         setClaimPhase,
+        setClaimRetry,
       );
       saveAliasRecord({
         credentialId: activeProfile.passkey.credentialId,
@@ -4793,6 +4876,7 @@ export default function PassportDemo() {
       });
     } finally {
       setClaimPhase(null);
+      setClaimRetry(null);
       setRegisterNowBusy(false);
     }
   }, [
@@ -5165,6 +5249,11 @@ export default function PassportDemo() {
     setAccountSearch(null);
     setRecoveringAccount(false);
     setClaimPhase(null);
+    /* A schedule the signed-out session left waiting is abandoned with it: the
+       run is told to stop, so its next attempt is never made, and the notice
+       goes with the screen that was showing it. */
+    claimRetryRun.current?.cancel();
+    setClaimRetry(null);
     setAliasFailure(null);
     setReclaim(null);
     setReclaimError(null);
@@ -7935,6 +8024,11 @@ export default function PassportDemo() {
              Home is where that name is waiting with "Register now" on it. */
           onContinueHome={leaveNameStepForHome}
           claimPhase={claimPhase}
+          /* The claim being PATIENT rather than failing — see
+             `lib/claimRetry.ts`. Non-null keeps the stepper up, says the name
+             service is busy, and turns the card's retry into "Try now". */
+          claimRetry={claimRetry}
+          onRetryNow={() => claimRetryRun.current?.tryNow()}
           error={aliasFailure?.message ?? null}
           /* The name step has no sign-out in its header, so when a passkey
              ceremony refuses here the failure card is the ONLY place a way out
