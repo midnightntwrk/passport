@@ -730,7 +730,7 @@ export async function createMidnamesSponsor(
   };
   /** The rebuild's wait on the indexer, for every retry in this module. */
   const heightGate = {
-    indexerHeight: () => queryIndexerHeight(config.indexerHttpUrl),
+    indexerHeight: () => queryIndexerHeight(config.indexerHttpUrls),
     chainHeight: () => wallet.nodeHeight(),
   };
 
@@ -807,7 +807,7 @@ export async function createMidnamesSponsor(
       };
       const address = rawContractAddress(deployTxData.public.contractAddress);
       const identifier = transactionIdentifier(deployTxData);
-      const resolved = await resolveTransactionHash(config.indexerHttpUrl, identifier);
+      const resolved = await resolveTransactionHash(config.indexerHttpUrls, identifier);
       return { address, deployTx: resolved.hash, deployBlock: resolved.block };
     },
 
@@ -1140,9 +1140,9 @@ export async function createMidnamesSponsor(
          its whole retry budget doing it. See `deployTransactionReference`. */
       const [deploy, register] = await Promise.all([
         deployTransactionReference(pooled, resolverDeployTx, (identifier) =>
-          resolveTransactionHash(config.indexerHttpUrl, identifier),
+          resolveTransactionHash(config.indexerHttpUrls, identifier),
         ),
-        resolveTransactionHash(config.indexerHttpUrl, registerTx),
+        resolveTransactionHash(config.indexerHttpUrls, registerTx),
       ]);
 
       return {

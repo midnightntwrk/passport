@@ -1395,9 +1395,11 @@ function fakeHead(now: () => number, script: { height: () => number | null }): C
     probes: 0,
     failures: 0,
     lastError: null,
+    urlInUse: 'https://rpc.stagenet.shielded.tools',
   };
   return {
     url: 'https://rpc.stagenet.shielded.tools',
+    urls: ['https://rpc.stagenet.shielded.tools'],
     reading: () => ({ ...state }),
     read: async () => {
       state.probes += 1;

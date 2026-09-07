@@ -827,7 +827,7 @@ export async function createAccountFunder(
   };
   /** The rebuild's wait on the indexer, for every retry in this module. */
   const heightGate = {
-    indexerHeight: () => queryIndexerHeight(config.indexerHttpUrl),
+    indexerHeight: () => queryIndexerHeight(config.indexerHttpUrls),
     chainHeight: () => wallet.nodeHeight(),
   };
 
@@ -1307,7 +1307,7 @@ export async function createAccountFunder(
         );
       }
 
-      const resolved = await resolveTransactionHash(config.indexerHttpUrl, depositTx);
+      const resolved = await resolveTransactionHash(config.indexerHttpUrls, depositTx);
       return {
         contractAddress: address,
         txHash: resolved.hash,
@@ -1433,8 +1433,8 @@ export async function createAccountFunder(
       void ensureSpareCoin();
 
       const [mintResolved, depositResolved] = await Promise.all([
-        resolveTransactionHash(config.indexerHttpUrl, mintTx),
-        resolveTransactionHash(config.indexerHttpUrl, depositTx),
+        resolveTransactionHash(config.indexerHttpUrls, mintTx),
+        resolveTransactionHash(config.indexerHttpUrls, depositTx),
       ]);
       return {
         contractAddress: address,

@@ -1227,9 +1227,12 @@ Everything comes from the environment. Only `BALANCER_SEED` is required.
 | `BALANCER_STATE_DIR` | `./state` | Holds the sync snapshot. |
 | `BALANCER_ENV_FILE` | — | A `KEY=VALUE` file to merge in. The real environment always wins. |
 | `BALANCER_PROVER_URL` | — | External proof server. Unset means prove in-process. |
-| `BALANCER_INDEXER_URL` | stagenet indexer | Overrides the network default. |
+| `BALANCER_INDEXER_URL` | stagenet indexer | Overrides the network default. Read as a list of one; `BALANCER_INDEXER_URLS` wins where both are set. |
+| `BALANCER_INDEXER_URLS` | the singular, or the network default | Ordered comma list of indexers, preferred first. Tried left to right; nothing reorders them and nothing remembers a winner between calls. |
 | `BALANCER_INDEXER_WS_URL` | derived | Defaults to the HTTP URL with `/ws` appended. |
-| `BALANCER_NODE_URL` | `wss://rpc.stagenet.shielded.tools` | Submission relay source. |
+| `BALANCER_INDEXER_WS_URLS` | derived from `BALANCER_INDEXER_URLS` | One WebSocket per indexer, in the same order. A shorter list is padded from the derivation rather than pairing an indexer with somebody else's socket. |
+| `BALANCER_NODE_URL` | `wss://rpc.stagenet.shielded.tools` | Submission relay source. Read as a list of one; `BALANCER_NODE_URLS` wins where both are set. |
+| `BALANCER_NODE_URLS` | the singular, or the network default | Ordered comma list of nodes, preferred first. The submission connection walks it on every rebuild, starting again at the first; the head probe walks it on every read. |
 | `BALANCER_FEE_BLOCKS_MARGIN` | `5` | Fee-estimate margin. A wallet with only a few blocks of DUST refuses its own transactions under a larger one. |
 | `BALANCER_BALANCE_TTL_MS` | `1800000` | TTL on every balanced transaction, and the `expiresAt` handed back. |
 | `BALANCER_BALANCE_ORPHAN_MS` | `120000` | How long a balanced transaction may go unseen on chain before the DUST it booked is handed back. See "Booked DUST" below. |

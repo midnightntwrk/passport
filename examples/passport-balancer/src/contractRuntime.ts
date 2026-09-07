@@ -29,6 +29,7 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import type { ZKConfigProvider } from '@midnight-ntwrk/midnight-js-types';
 
 import type { BalancerConfig } from './config.js';
+import { askIndexers, type IndexerUrls } from './endpoints.js';
 import { countingProof } from './proving.js';
 import { currentJob, progress, releaseWithJob } from './reservation.js';
 import type { ContractWalletProvider } from './wallet.js';
@@ -131,13 +132,13 @@ export function transactionIdentifier(result: unknown): string {
  * rather than replaced by a plausible-looking lie.
  */
 export async function resolveTransactionHash(
-  indexerHttpUrl: string,
+  indexer: IndexerUrls,
   identifier: string,
 ): Promise<{ hash: string; block: number | null }> {
   const query = `{ transactions(offset: { identifier: "${identifier}" }) { hash block { height } } }`;
-  for (let attempt = 0; attempt < TX_HASH_ATTEMPTS; attempt += 1) {
+  const askOne = async (url: string): Promise<{ hash: string; block: number | null } | null> => {
     try {
-      const response = await fetch(indexerHttpUrl, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ query }),
@@ -148,8 +149,16 @@ export async function resolveTransactionHash(
       const found = body.data?.transactions?.[0];
       if (found?.hash) return { hash: found.hash, block: found.block?.height ?? null };
     } catch {
-      // Transient network or parse failure — retried below.
+      // Transient network or parse failure — the next indexer, or the retry.
     }
+    return null;
+  };
+  for (let attempt = 0; attempt < TX_HASH_ATTEMPTS; attempt += 1) {
+    /* Every configured indexer, then the wait. A second indexer that is merely
+       further behind answers on a later attempt rather than on this one, which
+       is the same lag this loop already exists to ride out. */
+    const found = await askIndexers(indexer, askOne, (value) => value !== null);
+    if (found) return found;
     await wait(CONFIRM_INTERVAL_MS);
   }
   return { hash: identifier, block: null };
@@ -305,65 +314,94 @@ export async function raceAbort<T>(work: Promise<T>): Promise<T> {
  * whether the indexer has the block that refused the last build, and on
  * stagenet the indexer runs 13–14 s behind the node.
  */
-export async function queryIndexerHeight(indexerHttpUrl: string): Promise<number | null> {
-  try {
-    const response = await fetch(indexerHttpUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query: '{ block { height } }' }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    const body = (await response.json()) as { data?: { block?: { height?: number } } };
-    const height = body.data?.block?.height;
-    return typeof height === 'number' ? height : null;
-  } catch {
-    return null;
-  }
+export async function queryIndexerHeight(indexer: IndexerUrls): Promise<number | null> {
+  return await askIndexers(
+    indexer,
+    async (url) => {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ query: '{ block { height } }' }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        const body = (await response.json()) as { data?: { block?: { height?: number } } };
+        const height = body.data?.block?.height;
+        return typeof height === 'number' ? height : null;
+      } catch {
+        return null;
+      }
+    },
+    (height) => height !== null,
+  );
 }
 
 export async function queryTransactionByIdentifier(
-  indexerHttpUrl: string,
+  indexer: IndexerUrls,
   identifier: string,
 ): Promise<IndexerAnswer & { hash: string | null; block: number | null }> {
   const query = `{ transactions(offset: { identifier: "${identifier}" }) { hash block { height } } }`;
-  try {
-    const response = await fetch(indexerHttpUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    const body = (await response.json()) as {
-      data?: { transactions?: Array<{ hash?: string; block?: { height?: number } }> };
-    };
-    const found = body.data?.transactions?.[0];
-    if (found?.hash) {
-      return { found: true, reachable: true, hash: found.hash, block: found.block?.height ?? null };
-    }
-    return { found: false, reachable: true, hash: null, block: null };
-  } catch {
-    return { found: false, reachable: false, hash: null, block: null };
-  }
+  return await askIndexers(
+    indexer,
+    async (url) => {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ query }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        const body = (await response.json()) as {
+          data?: { transactions?: Array<{ hash?: string; block?: { height?: number } }> };
+        };
+        const found = body.data?.transactions?.[0];
+        if (found?.hash) {
+          return {
+            found: true,
+            reachable: true,
+            hash: found.hash,
+            block: found.block?.height ?? null,
+          };
+        }
+        return { found: false, reachable: true, hash: null, block: null };
+      } catch {
+        return { found: false, reachable: false, hash: null, block: null };
+      }
+    },
+    /* An indexer that ANSWERED settles the question, whether or not it had the
+       transaction — falling through on a definite "not there" would let a
+       second, further-behind indexer overturn a correct answer. Only an indexer
+       that could not be asked is a reason to ask another. */
+    (answer) => answer.reachable,
+  );
 }
 
 /** One indexer query: does a contract exist at this address? */
 export async function queryContract(
-  indexerHttpUrl: string,
+  indexer: IndexerUrls,
   contractAddress: string,
 ): Promise<IndexerAnswer> {
   const query = `{ contractAction(address: "${contractAddress}") { address } }`;
-  try {
-    const response = await fetch(indexerHttpUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    const body = (await response.json()) as { data?: { contractAction?: { address?: string } | null } };
-    return { found: Boolean(body.data?.contractAction?.address), reachable: true };
-  } catch {
-    return { found: false, reachable: false };
-  }
+  return await askIndexers(
+    indexer,
+    async (url) => {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ query }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        const body = (await response.json()) as {
+          data?: { contractAction?: { address?: string } | null };
+        };
+        return { found: Boolean(body.data?.contractAction?.address), reachable: true };
+      } catch {
+        return { found: false, reachable: false };
+      }
+    },
+    (answer) => answer.reachable,
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -586,15 +624,49 @@ export function inMemoryPrivateStateProvider(initial: Record<string, unknown>) {
   };
 }
 
-/** The indexer reader, in the beta's object-argument form. */
+/**
+ * The indexer reader, in the beta's object-argument form — built against the
+ * first indexer in the list that will answer.
+ *
+ * FAILOVER HAPPENS HERE, AT CONSTRUCTION, and nowhere after it. An
+ * `indexerPublicDataProvider` is an Apollo client over a graphql-ws socket: it
+ * is a CONNECTION, and a connection stays on the endpoint it opened. So the
+ * choice is made once, when the client is built, and a client whose indexer
+ * dies underneath it is replaced rather than re-pointed — which is exactly what
+ * `boundedPublicDataProvider`'s `fresh()` already does, and it comes back
+ * through here and re-chooses.
+ *
+ * WITH ONE INDEXER CONFIGURED NOTHING HAPPENS AT ALL. There is no choice to
+ * make, so no probe is sent and this is the same two-line constructor it has
+ * always been. The probe below only exists to decide between endpoints, and a
+ * list of one is not a decision.
+ *
+ * When there IS a choice, each candidate is asked the cheapest question the
+ * schema has — its own block height, bounded by `queryIndexerHeight`'s ten
+ * seconds — and the first that answers gets the client. If none answers, the
+ * preferred one is used anyway: an indexer having a moment must not become a
+ * job that cannot even be started, and every wait built on this client is
+ * bounded by `boundedPublicDataProvider` regardless.
+ */
 export async function publicDataProviderFor(config: BalancerConfig) {
   const { indexerPublicDataProvider } = await import(
     '@midnight-ntwrk/midnight-js-indexer-public-data-provider'
   );
-  return indexerPublicDataProvider({
-    queryURL: config.indexerHttpUrl,
-    subscriptionURL: config.indexerWsUrl,
-  });
+  let index = 0;
+  if (config.indexerHttpUrls.length > 1) {
+    for (let candidate = 0; candidate < config.indexerHttpUrls.length; candidate += 1) {
+      const url = config.indexerHttpUrls[candidate] as string;
+      if ((await queryIndexerHeight(url)) !== null) {
+        index = candidate;
+        break;
+      }
+      console.warn(`[indexer] ${url} did not answer — trying the next configured indexer`);
+    }
+  }
+  const queryURL = config.indexerHttpUrls[index] ?? config.indexerHttpUrl;
+  const subscriptionURL = config.indexerWsUrls[index] ?? config.indexerWsUrl;
+  if (index > 0) console.warn(`[indexer] this client is reading from ${queryURL}`);
+  return indexerPublicDataProvider({ queryURL, subscriptionURL });
 }
 
 /** The three provider methods a spend job can wait on for ever. */
@@ -626,8 +698,8 @@ export interface BoundedProviderOptions {
    * fixed.
    */
   fresh: () => Promise<WatchingProvider>;
-  /** Where {@link queryTransactionByIdentifier} asks. */
-  indexerHttpUrl: string;
+  /** Where {@link queryTransactionByIdentifier} asks — one indexer, or the list. */
+  indexerHttpUrl: IndexerUrls;
   /**
    * The direct question: is this transaction, or this contract, on chain?
    *
@@ -854,7 +926,7 @@ export async function contractProviders(
     publicDataProvider: boundedPublicDataProvider(base as never, {
       confirmTimeoutMs: config.confirmTimeoutMs,
       fresh: async () => (await open()) as never,
-      indexerHttpUrl: config.indexerHttpUrl,
+      indexerHttpUrl: config.indexerHttpUrls,
     }),
     zkConfigProvider: options.zkConfigProvider,
     proofProvider: options.proofProvider,

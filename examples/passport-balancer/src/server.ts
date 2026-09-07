@@ -137,6 +137,7 @@ import { createChainHeadProbe, type ChainHeadProbe } from './chainHead.js';
 import { ASSET_SYMBOL, applyEnvFile, loadConfig, type BalancerConfig } from './config.js';
 import { rawContractAddress } from './contractRuntime.js';
 import { rollbackDustSnapshot } from './dustRollback.js';
+import { indexerUrlInUse } from './endpoints.js';
 import {
   DEFAULT_HEALTH_POLICY,
   EMPTY_HEALTH_RECORD,
@@ -253,9 +254,12 @@ async function main(): Promise<void> {
   applyEnvFile();
   const config: BalancerConfig = loadConfig();
   console.log(`network   ${config.networkId}`);
-  console.log(`indexer   ${config.indexerHttpUrl}`);
-  console.log(`indexerWs ${config.indexerWsUrl}`);
-  console.log(`node      ${config.nodeUrl}`);
+  /* The whole list, in the operator's order, so the journal says at start-up
+     what this process will actually try. A single-endpoint deployment prints
+     exactly the one line it always printed. */
+  console.log(`indexer   ${config.indexerHttpUrls.join(', ')}`);
+  console.log(`indexerWs ${config.indexerWsUrls.join(', ')}`);
+  console.log(`node      ${config.nodeUrls.join(', ')}`);
   console.log(
     `prover    ${config.provingServerUrl ?? 'in-process WASM prover (no BALANCER_PROVER_URL set)'}`,
   );
@@ -501,8 +505,12 @@ async function main(): Promise<void> {
    * Built unconditionally, even when the watchdog itself is switched off, so
    * that `/status` still carries the public head beside this wallet's own
    * figures for an operator diagnosing by hand.
+   *
+   * It is given the whole node list rather than the preferred node: this probe
+   * holds nothing open, so there is nothing for it to be sticky about, and one
+   * read walks the list until a node answers.
    */
-  const chainHeadProbe: ChainHeadProbe = createChainHeadProbe({ nodeUrl: config.nodeUrl });
+  const chainHeadProbe: ChainHeadProbe = createChainHeadProbe({ nodeUrls: config.nodeUrls });
   /**
    * The shelf of pre-deployed resolver leaves and the filler that stocks it.
    * `null` when there is no sponsor to deploy through or the target is zero.
@@ -1174,6 +1182,25 @@ async function main(): Promise<void> {
       consecutiveRebuildFailures: socketHealth?.consecutiveRebuildFailures ?? 0,
       nodeSocketRebuilds: socketHealth?.rebuilds ?? 0,
       lastSocketFailureAt: socketHealth?.lastSocketFailureAt ?? null,
+      /* WHICH ENDPOINTS THIS PROCESS IS ACTUALLY USING, as distinct from the
+         ones it prefers. `nodeUrls` and `indexerUrls` are what was configured,
+         in the operator's order; the two `…InUse` fields are what answered.
+         With one of each configured they agree for ever, which is the reading
+         every deployment has today. With two they are the only place an
+         operator can see that a provider's bad afternoon is being absorbed
+         rather than suffered — see `./endpoints.ts`. */
+      nodeUrls: config.nodeUrls,
+      /* From the connection that really moved: `./submission.ts` walks the list
+         on every rebuild, so this is the node transactions are going to. */
+      nodeUrlInUse: socketHealth?.nodeUrlInUse ?? config.nodeUrls[0] ?? null,
+      indexerUrls: config.indexerHttpUrls,
+      /* The indexer that last answered a QUERY. The wallet facade's own
+         subscription is a separate connection, chosen once at start-up and not
+         re-pointable while the facade runs — see `openBalancerWallet`. */
+      indexerUrlInUse: indexerUrlInUse() ?? config.indexerHttpUrls[0] ?? null,
+      /* The node the head probe last read from, which walks the list per read
+         and so may differ from the socket's. */
+      chainHeadUrlInUse: headReading.urlInUse,
       /* THE SECOND OPINION. Every other figure on this endpoint is this wallet
          describing itself, and on 2026/09/05 all of them were true and none of
          them was the point: the wallet read well for four and a half hours
@@ -2567,7 +2594,7 @@ async function main(): Promise<void> {
     assetAvailable: swapPayer.available,
     assetUnavailableReason: swapPayer.unavailableReason,
     ledger: swapLedgerOf(swapLedger),
-    verifyPayment: (txHash) => verifyPaymentOnChain(config.indexerHttpUrl, txHash),
+    verifyPayment: (txHash) => verifyPaymentOnChain(config.indexerHttpUrls, txHash),
     payOut: async (account) => {
       const paid = await swapPayer.payInto(account);
       return {

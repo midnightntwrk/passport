@@ -76,6 +76,7 @@ import {
 import { V1Builder as UnshieldedV1Builder } from '@midnight-ntwrk/wallet-sdk/unshielded/v1';
 
 import type { BalancerConfig } from './config.js';
+import { askIndexers, type IndexerUrls } from './endpoints.js';
 import {
   createWalletReservation,
   currentJob,
@@ -84,9 +85,11 @@ import {
   type RunningJobSummary,
 } from './reservation.js';
 import { countingProof, httpWalletProvingService, proverIdle } from './proving.js';
+import { createChainHeadProbe } from './chainHead.js';
 import {
   CONTRACT_PROOF_TIMEOUT_MS,
   ProofTimeout,
+  queryIndexerHeight,
   queryTransactionByIdentifier,
   withDeadline,
 } from './contractRuntime.js';
@@ -909,28 +912,81 @@ export function shortfallRefusal(code: string, message: string, settling: boolea
  * from a response that parsed is "not on chain".
  */
 export async function transactionLanded(
-  indexerHttpUrl: string,
+  indexer: IndexerUrls,
   identifier: string,
 ): Promise<boolean | null> {
   const query = `{ transactions(offset: { identifier: "${identifier}" }) { hash } }`;
-  try {
-    const response = await fetch(indexerHttpUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query }),
-    });
-    if (!response.ok) return null;
-    const body = (await response.json()) as {
-      data?: { transactions?: Array<{ hash?: string }> };
-      errors?: unknown[];
-    };
-    if (body.errors && body.errors.length > 0) return null;
-    const found = body.data?.transactions;
-    if (!Array.isArray(found)) return null;
-    return found.length > 0;
-  } catch {
-    return null;
+  return await askIndexers(
+    indexer,
+    async (url) => {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ query }),
+        });
+        if (!response.ok) return null;
+        const body = (await response.json()) as {
+          data?: { transactions?: Array<{ hash?: string }> };
+          errors?: unknown[];
+        };
+        if (body.errors && body.errors.length > 0) return null;
+        const found = body.data?.transactions;
+        if (!Array.isArray(found)) return null;
+        return found.length > 0;
+      } catch {
+        return null;
+      }
+    },
+    /* `null` is "the indexer would not answer", which is the one case worth
+       asking a second one about. A definite true or false is an answer. */
+    (answer) => answer !== null,
+  );
+}
+
+/**
+ * One node's head over plain HTTPS, or `null` if it would not answer.
+ *
+ * The same single bounded `chain_getHeader` the health probe makes, reused here
+ * for a different question: not "is the chain moving" but "is this endpoint
+ * worth opening a wallet against".
+ */
+export async function readNodeHead(nodeUrl: string): Promise<number | null> {
+  return (await createChainHeadProbe({ nodeUrl }).read()).height;
+}
+
+/**
+ * The index of the first endpoint in a list that answers, or 0.
+ *
+ * A LIST OF ONE IS NOT A DECISION, and this returns 0 for one without sending
+ * anything — which is what keeps a single-endpoint deployment byte-for-byte the
+ * service it was before failover existed. It only asks when there is genuinely
+ * a choice to make.
+ *
+ * When nothing answers it returns 0 as well. The preferred endpoint being
+ * unreachable at this instant is not a reason to refuse to start: the wallet's
+ * own sync retries for as long as it takes, and a service that will not come up
+ * because a public indexer had a bad second is a worse outage than the one it
+ * was avoiding.
+ */
+export async function chooseReachable(
+  urls: readonly string[],
+  answers: (url: string) => Promise<boolean>,
+  what: string,
+): Promise<number> {
+  if (urls.length <= 1) return 0;
+  for (let index = 0; index < urls.length; index += 1) {
+    const url = urls[index] as string;
+    if (await answers(url)) {
+      if (index > 0) console.warn(`[${what}] opening on ${url} — the preferred one did not answer`);
+      return index;
+    }
+    console.warn(`[${what}] ${url} did not answer — trying the next configured ${what}`);
   }
+  console.warn(
+    `[${what}] not one configured ${what} answered — opening on ${urls[0]} and letting the wallet retry`,
+  );
+  return 0;
 }
 
 /**
@@ -1270,13 +1326,48 @@ export async function openBalancerWallet(
   const publicKey = PublicKey.fromKeyStore(unshieldedKeystore);
   const address = publicKey.address;
 
+  /**
+   * The facade's own two connections, and the one thing that cannot be made to
+   * fail over while it runs.
+   *
+   * `WalletFacade.init` builds a `PolkadotNodeClient` and an indexer client
+   * from this object ONCE, at start-up, and keeps them for the life of the
+   * facade. There is no API on either to re-point it at another URL, and there
+   * is no way to rebuild them short of rebuilding the facade — which is a cold
+   * or snapshot-resumed wallet start, i.e. the `restart` rung, not a remedy
+   * this module can take on its own. So:
+   *
+   *   - the facade's SYNC relay and its indexer subscription stay on the
+   *     endpoints named here until this service restarts. `reconnectNode` and
+   *     the health ladder's `refresh` rebuild the SUBMISSION connection — the
+   *     one this module owns, in `./submission.ts` — and that one does walk the
+   *     whole list on every rebuild. Nothing pretends otherwise, and `/status`
+   *     publishes `nodeUrlInUse` from the connection that really moved.
+   *   - which endpoint the facade opens on is still a choice made from the
+   *     LIST, at the one moment it can be made: `chooseReachable` below asks
+   *     each candidate before the facade is built, so a preferred provider that
+   *     is down at start-up costs a probe rather than a whole service.
+   *
+   * With one endpoint configured there is no choice to make, no probe is sent,
+   * and this is the same configuration object it has always been.
+   */
+  const relayIndex = await chooseReachable(
+    config.nodeUrls,
+    async (nodeUrl) => (await readNodeHead(nodeUrl)) !== null,
+    'node',
+  );
+  const indexerIndex = await chooseReachable(
+    config.indexerHttpUrls,
+    async (indexerUrl) => (await queryIndexerHeight(indexerUrl)) !== null,
+    'indexer',
+  );
   const configuration = {
     networkId: config.networkId,
     indexerClientConnection: {
-      indexerHttpUrl: config.indexerHttpUrl,
-      indexerWsUrl: config.indexerWsUrl,
+      indexerHttpUrl: config.indexerHttpUrls[indexerIndex] as string,
+      indexerWsUrl: config.indexerWsUrls[indexerIndex] as string,
     },
-    relayURL: new URL(config.relayUrl),
+    relayURL: new URL(config.relayUrls[relayIndex] as string),
     costParameters: { feeBlocksMargin: config.feeBlocksMargin },
     txHistoryStorage: new NoOpTransactionHistoryStorage(),
     ...(config.provingServerUrl ? { provingServerUrl: new URL(config.provingServerUrl) } : {}),
@@ -1445,7 +1536,16 @@ export async function openBalancerWallet(
          silence, for ever. `./submission.ts` serialises submissions so two
          watches never coexist, and bounds each one. */
       submissionService: (cfg: { relayURL: URL }) => {
-        nodeConnection = polkadotConnection(cfg);
+        /* The facade hands down the ONE relay it was configured with; the list
+           comes from here, because the facade has no idea there is one. This is
+           the connection that walks it: every rebuild starts again at the first
+           node, so the preferred provider is re-tried the moment it might be
+           back. See the note on `configuration` above for what this can and
+           cannot do about the facade's own client. */
+        nodeConnection = polkadotConnection({
+          relayURL: cfg.relayURL,
+          relayURLs: config.relayUrls.map((relayUrl) => new URL(relayUrl)),
+        });
         /* Cast because the SDK types `submitTransaction` as an OVERLOAD SET
            whose return type follows the status the caller asked for, and this
            wrapper deliberately does not honour that: it asks the node for
@@ -1765,7 +1865,7 @@ export async function openBalancerWallet(
      it. See `createOrphanWatch` for what that window is protecting against. */
   const orphans = createOrphanWatch({
     orphanMs: config.balanceOrphanMs,
-    landed: (identifier) => transactionLanded(config.indexerHttpUrl, identifier),
+    landed: (identifier) => transactionLanded(config.indexerHttpUrls, identifier),
     revert: async (entry) => {
       await reserve(
         () => facade.revert(entry.finalized as ledger.FinalizedTransaction),
@@ -2573,7 +2673,7 @@ export async function openBalancerWallet(
                transaction that has genuinely landed. The indexer is asked
                first, and only an answer of "not there" is treated as failure. */
             if (isSubmissionTimeout(cause)) {
-              const seen = await queryTransactionByIdentifier(config.indexerHttpUrl, identifier);
+              const seen = await queryTransactionByIdentifier(config.indexerHttpUrls, identifier);
               if (seen.found) {
                 console.log(
                   `[job] the node never acknowledged ${identifier}, but it is on chain in block ${seen.block ?? '?'} — carrying on`,

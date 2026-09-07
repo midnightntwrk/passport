@@ -147,6 +147,15 @@ export type NodeSocketState = 'connected' | 'reconnecting' | 'dead';
 
 export interface NodeSocketHealth {
   nodeSocket: NodeSocketState;
+  /**
+   * The node this connection is actually open on.
+   *
+   * With one node configured it is that node, always. With two it is the answer
+   * to the only question an operator has during a provider's bad afternoon:
+   * whether this sponsor fell through to the second one, or is still failing
+   * against the first.
+   */
+  nodeUrlInUse: string;
   /** Submissions that have failed on the socket since the last one that did not. */
   consecutiveSocketFailures: number;
   /** Rebuilds that have failed since the last one that did not. */
@@ -156,6 +165,43 @@ export interface NodeSocketHealth {
   lastSocketFailureAt: string | null;
   /** The message of the most recent socket failure, for the journal. */
   lastSocketFailure: string | null;
+  /** The chain as this socket sees it. See {@link SocketHead}. */
+  socketHead: SocketHead;
+}
+
+/**
+ * The head of the chain as read THROUGH THE SUBMISSION SOCKET.
+ *
+ * WHY IT IS NOT THE WALLET'S SYNC INDICES. The health ladder briefly judged
+ * this socket by whether the wallet's sync indices moved while the public
+ * node's head climbed, and on 2026/09/06 that called a perfectly well sponsor
+ * degraded every two minutes: a wallet's unshielded `highestTransactionId` and
+ * its shielded and DUST merkle indices only move when there is ledger activity
+ * THAT CONCERNS IT, so on a quiet stagenet they stand still for hours while the
+ * wallet is synced and every stream is connected. Wallet stillness was never
+ * evidence of a dead socket; on 2026/09/05 the two happened to coincide.
+ *
+ * This is the like-for-like signal that rule wanted. It is one
+ * `chain_subscribeNewHeads` on the very `ApiPromise` the service submits on —
+ * the connection that actually died — so a head arriving over it is proof that
+ * this socket is alive, and a head NOT arriving while the public node's HTTPS
+ * probe climbs is proof that it is not. Both figures are block heights of the
+ * same chain, so the difference between them is a number rather than an
+ * analogy.
+ *
+ * `height: null` with `subscribed: false` means unknown — a connection that has
+ * never opened, or a node client that does not offer the subscription — and
+ * `./health.ts` treats unknown as no evidence rather than as a stall.
+ */
+export interface SocketHead {
+  /** The highest header this socket has delivered, or `null` for none yet. */
+  height: number | null;
+  /** When that header arrived, epoch ms. */
+  at: number | null;
+  /** Whether a head subscription is currently established on this socket. */
+  subscribed: boolean;
+  /** Headers delivered since this connection was last built. */
+  headers: number;
 }
 
 /**
@@ -264,7 +310,21 @@ export interface MidnightApi {
   isConnected: boolean;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  rpc: { chain: { getHeader(): Promise<{ number: { toNumber(): number } }> } };
+  rpc: {
+    chain: {
+      getHeader(): Promise<{ number: { toNumber(): number } }>;
+      /**
+       * The head, streamed over THIS socket.
+       *
+       * Optional so a test's fake api need not carry it, and guarded at the one
+       * call site — a connection with no subscription simply reports no socket
+       * head, which reads as "unknown" rather than as "stalled".
+       */
+      subscribeNewHeads?(
+        callback: (header: { number: { toNumber(): number } }) => void,
+      ): Promise<() => void>;
+    };
+  };
   tx: {
     midnight: {
       sendMnTransaction(payload: string): {
@@ -292,13 +352,16 @@ interface ExtrinsicStatusResult {
 
 export interface PolkadotConnectionOptions {
   /**
-   * Builds one fresh connection: a new `WsProvider` and a new `ApiPromise`.
+   * Builds one fresh connection to ONE node: a new `WsProvider` and a new
+   * `ApiPromise` for the URL it is handed.
    *
    * Injected only by `test/submission.test.ts`, which is what makes the rebuild
    * path testable at all — the socket is otherwise the one part of this module
-   * a unit test cannot reach.
+   * a unit test cannot reach. The URL argument is what makes the failover
+   * testable too: a fake that answers differently per URL is the whole of the
+   * "the second node picks it up" case.
    */
-  createApi?: () => Promise<MidnightApi>;
+  createApi?: (url: string) => Promise<MidnightApi>;
   /**
    * How long one rebuild may take before it is abandoned and counted as
    * failed. Bounded because a rebuild that hangs is the outage again with a
@@ -323,14 +386,21 @@ const describeCause = (cause: unknown): string =>
  * signal this process publishes said the sponsor was well.
  */
 export function polkadotConnection(
-  config: { relayURL: URL },
+  config: { relayURL: URL; relayURLs?: readonly URL[] },
   options: PolkadotConnectionOptions = {},
 ): NodeConnection {
+  /* The list, in the operator's order, with the singular `relayURL` as its one
+     entry when no list was given. That is what the wallet facade hands down
+     when it builds this service itself — see `submissionService` in
+     `./wallet.ts`, which passes the configured list alongside it. */
+  const relayUrls = (
+    config.relayURLs && config.relayURLs.length > 0 ? config.relayURLs : [config.relayURL]
+  ).map((url) => url.toString());
   const createApi =
     options.createApi ??
-    ((): Promise<MidnightApi> =>
+    ((url: string): Promise<MidnightApi> =>
       ApiPromise.create({
-        provider: new WsProvider(config.relayURL.toString()),
+        provider: new WsProvider(url),
         throwOnConnect: false,
         noInitWarn: true,
       }) as unknown as Promise<MidnightApi>);
@@ -345,6 +415,14 @@ export function polkadotConnection(
   let rebuilds = 0;
   let lastSocketFailureAt: string | null = null;
   let lastSocketFailure: string | null = null;
+  /* The node this connection is open on — the preferred one until something
+     has actually been opened, which is also what it reads as for the whole life
+     of a single-node deployment. */
+  let nodeUrlInUse = relayUrls[0] as string;
+  /* The head as seen THROUGH THIS SOCKET, and the unsubscribe for the watch
+     that supplies it. See `subscribeHead` below for why this exists. */
+  let socketHead: SocketHead = { height: null, at: null, subscribed: false, headers: 0 };
+  let unsubscribeHead: (() => void) | null = null;
 
   /** Bounds one wait without leaving the loser of the race unhandled. */
   const bounded = async <T>(work: Promise<T>, ms: number, what: string): Promise<T> => {
@@ -371,6 +449,102 @@ export function polkadotConnection(
   };
 
   /**
+   * The head watch, re-established on every connection this module opens.
+   *
+   * One subscription, never more: it is torn down before a rebuild and set up
+   * again after it, so `socketHead.headers` counts what the CURRENT socket has
+   * delivered and a fresh connection that delivers nothing is visibly a fresh
+   * connection that delivers nothing rather than a stale count carried over.
+   *
+   * Failure to subscribe is not failure to connect. A node client that does not
+   * offer `subscribeNewHeads`, or one that refuses it, leaves `subscribed:
+   * false` and the health ladder with no evidence either way — which is the
+   * correct reading, and much better than a `null` height that could be
+   * mistaken for a stall.
+   */
+  const subscribeHead = async (api: MidnightApi): Promise<void> => {
+    socketHead = { height: null, at: null, subscribed: false, headers: 0 };
+    const subscribe = api.rpc.chain.subscribeNewHeads;
+    if (!subscribe) return;
+    try {
+      const stop = await bounded(
+        Promise.resolve(
+          subscribe.call(api.rpc.chain, (header) => {
+            const height = header.number.toNumber();
+            socketHead = {
+              height:
+                socketHead.height === null ? height : Math.max(socketHead.height, height),
+              at: now(),
+              subscribed: true,
+              headers: socketHead.headers + 1,
+            };
+          }),
+        ),
+        rebuildTimeoutMs,
+        'the head subscription',
+      );
+      unsubscribeHead = stop;
+      socketHead = { ...socketHead, subscribed: true };
+    } catch (cause) {
+      /* Logged and left alone. A connection that submits perfectly well but
+         cannot stream heads is worth keeping; what it costs is one signal. */
+      log(`[node] the head subscription could not be opened: ${describeCause(cause)}`);
+    }
+  };
+
+  /** Ends the current head watch, if there is one. Never throws. */
+  const unwatchHead = (): void => {
+    try {
+      unsubscribeHead?.();
+    } catch {
+      // A subscription the node has already closed is not a failure.
+    }
+    unsubscribeHead = null;
+    socketHead = { ...socketHead, subscribed: false };
+  };
+
+  /**
+   * Opens ONE connection, walking the node list left to right.
+   *
+   * Every URL gets the same bounded attempt the single node has always had, and
+   * the first one that yields an api wins — the rest are never contacted. A URL
+   * is passed over only when building against it REJECTS or exceeds
+   * `rebuildTimeoutMs`, which is what an unreachable or wedged node looks like
+   * from here; `throwOnConnect: false` means `ApiPromise.create` waits for a
+   * socket rather than resolving without one, so the ceiling is the real test.
+   *
+   * Every attempt starts at the front of the list. There is deliberately no
+   * cursor and no memory of which node failed last time: a rebuild is the
+   * moment to ask the preferred provider whether it is back, and an outage that
+   * is over should not need a restart to be noticed.
+   */
+  const openSomewhere = async (what: string): Promise<MidnightApi> => {
+    const refusals: string[] = [];
+    for (const url of relayUrls) {
+      try {
+        const api = await bounded(createApi(url), rebuildTimeoutMs, what);
+        nodeUrlInUse = url;
+        if (refusals.length > 0) {
+          /* The line that matters most on the day this earns its keep: the
+             preferred node refused and a second one picked the sponsor up. A
+             fall-through that succeeded in silence is the outage nobody
+             noticed. */
+          log(`[node] fell through to ${url} — ${refusals.join('; ')}`);
+        }
+        await subscribeHead(api);
+        return api;
+      } catch (cause) {
+        refusals.push(`${url}: ${describeCause(cause)}`);
+      }
+    }
+    throw new Error(
+      relayUrls.length === 1
+        ? (refusals[0] as string)
+        : `no configured node could be reached — ${refusals.join('; ')}`,
+    );
+  };
+
+  /**
    * Throw the socket away and open another.
    *
    * The old one is DISCARDED, not reconnected: a provider that has decided it
@@ -381,6 +555,7 @@ export function polkadotConnection(
   const rebuild = async (reason: string): Promise<MidnightApi> => {
     const previous = opening;
     opening = null;
+    unwatchHead();
     socket = 'reconnecting';
     rebuilds += 1;
     log(`[node] rebuilding the submission connection — ${reason} (rebuild ${rebuilds})`);
@@ -391,13 +566,13 @@ export function polkadotConnection(
          holding the next submission for. */
       void stale?.disconnect().catch(() => undefined);
     }
-    const fresh = bounded(createApi(), rebuildTimeoutMs, 'the submission connection rebuild');
+    const fresh = openSomewhere('the submission connection rebuild');
     opening = fresh;
     try {
       const api = await fresh;
       consecutiveRebuildFailures = 0;
       socket = 'connected';
-      log('[node] the submission connection is rebuilt');
+      log(`[node] the submission connection is rebuilt on ${nodeUrlInUse}`);
       return api;
     } catch (cause) {
       consecutiveRebuildFailures += 1;
@@ -411,7 +586,7 @@ export function polkadotConnection(
   };
 
   const connected = async (): Promise<MidnightApi> => {
-    if (!opening) opening = createApi();
+    if (!opening) opening = openSomewhere('the submission connection');
     let api: MidnightApi;
     try {
       api = await opening;
@@ -506,11 +681,13 @@ export function polkadotConnection(
     socketHealth(): NodeSocketHealth {
       return {
         nodeSocket: socket,
+        nodeUrlInUse,
         consecutiveSocketFailures,
         consecutiveRebuildFailures,
         rebuilds,
         lastSocketFailureAt,
         lastSocketFailure,
+        socketHead: { ...socketHead },
       };
     },
 
@@ -561,6 +738,7 @@ export function polkadotConnection(
     },
 
     async close(): Promise<void> {
+      unwatchHead();
       if (!opening) return;
       const api = await opening.catch(() => null);
       opening = null;
@@ -654,7 +832,7 @@ export function serialiseSubmissions<TTransaction>(
  * spare-mint path, and the contract path in `midnightProvider.submitTx`.
  */
 export function serialisedSubmissionService<TTransaction>(
-  config: { relayURL: URL },
+  config: { relayURL: URL; relayURLs?: readonly URL[] },
   options: SerialisedSubmissionOptions<TTransaction>,
   connectionOptions: PolkadotConnectionOptions = {},
 ): SubmissionLike<TTransaction> {

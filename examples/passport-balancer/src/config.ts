@@ -10,14 +10,38 @@
 
 import { readFileSync } from 'node:fs';
 
+import { parseUrlList } from './endpoints.js';
 import { DEFAULT_TRUSTED_PROXIES } from './limits.js';
 
+/**
+ * The node and the indexer, as ORDERED LISTS with the preferred provider first.
+ *
+ * The singular fields are the first entry of their list and are kept because
+ * they are what thirty-odd call sites and every log line already say. They are
+ * the PREFERRED endpoint, not the endpoint in use: what is in use right now is
+ * `nodeUrlInUse` and `indexerUrlInUse` on `/status`.
+ *
+ * With one URL configured — which is every deployment until somebody writes a
+ * second one — each list has one entry and every walk over it is the single
+ * attempt this service has always made. See `./endpoints.ts` for the rule.
+ */
 export interface BalancerNetworkEndpoints {
+  /** The preferred indexer: `indexerHttpUrls[0]`. */
   indexerHttpUrl: string;
+  /** Every indexer, in the operator's order. Never empty. */
+  indexerHttpUrls: string[];
+  /** The preferred indexer's WebSocket: `indexerWsUrls[0]`. */
   indexerWsUrl: string;
+  /** One WebSocket per entry of {@link indexerHttpUrls}, in the same order. */
+  indexerWsUrls: string[];
+  /** The preferred node: `nodeUrls[0]`. */
   nodeUrl: string;
-  /** The submission relay: the node URL as a WebSocket. */
+  /** Every node, in the operator's order. Never empty. */
+  nodeUrls: string[];
+  /** The submission relay: the preferred node URL as a WebSocket. */
   relayUrl: string;
+  /** One relay per entry of {@link nodeUrls}, in the same order. */
+  relayUrls: string[];
   /**
    * An external proof server, when one exists. `undefined` means the service
    * proves in-process with the SDK's own WASM prover — see `wallet.ts`.
@@ -579,25 +603,76 @@ const MIDNAMES_TLD_DEFAULTS: Record<string, string> = {
   stagenet: '29be1e64846cff4600c5297fa54b27d4c9296b3ccc2cdba190eaba1d64c5f116',
 };
 
-/** Resolves endpoints for a network, with per-endpoint env overrides. */
+/**
+ * One endpoint list out of two variables and a default.
+ *
+ * The plural wins when it is set, the singular is read as a list of one, and
+ * the network default is the list when neither is. A variable that is set but
+ * parses to nothing — `BALANCER_NODE_URLS=" , "` — falls through to the next
+ * source rather than producing an empty list: an operator who blanks a variable
+ * gets the default back, not a service that cannot reach a node.
+ */
+function endpointList(
+  plural: string | undefined,
+  singular: string | undefined,
+  fallback: string | undefined,
+): string[] {
+  const fromPlural = parseUrlList(plural);
+  if (fromPlural.length > 0) return fromPlural;
+  const fromSingular = parseUrlList(singular);
+  if (fromSingular.length > 0) return fromSingular;
+  return parseUrlList(fallback);
+}
+
+/**
+ * Resolves endpoints for a network, with per-endpoint env overrides.
+ *
+ * `BALANCER_NODE_URLS` and `BALANCER_INDEXER_URLS` are comma-separated and
+ * ordered: the first is preferred, and the rest exist for the afternoon it is
+ * not answering. `BALANCER_NODE_URL` and `BALANCER_INDEXER_URL` still work and
+ * mean a list of one, so no deployed environment file has to change for this.
+ *
+ * `BALANCER_INDEXER_WS_URLS` is derived from the HTTP list when it is not given
+ * — one WebSocket per indexer, in the same order — so a second indexer is one
+ * setting rather than two. Given explicitly, it is used as written; a list
+ * shorter than the HTTP one leaves the indexers past its end without a
+ * subscription URL, so it is padded from the derivation rather than allowed to
+ * pair an indexer with somebody else's socket.
+ */
 export function networkEndpoints(
   networkId: string,
   env: NodeJS.ProcessEnv = process.env,
 ): BalancerNetworkEndpoints {
   const defaults = NETWORK_DEFAULTS[networkId];
-  const indexerHttpUrl = trimmed(env.BALANCER_INDEXER_URL) ?? defaults?.indexer;
-  const nodeUrl = trimmed(env.BALANCER_NODE_URL) ?? defaults?.node;
-  if (!indexerHttpUrl || !nodeUrl) {
+  const indexerHttpUrls = endpointList(
+    env.BALANCER_INDEXER_URLS,
+    env.BALANCER_INDEXER_URL,
+    defaults?.indexer,
+  );
+  const nodeUrls = endpointList(env.BALANCER_NODE_URLS, env.BALANCER_NODE_URL, defaults?.node);
+  if (indexerHttpUrls.length === 0 || nodeUrls.length === 0) {
     throw new Error(
-      `No default endpoints are known for network "${networkId}". Set BALANCER_INDEXER_URL and BALANCER_NODE_URL explicitly, or use one of: ${Object.keys(NETWORK_DEFAULTS).join(', ')}.`,
+      `No default endpoints are known for network "${networkId}". Set BALANCER_INDEXER_URLS and BALANCER_NODE_URLS explicitly, or use one of: ${Object.keys(NETWORK_DEFAULTS).join(', ')}.`,
     );
   }
+  const derivedWs = indexerHttpUrls.map(indexerWsFrom);
+  const givenWs = endpointList(
+    env.BALANCER_INDEXER_WS_URLS,
+    env.BALANCER_INDEXER_WS_URL,
+    undefined,
+  );
+  const indexerWsUrls = derivedWs.map((derived, index) => givenWs[index] ?? derived);
+  const relayUrls = nodeUrls.map(relayFrom);
   const provingServerUrl = trimmed(env.BALANCER_PROVER_URL) ?? defaults?.prover;
   return {
-    indexerHttpUrl,
-    indexerWsUrl: trimmed(env.BALANCER_INDEXER_WS_URL) ?? indexerWsFrom(indexerHttpUrl),
-    nodeUrl,
-    relayUrl: relayFrom(nodeUrl),
+    indexerHttpUrl: indexerHttpUrls[0] as string,
+    indexerHttpUrls,
+    indexerWsUrl: indexerWsUrls[0] as string,
+    indexerWsUrls,
+    nodeUrl: nodeUrls[0] as string,
+    nodeUrls,
+    relayUrl: relayUrls[0] as string,
+    relayUrls,
     ...(provingServerUrl ? { provingServerUrl } : {}),
   };
 }

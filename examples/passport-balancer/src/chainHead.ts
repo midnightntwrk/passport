@@ -103,6 +103,14 @@ export interface ChainHeadReading {
   failures: number;
   /** Why the last failure failed, for `/status`. `null` after a success. */
   lastError: string | null;
+  /**
+   * Which node answered the last successful read — the preferred one until a
+   * read has fallen through to another.
+   *
+   * With one node configured this is that node for ever. With two it is the
+   * only place an operator can see that the second one is carrying the probe.
+   */
+  urlInUse: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -203,8 +211,10 @@ export function parseChainHead(body: unknown): number | null {
 /* -------------------------------------------------------------------------- */
 
 export interface ChainHeadProbe {
-  /** The endpoint being asked, for `/status` and the start-up log. */
+  /** The preferred endpoint, for `/status` and the start-up log. */
   url: string;
+  /** Every endpoint this probe may ask, in the operator's order. */
+  urls: readonly string[];
   /** Ask the node. Never rejects; every outcome is in the reading. */
   read(): Promise<ChainHeadReading>;
   /** The last reading, without asking anything. */
@@ -212,9 +222,24 @@ export interface ChainHeadProbe {
 }
 
 export interface ChainHeadProbeOptions {
-  /** `config.nodeUrl` — converted to HTTP by {@link chainHeadUrl}. */
-  nodeUrl: string;
-  /** Five seconds, which is under one stagenet block. */
+  /**
+   * `config.nodeUrl` — converted to HTTP by {@link chainHeadUrl}. Equivalent to
+   * a {@link nodeUrls} of one, and kept so a test can name a single node.
+   */
+  nodeUrl?: string;
+  /**
+   * `config.nodeUrls` — every node, in the operator's order, each converted to
+   * HTTP by {@link chainHeadUrl}.
+   *
+   * One READ walks this list: a node that fails is not the reading, it is a
+   * reason to ask the next one, and only a list with nothing left in it is a
+   * failed probe. That is deliberately different from the submission
+   * connection's rule — this probe holds nothing open, so there is nothing for
+   * it to be sticky about, and asking a second node costs one more request
+   * inside the same five-second-per-node budget.
+   */
+  nodeUrls?: readonly string[];
+  /** Five seconds, which is under one stagenet block. Per node asked. */
   timeoutMs?: number;
   now?: () => number;
   fetch?: ChainHeadFetch;
@@ -224,7 +249,17 @@ export interface ChainHeadProbeOptions {
 export const DEFAULT_CHAIN_HEAD_TIMEOUT_MS = 5_000;
 
 export function createChainHeadProbe(options: ChainHeadProbeOptions): ChainHeadProbe {
-  const url = chainHeadUrl(options.nodeUrl);
+  const configured =
+    options.nodeUrls && options.nodeUrls.length > 0
+      ? options.nodeUrls
+      : options.nodeUrl
+        ? [options.nodeUrl]
+        : [];
+  if (configured.length === 0) {
+    throw new Error('createChainHeadProbe needs at least one node URL');
+  }
+  const urls = configured.map(chainHeadUrl);
+  const url = urls[0] as string;
   const timeoutMs = options.timeoutMs ?? DEFAULT_CHAIN_HEAD_TIMEOUT_MS;
   const now = options.now ?? Date.now;
   const call: ChainHeadFetch =
@@ -237,6 +272,7 @@ export function createChainHeadProbe(options: ChainHeadProbeOptions): ChainHeadP
     probes: 0,
     failures: 0,
     lastError: null,
+    urlInUse: url,
   };
 
   const fail = (detail: string): ChainHeadReading => {
@@ -246,50 +282,67 @@ export function createChainHeadProbe(options: ChainHeadProbeOptions): ChainHeadP
     return { ...state };
   };
 
+  /** One node, asked once. A height, or the reason there is none. */
+  const askOne = async (target: string): Promise<number | string> => {
+    let response: ChainHeadResponse;
+    try {
+      response = await call(target, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'chain_getHeader',
+          params: [],
+        }),
+        /* Bounded here rather than by a race, so the request is actually
+           cancelled and not merely stopped being waited on. Node's timeout
+           signal does not hold the event loop open. */
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (cause) {
+      return cause instanceof Error ? cause.message : String(cause);
+    }
+
+    if (!response.ok) return `the node answered ${response.status}`;
+
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch (cause) {
+      return `the node's answer was not JSON: ${cause instanceof Error ? cause.message : String(cause)}`;
+    }
+
+    const height = parseChainHead(body);
+    if (height === null) return 'the node answered without a readable header number';
+    return height;
+  };
+
   return {
     url,
+    urls,
     reading: () => ({ ...state }),
     read: async (): Promise<ChainHeadReading> => {
       state.probes += 1;
-      let response: ChainHeadResponse;
-      try {
-        response = await call(url, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'chain_getHeader',
-            params: [],
-          }),
-          /* Bounded here rather than by a race, so the request is actually
-             cancelled and not merely stopped being waited on. Node's timeout
-             signal does not hold the event loop open. */
-          signal: AbortSignal.timeout(timeoutMs),
-        });
-      } catch (cause) {
-        return fail(cause instanceof Error ? cause.message : String(cause));
+      /* Every node in turn, and only a list with nothing left in it is a failed
+         probe. Each refusal is NAMED in the recorded error, because "the second
+         opinion is unavailable" and "the preferred node is down but the second
+         answered" are different facts and only one of them is a problem. */
+      const refusals: string[] = [];
+      for (const target of urls) {
+        const answer = await askOne(target);
+        if (typeof answer === 'string') {
+          refusals.push(urls.length === 1 ? answer : `${target}: ${answer}`);
+          continue;
+        }
+        state.height = answer;
+        state.at = now();
+        state.probeFailures = 0;
+        state.lastError = null;
+        state.urlInUse = target;
+        return { ...state };
       }
-
-      if (!response.ok) return fail(`the node answered ${response.status}`);
-
-      let body: unknown;
-      try {
-        body = await response.json();
-      } catch (cause) {
-        return fail(
-          `the node's answer was not JSON: ${cause instanceof Error ? cause.message : String(cause)}`,
-        );
-      }
-
-      const height = parseChainHead(body);
-      if (height === null) return fail('the node answered without a readable header number');
-
-      state.height = height;
-      state.at = now();
-      state.probeFailures = 0;
-      state.lastError = null;
-      return { ...state };
+      return fail(refusals.join('; '));
     },
   };
 }

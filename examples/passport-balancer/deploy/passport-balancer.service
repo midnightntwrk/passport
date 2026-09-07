@@ -36,6 +36,26 @@ EnvironmentFile=/etc/passport-balancer.env
 Environment=BALANCER_NETWORK=stagenet
 Environment=BALANCER_STATE_DIR=/var/lib/passport-balancer
 Environment=BALANCER_PORT=8807
+# THE NODE AND THE INDEXER, AS ORDERED LISTS. Both are commented out, which
+# means both fall back to the network defaults — one node and one indexer, which
+# is what this droplet has always run on and what it runs on now.
+#
+# Neither default is ours and neither has an availability promise. Writing a
+# second URL here is the whole of adding one: the list is tried left to right,
+# nothing reorders it, and nothing remembers a winner between calls, so the
+# preferred provider is asked first every time. The submission connection walks
+# the list on every rebuild — starting again at the first, so a provider that
+# comes back is picked up without a restart — and the head probe walks it on
+# every read. /status publishes nodeUrlInUse and indexerUrlInUse, which is where
+# an operator sees that a fall-through happened.
+#
+# The singular names still work and mean a list of one, so nothing in
+# /etc/passport-balancer.env has to change for this.
+#Environment=BALANCER_NODE_URLS=wss://rpc.stagenet.shielded.tools,wss://second-node.example
+#Environment=BALANCER_INDEXER_URLS=https://indexer.stagenet.shielded.tools/api/v4/graphql,https://second-indexer.example/api/v4/graphql
+# One WebSocket per indexer, in the same order. Derived from the HTTP list when
+# it is not given, so a second indexer is normally one setting rather than two.
+#Environment=BALANCER_INDEXER_WS_URLS=wss://indexer.stagenet.shielded.tools/api/v4/graphql/ws,wss://second-indexer.example/api/v4/graphql/ws
 # The sponsor proves through the SAME public route the app uses — the 1AM
 # gateway first, our own proof server behind it — instead of addressing
 # 127.0.0.1:6300 directly. This box has two vCPUs and one proof server with a

@@ -52,6 +52,7 @@
  * returns the same two transaction hashes rather than paying a second lot.
  */
 
+import { askIndexers, type IndexerUrls } from './endpoints.js';
 import type { JsonLedger } from './ledgers.js';
 
 /* -------------------------------------------------------------------------- */
@@ -166,6 +167,21 @@ export type PaymentVerdict =
  * depending on how far the submission got — by identifier.
  */
 export async function verifyPaymentOnChain(
+  indexer: IndexerUrls,
+  txHash: string,
+): Promise<PaymentVerdict> {
+  return await askIndexers(
+    indexer,
+    (url) => askOneIndexerAboutPayment(url, txHash),
+    /* Only `unreachable` is a reason to ask a second indexer. `absent` is an
+       indexer that answered and did not have it, and a further-behind second
+       opinion must not be allowed to overturn that. */
+    (verdict) => verdict.state !== 'unreachable',
+  );
+}
+
+/** {@link verifyPaymentOnChain} against exactly one indexer. */
+async function askOneIndexerAboutPayment(
   indexerHttpUrl: string,
   txHash: string,
 ): Promise<PaymentVerdict> {

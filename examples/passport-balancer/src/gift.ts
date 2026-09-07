@@ -387,8 +387,8 @@ export function createColourPayer(deps: {
     }
 
     const [mintResolved, depositResolved] = await Promise.all([
-      resolveTransactionHash(config.indexerHttpUrl, mintTx),
-      resolveTransactionHash(config.indexerHttpUrl, depositTx),
+      resolveTransactionHash(config.indexerHttpUrls, mintTx),
+      resolveTransactionHash(config.indexerHttpUrls, depositTx),
     ]);
     return {
       mintTx: mintResolved.hash,
