@@ -188,6 +188,30 @@ precisely the incoherence between `main` and production this page exists to end.
 If you use it, say so in the pull request or the channel, and cut a release from
 `main` afterwards so the two agree again.
 
-## Every deploy is backed by a release tag
+## Every deploy is backed by a release
 
-Every production deploy must be backed by a GitHub release (Hector, 2026/09/03: "nothing fancy, just the release tag"). `deploy:passport:manual` ends by running `scripts/tag-release.mjs`, which reads the service-worker build id from `examples/passport-demo/dist/sw.js`, refuses a dirty tree, and creates a pre-release named `demo-YYYY.MM.DD-<first 8 of the build id>` on `midnightntwrk/passport` (override with `PASSPORT_RELEASE_REPO`) targeting the deployed commit, with the build id, commit, and production URL in the notes (`PASSPORT_RELEASE_NOTES` adds a gate summary). It is idempotent: an existing tag is reported and left alone. `--dry-run` prints the command without creating anything. When the branch is carried into `midnightntwrk/passport-demo`, tag that repository the same way at the carried commit.
+Every production deploy must be backed by a GitHub release (Hector, 2026/09/03: "nothing fancy, just the release tag"). `deploy:passport:manual` ends by running `scripts/tag-release.mjs`, which reads the service-worker build id from `examples/passport-demo/dist/sw.js`, refuses a dirty tree, and creates a release on `midnightntwrk/passport` targeting the deployed commit.
+
+The release is tagged `v<N>`, where N is one past the highest `v<N>` that already exists — counted from both the tag refs (`git ls-remote --tags`) and the releases (`gh release list`), so a tag pushed without a release, or a release whose tag was deleted, still counts. A repository holding only the older `demo-YYYY.MM.DD-<build id>` tags therefore starts at `v1`. The title is `v<N> - YYYY/MM/DD` (UTC). The body opens with the build id, the commit, and the production URL, then carries the "## Fixed" section of `RELEASE-NOTES.md` (`PASSPORT_RELEASE_NOTES` appends a gate summary).
+
+**It is not a pre-release** (changed 2026/09/07). It used to be, and that was the bug: GitHub never shows a pre-release as "Latest", so a reviewer reading the repository front page saw a three-day-old release and concluded nothing had shipped since. The naming rule — `v<N> - <date>` — is Hector's, from the same review.
+
+It is idempotent: a build that already has a release, under a `v<N>` tag or a legacy `demo-…` one, is reported and left alone. `--dry-run` prints the `gh` command without creating anything. The derivation of the number and the title is unit-tested — `npm run test:release-naming`.
+
+Options, for releasing something other than "what was just built here":
+
+| Option | What it is for |
+| --- | --- |
+| `--repo <owner/name>` | The repository to release in. Default `midnightntwrk/passport` (or `PASSPORT_RELEASE_REPO`). The carry into `midnightntwrk/passport-demo` passes that repository, so the same deploy is released the same way in both places. |
+| `--commit <sha>` | The commit the release points at. Default HEAD. The carried commit has a different sha in `passport-demo`, and an older deploy is no longer at HEAD. Naming it also makes the notes come from THAT commit's `RELEASE-NOTES.md`, so the release says what that build shipped rather than what has been fixed since. |
+| `--build-id <id>` | The service-worker build id, when `dist/` has moved on — mirroring into `passport-demo`, or filling in a release after the fact. Default: read from the stamped `dist/sw.js`. |
+
+The mirror of a deploy into `passport-demo` is run from a **checkout of `passport-demo`**, after the carry — the carried commit only exists there, and the script resolves `--commit` against the repository it is run in (which is also where it reads that commit's `RELEASE-NOTES.md`). The carry brings the script itself along, so it is already present:
+
+```sh
+cd <a clean checkout of midnightntwrk/passport-demo, at the carried branch>
+node scripts/tag-release.mjs --repo midnightntwrk/passport-demo \
+  --commit <the carried commit> --build-id <the deployed build id>
+```
+
+Only deploys get releases. A build that was never uploaded does not get one, however tempting the round number.

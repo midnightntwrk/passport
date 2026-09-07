@@ -69,7 +69,8 @@
     "deploy:raffle": "VITE_PASSPORT_ORIGIN=https://midnightpassport.com npm run build --workspace examples/raffle-demo && node scripts/build-vercel-output.mjs examples/raffle-demo && cd examples/raffle-demo && vercel deploy --prebuilt --prod --yes",
     "deploy:template": "cd examples/passport-app-template && VITE_PASSPORT_ORIGIN=https://midnightpassport.com npm run build && cd ../.. && node scripts/build-vercel-output.mjs examples/passport-app-template && cd examples/passport-app-template && vercel deploy --prebuilt --prod --yes",
     "deploy:hub": "npm run build --workspace passport-app-hub && node scripts/build-vercel-output.mjs examples/passport-app-hub && cd examples/passport-app-hub && vercel deploy --prebuilt --prod --yes",
-    "deploy:docs": "npm run build --workspace passport-docs && node scripts/build-vercel-output.mjs examples/passport-docs && cd examples/passport-docs && vercel deploy --prebuilt --prod --yes"
+    "deploy:docs": "npm run build --workspace passport-docs && node scripts/build-vercel-output.mjs examples/passport-docs && cd examples/passport-docs && vercel deploy --prebuilt --prod --yes",
+    "test:release-naming": "node --test scripts/release-naming.test.mjs"
   },
   "//dependencies": [
     "These are pinned HERE so that npm's hoisting is a decision rather than an",
