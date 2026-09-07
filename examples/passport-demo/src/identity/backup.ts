@@ -845,6 +845,30 @@ export function assertBackupRecordContainers(contents: PassportBackupContents): 
 }
 
 /**
+ * The contract records a FILE may carry: everything except a deploy this
+ * browser has submitted and not yet had answered for.
+ *
+ * A `'submitted'` record is a note about a transaction in flight in ONE browser
+ * — see `./passportContractStore.ts` for why it exists and what clears it — and
+ * it is not a claim anybody else could act on. `prepareContractRecord` below
+ * refuses the status on the way in, deliberately, and writing one into a file
+ * would only produce a restore that has to explain a refusal. It is left behind
+ * here instead, and the deploy it records is settled by the browser that made
+ * it.
+ */
+function settledContractRecords(
+  records: Record<string, PassportContractRecord>,
+): Record<string, PassportContractRecord> {
+  const settled: Record<string, PassportContractRecord> = Object.create(
+    null,
+  ) as Record<string, PassportContractRecord>;
+  for (const [key, record] of Object.entries(records)) {
+    if (record.status !== 'submitted') settled[key] = record;
+  }
+  return settled;
+}
+
+/**
  * Reads the three allow-listed stores. Takes no arguments — that is the point.
  *
  * The wallet sync snapshot and every passkey-derived secret are absent by
@@ -869,7 +893,11 @@ export async function collectPassportBackup(): Promise<PassportBackupContents> {
        APPLIED rather than asserted: everything else is simply left behind, and
        an export cannot be blocked by anything this browser happens to hold. */
     aliases: takeRecordMap(loadAliasRecords(), ALIAS_FIELDS),
-    passportContracts: takeRecordMap(loadPassportContractRecords(), CONTRACT_FIELDS),
+    passportContracts: takeRecordMap(
+      /* Everything the chain has answered for, and nothing else — see below. */
+      settledContractRecords(loadPassportContractRecords()),
+      CONTRACT_FIELDS,
+    ),
     incentives: loadIncentives().map((record) => takeRecordFields(record, INCENTIVE_FIELDS)),
   };
   /* The belt to that: on a projected payload it can no longer fire, and it
@@ -1437,6 +1465,12 @@ function prepareAliasRecord(value: AliasRecord, fileKey: string): Prepared<Alias
  * checked as 64 hex characters here rather than left to the store, because the
  * store's job is "a deployed record carries AN address" and this one's is "and
  * it is the shape an address has".
+ *
+ * `'submitted'` is not a status a file may carry either, and the status list
+ * below is what refuses it. It is a note about a transaction in flight in one
+ * browser; another browser cannot settle it and must not inherit a claim it
+ * has no way of checking. {@link settledContractRecords} keeps it out of the
+ * file in the first place, so this refusal is the belt to that brace.
  */
 function prepareContractRecord(value: PassportContractRecord): Prepared<PassportContractRecord> {
   if (!isNonEmptyString(value.credentialId) || !isNonEmptyString(value.network)) {

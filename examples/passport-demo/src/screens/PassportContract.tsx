@@ -77,8 +77,16 @@ export default function PassportContractCard(props: PassportContractCardProps) {
   /* Submitted, and not yet answered for by the network — the state a restore
      also lands in, where the address came from a file and nothing on this
      device has seen it. It is not "ready", so it does not say so: it is still
-     being set up, and the next refresh settles it. */
-  const settling = record?.status === 'deployed' && record.ledgerConfirmed === false
+     being set up, and the next refresh settles it.
+
+     A `'submitted'` record is the same state reached from the other side
+     (2026/09/07): this browser sent the transaction and was closed before it
+     could see it land. It says the same calm sentence, because it is the same
+     sentence that was true when the app was closed — see
+     `../identity/passportContractStore.ts`. */
+  const settling =
+    record?.status === 'submitted' ||
+    (record?.status === 'deployed' && record.ledgerConfirmed === false)
   const working = Boolean(busy) || settling
   /* The ONLY action: retrying an attempt that failed. */
   const showRetry = failed && !busy && (Boolean(onRetry) || Boolean(disabledReason))

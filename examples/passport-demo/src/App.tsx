@@ -3842,6 +3842,84 @@ export default function PassportDemo() {
     })();
   }, [contractRecords, localWalletStatus, profile]);
 
+  /**
+   * A DEPLOY THIS BROWSER SUBMITTED AND WAS CLOSED BEFORE IT COULD SEE LAND.
+   * -------------------------------------------------------------------------
+   * The resume, and the whole point of the `'submitted'` record: a reopened
+   * Passport picks the question back up instead of behaving as though the
+   * transaction never happened.
+   *
+   * What it does is ask rather than listen. The submission it is resuming was
+   * lost precisely because a subscription stopped speaking, so this reads the
+   * contract's own state back through the indexer, repeatedly, for
+   * `RESUME_CONFIRM_WINDOW_MS` — and the account is normally there on the first
+   * read, because it landed while the app was closed.
+   *
+   * FOUND: the record becomes `'deployed'`, which is the same record the deploy
+   * would have written for itself. Everything downstream then behaves exactly
+   * as it does after a deploy that was watched all the way — the name step has
+   * an account to point at, the opening balance is requested by the grant
+   * effect above, and the claim below reuses the contract rather than deploying
+   * another.
+   *
+   * NOT FOUND: the record becomes `'failed'`, in plain words, KEEPING the
+   * address and the identifier so nothing about the attempt is thrown away.
+   * That is what puts "Try setting up again" on the Home card — the existing
+   * retry, which may deploy again, and which is now a decision the person makes
+   * rather than one the app makes silently on their behalf.
+   *
+   * One attempt per key per session, on the same ref discipline as the two
+   * effects above: a re-render must not become a poll.
+   */
+  const attemptedContractResumes = useRef(new Set<string>());
+  useEffect(() => {
+    const handle = localWalletRef.current;
+    if (localWalletStatus !== 'ready' || !handle || !profile) return;
+    const key = passportContractRecordKey(
+      profile.passkey.credentialId,
+      handle.network.networkId,
+    );
+    const record = contractRecords[key];
+    if (record?.status !== 'submitted' || !record.address) return;
+    if (attemptedContractResumes.current.has(key)) return;
+    attemptedContractResumes.current.add(key);
+    const address = record.address;
+    void (async () => {
+      const { awaitPassportContractOnLedger } = await import('./identity/passportContract.js');
+      const live = await awaitPassportContractOnLedger(handle.network.indexerHttpUrl, address);
+      if (live) {
+        savePassportContractRecord({
+          ...record,
+          status: 'deployed',
+          ledgerConfirmed: true,
+          updatedAt: new Date().toISOString(),
+        });
+        addActivity({
+          label: 'Your account is set up',
+          detail:
+            'It was still being set up when Passport was last closed. It is there now, and this Passport is using it.',
+          status: 'complete',
+          source: 'chain',
+          txHash: record.deployTxId,
+        });
+        return;
+      }
+      savePassportContractRecord({
+        ...record,
+        status: 'failed',
+        /* Read on the Home card, verbatim: what happened, and what they can
+           do. No machinery — the transaction, the indexer, and the contract
+           are all in the console line the resume leaves behind. */
+        failureReason:
+          'Setting your account up was interrupted, and it has not appeared since. You can try again.',
+        updatedAt: new Date().toISOString(),
+      });
+      console.info(
+        `[contract] the submitted deploy ${record.deployTxId ?? ''} at ${address} did not appear within the resume window; the Home card now offers a retry.`,
+      );
+    })();
+  }, [addActivity, contractRecords, localWalletStatus, profile]);
+
   /** A live availability probe against one network's own registry. */
   const probeAlias = useCallback(
     async (network: PassportNetwork, alias: string): Promise<AliasAvailability> => {
@@ -3947,6 +4025,48 @@ export default function PassportDemo() {
       if (existing) return { ...existing, joined: true };
 
       const submitted = run();
+      /* THE MEMORY OF A DEPLOY IN FLIGHT (2026/09/07).
+         --------------------------------------------------------------------
+         Written the moment the transaction is handed to the node, and written
+         HERE for the same reason the deployed record is: exactly once, however
+         many callers are waiting on this run.
+
+         It exists because the deploy used to be remembered nowhere but React
+         state. A reviewer's account transaction landed in block 359977 five
+         seconds after it went out; the wait for it could not end (see
+         `lib/chainWait.ts`), they reopened Passport, and the app showed them
+         the name step with no account — one claim away from deploying a SECOND
+         contract on a second sponsored fee for an account they already had.
+
+         It claims nothing the chain has not said: the store refuses a
+         `'submitted'` record that tries to carry a confirmed read-back, every
+         reader in this app treats anything that is not `'deployed'` as "no
+         account yet", and the Home card reads it as still being set up. It is
+         overwritten by `'deployed'` below when this session sees it land, and
+         by the resume effect on a later launch when it does not. */
+      void submitted.then(
+        (submission) => {
+          try {
+            savePassportContractRecord({
+              credentialId,
+              network: submission.network,
+              status: 'submitted',
+              address: submission.address,
+              deployTxId: submission.identifier,
+              txIdResolved: isLedgerTxHash(submission.identifier),
+              deviceCommitment: submission.deviceCommitment,
+              feePaidBy: submission.feePaidBy,
+              updatedAt: submission.submittedAt,
+            });
+          } catch (cause) {
+            /* A record this browser refused to store is a deploy it will not
+               be able to resume, which is the state it was in before today —
+               not a reason to fail a deploy that is already in flight. */
+            console.debug('[contract] could not note the deploy in flight', cause);
+          }
+        },
+        () => undefined,
+      );
       const landed = (async () => {
         const deployment = await (await submitted).settled;
         /* `deployTxId` is whatever the resolution loop ended with: the ledger
@@ -4415,6 +4535,35 @@ export default function PassportDemo() {
            per network, not one per name. */
         const existing = loadPassportContractRecord(credentialId, network);
         let contractAddress = existing?.status === 'deployed' ? existing.address : undefined;
+        /* A DEPLOY THIS BROWSER ALREADY SENT (2026/09/07). The resume effect
+           above normally settles one of these long before anybody has finished
+           typing a name, but a claim made while it is still running must not
+           race it into a second contract on a second sponsored fee. So the same
+           question is asked here, with the same window, and only an answer of
+           "it is not there" lets this claim deploy — which is then the person's
+           own retry, made by pressing Register. */
+        if (!contractAddress && existing?.status === 'submitted' && existing.address) {
+          onPhase('attaching-account');
+          setContractBusy(true);
+          const { awaitPassportContractOnLedger } = await import(
+            './identity/passportContract.js'
+          );
+          const resumedAddress = existing.address;
+          const live = await awaitPassportContractOnLedger(
+            handle.network.indexerHttpUrl,
+            resumedAddress,
+          );
+          setContractBusy(false);
+          if (live) {
+            savePassportContractRecord({
+              ...existing,
+              status: 'deployed',
+              ledgerConfirmed: true,
+              updatedAt: new Date().toISOString(),
+            });
+            contractAddress = resumedAddress;
+          }
+        }
         if (!contractAddress) {
           onPhase('attaching-account');
           setContractBusy(true);

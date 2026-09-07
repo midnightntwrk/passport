@@ -1041,6 +1041,39 @@ describe('a file that claims more than a file can know', () => {
     expect((await collectPassportBackup()).passportContracts).toEqual({});
   });
 
+  it('leaves a deploy still in flight out of the file entirely', async () => {
+    /* A `'submitted'` record is one browser's note that a transaction went out
+       (see `./passportContractStore.ts`). Nobody else can settle it, the
+       restore refuses the status outright, and a file carrying one would only
+       produce a refusal to explain — so it is never written into a file, while
+       everything the chain HAS answered for still is. */
+    const { savePassportContractRecord } = await import('./passportContractStore.js');
+    savePassportContractRecord({
+      credentialId: 'AQIDBA==',
+      network: 'stagenet',
+      status: 'submitted',
+      address: 'ab'.repeat(32),
+      deployTxId: 'cd'.repeat(33),
+      updatedAt: '2026-09-07T09:00:00.000Z',
+    });
+    await applyPassportBackup(contents());
+    const exported = (await collectPassportBackup()).passportContracts;
+    expect(Object.keys(exported)).toEqual(['AQIDBA==::preview']);
+    // And it is still in the store, for this browser's own resume to settle.
+    const { loadPassportContractRecord } = await import('./passportContractStore.js');
+    expect(loadPassportContractRecord('AQIDBA==', 'stagenet')?.status).toBe('submitted');
+  });
+
+  it('refuses a file that carries a deploy somebody else had in flight', async () => {
+    const forged = contents();
+    Object.assign(forged.passportContracts['AQIDBA==::preview']!, { status: 'submitted' });
+    const summary = await applyPassportBackup(forged);
+    expect(summary.passportContracts.restored).toBe(0);
+    expect(summary.passportContracts.skipped[0]?.reason).toMatch(
+      /is not a status a contract record has/,
+    );
+  });
+
   it('writes a contract record the file called confirmed as unconfirmed', async () => {
     const summary = await applyPassportBackup(contents());
     expect(summary.passportContracts.restored).toBe(1);
@@ -3307,7 +3340,9 @@ describe('a bulk write that must not destroy what it replaces', () => {
         updatedAt: '2027-01-01T00:00:00.000Z',
       },
     ]);
-    expect(badStatus?.reason).toMatch(/status must be deployed or failed/);
+    /* `'submitted'` joined the list on 2026/09/07 — see
+       `./passportContractStore.ts`. `'pending'` is still not a status. */
+    expect(badStatus?.reason).toMatch(/status must be submitted, deployed or failed/);
     expect(loadPassportContractRecord('AQIDBA==', 'preview')?.address).toBe('cc'.repeat(32));
   });
 });

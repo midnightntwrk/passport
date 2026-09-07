@@ -5,9 +5,44 @@
  * for the same reason: the store holds only what actually happened. A
  * `'deployed'` record must carry both a real contract address and a real
  * deployment transaction id; anything short of that is `'failed'` with the
- * reason it failed, in words the user can act on. There is deliberately no
- * "pending" state that looks like success — a deploy in flight lives in React
- * state and is written here only once the chain has answered.
+ * reason it failed, in words the user can act on.
+ *
+ * `'submitted'` — AND WHY THE RULE ABOVE NOW HAS AN EXCEPTION (2026/09/07)
+ * -----------------------------------------------------------------------
+ * Until today a deploy in flight lived only in React state, and this store held
+ * nothing until the chain had answered. That rule was written against ONE way
+ * of getting it wrong — reporting an account that does not exist — and it made
+ * the app perfect at that while leaving it defenceless against the opposite
+ * mistake, which turned out to be the expensive one.
+ *
+ * A reviewer's deploy was submitted, landed in block 359977 five seconds later,
+ * and was never seen to land because the wait for it could not end (see
+ * `../lib/chainWait.ts`). They reopened Passport. React state was gone, this
+ * store was empty, and so the app showed them the name step with no account —
+ * and had they claimed a name there, it would have deployed a SECOND contract,
+ * on a second sponsored fee, for a Passport that already had one. The memory of
+ * the first deploy existed nowhere at all.
+ *
+ * So a `'submitted'` record is now written the moment a transaction is handed
+ * to the node, and it is a statement about THIS BROWSER rather than about the
+ * chain: "a deploy for this credential and network went out at this time,
+ * carrying this address and this transaction identifier". It claims nothing
+ * about whether it landed, and every reader in the app already treats anything
+ * that is not `'deployed'` as "no account yet", so it cannot be mistaken for
+ * one — the Home card reads it as still being set up, and
+ * `refusePassportContractRecord` refuses one that tries to claim a confirmed
+ * read-back or a recovery.
+ *
+ * WHAT CLEARS IT. Exactly one thing: an answer. The settle in
+ * `./passportContract.ts` overwrites it with `'deployed'` when the deploy lands
+ * in the same session; on a later launch, the resume in `../App.tsx` reads the
+ * address back through the indexer and overwrites it with `'deployed'` when it
+ * is there, or with `'failed'` — carrying the same address and identifier, so
+ * nothing is lost — when it is still absent after
+ * `RESUME_CONFIRM_WINDOW_MS`, which is what puts the retry on the Home card.
+ * A `'submitted'` record therefore never outlives the question it records, and
+ * it is left out of backup files (`./backup.ts`) because it is a fact about one
+ * browser's in-flight transaction rather than a portable claim.
  *
  * Keyed by credential AND network, because both matter: one passkey may hold a
  * contract on the localnet and another on preview, and a contract deployed on
@@ -17,7 +52,7 @@
  * localStorage, under `passport-contract:v1`.
  */
 
-export type PassportContractRecordStatus = 'deployed' | 'failed';
+export type PassportContractRecordStatus = 'submitted' | 'deployed' | 'failed';
 
 export interface PassportContractRecord {
   /** The passkey credential this contract's device secret is derived from. */
@@ -25,9 +60,12 @@ export interface PassportContractRecord {
   /** The network the deployment really landed on. */
   network: string;
   status: PassportContractRecordStatus;
-  /** Raw 64-hex contract address. Present on every `'deployed'` record. */
+  /** Raw 64-hex contract address. Present on every `'deployed'` record, and on
+   * every `'submitted'` one — the address is a pure function of the initial
+   * contract state, so it is known before the transaction is sent. */
   address?: string;
-  /** The deployment transaction. Present on every `'deployed'` record. */
+  /** The deployment transaction. Present on every `'deployed'` record, and on
+   * every `'submitted'` one, where it is the identifier as submitted. */
   deployTxId?: string;
   /**
    * Whether {@link deployTxId} is the 32-byte ledger HASH an explorer can
@@ -127,7 +165,9 @@ function readAll(): Record<string, PassportContractRecord> {
         record &&
         typeof record.credentialId === 'string' &&
         typeof record.network === 'string' &&
-        (record.status === 'deployed' || record.status === 'failed')
+        (record.status === 'submitted' ||
+          record.status === 'deployed' ||
+          record.status === 'failed')
       ) {
         records[key] = record;
       }
@@ -192,8 +232,27 @@ export function refusePassportContractRecord(record: PassportContractRecord): st
   if (typeof record.credentialId !== 'string' || typeof record.network !== 'string') {
     return 'A Passport contract record must name the credential and the network it was deployed on, both as text.';
   }
-  if (record.status !== 'deployed' && record.status !== 'failed') {
-    return 'A Passport contract record\'s status must be deployed or failed.';
+  if (
+    record.status !== 'submitted' &&
+    record.status !== 'deployed' &&
+    record.status !== 'failed'
+  ) {
+    return 'A Passport contract record\'s status must be submitted, deployed or failed.';
+  }
+  if (record.status === 'submitted') {
+    /* Both, and for the same reason a deployed record needs both: a submitted
+       record exists to stop a second deploy and to be resumed later, and it can
+       do neither without the address to read back and the identifier to name. */
+    if (!record.address || !record.deployTxId) {
+      return 'A submitted Passport contract record must carry both the contract address and the transaction identifier it was submitted under.';
+    }
+    /* The one thing it may not do is borrow a stronger record's evidence. A
+       submission has not been read back and was not recovered from anywhere;
+       either flag on it would make a screen that reads them tell the chain's
+       story about a transaction nobody has asked the chain about. */
+    if (record.ledgerConfirmed === true || record.recovered) {
+      return 'A submitted Passport contract record cannot claim a confirmed on-chain read-back or a recovery — nothing has answered for it yet.';
+    }
   }
   if (record.status === 'deployed' && record.recovered) {
     /* The recovered case, and the only one exempt from the transaction-id
