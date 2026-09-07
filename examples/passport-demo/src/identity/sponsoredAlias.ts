@@ -41,6 +41,14 @@
  * another network reads as unavailable and the name queues.
  */
 
+import { describeEndpointRefusals } from '../lib/endpoints.js';
+import {
+  firstFunderThatAnswers,
+  funderAnsweredWith,
+  funderDidNotAnswer,
+  funderTransportReason,
+  type FunderAnswer,
+} from '../lib/funderFailover.js';
 import type { AliasClaimResult, MidnamesNetwork } from './midnames.js';
 /* The leaf, not `./midnames.js`: this module is pure transport and must stay
    importable without the ledger WASM behind it. */
@@ -114,6 +122,20 @@ export class AliasSponsorRefusal extends Error {
      * `detail`, and for the same reason.
      */
     readonly retryAfterMs: number | null = null,
+    /**
+     * Whether THE FUNDER ITSELF produced this refusal.
+     *
+     * `false` only where nothing at the far end answered: the socket never
+     * opened, the round trip timed out, or an edge answered `502`/`503`/`504`
+     * with a body naming no code. It is the one bit that decides whether a
+     * SECOND funder may be asked — see `lib/funderFailover.ts` for why that
+     * rule is narrower here than it is for a proof server, and for the double
+     * grant the narrow rule still cannot rule out.
+     *
+     * Defaults to `true`, which is the safe default: an unclassified refusal
+     * ends the walk rather than spending a second funder's NIGHT.
+     */
+    readonly reachedFunder: boolean = true,
   ) {
     super(message);
     this.name = 'AliasSponsorRefusal';
@@ -307,23 +329,73 @@ export async function checkAliasSponsorship(
   funderUrl: string,
   network: MidnamesNetwork,
 ): Promise<boolean> {
+  const answer = await probeAliasSponsorship(funderUrl, network);
+  return answer.answered ? answer.value : false;
+}
+
+/**
+ * The same probe, keeping the one distinction {@link checkAliasSponsorship}
+ * throws away: whether the funder ANSWERED at all.
+ *
+ * A funder that answers "not sponsoring right now" and a funder that is not
+ * there are both `false` to a caller deciding whether to offer a name, which
+ * is why the public signature has always collapsed them. They are not the same
+ * thing to a caller deciding whether to ask a STANDBY: the first is an answer
+ * and ends the walk, the second is silence and does not. See
+ * `lib/funderFailover.ts`.
+ *
+ * The cache is written only on an answer. A funder that could not be reached
+ * has told us nothing worth remembering for thirty seconds, and caching its
+ * silence as "unavailable" would keep the standby unreachable for that long
+ * too.
+ */
+async function probeAliasSponsorship(
+  funderUrl: string,
+  network: MidnamesNetwork,
+): Promise<FunderAnswer<boolean>> {
   const cached = probeCache.get(funderUrl);
-  if (cached && Date.now() - cached.at < PROBE_TTL_MS) return cached.available;
+  if (cached && Date.now() - cached.at < PROBE_TTL_MS) {
+    return { answered: true, value: cached.available };
+  }
+  let answered = false;
   let available = false;
   try {
     const response = await fetchWithTimeout(`${funderUrl}/status`, PROBE_TIMEOUT_MS);
+    answered = funderAnsweredWith(response.status, null);
     if (response.ok) {
-      const body = (await response.json()) as {
+      const body = (await response.json().catch(() => ({}))) as {
         network?: unknown;
         aliasSponsorship?: unknown;
       };
       available = body.network === network && body.aliasSponsorship === 'available';
     }
   } catch {
-    available = false;
+    answered = false;
   }
+  if (!answered) return funderDidNotAnswer(`${funderUrl}/status did not answer`);
   probeCache.set(funderUrl, { at: Date.now(), available });
-  return available;
+  return { answered: true, value: available };
+}
+
+/**
+ * The probe across an ORDERED list of funders — the first one that answers.
+ *
+ * A funder that answers "not sponsoring" is the answer, and the standby is NOT
+ * consulted behind it: the two funders are different wallets, and a name
+ * registered by the standby because the primary was merely paused is a name
+ * the primary would have registered a minute later. Only silence falls
+ * through.
+ */
+export async function checkAliasSponsorshipAcross(
+  funderUrls: readonly string[],
+  network: MidnamesNetwork,
+): Promise<boolean> {
+  const outcome = await firstFunderThatAnswers(
+    funderUrls,
+    (funderUrl) => probeAliasSponsorship(funderUrl, network),
+    'the sponsorship probe',
+  );
+  return outcome.served ? outcome.value : false;
 }
 
 /** Drops the cached probe answer — used after a refusal that dates it. */
@@ -437,12 +509,15 @@ export async function sponsorAliasRegistration(
       });
     } catch (cause) {
       invalidateSponsorshipProbe(funderUrl);
+      const reason = funderTransportReason(cause);
       throw new AliasSponsorRefusal(
         'unreachable',
-        `The sponsorship service could not be reached: ${
-          cause instanceof Error ? cause.message : String(cause)
-        }`,
+        `The sponsorship service could not be reached: ${reason}`,
         true,
+        `The sponsorship service could not be reached: ${reason}`,
+        null,
+        /* Nothing at the funder answered, so a standby may be asked. */
+        false,
       );
     }
     let parsed: unknown = null;
@@ -510,6 +585,11 @@ export async function sponsorAliasRegistration(
       !NO_FALLBACK_CODES.has(code),
       serviceMessage,
       retryAfterMs,
+      /* A `502` carrying an HTML error page is an edge speaking for a funder
+         that is down; a `503` carrying `{"error":"wallet-syncing"}` is the
+         funder speaking for itself, and a standby asked after that one would
+         register the name a second time. */
+      funderAnsweredWith(response.status, body),
     );
   }
 
@@ -570,4 +650,66 @@ export async function sponsorAliasRegistration(
     claimedAt: success.registeredAt,
     registryConfirmed,
   };
+}
+
+/**
+ * {@link sponsorAliasRegistration} across an ORDERED list of funders.
+ *
+ * The one rule, and it is the whole reason this is not `firstEndpointThatServes`
+ * with a fetch in it: **a refusal ends the walk.** Only a funder that did not
+ * answer — no socket, a timeout, or an edge's bare `502`/`503`/`504` — lets the
+ * standby be asked. `AliasSponsorRefusal.reachedFunder` carries that bit from
+ * wherever the refusal was made.
+ *
+ * WHAT A SECOND FUNDER WOULD DO IF THE RULE WERE ANY WIDER. The two funders
+ * hold different wallets. Asked in turn about the same name, the second either
+ * registers it a second time (paying its own registry price for a name the
+ * first already owns for this user) or discovers the first's work and refuses
+ * `name-taken` — a refusal the reader is then shown for a name that IS theirs.
+ * The narrow rule leaves exactly one window open, and it is the unavoidable
+ * one: the primary registered the name and its answer was lost coming back.
+ * That surfaces as `name-taken`, which `aliasRefusalMessage` and
+ * `lib/claimFailure.ts` already handle, and `identity/aliasStore.ts` keeps the
+ * name locally either way.
+ *
+ * Everything that is not a refusal — an `awaitTarget` rejection, a decoder
+ * throwing, a bug — is carried out of the walk and rethrown unchanged rather
+ * than being read as an unreachable funder. A list of ONE behaves exactly as
+ * `sponsorAliasRegistration` does: the same result, or the same error object.
+ */
+export async function sponsorAliasRegistrationAcross(
+  funderUrls: readonly string[],
+  request: SponsorAliasRequest,
+  options: SponsorAliasOptions = {},
+): Promise<AliasClaimResult> {
+  type Attempt = { ok: true; result: AliasClaimResult } | { ok: false; error: unknown };
+  const outcome = await firstFunderThatAnswers<Attempt>(
+    funderUrls,
+    async (funderUrl): Promise<FunderAnswer<Attempt>> => {
+      try {
+        return { answered: true, value: { ok: true, result: await sponsorAliasRegistration(funderUrl, request, options) } };
+      } catch (error) {
+        if (error instanceof AliasSponsorRefusal && !error.reachedFunder) {
+          return funderDidNotAnswer(`${funderUrl}: ${error.serviceMessage}`);
+        }
+        return { answered: true, value: { ok: false, error } };
+      }
+    },
+    'name registration',
+  );
+  if (!outcome.served) {
+    /* Nobody answered. Said in the vocabulary one funder's silence already
+       has, so every caller — the claim's retry schedule included — classifies
+       it exactly as it does today. */
+    throw new AliasSponsorRefusal(
+      'unreachable',
+      'The sponsorship service could not be reached.',
+      true,
+      describeEndpointRefusals(outcome.refusals),
+      null,
+      false,
+    );
+  }
+  if (!outcome.value.ok) throw outcome.value.error;
+  return outcome.value.result;
 }

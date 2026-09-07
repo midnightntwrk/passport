@@ -104,6 +104,12 @@ import * as Rx from 'rxjs';
 
 import type { PassportStateScope, PassportWalletSeedProvider } from '../backend.js';
 import { parseEndpointList } from './endpoints.js';
+import {
+  firstIndexerThatAnswers,
+  indexerEndpointList,
+  indexerWsFrom,
+  type IndexerEndpoint,
+} from './indexerFailover.js';
 import { sponsorReadiness, sponsorRefusal } from './sponsor.js';
 import type { SponsorUnavailableCause } from './sponsor.js';
 import { httpWalletProvingService } from './walletProver.js';
@@ -131,10 +137,25 @@ export { clearWalletSnapshots };
 export interface LocalWalletNetworkConfig {
   /** Midnight network identifier, e.g. `preview`, `mainnet`, `undeployed`. */
   networkId: string;
-  /** Indexer GraphQL endpoint over HTTP. */
+  /**
+   * The indexer this wallet's facade was actually built against — the head of
+   * {@link indexers} when nothing was probed, and otherwise the first entry
+   * that answered. Read it, not the list, to know where a wallet is reading.
+   */
   indexerHttpUrl: string;
   /** Indexer GraphQL endpoint over WebSocket (the HTTP URL plus `/ws`). */
   indexerWsUrl: string;
+  /**
+   * Every indexer this build is configured with, in the operator's order.
+   *
+   * `VITE_INDEXER_URL` takes a comma-separated list since 2026/09/06, and a
+   * single URL is a list of one that behaves exactly as it always did. The
+   * wallet opens on the first of these that answers a bounded probe; a stall
+   * afterwards is a REBUILD on the next one rather than a live switch, because
+   * the SDK binds its indexer client at `WalletFacade.init` and every consumer
+   * of an open wallet holds that facade. See `./indexerFailover.ts`.
+   */
+  indexers: IndexerEndpoint[];
   /** Node relay WebSocket URL used for transaction submission. */
   relayUrl: string;
   /**
@@ -201,13 +222,14 @@ const DEFAULT_PROVING_SERVER_URL = '';
 const DEFAULT_NETWORK_ID = 'stagenet';
 
 /**
- * The indexer's WebSocket endpoint is its HTTP endpoint with `/ws` appended —
- * the bare GraphQL path refuses the upgrade. Verified against Preview on
- * 2026/08/04; see the header comment in `./indexerTx.ts`.
+ * How long the indexer probe is given before an endpoint is passed over.
+ *
+ * Short, because it is spent on the way into the app: a Passport that opens is
+ * behind it. The full `fetchChainHeight` ceiling is ten seconds, which is the
+ * right patience for the depth guard and the wrong patience for a health check
+ * with a standby waiting behind it.
  */
-function indexerWsFrom(indexerHttpUrl: string): string {
-  return `${indexerHttpUrl.replace(/\/+$/, '').replace(/^http/, 'ws')}/ws`;
-}
+const INDEXER_PROBE_TIMEOUT_MS = 4_000;
 
 /** The submission relay speaks WebSocket, so an `http(s)` node URL is upgraded. */
 function relayFrom(nodeUrl: string): string {
@@ -279,8 +301,11 @@ function warnOnLoopbackEndpoints(config: LocalWalletNetworkConfig): void {
  * the same build can be pointed at a localnet, and nothing is pinned to one.
  *
  *   VITE_MIDNIGHT_NETWORK_ID    default `stagenet`
- *   VITE_INDEXER_URL            default the stagenet indexer (shared with indexerTx)
- *   VITE_INDEXER_WS_URL         default derived from VITE_INDEXER_URL
+ *   VITE_INDEXER_URL            default the stagenet indexer (shared with
+ *                               indexerTx). Takes one URL or SEVERAL,
+ *                               comma-separated and tried in the order written.
+ *   VITE_INDEXER_WS_URL         default derived from VITE_INDEXER_URL, position
+ *                               by position across the list
  *   VITE_MIDNIGHT_NODE_URL      default the stagenet RPC node
  *   VITE_MIDNIGHT_RELAY_URL     default derived from VITE_MIDNIGHT_NODE_URL
  *   VITE_MIDNIGHT_PROVING_URL   default NONE — stagenet publishes no proof
@@ -292,8 +317,18 @@ export function localWalletNetworkConfig(
   overrides: Partial<LocalWalletNetworkConfig> = {},
 ): LocalWalletNetworkConfig {
   const env = environment();
-  const indexerHttpUrl =
-    overrides.indexerHttpUrl ?? env.VITE_INDEXER_URL ?? DEFAULT_INDEXER_HTTP_URL;
+  /* THE LIST IS THE SOURCE, and `indexerHttpUrl` is its head — the same shape
+     `provingServerUrls`/`provingServerUrl` has, and for the same reason: a
+     config where the two disagreed would query one host and subscribe to
+     another. An `indexers` override is what a rebuild after a stall passes,
+     already rotated so the endpoint to try next is first. */
+  const indexers =
+    overrides.indexers ??
+    indexerEndpointList(
+      overrides.indexerHttpUrl ?? env.VITE_INDEXER_URL ?? DEFAULT_INDEXER_HTTP_URL,
+      overrides.indexerWsUrl ?? env.VITE_INDEXER_WS_URL,
+    );
+  const indexerHttpUrl = indexers[0]?.httpUrl ?? DEFAULT_INDEXER_HTTP_URL;
   const nodeUrl = env.VITE_MIDNIGHT_NODE_URL ?? DEFAULT_NODE_URL;
   /* One list, and `provingServerUrl` is its head rather than a second source
      of truth — a config where the two disagreed would prove a contract circuit
@@ -306,9 +341,9 @@ export function localWalletNetworkConfig(
     );
   const config: LocalWalletNetworkConfig = {
     networkId: overrides.networkId ?? env.VITE_MIDNIGHT_NETWORK_ID ?? DEFAULT_NETWORK_ID,
+    indexers,
     indexerHttpUrl,
-    indexerWsUrl:
-      overrides.indexerWsUrl ?? env.VITE_INDEXER_WS_URL ?? indexerWsFrom(indexerHttpUrl),
+    indexerWsUrl: indexers[0]?.wsUrl ?? indexerWsFrom(indexerHttpUrl),
     relayUrl: overrides.relayUrl ?? env.VITE_MIDNIGHT_RELAY_URL ?? relayFrom(nodeUrl),
     provingServerUrls,
     provingServerUrl: provingServerUrls[0] ?? DEFAULT_PROVING_SERVER_URL,
@@ -988,7 +1023,35 @@ export async function createLocalMidnightWallet(
   }
   installZswapApplyGuard();
 
-  const network = localWalletNetworkConfig(options.network);
+  const configured = localWalletNetworkConfig(options.network);
+  /**
+   * WHICH INDEXER THIS WALLET OPENS ON.
+   *
+   * Asked before the facade is built, because the facade cannot be asked
+   * again: `WalletFacade.init` takes one `indexerClientConnection` and holds
+   * it for the life of the wallet. One cheap block-height query per endpoint,
+   * bounded at {@link INDEXER_PROBE_TIMEOUT_MS}, and the first that answers is
+   * the one the wallet is built against.
+   *
+   * A LIST OF ONE COSTS ONE PROBE AND CHANGES NOTHING — it opens on that
+   * endpoint whatever the probe said, because a probe that is wrong about a
+   * healthy indexer must not be the reason a Passport will not open. The probe
+   * is a preference between endpoints, never a gate.
+   */
+  const chosen =
+    configured.indexers.length > 1
+      ? await firstIndexerThatAnswers(
+          configured.indexers,
+          async (httpUrl) => (await fetchChainHeight(httpUrl, INDEXER_PROBE_TIMEOUT_MS)) !== null,
+        )
+      : null;
+  const network: LocalWalletNetworkConfig = chosen
+    ? {
+        ...configured,
+        indexerHttpUrl: chosen.endpoint.httpUrl,
+        indexerWsUrl: chosen.endpoint.wsUrl,
+      }
+    : configured;
   // The address codecs and the unshielded keystore read the process-wide
   // network id, so it must be set before any key or address is produced.
   setNetworkId(network.networkId);

@@ -25,6 +25,18 @@ import {
   type AccountFromBlobAccount,
 } from './lib/accountOnPasskey.js';
 import { compactAddress } from './lib/address.js';
+import { describeEndpointRefusals, parseEndpointList } from './lib/endpoints.js';
+import {
+  firstFunderThatAnswers,
+  funderAnsweredWith,
+  funderDidNotAnswer,
+  funderTransportReason,
+} from './lib/funderFailover.js';
+import {
+  INDEXER_STALL_MS,
+  indexersAfter,
+  watchIndexerStall,
+} from './lib/indexerFailover.js';
 import {
   nameOwnershipOutcome,
   nameRecoveryStillOpening,
@@ -285,17 +297,31 @@ const signingNetworkLabel = configuredWalletNetwork
   ? NETWORK_LABELS[configuredWalletNetwork]
   : 'its configured network';
 /**
- * The optional Passport service (`VITE_FUNDER_URL`, see
- * `examples/passport-funder` and `examples/passport-balancer`). It does two
- * things for a Passport, and neither of them puts value in the wallet: it
- * REGISTERS the `.night` name from its own NIGHT (`POST /register-alias`), and
- * it funds the ACCOUNT contract once that account exists (`POST
+ * The optional Passport services (`VITE_FUNDER_URL`, see
+ * `examples/passport-funder` and `examples/passport-balancer`). They do two
+ * things for a Passport, and neither of them puts value in the wallet: they
+ * REGISTER the `.night` name from their own NIGHT (`POST /register-alias`), and
+ * they fund the ACCOUNT contract once that account exists (`POST
  * /fund-account`). Unset, a name simply queues until a service is back — the
  * wallet is never asked to pay for one.
+ *
+ * AN ORDERED LIST since 2026/09/06, on the comma-separated format the sponsor
+ * and proving variables already take, and with one clause the others do not
+ * have: only a funder that DID NOT ANSWER is fallen through. A funder that
+ * refuses has answered, and a standby asked behind it is a second wallet that
+ * would register the name again or grant a second time. The whole rule, and
+ * the one double grant it cannot rule out, are in `lib/funderFailover.ts`.
  */
-const FUNDER_URL =
-  (import.meta.env as Record<string, string | undefined>).VITE_FUNDER_URL?.trim().replace(/\/+$/, '') ||
-  null;
+const FUNDER_URLS = parseEndpointList(
+  (import.meta.env as Record<string, string | undefined>).VITE_FUNDER_URL,
+);
+/**
+ * The first funder in the list, and the answer to "is a Passport service
+ * configured at all". Every request walks {@link FUNDER_URLS} rather than
+ * using this — see `lib/funderFailover.ts` for the narrow rule that walk
+ * follows, which is not the sponsor's.
+ */
+const FUNDER_URL = FUNDER_URLS[0] ?? null;
 /**
  * Ceiling on ONE `/fund-account` round-trip.
  *
@@ -386,33 +412,52 @@ async function probeStablecoin(): Promise<{ symbol: string; colourHex: string } 
   const configured = CONFIGURED_STABLECOIN_COLOUR
     ? { symbol: 'mUSD', colourHex: CONFIGURED_STABLECOIN_COLOUR }
     : null;
-  if (!FUNDER_URL) return configured;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4_000);
-    let body: { assetColourHex?: unknown; assetSymbol?: unknown };
-    try {
-      const response = await fetch(`${FUNDER_URL}/status`, { signal: controller.signal });
-      if (!response.ok) return configured;
-      body = (await response.json()) as { assetColourHex?: unknown; assetSymbol?: unknown };
-    } finally {
-      clearTimeout(timer);
-    }
-    const colourHex = normalisedColourHex(
-      typeof body.assetColourHex === 'string' ? body.assetColourHex : null,
-    );
-    if (!colourHex) return configured;
-    return {
-      symbol:
-        typeof body.assetSymbol === 'string' && body.assetSymbol.trim()
-          ? body.assetSymbol.trim()
-          : 'mUSD',
-      colourHex,
-    };
-  } catch {
-    // Unreachable or unparseable: the configured colour, or nothing at all.
-    return configured;
-  }
+  /* A READ, so the first funder that answers wins — including one that answers
+     something unusable. Reads carry no risk of a second grant, but they carry
+     the same risk of DISAGREEMENT: two funders mint their own stablecoin, and
+     asking the standby because the primary's answer was not to our taste would
+     show a colour the account does not hold. */
+  const outcome = await firstFunderThatAnswers<{ symbol: string; colourHex: string } | null>(
+    FUNDER_URLS,
+    async (funderUrl) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4_000);
+      let response: Response;
+      try {
+        response = await fetch(`${funderUrl}/status`, { signal: controller.signal });
+      } catch (cause) {
+        return funderDidNotAnswer(funderTransportReason(cause));
+      } finally {
+        clearTimeout(timer);
+      }
+      if (!funderAnsweredWith(response.status, null)) {
+        return funderDidNotAnswer(`HTTP ${response.status}`);
+      }
+      if (!response.ok) return { answered: true, value: null };
+      const body = (await response.json().catch(() => ({}))) as {
+        assetColourHex?: unknown;
+        assetSymbol?: unknown;
+      };
+      const colourHex = normalisedColourHex(
+        typeof body.assetColourHex === 'string' ? body.assetColourHex : null,
+      );
+      if (!colourHex) return { answered: true, value: null };
+      return {
+        answered: true,
+        value: {
+          symbol:
+            typeof body.assetSymbol === 'string' && body.assetSymbol.trim()
+              ? body.assetSymbol.trim()
+              : 'mUSD',
+          colourHex,
+        },
+      };
+    },
+    'the stablecoin colour',
+  );
+  // Unreachable, or an answer with no colour in it: the configured colour, or
+  // nothing at all.
+  return (outcome.served ? outcome.value : null) ?? configured;
 }
 
 /**
@@ -527,8 +572,8 @@ const SPONSOR_UNAVAILABLE_SENTENCE =
  */
 async function aliasSponsorshipLikely(network: string | null | undefined): Promise<boolean> {
   if (!FUNDER_URL || !aliasRegistrationSupported(network)) return false;
-  const { checkAliasSponsorship } = await import('./identity/sponsoredAlias.js');
-  return checkAliasSponsorship(FUNDER_URL, network as MidnamesNetwork);
+  const { checkAliasSponsorshipAcross } = await import('./identity/sponsoredAlias.js');
+  return checkAliasSponsorshipAcross(FUNDER_URLS, network as MidnamesNetwork);
 }
 
 /**
@@ -3250,9 +3295,109 @@ export default function PassportDemo() {
     }
   };
 
+  /**
+   * How many times this session has rebuilt the wallet onto another indexer.
+   * Capped at the length of the configured list: rotating through every
+   * endpoint once and still stalling means the fault is not the indexer, and
+   * a rebuild loop would be a worse Passport than a stalled one.
+   */
+  const indexerRebuilds = useRef(0);
+
+  /**
+   * Bumped whenever the open wallet is REPLACED without its status changing.
+   *
+   * The effects that subscribe to a wallet — the sync progress below and the
+   * balance watch under it — read `localWalletRef.current` and re-run on
+   * `localWalletStatus`, which is sound for every other path: a wallet only
+   * ever arrives through 'opening' → 'ready', and the transition is what
+   * resubscribes them. The indexer rebuild is the one replacement that happens
+   * with the status already 'ready' and deliberately left there, so without a
+   * dependency of its own the new wallet would be live and unsubscribed —
+   * a sync percentage frozen at the stalled wallet's last reading, no stall
+   * watch on the wallet that replaced it, and incoming NIGHT unnoticed.
+   */
+  const [localWalletEpoch, setLocalWalletEpoch] = useState(0);
+
+  /**
+   * Rebuilds the open wallet against the NEXT indexer in the configured list.
+   *
+   * WHY A REBUILD AND NOT A SWITCH. `WalletFacade.init` is handed one
+   * `indexerClientConnection` and holds it for the life of the wallet; the SDK
+   * exposes no way to retarget an open client, and every consumer of one has
+   * captured that facade — `identity/accountCustody.ts` subscribes to
+   * `wallet.facade.state()` for the length of a deploy, `identity/
+   * contractRuntime.ts` submits through it, and the balance and sync
+   * subscriptions below ride it. So the wallet is rebuilt: the same operation
+   * the silent session restore above performs, from the same persisted seed,
+   * and it resumes from the sync snapshot it has already saved rather than
+   * walking the chain again. Nothing here pretends the open client moved.
+   *
+   * SILENT, AND ONLY EVER A REPLACEMENT. No status change, no toast, no copy:
+   * the screen keeps the wallet it has until a working one exists to put in
+   * its place, and a rebuild that fails leaves the stalled wallet where it is
+   * rather than taking the session down with it. The only trace is one
+   * `console.info` naming the endpoint index.
+   *
+   * NO SEED, NO REBUILD. A session with no persisted seed (sign-out clears it)
+   * cannot be reopened without a passkey ceremony, and summoning one for a
+   * fault the reader has not noticed is worse than the stall.
+   */
+  const rebuildOnNextIndexer = useCallback(
+    async (handle: LocalMidnightWallet): Promise<void> => {
+      if (localWalletRef.current !== handle || onboardingRunning.current) return;
+      const rotated = indexersAfter(handle.network.indexers, handle.network.indexerHttpUrl);
+      if (!rotated) return;
+      if (indexerRebuilds.current >= handle.network.indexers.length) return;
+      indexerRebuilds.current += 1;
+      const next = rotated[0];
+      console.info(
+        `[indexer] ${handle.network.indexerHttpUrl} served no progress for ${
+          INDEXER_STALL_MS / 1_000
+        } s; rebuilding this Passport's wallet on endpoint ${handle.network.indexers.findIndex(
+          (endpoint) => endpoint.httpUrl === next.httpUrl,
+        )} (${next.httpUrl})`,
+      );
+      const restored = await loadPersistedWalletSession();
+      if (!restored) return;
+      const seed = restored.seed;
+      let rebuilt: LocalMidnightWallet;
+      try {
+        const { createLocalMidnightWallet } = await import('./lib/localWallet.js');
+        try {
+          rebuilt = await createLocalMidnightWallet(seed, { network: { indexers: rotated } });
+        } finally {
+          seed.fill(0);
+        }
+      } catch (cause) {
+        console.info('[indexer] the rebuild did not open; keeping the stalled wallet', cause);
+        return;
+      }
+      // Whoever the reader asked for keeps the wallet: a ceremony that started
+      // while this was opening owns `localWalletRef`, and this one is dropped.
+      if (localWalletRef.current !== handle || onboardingRunning.current) {
+        void rebuilt.close().catch(() => undefined);
+        return;
+      }
+      await closeLocalWallet();
+      localWalletRef.current = rebuilt;
+      setLocalWalletNetworkId(rebuilt.network.networkId);
+      setLocalWalletProvingMode(rebuilt.provingMode);
+      setLocalSurfaces(initialLocalSurfaceState(rebuilt));
+      /* The status stays 'ready' throughout — that is what makes the rebuild
+         silent — so this is the only thing that tells the wallet-scoped
+         subscriptions below to move to the wallet that replaced the one they
+         are holding. */
+      setLocalWalletEpoch((epoch) => epoch + 1);
+      void refreshLocalBalances();
+    },
+    [closeLocalWallet, refreshLocalBalances],
+  );
+
   // Live sync progress from the local wallet's state stream. Resubscribes per
   // wallet handle; on the transition to fully synced, refresh balances once so
-  // the surfaces settle the moment the chain walk completes.
+  // the surfaces settle the moment the chain walk completes. It is also where
+  // an indexer that has stopped serving this wallet is noticed — the readings
+  // this effect already receives are the only evidence there is.
   useEffect(() => {
     if (localWalletStatus !== 'ready') {
       setLocalSyncPercent(null);
@@ -3262,7 +3407,13 @@ export default function PassportDemo() {
     const handle = localWalletRef.current;
     if (!handle) return;
     let wasSynced = false;
+    const stallWatch = watchIndexerStall({
+      onStalled: () => {
+        void rebuildOnNextIndexer(handle);
+      },
+    });
     const unsubscribe = handle.subscribeSyncProgress((progress) => {
+      stallWatch.observe(progress);
       setLocalSyncPercent(progress.percent);
       if (progress.synced && !wasSynced) {
         wasSynced = true;
@@ -3274,11 +3425,12 @@ export default function PassportDemo() {
       }
     });
     return () => {
+      stallWatch.stop();
       unsubscribe();
       setLocalSyncPercent(null);
       localWalletSynced.current = false;
     };
-  }, [localWalletStatus, refreshLocalBalances]);
+  }, [localWalletEpoch, localWalletStatus, refreshLocalBalances, rebuildOnNextIndexer]);
 
   /**
    * Live balances from the same wallet state stream the sync percent rides.
@@ -3403,7 +3555,7 @@ export default function PassportDemo() {
       unsubscribe();
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [addActivity, localWalletStatus]);
+  }, [addActivity, localWalletEpoch, localWalletStatus]);
 
   /* ---------------------------------------------------------------------- */
   /* Identity — claiming, queueing, and reclaiming a .night name             */
@@ -3857,36 +4009,52 @@ export default function PassportDemo() {
       contractAddress: string,
     ): Promise<{ kind: 'deposited' | 'refused' } | { kind: 'retry'; reason: string }> => {
       if (!FUNDER_URL) return { kind: 'refused' };
-      let answer: FundAccountAnswer;
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), FUND_ACCOUNT_TIMEOUT_MS);
-        let response: Response;
-        try {
-          response = await fetch(`${FUNDER_URL}/fund-account`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ contractAddress }),
-            signal: controller.signal,
-          });
-        } finally {
-          clearTimeout(timer);
-        }
-        answer = {
-          kind: 'response',
-          ok: response.ok,
-          status: response.status,
-          body: await response.json().catch(() => ({})),
-        };
-      } catch (cause) {
-        /* Unreachable, or the round-trip ceiling. Nothing is recorded: a
-           network that is down for one attempt is not a verdict on the grant,
-           and the schedule above will ask again. */
-        answer = {
-          kind: 'transport-failure',
-          message: cause instanceof Error ? cause.message : String(cause),
-        };
-      }
+      /* THE ONE GRANT, AND TWO WALLETS THAT COULD EACH MAKE IT. A funder that
+         REFUSES has answered, and its answer is carried out of the walk as the
+         value so it is classified exactly as one funder's refusal is today —
+         the standby is never asked behind it, because the grant is once per
+         account for ever and each funder keeps its own ledger of that. Only a
+         funder that did not answer at all is fallen through. See
+         `lib/funderFailover.ts` for the one double grant this cannot rule out
+         and for the four checks that bound it. */
+      const outcome = await firstFunderThatAnswers<FundAccountAnswer>(
+        FUNDER_URLS,
+        async (funderUrl) => {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), FUND_ACCOUNT_TIMEOUT_MS);
+          let response: Response;
+          try {
+            response = await fetch(`${funderUrl}/fund-account`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ contractAddress }),
+              signal: controller.signal,
+            });
+          } catch (cause) {
+            /* Unreachable, or the round-trip ceiling. Nothing is recorded: a
+               network that is down for one attempt is not a verdict on the
+               grant, and the schedule above will ask again. */
+            return funderDidNotAnswer(funderTransportReason(cause));
+          } finally {
+            clearTimeout(timer);
+          }
+          const body: unknown = await response.json().catch(() => ({}));
+          if (!funderAnsweredWith(response.status, body)) {
+            return funderDidNotAnswer(`HTTP ${response.status}`);
+          }
+          return {
+            answered: true,
+            value: { kind: 'response', ok: response.ok, status: response.status, body },
+          };
+        },
+        'the activation grant',
+      );
+      const answer: FundAccountAnswer = outcome.served
+        ? outcome.value
+        : {
+            kind: 'transport-failure',
+            message: describeEndpointRefusals(outcome.refusals),
+          };
 
       const plan = classifyFundAccountAnswer(answer, contractAddress);
       if (plan.rememberFunded) rememberAccountFunding(contractAddress);
@@ -4087,7 +4255,7 @@ export default function PassportDemo() {
         { AliasClaimError, deriveMidnamesOwnerKey },
         { submitPassportContract },
         { deriveWalletSeed },
-        { AliasSponsorRefusal, sponsorAliasRegistration },
+        { AliasSponsorRefusal, sponsorAliasRegistrationAcross },
       ] = await Promise.all([
         import('./identity/midnames.js'),
         import('./identity/passportContract.js'),
@@ -4448,8 +4616,8 @@ export default function PassportDemo() {
                 };
               },
               attempt: () =>
-                sponsorAliasRegistration(
-                  FUNDER_URL,
+                sponsorAliasRegistrationAcross(
+                  FUNDER_URLS,
                   {
                     alias,
                     ownerKey,

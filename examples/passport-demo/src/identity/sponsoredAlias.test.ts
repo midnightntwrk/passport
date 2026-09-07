@@ -32,8 +32,10 @@ import {
   AliasSponsorRefusal,
   aliasRefusalMessage,
   checkAliasSponsorship,
+  checkAliasSponsorshipAcross,
   invalidateSponsorshipProbe,
   sponsorAliasRegistration,
+  sponsorAliasRegistrationAcross,
 } from './sponsoredAlias.js';
 
 /* `sponsorAliasRegistration` reaches for `./midnames.js` through a dynamic
@@ -780,5 +782,174 @@ describe('aliasRefusalMessage', () => {
     expect(limited).toMatch(/\.$/);
     expect(limited.match(/\.(?=\s|$)/g) ?? []).toHaveLength(2);
     expect(limited.match(/\bkept\b/gi) ?? []).toHaveLength(1);
+  });
+});
+
+/**
+ * A SECOND FUNDER, AND THE ONE THING IT MAY NEVER DO.
+ *
+ * The list wrappers exist because we now run a standby droplet, and the whole
+ * of their correctness is a subtraction from the sponsor's rule: a funder that
+ * REFUSED has answered, and a standby asked behind it is a different wallet
+ * that would register the same name a second time. Only silence — no socket, a
+ * timeout, or an edge's bare 5xx — is fallen through. See
+ * `lib/funderFailover.ts` for the classification these lean on.
+ */
+describe('checkAliasSponsorshipAcross', () => {
+  const STANDBY = 'https://standby.example/balancer';
+
+  it('takes the first funder that answers, even when the answer is "not right now"', async () => {
+    /* The primary being PAUSED is not a reason to send a name to another
+       wallet: it is a reason to queue the name, which is what `false` means
+       everywhere it is read. */
+    const asked: string[] = [];
+    installFetch(async (url) => {
+      asked.push(url);
+      return json({ network: 'stagenet', aliasSponsorship: 'paused' });
+    });
+    expect(await checkAliasSponsorshipAcross([FUNDER, STANDBY], 'stagenet')).toBe(false);
+    expect(asked).toEqual([`${FUNDER}/status`]);
+  });
+
+  it('asks the standby only when the primary did not answer at all', async () => {
+    const asked: string[] = [];
+    installFetch(async (url) => {
+      asked.push(url);
+      if (url.startsWith(FUNDER)) throw new TypeError('Failed to fetch');
+      return json({ network: 'stagenet', aliasSponsorship: 'available' });
+    });
+    expect(await checkAliasSponsorshipAcross([FUNDER, STANDBY], 'stagenet')).toBe(true);
+    expect(asked).toEqual([`${FUNDER}/status`, `${STANDBY}/status`]);
+  });
+
+  it('does not cache a silence as an unavailable funder', async () => {
+    /* A funder that could not be reached has told us nothing worth remembering
+       for thirty seconds, and caching its silence would keep it — and the
+       claim behind it — unavailable for that long after it came back. */
+    let attempt = 0;
+    installFetch(async () => {
+      attempt += 1;
+      if (attempt === 1) throw new TypeError('Failed to fetch');
+      return json({ network: 'stagenet', aliasSponsorship: 'available' });
+    });
+    expect(await checkAliasSponsorship(FUNDER, 'stagenet')).toBe(false);
+    expect(await checkAliasSponsorship(FUNDER, 'stagenet')).toBe(true);
+  });
+
+  it('is false, without asking anybody, when no funder is configured', async () => {
+    const spy = installFetch(async () => json({}));
+    expect(await checkAliasSponsorshipAcross([], 'stagenet')).toBe(false);
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('sponsorAliasRegistrationAcross', () => {
+  const STANDBY = 'https://standby.example/balancer';
+
+  /** Which funders were asked to register, in order. */
+  function recordRegistrations(
+    answer: (url: string) => Promise<Response>,
+  ): { asked: string[] } {
+    const asked: string[] = [];
+    installFetch(async (url) => {
+      asked.push(url);
+      return answer(url);
+    });
+    return { asked };
+  }
+
+  it('asks the standby after a network error, and reports its result', async () => {
+    resolveAliasTarget.mockResolvedValue({
+      resolverAddress: RESOLVER,
+      target: { kind: 'contract', hex: ACCOUNT },
+    });
+    const { asked } = recordRegistrations(async (url) => {
+      if (url.startsWith(FUNDER)) throw new TypeError('Failed to fetch');
+      return json(registeredBody());
+    });
+    const claimed = await sponsorAliasRegistrationAcross([FUNDER, STANDBY], request);
+    expect(claimed.domain).toBe('alice.night');
+    expect(asked).toEqual([`${FUNDER}/register-alias`, `${STANDBY}/register-alias`]);
+  });
+
+  it('asks the standby after an edge’s 502 HTML page', async () => {
+    /* Caddy in front of a Node process that is down. Nothing at the funder saw
+       the request, so nothing at the funder can have registered anything. */
+    resolveAliasTarget.mockResolvedValue({
+      resolverAddress: RESOLVER,
+      target: { kind: 'contract', hex: ACCOUNT },
+    });
+    const { asked } = recordRegistrations(async (url) =>
+      url.startsWith(FUNDER)
+        ? new Response('<html>502 Bad Gateway</html>', { status: 502 })
+        : json(registeredBody()),
+    );
+    await sponsorAliasRegistrationAcross([FUNDER, STANDBY], request);
+    expect(asked).toHaveLength(2);
+  });
+
+  it('STOPS at a 429, with the primary’s own refusal', async () => {
+    const { asked } = recordRegistrations(async () =>
+      json({ error: 'rate-limited', message: 'Too many names this hour.', retryAfterMs: 60_000 }, 429),
+    );
+    await expect(sponsorAliasRegistrationAcross([FUNDER, STANDBY], request)).rejects.toMatchObject({
+      name: 'AliasSponsorRefusal',
+      code: 'rate-limited',
+      retryAfterMs: 60_000,
+    });
+    expect(asked).toEqual([`${FUNDER}/register-alias`]);
+  });
+
+  it('STOPS at a 503 that names a code, because the funder answered', async () => {
+    /* The balancer's own readiness refusal IS a 503. A standby asked behind it
+       would register a name the primary registers a minute later. */
+    const { asked } = recordRegistrations(async () =>
+      json({ error: 'wallet-syncing', message: 'The sponsor wallet is catching up.' }, 503),
+    );
+    await expect(sponsorAliasRegistrationAcross([FUNDER, STANDBY], request)).rejects.toMatchObject({
+      code: 'wallet-syncing',
+    });
+    expect(asked).toEqual([`${FUNDER}/register-alias`]);
+  });
+
+  it('reports one unreachable refusal when nobody answered', async () => {
+    recordRegistrations(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    await expect(sponsorAliasRegistrationAcross([FUNDER, STANDBY], request)).rejects.toMatchObject({
+      name: 'AliasSponsorRefusal',
+      code: 'unreachable',
+      // Still worth queueing: nothing was registered anywhere.
+      selfPayWorthTrying: true,
+      reachedFunder: false,
+    });
+  });
+
+  it('rethrows anything that is not a refusal, unchanged', async () => {
+    /* An `awaitTarget` that rejects is the account deploy failing, and that
+       error outranks anything the name service would have said. Reading it as
+       an unreachable funder would send it to the standby and lose it. */
+    const deployFailure = new Error('the account deploy never landed');
+    installFetch(async () => json({ error: 'target-missing' }, 409));
+    await expect(
+      sponsorAliasRegistrationAcross([FUNDER, STANDBY], { ...request, targetPending: true }, {
+        awaitTarget: () => Promise.reject(deployFailure),
+      }),
+    ).rejects.toBe(deployFailure);
+  });
+
+  it('behaves exactly as the single-URL call for a list of one', async () => {
+    resolveAliasTarget.mockResolvedValue(null);
+    installFetch(async () => json(registeredBody()));
+    const claimed = await sponsorAliasRegistrationAcross([FUNDER], request);
+    expect(claimed).toMatchObject({ domain: 'alice.night', registryConfirmed: false });
+  });
+
+  it('refuses without asking anybody when no funder is configured', async () => {
+    const spy = installFetch(async () => json(registeredBody()));
+    await expect(sponsorAliasRegistrationAcross([], request)).rejects.toMatchObject({
+      code: 'unreachable',
+    });
+    expect(spy).not.toHaveBeenCalled();
   });
 });
