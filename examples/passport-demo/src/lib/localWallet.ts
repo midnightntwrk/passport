@@ -113,6 +113,7 @@ import {
 import { sponsorReadiness, sponsorRefusal } from './sponsor.js';
 import type { SponsorUnavailableCause } from './sponsor.js';
 import { httpWalletProvingService } from './walletProver.js';
+import { createWalletSnapshotCheckpointer } from './walletSnapshotCheckpoint.js';
 import { wasmWalletProvingService } from './wasmProver.js';
 import {
   clearWalletSnapshots,
@@ -1246,57 +1247,42 @@ export async function createLocalMidnightWallet(
 
   const saveSnapshot = async (): Promise<void> => {
     if (stopped) return;
-    try {
-      // Bounded so that `close()` — which awaits this — can never be held open
-      // by a wedged facade or a blocked IndexedDB transaction.
-      const [shielded, unshielded, dust] = await Promise.race([
-        Promise.all([
-          facade.shielded.serializeState(),
-          facade.unshielded.serializeState(),
-          facade.dust.serializeState(),
-        ]),
-        new Promise<never>((_resolve, reject) =>
-          setTimeout(
-            () => reject(new Error('serializing the wallet state timed out')),
-            SNAPSHOT_TIMEOUT_MS,
-          ),
+    // Bounded so that `close()` — which awaits this — can never be held open
+    // by a wedged facade or a blocked IndexedDB transaction.
+    const [shielded, unshielded, dust] = await Promise.race([
+      Promise.all([
+        facade.shielded.serializeState(),
+        facade.unshielded.serializeState(),
+        facade.dust.serializeState(),
+      ]),
+      new Promise<never>((_resolve, reject) =>
+        setTimeout(
+          () => reject(new Error('serializing the wallet state timed out')),
+          SNAPSHOT_TIMEOUT_MS,
         ),
-      ]);
-      await saveWalletSnapshot({
-        version: WALLET_SNAPSHOT_VERSION,
-        networkId: network.networkId,
-        unshieldedAddress,
-        savedAt: new Date().toISOString(),
-        shielded,
-        unshielded,
-        dust,
-      });
-      if (devMode()) console.debug('[localWallet] sync snapshot saved');
-    } catch (cause) {
-      // Losing the cache costs a longer sync next time and nothing else.
-      console.debug('[localWallet] unable to save the sync snapshot', cause);
-    }
+      ),
+    ]);
+    await saveWalletSnapshot({
+      version: WALLET_SNAPSHOT_VERSION,
+      networkId: network.networkId,
+      unshieldedAddress,
+      savedAt: new Date().toISOString(),
+      shielded,
+      unshielded,
+      dust,
+    });
+    if (devMode()) console.debug('[localWallet] sync snapshot saved');
   };
 
-  let snapshotTimer: ReturnType<typeof setInterval> | null = null;
-  let sawSynced = false;
+  const snapshotCheckpointer = createWalletSnapshotCheckpointer({
+    save: saveSnapshot,
+    // Losing the cache costs a longer sync next time and nothing else.
+    onError: (cause) => console.debug('[localWallet] unable to save the sync snapshot', cause),
+  });
   const snapshotSubscription = facade.state().subscribe({
     next: (state) => {
       if (closed) return;
-      if (!state.isSynced) {
-        sawSynced = false;
-        return;
-      }
-      if (sawSynced) return;
-      sawSynced = true;
-      void saveSnapshot();
-      if (snapshotTimer === null) {
-        // Keep refreshing while synced so a long-lived tab does not leave a
-        // stale offset behind if it is killed rather than closed.
-        snapshotTimer = setInterval(() => {
-          if (!closed && sawSynced) void saveSnapshot();
-        }, 60_000);
-      }
+      snapshotCheckpointer.noteState(state.isSynced);
     },
     error: (cause) => {
       // Sync errors are surfaced through subscribeSyncProgress's `connected`
@@ -1472,14 +1458,10 @@ export async function createLocalMidnightWallet(
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
-      if (snapshotTimer !== null) {
-        clearInterval(snapshotTimer);
-        snapshotTimer = null;
-      }
       snapshotSubscription.unsubscribe();
       // Last write wins: whatever this session reached is what the next one
       // resumes from, synced or not.
-      await saveSnapshot();
+      await snapshotCheckpointer.stop();
       stopped = true;
       try {
         await facade.stop();

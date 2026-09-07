@@ -514,6 +514,7 @@ export default mergeConfig(
           'src/lib/endpoints.ts',
           'src/lib/feeReadinessPoll.ts',
           'src/lib/funderFailover.ts',
+          'src/lib/walletSnapshotCheckpoint.ts',
           'src/lib/indexerFailover.ts',
           'src/lib/installPrompt.ts',
           'src/lib/nameRecovery.ts',
