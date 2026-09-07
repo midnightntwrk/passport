@@ -89,6 +89,80 @@ To require a human approval before each production deploy, add a `production`
 environment under **Settings → Environments** with required reviewers and a
 `environment: production` line to the deploy job.
 
+## Endpoint lists, and the one that is not like the others
+
+Four of the app's endpoint variables take a **comma-separated, ordered list**
+rather than a single URL. A single URL is a list of one and behaves exactly as
+it always did, so nothing has to change to keep a deployment as it is. The
+values the workflow passes in live in
+[`deploy-demo.yml`](../../.github/workflows/deploy-demo.yml); the full reasoning
+for each is in [`examples/passport-demo/.env.example`](../../examples/passport-demo/.env.example).
+
+| Variable | What a second entry buys | When the next entry is tried |
+|---|---|---|
+| `VITE_MIDNIGHT_PROVING_URL` | a second prover | any refusal or failure, per request |
+| `VITE_SPONSOR_URL` | a second fee sponsor | any refusal or failure, per request |
+| `VITE_INDEXER_URL` | a second indexer | at wallet open, and on a stall |
+| `VITE_FUNDER_URL` | a standby Passport service | **only** when the first did not answer |
+
+The order is the operator's. Nothing reorders the list, load-balances across it,
+or remembers a winner between calls, so failover can be proved by writing the
+list the other way round. A failover writes one `console.info` line naming the
+endpoint index it moved to; no wording the reader sees changes, and no endpoint
+name reaches a screen.
+
+### `VITE_FUNDER_URL` — a refusal is an answer
+
+`/register-alias` and `/fund-account` **spend**, and a standby Passport service
+is a different wallet: its own NIGHT, its own DUST, and its own once-per-account
+record of who it has funded. So this list is fallen through **only when the
+service did not answer at all** — no socket, a timed-out round trip, or a
+`502`/`503`/`504` whose body carries no service JSON, which is the page a
+reverse proxy sends when the process behind it is down.
+
+Everything else stops the walk, because it is the service speaking for itself: a
+`2xx`, any `4xx` including `429`, a `500` (that came out of the service's own
+process, which may therefore have acted before it fell over), and a `503`
+carrying a JSON code such as `wallet-syncing`, `INSUFFICIENT_DUST`, or `PAUSED`.
+The reader is shown that refusal exactly as they are shown one service's refusal
+today. A standby asked behind a refusal would register the same name from a
+second wallet — surfacing as `name-taken` for a name that is in fact theirs — or
+grant the activation a second time.
+
+**One double grant remains possible and cannot be closed from the browser:** the
+first service acted and its answer was lost coming back. That is bounded rather
+than prevented, by checks that were already in place — the per-contract funding
+marker read before every attempt and after every backoff wait, the service's own
+`already-funded` answer counting as a success, the hold that stops a grant while
+a name is unclaimed, and the account contract's own balance mirror, which makes
+a second grant visible and spendable rather than lost. Two services can over-fund
+one demo account; they cannot under-fund one or leave a Passport without a name.
+
+`GET /status` is a read, so the sponsorship probe and the stablecoin colour
+simply take the first service that answers.
+
+### `VITE_INDEXER_URL` — chosen at open, replaced on a stall
+
+The indexer is not chosen per request. The wallet SDK is handed one indexer
+connection when a wallet is opened and holds it for that wallet's life, so:
+
+- **at open**, each endpoint is asked a one-block-height query with a
+  four-second ceiling and the wallet is built against the first that answers. A
+  list of one skips the probe.
+- **on a stall** — a dropped connection, or a sync percentage that has not moved
+  for ninety seconds — the wallet is **rebuilt** against the next endpoint from
+  the seed already stored, which is the same rebuild a silent session restore
+  performs. It resumes from the saved sync snapshot rather than walking the chain
+  again. The list is rotated rather than truncated, so a restarted primary is
+  picked up again without a redeploy, and rebuilds in one session are capped at
+  the length of the list.
+
+`VITE_INDEXER_WS_URL`, where it is set, follows the HTTP list position by
+position rather than being a list in its own right — an indexer is one host
+reached two ways. An override shorter than the HTTP list covers the endpoints it
+reaches and the rest derive theirs, so adding a second indexer is a one-variable
+change.
+
 ## Rolling back
 
 Roll back in Vercel; do not deploy an older commit.
