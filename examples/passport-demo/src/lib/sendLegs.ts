@@ -404,11 +404,18 @@ export interface SendStepLineInput {
  * person would say it; the words coin, note, contract, circuit, and nonce are
  * deliberately not on this surface. `returning` is not a step of the payment at
  * all — it is the amount going back after the paying leg refused — so it is
- * never numbered.
+ * never numbered, and since 2026/09/07 neither is `changing`: the change comes
+ * back after the payment is confirmed, with nobody waiting on it.
  */
 export function sendStepLine(input: SendStepLineInput): string {
   const suffix = input.attemptSuffix ?? '';
-  const of = `of ${input.steps}`;
+  /* TWO, WHATEVER THE PLAN IS (2026/09/07). A part-coin payment is still three
+     transactions and `steps` still says so — it is what chooses the wording
+     below — but the third puts the SENDER's own change back into the SENDER's
+     own account and runs after the confirmation, with nobody waiting on it. So
+     the count on screen is the count somebody actually sits through, and
+     `changing` is no longer numbered at all. */
+  const of = 'of 2';
   switch (input.step) {
     case 'withdrawing':
       return input.steps === 3
@@ -423,7 +430,7 @@ export function sendStepLine(input: SendStepLineInput): string {
         ? `Step 2 ${of} · Paying ${input.recipient}${suffix}.`
         : `Step 2 ${of} — paying it into ${input.recipient}’s account${suffix}.`;
     case 'changing':
-      return `Step 3 of 3 · Returning the change${suffix}.`;
+      return `Returning your change${suffix}.`;
     default:
       /* Not a step of the payment: the paying leg refused, and the amount is
          being put back. Said plainly and immediately, because the alternative
@@ -937,4 +944,234 @@ export function sendFailureNotice(notice: SendFailureNotice): string {
     ? 'the item is still in your account'
     : `no ${notice.assetSymbol} moved from your account`;
   return `Nothing was sent — ${nothing}. ${notice.message}`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The change that comes back on its own                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * WHY THE THIRD LEG STOPPED BEING SOMETHING PEOPLE WATCH (2026/09/07)
+ * -------------------------------------------------------------------
+ * Reported as "improve the transfer times". A shielded payment out of a coin
+ * bigger than the amount is three transactions, and the recipient has their
+ * money at the end of the SECOND one — `deposit_shielded` into their account.
+ * The third puts the sender's own change back into the sender's own account.
+ * Nobody but the sender is waiting on it, and until this date it was awaited
+ * inline with its own 180-second settlement watch, so the last third of every
+ * mUSD transfer was a person watching a step that concerned only themselves
+ * while the screen still said the payment was in progress.
+ *
+ * So the run is COMPLETE, to the reader, when leg two lands: the confirmation,
+ * the "Sent" row on the trail, the balances. Leg three runs detached. The
+ * record it leaves behind is unchanged — it is still written at `change`, it
+ * still resumes without a prompt after a reload, and Home still offers to carry
+ * it on if it stops — so nothing about the money's safety turns on the tab
+ * staying open. What changed is only who is asked to wait.
+ *
+ * THE ONE THING THAT MUST STILL BE SEQUENCED. The change is a coin, and the
+ * next send has to spend it. A second send started while it is in flight would
+ * build against a wallet that is one note short and be refused by the node for
+ * it, so the sheet holds the next transfer until the change has landed — see
+ * {@link sendBlockedByChangeReturn}.
+ */
+
+/**
+ * Whether this record's recipient has been paid and only the sender's own
+ * change is outstanding.
+ *
+ * `change` is the leg the paying transaction writes when it succeeds and the
+ * plan had a remainder, so the presence of the leg IS the fact.
+ */
+export function awaitsChangeReturn(record: PendingSend): boolean {
+  return record.leg === 'change';
+}
+
+/**
+ * Whether a change return is running rather than stopped.
+ *
+ * A record at `change` with no reason on it is one the app is carrying, or is
+ * about to carry, by itself. One WITH a reason has stopped, and it has a card
+ * on Home saying so — a quiet line claiming the change was on its way over a
+ * run that had given up would be the screen making a promise nothing was
+ * keeping.
+ */
+export function changeReturnInFlight(records: readonly PendingSend[]): boolean {
+  return records.some((record) => awaitsChangeReturn(record) && record.lastError === undefined);
+}
+
+/**
+ * The quiet line Home prints under the balances while the change comes back.
+ *
+ * NO MACHINERY, and no figure. The balance above it is the account's own and it
+ * is correct; this only says that a little more is on its way back to it. An
+ * amount here would invite the reader to add the two together, which is exactly
+ * what a balance line must never make somebody do.
+ */
+export const CHANGE_RETURN_LINE = 'Returning your change…';
+
+/** The line, or nothing at all when there is no change in flight. */
+export function changeReturnLine(records: readonly PendingSend[]): string | null {
+  return changeReturnInFlight(records) ? CHANGE_RETURN_LINE : null;
+}
+
+/**
+ * Why the next transfer has to wait, in the plainest words there are.
+ *
+ * It is not "busy" and it is not an error: the previous transfer WORKED, and
+ * the only thing outstanding is the sender's own change on its way back into
+ * their account. The next send needs that coin, so it waits for it.
+ */
+export const SEND_BLOCKED_BY_CHANGE_RETURN = 'Finishing your last transfer…';
+
+/**
+ * Whether a new send must wait, and what to say while it does.
+ *
+ * A record at `change` blocks whether or not it is running: a stopped one is
+ * still change that has not come back, and the coin the next send would spend
+ * is still not in the account. The card on Home is the way to move it along.
+ */
+export function sendBlockedByChangeReturn(records: readonly PendingSend[]): string | null {
+  return records.some(awaitsChangeReturn) ? SEND_BLOCKED_BY_CHANGE_RETURN : null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Where the time actually goes                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * THE STAGES ONE LEG CAN BE TIMED AT, and why these four and not others.
+ *
+ * "Improve the transfer times" cannot be answered without knowing which part is
+ * slow, and until 2026/09/07 the only figure anybody had was the whole send.
+ * These are the four spans a leg is really made of, as this client can
+ * attribute them:
+ *
+ *   `prove`   — every local cryptographic step: balancing the transaction,
+ *               signing the recipe, and computing the wallet's own proof. One
+ *               figure because they are one uninterrupted stretch of work on
+ *               this device, and the reader of a console line wants to know
+ *               whether the device or the network is the cost.
+ *   `sponsor` — the fee sponsor holding the balanced transaction.
+ *   `submit`  — the node being asked to take it, up to inclusion.
+ *   `settle`  — waiting for what the leg moved to become visible: leg one's
+ *               amount arriving at the sender's own Passport, leg three's
+ *               change appearing after leg two spent the bigger note.
+ *
+ * A stage with no time against it is LEFT OUT of the line rather than printed
+ * as `0.0 s` — a zero would read as "this was instant" when what happened is
+ * that the leg never reached it.
+ */
+export type SendStage = 'prove' | 'sponsor' | 'submit' | 'settle';
+
+/** The order stages are printed in: the order a leg walks them. */
+export const SEND_STAGES: readonly SendStage[] = ['prove', 'sponsor', 'submit', 'settle'];
+
+/** One leg, once it is over, with a wall-clock figure against each stage. */
+export interface SendLegTiming {
+  /** 1, 2, or 3 — the leg's number in the plan, as the step lines count them. */
+  leg: number;
+  /** `withdraw`, `deposit`, `change`. A console word, never a screen one. */
+  name: string;
+  /** Milliseconds per stage. An absent stage was never entered. */
+  stages: Partial<Record<SendStage, number>>;
+}
+
+/**
+ * A duration as a console reads it: one decimal place, in seconds.
+ *
+ * Seconds because every figure here is one — the fastest stage this has ever
+ * measured is a sponsor round trip at about a second — and one decimal because
+ * a millisecond count of a network wait is precision nobody can act on.
+ */
+export function formatSendDuration(ms: number): string {
+  return `${(Math.max(0, ms) / 1000).toFixed(1)} s`;
+}
+
+/** The total of every stage on a leg. */
+export function sendLegTotalMs(timing: SendLegTiming): number {
+  return SEND_STAGES.reduce((total, stage) => total + (timing.stages[stage] ?? 0), 0);
+}
+
+/**
+ * The per-leg line.
+ *
+ *     [send] leg 2 deposit: prove 9.8 s · sponsor 1.2 s · submit 6.1 s · settle 4.0 s
+ *
+ * A leg that reached no stage at all still gets a line, because "leg 1 withdraw
+ * was skipped" is itself worth reading in a console that is being used to work
+ * out where a send's time went.
+ */
+export function formatSendLegTiming(timing: SendLegTiming): string {
+  const parts: string[] = [];
+  for (const stage of SEND_STAGES) {
+    const ms = timing.stages[stage];
+    /* An absent stage is left out; a stage that really measured zero is
+       printed, because "0.0 s" against a stage that ran is a fact and "nothing
+       here" against one that did not is a different one. */
+    if (ms === undefined) continue;
+    parts.push(`${stage} ${formatSendDuration(ms)}`);
+  }
+  const body = parts.length === 0 ? 'nothing timed' : parts.join(' · ');
+  return `[send] leg ${timing.leg} ${timing.name}: ${body}`;
+}
+
+/**
+ * The one summary line, and the value the dev diagnostics hold.
+ *
+ *     [send] total 21.1 s · leg 1 withdraw 8.0 s · leg 2 deposit 13.1 s
+ *
+ * The total is the sum of the legs rather than a separate stopwatch, so the
+ * line can never disagree with itself — a wall-clock total that did not match
+ * its own parts would send somebody looking for a stage that was never
+ * measured.
+ */
+export function formatSendSummary(legs: readonly SendLegTiming[]): string {
+  if (legs.length === 0) return '[send] nothing timed';
+  const total = legs.reduce((sum, leg) => sum + sendLegTotalMs(leg), 0);
+  const parts = legs.map(
+    (leg) => `leg ${leg.leg} ${leg.name} ${formatSendDuration(sendLegTotalMs(leg))}`,
+  );
+  return `[send] total ${formatSendDuration(total)} · ${parts.join(' · ')}`;
+}
+
+/**
+ * A stopwatch for one leg's stages.
+ *
+ * NO CLOCK OF ITS OWN — `now` is an argument, on the same principle as
+ * {@link watchForSettlement}: a timing rule a test has to wait out in real time
+ * is one nobody drills. Stages ACCUMULATE, because a leg that was attempted
+ * three times really did spend the sum of its three provings, and a figure that
+ * only remembered the last attempt would say a slow leg was a fast one.
+ */
+export interface SendStageClock {
+  /** Adds `ms` to a stage. Negative and non-finite figures are ignored. */
+  add: (stage: SendStage, ms: number) => void;
+  /** Times `run`, charging however long it took to `stage`. */
+  time: <T>(stage: SendStage, run: () => Promise<T>) => Promise<T>;
+  /** What has been charged so far. A fresh object each time. */
+  stages: () => Partial<Record<SendStage, number>>;
+}
+
+export function createSendStageClock(now: () => number = () => Date.now()): SendStageClock {
+  const charged: Partial<Record<SendStage, number>> = {};
+  const add = (stage: SendStage, ms: number): void => {
+    if (!Number.isFinite(ms) || ms < 0) return;
+    charged[stage] = (charged[stage] ?? 0) + ms;
+  };
+  return {
+    add,
+    time: async <T,>(stage: SendStage, run: () => Promise<T>): Promise<T> => {
+      const started = now();
+      try {
+        return await run();
+      } finally {
+        /* CHARGED EVEN WHEN IT THREW. A stage that failed after eleven seconds
+           cost those eleven seconds, and a retry ladder whose failures were
+           free would report a two-minute leg as a twenty-second one. */
+        add(stage, now() - started);
+      }
+    },
+    stages: () => ({ ...charged }),
+  };
 }

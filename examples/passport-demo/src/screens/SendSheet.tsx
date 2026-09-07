@@ -396,6 +396,20 @@ export interface SendSheetProps {
    */
   nameLegAttempt?: number | null
   /**
+   * WHY THE NEXT TRANSFER HAS TO WAIT, or nothing when it does not.
+   *
+   * There is exactly one reason today and it is not an error: the change from
+   * the last transfer is on its way back into the account, and this transfer
+   * would have to spend that coin — see `sendBlockedByChangeReturn` in
+   * `lib/sendLegs.ts`, which owns the sentence. It clears by itself, usually
+   * within a leg's worth of network time.
+   *
+   * Rendered where the fee block is rendered and disabling the same controls,
+   * because it is the same shape of thing: a state the sheet cannot act in,
+   * that says WHAT it is waiting for rather than merely refusing.
+   */
+  blockedReason?: string | null
+  /**
    * Leaves the session for the landing screen — offered ONLY beside a failure
    * the host marked as a passkey ceremony that could not be completed.
    *
@@ -618,6 +632,7 @@ export default function SendSheet(props: SendSheetProps) {
     nameLeg,
     nameLegAttempt,
     nameLegSteps: hostNameLegSteps,
+    blockedReason,
     onSignOut,
     onClose,
   } = props
@@ -1019,6 +1034,16 @@ export default function SendSheet(props: SendSheetProps) {
 
   const feeBlocksSend = fee?.mode === 'unsponsored'
   const feeCause = fee?.mode === 'unsponsored' ? fee.cause : null
+
+  /* WAITING FOR THE LAST TRANSFER TO FINISH ITSELF (2026/09/07). Not a
+     failure and not the fee: the previous payment went through and its change
+     is still coming back, and this one needs that coin. It clears by itself,
+     so the control says what it is waiting for rather than merely refusing —
+     the same rule the fee block above follows. See
+     `SendSheetProps.blockedReason`. */
+  const waitingOnLastTransfer =
+    typeof blockedReason === 'string' && blockedReason.length > 0 ? blockedReason : null
+  const cannotSend = feeBlocksSend || waitingOnLastTransfer !== null
 
   /* What the primary control says while it waits. A blocked control still says
      what it is waiting FOR — "disabled" on its own is the thing that reads as
@@ -1590,9 +1615,11 @@ export default function SendSheet(props: SendSheetProps) {
                 setFeeChanged(false)
                 setStep('review')
               }}
-              disabled={!canReview || feeBlocksSend}
+              disabled={!canReview || cannotSend}
             >
-              {feeBlocksSend ? (
+              {waitingOnLastTransfer !== null ? (
+                <span>{waitingOnLastTransfer}</span>
+              ) : feeBlocksSend ? (
                 <span>{blockedPrimaryLabel}</span>
               ) : (
                 <>
@@ -1601,6 +1628,12 @@ export default function SendSheet(props: SendSheetProps) {
                 </>
               )}
             </button>
+            {waitingOnLastTransfer !== null ? (
+              <p className="mnhome-send-hint" role="status">
+                Your change from the last transfer is on its way back into your account. This
+                will be ready as soon as it lands.
+              </p>
+            ) : null}
             {feeWaitRow}
           </div>
         ) : (
@@ -1704,10 +1737,17 @@ export default function SendSheet(props: SendSheetProps) {
                 <div className="mnhome-send-row">
                   <dt>How it goes</dt>
                   <dd>
-                    <strong>{nameLegSteps === 3 ? 'Three steps' : 'Two steps'}</strong>
+                    {/* WHAT YOU WAIT FOR, NOT WHAT HAPPENS (2026/09/07). A
+                        part-coin payment is still three transactions, but the
+                        third one puts YOUR OWN change back into YOUR OWN
+                        account and nobody is waiting on it — so since this date
+                        it runs after the confirmation rather than in front of
+                        it, and this row says two, because two is what somebody
+                        about to press Send will actually sit through. */}
+                    <strong>Two steps</strong>
                     <small>
                       {nameLegSteps === 3
-                        ? 'The whole of what your account holds of this comes out, they are paid, and your change goes back in. All three are network transactions, so this takes longer than sending to an address.'
+                        ? 'The whole of what your account holds of this comes out, then they are paid. Both are network transactions, so this takes longer than sending to an address. Your change comes back to you on its own afterwards — you do not have to wait for it.'
                         : 'The amount leaves your account, then it is paid into theirs. Both are network transactions, so this takes longer than sending to an address.'}
                     </small>
                   </dd>
@@ -1820,7 +1860,7 @@ export default function SendSheet(props: SendSheetProps) {
                 type="button"
                 className="mnhome-send-primary"
                 onClick={() => void handleSend()}
-                disabled={busy || !canReview || feeBlocksSend}
+                disabled={busy || !canReview || cannotSend}
               >
                 {busy ? (
                   <>

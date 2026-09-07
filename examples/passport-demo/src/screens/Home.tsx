@@ -283,7 +283,23 @@ export interface HomeScreenProps {
     /** Which of a name transfer's two legs is running. See the Send sheet. */
     nameLeg?: SendSheetProps['nameLeg']
     nameLegAttempt?: SendSheetProps['nameLegAttempt']
+    /**
+     * Why the next transfer has to wait, in the host's own plain words, or
+     * nothing when it does not. See {@link SendSheetProps.blockedReason}.
+     */
+    blockedReason?: SendSheetProps['blockedReason']
   } | null
+  /**
+   * The sender's own change coming back from the last transfer, as one quiet
+   * line under the balances — or nothing, which is the usual answer.
+   *
+   * The recipient of that transfer has been paid; what is outstanding is the
+   * sender's own remainder, on its way back into their account without anybody
+   * waiting for it. The balance above stays the account's own figure, which is
+   * correct; this only says a little more is coming back to it. See
+   * `changeReturnLine` in `lib/sendLegs.ts`, which owns the words.
+   */
+  changeReturnNote?: string | null
   /**
    * The activity trail, newest first — every row Passport has written for this
    * credential, with the explorer link the host resolved where a row has a
@@ -341,6 +357,7 @@ export default function HomeScreen(props: HomeScreenProps) {
     account,
     legacyFunds,
     pendingSends,
+    changeReturnNote,
     syncPercent,
     network,
     error,
@@ -850,6 +867,14 @@ export default function HomeScreen(props: HomeScreenProps) {
             {onTheWayLine ? (
               <p className="mnhome-onway">{onTheWayLine}</p>
             ) : null}
+            {/* THE SENDER'S OWN CHANGE, COMING BACK (2026/09/07). The transfer
+                that produced it is finished — the recipient was paid — and the
+                remainder is on its way back into this account without anybody
+                waiting for it. One line, in the same quiet register as the one
+                above, and gone the moment the balance itself says it. */}
+            {changeReturnNote ? (
+              <p className="mnhome-onway">{changeReturnNote}</p>
+            ) : null}
             {tokenRows.length > TOKENS_VISIBLE ? (
               <button
                 type="button"
@@ -1009,6 +1034,7 @@ export default function HomeScreen(props: HomeScreenProps) {
             phase={send.phase ?? null}
             nameLeg={send.nameLeg ?? null}
             nameLegAttempt={send.nameLegAttempt ?? null}
+            blockedReason={send.blockedReason ?? null}
             /* The sheet's approval is a passkey assertion, so it can hit the
                same mid-session dead end the name step reported on 2026/08/31.
                Home already holds the sign-out; the sheet offers it only beside

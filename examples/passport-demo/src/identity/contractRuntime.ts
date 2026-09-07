@@ -368,6 +368,67 @@ export type BalancingStage =
   | 'expired'
   | 'deserialise';
 
+/* -------------------------------------------------------------------------- */
+/* Where one contract call's time went                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * WALL-CLOCK PER STAGE, FOR THE ONE QUESTION NOBODY COULD ANSWER (2026/09/07)
+ * --------------------------------------------------------------------------
+ * "Improve the transfer times" was reported with one figure behind it: how
+ * long the whole send took. Which of proving, the sponsor, or the node was the
+ * cost was a guess, and every optimisation made against a guess is a
+ * coin-flip.
+ *
+ * These three spans are the ones this module is the only place that can see —
+ * they all happen INSIDE one `callTx`, behind a single `submitting` phase, so
+ * the send runner above cannot time them itself. It reads them back with
+ * {@link takeContractCallTimings} once a leg is over and prints the line.
+ *
+ * A MODULE-LEVEL ACCUMULATOR rather than a value threaded through the provider,
+ * because the provider is handed to midnight-js and its return values are the
+ * SDK's, not ours: there is nowhere to hang a figure on the way out. It is safe
+ * for the same reason `lastBalance` above is: this client balances and submits
+ * one contract transaction at a time, and the send runner resets the count
+ * before each leg and takes it after.
+ *
+ * FIGURES ONLY. Nothing here decides anything, nothing here is shown to a user,
+ * and a stage that is never entered stays at zero.
+ */
+export interface ContractCallTimings {
+  /** Balancing, signing, and the wallet's own proof — the local work. */
+  prove: number;
+  /** The fee sponsor holding the balanced transaction. */
+  sponsor: number;
+  /** The node being asked to take it, up to inclusion. */
+  submit: number;
+}
+
+let contractCallTimings: ContractCallTimings = { prove: 0, sponsor: 0, submit: 0 };
+
+/** Adds a measured span to the stage it was spent in. */
+function recordContractCallStage(stage: keyof ContractCallTimings, ms: number): void {
+  if (!Number.isFinite(ms) || ms < 0) return;
+  contractCallTimings[stage] += ms;
+}
+
+/** Starts a fresh count. Called before the first attempt of a leg. */
+export function resetContractCallTimings(): void {
+  contractCallTimings = { prove: 0, sponsor: 0, submit: 0 };
+}
+
+/**
+ * What has been charged since the last reset, and a fresh count afterwards.
+ *
+ * Read once per leg. Retries within a leg ACCUMULATE, deliberately: a leg
+ * attempted three times really did spend the sum of its three provings.
+ */
+export function takeContractCallTimings(): ContractCallTimings {
+  const charged = contractCallTimings;
+  resetContractCallTimings();
+  return charged;
+}
+
 /**
  * A balancing failure that says WHAT failed, whether it is worth trying again,
  * and what the person in front of the screen should be told — three questions
@@ -570,6 +631,7 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
     /* The step being attempted, so the `catch` can say which one failed rather
        than calling every one of them a sponsor refusal. */
     let stage: BalancingStage = 'balance';
+    const localWorkStartedAt = Date.now();
     try {
       recipe = await facade.balanceUnboundTransaction(tx, wallet.keys, {
         ttl,
@@ -592,14 +654,22 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
          shielded sends failed at step two and unshielded ones did not. */
       stage = 'prove';
       const finalized = await facade.finalizeRecipe(signed);
+      /* EVERY LOCAL CRYPTOGRAPHIC STEP, as one figure — see
+         `recordContractCallStage`. Balancing, signing, and proving are one
+         uninterrupted stretch of work on this device, and what a console
+         reader wants to know is whether the device or the network is the
+         cost. */
+      recordContractCallStage('prove', Date.now() - localWorkStartedAt);
       /* A longer 429 window than a transfer gets, because the stakes differ:
          there is nothing to fall back TO here — a busy sponsor is worth
          waiting out rather than turning into a refusal. See
          SPONSOR_CONTRACT_RETRY_WINDOW_MS. */
       stage = 'sponsor';
+      const sponsorStartedAt = Date.now();
       const balanced = await sponsorBalanceOnly(finalized.serialize(), {
         pendingRetryWindowMs: SPONSOR_CONTRACT_RETRY_WINDOW_MS,
       });
+      recordContractCallStage('sponsor', Date.now() - sponsorStartedAt);
       /* The sponsor stamps an expiry. An already expired balanced transaction
          is refused here rather than submitted; an empty or unparseable stamp
          reads as "no expiry given". */
@@ -768,6 +838,7 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
      */
     async submitTx(tx: unknown): Promise<unknown> {
       const booked = lastBalance;
+      const submitStartedAt = Date.now();
       try {
         return await boundedSubmit(tx);
       } catch (cause) {
@@ -777,6 +848,10 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
           void sponsorAbandonBalance(booked.txHash, booked.servedBy);
         }
         throw cause;
+      } finally {
+        /* Charged whether the node took it or refused it: a submission that
+           failed after eleven seconds cost those eleven seconds. */
+        recordContractCallStage('submit', Date.now() - submitStartedAt);
       }
     },
   };

@@ -83,7 +83,13 @@ import type { NameLookup } from './lib/recipientName.js';
 /* The two-leg send's record and its retry rules. Pure — no React, no fetch, no
    storage — see `lib/sendLegs.ts`, where every branch is drilled. */
 import {
+  awaitsChangeReturn,
+  changeReturnLine,
   classifyLegError,
+  createSendStageClock,
+  formatSendDuration,
+  formatSendLegTiming,
+  formatSendSummary,
   pendingSendsStorageKey,
   pendingSendStepLine,
   planOfRecord,
@@ -93,11 +99,13 @@ import {
   resumesWithoutPrompt,
   retryDelayMs,
   SEND_LEG_ATTEMPTS,
+  sendBlockedByChangeReturn,
   sendRefusalText,
   serialisePendingSends,
   watchForSettlement,
   type PendingSend,
   type PendingSendAsset,
+  type SendLegTiming,
   type PendingSendKind,
 } from './lib/sendLegs.js';
 /* The note a shielded transfer's two legs are joined by. Type-only, so the rule
@@ -1605,6 +1613,22 @@ export default function PassportDemo() {
   const [reclaimBusy, setReclaimBusy] = useState(false);
   const [reclaimError, setReclaimError] = useState<string | null>(null);
   /**
+   * THE CHANGE COMING BACK, WITH NOBODY WATCHING IT (2026/09/07).
+   *
+   * The third leg of a shielded payment puts the SENDER's own change back into
+   * the SENDER's own account; the recipient has been paid at the end of leg
+   * two. Since 2026/09/07 it is detached from the run the Send sheet waits on
+   * — see `runNameSend` — and this flag is what the rest of the screen needs to
+   * know about it: it joins {@link passportBusy} below, so the service worker
+   * cannot reload the document out from under a leg that is proving, and the
+   * balance watch stands off rather than piling a read on top of it.
+   *
+   * NOT the record. The durable half is the `pendingSends` entry at `change`,
+   * which is what survives a reload and what Home reads; this is only "a leg
+   * is running in this tab right now".
+   */
+  const [changeReturning, setChangeReturning] = useState(false);
+  /**
    * "Passport is in the middle of something", declared once for the whole
    * screen from the busy states the flows already keep.
    *
@@ -1625,7 +1649,8 @@ export default function PassportDemo() {
     accountPhase !== null ||
     depositBusy ||
     registerNowBusy ||
-    reclaimBusy;
+    reclaimBusy ||
+    changeReturning;
   useEffect(() => (passportBusy ? holdCriticalWork() : undefined), [passportBusy]);
 
   /** Guards the one-shot decision to enter the identity steps for a session. */
@@ -6371,6 +6396,16 @@ export default function PassportDemo() {
      after that the card is back with its Continue and the next move is the
      reader's. */
   const autoResumedSends = useRef<Set<string>>(new Set());
+  /**
+   * The change returns this tab is already carrying, by record id.
+   *
+   * A detached third leg leaves its record at `change`, which is exactly the
+   * shape `resumesWithoutPrompt` offers to carry on by itself — so without this
+   * the automatic resume would start a SECOND run of the leg already in flight,
+   * and the two would prove against a state the other was moving. The set is
+   * the one thing that says "this one already has somebody on it".
+   */
+  const changeReturnsInFlight = useRef<Set<string>>(new Set());
 
   const persistPendingSends = useCallback((next: PendingSend[]) => {
     pendingSendsRef.current = next;
@@ -6504,6 +6539,25 @@ export default function PassportDemo() {
    */
   const runNameSend = useCallback(
     async (initial: PendingSend, options: { resumed?: boolean } = {}): Promise<void> => {
+      /* ONE AT A TIME WHILE CHANGE IS IN FLIGHT (2026/09/07). The change from
+         the last transfer is a coin, and this transfer would have to spend it;
+         starting before it has landed builds against a wallet that is one note
+         short and earns a refusal from the node for it. The sheet already
+         disables its own control on the same rule — this is the backstop, for
+         the paths that do not go through it.
+
+         THE RUN BEING CARRIED ON IS NOT ITS OWN BLOCKER: continuing a record
+         that is AT the change leg is the thing that clears this. */
+      const blocked = sendBlockedByChangeReturn(
+        pendingSendsRef.current.filter((entry) => entry.id !== initial.id),
+      );
+      if (blocked !== null) {
+        throw Object.assign(new Error(blocked), {
+          code: 'name-send-failed' as const,
+          legLanded: false,
+          recipientPaid: false,
+        });
+      }
       const account = requireAccount();
       const {
         depositNight,
@@ -6516,6 +6570,15 @@ export default function PassportDemo() {
         withdrawShielded,
       } = await import('./identity/accountCustody.js');
       const { findArrivedNote, shieldedNoteIds } = await import('./lib/shieldedNote.js');
+      /* WHERE THE TIME WENT, per leg. The three spans inside one contract call
+         — the local proving, the sponsor, the node — happen behind a single
+         `submitting` phase and cannot be timed from out here, so
+         `identity/contractRuntime.ts` counts them and this reads them back
+         between legs. Figures only: nothing below decides anything on them and
+         nothing reaches a screen. */
+      const { resetContractCallTimings, takeContractCallTimings } = await import(
+        './identity/contractRuntime.js'
+      );
 
       const amount = BigInt(initial.amount);
       const amountText = pendingSendAmountLabel(initial, pendingSendAsset(initial));
@@ -6551,7 +6614,11 @@ export default function PassportDemo() {
         }
         const entry = addActivity({
           label: `Sending to ${record.recipient.label}`,
-          detail: `${amountText}, in ${plan.steps === 3 ? 'three' : 'two'} steps.`,
+          /* TWO, WHATEVER THE PLAN IS. A part-coin payment has a third
+             transaction and it returns the sender's own change after the
+             payment is confirmed — see `detachChange` — so two is what somebody
+             reading this row is actually waiting for. */
+          detail: `${amountText}, in two steps.`,
           status: 'pending',
           source: 'wallet',
         });
@@ -6572,6 +6639,43 @@ export default function PassportDemo() {
 
       let activityId = record.activityId ?? '';
       let settledNote: WalletShieldedNote | null = null;
+      /* ONE STOPWATCH PER LEG, and a line per leg when it is over.
+         `openLeg` starts the contract-side count; `closeLeg` reads it back,
+         adds whatever waiting this side measured, prints the line, and keeps
+         the figure for the summary. */
+      const legTimings: SendLegTiming[] = [];
+      let legClock = createSendStageClock();
+      /* From zero, whichever leg this run starts on. A run that stopped inside
+         a leg left figures behind it, and a resumed run that began at `settle`
+         opens no leg of its own — so the count is cleared here rather than
+         only where a leg starts. */
+      resetContractCallTimings();
+      const openLeg = (): void => {
+        legClock = createSendStageClock();
+        resetContractCallTimings();
+      };
+      const closeLeg = (leg: number, name: string): void => {
+        const contract = takeContractCallTimings();
+        legClock.add('prove', contract.prove);
+        legClock.add('sponsor', contract.sponsor);
+        legClock.add('submit', contract.submit);
+        const timing: SendLegTiming = { leg, name, stages: legClock.stages() };
+        legTimings.push(timing);
+        console.info(formatSendLegTiming(timing));
+      };
+      /* THE SUMMARY, and the only place a figure outlives the run. It is put
+         where the toast helper already puts itself — a property on `window`,
+         for a console session — because this app has no diagnostics panel and
+         a line that scrolls away is one nobody can read back. */
+      const summariseLegs = (): void => {
+        if (legTimings.length === 0) return;
+        const summary = formatSendSummary(legTimings);
+        console.info(summary);
+        (window as unknown as { __passportSendTimings?: unknown }).__passportSendTimings = {
+          summary,
+          legs: legTimings.map((leg) => ({ ...leg, stages: { ...leg.stages } })),
+        };
+      };
       /* WHAT THE CHAIN HAS SEEN OF LEG ONE. `txIdResolved` is an indexer answer
          FOR that transaction, so a resolved hash IS the landing; an unresolved
          one leaves the 33-byte identifier, which the indexer can be asked about
@@ -6629,6 +6733,7 @@ export default function PassportDemo() {
 
       const runWithdraw = async (deviceSecret: Uint8Array): Promise<void> => {
         activityId = begin(false);
+        openLeg();
         /* WHAT THE WALLET ALREADY HELD, read before anything is submitted and
            written down before it is used. Both halves matter: a shielded run
            identifies its note by the nonce that was NOT here, and a NIGHT run
@@ -6808,20 +6913,26 @@ export default function PassportDemo() {
               identifier,
             )) !== null;
         }
-        const outcome = await watchForSettlement<WalletShieldedNote | null>({
-          readWallet: lookForArrival,
-          landed: withdrawLanded,
-          confirmLanded,
-          /* The surfaces catch up with the chain rather than with the next
-             render: the amount has demonstrably left the account by now, and
-             Home was showing the figure from before it did. */
-          onLanded: () => {
-            void refreshLocalBalances();
-          },
-          now: () => Date.now(),
-          sleep: pause,
-          deadlineMs: SETTLE_DEADLINE_MS,
-        });
+        const outcome = await legClock.time('settle', () =>
+          watchForSettlement<WalletShieldedNote | null>({
+            readWallet: lookForArrival,
+            landed: withdrawLanded,
+            confirmLanded,
+            /* The surfaces catch up with the chain rather than with the next
+               render: the amount has demonstrably left the account by now, and
+               Home was showing the figure from before it did. */
+            onLanded: () => {
+              void refreshLocalBalances();
+            },
+            now: () => Date.now(),
+            sleep: pause,
+            deadlineMs: SETTLE_DEADLINE_MS,
+          }),
+        );
+        /* LEG ONE IS OVER EITHER WAY. Its own wait is what this measured, so
+           the line is printed before the branch — a leg that timed out is
+           precisely the one somebody reading a console wants the figures for. */
+        closeLeg(1, 'withdraw');
         if (outcome.settled) return outcome.note;
         /* Left at `settle`, not failed: the amount has moved and the arrival
            is still coming. Home offers to look again. */
@@ -6832,6 +6943,7 @@ export default function PassportDemo() {
 
       const runDeposit = async (note: WalletShieldedNote | null): Promise<void> => {
         save({ leg: 'deposit' });
+        openLeg();
         /* Whatever the prewarm managed, or nothing — a resumed run that skipped
            the wait never started one, and the deposit opens its own.
 
@@ -6890,13 +7002,17 @@ export default function PassportDemo() {
               lastError: undefined,
             });
             if (plan.change === null) dropPendingSend(record.id);
+            /* THE TRANSFER IS DONE, WHICHEVER PLAN THIS WAS (2026/09/07). The
+               recipient has the money at this line, and the trail says so
+               without a qualifier — a run with change left owes the SENDER
+               their own remainder and nobody else anything, and it comes back
+               by itself. The row is not left `pending` over it: a completed
+               payment showing as in progress is what sent people back to this
+               screen to check on a transfer that had finished. */
             updateActivity(activityId, {
-              status: plan.change === null ? 'complete' : 'pending',
+              status: 'complete',
               label: `Sent to ${record.recipient.label}`,
-              detail:
-                plan.change === null
-                  ? `${amountText} is now in ${record.recipient.label}’s account.`
-                  : `${amountText} is now in ${record.recipient.label}’s account. Putting your change back next.`,
+              detail: `${amountText} is now in ${record.recipient.label}’s account.`,
               source: 'chain',
               txHash: paid.txId,
             });
@@ -6909,6 +7025,7 @@ export default function PassportDemo() {
               link: explorerTxLink(paid.txId, paid.network),
             });
             void refreshLocalBalances();
+            closeLeg(2, 'deposit');
             return;
           } catch (cause) {
             const verdict = classifyLegError(cause);
@@ -6941,53 +7058,63 @@ export default function PassportDemo() {
        * exists at all because the wallet's own balancing produced it when leg
        * two spent the bigger note. It cannot be built before leg two lands, so
        * this waits; only the CONNECTION was opened early.
+       *
+       * NOBODY WATCHES IT ANY MORE (2026/09/07). It is run detached — see
+       * `detachChange` below — so it touches none of the Send sheet's progress
+       * state: `nameSendLeg`, `nameSendAttempt`, and `accountPhase` belong to
+       * the run somebody is waiting on, and this is not one. What it does keep
+       * is every durable thing: the record, the retry ladder, the reason on a
+       * failure, and the trail row it completes.
        */
       const runChange = async (): Promise<void> => {
         const owed = plan.change;
         /* Never reached with no change: the caller checks the plan first. This
            is the type narrowing, not a second decision. */
         if (owed === null) return;
-        save({ leg: 'change' });
-        setNameSendLeg('changing');
-        setNameSendAttempt(null);
-        const identifier = record.depositTxHash;
-        const outcome = await watchForSettlement<WalletShieldedNote>({
-          readWallet: () => lookForNote(owed),
-          /* Leg two's transaction is the one the change comes out of, so the
-             indexer is asked about that and not about leg one. A resolved hash
-             is already an indexer answer, so the record's hash starts this
-             landed either way — the wallet is simply re-read until the change
-             appears. */
-          landed: true,
-          now: () => Date.now(),
-          sleep: pause,
-          deadlineMs: SETTLE_DEADLINE_MS,
-        });
+        /* THE REASON IS CLEARED AS THIS STARTS. A record at `change` with no
+           reason on it is one that is running, which is what Home's quiet line
+           turns on — see `changeReturnInFlight`. Leaving a stale reason there
+           would put a "payment not finished" card over a leg that is working. */
+        save({ leg: 'change', lastError: undefined });
+        openLeg();
+        const outcome = await legClock.time('settle', () =>
+          watchForSettlement<WalletShieldedNote>({
+            readWallet: () => lookForNote(owed),
+            /* Leg two's transaction is the one the change comes out of, so the
+               indexer is asked about that and not about leg one. A resolved
+               hash is already an indexer answer, so the record's hash starts
+               this landed either way — the wallet is simply re-read until the
+               change appears. */
+            landed: true,
+            now: () => Date.now(),
+            sleep: pause,
+            deadlineMs: SETTLE_DEADLINE_MS,
+          }),
+        );
         if (!outcome.settled) {
           const waiting = 'Your change has not come back to your wallet yet.';
           save({ leg: 'change', lastError: { message: waiting, retryable: true } });
+          closeLeg(3, 'change');
           throw failure(new Error(waiting), waiting, true);
         }
         let prepared = changeConnection === null ? null : await changeConnection;
         for (let attempt = record.attempts.change; ; attempt += 1) {
-          setNameSendLeg('changing');
-          setNameSendAttempt(attempt + 1);
           try {
-            const back = await depositShielded(
-              account.handle,
-              {
-                contractAddress: account.address,
-                coin: shieldedCoinFromNote(outcome.note),
-                prepared,
-              },
-              (progress) => setAccountPhase(progress.phase),
-            );
+            const back = await depositShielded(account.handle, {
+              contractAddress: account.address,
+              coin: shieldedCoinFromNote(outcome.note),
+              prepared,
+            });
             save({
               leg: 'done',
               attempts: { ...record.attempts, change: attempt + 1 },
               lastError: undefined,
             });
             dropPendingSend(record.id);
+            /* The row already says the payment is complete — leg two said so.
+               This only adds the fact that the sender's own change is back, and
+               it names leg three's transaction so the trail links to the thing
+               that actually moved it. */
             updateActivity(activityId, {
               status: 'complete',
               label: `Sent to ${record.recipient.label}`,
@@ -6996,6 +7123,7 @@ export default function PassportDemo() {
               txHash: back.txId,
             });
             void refreshLocalBalances();
+            closeLeg(3, 'change');
             return;
           } catch (cause) {
             const verdict = classifyLegError(cause);
@@ -7005,11 +7133,70 @@ export default function PassportDemo() {
               lastError: { message: verdict.message, retryable: verdict.retryable },
             });
             if (!verdict.retryable || attempt + 1 >= SEND_LEG_ATTEMPTS) {
+              closeLeg(3, 'change');
               throw failure(cause, verdict.message, true);
             }
             await pause(retryDelayMs(attempt));
           }
         }
+      };
+
+      /**
+       * LEG THREE, LET GO OF (2026/09/07).
+       *
+       * The recipient has their money. What is left is the sender's own change
+       * coming back into the sender's own account, and until this date it was
+       * awaited inline with its own 180-second watch — so the last third of
+       * every part-coin transfer was somebody watching a step that concerned
+       * nobody but themselves, on a screen still saying the payment was in
+       * progress.
+       *
+       * NOTHING ABOUT THE MONEY'S SAFETY MOVES WITH IT. The record is still
+       * written at `change` before this starts, so a reload, a closed tab, or a
+       * failure leaves exactly what it left before: a record that resumes
+       * without a prompt (`resumesWithoutPrompt`) and a Home card that offers
+       * to carry it on. The only thing that changed is who waits.
+       *
+       * THE FAILURE IS A NOTICE, NEVER A FAILED SEND. `runNameSend`'s promise
+       * has already resolved by now, so a rejection here has nowhere to go and
+       * must not look for one: the toast says the payment went through and the
+       * change has not, and the card on Home carries the rest. Rethrowing into
+       * an unhandled rejection would be the browser reporting a finished
+       * payment as broken.
+       */
+      /* Whether the third leg was let go of, so the summary line is printed by
+         whichever half of the run finishes last rather than twice. */
+      let changeDetached = false;
+      const detachChange = (): void => {
+        setChangeReturning(true);
+        /* CLAIMED BEFORE ANYTHING ELSE SEES THE RECORD. The record is already
+           at `change`, which is the shape the automatic resume offers to carry
+           on — so this tab says the leg is taken before the effect that would
+           otherwise start a second one gets a render to notice it in. Both
+           guards are set: the resume's own once-per-record set, and the
+           explicit one `continuePendingSend` checks. */
+        changeReturnsInFlight.current.add(record.id);
+        autoResumedSends.current.add(record.id);
+        void (async (): Promise<void> => {
+          try {
+            await runChange();
+          } catch (cause) {
+            console.info('[send] the change has not come back yet', cause);
+            pushToast({
+              /* SUCCESS, because the payment succeeded. The outstanding half is
+                 the sender's own remainder and Home is where it comes back
+                 from. An error tone here would report a completed transfer as a
+                 failure. */
+              tone: 'success',
+              title: `${record.recipient.label} paid`,
+              body: 'Your change has not come back to your account yet. Finish that from Home.',
+            });
+          } finally {
+            changeReturnsInFlight.current.delete(record.id);
+            setChangeReturning(false);
+            summariseLegs();
+          }
+        })();
       };
 
       try {
@@ -7026,9 +7213,20 @@ export default function PassportDemo() {
         }
         /* A RUN CARRIED ON FROM THE THIRD LEG has already paid the recipient,
            and there is exactly one thing left to do. Running the first two
-           again would pay them a second time. */
+           again would pay them a second time.
+
+           AWAITED HERE, unlike the fresh run below, and the difference is who
+           asked: this is Home's card being carried on — by a press or by the
+           automatic resume — and its card says "Carrying on…" for exactly as
+           long as this takes. There is no Send sheet in front of anybody to
+           finish early. */
         if (record.leg === 'change') {
-          await runChange();
+          setChangeReturning(true);
+          try {
+            await runChange();
+          } finally {
+            setChangeReturning(false);
+          }
         } else {
           /* A shielded run needs the note itself however far it had got: the
              deposit consumes one specific note and only this can name it. A
@@ -7037,7 +7235,14 @@ export default function PassportDemo() {
             settledNote = await runSettle();
           }
           await runDeposit(settledNote);
-          if (plan.change !== null) await runChange();
+          /* THE TRANSFER IS OVER, AS FAR AS THE READER IS CONCERNED. The
+             recipient was paid by the line above; the change is the sender's
+             own and comes back without anybody watching it. See
+             `detachChange`. */
+          if (plan.change !== null) {
+            changeDetached = true;
+            detachChange();
+          }
         }
       } catch (cause) {
         const legLanded = Boolean(record.withdrawTxHash);
@@ -7087,7 +7292,13 @@ export default function PassportDemo() {
 
         if (activityId) {
           updateActivity(activityId, {
-            status: 'error',
+            /* NEVER A FAILED SEND WHERE THE RECIPIENT WAS PAID (2026/09/07).
+               The only way to reach here with `recipientPaid` is a third leg
+               that did not finish, and the third leg is the sender's own change
+               coming back — the payment itself completed, and a red row over it
+               would send somebody chasing a transfer that worked. The detail
+               below still says what is outstanding. */
+            status: recipientPaid ? 'complete' : 'error',
             label: recipientPaid
               ? `Sent to ${record.recipient.label}`
               : legLanded
@@ -7124,6 +7335,10 @@ export default function PassportDemo() {
         setNameSendLeg(null);
         setNameSendAttempt(null);
         setAccountPhase(null);
+        /* WHERE THE TIME WENT, once. A run whose third leg was let go of is
+           summarised by that leg when it lands, so the figures are printed by
+           whichever half finishes last rather than twice. */
+        if (!changeDetached) summariseLegs();
       }
     },
     [
@@ -7162,6 +7377,10 @@ export default function PassportDemo() {
     async (id: string, options: { prompt?: boolean } = {}): Promise<void> => {
       const record = pendingSendsRef.current.find((entry) => entry.id === id);
       if (!record) return;
+      /* Already being carried, detached, by the run that paid the recipient —
+         see `detachChange`. A second walk of the same leg would prove against a
+         state the first is moving, and the node would refuse it. */
+      if (changeReturnsInFlight.current.has(id)) return;
       if (resumingSendIdRef.current !== null) return;
       resumingSendIdRef.current = id;
       setResumingSendId(id);
@@ -7296,6 +7515,11 @@ export default function PassportDemo() {
       tokenType: string;
       amount: bigint;
     }): Promise<void> => {
+      /* The same one-at-a-time rule the name path keeps: the change from the
+         last transfer is a coin this withdrawal would have to be balanced
+         against, and it is not in the account yet. */
+      const blocked = sendBlockedByChangeReturn(pendingSendsRef.current);
+      if (blocked !== null) throw new Error(blocked);
       const account = requireAccount();
       try {
         const { withdrawShielded } = await import('./identity/accountCustody.js');
@@ -7319,7 +7543,20 @@ export default function PassportDemo() {
                measured to survive every rebuild — three attempts, three
                `Custom error: 239`s, live on stagenet — and the attempts after
                the first buy a person forty more seconds of watching a sheet
-               before being told the same thing. */
+               before being told the same thing.
+
+               AND STILL A SPLIT WITHDRAWAL, reviewed again 2026/09/07 when the
+               name path's third leg was let go of. Passing `whole: true` here
+               would send the account's ENTIRE holding of this colour to a raw
+               address that is not the sender's, so paying part of a coin would
+               need the amount routed through the sender's own address and the
+               remainder returned — a second and a third transaction, on the one
+               path that is a single transaction today. The common case is a
+               transfer that succeeds first time, and adding two legs to make
+               the uncommon 239 cheaper would be paying every send for a refusal
+               most of them never see. So the split stays, and the rebuild's
+               cost is MEASURED rather than assumed: the line below is what says
+               how much a 239 is really worth. */
             const withdrawOnce = () =>
               withdrawShielded(
                 account.handle,
@@ -7333,13 +7570,25 @@ export default function PassportDemo() {
                 (progress) => setAccountPhase(progress.phase),
               );
             let result;
+            const startedAt = Date.now();
             try {
               result = await withdrawOnce();
             } catch (firstAttempt) {
               if (!classifyLegError(firstAttempt).rebuild) throw firstAttempt;
+              const refusedAfterMs = Date.now() - startedAt;
               console.debug('[send] the shielded withdrawal is being built again', firstAttempt);
               await new Promise((resolve) => setTimeout(resolve, retryDelayMs(0)));
+              const rebuiltFrom = Date.now();
               result = await withdrawOnce();
+              /* WHAT THE REBUILD COSTS, in the same seconds the leg lines use.
+                 The first figure is the attempt that was thrown away; the
+                 second is the one that worked. Both together are what a reader
+                 asking "why did that transfer take a minute" needs. */
+              console.info(
+                `[send] shielded withdrawal rebuilt after a refusal: refused ${formatSendDuration(
+                  refusedAfterMs,
+                )} · rebuild ${formatSendDuration(Date.now() - rebuiltFrom)}`,
+              );
             }
             updateActivity(entry.id, {
               status: 'complete',
@@ -7629,6 +7878,11 @@ export default function PassportDemo() {
           nameLeg: nameSendLeg,
           nameLegAttempt: nameSendAttempt,
           nameLegSteps: nameSendSteps,
+          /* ONE AT A TIME WHILE CHANGE IS COMING BACK. The next transfer would
+             have to spend the coin that is still on its way into the account,
+             so the sheet holds it and says what it is waiting for. The runner
+             refuses the same case as a backstop — see `runNameSend`. */
+          blockedReason: sendBlockedByChangeReturn(pendingSends),
         }
       : null;
 
@@ -7750,24 +8004,33 @@ export default function PassportDemo() {
    *
    * NO MACHINERY IN ANY OF THESE SENTENCES. The step lines say what happened to
    * the money, in the same two-step language the Send sheet uses.
+   *
+   * WITH ONE EXCLUSION SINCE 2026/09/07: a change return that is RUNNING gets
+   * no card. The recipient has been paid, nothing is wrong, and the change
+   * comes back by itself — a "Payment not finished" card over that would report
+   * a completed transfer as a problem. It gets the quiet line under the
+   * balances instead (`changeReturnLine`). A change return that has STOPPED
+   * still earns its card: that one has a reason on it and a Continue to press.
    */
   const homePendingSends = useMemo(
     () =>
-      pendingSends.map((record) => ({
-        id: record.id,
-        label: record.leg === 'change'
-          ? `Your change from paying ${record.recipient.label}`
-          : `Sending ${pendingSendAmountLabel(record, pendingSendAsset(record))} to ${record.recipient.label}`,
-        step: pendingSendStepLine(record),
-        reason: record.lastError?.message ?? null,
-        /* Carrying on by itself, so the card says so. The step line above it
-           advances as each leg is written down, which is the progress. */
-        busy: resumingSendId === record.id,
-        onContinue: () => void continuePendingSend(record.id),
-        ...(record.withdrawTxHash
-          ? {}
-          : { onGiveUp: () => dropPendingSend(record.id) }),
-      })),
+      pendingSends
+        .filter((record) => !(awaitsChangeReturn(record) && record.lastError === undefined))
+        .map((record) => ({
+          id: record.id,
+          label: record.leg === 'change'
+            ? `Your change from paying ${record.recipient.label}`
+            : `Sending ${pendingSendAmountLabel(record, pendingSendAsset(record))} to ${record.recipient.label}`,
+          step: pendingSendStepLine(record),
+          reason: record.lastError?.message ?? null,
+          /* Carrying on by itself, so the card says so. The step line above it
+             advances as each leg is written down, which is the progress. */
+          busy: resumingSendId === record.id,
+          onContinue: () => void continuePendingSend(record.id),
+          ...(record.withdrawTxHash
+            ? {}
+            : { onGiveUp: () => dropPendingSend(record.id) }),
+        })),
     [continuePendingSend, dropPendingSend, pendingSendAsset, pendingSends, resumingSendId],
   );
 
@@ -8412,6 +8675,10 @@ export default function PassportDemo() {
               /* Payments that left this Passport and have not arrived. See
                  `runNameSend` for why a two-leg send is written down. */
               pendingSends={homePendingSends}
+              /* The sender's own change on its way back from a transfer that
+                 has ALREADY paid its recipient — one quiet line under the
+                 balances, and no card, because nothing is wrong. */
+              changeReturnNote={changeReturnLine(pendingSends)}
               error={error}
               onDismissError={() => setError(null)}
               onRefresh={refreshMobile}

@@ -28,13 +28,24 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  awaitsChangeReturn,
+  CHANGE_RETURN_LINE,
+  changeReturnInFlight,
+  changeReturnLine,
   classifyLegError,
+  createSendStageClock,
+  formatSendDuration,
+  formatSendLegTiming,
+  formatSendSummary,
   pendingSendsStorageKey,
   pendingSendAmountLabel,
   pendingSendStepLine,
   planOfRecord,
   planShieldedSend,
   sendStepLine,
+  SEND_BLOCKED_BY_CHANGE_RETURN,
+  sendBlockedByChangeReturn,
+  sendLegTotalMs,
   SEND_REFUSED_TEXT,
   sendRefusalText,
   readPendingSends,
@@ -799,19 +810,22 @@ describe('sendStepLine', () => {
   const three = { steps: 3 as const, recipient: 'alice.night' };
   const two = { steps: 2 as const, recipient: 'alice.night' };
 
-  it('counts a three-step payment in plain words', () => {
+  /* COUNTS WHAT IS WAITED FOR, NOT WHAT HAPPENS (2026/09/07). A part-coin
+     payment is still three transactions and `steps: 3` still chooses the
+     whole-coin wording, but the third returns the sender's own change after the
+     payment is confirmed and nobody sits through it — so the line says two, and
+     `changing` is not numbered at all. */
+  it('counts a three-transaction payment as the two steps somebody waits for', () => {
     expect(sendStepLine({ ...three, step: 'withdrawing' })).toBe(
-      'Step 1 of 3 · Taking the coin out.',
+      'Step 1 of 2 · Taking the coin out.',
     );
     expect(sendStepLine({ ...three, step: 'settling' })).toBe(
       'Step 1 done. Waiting for it to clear before it goes on.',
     );
     expect(sendStepLine({ ...three, step: 'depositing' })).toBe(
-      'Step 2 of 3 · Paying alice.night.',
+      'Step 2 of 2 · Paying alice.night.',
     );
-    expect(sendStepLine({ ...three, step: 'changing' })).toBe(
-      'Step 3 of 3 · Returning the change.',
-    );
+    expect(sendStepLine({ ...three, step: 'changing' })).toBe('Returning your change.');
   });
 
   it('still counts a two-step payment to two', () => {
@@ -828,13 +842,13 @@ describe('sendStepLine', () => {
 
   it('shows a retry on the step that is being attempted again', () => {
     expect(sendStepLine({ ...three, step: 'withdrawing', attemptSuffix: ' (retry 1 of 2)' })).toBe(
-      'Step 1 of 3 · Taking the coin out (retry 1 of 2).',
+      'Step 1 of 2 · Taking the coin out (retry 1 of 2).',
     );
     expect(sendStepLine({ ...three, step: 'depositing', attemptSuffix: ' (retry 1 of 2)' })).toBe(
-      'Step 2 of 3 · Paying alice.night (retry 1 of 2).',
+      'Step 2 of 2 · Paying alice.night (retry 1 of 2).',
     );
     expect(sendStepLine({ ...three, step: 'changing', attemptSuffix: ' (retry 1 of 2)' })).toBe(
-      'Step 3 of 3 · Returning the change (retry 1 of 2).',
+      'Returning your change (retry 1 of 2).',
     );
     expect(sendStepLine({ ...two, step: 'depositing', attemptSuffix: ' (retry 1 of 2)' })).toBe(
       'Step 2 of 2 — paying it into alice.night’s account (retry 1 of 2).',
@@ -994,5 +1008,202 @@ describe('sendFailureNotice, on a payment that worked', () => {
         'finish that from Home.',
     );
     expect(said).not.toMatch(/not paid|nothing was sent/i);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The change that comes back on its own                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * THE THIRD LEG, LET GO OF (2026/09/07).
+ *
+ * Every rule in here answers one of four ways a detached leg could lose or
+ * misreport somebody's money, and each is drilled as the rule rather than
+ * through the orchestrator that applies it:
+ *
+ *   DETACHED, NOT DROPPED — the record is still written at `change`, so the
+ *     work is still owed and still owned by something.
+ *   A FAILURE IS A NOTICE, NOT A FAILED SEND — the recipient was paid, the
+ *     sentence has to say so, and the run has to stay resumable.
+ *   THE NEXT SEND WAITS — the change is a coin, and the next transfer would
+ *     have to spend it.
+ *   A RELOAD CHANGES NOTHING — the record survives storage and comes back
+ *     resumable without a prompt.
+ */
+describe('the change that comes back on its own', () => {
+  const changing = (overrides: Partial<PendingSend> = {}): PendingSend =>
+    shieldedSend({
+      leg: 'change',
+      depositTxHash: 'ff'.repeat(32),
+      withdrawAmount: '3000000',
+      lastError: undefined,
+      ...overrides,
+    });
+
+  it('knows the recipient has been paid and only the sender is owed', () => {
+    expect(awaitsChangeReturn(changing())).toBe(true);
+    /* Every other leg is a payment that has NOT reached its recipient, and
+       treating one of them as "only the change is left" would be the screen
+       telling somebody a transfer worked when it had not. */
+    expect(awaitsChangeReturn(shieldedSend({ leg: 'deposit' }))).toBe(false);
+    expect(awaitsChangeReturn(nightSend({ leg: 'settle' }))).toBe(false);
+    expect(awaitsChangeReturn(shieldedSend({ leg: 'failed' }))).toBe(false);
+    expect(awaitsChangeReturn(shieldedSend({ leg: 'done' }))).toBe(false);
+  });
+
+  it('says the change is on its way only while it is actually running', () => {
+    expect(changeReturnInFlight([changing()])).toBe(true);
+    expect(changeReturnLine([changing()])).toBe(CHANGE_RETURN_LINE);
+    /* A run that STOPPED has a reason on it and a card on Home to carry it on.
+       A quiet line claiming the change was coming back over that would be a
+       promise nothing is keeping. */
+    expect(
+      changeReturnInFlight([
+        changing({ lastError: { message: 'The network turned this step down.', retryable: true } }),
+      ]),
+    ).toBe(false);
+    expect(changeReturnLine([nightSend(), shieldedSend()])).toBeNull();
+    expect(changeReturnLine([])).toBeNull();
+  });
+
+  it('holds the next transfer until the change has landed, running or stopped', () => {
+    expect(sendBlockedByChangeReturn([changing()])).toBe(SEND_BLOCKED_BY_CHANGE_RETURN);
+    /* STOPPED STILL BLOCKS. The coin the next send would spend is not in the
+       account either way, and a sheet that let one through would build against
+       a wallet one note short. */
+    expect(
+      sendBlockedByChangeReturn([
+        changing({ lastError: { message: 'The network turned this step down.', retryable: true } }),
+      ]),
+    ).toBe(SEND_BLOCKED_BY_CHANGE_RETURN);
+    /* And nothing else blocks anything: an unfinished payment at any other leg
+       has not spent the coin the next one needs. */
+    expect(sendBlockedByChangeReturn([nightSend(), shieldedSend()])).toBeNull();
+    expect(sendBlockedByChangeReturn([])).toBeNull();
+  });
+
+  it('says the payment went through when the change is what did not', () => {
+    /* NON-BLOCKING, AND NOT A FAILED SEND. The one thing this sentence must
+       never do is tell somebody a transfer failed when their recipient has the
+       money — they would go chasing a payment that happened. */
+    const notice = sendFailureNotice({
+      legLanded: true,
+      recipientPaid: true,
+      message: 'The network turned this step down.',
+      amountLabel: '1 mUSD',
+      assetSymbol: 'mUSD',
+    });
+    expect(notice).toContain('Your payment went through');
+    expect(notice).not.toContain('Nothing was sent');
+    expect(notice).not.toContain('did not finish');
+  });
+
+  it('comes back from a reload resumable, with nobody asked to press anything', () => {
+    const stopped = changing({
+      lastError: { message: 'The network turned this step down.', retryable: true },
+    });
+    const restored = readPendingSends(serialisePendingSends([stopped]))[0];
+    expect(restored.leg).toBe('change');
+    /* The paying leg's hash survives, which is what stops a resumed run paying
+       the recipient a second time. */
+    expect(restored.depositTxHash).toBe('ff'.repeat(32));
+    /* And it carries on by itself: leg one was authorised long ago and every
+       leg left is permissionless. */
+    expect(resumesWithoutPrompt(restored)).toBe(true);
+    /* Home's card says the payment worked — never that it did not. */
+    const line = pendingSendStepLine(restored);
+    expect(line).toContain('has been paid');
+    expect(line).toContain('change');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Where the time actually goes                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The per-stage stopwatch and the two lines it prints.
+ *
+ * These are console figures and nothing branches on them, so what is held to
+ * account is that they cannot LIE: a stage that was never entered must not be
+ * printed as instant, a retried leg must be charged for every attempt it made,
+ * and a summary must never disagree with the legs it is a summary of.
+ */
+describe('the per-stage send timings', () => {
+  it('prints a duration in the seconds a console reads', () => {
+    expect(formatSendDuration(9800)).toBe('9.8 s');
+    expect(formatSendDuration(0)).toBe('0.0 s');
+    /* A clock that went backwards — a system time change mid-send — is floored
+       rather than printed as a negative wait nobody could have had. */
+    expect(formatSendDuration(-500)).toBe('0.0 s');
+  });
+
+  it('lays a leg out in the order the leg walks its stages', () => {
+    expect(
+      formatSendLegTiming({
+        leg: 2,
+        name: 'deposit',
+        stages: { prove: 9800, sponsor: 1200, submit: 6100, settle: 4000 },
+      }),
+    ).toBe('[send] leg 2 deposit: prove 9.8 s · sponsor 1.2 s · submit 6.1 s · settle 4.0 s');
+  });
+
+  it('leaves out a stage the leg never entered rather than calling it instant', () => {
+    expect(
+      formatSendLegTiming({ leg: 3, name: 'change', stages: { settle: 21_400 } }),
+    ).toBe('[send] leg 3 change: settle 21.4 s');
+    /* A leg that reached nothing still earns a line: "this was skipped" is
+       exactly what somebody working out where a send's time went needs. */
+    expect(formatSendLegTiming({ leg: 1, name: 'withdraw', stages: {} })).toBe(
+      '[send] leg 1 withdraw: nothing timed',
+    );
+  });
+
+  it('summarises to a total that is the sum of its own parts', () => {
+    const first = { leg: 1, name: 'withdraw', stages: { prove: 4000, sponsor: 1000, submit: 3000 } };
+    const legs = [
+      first,
+      { leg: 2, name: 'deposit', stages: { prove: 9800, sponsor: 1200, submit: 2100 } },
+    ];
+    expect(sendLegTotalMs(first)).toBe(8000);
+    expect(formatSendSummary(legs)).toBe(
+      '[send] total 21.1 s · leg 1 withdraw 8.0 s · leg 2 deposit 13.1 s',
+    );
+    expect(formatSendSummary([])).toBe('[send] nothing timed');
+  });
+
+  it('charges a stage for every attempt at it, failures included', async () => {
+    let clock = 0;
+    const stages = createSendStageClock(() => clock);
+    await stages.time('prove', () => {
+      clock += 8000;
+      return Promise.resolve();
+    });
+    /* THE FAILED ATTEMPT COST WHAT IT COST. A ladder whose refusals were free
+       would report a two-minute leg as a twenty-second one. */
+    await expect(
+      stages.time('prove', () => {
+        clock += 3000;
+        return Promise.reject(new Error('refused'));
+      }),
+    ).rejects.toThrow('refused');
+    stages.add('sponsor', 1200);
+    /* Figures nothing could have measured are ignored rather than poisoning a
+       total with a `NaN`. */
+    stages.add('submit', Number.NaN);
+    stages.add('submit', -1);
+    expect(stages.stages()).toEqual({ prove: 11_000, sponsor: 1200 });
+    /* A copy each time, so a caller that keeps one cannot watch it change
+       underneath the line it already printed. */
+    const snapshot = stages.stages();
+    stages.add('settle', 500);
+    expect(snapshot.settle).toBeUndefined();
+  });
+
+  it('has a clock of its own when nobody injects one', async () => {
+    const stages = createSendStageClock();
+    await stages.time('settle', () => Promise.resolve());
+    expect(stages.stages().settle).toBeGreaterThanOrEqual(0);
   });
 });
