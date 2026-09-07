@@ -56,6 +56,21 @@
  * here to render a hook into. That file holds the watch's lifetime, a
  * `visibilitychange` listener, and two refs — no decisions.
  *
+ * `src/lib/chainWait.ts` went IN on 2026/09/07, the day it was written. It
+ * holds the bound on every wait this app makes on the chain, and the defect it
+ * was written for is a reviewer left on "Setting up your account…" for ever
+ * while their transaction sat happily in a block. Every branch in it is a way
+ * of getting a wait wrong: one that never ends is the defect itself, one that
+ * ends too early reports an account nobody has confirmed, one that swallows a
+ * refusal hides a transaction the chain threw out, and one that abandons a
+ * promise without handling its rejection turns a slow node into a console
+ * error minutes later. It holds no SDK, no DOM, no `fetch`, and no clock of
+ * its own — the clock and the sleep are injected — so all of it is drilled on
+ * a hand-wound clock in `src/lib/chainWait.test.ts`. The SDK shapes it is used
+ * against stay in `src/identity/contractRuntime.ts` and
+ * `src/identity/passportContract.ts`, which are out for the reason every
+ * module in that directory is.
+ *
  * `src/lib/sheetHistory.ts` went IN on 2026/09/04, the day it was written. It
  * decides which history entry belongs to which of Passport's sheets, and
  * whether a closing sheet still owes the stack an entry — three answers, and
@@ -506,6 +521,7 @@ export default mergeConfig(
           'src/lib/address.ts',
           'src/lib/appBusy.ts',
           'src/lib/balanceWatch.ts',
+          'src/lib/chainWait.ts',
           'src/lib/claimFailure.ts',
           'src/lib/claimRetry.ts',
           'src/lib/claimSteps.ts',
