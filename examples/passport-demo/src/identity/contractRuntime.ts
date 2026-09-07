@@ -49,6 +49,12 @@
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
+import {
+  connectionWatchFor,
+  transactionIdentifierOf,
+  waitBounded,
+  SUBMIT_WAIT_MS,
+} from '../lib/chainWait.js';
 import { describeEndpointRefusals, firstEndpointThatServes } from '../lib/endpoints.js';
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
 /* One fetch per ZK artefact instead of three. Pure, drilled, and the reason a
@@ -530,6 +536,14 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
     finalizeRecipe(signed: unknown): Promise<ledger.FinalizedTransaction>;
     submitTransaction(tx: unknown): Promise<unknown>;
     revert(recipe: unknown): Promise<unknown>;
+    /* The two halves `submitTransaction` is made of, reached directly so the
+       wait can be asked for at INCLUSION rather than at finality. Optional
+       because a test double — and, one day, another SDK build — may not carry
+       them, and the fall-back is the facade's own method. */
+    submissionService?: {
+      submitTransaction(tx: unknown, waitForStatus?: string): Promise<unknown>;
+    };
+    pendingTransactionsService?: { addPendingTransaction(tx: unknown): Promise<unknown> };
   };
 
   const revertQuietly = async (recipe: unknown): Promise<void> => {
@@ -623,6 +637,96 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
     }
   };
 
+  /**
+   * `WalletFacade.submitTransaction`, with the wait asked for at INCLUSION.
+   *
+   * The facade's own method is three lines — add the transaction to the pending
+   * set, `submissionService.submitTransaction(tx, 'Finalized')`, answer with
+   * `tx.identifiers().at(-1)` — and only the middle one is wrong for us. It
+   * waits on a polkadot-js `author_submitAndWatchExtrinsic` subscription, which
+   * is NEVER re-created after a websocket drop and never errors, so a drop
+   * between the submit and finality hangs it for the life of the tab. Passport
+   * proves inclusion through the indexer afterwards in every path that cares,
+   * so finality was never the thing being waited for; it was just the default.
+   *
+   * `'InBlock'` is the same subscription with an earlier stopping point, so
+   * this is a smaller wait rather than a different one — and it is bounded
+   * again by {@link boundedSubmit} above, because a subscription that has lost
+   * its socket will not report inclusion either.
+   *
+   * The failure path is the facade's, deliberately and to the letter: the
+   * transaction is reverted out of the pending set and the original error is
+   * rethrown untouched, so `submitTx`'s sponsor-abandon rule still sees exactly
+   * what it saw before. Where the submission service cannot be reached at all,
+   * the facade's own method is called and nothing about this applies.
+   */
+  const submitWithoutWaitingForFinality = async (tx: unknown): Promise<unknown> => {
+    const service = facade.submissionService;
+    if (!service || typeof service.submitTransaction !== 'function') {
+      return facade.submitTransaction(tx);
+    }
+    try {
+      await facade.pendingTransactionsService?.addPendingTransaction(tx);
+      await service.submitTransaction(tx, 'InBlock');
+      return transactionIdentifierOf(tx);
+    } catch (cause) {
+      /* What the facade does here, and for its reason: a transaction the node
+         would not take must not be left booked against this wallet's coins. */
+      try {
+        await facade.revert(tx);
+      } catch (revertCause) {
+        console.debug('[contract] could not revert a refused submission', revertCause);
+      }
+      throw cause;
+    }
+  };
+
+  /**
+   * The submit, with a bound on how long it may wait for the node.
+   *
+   * WHAT IT ANSWERS WITH AT THE BOUND, AND WHY THAT IS NOT A GUESS. The value
+   * `submitTransaction` resolves with is `tx.identifiers().at(-1)` — a value
+   * this tab computed before anything was sent. So at the deadline this returns
+   * the identifier the unbounded wait would eventually have returned, and the
+   * caller carries on to the indexer, which is where the question "did it land"
+   * is actually answered. Nothing is claimed about the transaction here.
+   *
+   * NOTHING IS REVERTED AND NOTHING IS GIVEN BACK at the bound. The transaction
+   * may be in a block already — the defect this was written for is exactly that
+   * case — and handing the sponsor back a fee that has been spent, or dropping
+   * a pending transaction that is about to apply, would turn a slow wait into a
+   * wrong one. Only a real refusal does either, and that path is unchanged.
+   *
+   * A connection that goes away during the wait ends it the same way: it is the
+   * signal that no answer is coming, whereas the deadline is only the signal
+   * that none has come yet. Both are logged, by name, so an operator reading a
+   * console can tell one from the other.
+   *
+   * With NO identifier to answer with there is nothing to carry on with, so the
+   * wait is the SDK's own and unbounded. That shape does not occur on this
+   * build; answering `undefined` early would be worse than waiting.
+   */
+  const boundedSubmit = async (tx: unknown): Promise<unknown> => {
+    const identifier = transactionIdentifierOf(tx);
+    if (identifier === null) return facade.submitTransaction(tx);
+    const outcome = await waitBounded(submitWithoutWaitingForFinality(tx), {
+      deadlineMs: SUBMIT_WAIT_MS,
+      /* The submission service's node client is built behind a closed-over
+         `Deferred` on this build, so neither candidate answers and the device's
+         own radio is what is watched — which is the thing that actually moves
+         during an Android handoff. See `../lib/chainWait.ts`. */
+      watch: connectionWatchFor(
+        [facade.submissionService, (facade.submissionService as { api?: unknown })?.api],
+        globalThis,
+      ),
+    });
+    if (outcome.via === 'answer') return outcome.value;
+    console.info(
+      `[contract] the node has not answered for ${identifier} — ${outcome.reason}. Carrying on with the transaction identifier; the indexer decides whether it landed.`,
+    );
+    return identifier;
+  };
+
   const walletProvider = {
     /* ledger-9 hands these out as 64-hex strings already — there is no
        `toHexString()` to call, and calling one is a TypeError. */
@@ -646,6 +750,9 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
     /**
      * Submits, and on a NODE REJECTION gives the sponsor its fee back at once.
      *
+     * THE WAIT IS BOUNDED, AND IT IS NOT A WAIT FOR FINALITY (2026/09/07).
+     * See {@link submitWithoutWaitingForFinality} and `../lib/chainWait.ts`.
+     *
      * A rejected transaction is never going to land, so the whole DUST coin the
      * sponsor booked for it would otherwise sit spoken-for until the sweeper
      * noticed — two minutes on 2026/09/02, during which every registration and
@@ -662,7 +769,7 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
     async submitTx(tx: unknown): Promise<unknown> {
       const booked = lastBalance;
       try {
-        return await facade.submitTransaction(tx);
+        return await boundedSubmit(tx);
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (booked && NODE_REJECTION_PATTERN.test(message)) {

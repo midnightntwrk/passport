@@ -20,6 +20,7 @@ import {
   BalancingFailure,
 } from './contractRuntime.js';
 import { hexToBytes as verifierHexToBytes } from '../verify/indexer.js';
+import { SUBMIT_WAIT_MS } from '../lib/chainWait.js';
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
 import { createSponsorError, resetSponsorReadinessCache } from '../lib/sponsor.js';
 import type { SponsorReadiness } from '../lib/sponsor.js';
@@ -410,6 +411,209 @@ describe('submitTx, after the node refuses a sponsored transaction', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(thrown).toBe(cause);
     expect(abandons).toEqual([]);
+  });
+});
+
+/**
+ * The submit does not wait for finality, and cannot wait for ever (2026/09/07).
+ *
+ * The defect is in `../lib/chainWait.ts`'s header: the SDK's own
+ * `submitTransaction` waits on a polkadot-js subscription for the node's
+ * `Finalized` event with no bound, and that subscription is never re-created
+ * after a websocket drop and never errors. A reviewer sat on "Setting up your
+ * account…" indefinitely while their transaction was in a block.
+ *
+ * Two rules come out of that, and both are here: ask for INCLUSION rather than
+ * finality, and stop waiting at a deadline with the identifier this tab already
+ * holds. What must NOT change is the failure path — a node that refuses a
+ * transaction still reverts it and still gives the sponsor its fee back.
+ */
+describe('submitTx, bounded and not waiting for finality', () => {
+  /** A finalized transaction, which carries its own identifiers. */
+  const TX = { identifiers: () => ['xy'.repeat(33)] };
+  const IDENTIFIER = 'xy'.repeat(33);
+
+  /** A facade whose submission service can be told how to behave. */
+  function walletWithSubmission(service: {
+    submitTransaction: (tx: unknown, waitForStatus?: string) => Promise<unknown>;
+  }): { wallet: LocalMidnightWallet; pending: unknown[]; reverted: unknown[] } {
+    const pending: unknown[] = [];
+    const reverted: unknown[] = [];
+    return {
+      pending,
+      reverted,
+      wallet: {
+        facade: {
+          /* Enough of a balancing path to reach the sponsor, so a booking is
+             remembered by the time the refusal test submits. */
+          balanceUnboundTransaction: async () => ({ recipe: true }),
+          signRecipe: async () => ({ signed: true }),
+          finalizeRecipe: async () => ({ serialize: () => Uint8Array.from([1, 2]) }),
+          submissionService: service,
+          pendingTransactionsService: {
+            addPendingTransaction: async (tx: unknown) => void pending.push(tx),
+          },
+          submitTransaction: async () => 'the facade waited for finality',
+          revert: async (tx: unknown) => void reverted.push(tx),
+        },
+        keys: {
+          shieldedSecretKeys: { coinPublicKey: '00', encryptionPublicKey: '00' },
+          unshieldedKeystore: { signDataAsync: async () => ({}) },
+        },
+      } as unknown as LocalMidnightWallet,
+    };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('asks the node for inclusion, not finality, and answers with the identifier', async () => {
+    const asked: (string | undefined)[] = [];
+    const { wallet, pending } = walletWithSubmission({
+      submitTransaction: async (_tx, waitForStatus) => {
+        asked.push(waitForStatus);
+        return { _tag: 'InBlock' };
+      },
+    });
+    await expect(walletProviderFor(wallet).submitTx(TX)).resolves.toBe(IDENTIFIER);
+    expect(asked).toEqual(['InBlock']);
+    // The pending set is still written first, exactly as the facade does it.
+    expect(pending).toEqual([TX]);
+  });
+
+  it('stops waiting at the deadline and carries on with what it already knows', async () => {
+    vi.useFakeTimers();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const { wallet, reverted } = walletWithSubmission({
+      // The subscription that lost its socket: silent, for ever.
+      submitTransaction: () => new Promise(() => {}),
+    });
+    const submitted = walletProviderFor(wallet).submitTx(TX);
+    await vi.advanceTimersByTimeAsync(SUBMIT_WAIT_MS);
+    expect(await submitted).toBe(IDENTIFIER);
+    /* NOTHING is given back at the deadline. The transaction may be in a block
+       already — that is the whole defect — and reverting it, or handing the
+       sponsor back a fee that has been spent, would turn a slow wait into a
+       wrong one. */
+    expect(reverted).toEqual([]);
+    expect(info.mock.calls[0]?.[0]).toMatch(/nothing answered within 60s/);
+  });
+
+  it('stops the moment the device loses its network, saying so', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const listeners = new Set<() => void>();
+    const device = {
+      navigator: { onLine: true },
+      addEventListener: (event: string, handler: () => void) => {
+        if (event === 'offline') listeners.add(handler);
+      },
+      removeEventListener: (_event: string, handler: () => void) => void listeners.delete(handler),
+    };
+    for (const [key, value] of Object.entries(device)) vi.stubGlobal(key, value);
+    try {
+      const { wallet } = walletWithSubmission({
+        submitTransaction: () => new Promise(() => {}),
+      });
+      const submitted = walletProviderFor(wallet).submitTx(TX);
+      await Promise.resolve();
+      for (const handler of listeners) handler();
+      expect(await submitted).toBe(IDENTIFIER);
+      expect(info.mock.calls[0]?.[0]).toMatch(/this device lost its network connection/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('still reverts, and still releases the fee, when the node REFUSES it', async () => {
+    const abandons: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown, init?: { body?: string }) => {
+        const url = String(input);
+        if (url.includes('/wallet-status')) {
+          return new Response(JSON.stringify(READY_WALLET_STATUS), { status: 200 });
+        }
+        if (url.includes('/balance-only/abandon')) {
+          abandons.push(init?.body ?? '');
+          return new Response('{}', { status: 200 });
+        }
+        return new Response(
+          JSON.stringify({ txHash: 'ab'.repeat(32), txBytes: '00ff', expiresAt: '' }),
+          { status: 200 },
+        );
+      }),
+    );
+    const cause = new Error('RpcError: 1010: Invalid Transaction: Custom error: 231');
+    const { wallet, reverted } = walletWithSubmission({
+      submitTransaction: async () => {
+        throw cause;
+      },
+    });
+    const provider = walletProviderFor(wallet);
+    // Balances (and fails on the sponsor's bytes) so a booking is remembered.
+    await provider.balanceTx({}).catch(() => undefined);
+    await expect(provider.submitTx(TX)).rejects.toBe(cause);
+    // The last revert is the submission's own; the first is the balancing
+    // recipe the sponsor's unreadable bytes abandoned.
+    expect(reverted.at(-1)).toBe(TX);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(abandons).toEqual([JSON.stringify({ txHash: 'ab'.repeat(32) })]);
+    vi.unstubAllGlobals();
+  });
+
+  it('leaves the SDK’s own wait alone where there is no identifier to answer with', async () => {
+    const { wallet } = walletWithSubmission({
+      submitTransaction: async () => ({ _tag: 'InBlock' }),
+    });
+    /* No identifier means nothing to carry on WITH, so bounding the wait would
+       only replace a long wait with a wrong answer. */
+    await expect(walletProviderFor(wallet).submitTx({})).resolves.toBe(
+      'the facade waited for finality',
+    );
+  });
+
+  it('falls back to the facade’s own method where no submission service exists', async () => {
+    const wallet = {
+      facade: {
+        submitTransaction: async () => 'the facade waited for finality',
+        revert: async () => ({}),
+      },
+      keys: {
+        shieldedSecretKeys: { coinPublicKey: '00', encryptionPublicKey: '00' },
+        unshieldedKeystore: { signDataAsync: async () => ({}) },
+      },
+    } as unknown as LocalMidnightWallet;
+    await expect(walletProviderFor(wallet).submitTx(TX)).resolves.toBe(
+      'the facade waited for finality',
+    );
+  });
+
+  it('says so and carries on when even the revert fails', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
+    const cause = new Error('the node would not take it');
+    const wallet = {
+      facade: {
+        submissionService: {
+          submitTransaction: async () => {
+            throw cause;
+          },
+        },
+        pendingTransactionsService: { addPendingTransaction: async () => undefined },
+        submitTransaction: async () => 'unused',
+        revert: async () => {
+          throw new Error('the pending set had already forgotten it');
+        },
+      },
+      keys: {
+        shieldedSecretKeys: { coinPublicKey: '00', encryptionPublicKey: '00' },
+        unshieldedKeystore: { signDataAsync: async () => ({}) },
+      },
+    } as unknown as LocalMidnightWallet;
+    // The ORIGINAL error travels; the revert's own failure is only a log line.
+    await expect(walletProviderFor(wallet).submitTx(TX)).rejects.toBe(cause);
+    expect(debug).toHaveBeenCalled();
   });
 });
 

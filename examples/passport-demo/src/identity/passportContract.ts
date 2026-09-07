@@ -61,6 +61,7 @@
 
 
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
+import { pollUntilTrue, waitBounded, SETTLE_WATCH_MS } from '../lib/chainWait.js';
 import { beginFeeWait, endFeeWait } from '../lib/claimSteps.js';
 import type { SponsorReadiness } from '../lib/sponsor.js';
 import { sponsorFeeRefusal, sponsorReadiness } from '../lib/sponsor.js';
@@ -425,6 +426,46 @@ export async function confirmPassportContractOnLedger(
   }
 }
 
+/**
+ * How long a deploy this browser SUBMITTED and never heard back about is given
+ * to appear, when the app is opened again.
+ *
+ * Two minutes, from the same measurement {@link SETTLE_WATCH_MS} comes from: an
+ * account that is going to appear appears in about fourteen seconds, so a
+ * window this wide is generous about a slow indexer while still ending. What
+ * happens at the end of it is not a verdict on the transaction — it is the
+ * point at which the person is offered the retry rather than left watching.
+ */
+export const RESUME_CONFIRM_WINDOW_MS = 120_000;
+
+/** How often the resumed read asks again. */
+export const RESUME_CONFIRM_INTERVAL_MS = 5_000;
+
+/**
+ * Waits for a contract address to appear on the indexer, or gives up saying so.
+ *
+ * {@link confirmPassportContractOnLedger} asks ONCE, and deliberately: it backs
+ * a sign-in, where stalling on a slow indexer would cost somebody their
+ * Passport. This asks repeatedly, and equally deliberately: it backs a deploy
+ * this browser submitted and was interrupted before it could see land, where
+ * the whole question is whether the account is already there — and answering
+ * "no" too quickly is how a second contract gets deployed on a second sponsored
+ * fee for an account that already exists.
+ *
+ * `false` means the window closed without an answer. It never means the account
+ * is not there.
+ */
+export async function awaitPassportContractOnLedger(
+  indexerHttpUrl: string,
+  address: string,
+  options: { windowMs?: number; intervalMs?: number } = {},
+): Promise<boolean> {
+  return pollUntilTrue(() => confirmPassportContractOnLedger(indexerHttpUrl, address), {
+    windowMs: options.windowMs ?? RESUME_CONFIRM_WINDOW_MS,
+    intervalMs: options.intervalMs ?? RESUME_CONFIRM_INTERVAL_MS,
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Funds                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -760,9 +801,37 @@ async function settlePassportContract(
   },
 ): Promise<PassportContractDeployment> {
   const { SucceedEntirely } = await import('@midnight-ntwrk/midnight-js-types');
-  let finalized: { status: string };
+  /**
+   * The chain's verdict on the transaction, or null where the watch never
+   * spoke.
+   *
+   * THE WATCH IS BOUNDED (2026/09/07). `watchForTxData` is a subscription, and
+   * a subscription that loses its socket is silent rather than broken — see
+   * `../lib/chainWait.ts` for the polkadot-js behaviour this shares. Waiting on
+   * it without a bound is what left a reviewer on "Setting up your account…"
+   * indefinitely, so it now gets {@link SETTLE_WATCH_MS} — nearly ten times the
+   * worst indexer lag ever measured here — and then the read-back below answers
+   * the same question by ASKING instead of listening.
+   *
+   * A watch that says nothing is therefore not a failure and must not be
+   * reported as one: `landed` still resolves, the grant is still requested, and
+   * `ledgerConfirmed` carries whether the read-back found the contract. Only a
+   * watch that ANSWERS with a failing status is a failure, and that path is
+   * exactly as it was.
+   */
+  let finalized: { status: string } | null = null;
   try {
-    finalized = await providers.publicDataProvider.watchForTxData(submitted.identifier);
+    const watched = await waitBounded(
+      providers.publicDataProvider.watchForTxData(submitted.identifier),
+      { deadlineMs: SETTLE_WATCH_MS },
+    );
+    if (watched.via === 'answer') {
+      finalized = watched.value;
+    } else {
+      console.info(
+        `[contract] the deployment watch for ${submitted.identifier} gave up — ${watched.reason}. Reading the contract's own state back instead.`,
+      );
+    }
   } catch (cause) {
     throw new PassportContractError(
       'deploy-failed',
@@ -770,7 +839,7 @@ async function settlePassportContract(
       cause instanceof Error ? cause.message : String(cause),
     );
   }
-  if (finalized.status !== SucceedEntirely) {
+  if (finalized && finalized.status !== SucceedEntirely) {
     throw new PassportContractError(
       'deploy-failed',
       'Your Passport account could not be set up.',
