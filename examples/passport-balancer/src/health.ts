@@ -50,23 +50,49 @@
  * `wedged` here is the narrower thing this process CAN see: a facade that has
  * stopped answering while the HTTP server still does.
  *
- * THE SIXTH FAILURE, AND WHY IT NEEDED SOMEBODY ELSE TO SEE IT
- * ------------------------------------------------------------
+ * THE SIXTH FAILURE, AND THE TWO WRONG SIGNALS IT WAS CHASED WITH
+ * ---------------------------------------------------------------
  * Every fact above is read from the wallet, and there is one question a wallet
- * cannot answer about itself: has the chain gone quiet, or have I stopped being
- * told about it? Both read as sync indices that do not move. That is why
- * `stallMs` waits half an hour — it has to outlast the longest quiet spell a
- * healthy stagenet can have — and it is why on 2026/09/05, with the node
- * websocket dead since about 14:48, the first word of trouble was at 15:28.
+ * cannot answer about itself: is the connection I submit on still there? None
+ * of it moves when that connection dies — the wallet reads its state from the
+ * INDEXER — which is how five hours of every-submission-fails read as `healthy`
+ * on 2026/09/05.
  *
- * `./chainHead.ts` asks the public node for its head over its own HTTPS
- * request, sharing no socket and no subscription with anything under test.
- * Blocks produced while this wallet learned nothing is a figure neither
- * explanation survives: forty of them in five minutes and the chain is
- * demonstrably not quiet. So there are now two staleness rules — a five-minute
- * one when the second opinion is available, and the old thirty-minute one when
- * it is not. Losing the probe loses the speed and nothing else; no verdict is
- * ever reached BECAUSE the public node would not answer.
+ * THE FIRST WRONG SIGNAL was the wallet's own sync indices, waited on for half
+ * an hour. It was slow — the socket died at about 14:48 and the first word came
+ * at 15:28 — but that patience was at least deliberate: a wallet watching only
+ * itself cannot tell a quiet chain from a lost one.
+ *
+ * THE SECOND WRONG SIGNAL, added on 2026/09/06, kept the indices and gave them
+ * a second opinion: the public node's head over HTTPS, with forty blocks
+ * produced while the indices stood still called a cut-off wallet in five
+ * minutes instead of thirty. It fired on a healthy idle sponsor every single
+ * tick — 614 `degraded` lines in a day — because a wallet's indices are not a
+ * liveness signal at all: `highestTransactionId` and the shielded and DUST
+ * merkle indices only move on ledger activity THAT CONCERNS THIS WALLET, so a
+ * quiet stagenet leaves them still for hours while everything is well.
+ *
+ * WHAT IS ACTUALLY WATCHED NOW is the connection itself. `./submission.ts`
+ * holds one `chain_subscribeNewHeads` on the very `ApiPromise` this service
+ * submits on, re-established on every rebuild, and records the height and
+ * instant of each header. A header arriving over that connection is proof the
+ * connection is alive; a header not arriving while the chain demonstrably
+ * climbs is proof that it is not. Unlike the indices, a header is produced
+ * whether or not anything in the block concerns this wallet, so silence has no
+ * quiet-chain explanation to protect — which is what buys five minutes.
+ *
+ * AND THE REFERENCE IS TWO OBSERVERS, NOT ONE, because of the second finding of
+ * 2026/09/06: when the node's addresses were black-holed the HTTPS head probe
+ * went blind at the same instant the socket did, and `/status` said connected
+ * and synced for seven and a half minutes while nothing could get through. A
+ * reference that shares a host with the thing it checks is not a reference. So
+ * `referenceHead` is `max(node HTTPS head, indexer head)` — a different host
+ * answering a different protocol — and either alone is enough. Both
+ * unavailable is no observation, which falls back to the old thirty-minute
+ * indices rule and concludes nothing.
+ *
+ * The indices rule is kept exactly as it was, for exactly the reason it is
+ * worth keeping: it is looking at something else.
  *
  * WHAT THE REMEDIES ACTUALLY CALL, AND WHAT THE SDK WILL NOT LET US DO
  * -------------------------------------------------------------------
@@ -127,7 +153,7 @@
  *   - Never twice without an intervening healthy tick, likewise persisted.
  */
 
-import type { NodeSocketState } from './submission.js';
+import type { NodeSocketState, SocketHead } from './submission.js';
 import type { ProvingState } from './availability.js';
 import type { ChainHeadProbe, ChainHeadReading } from './chainHead.js';
 
@@ -280,47 +306,102 @@ export interface HealthFacts {
   /** Unhealthy ticks BEFORE this one, so the first bad tick sees zero. */
   consecutiveUnhealthy: number;
   /**
-   * The PUBLIC node's head, asked over its own HTTPS connection — the second
-   * opinion, and `undefined` when there is not one.
+   * The chain as read THROUGH THE SUBMISSION SOCKET — one
+   * `chain_subscribeNewHeads` on the very `ApiPromise` this service submits
+   * on, re-established on every rebuild. See `SocketHead` in `./submission.ts`.
+   *
+   * This is the signal the wallet's sync indices were standing in for and
+   * should never have been. A head arriving over this subscription is proof
+   * that THIS connection is alive; a head not arriving while an independent
+   * reference climbs is proof that it is not. Both are block heights of the
+   * same chain, so the difference between them is a number.
+   */
+  socketHead: SocketHead;
+  /**
+   * The chain as somebody who is NOT this socket sees it — and `undefined` when
+   * nobody does.
    *
    * See {@link ChainHeadFacts}. Absent means exactly one thing: no independent
    * observation is available this tick, so the classifier falls back to the old
-   * thirty-minute patience. It never means the chain has stopped.
+   * thirty-minute patience on the wallet's indices. It never means the chain
+   * has stopped.
    */
   chainHead?: ChainHeadFacts;
 }
 
 /**
- * What an independent look at the chain says, reduced to the four numbers the
- * verdict is allowed to reason about.
+ * THE REFERENCE HEAD: how far the chain has got, according to somebody who is
+ * not the connection under test.
  *
- * The point of every field here is to keep the classifier from believing a
- * reading it should not: a head that was read four minutes ago says nothing
- * about now, and a head carried forward across failed probes says nothing at
- * all. So the height travels with its age and with the failure count that
- * earned that age, and the branch that uses it insists on both.
+ * WHY IT IS TWO OBSERVERS AND NOT ONE. Until 2026/09/06 this was the public
+ * node's head over one HTTPS `chain_getHeader`, which is independent of the
+ * SOCKET but not of the NODE. On 2026/09/06 the node's addresses were
+ * black-holed, and the HTTPS probe went blind at the same instant the socket
+ * did — so the probe reported nothing, the fast rule turned itself off for want
+ * of a second opinion, and `/status` said connected and synced for seven and a
+ * half minutes while not one transaction could get through. A reference that
+ * shares a host with the thing it is meant to check is not a reference.
+ *
+ * So the reference is `max(nodeHeight, indexerHeight)`, and the indexer is a
+ * different host answering a different protocol. Either one alone is enough,
+ * `max` because whichever is further along is the better lower bound on the
+ * true head, and both being unavailable is `undefined` — no observation, which
+ * falls back to the wallet's own thirty-minute rule rather than concluding
+ * anything.
+ *
+ * Every duration here is bookkeeping the LOOP owns, because "for five minutes"
+ * cannot be read off a single tick. `assessHealth` stays pure: it is handed how
+ * long a condition has held and decides, and a test can place a five-minute
+ * stall exactly where it likes.
  */
 export interface ChainHeadFacts {
-  /** The head height as last successfully read. */
-  height: number;
-  /** When that read happened, in epoch milliseconds. */
-  at: number;
-  /** How stale the reading is: `now - at`. */
+  /**
+   * The node's own HTTPS head, or `null` when it will not answer or its last
+   * answer has gone stale. Published; never on its own the reference.
+   */
+  nodeHeight: number | null;
+  /** The indexer's latest block height, or `null` when it would not answer. */
+  indexerHeight: number | null;
+  /** `max` of the two above. This is what everything below is measured against. */
+  referenceHead: number;
+  /** How old the freshest of the two readings is. */
   ageMs: number;
-  /** Head probes that have failed since the last one that did not. */
+  /** Node head probes that have failed since the last one that did not. */
   probeFailures: number;
   /**
-   * How far the head has climbed since the wallet's own indices last moved —
-   * the head at `now` minus the head recorded at `lastStateChangeAt`.
+   * `referenceHead` minus the socket's own head, or `null` when the socket has
+   * delivered no header to compare against.
    *
-   * THIS IS THE WHOLE MEASUREMENT. `lastStateChangeAt` alone cannot separate a
-   * quiet chain from a cut-off wallet, because both look like indices standing
-   * still. This number is the chain's own answer to that question, taken from a
-   * connection the wallet does not share: blocks that were produced while this
-   * wallet learned nothing. Zero on the tick the indices last moved, and on
-   * every tick before the first successful head read.
+   * Never negative: a socket ahead of the reference is a socket doing its job
+   * with an indexer a block behind it, which is the normal reading.
    */
-  advancedSinceStateChange: number;
+  socketLagBlocks: number | null;
+  /**
+   * How long {@link socketLagBlocks} has been CONTINUOUSLY at or over
+   * `socketLagBlocks` in the policy. Zero the moment it is not.
+   */
+  socketLaggingForMs: number;
+  /**
+   * How long since the socket last delivered a header — or, on a connection
+   * that has delivered none, since the watch on it began.
+   *
+   * The second half of the rule, and it catches what the lag cannot: a
+   * subscription that has delivered nothing at all has no height to be behind
+   * with.
+   */
+  socketSilentForMs: number;
+  /** Blocks the reference head has climbed during that silence. */
+  advancedWhileSocketSilent: number;
+  /**
+   * `referenceHead` minus the indexer's height, or `null` when the indexer did
+   * not answer. Zero when the indexer IS the reference.
+   */
+  indexerBehindHeadBlocks: number | null;
+  /**
+   * How long {@link indexerBehindHeadBlocks} has been continuously at or over
+   * `indexerBehindBlocks` in the policy.
+   */
+  indexerBehindForMs: number;
 }
 
 export interface HealthAssessment {
@@ -365,49 +446,71 @@ export interface HealthPolicy {
   settleWindowMs: number;
   /**
    * How long the wallet's sync indices may stand still before it is reported as
-   * stale WITH NOTHING ELSE TO GO ON. Soft, and never on its own a reason to
-   * restart.
+   * stale. Soft, and never on its own a reason to restart.
    *
-   * Half an hour, and it is the right figure for a signal with one input: a
-   * wallet watching only itself cannot tell a quiet chain from a lost one, so
-   * the threshold has to be longer than the longest quiet spell a healthy
-   * stagenet can have. That is what made 2026/09/05 a forty-minute diagnosis.
-   * {@link headStallMs} is the same question asked with a second opinion, and
-   * this stays as the fallback for when there is not one.
+   * HALF AN HOUR, AND IT STAYS HALF AN HOUR. On 2026/09/06 this figure was
+   * shortened to five minutes wherever the public head was seen to be climbing,
+   * on the reasoning that blocks produced while the wallet learned nothing
+   * cannot be a quiet chain. That reasoning was wrong about what the indices
+   * measure: a wallet's unshielded `highestTransactionId` and its shielded and
+   * DUST merkle indices only move on ledger activity THAT CONCERNS IT, so on a
+   * quiet stagenet a perfectly well sponsor stands still for hours. The rule
+   * fired on every tick of an idle, healthy sponsor — 614 `degraded` lines in a
+   * day, each with a remedy, none of them a fault.
+   *
+   * The signal that rule wanted is now taken directly, from the socket's own
+   * head subscription rather than from the wallet's indices — see
+   * {@link socketStallMs}. This is what remains: the old, patient rule on the
+   * old, indirect signal, which is worth keeping precisely because it is
+   * looking at something else.
    */
   stallMs: number;
   /**
-   * How long the wallet's indices may stand still when the PUBLIC head is known
-   * to be climbing — five minutes, not thirty.
+   * How long the SUBMISSION SOCKET may lag the reference head, or stay silent,
+   * before this service concludes the connection is gone — five minutes.
    *
-   * The shorter figure is bought entirely by the independent observation. With
-   * {@link headBlocksForStall} blocks produced in the window and nothing
-   * learned from any of them, "the chain is quiet" is not on the list of
-   * explanations any more, so the patience that existed to protect that
-   * explanation is not needed either.
+   * Five rather than thirty because this signal has no quiet-chain
+   * explanation to protect. The wallet's indices stand still on an idle chain;
+   * a head subscription does not, because a head is produced whether or not
+   * anything on it concerns this wallet. Silence here is silence about blocks
+   * that demonstrably exist.
    */
-  headStallMs: number;
+  socketStallMs: number;
   /**
-   * Blocks the public head must have climbed inside {@link headStallMs} before
-   * a still wallet is called cut off.
+   * Blocks the reference head must be ahead of the socket, or must climb during
+   * the socket's silence, before that counts.
    *
    * Stagenet produces a block about every six seconds, so five minutes is
-   * roughly fifty. Forty is deliberately under that: a probe that missed a tick
-   * or two, or a node that fell briefly behind its own schedule, must not turn
-   * the fast rule off — it should only ever be the case that the head is
-   * CLEARLY moving, and forty blocks in five minutes is clearly moving.
+   * roughly fifty. Forty is deliberately under that: a probe that missed a
+   * tick, or an indexer a few blocks behind, must not be able to trip this on
+   * its own — it should only ever be the case that the reference is CLEARLY
+   * moving and the socket clearly is not.
    */
-  headBlocksForStall: number;
+  socketLagBlocks: number;
   /**
-   * How stale a head reading may be and still count as a second opinion.
+   * How stale the reference reading may be and still be a reference.
    *
-   * The reading is sticky across failed probes — see `ChainHeadReading.height`
-   * in `./chainHead.ts` — so without this an old height and a running clock
-   * would eventually read as a head that had stopped climbing, which is a
-   * conclusion this probe is not entitled to. Past this age the fast rule turns
-   * itself off and {@link stallMs} is what is left.
+   * The node's HTTPS reading is sticky across failed probes — see
+   * `ChainHeadReading.height` in `./chainHead.ts` — so without this an old
+   * height and a running clock would eventually read as a chain that had
+   * stopped, which is a conclusion no probe here is entitled to. Past this age
+   * there is no reference, and the socket rule turns itself off.
    */
   chainHeadMaxAgeMs: number;
+  /**
+   * How far the indexer may fall behind the reference head before `/status`
+   * says so — a hundred blocks, about ten minutes of stagenet.
+   *
+   * ALERT-ONLY AND IT HAS NO REMEDY, which is the point of it. An indexer that
+   * has fallen behind is somebody else's server having a bad afternoon: this
+   * service cannot repair it, restarting into it repairs nothing, and failing
+   * over is a decision for the endpoint list rather than for the health ladder.
+   * What it CAN do is stop an operator diagnosing a sponsor that reads stale
+   * because the indexer it reads through is stale.
+   */
+  indexerBehindBlocks: number;
+  /** How long the indexer must be that far behind before it is reported. */
+  indexerBehindMs: number;
   /**
    * Consecutive head-probe failures before `/status` publishes the probe as
    * `failing`.
@@ -456,9 +559,11 @@ export const DEFAULT_HEALTH_POLICY: HealthPolicy = {
   startupGraceMs: 900_000,
   settleWindowMs: 300_000,
   stallMs: 1_800_000,
-  headStallMs: 300_000,
-  headBlocksForStall: 40,
+  socketStallMs: 300_000,
+  socketLagBlocks: 40,
   chainHeadMaxAgeMs: 120_000,
+  indexerBehindBlocks: 100,
+  indexerBehindMs: 300_000,
   chainHeadProbeFailuresForFailing: 10,
   wedgeTicks: 2,
   orphanMs: 120_000,
@@ -708,79 +813,91 @@ export function assessHealth(
       restartEligible: true,
     };
   }
-  /* 7b. THE SAME STALENESS, ASKED WITH A SECOND OPINION — and answered in five
-         minutes instead of thirty.
+  /* 7b. THE SUBMISSION SOCKET, JUDGED AGAINST A CHAIN IT DOES NOT CARRY.
 
-         The branch below is the honest limit of what a wallet can conclude
-         about itself. It waits half an hour because a wallet watching its own
-         sync indices cannot tell "nothing relevant has happened" from "I have
-         stopped being told what is happening": both are indices that do not
-         move, and half an hour is how long a quiet stagenet was judged able to
-         go without producing anything this wallet cares about.
+         WHAT THIS BRANCH REPLACES, AND WHY. Until 2026/09/06 it compared the
+         public node's head against the WALLET'S SYNC INDICES, and called five
+         minutes of head-climbing-while-indices-still a cut-off wallet. On a
+         live drill that fired on a healthy idle sponsor every single tick —
+         614 `degraded` lines in a day — because a wallet's indices are not a
+         liveness signal at all: `highestTransactionId` and the shielded and
+         DUST merkle indices only move on ledger activity THAT CONCERNS THIS
+         WALLET, so a quiet stagenet leaves them standing still for hours while
+         every stream is connected and every figure is correct. Wallet stillness
+         never was evidence of a dead socket; on 2026/09/05 the two merely
+         coincided.
 
-         `./chainHead.ts` removes the ambiguity by asking somebody else. The
-         public node's head climbs about ten blocks a minute whatever this
-         service is doing, over an HTTPS request that shares no socket, no
-         provider, and no subscription with anything under test. Forty blocks
-         produced while this wallet learned nothing at all is not a quiet chain;
-         it is a wallet that is no longer being told, and there is no longer any
-         reason to sit on that for another twenty-five minutes.
+         The signal that rule wanted, taken directly: one
+         `chain_subscribeNewHeads` on the very `ApiPromise` this service submits
+         on, re-established on every rebuild, recording the height and the
+         instant of each header. A head arriving over THAT connection is proof
+         the connection is alive, and — unlike the wallet's indices — a header
+         is produced whether or not anything in the block concerns this wallet,
+         so silence here has no quiet-chain explanation to protect. That is what
+         buys five minutes instead of thirty.
 
-         WHAT IS AND IS NOT REQUIRED HERE, and why:
+         AND THE REFERENCE IS NOT THE NODE. The second live finding of
+         2026/09/06: when the node's addresses were black-holed the HTTPS head
+         probe went blind at the same instant the socket did, so the comparison
+         had nothing left to compare against and `/status` said connected and
+         synced for seven and a half minutes while nothing could get through. A
+         reference that shares a host with the thing it checks is not a
+         reference. So `referenceHead` is `max(node, indexer)` — see
+         {@link ChainHeadFacts} — and the indexer is a different host answering
+         a different protocol. The black-hole case is the indexer climbing
+         alone, which is exactly what that catches.
 
-           - A head reading with `probeFailures === 0` and an age inside
-             `chainHeadMaxAgeMs`. A stale or carried-forward height is not a
-             second opinion, and one that is missing is not evidence — a probe
-             that cannot reach the public node says nothing whatever about this
-             wallet, so its failure falls THROUGH to the thirty-minute rule
-             rather than concluding anything of its own.
-           - The wallet not busy syncing. Already guaranteed rather than
-             re-checked: `reserved`, `syncAhead`, and `busy` all return above,
-             and a wallet that is merely behind but still MOVING has a
-             `lastStateChangeAt` that keeps resetting, so it can never reach
-             this window. `isSynced: false` with progress is fine, and stays
-             fine.
+         TWO WAYS IN, and the second is not redundant:
 
-         The remedy is `refresh`, which since 2026/09/05 also rebuilds the
-         submission socket when that socket is not answering — so the cheap rung
-         is now the one that repairs the connection this verdict most often
-         means. `restartEligible` stays false for the same reason it is false
-         below: the fault this catches is a connection, and a connection is
-         repaired by remaking it, not by a chain walk.
+           - THE LAG. The reference is `socketLagBlocks` ahead of the socket's
+             own head and has been for `socketStallMs`. This is the socket
+             frozen at a height.
+           - THE SILENCE. No header for `socketStallMs` while the reference
+             climbed `socketLagBlocks`. A subscription that has delivered
+             NOTHING — a fresh connection whose stream never opened — has no
+             height to be behind with, so the lag limb cannot see it.
 
-         THE RESIDUAL FALSE POSITIVE, NAMED. The shielded and DUST applied
-         indices follow chain-wide ledger activity rather than this wallet's own
-         transactions, so a stagenet with blocks but genuinely no shielded or
-         DUST traffic for five minutes could in principle reach this branch on a
-         perfectly well wallet. That is tolerated deliberately: what it costs is
-         one log line and a re-read of a wallet that is fine, and — because the
-         verdict is not `healthy` — a pause on the resolver-pool filler until
-         the indices move again. What it buys is a five-minute diagnosis of the
-         fault that cost four and a half hours of sponsorships. Nothing on this
-         branch restarts anything. */
+         WHAT IS NOT REQUIRED, and why not:
+
+           - The wallet's sync indices. Deliberately not consulted anywhere in
+             this branch. That is the whole of the correction.
+           - A socket head, where the silence limb applies. But a connection
+             with no subscription established and no header ever
+             (`subscribed: false`, `height: null`) is UNKNOWN rather than
+             stalled — a node client that does not offer the subscription must
+             not read as a dead one — and is skipped.
+           - The wallet not being busy. Already guaranteed rather than
+             re-checked: `reserved`, `syncAhead`, and `busy` all return above.
+
+         The remedy is `reconnect`, by way of `socketFault`, because the fault
+         this catches IS the connection: a `refresh` re-reads the wallet from
+         the indexer, which was never the thing that died. */
   const head = facts.chainHead;
-  const stillFor = facts.now - facts.lastStateChangeAt;
-  if (
-    head !== undefined &&
-    head.probeFailures === 0 &&
-    head.ageMs <= policy.chainHeadMaxAgeMs &&
-    stillFor >= policy.headStallMs &&
-    head.advancedSinceStateChange >= policy.headBlocksForStall
-  ) {
-    /* Read for the same reason it is read below: a stalled wallet is exactly
-       the state in which the submission socket deserves to be suspected, and
-       the count alone misses a socket nothing has been submitted on. */
-    const socketSuspect = facts.nodeSocket !== 'connected' || facts.consecutiveSocketFailures > 0;
-    return {
-      verdict: 'degraded',
-      reason: socketSuspect
-        ? `the public node’s head has climbed ${head.advancedSinceStateChange} block(s) to ${head.height} while this wallet’s sync indices have not moved in ${minutes(stillFor)}, and the submission socket reads ${facts.nodeSocket} with ${facts.consecutiveSocketFailures} failure(s) against it — the chain is not quiet, this wallet is cut off`
-        : `the public node’s head has climbed ${head.advancedSinceStateChange} block(s) to ${head.height} while this wallet’s sync indices have not moved in ${minutes(stillFor)} — the chain is not quiet, this wallet is cut off`,
-      act: true,
-      restartEligible:
-        socketSuspect && facts.consecutiveRebuildFailures >= policy.rebuildFailuresForRestart,
-      ...(socketSuspect ? { socketFault: true as const } : {}),
-    };
+  const socketKnown = facts.socketHead.subscribed || facts.socketHead.height !== null;
+  if (head !== undefined && head.ageMs <= policy.chainHeadMaxAgeMs && socketKnown) {
+    const lagged =
+      head.socketLagBlocks !== null &&
+      head.socketLagBlocks >= policy.socketLagBlocks &&
+      head.socketLaggingForMs >= policy.socketStallMs;
+    const silent =
+      head.socketSilentForMs >= policy.socketStallMs &&
+      head.advancedWhileSocketSilent >= policy.socketLagBlocks;
+    if (lagged || silent) {
+      return {
+        verdict: 'degraded',
+        reason: lagged
+          ? `the submission socket is ${head.socketLagBlocks} block(s) behind a chain that has reached ${head.referenceHead}, and has been for ${minutes(head.socketLaggingForMs)} — the connection this service submits on is not following the chain`
+          : `the submission socket has delivered no block header for ${minutes(head.socketSilentForMs)} while the chain climbed ${head.advancedWhileSocketSilent} block(s) to ${head.referenceHead} — the connection this service submits on has gone quiet`,
+        act: true,
+        /* The socket rather than the wallet: `chooseRemedy` reads this and takes
+           the `reconnect` rung on the first tick instead of climbing the soft
+           ladder. A rebuild is one websocket, and it is what repairs this. */
+        socketFault: true as const,
+        /* A restart only once rebuilding itself has failed M times, which is the
+           bound every other socket fault here carries. */
+        restartEligible: facts.consecutiveRebuildFailures >= policy.rebuildFailuresForRestart,
+      };
+    }
   }
 
   if (facts.now - facts.lastStateChangeAt >= policy.stallMs) {
@@ -807,6 +924,45 @@ export function assessHealth(
       restartEligible:
         socketSuspect && facts.consecutiveRebuildFailures >= policy.rebuildFailuresForRestart,
       ...(socketSuspect ? { socketFault: true as const } : {}),
+    };
+  }
+
+  /* 9. THE INDEXER HAS FALLEN BEHIND — reported, and nothing else.
+
+        LAST, AND `act: false`, and both are deliberate. This is the only
+        verdict in this module that names a fault in somebody ELSE'S service:
+        an indexer a hundred blocks behind is a server having a bad afternoon,
+        and there is no rung on the ladder that reaches it. A refresh re-reads
+        the same stale answers, a reconnect rebuilds a socket that is fine, a
+        restart resumes from a snapshot and asks the same indexer again.
+        Choosing a different indexer is a decision for the endpoint list in
+        `./endpoints.ts` and its own construction-time probe, not for a health
+        remedy — see `publicDataProviderFor`.
+
+        It is last so that it can never mask a fault this service CAN repair: a
+        dead socket, a stale wallet, a wedged DUST balance, and every other
+        branch above answer first, and this is only reached on a service that is
+        otherwise well. `act: false` gives it `remedy: 'none'` through
+        `chooseRemedy` and keeps it out of the unhealthy streak, so it cannot
+        escalate anything of its own or hurry a later fault towards a restart.
+
+        What it buys is the diagnosis. Nearly everything this wallet knows about
+        the chain it learns from the indexer, so an indexer ten minutes behind
+        is a sponsor whose every figure is ten minutes old — and without this
+        line an operator would be reading those figures looking for a fault in
+        the sponsor. */
+  if (
+    head !== undefined &&
+    head.indexerBehindHeadBlocks !== null &&
+    head.indexerBehindHeadBlocks >= policy.indexerBehindBlocks &&
+    head.indexerBehindForMs >= policy.indexerBehindMs
+  ) {
+    return {
+      verdict: 'degraded',
+      reason: `the indexer is ${head.indexerBehindHeadBlocks} block(s) behind a chain that has reached ${head.referenceHead}, and has been for ${minutes(head.indexerBehindForMs)} — everything this wallet reads is that far out of date, and there is no remedy here for somebody else's server`,
+      /* Reported and never acted on. See the note above the branch. */
+      act: false,
+      restartEligible: false,
     };
   }
 
@@ -1204,15 +1360,31 @@ export interface HealthLoopOptions {
   intervalMs: number;
   probe: HealthProbe;
   /**
-   * The independent look at the chain — `./chainHead.ts`. Optional: without it
-   * the loop behaves exactly as it did, on `stallMs` alone.
+   * The node's own head over HTTPS — `./chainHead.ts`. Optional: without it and
+   * without {@link indexerHeight} there is no reference, and the loop behaves
+   * exactly as it did on `stallMs` alone.
    *
-   * Read on the same tick as the wallet, because the two figures are only worth
-   * anything together: what the branch in `assessHealth` compares is blocks
-   * produced against indices learned, and reading them minutes apart would put
-   * a gap into the comparison that neither the chain nor the wallet put there.
+   * Read on the same tick as the wallet, because the figures are only worth
+   * anything together: what `assessHealth` compares is the reference head
+   * against the socket's own, and reading them minutes apart would put a gap
+   * into the comparison that neither of them put there.
    */
   chainHead?: ChainHeadProbe;
+  /**
+   * The indexer's latest block height — the OTHER half of the reference, and
+   * the half that survives the node being unreachable.
+   *
+   * One bounded GraphQL query per tick against a different host answering a
+   * different protocol. It exists because of 2026/09/06: when the node's
+   * addresses were black-holed the HTTPS probe went blind at the same instant
+   * the socket did, and a reference that shares a host with the thing it checks
+   * is not a reference.
+   *
+   * Must not reject — `null` is how it says the indexer would not answer — and
+   * a rejection is caught here anyway, because losing the second observer must
+   * never be able to fail a tick.
+   */
+  indexerHeight?: () => Promise<number | null>;
   remedies: HealthRemedies;
   store: HealthRecordStore;
   policy?: HealthPolicy;
@@ -1247,11 +1419,21 @@ export interface HealthSnapshot {
   lastRestartReason: string | null;
   awaitingHealthyTick: boolean;
   /**
-   * The second opinion, as `/status` publishes it. `null` when no head probe is
-   * configured, which is the only case in which this service has nothing to say
-   * about the chain it is not on.
+   * The reference head and everything measured against it, as `/status`
+   * publishes it. `null` when neither observer is configured, which is the only
+   * case in which this service has nothing to say about the chain under it.
    */
   chainHead: ChainHeadSnapshot | null;
+  /**
+   * The chain as the SUBMISSION SOCKET sees it, and how far behind the
+   * reference that leaves it. `null` before the first tick.
+   *
+   * The pair of figures the stall rule acts on, published so that an operator
+   * can watch the rule not firing as well as firing — which, after 614 false
+   * `degraded` lines in a day from the rule this replaced, is the reading that
+   * matters most.
+   */
+  socketHead: SocketHeadSnapshot | null;
   /**
    * `ok` while the public node is answering, `failing` once it has refused
    * `chainHeadProbeFailuresForFailing` times in a row, `off` when there is no
@@ -1267,7 +1449,7 @@ export interface HealthSnapshot {
 export interface ChainHeadSnapshot {
   /** The HTTPS endpoint being asked. */
   url: string;
-  /** The last height read, or `null` if none ever was. */
+  /** The last height the NODE gave, or `null` if it never has. */
   height: number | null;
   /** When it was read, ISO-8601. */
   at: string | null;
@@ -1280,12 +1462,40 @@ export interface ChainHeadSnapshot {
   failures: number;
   /** Why the last one failed. `null` after a success. */
   lastError: string | null;
+  /** The INDEXER's latest block height, or `null` when it would not answer. */
+  indexerHead: number | null;
   /**
-   * Blocks the head climbed while the wallet's indices stood still, as of the
-   * last tick. Zero on a wallet that is keeping up, which is the reading an
-   * operator should expect to see.
+   * `max` of the two heights above — what the socket is judged against, and
+   * `null` only when neither observer answered.
    */
-  advancedSinceStateChange: number;
+  referenceHead: number | null;
+  /**
+   * How far the indexer is behind the reference. Zero when the indexer IS the
+   * reference, `null` when it did not answer. Past
+   * `indexerBehindBlocks` for `indexerBehindMs` this is reported as `degraded`
+   * with no remedy — see `assessHealth`.
+   */
+  indexerBehindHeadBlocks: number | null;
+}
+
+export interface SocketHeadSnapshot {
+  /** The highest header the submission socket has delivered, or `null`. */
+  height: number | null;
+  /** When that header arrived, ISO-8601. */
+  at: string | null;
+  /** Whether a head subscription is established on the current connection. */
+  subscribed: boolean;
+  /** Headers delivered since that connection was built. */
+  headers: number;
+  /**
+   * `referenceHead - height`, and the figure the lag limb of the stall rule
+   * acts on. Zero on a socket that is keeping up, which is what an operator
+   * should expect to see; `null` when there is nothing to compare.
+   */
+  socketHeadLagBlocks: number | null;
+  /** How long since the last header, and how far the chain got meanwhile. */
+  silentForMs: number;
+  advancedWhileSilentBlocks: number;
 }
 
 export interface HealthMonitor {
@@ -1343,21 +1553,36 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
   let lastResyncDustAt: number | null = null;
   let restartsSinceBoot = 0;
 
-  /* The second opinion's own two pieces of memory.
+  /* THE REFERENCE HEAD'S BOOKKEEPING, and the socket's.
 
-     `lastHeadReading` is the last thing the probe said, kept so `assessNow()`
-     can answer a gate without opening a request of its own — a probe taken to
-     answer a gate must not be able to move any of this loop's bookkeeping.
+     `assessHealth` is pure and is handed durations, because "for five minutes"
+     cannot be read off a single tick. Everything below is what turns a sequence
+     of readings into those durations.
 
-     `headAtStateChange` is the head as it stood the last time the WALLET moved,
-     and it is the whole comparison: subtracting it from the current head gives
-     blocks produced while this wallet learned nothing. It is re-stamped
-     whenever the fingerprint changes, and — for the first tick of a process,
-     which has no previous fingerprint to differ from — on the first successful
-     read, so a fresh process starts the count from zero rather than from
-     whatever the chain height happened to be. */
+     `lastHeadReading` and `lastIndexerHeight` are the two observers' last
+     answers, kept so `assessNow()` can answer a gate without opening requests
+     of its own — a probe taken to answer a gate must not be able to move any of
+     this loop's bookkeeping.
+
+     `socketLagSince` is when the lag last REACHED the threshold and has been at
+     or over it since; `null` the moment it is not, so the duration is a
+     continuous one rather than a total.
+
+     `lastSocketHeaderAt` and `referenceAtLastHeader` are the silence limb: the
+     instant of the last header this socket delivered, and where the chain had
+     got to then. A rebuild resets the socket's own figures to nothing, and
+     `socketWatchSince` is what gives a connection that has delivered no header
+     at all a clock to be silent against — its own start, not the process's.
+
+     `indexerBehindSince` is the same continuous-duration idea for the indexer,
+     whose verdict is alert-only. */
   let lastHeadReading: ChainHeadReading | null = null;
-  let headAtStateChange: number | null = null;
+  let lastIndexerHeight: number | null = null;
+  let socketLagSince: number | null = null;
+  let lastSocketHeaderAt: number | null = null;
+  let referenceAtLastHeader: number | null = null;
+  let socketWatchSince: number | null = null;
+  let indexerBehindSince: number | null = null;
 
   const snapshot: HealthSnapshot = {
     intervalMs: options.intervalMs,
@@ -1383,32 +1608,163 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
           probes: 0,
           failures: 0,
           lastError: null,
-          advancedSinceStateChange: 0,
+          indexerHead: null,
+          referenceHead: null,
+          indexerBehindHeadBlocks: null,
         }
       : null,
+    socketHead: null,
     chainHeadProbe: options.chainHead ? 'ok' : 'off',
   };
 
   /**
-   * The head reading turned into the four-and-a-bit numbers the classifier is
-   * allowed to see, or `undefined` when there is nothing worth showing it.
+   * The node's HTTPS height, but only while it is still an OBSERVATION.
    *
-   * `undefined` is returned for a probe that has never succeeded — a height of
-   * `null` — because "no observation" and "an observation of nothing" must not
-   * be the same value here: the first falls back to `stallMs`, and the second
-   * would be a claim about the chain.
+   * `ChainHeadReading.height` is sticky across failed probes — see
+   * `./chainHead.ts` — so a node that stopped answering four minutes ago is
+   * still reporting the height it last saw. Carrying that into the reference
+   * would turn a blind probe into a chain that had stopped climbing, which is a
+   * conclusion no probe here is entitled to. Past `chainHeadMaxAgeMs` the node
+   * contributes nothing and the indexer is the whole reference — which is
+   * exactly the black-holed-node case of 2026/09/06.
    */
-  const headFactAt = (at: number): ChainHeadFacts | undefined => {
+  const freshNodeHeightAt = (at: number): number | null => {
     const reading = lastHeadReading;
-    if (reading === null || reading.height === null || reading.at === null) return undefined;
+    if (reading === null || reading.height === null || reading.at === null) return null;
+    return at - reading.at <= policy.chainHeadMaxAgeMs ? reading.height : null;
+  };
+
+  /**
+   * One tick's readings turned into the facts the classifier reasons about,
+   * and the durations it cannot derive on its own.
+   *
+   * `undefined` when NEITHER observer answered. That is "no observation" rather
+   * than "an observation of nothing", and the difference is the whole of what
+   * keeps this rule honest: the first falls back to the wallet's thirty-minute
+   * rule, the second would be a claim about a chain nobody looked at.
+   *
+   * MUTATES the loop's memory, and is therefore called exactly once per tick,
+   * from `runTick`. `assessNow()` uses {@link headFactsForGate} instead, which
+   * reads the same memory without moving it.
+   */
+  const observeAt = (at: number, socket: SocketHead): ChainHeadFacts | undefined => {
+    const nodeHeight = freshNodeHeightAt(at);
+    const indexerHeight = lastIndexerHeight;
+    if (nodeHeight === null && indexerHeight === null) {
+      /* No reference this tick. The continuous-duration clocks are left where
+         they are rather than reset: an outage of both observers must not be
+         able to forgive a lag that was already four minutes old, and it must
+         not be able to extend one either — the branch is skipped entirely for
+         want of a reading, which is the correct answer. */
+      return undefined;
+    }
+    const referenceHead = Math.max(nodeHeight ?? 0, indexerHeight ?? 0);
+    /* The freshest of the two: the indexer is asked on this very tick, so when
+       it answered the reference is as new as the tick. */
+    const ageMs =
+      indexerHeight !== null ? 0 : at - (lastHeadReading?.at ?? at);
+
+    /* THE SILENCE LIMB. A header the socket has not delivered before is stamped
+       with where the chain had got to when it arrived, so the climb during a
+       silence is measured from the right place. A connection that has delivered
+       NO header — a fresh rebuild, or a stream that never opened — is silent
+       from the moment this loop first saw it in that state, not from process
+       start: a rebuild must be given its own five minutes rather than
+       inheriting the previous connection's. */
+    if (socket.at !== null && socket.at !== lastSocketHeaderAt) {
+      lastSocketHeaderAt = socket.at;
+      referenceAtLastHeader = referenceHead;
+      socketWatchSince = null;
+    } else if (socket.at === null) {
+      if (socketWatchSince === null) {
+        socketWatchSince = at;
+        referenceAtLastHeader = referenceHead;
+      }
+      lastSocketHeaderAt = null;
+    }
+    const silentSince = socket.at ?? socketWatchSince ?? at;
+    const socketSilentForMs = Math.max(0, at - silentSince);
+    const advancedWhileSocketSilent =
+      referenceAtLastHeader === null ? 0 : Math.max(0, referenceHead - referenceAtLastHeader);
+
+    /* THE LAG LIMB. Never negative: a socket ahead of the reference is a socket
+       doing its job with an indexer a block behind it. */
+    const socketLagBlocks =
+      socket.height === null ? null : Math.max(0, referenceHead - socket.height);
+    if (socketLagBlocks !== null && socketLagBlocks >= policy.socketLagBlocks) {
+      if (socketLagSince === null) socketLagSince = at;
+    } else {
+      socketLagSince = null;
+    }
+
+    const indexerBehindHeadBlocks =
+      indexerHeight === null ? null : Math.max(0, referenceHead - indexerHeight);
+    if (
+      indexerBehindHeadBlocks !== null &&
+      indexerBehindHeadBlocks >= policy.indexerBehindBlocks
+    ) {
+      if (indexerBehindSince === null) indexerBehindSince = at;
+    } else {
+      indexerBehindSince = null;
+    }
+
     return {
-      height: reading.height,
-      at: reading.at,
-      ageMs: at - reading.at,
-      probeFailures: reading.probeFailures,
-      advancedSinceStateChange:
-        headAtStateChange === null ? 0 : Math.max(0, reading.height - headAtStateChange),
+      nodeHeight,
+      indexerHeight,
+      referenceHead,
+      ageMs,
+      probeFailures: lastHeadReading?.probeFailures ?? 0,
+      socketLagBlocks,
+      socketLaggingForMs: socketLagSince === null ? 0 : at - socketLagSince,
+      socketSilentForMs,
+      advancedWhileSocketSilent,
+      indexerBehindHeadBlocks,
+      indexerBehindForMs: indexerBehindSince === null ? 0 : at - indexerBehindSince,
     };
+  };
+
+  /**
+   * The same facts for a GATE, derived without moving anything.
+   *
+   * `assessNow()` is documented not to touch the loop's bookkeeping — a gate's
+   * cadence is whatever the resolver-pool filler happens to be doing, and
+   * letting it stamp the silence clock would let it decide how long a socket
+   * had been quiet. So this reads the clocks the last tick set and computes the
+   * durations against `at`; between ticks that is the same answer the tick
+   * would have given, and it can never be a longer one.
+   */
+  const headFactsForGate = (at: number, socket: SocketHead): ChainHeadFacts | undefined => {
+    const nodeHeight = freshNodeHeightAt(at);
+    const indexerHeight = lastIndexerHeight;
+    if (nodeHeight === null && indexerHeight === null) return undefined;
+    const referenceHead = Math.max(nodeHeight ?? 0, indexerHeight ?? 0);
+    const silentSince = socket.at ?? socketWatchSince;
+    const socketLagBlocks =
+      socket.height === null ? null : Math.max(0, referenceHead - socket.height);
+    const indexerBehindHeadBlocks =
+      indexerHeight === null ? null : Math.max(0, referenceHead - indexerHeight);
+    return {
+      nodeHeight,
+      indexerHeight,
+      referenceHead,
+      ageMs: indexerHeight !== null ? 0 : at - (lastHeadReading?.at ?? at),
+      probeFailures: lastHeadReading?.probeFailures ?? 0,
+      socketLagBlocks,
+      socketLaggingForMs: socketLagSince === null ? 0 : Math.max(0, at - socketLagSince),
+      socketSilentForMs: silentSince === null ? 0 : Math.max(0, at - silentSince),
+      advancedWhileSocketSilent:
+        referenceAtLastHeader === null ? 0 : Math.max(0, referenceHead - referenceAtLastHeader),
+      indexerBehindHeadBlocks,
+      indexerBehindForMs: indexerBehindSince === null ? 0 : Math.max(0, at - indexerBehindSince),
+    };
+  };
+
+  /** The socket head a tick that could not read the wallet has to assume. */
+  const UNKNOWN_SOCKET_HEAD: SocketHead = {
+    height: null,
+    at: null,
+    subscribed: false,
+    headers: 0,
   };
 
   const publishRecord = (record: HealthRecord): void => {
@@ -1422,12 +1778,16 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
     if (inFlight || stopped) return null;
     inFlight = true;
     try {
-      /* The second opinion is asked FIRST, before the clock is stamped, so the
-         reading the classifier judges by age is a fresh one rather than one
-         aged by however long the wallet took to answer. It is bounded at five
-         seconds and it cannot reject — see `./chainHead.ts` — so nothing about
-         the tick below depends on the public node being reachable. */
+      /* BOTH OBSERVERS ARE ASKED FIRST, before the clock is stamped, so the
+         reference the classifier judges by age is a fresh one rather than one
+         aged by however long the wallet took to answer. Neither can fail the
+         tick: the head probe is bounded at five seconds and cannot reject (see
+         `./chainHead.ts`), and the indexer query is caught here — losing an
+         observer must never be able to end a check. */
       if (options.chainHead) lastHeadReading = await options.chainHead.read();
+      if (options.indexerHeight) {
+        lastIndexerHeight = await options.indexerHeight().catch(() => null);
+      }
 
       const at = now();
       let facts: HealthFacts;
@@ -1436,20 +1796,12 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
         const moved = lastFingerprint !== null && reading.fingerprint !== lastFingerprint;
         if (moved) lastStateChangeAt = at;
         lastFingerprint = reading.fingerprint;
-        /* The head is re-stamped exactly when the wallet moves, which is what
-           makes `advancedSinceStateChange` mean "blocks produced while this
-           wallet learned nothing". Also stamped once on the first successful
-           read, so a fresh process counts from zero rather than from the
-           absolute height of a chain it has just joined. */
-        if (moved || headAtStateChange === null) {
-          headAtStateChange = lastHeadReading?.height ?? headAtStateChange;
-        }
         facts = {
           ...reading,
           now: at,
           lastStateChangeAt,
           consecutiveUnhealthy,
-          chainHead: headFactAt(at),
+          chainHead: observeAt(at, reading.socketHead),
         };
       } catch (cause) {
         /* The probe itself is written not to throw — it reports an unreadable
@@ -1480,21 +1832,31 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
           nodeSocket: 'connected',
           consecutiveSocketFailures: 0,
           consecutiveRebuildFailures: 0,
+          /* For the same reason as `nodeSocket` above: a wallet that cannot be
+             read says nothing about the socket, and an unknown socket head is
+             no evidence rather than a stalled one. */
+          socketHead: UNKNOWN_SOCKET_HEAD,
           lastStateChangeAt,
           consecutiveUnhealthy,
           /* Carried even here, where it changes no verdict — the unreadable
              branches return long before the stall ones — because `/status`
              publishes this reading and an operator looking at a wedged facade
              is entitled to know whether the chain under it was moving. */
-          chainHead: headFactAt(at),
+          chainHead: observeAt(at, UNKNOWN_SOCKET_HEAD),
         };
       }
 
       const assessment = assessHealth(facts, policy);
+      /* `act` as well as the verdict, and that is what keeps the alert-only
+         indexer-behind branch out of the escalation ladder. Every verdict that
+         acts is one this service can do something about; a `degraded` that
+         cannot be acted on is a report, and counting it would let somebody
+         else's slow indexer hurry a later, genuine fault towards a restart. */
       const unhealthy =
-        assessment.verdict === 'degraded' ||
-        assessment.verdict === 'wedged' ||
-        assessment.verdict === 'dust-wedged';
+        assessment.act &&
+        (assessment.verdict === 'degraded' ||
+          assessment.verdict === 'wedged' ||
+          assessment.verdict === 'dust-wedged');
       /* Only `healthy` clears the streak. `busy` and `settling` LEAVE IT ALONE:
          a wallet that was degraded and is now merely mid-spend has not been
          shown to be well, and zeroing the count there would let a fault that
@@ -1519,15 +1881,31 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
           probes: head.probes,
           failures: head.failures,
           lastError: head.lastError,
-          advancedSinceStateChange: facts.chainHead?.advancedSinceStateChange ?? 0,
+          indexerHead: lastIndexerHeight,
+          referenceHead: facts.chainHead?.referenceHead ?? null,
+          indexerBehindHeadBlocks: facts.chainHead?.indexerBehindHeadBlocks ?? null,
         };
         /* Published, not acted on. A public node that will not answer says
-           nothing about this wallet, so the only consequence of `failing` is
-           that the fast stall rule turns itself off — which is why an operator
-           needs to be able to see it beside a thirty-minute diagnosis. */
+           nothing about this wallet, and since 2026/09/06 it does not even turn
+           the fast rule off — the indexer is the other half of the reference,
+           and one observer is enough. It is published because an operator
+           diagnosing by hand is entitled to know which observers were
+           available. */
         snapshot.chainHeadProbe =
           head.probeFailures >= policy.chainHeadProbeFailuresForFailing ? 'failing' : 'ok';
       }
+      /* The socket's own view, published every tick — including, and especially,
+         on the healthy ticks. A rule that fired 614 times in a day on a well
+         sponsor is a rule an operator has to be able to watch NOT firing. */
+      snapshot.socketHead = {
+        height: facts.socketHead.height,
+        at: facts.socketHead.at === null ? null : new Date(facts.socketHead.at).toISOString(),
+        subscribed: facts.socketHead.subscribed,
+        headers: facts.socketHead.headers,
+        socketHeadLagBlocks: facts.chainHead?.socketLagBlocks ?? null,
+        silentForMs: facts.chainHead?.socketSilentForMs ?? 0,
+        advancedWhileSilentBlocks: facts.chainHead?.advancedWhileSocketSilent ?? 0,
+      };
 
       const record = options.store.read();
       if (assessment.verdict === 'healthy' && record.awaitingHealthyTick) {
@@ -1644,18 +2022,18 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
       const at = now();
       try {
         const reading = await options.probe();
-        /* The LAST head read rather than a fresh one, deliberately. This method
+        /* The LAST readings rather than fresh ones, deliberately. This method
            answers a gate and is documented not to touch the loop's bookkeeping;
-           opening a request here would also let a gate's cadence — which is
+           opening requests here would also let a gate's cadence — which is
            whatever the resolver-pool filler happens to be doing — drive how
-           often the public node is asked. */
+           often somebody else's node and indexer are asked. */
         return assessHealth(
           {
             ...reading,
             now: at,
             lastStateChangeAt,
             consecutiveUnhealthy,
-            chainHead: headFactAt(at),
+            chainHead: headFactsForGate(at, reading.socketHead),
           },
           policy,
         );
@@ -1683,9 +2061,10 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
             nodeSocket: 'connected',
             consecutiveSocketFailures: 0,
             consecutiveRebuildFailures: 0,
+            socketHead: UNKNOWN_SOCKET_HEAD,
             lastStateChangeAt,
             consecutiveUnhealthy,
-            chainHead: headFactAt(at),
+            chainHead: headFactsForGate(at, UNKNOWN_SOCKET_HEAD),
           },
           policy,
         );

@@ -299,16 +299,30 @@ function fakeApi(options: {
   connectRejects?: boolean;
   /** What `.send()` does. Defaults to acknowledging with a hash. */
   send?: (payload: string) => Promise<string>;
+  /**
+   * `undefined` offers the head subscription and never delivers a header;
+   * a function is handed the emit callback so a case can deliver whatever it
+   * likes; `false` offers no subscription at all, like a client that does not
+   * implement it.
+   */
+  heads?: false | ((emit: (height: number) => void) => void);
   name: string;
-}): MidnightApi & { sends: string[]; disconnected: () => boolean; connects: () => number } {
+}): MidnightApi & {
+  sends: string[];
+  disconnected: () => boolean;
+  connects: () => number;
+  unsubscribed: () => number;
+} {
   const sends: string[] = [];
   let wasDisconnected = false;
   let connects = 0;
+  let unsubscribes = 0;
   const api = {
     isConnected: options.connected,
     sends,
     disconnected: () => wasDisconnected,
     connects: () => connects,
+    unsubscribed: () => unsubscribes,
     async connect(): Promise<void> {
       connects += 1;
       if (options.connectRejects) throw new Error('WebSocket is not connected');
@@ -316,7 +330,27 @@ function fakeApi(options: {
     async disconnect(): Promise<void> {
       wasDisconnected = true;
     },
-    rpc: { chain: { getHeader: async () => ({ number: { toNumber: () => 1 } }) } },
+    rpc: {
+      chain: {
+        getHeader: async () => ({ number: { toNumber: () => 1 } }),
+        ...(options.heads === false
+          ? {}
+          : {
+              async subscribeNewHeads(
+                callback: (header: { number: { toNumber(): number } }) => void,
+              ): Promise<() => void> {
+                if (typeof options.heads === 'function') {
+                  options.heads((height: number) =>
+                    callback({ number: { toNumber: () => height } }),
+                  );
+                }
+                return () => {
+                  unsubscribes += 1;
+                };
+              },
+            }),
+      },
+    },
     tx: {
       midnight: {
         sendMnTransaction(payload: string) {
@@ -580,5 +614,188 @@ describe('rebuilding a submission connection that has died', () => {
 
     assert.ok(Date.now() - started < 1_000, 'the rebuild gave up on its own clock');
     assert.equal(connection.socketHealth?.().consecutiveRebuildFailures, 1);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The node list, and the head this connection watches on it                  */
+/* -------------------------------------------------------------------------- */
+
+const PAYLOAD = new Uint8Array([1, 2, 3]);
+const A = new URL('wss://ours.example');
+const B = new URL('wss://theirs.example');
+
+describe('opening the submission connection over a list of nodes', () => {
+  it('opens on the first node and never contacts the second', async () => {
+    const asked: string[] = [];
+    const connection = polkadotConnection(
+      { relayURL: A, relayURLs: [A, B] },
+      {
+        log: () => undefined,
+        createApi: async (url) => {
+          asked.push(url);
+          return fakeApi({ name: 'first', connected: true });
+        },
+      },
+    );
+    await connection.send(PAYLOAD);
+    assert.deepEqual(asked, [A.toString()]);
+    assert.equal(connection.socketHealth?.().nodeUrlInUse, A.toString());
+  });
+
+  it('falls through to the second when the first will not build, and says so', async () => {
+    const lines: string[] = [];
+    const asked: string[] = [];
+    const connection = polkadotConnection(
+      { relayURL: A, relayURLs: [A, B] },
+      {
+        log: (line) => lines.push(line),
+        createApi: async (url) => {
+          asked.push(url);
+          if (url === A.toString()) throw new Error('connection refused');
+          return fakeApi({ name: 'second', connected: true });
+        },
+      },
+    );
+    await connection.send(PAYLOAD);
+    assert.deepEqual(asked, [A.toString(), B.toString()]);
+    assert.equal(connection.socketHealth?.().nodeUrlInUse, B.toString());
+    /* The line that matters most on the day this earns its keep: a fall-through
+       that succeeded in silence is the outage nobody noticed. */
+    assert.ok(
+      lines.some((line) => line.includes('fell through to') && line.includes('connection refused')),
+      lines.join('\n'),
+    );
+  });
+
+  it('starts again at the FIRST node on every rebuild', async () => {
+    /* No cursor and no memory of which node failed last time: a rebuild is the
+       moment to ask the preferred provider whether it is back, and an outage
+       that is over should not need a restart to be noticed. */
+    const asked: string[] = [];
+    let firstWorks = false;
+    const connection = polkadotConnection(
+      { relayURL: A, relayURLs: [A, B] },
+      {
+        log: () => undefined,
+        createApi: async (url) => {
+          asked.push(url);
+          if (url === A.toString() && !firstWorks) throw new Error('connection refused');
+          return fakeApi({ name: url, connected: true });
+        },
+      },
+    );
+    await connection.send(PAYLOAD);
+    assert.equal(connection.socketHealth?.().nodeUrlInUse, B.toString());
+
+    firstWorks = true;
+    await connection.rebuild?.('the preferred node may be back');
+    await connection.send(PAYLOAD);
+    assert.equal(connection.socketHealth?.().nodeUrlInUse, A.toString());
+    assert.deepEqual(asked, [A.toString(), B.toString(), A.toString()]);
+  });
+
+  it('behaves exactly as one node did when only one is configured', async () => {
+    /* The failure message is the node's own, not a list's summary of it. */
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: () => undefined,
+        createApi: async () => {
+          throw new Error('connection refused');
+        },
+      },
+    );
+    await assert.rejects(connection.send(PAYLOAD), /connection refused/);
+  });
+});
+
+describe('the head this connection watches', () => {
+  it('records every header the socket delivers', async () => {
+    let emit: ((height: number) => void) | null = null;
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: () => undefined,
+        createApi: async () =>
+          fakeApi({
+            name: 'node',
+            connected: true,
+            heads: (send) => {
+              emit = send;
+            },
+          }),
+      },
+    );
+    await connection.send(PAYLOAD);
+    let head = connection.socketHealth?.().socketHead;
+    assert.equal(head?.subscribed, true);
+    assert.equal(head?.height, null, 'subscribed, and no header yet');
+    assert.equal(head?.headers, 0);
+
+    (emit as unknown as (height: number) => void)(342_015);
+    (emit as unknown as (height: number) => void)(342_016);
+    head = connection.socketHealth?.().socketHead;
+    assert.equal(head?.height, 342_016);
+    assert.equal(head?.headers, 2);
+    assert.ok(head?.at !== null);
+  });
+
+  it('never lets a late or out-of-order header lower the head', async () => {
+    let emit: ((height: number) => void) | null = null;
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: () => undefined,
+        createApi: async () =>
+          fakeApi({ name: 'node', connected: true, heads: (send) => (emit = send) }),
+      },
+    );
+    await connection.send(PAYLOAD);
+    (emit as unknown as (height: number) => void)(342_016);
+    (emit as unknown as (height: number) => void)(342_015);
+    assert.equal(connection.socketHealth?.().socketHead.height, 342_016);
+  });
+
+  it('starts the count again on a rebuild, rather than carrying it over', async () => {
+    /* `headers` counts what the CURRENT connection has delivered, so a fresh
+       connection delivering nothing is visibly a fresh connection delivering
+       nothing — which is exactly what the silence limb of the stall rule reads. */
+    let emit: ((height: number) => void) | null = null;
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: () => undefined,
+        createApi: async () =>
+          fakeApi({ name: 'node', connected: true, heads: (send) => (emit = send) }),
+      },
+    );
+    await connection.send(PAYLOAD);
+    (emit as unknown as (height: number) => void)(342_015);
+    assert.equal(connection.socketHealth?.().socketHead.headers, 1);
+
+    await connection.rebuild?.('a drill');
+    const head = connection.socketHealth?.().socketHead;
+    assert.equal(head?.headers, 0);
+    assert.equal(head?.height, null);
+    assert.equal(head?.subscribed, true, 'the watch is re-established on the new connection');
+  });
+
+  it('keeps a connection whose client offers no head subscription, and calls it unknown', async () => {
+    /* A node client without `subscribeNewHeads` submits perfectly well. What it
+       costs is one signal, and `./health.ts` reads `subscribed: false` with no
+       header as no evidence rather than as a stall. */
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: () => undefined,
+        createApi: async () => fakeApi({ name: 'node', connected: true, heads: false }),
+      },
+    );
+    await connection.send(PAYLOAD);
+    const head = connection.socketHealth?.().socketHead;
+    assert.equal(head?.subscribed, false);
+    assert.equal(head?.height, null);
+    assert.equal(connection.socketHealth?.().nodeSocket, 'connected', 'still a usable socket');
   });
 });

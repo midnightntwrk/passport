@@ -135,7 +135,7 @@ import {
 import { walletAvailability } from './availability.js';
 import { createChainHeadProbe, type ChainHeadProbe } from './chainHead.js';
 import { ASSET_SYMBOL, applyEnvFile, loadConfig, type BalancerConfig } from './config.js';
-import { rawContractAddress } from './contractRuntime.js';
+import { queryIndexerHeight, rawContractAddress } from './contractRuntime.js';
 import { rollbackDustSnapshot } from './dustRollback.js';
 import { indexerUrlInUse } from './endpoints.js';
 import {
@@ -985,9 +985,10 @@ async function main(): Promise<void> {
    * indexer reports real heights, and is not the case on stagenet today, where
    * the field is `null` and `appliedBehindHeadNote` says why.
    *
-   * The staleness verdict does NOT depend on any of this: it compares the head
-   * against ITSELF over time — see `advancedSinceStateChange` in `./health.ts`
-   * — which needs no shared unit with the wallet at all.
+   * The staleness verdict does NOT depend on any of this, and since 2026/09/06
+   * does not involve the wallet's figures at all: it compares the reference
+   * head against the SUBMISSION SOCKET's own head, which are two readings of
+   * the same chain in the same unit. See `socketHead` in `./health.ts`.
    */
   const HEAD_LAG_SANITY_BLOCKS = 100_000;
 
@@ -1201,14 +1202,18 @@ async function main(): Promise<void> {
       /* The node the head probe last read from, which walks the list per read
          and so may differ from the socket's. */
       chainHeadUrlInUse: headReading.urlInUse,
-      /* THE SECOND OPINION. Every other figure on this endpoint is this wallet
-         describing itself, and on 2026/09/05 all of them were true and none of
-         them was the point: the wallet read well for four and a half hours
-         while nothing it submitted reached the node. This one comes from the
-         public node over its own HTTPS request and shares nothing with the
-         connections above, so it is the only line here that can contradict
-         them. `advancedWhileWalletStill` is the number the fast stall rule acts
-         on: blocks produced while this wallet's sync indices did not move. */
+      /* THE OBSERVERS THAT ARE NOT THIS WALLET. Every other figure on this
+         endpoint is this wallet describing itself, and on 2026/09/05 all of
+         them were true and none of them was the point: the wallet read well for
+         four and a half hours while nothing it submitted reached the node.
+
+         `height` is the public node over its own HTTPS request. `indexerHead`
+         is a different host answering a different protocol, and it is here
+         because of 2026/09/06: with the node's addresses black-holed the HTTPS
+         probe went blind at the same instant the socket did, and a reference
+         that shares a host with the thing it checks is not a reference.
+         `referenceHead` is the greater of the two and is what the socket below
+         is judged against. */
       chainHead: {
         url: chainHeadProbe.url,
         height: headReading.height,
@@ -1218,13 +1223,28 @@ async function main(): Promise<void> {
         probes: headReading.probes,
         failures: headReading.failures,
         lastError: headReading.lastError,
-        advancedWhileWalletStill: headSnapshot?.advancedSinceStateChange ?? null,
+        indexerHead: headSnapshot?.indexerHead ?? null,
+        referenceHead: headSnapshot?.referenceHead ?? null,
+        /* Past a hundred blocks for five minutes this is `degraded` with no
+           remedy: an indexer that has fallen behind is somebody else's server,
+           and every figure this wallet publishes is that far out of date. */
+        indexerBehindHeadBlocks: headSnapshot?.indexerBehindHeadBlocks ?? null,
       },
+      /* THE CHAIN AS THE SUBMISSION SOCKET SEES IT — one head subscription on
+         the very connection this service submits on, so a header arriving here
+         is proof that connection is alive and a header not arriving while
+         `referenceHead` climbs is proof that it is not.
+
+         It replaces a comparison against the WALLET'S sync indices, which was
+         never a liveness signal: those indices only move on ledger activity
+         that concerns this wallet, so a healthy idle sponsor stood still and
+         was called degraded 614 times in a day. Published on every tick,
+         healthy ones included, so the rule can be watched not firing. */
+      socketHead: healthMonitor?.snapshot().socketHead ?? null,
+      socketHeadLagBlocks: healthMonitor?.snapshot().socketHead?.socketHeadLagBlocks ?? null,
       /* Reported and never acted on: a public node that will not answer says
-         nothing about this wallet. All `failing` means is that the five-minute
-         stall rule has turned itself off and the thirty-minute one is what is
-         left — which is exactly what an operator reading a slow diagnosis needs
-         to know. */
+         nothing about this wallet, and since the indexer became the other half
+         of the reference it no longer turns the socket rule off either. */
       chainHeadProbe:
         headSnapshot === null
           ? headReading.probeFailures >= DEFAULT_HEALTH_POLICY.chainHeadProbeFailuresForFailing
@@ -1333,6 +1353,11 @@ async function main(): Promise<void> {
       nodeSocket: socket?.nodeSocket ?? 'connected',
       consecutiveSocketFailures: socket?.consecutiveSocketFailures ?? 0,
       consecutiveRebuildFailures: socket?.consecutiveRebuildFailures ?? 0,
+      /* The chain as that same connection sees it — one head subscription held
+         on the `ApiPromise` this service submits on. A wallet whose facade has
+         not been built yet has no socket to have a view, which reads as
+         unknown rather than as a stalled one. */
+      socketHead: socket?.socketHead ?? { height: null, at: null, subscribed: false, headers: 0 },
       fingerprint,
     };
   };
@@ -1341,13 +1366,21 @@ async function main(): Promise<void> {
     healthMonitor = startHealthLoop({
       intervalMs: config.healthIntervalMs,
       probe: healthProbe,
-      /* The second opinion. Without it the stall rule waits half an hour,
-         because a wallet reading only its own indices cannot tell a quiet chain
-         from a lost one — which is how the node websocket that died at 14:48
-         UTC on 2026/09/05 was not reported until 15:28. With it the same
-         staleness is called in five minutes, and a probe that cannot reach the
-         public node simply gives the old patience back. */
+      /* THE TWO OBSERVERS the submission socket is judged against, and they are
+         deliberately two. The node's HTTPS head is independent of the SOCKET
+         but not of the NODE: on 2026/09/06 the node's addresses were
+         black-holed and this probe went blind at the same instant the socket
+         did, leaving `/status` saying connected and synced for seven and a half
+         minutes while nothing could get through. The indexer is a different
+         host answering a different protocol, so the two cannot fail together
+         for one reason, and `assessHealth` takes whichever is further along.
+         Losing both gives the wallet's own thirty-minute rule back and
+         concludes nothing. */
       chainHead: chainHeadProbe,
+      /* One bounded GraphQL query per tick, over the indexer list — see
+         `./endpoints.ts`. It answers `null` rather than throwing, and a
+         rejection is caught by the loop regardless. */
+      indexerHeight: () => queryIndexerHeight(config.indexerHttpUrls),
       /* The floor under a wedge verdict is the sweeper's own window, so the two
          can never disagree about when a booked coin has stopped being
          explainable. */

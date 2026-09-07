@@ -75,6 +75,11 @@ const healthy = (overrides: Partial<HealthFacts> = {}): HealthFacts => ({
   nodeSocket: 'connected',
   consecutiveSocketFailures: 0,
   consecutiveRebuildFailures: 0,
+  /* The socket's own view of the chain, healthy by default: subscribed, and a
+     header a moment ago. `342,015` is the height stagenet actually reported on
+     2026/09/06 — `0x537ff` — so the arithmetic in these assertions is at the
+     scale of the real chain rather than a convenient small integer. */
+  socketHead: { height: 342_015, at: T0 - 6_000, subscribed: true, headers: 3_000 },
   ...overrides,
 });
 
@@ -681,10 +686,16 @@ describe('the remedy ladder', () => {
  */
 function harness(
   readings: HealthProbeReading[],
-  /* The second opinion, built against the harness's own clock so a test can
-     move the chain and the wallet independently — which is the one thing the
-     fast stall rule is about. `undefined` is the pre-2026/09/06 loop. */
+  /* THE TWO OBSERVERS, built against the harness's own clock so a test can move
+     the chain, the socket, and the wallet independently — which is the whole of
+     what the stall rule is about. Both `undefined` is a loop with no reference
+     at all, which is the pre-2026/09/06 behaviour and concludes nothing. */
   makeHead?: (now: () => number) => ChainHeadProbe,
+  indexerHeight?: () => number | null,
+  /* The socket's own head, scripted per tick rather than taken from `readings`,
+     because a case that moves the chain has to be able to move the socket with
+     it — or deliberately not to. */
+  socketHead?: () => HealthProbeReading['socketHead'],
 ) {
   let clock = T0;
   let record: HealthRecord = { ...EMPTY_HEALTH_RECORD };
@@ -696,8 +707,12 @@ function harness(
     random: () => 0.5,
     log: () => undefined,
     warn: () => undefined,
-    probe: async () => readings[Math.min(index++, readings.length - 1)]!,
+    probe: async () => {
+      const next = readings[Math.min(index++, readings.length - 1)]!;
+      return socketHead ? { ...next, socketHead: socketHead() } : next;
+    },
     ...(makeHead ? { chainHead: makeHead(() => clock) } : {}),
+    ...(indexerHeight ? { indexerHeight: async () => indexerHeight() } : {}),
     store: {
       read: () => record,
       write: async (next) => {
@@ -1192,193 +1207,367 @@ describe('the remedy for a dead submission socket', () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* The second opinion: a head that moves while the wallet does not            */
+/* The socket's own head, against a reference it does not carry               */
 /* -------------------------------------------------------------------------- */
 
 /**
- * The public node's head as the classifier sees it, healthy by default: read
- * this instant, no failures against it, and level with where it stood when this
- * wallet last moved. Every case below is this minus exactly one thing.
+ * The reference head as the classifier sees it, HEALTHY BY DEFAULT: read this
+ * instant, no failures against either observer, level with the socket's own
+ * head, and nothing lagging or silent for any length of time. Every case below
+ * is this minus exactly one thing.
  *
- * `342,015` is the height stagenet actually reported on 2026/09/06 — `0x537ff`
- * — so the numbers in these assertions are the scale of the real chain rather
- * than a convenient small integer.
+ * The default matters more here than in most of these helpers. The rule this
+ * replaces fired on a well sponsor 614 times in a day, so the case that has to
+ * be easiest to write — and hardest to break by accident — is the one where
+ * nothing at all is wrong.
  */
 const head = (overrides: Partial<ChainHeadFacts> = {}): ChainHeadFacts => ({
-  height: 342_015,
-  at: T0,
+  nodeHeight: 342_015,
+  indexerHeight: 342_015,
+  referenceHead: 342_015,
   ageMs: 0,
   probeFailures: 0,
-  advancedSinceStateChange: 0,
+  socketLagBlocks: 0,
+  socketLaggingForMs: 0,
+  socketSilentForMs: 6_000,
+  advancedWhileSocketSilent: 1,
+  indexerBehindHeadBlocks: 0,
+  indexerBehindForMs: 0,
   ...overrides,
 });
 
 /** Fifty blocks: five minutes of a six-second chain. */
 const FIVE_MINUTES_OF_BLOCKS = 50;
 
-describe('the stall verdict with a second opinion', () => {
-  it('calls a still wallet cut off after FIVE minutes when the head has moved', () => {
-    /* The 2026/09/05 fault, an hour and a half earlier than it was found. The
-       wallet reads perfectly: synced, connected, three DUST UTxOs, nothing in
-       flight. The only thing wrong with it is that fifty blocks were produced
-       while it learned nothing, and that is a fact it could not have on its
-       own. */
+describe('the stall verdict on the submission socket', () => {
+  it('says NOTHING about a healthy idle sponsor, whatever its sync indices do', () => {
+    /* THE CORRECTION OF 2026/09/06, and the first case in this file for a
+       reason. The rule this replaces compared the public head against the
+       WALLET'S sync indices, and on a live drill it called a perfectly well
+       sponsor degraded on every tick — 614 lines in a day — because those
+       indices only move on ledger activity that concerns the wallet, and a
+       quiet stagenet has none for hours at a time.
+
+       Here the wallet has been still for fifty-nine minutes and the chain has
+       climbed six hundred blocks meanwhile. The socket is following it. There
+       is nothing wrong, and the verdict says nothing. */
+    for (const stillFor of [5, 10, 29, 59]) {
+      const verdict = assessHealth(
+        healthy({
+          lastStateChangeAt: T0 - stillFor * MINUTE,
+          socketHead: { height: 342_015, at: T0 - 6_000, subscribed: true, headers: 9_000 },
+          chainHead: head(),
+        }),
+      );
+      assert.equal(
+        verdict.verdict,
+        stillFor >= 30 ? 'degraded' : 'healthy',
+        `at ${stillFor} min still`,
+      );
+      if (stillFor < 30) continue;
+      /* Past half an hour the OLD indices rule speaks, as it always did, and it
+         is deliberately the only thing that does. It is a different signal
+         reported in different words. */
+      assert.match(verdict.reason, /sync indices have not moved/);
+      assert.doesNotMatch(verdict.reason, /block\(s\) behind|no block header/);
+    }
+  });
+
+  it('calls a socket that has frozen behind the chain at five minutes', () => {
+    /* The lag limb. The socket's own head has stopped at a height while the
+       reference has run fifty blocks past it, and it has been that way for the
+       whole window. Nothing about the wallet is consulted. */
     const verdict = assessHealth(
       healthy({
-        lastStateChangeAt: T0 - 5 * MINUTE,
-        chainHead: head({ advancedSinceStateChange: FIVE_MINUTES_OF_BLOCKS }),
+        socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, headers: 9_000 },
+        chainHead: head({
+          nodeHeight: 342_065,
+          indexerHeight: 342_065,
+          referenceHead: 342_065,
+          socketLagBlocks: FIVE_MINUTES_OF_BLOCKS,
+          socketLaggingForMs: 5 * MINUTE,
+          socketSilentForMs: 5 * MINUTE,
+          advancedWhileSocketSilent: FIVE_MINUTES_OF_BLOCKS,
+        }),
       }),
     );
     assert.equal(verdict.verdict, 'degraded');
     assert.equal(verdict.act, true);
-    assert.match(verdict.reason, /head has climbed 50 block\(s\) to 342015/);
-    assert.match(verdict.reason, /the chain is not quiet, this wallet is cut off/);
-    assert.equal(verdict.socketFault, undefined, 'the socket here is answering');
-    assert.equal(
-      verdict.restartEligible,
-      false,
-      'a connection is repaired by remaking it, not by a chain walk',
-    );
+    assert.equal(verdict.socketFault, true, 'this is the connection, not the wallet');
+    assert.match(verdict.reason, /submission socket is 50 block\(s\) behind a chain that has reached 342065/);
+    assert.doesNotMatch(verdict.reason, /sync indices/);
   });
 
-  it('takes the cheap rung for it — a refresh, which now rebuilds the socket too', () => {
+  it('takes the reconnect rung for it on the first tick', () => {
+    /* A rebuild is one websocket, and it is what repairs this. The soft ladder
+       exists to protect a possibly-transient signal from acting on a live
+       sponsor; five minutes of a socket not following the chain is neither. */
     const facts = healthy({
-      lastStateChangeAt: T0 - 5 * MINUTE,
-      chainHead: head({ advancedSinceStateChange: FIVE_MINUTES_OF_BLOCKS }),
+      socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, headers: 9_000 },
+      chainHead: head({
+        referenceHead: 342_065,
+        socketLagBlocks: FIVE_MINUTES_OF_BLOCKS,
+        socketLaggingForMs: 5 * MINUTE,
+      }),
     });
     const choice = chooseRemedy(assessHealth(facts), facts, {
       lastRewarmAt: null,
       lastResyncDustAt: null,
       record: { ...EMPTY_HEALTH_RECORD },
     });
-    assert.equal(choice.remedy, 'refresh');
+    assert.equal(choice.remedy, 'reconnect');
   });
 
-  it('says nothing at four minutes, however fast the head is climbing', () => {
-    /* The threshold is a threshold. A wallet whose indices went quiet a moment
-       ago is not yet evidence of anything, and the remedy would land on top of
-       whatever it was doing. */
+  it('calls a subscription that has gone silent, even with no head to be behind with', () => {
+    /* The silence limb, and why it is not redundant: a connection whose stream
+       never opened has delivered NO header, so there is no height for the lag
+       limb to compare. Five minutes of nothing while the chain produced fifty
+       blocks is the same fault seen from the other side. */
     const verdict = assessHealth(
       healthy({
-        lastStateChangeAt: T0 - 4 * MINUTE,
-        chainHead: head({ advancedSinceStateChange: 400 }),
+        socketHead: { height: null, at: null, subscribed: true, headers: 0 },
+        chainHead: head({
+          referenceHead: 342_065,
+          socketLagBlocks: null,
+          socketLaggingForMs: 0,
+          socketSilentForMs: 5 * MINUTE,
+          advancedWhileSocketSilent: FIVE_MINUTES_OF_BLOCKS,
+        }),
       }),
     );
-    assert.equal(verdict.verdict, 'healthy');
-  });
-
-  it('needs the head to be CLEARLY moving, not merely to have moved', () => {
-    /* Thirty-nine blocks in ten minutes is a chain that is barely producing,
-       and a barely-producing chain is exactly the case the fast rule must not
-       claim to have diagnosed. It falls through to the old patience. */
-    const verdict = assessHealth(
-      healthy({
-        lastStateChangeAt: T0 - 10 * MINUTE,
-        chainHead: head({ advancedSinceStateChange: 39 }),
-      }),
-    );
-    assert.equal(verdict.verdict, 'healthy');
-  });
-
-  it('leaves a busy wallet alone, whatever the chain is doing', () => {
-    /* The asymmetry this whole module is built on: acting on a wallet somebody
-       is spending from is worse than any diagnosis is worth. A claim, a queued
-       job, and a wallet catching up with its own submission each answer before
-       any of this is reached. */
-    const chain = head({ advancedSinceStateChange: 500 });
-    const still = { lastStateChangeAt: T0 - 60 * MINUTE, chainHead: chain };
-
-    const claimed = assessHealth(healthy({ ...still, reserved: true }));
-    assert.equal(claimed.verdict, 'busy');
-    assert.equal(claimed.act, false);
-
-    const queued = assessHealth(healthy({ ...still, busy: true }));
-    assert.equal(queued.verdict, 'busy');
-    assert.equal(queued.act, false);
-
-    const ahead = assessHealth(
-      healthy({ ...still, syncAhead: 'unshielded applied 9549 > highest 9521' }),
-    );
-    assert.equal(ahead.verdict, 'settling');
-    assert.equal(ahead.act, false);
-  });
-
-  it('still names the socket when a cut-off wallet has one that is not answering', () => {
-    /* The correction of 2026/09/05 is not lost to the new branch: a stalled
-       wallet is exactly the reading that should make this service suspect the
-       connection it submits on, and the count alone misses a socket nothing has
-       been submitted through. */
-    const facts = healthy({
-      lastStateChangeAt: T0 - 5 * MINUTE,
-      nodeSocket: 'dead',
-      chainHead: head({ advancedSinceStateChange: FIVE_MINUTES_OF_BLOCKS }),
-    });
-    const verdict = assessHealth(facts);
     assert.equal(verdict.verdict, 'degraded');
     assert.equal(verdict.socketFault, true);
-    assert.match(verdict.reason, /the submission socket reads dead/);
-    const choice = chooseRemedy(verdict, facts, {
-      lastRewarmAt: null,
-      lastResyncDustAt: null,
-      record: { ...EMPTY_HEALTH_RECORD },
-    });
-    assert.equal(choice.remedy, 'reconnect', 'a dead socket is rebuilt, not re-read');
+    assert.match(verdict.reason, /no block header for 5 min while the chain climbed 50 block\(s\)/);
+  });
+
+  it('says nothing at four minutes, or under forty blocks, however bad it looks', () => {
+    /* Both thresholds are thresholds. A socket a moment behind is a socket, and
+       a chain that has barely produced is exactly the case this must not claim
+       to have diagnosed. */
+    const nearlyLate = assessHealth(
+      healthy({
+        chainHead: head({
+          socketLagBlocks: 400,
+          socketLaggingForMs: 4 * MINUTE,
+          socketSilentForMs: 4 * MINUTE,
+          advancedWhileSocketSilent: 400,
+        }),
+      }),
+    );
+    assert.equal(nearlyLate.verdict, 'healthy');
+
+    const barelyMoving = assessHealth(
+      healthy({
+        chainHead: head({
+          socketLagBlocks: 39,
+          socketLaggingForMs: 20 * MINUTE,
+          socketSilentForMs: 20 * MINUTE,
+          advancedWhileSocketSilent: 39,
+        }),
+      }),
+    );
+    assert.equal(barelyMoving.verdict, 'healthy');
+  });
+
+  it('leaves a busy wallet alone, whatever the socket is doing', () => {
+    /* The asymmetry this whole module is built on: acting on a wallet somebody
+       is spending from is worse than any diagnosis is worth. */
+    const dead = {
+      socketHead: { height: 342_015, at: T0 - 60 * MINUTE, subscribed: true, headers: 9_000 },
+      chainHead: head({
+        referenceHead: 348_015,
+        socketLagBlocks: 6_000,
+        socketLaggingForMs: 60 * MINUTE,
+        socketSilentForMs: 60 * MINUTE,
+        advancedWhileSocketSilent: 6_000,
+      }),
+    };
+    assert.equal(assessHealth(healthy({ ...dead, reserved: true })).verdict, 'busy');
+    assert.equal(assessHealth(healthy({ ...dead, busy: true })).verdict, 'busy');
+    assert.equal(
+      assessHealth(healthy({ ...dead, syncAhead: 'unshielded applied 9549 > highest 9521' }))
+        .verdict,
+      'settling',
+    );
+  });
+
+  it('treats a connection with no subscription as unknown, never as stalled', () => {
+    /* A node client that does not offer `subscribeNewHeads`, or one that
+       refused it. `subscribed: false` with no header ever is NO EVIDENCE, and
+       reading it as a dead socket would restart a connection that is submitting
+       perfectly well. */
+    const verdict = assessHealth(
+      healthy({
+        socketHead: { height: null, at: null, subscribed: false, headers: 0 },
+        chainHead: head({
+          referenceHead: 348_015,
+          socketLagBlocks: null,
+          socketSilentForMs: 60 * MINUTE,
+          advancedWhileSocketSilent: 6_000,
+        }),
+      }),
+    );
+    assert.equal(verdict.verdict, 'healthy');
+  });
+
+  it('escalates to a restart only once rebuilding itself has failed', () => {
+    const stalled = {
+      socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, headers: 9_000 },
+      chainHead: head({
+        referenceHead: 342_065,
+        socketLagBlocks: FIVE_MINUTES_OF_BLOCKS,
+        socketLaggingForMs: 5 * MINUTE,
+      }),
+    };
+    assert.equal(assessHealth(healthy(stalled)).restartEligible, false);
+    assert.equal(
+      assessHealth(
+        healthy({
+          ...stalled,
+          consecutiveRebuildFailures: DEFAULT_HEALTH_POLICY.rebuildFailuresForRestart,
+        }),
+      ).restartEligible,
+      true,
+    );
   });
 });
 
-describe('the stall verdict without a second opinion', () => {
-  it('waits the old half hour when the head is standing still too', () => {
-    /* A genuinely quiet chain. The wallet has learned nothing because there was
-       nothing to learn, and the fast rule must not fire on it — this is the
-       case the thirty minutes existed to protect, and it still does. */
-    for (const minutes of [5, 10, 20, 29]) {
-      const verdict = assessHealth(
-        healthy({ lastStateChangeAt: T0 - minutes * MINUTE, chainHead: head() }),
-      );
-      assert.equal(verdict.verdict, 'healthy', `fired at ${minutes} min on a quiet chain`);
-    }
-    const late = assessHealth(
-      healthy({ lastStateChangeAt: T0 - 31 * MINUTE, chainHead: head() }),
+describe('the reference head, when one observer goes blind', () => {
+  it('still catches a stalled socket when the NODE probe has failed and the indexer climbs', () => {
+    /* THE SECOND LIVE FINDING OF 2026/09/06. The node's addresses were
+       black-holed, so the HTTPS head probe went blind at the same instant the
+       socket did — and the rule that depended on it turned itself off and said
+       nothing for seven and a half minutes while `/status` reported connected
+       and synced. A reference that shares a host with the thing it checks is not
+       a reference; the indexer is a different host answering a different
+       protocol, and on its own it is enough. */
+    const verdict = assessHealth(
+      healthy({
+        socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, headers: 9_000 },
+        chainHead: head({
+          nodeHeight: null,
+          probeFailures: 12,
+          indexerHeight: 342_065,
+          referenceHead: 342_065,
+          socketLagBlocks: FIVE_MINUTES_OF_BLOCKS,
+          socketLaggingForMs: 5 * MINUTE,
+        }),
+      }),
     );
-    assert.equal(late.verdict, 'degraded');
-    assert.match(late.reason, /sync indices have not moved in 31 min/);
+    assert.equal(verdict.verdict, 'degraded');
+    assert.equal(verdict.socketFault, true);
+    assert.match(verdict.reason, /reached 342065/);
   });
 
-  it('falls back to the old rule while the head probe is failing', () => {
-    /* A probe that cannot reach the public node says nothing whatever about
-       this wallet, so the correct response to losing the second opinion is to
-       go back to the first one — never to conclude something from the loss.
-       The height carried here is deliberately a stale one that WOULD trip the
-       fast rule if it were believed. */
-    const cutOff = head({ advancedSinceStateChange: 400, probeFailures: 1 });
+  it('concludes nothing at all when NEITHER observer answered', () => {
+    /* No observation, which is not an observation of nothing. The wallet's own
+       thirty-minute rule is what is left, exactly as it was before any of this
+       existed. */
+    const blind = {
+      socketHead: { height: 342_015, at: T0 - 60 * MINUTE, subscribed: true, headers: 9_000 },
+    };
     assert.equal(
-      assessHealth(healthy({ lastStateChangeAt: T0 - 10 * MINUTE, chainHead: cutOff })).verdict,
+      assessHealth(healthy({ ...blind, lastStateChangeAt: T0 - 10 * MINUTE })).verdict,
       'healthy',
     );
-    const late = assessHealth(
-      healthy({ lastStateChangeAt: T0 - 40 * MINUTE, chainHead: cutOff }),
-    );
+    const late = assessHealth(healthy({ ...blind, lastStateChangeAt: T0 - 40 * MINUTE }));
     assert.equal(late.verdict, 'degraded');
-    assert.match(late.reason, /sync indices have not moved in 40 min/, 'the old wording, and the old clock');
+    assert.match(late.reason, /sync indices have not moved in 40 min/);
   });
 
-  it('falls back to the old rule on a reading that has gone stale', () => {
-    const old = head({
-      advancedSinceStateChange: 400,
-      ageMs: DEFAULT_HEALTH_POLICY.chainHeadMaxAgeMs + 1,
-    });
-    assert.equal(
-      assessHealth(healthy({ lastStateChangeAt: T0 - 10 * MINUTE, chainHead: old })).verdict,
-      'healthy',
+  it('ignores a reference reading that has gone stale', () => {
+    /* The node's reading is sticky across failed probes, so an old height and a
+       running clock would eventually read as a chain that had stopped — a
+       conclusion no probe here is entitled to. */
+    const verdict = assessHealth(
+      healthy({
+        socketHead: { height: 342_015, at: T0 - 10 * MINUTE, subscribed: true, headers: 9_000 },
+        chainHead: head({
+          ageMs: DEFAULT_HEALTH_POLICY.chainHeadMaxAgeMs + 1,
+          referenceHead: 342_415,
+          socketLagBlocks: 400,
+          socketLaggingForMs: 10 * MINUTE,
+        }),
+      }),
     );
+    assert.equal(verdict.verdict, 'healthy');
   });
 
-  it('behaves exactly as it did when there is no probe at all', () => {
-    /* Every existing case in this file runs without a `chainHead`, and this
-       says in one place what that absence means: no observation, not an
-       observation of nothing. */
+  it('behaves exactly as it did when there is no observer configured at all', () => {
     assert.equal(assessHealth(healthy({ lastStateChangeAt: T0 - 10 * MINUTE })).verdict, 'healthy');
     assert.equal(assessHealth(healthy({ lastStateChangeAt: T0 - 31 * MINUTE })).verdict, 'degraded');
+  });
+});
+
+describe('an indexer that has fallen behind', () => {
+  it('reports it as degraded with NO remedy', () => {
+    /* The only verdict in this module that names a fault in somebody else's
+       service, and the only one that acts on nothing. There is no rung that
+       reaches it: a refresh re-reads the same stale answers, a reconnect
+       rebuilds a socket that is fine, and a restart asks the same indexer
+       again. What it buys is the diagnosis — everything this wallet knows about
+       the chain it learns from the indexer. */
+    const facts = healthy({
+      chainHead: head({
+        nodeHeight: 342_015,
+        indexerHeight: 341_815,
+        referenceHead: 342_015,
+        indexerBehindHeadBlocks: 200,
+        indexerBehindForMs: 5 * MINUTE,
+      }),
+    });
+    const verdict = assessHealth(facts);
+    assert.equal(verdict.verdict, 'degraded');
+    assert.equal(verdict.act, false, 'alert-only');
+    assert.equal(verdict.restartEligible, false);
+    assert.equal(verdict.socketFault, undefined);
+    assert.match(verdict.reason, /indexer is 200 block\(s\) behind/);
+    assert.equal(
+      chooseRemedy(verdict, facts, {
+        lastRewarmAt: null,
+        lastResyncDustAt: null,
+        record: { ...EMPTY_HEALTH_RECORD },
+      }).remedy,
+      'none',
+    );
+  });
+
+  it('holds under a hundred blocks, and under five minutes', () => {
+    assert.equal(
+      assessHealth(
+        healthy({ chainHead: head({ indexerBehindHeadBlocks: 99, indexerBehindForMs: 60 * MINUTE }) }),
+      ).verdict,
+      'healthy',
+    );
+    assert.equal(
+      assessHealth(
+        healthy({
+          chainHead: head({ indexerBehindHeadBlocks: 5_000, indexerBehindForMs: 4 * MINUTE }),
+        }),
+      ).verdict,
+      'healthy',
+    );
+  });
+
+  it('never masks a fault this service could actually repair', () => {
+    /* It is the LAST branch, so a stalled socket and a behind indexer together
+       report the socket — which is the one of the two anything can be done
+       about. */
+    const verdict = assessHealth(
+      healthy({
+        socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, headers: 9_000 },
+        chainHead: head({
+          referenceHead: 342_065,
+          socketLagBlocks: FIVE_MINUTES_OF_BLOCKS,
+          socketLaggingForMs: 5 * MINUTE,
+          indexerHeight: 341_815,
+          indexerBehindHeadBlocks: 250,
+          indexerBehindForMs: 30 * MINUTE,
+        }),
+      }),
+    );
+    assert.equal(verdict.socketFault, true);
+    assert.match(verdict.reason, /submission socket/);
   });
 });
 
@@ -1419,56 +1608,234 @@ function fakeHead(now: () => number, script: { height: () => number | null }): C
   };
 }
 
-describe('the loop with a second opinion', () => {
-  it('acts at five minutes on a wallet the chain has left behind', async () => {
-    /* Ten blocks a minute, which is stagenet, against a fingerprint that never
-       changes — the shape of 2026/09/05 with the clock the fix gives it. */
-    const h = harness([reading({ fingerprint: 'frozen' })], (now) =>
-      fakeHead(now, { height: () => 342_015 + Math.floor((now() - T0) / MINUTE) * 10 }),
+/** Ten blocks a minute from `342,015`, which is stagenet's own cadence. */
+const climbingFrom = (at: number): number => 342_015 + Math.floor((at - T0) / MINUTE) * 10;
+
+/**
+ * A handle on the harness's own clock.
+ *
+ * `startHealthLoop` is given `now` by the harness and hands it back through
+ * `makeHead`; this captures it so a case can script the indexer and the socket
+ * against the SAME clock the loop is ticking on. Without it a case would be
+ * scripting the chain against a clock that never moves, which is how a socket
+ * that was meant to keep up appeared to freeze.
+ */
+function clockHandle() {
+  let read: () => number = () => T0;
+  return {
+    at: (): number => read(),
+    head: (script: (at: number) => number | null) => (now: () => number): ChainHeadProbe => {
+      read = now;
+      return fakeHead(now, { height: () => script(now()) });
+    },
+  };
+}
+
+/** A socket head frozen at a height, as a reading the harness can replay. */
+const frozenSocket = (at: number) => ({
+  height: 342_015,
+  at,
+  subscribed: true,
+  headers: 9_000,
+});
+
+describe('the loop watching the socket against the chain', () => {
+  it('leaves a healthy IDLE sponsor entirely alone while the chain climbs', async () => {
+    /* The regression this whole change exists for. The wallet's fingerprint
+       never moves — a quiet stagenet, which is most of them — and the chain
+       runs an hour ahead of where it started. The socket is following it, so
+       there is nothing to report, and the old rule would have reported it
+       thirty times over. */
+    const clock = clockHandle();
+    const h = harness(
+      [reading({ fingerprint: 'frozen' })],
+      clock.head(climbingFrom),
+      () => climbingFrom(clock.at()),
+      () => ({
+        height: climbingFrom(clock.at()),
+        at: clock.at(),
+        subscribed: true,
+        headers: 9_000,
+      }),
+    );
+    for (let minute = 0; minute < 29; minute += 1) {
+      const verdict = await h.monitor.tick();
+      assert.equal(verdict?.verdict, 'healthy', `fired at minute ${minute}`);
+      h.advance(MINUTE);
+    }
+    assert.deepEqual(h.calls, [], 'not one remedy on a sponsor that is perfectly well');
+    h.monitor.stop();
+  });
+
+  it('acts at five minutes on a socket the chain has left behind', async () => {
+    const clock = clockHandle();
+    const h = harness(
+      [reading({ fingerprint: 'frozen' })],
+      clock.head(climbingFrom),
+      () => climbingFrom(clock.at()),
+      () => frozenSocket(T0),
     );
 
-    /* Tick one stamps the head against the wallet's position and finds nothing
-       wrong: no blocks have been produced since this process started looking. */
+    /* Tick one: the socket is level with the chain and nothing is wrong. */
     assert.equal((await h.monitor.tick())?.verdict, 'healthy');
     assert.deepEqual(h.calls, []);
-    assert.equal(h.monitor.snapshot().chainHead?.height, 342_015);
-    assert.equal(h.monitor.snapshot().chainHead?.advancedSinceStateChange, 0);
-    assert.equal(h.monitor.snapshot().chainHeadProbe, 'ok');
+    assert.equal(h.monitor.snapshot().socketHead?.socketHeadLagBlocks, 0);
 
-    /* Four minutes on, forty blocks: below the window, so nothing happens. */
+    /* Four minutes on, forty blocks: at the block threshold, under the clock. */
     h.advance(4 * MINUTE);
     assert.equal((await h.monitor.tick())?.verdict, 'healthy');
     assert.deepEqual(h.calls, []);
 
-    /* Five minutes, fifty blocks, and the wallet has not moved once. */
+    /* Five minutes. A socket frozen at a height is silent AND behind, and the
+       silence limb is what reaches the window first — the lag limb's clock only
+       starts once the lag itself passes forty, which here is at minute four.
+       Both are the same fault; the silence is simply the earlier evidence, and
+       it is the wording an operator gets. */
     h.advance(MINUTE);
     const verdict = await h.monitor.tick();
     assert.equal(verdict?.verdict, 'degraded');
-    assert.match(verdict!.reason, /head has climbed 50 block\(s\)/);
-    assert.deepEqual(h.calls, ['refresh'], 'the cheap rung, which now rebuilds the socket too');
+    assert.match(verdict!.reason, /no block header for 5 min while the chain climbed 50 block\(s\) to 342065/);
+    assert.deepEqual(h.calls, ['reconnect'], 'a rebuild, on the first tick that earns it');
 
     const published = h.monitor.snapshot();
-    assert.equal(published.chainHead?.height, 342_065);
-    assert.equal(published.chainHead?.advancedSinceStateChange, 50);
-    assert.equal(published.chainHead?.url, 'https://rpc.stagenet.shielded.tools');
-    assert.equal(published.chainHead?.ageMs, 0, 'read on this very tick');
+    assert.equal(published.socketHead?.socketHeadLagBlocks, 50);
+    assert.equal(published.socketHead?.height, 342_015);
+    assert.equal(published.chainHead?.referenceHead, 342_065);
     h.monitor.stop();
   });
 
-  it('re-stamps the head every time the wallet moves, so a working wallet never trips', () => {
-    /* Proved as a property of the fact rather than through the loop, because it
-       is the fact that carries it: `advancedSinceStateChange` is measured from
-       the head as it stood when the indices last moved, so a wallet that keeps
-       up resets the count every tick and can never accumulate a window. */
-    const keepingUp = assessHealth(
-      healthy({ lastStateChangeAt: T0, chainHead: head({ advancedSinceStateChange: 0 }) }),
+  it('acts on a socket still delivering headers at a height that never moves', async () => {
+    /* The lag limb through the loop, and the one shape the silence limb cannot
+       see: headers keep arriving — so the socket is never silent — but every
+       one of them carries the same height. A node that has stopped importing
+       looks exactly like this. The lag reaches forty at minute four and has to
+       hold there for five more, so this is reported at minute nine. */
+    const clock = clockHandle();
+    const h = harness(
+      [reading({ fingerprint: 'a' })],
+      clock.head(climbingFrom),
+      () => climbingFrom(clock.at()),
+      () => ({ height: 342_015, at: clock.at(), subscribed: true, headers: 9_000 }),
     );
-    assert.equal(keepingUp.verdict, 'healthy');
+    assert.equal((await h.monitor.tick())?.verdict, 'healthy');
+    h.advance(4 * MINUTE);
+    assert.equal((await h.monitor.tick())?.verdict, 'healthy', 'forty behind, but only just');
+    h.advance(4 * MINUTE);
+    assert.equal((await h.monitor.tick())?.verdict, 'healthy', 'behind, but not yet for long');
+    h.advance(MINUTE);
+    const verdict = await h.monitor.tick();
+    assert.equal(verdict?.verdict, 'degraded');
+    assert.match(verdict!.reason, /submission socket is 90 block\(s\) behind a chain that has reached 342105/);
+    assert.deepEqual(h.calls, ['reconnect']);
+    assert.equal(h.monitor.snapshot().socketHead?.socketHeadLagBlocks, 90);
+    h.monitor.stop();
   });
 
-  it('publishes a failing probe on /status and does nothing whatever about it', async () => {
-    const h = harness([reading({ fingerprint: 'frozen' })], (now) =>
-      fakeHead(now, { height: () => null }),
+  it('acts on a subscription that has simply gone silent', async () => {
+    /* No header since the connection was built, and fifty blocks produced
+       meanwhile. There is no height to be behind with, so only the silence limb
+       can see this. */
+    const clock = clockHandle();
+    const h = harness(
+      [reading({ fingerprint: 'frozen' })],
+      clock.head(climbingFrom),
+      () => climbingFrom(clock.at()),
+      () => ({ height: null, at: null, subscribed: true, headers: 0 }),
+    );
+    assert.equal((await h.monitor.tick())?.verdict, 'healthy');
+    h.advance(5 * MINUTE);
+    const verdict = await h.monitor.tick();
+    assert.equal(verdict?.verdict, 'degraded');
+    assert.match(verdict!.reason, /no block header for 5 min while the chain climbed 50 block\(s\)/);
+    assert.deepEqual(h.calls, ['reconnect']);
+    h.monitor.stop();
+  });
+
+  it('still catches it with the node probe failing, on the indexer alone', async () => {
+    /* The black-holed node of 2026/09/06: the HTTPS probe goes blind at the
+       same instant the socket does, and without a second observer the rule
+       would turn itself off for exactly as long as the fault lasted. */
+    const clock = clockHandle();
+    const h = harness(
+      [reading({ fingerprint: 'frozen' })],
+      clock.head(() => null),
+      () => climbingFrom(clock.at()),
+      () => frozenSocket(T0),
+    );
+    assert.equal((await h.monitor.tick())?.verdict, 'healthy');
+    h.advance(5 * MINUTE);
+    const verdict = await h.monitor.tick();
+    assert.equal(verdict?.verdict, 'degraded');
+    assert.match(verdict!.reason, /no block header for 5 min while the chain climbed 50 block\(s\)/);
+    assert.deepEqual(h.calls, ['reconnect']);
+
+    const published = h.monitor.snapshot();
+    assert.equal(published.chainHeadProbe, 'ok', 'two failures is not ten');
+    assert.equal(published.chainHead?.height, null, 'the node never answered');
+    assert.equal(published.chainHead?.indexerHead, 342_065);
+    assert.equal(published.chainHead?.referenceHead, 342_065);
+    h.monitor.stop();
+  });
+
+  it('concludes nothing when BOTH observers are blind', async () => {
+    const clock = clockHandle();
+    const h = harness(
+      [reading({ fingerprint: 'frozen' })],
+      clock.head(() => null),
+      () => null,
+      () => frozenSocket(T0),
+    );
+    for (let minute = 0; minute < 10; minute += 1) {
+      assert.equal((await h.monitor.tick())?.verdict, 'healthy', `fired at minute ${minute}`);
+      h.advance(MINUTE);
+    }
+    assert.deepEqual(h.calls, [], 'losing both observers is not evidence about this socket');
+    assert.equal(h.monitor.snapshot().socketHead?.socketHeadLagBlocks, null);
+    h.monitor.stop();
+  });
+
+  it('reports an indexer that has fallen behind, and does nothing about it', async () => {
+    /* The node climbs; the indexer stopped 200 blocks ago. Everything else is
+       well, so this is the branch that speaks — and it is the branch with no
+       remedy. */
+    const clock = clockHandle();
+    const h = harness(
+      [reading({ fingerprint: 'a' })],
+      clock.head(climbingFrom),
+      () => 341_815,
+      () => ({
+        height: climbingFrom(clock.at()),
+        at: clock.at(),
+        subscribed: true,
+        headers: 9_000,
+      }),
+    );
+    assert.equal((await h.monitor.tick())?.verdict, 'healthy', 'two hundred behind, but only just');
+    h.advance(5 * MINUTE);
+    const verdict = await h.monitor.tick();
+    assert.equal(verdict?.verdict, 'degraded');
+    assert.equal(verdict?.act, false);
+    assert.match(verdict!.reason, /indexer is 250 block\(s\) behind/);
+    assert.deepEqual(h.calls, [], 'there is no rung that reaches somebody else’s server');
+    assert.equal(h.monitor.snapshot().chainHead?.indexerBehindHeadBlocks, 250);
+    /* And it does not build a streak, so it can never hurry a later, genuine
+       fault towards a restart. */
+    assert.equal(h.monitor.snapshot().consecutiveUnhealthy, 0);
+    h.monitor.stop();
+  });
+
+  it('publishes a failing node probe and does nothing whatever about it', async () => {
+    const clock = clockHandle();
+    const h = harness(
+      [reading({ fingerprint: 'a' })],
+      clock.head(() => null),
+      () => climbingFrom(clock.at()),
+      () => ({
+        height: climbingFrom(clock.at()),
+        at: clock.at(),
+        subscribed: true,
+        headers: 9_000,
+      }),
     );
     for (let n = 0; n < 10; n += 1) {
       assert.equal((await h.monitor.tick())?.verdict, 'healthy');
@@ -1477,18 +1844,22 @@ describe('the loop with a second opinion', () => {
     const published = h.monitor.snapshot();
     assert.equal(published.chainHeadProbe, 'failing');
     assert.equal(published.chainHead?.probeFailures, 10);
-    assert.equal(published.chainHead?.failures, 10);
     assert.equal(published.chainHead?.height, null);
     assert.equal(published.chainHead?.lastError, 'fetch failed');
     assert.deepEqual(h.calls, [], 'a public node that will not answer is not a fault in this wallet');
     h.monitor.stop();
   });
 
-  it('publishes nothing about a chain it was not given a probe for', async () => {
+  it('publishes nothing about a chain it was given no observer for', async () => {
     const h = harness([reading({})]);
     await h.monitor.tick();
     assert.equal(h.monitor.snapshot().chainHead, null);
     assert.equal(h.monitor.snapshot().chainHeadProbe, 'off');
+    assert.equal(
+      h.monitor.snapshot().socketHead?.socketHeadLagBlocks,
+      null,
+      'the socket is still published; there is simply nothing to compare it with',
+    );
     h.monitor.stop();
   });
 });

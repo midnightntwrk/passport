@@ -547,6 +547,29 @@ contractProving                            wasm | server — how CONTRACT circui
                                            question from `proving` above
 settling                                   not ready, but only because a spend's
                                            change is still in flight
+nodeUrls / nodeUrlInUse                    every node configured, in the
+                                           operator's order, and the one the
+                                           submission connection is open on
+indexerUrls / indexerUrlInUse              the same for the indexer: what was
+                                           configured, and which one last
+                                           answered a query
+chainHeadUrlInUse                          the node the head probe last read
+                                           from, which walks the list per read
+chainHead.height / .indexerHead            the two observers the socket is
+                                           judged against — the node over HTTPS
+                                           and the indexer over GraphQL
+chainHead.referenceHead                    max of the two: what "how far the
+                                           chain has got" means here
+chainHead.indexerBehindHeadBlocks          past 100 for five minutes this is
+                                           `degraded` with no remedy
+socketHead                                 the chain as the SUBMISSION socket
+                                           sees it — height, when the last
+                                           header arrived, whether the
+                                           subscription is up, and how many
+                                           headers this connection has delivered
+socketHeadLagBlocks                        referenceHead minus that height. Zero
+                                           on a socket keeping up, which is what
+                                           you should expect to see
 health                                     the watchdog's own account of itself
                                            — see "Keeping itself alive" below
 ```
@@ -719,8 +742,74 @@ DUST is on its way back:
    [The DUST wedge](#the-dust-wedge).
 5. `degraded` — unsynced; a dropped subscription; `proving: failed`;
    `proving: warming` long past a cold start; no DUST *and no NIGHT*, so nothing
-   to explain it; sync indices that have not moved in half an hour.
-6. `healthy`.
+   to explain it.
+6. `degraded`, with a `reconnect` — **the submission socket has stopped
+   following the chain**. See [Watching the socket, not the wallet](#watching-the-socket-not-the-wallet).
+7. `degraded` — sync indices that have not moved in half an hour.
+8. `degraded`, **alert-only** — the indexer is 100 blocks or more behind the
+   reference head, and has been for five minutes. Last, and `act: false`: it
+   names a fault in somebody else's server, there is no rung that reaches it,
+   and it must never mask one this service could repair or build a streak that
+   hurries a later fault towards a restart.
+9. `healthy`.
+
+#### Watching the socket, not the wallet
+
+Nothing above moves when the connection this service **submits** on dies — the
+wallet reads its state from the indexer, which is a different connection. That
+is how five hours of every-submission-fails read as `healthy` on 2026/09/05.
+
+Two wrong signals were tried for it. The wallet's own **sync indices**, waited on
+for half an hour: slow, but at least deliberately so. Then, on 2026/09/06, those
+same indices with the public node's head as a second opinion — forty blocks
+produced while the indices stood still, called in five minutes. That fired on a
+healthy idle sponsor **every tick**: 614 `degraded` lines in a day. A wallet's
+indices are not a liveness signal at all. `highestTransactionId` and the
+shielded and DUST merkle indices only move on ledger activity *that concerns
+this wallet*, so a quiet stagenet leaves them standing still for hours while
+every stream is connected and every figure is correct.
+
+What is watched now is the connection itself. `src/submission.ts` holds one
+`chain_subscribeNewHeads` on the very `ApiPromise` this service submits on,
+re-established on every rebuild, and records each header's height and instant
+(`socketHead`). A header arriving over that connection is proof it is alive.
+Unlike the indices, a header is produced whether or not anything in the block
+concerns this wallet — so silence has no quiet-chain explanation to protect, and
+that is what buys five minutes instead of thirty.
+
+**The reference is two observers, not one.** The other finding of 2026/09/06:
+with the node's addresses black-holed, the HTTPS head probe went blind at the
+same instant the socket did, and `/status` said connected and synced for seven
+and a half minutes while nothing could get through. A reference that shares a
+host with the thing it checks is not a reference. So
+
+    referenceHead = max(node HTTPS head, indexer head)
+
+and the indexer is a different host answering a different protocol — one bounded
+GraphQL query per tick. Either alone is enough; both unavailable is **no
+observation**, which falls back to the half-hour indices rule and concludes
+nothing. A node reading older than `chainHeadMaxAgeMs` (2 min) stops counting,
+because that reading is sticky across failed probes.
+
+The verdict is `degraded` with a `reconnect`, on the first tick that earns it,
+when either:
+
+- **the lag** — `referenceHead - socketHead.height` has been at or over 40 for
+  5 minutes; or
+- **the silence** — no header for 5 minutes while `referenceHead` climbed 40 or
+  more. Not redundant: a connection whose stream never opened has delivered no
+  header, so there is no height for the lag to compare.
+
+A connection with no subscription established *and* no header ever
+(`subscribed: false`, `height: null`) is **unknown**, never stalled — a node
+client that does not offer `subscribeNewHeads` submits perfectly well, and what
+it costs is one signal. `/status` publishes `socketHead` and
+`socketHeadLagBlocks` on every tick, healthy ones included: a rule that fired
+614 times in a day on a well sponsor is one an operator has to be able to watch
+*not* firing.
+
+The half-hour indices rule is kept exactly as it was, and for exactly the reason
+it is worth keeping — it is looking at something else.
 
 Only `healthy` clears the unhealthy streak. `busy` and `settling` **hold** it: a
 wallet that was degraded and is now merely mid-spend has not been shown to be
