@@ -101,8 +101,11 @@ env:
   # DUST speck the gateway pays for a fee is one our balancer keeps for the
   # path that has no second provider at all.
   #
-  # `VITE_FUNDER_URL` stays a single URL on purpose: `/register-alias` and
-  # `/fund-account` exist nowhere but our balancer (the gateway 404s both).
+  # `VITE_FUNDER_URL` is a single URL here because there is only one Passport
+  # sponsor today: `/register-alias` and `/fund-account` exist nowhere but our
+  # balancer (the gateway 404s both). Since 2026/09/07 the client accepts an
+  # ordered list and fails over only on unreachability, so a standby sponsor
+  # is one more address on this line, not a code change.
   #
   # THE BALANCER IS NAMED BY ITS SSLIP.IO ADDRESS, NOT BY A DNS RECORD
   # (2026/09/02). The friendly name this file used until today still resolves,
