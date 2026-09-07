@@ -1,0 +1,28 @@
+[
+  {
+    "instance_public_input_elements": 64,
+    "k": 16,
+    "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
+    "negative_control_rejected": true,
+    "path": "connector",
+    "prefix_applied": true,
+    "prefix_ascii": "midnight_signed_message:32:",
+    "proof_bytes": 4064,
+    "prove_ms": [
+      819,
+      791,
+      797
+    ],
+    "rust_checks": {
+      "message_is_sha256_of_signed_bytes": true,
+      "rejects_corrupted_payload": true,
+      "rejects_unhashed_message": true,
+      "verify_over_signed_bytes": true
+    },
+    "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+    "setup_pk_ms": 331,
+    "setup_vk_ms": 584,
+    "srs_load_ms": 61,
+    "verify_ms": 2
+  }
+]

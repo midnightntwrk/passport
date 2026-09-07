@@ -1,0 +1,18 @@
+// P4 probe G (correction pass): the ECDSA connector-envelope arm, whole.
+// persistentHash IS SHA-256 over the value's binary representation, and a
+// tuple of Bytes encodes as the raw concatenation, so the digest a
+// connector wallet signs on the ecdsa_secp256k1_sha256 scheme,
+// SHA-256("midnight_signed_message:32:" || challenge), is expressible
+// today and feeds the native ECDSA verify directly.
+pragma language_version 0.26;
+import CompactStandardLibrary;
+
+export pure circuit verify_envelope(
+  envelope_tag: Bytes<27>,
+  challenge: Bytes<32>,
+  sig: Secp256k1EcdsaSignature,
+  pk: Secp256k1Point
+): [] {
+  const digest = persistentHash<[Bytes<27>, Bytes<32>]>([envelope_tag, challenge]);
+  secp256k1EcdsaVerify(digest, sig, pk);
+}
