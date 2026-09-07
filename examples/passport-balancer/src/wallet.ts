@@ -81,7 +81,6 @@ import {
   createWalletReservation,
   currentJob,
   progress,
-  releaseWithJob,
   type RunningJobSummary,
 } from './reservation.js';
 import { countingProof, httpWalletProvingService, proverIdle } from './proving.js';
@@ -117,7 +116,10 @@ import {
   nightPayloadFirst,
   smallestOfType,
   unshieldedInputsOf,
+  type CoinPresence,
   type CoinTicket,
+  type ReclaimResult,
+  type ReservedCoinsSummary,
   type SelectableCoin,
 } from './coinReservation.js';
 import { FEE_CAPABLE_SPECKS } from './resolverPool.js';
@@ -1159,6 +1161,20 @@ export interface BalancerWallet {
   /** Coins no job may currently be handed, as keys — for `/status` and the journal. */
   excludedCoins(): string[];
   /**
+   * Coins a spend job owns right now — held, or in flight for a submission the
+   * node never acknowledged — with the job labels and the oldest age.
+   * Published on `/status` and read by the health verdict.
+   */
+  reservedCoins(): ReservedCoinsSummary;
+  /** Reservations reclaimed since this process started. `/status` publishes it. */
+  reservationsReclaimed(): number;
+  /**
+   * Takes back every reservation nothing will settle — the `reclaim` rung in
+   * `./health.ts`, and what a job waiting on a reserved coin does before it
+   * waits. See {@link CoinReservation.reclaim}.
+   */
+  reclaimReservations(): Promise<ReclaimResult>;
+  /**
    * Whether this wallet's DUST is hidden rather than absent, read from the live
    * state. `false` for every explainable shortfall — see {@link isDustWedged}
    * for the full conjunction and why each term is in it.
@@ -1402,7 +1418,24 @@ export async function openBalancerWallet(
      that this exists to catch. Wired into all three wallets through the
      SDK's public hook, `V1Builder.withCoinSelection`, with each wallet's own
      default selector underneath. */
-  const coins = createCoinReservation({ log: (line) => console.log(line) });
+  const coins = createCoinReservation({
+    log: (line) => console.log(line),
+    /* THE RELEASE IS ATTACHED WHERE THE TICKET IS BORN, not at the call site
+       that opens one. `RunningJob.release` is run by the queue on every exit a
+       job has — success, refusal, timeout, socket failure, exception, and the
+       watchdog's abort — so a ticket whose release is on that list cannot
+       outlive its job. See `attachToJob` in `./coinReservation.ts` for the
+       six minutes of 2026/09/07 that came of registering it by hand. */
+    attachToJob: (release) => {
+      const job = currentJob();
+      if (!job) return null;
+      job.release.push(release);
+      return job.id;
+    },
+    /* `reservation` is built below; this is only ever called from a reclaim
+       sweep, which is long after. */
+    jobRunning: (jobId) => reservation.counts().running.some((job) => job.id === jobId),
+  });
   const guardedShielded = (cfg: Parameters<typeof ShieldedWallet>[0]) =>
     CustomShieldedWallet(
       cfg,
@@ -1951,6 +1984,31 @@ export async function openBalancerWallet(
    * waited for is a block landing and an event batch replaying, both of which
    * are seconds, and the caller is holding nothing while it waits.
    */
+  /**
+   * Takes back every reservation nothing is going to settle, and says so.
+   *
+   * Called before a job WAITS for a reserved coin rather than on a timer,
+   * because that is the moment the question is being asked: something is
+   * excluded, and either a live job owns it or nobody does. On 2026/09/07 the
+   * answer was "nobody" for twenty-eight minutes and a job asked it every ten
+   * seconds without ever being able to act on it.
+   */
+  const reclaimReservations = async (): Promise<ReclaimResult> => {
+    let presence: ((key: string) => CoinPresence) | undefined;
+    try {
+      const state = await currentState();
+      const available = new Set(walletCoins(state, 'available').map(coinKey));
+      const pending = new Set(walletCoins(state, 'pending').map(coinKey));
+      presence = (key): CoinPresence =>
+        available.has(key) ? 'available' : pending.has(key) ? 'pending' : 'gone';
+    } catch {
+      /* A state that cannot be read says nothing about where a coin stands, so
+         the sweep is skipped rather than run against a guess. */
+      return { reclaimed: 0, dropped: 0, coins: 0 };
+    }
+    return coins.reclaim({ presence });
+  };
+
   const awaitFreeDustCoin = async (
     maxMs: number,
     options: { minSpecks?: bigint } = {},
@@ -2144,6 +2202,9 @@ export async function openBalancerWallet(
     },
 
     excludedCoins: () => coins.excluded(),
+    reservedCoins: () => coins.reservedCoins(),
+    reservationsReclaimed: () => coins.reservationsReclaimed(),
+    reclaimReservations,
 
     awaitFreeDustCoin,
 
@@ -2318,6 +2379,11 @@ export async function openBalancerWallet(
                 console.log(
                   `[coins] ${currentJob()?.label ?? 'this job'}: no selectable coin — ${excluded.length} excluded by other jobs (${message.slice(0, 60)}), waiting`,
                 );
+                /* THE SWEEP BEFORE THE WAIT. An exclusion that no live job owns
+                   is not going to end on its own, and waiting on it is what
+                   this job did for thirty seconds at a time, for ever, on
+                   2026/09/07. */
+                if ((await reclaimReservations()).coins > 0) continue;
                 await coins.whenReleased(
                   Math.min(10_000, waitForReservedCoinMs - (Date.now() - startedAt)),
                 );
@@ -2355,11 +2421,11 @@ export async function openBalancerWallet(
                (or the transaction landing, when the ticket becomes a flight)
                lets them go. Before 2026/09/03 each attempt released and
                reopened, and the job beside it took the coin in between. */
-            if (!ticket || !ticket.isOpen()) {
-              const opened = coins.open(label);
-              ticket = opened;
-              releaseWithJob(() => opened.release());
-            }
+            /* `open` attaches its own release to the running job — see
+               `attachToJob` where the reservation is built. Nothing is
+               registered here, because a release registered here is a release
+               that a path which never reached this line does not get. */
+            if (!ticket || !ticket.isOpen()) ticket = coins.open(label);
             let padRounds = padFloor;
             /* What the last balance ACTUALLY carried, which is not what it
                asked for whenever the crumbs ran out. Every piece of
@@ -2557,6 +2623,10 @@ export async function openBalancerWallet(
                 console.log(
                   `[coins] ${label}: no selectable coin to balance with — ${excluded.length} excluded by other jobs (${message.slice(0, 60)}), waiting`,
                 );
+                /* The same sweep as the estimate's, for the same reason: a coin
+                   excluded by a job that no longer exists comes free on demand
+                   rather than at the next TTL. */
+                if ((await reclaimReservations()).coins > 0) continue;
                 await coins.whenReleased(
                   Math.min(10_000, waitForReservedCoinMs - (Date.now() - startedAt)),
                 );
@@ -2719,8 +2789,14 @@ export async function openBalancerWallet(
                 balancedAt: Date.now(),
               });
               /* Possibly on its way, so its coins stay out of everyone else's
-                 reach until the chain or the TTL settles it. */
-              ticket?.submitted(inFlightUntil);
+                 reach until the chain or the TTL settles it — but marked
+                 UNACKNOWLEDGED, because nothing on the chain may ever settle
+                 it. That is the flag `coins.reclaim` reads three minutes later,
+                 once the sweeper has reverted the booking and the wallet has
+                 its coins back: without it, four of these in one outage held
+                 every fee-capable coin for the whole thirty-minute TTL and only
+                 a restart cleared them. */
+              ticket?.submitted(inFlightUntil, { acknowledged: false });
               throw cause;
             }
             try {

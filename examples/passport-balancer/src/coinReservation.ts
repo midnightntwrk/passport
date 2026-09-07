@@ -649,8 +649,21 @@ export interface CoinTicket {
    * them: the moment the spend is applied, the successor is real.
    */
   created(keys: Iterable<string>): void;
-  /** The transaction carrying the held coins was submitted; keep them excluded until applied or `expiresAt`. */
-  submitted(expiresAt: number): void;
+  /**
+   * The transaction carrying the held coins was submitted; keep them excluded
+   * until applied or `expiresAt`.
+   *
+   * `acknowledged` is what the NODE said, and it is the difference between a
+   * reservation the chain will settle and one nothing will. A transaction the
+   * node took (or that the indexer then showed on chain) is genuinely in
+   * flight and its coins are genuinely gone. A submission that TIMED OUT with
+   * the indexer saying the transaction is not on chain may still be on its way
+   * — so its coins stay excluded rather than being handed straight to the next
+   * job — but nothing on the chain will ever settle it if it was lost, and
+   * that is the reservation {@link CoinReservation.reclaim} exists to take
+   * back. See the outage of 2026/09/07 16:38.
+   */
+  submitted(expiresAt: number, options?: { acknowledged?: boolean }): void;
   /** The job ended without a submission, or reverted: every held coin is free again. */
   release(): void;
 }
@@ -658,7 +671,94 @@ export interface CoinTicket {
 export interface CoinReservationOptions {
   now?: () => number;
   log?: (line: string) => void;
+  /**
+   * Attaches a ticket's release to the JOB that opened it, and names that job.
+   * Returns the job's id, or `null` when nothing is running.
+   *
+   * WHY THE RESERVATION DOES THIS AND NOT ITS CALLER. Until 2026/09/07 the one
+   * place that opened a ticket also remembered to register its release, and a
+   * ticket opened anywhere else — or opened on a path that then threw before
+   * the registration — held its coins for the life of the process. Opening and
+   * releasing are now one act: a ticket cannot be created without its release
+   * being attached to the job that created it, whatever that job goes on to do
+   * or fail to do.
+   */
+  attachToJob?: (release: () => void) => string | null;
+  /** Whether the job of that id is still on the queue. Absent means "assume it is". */
+  jobRunning?: (jobId: string) => boolean;
 }
+
+/**
+ * Where a coin stands in the WALLET'S OWN state, as {@link CoinReservation.reclaim}
+ * needs to know it.
+ *
+ *   - `available` — the wallet has the coin back and would hand it out. A
+ *     reservation still excluding it is excluding nothing real.
+ *   - `pending` — booked against a submission of this wallet's. Correct, and
+ *     it ends by itself when the sweeper reverts or the chain applies.
+ *   - `gone` — in neither list: the chain has it. The reservation has nothing
+ *     left to protect and is dropped.
+ */
+export type CoinPresence = 'available' | 'pending' | 'gone';
+
+export interface ReclaimOptions {
+  /** A reservation younger than this is left alone. Defaults to {@link RESERVATION_RECLAIM_MS}. */
+  olderThanMs?: number;
+  /** Where each coin stands in the wallet's own state. Absent treats every coin as `available`. */
+  presence?: (key: string) => CoinPresence;
+}
+
+export interface ReclaimResult {
+  /** Reservations freed whose coins the wallet still has. */
+  reclaimed: number;
+  /** Reservations forgotten because the chain has taken their coins. */
+  dropped: number;
+  /** Coins made selectable again, across both. */
+  coins: number;
+}
+
+/** One reservation, as `/status` publishes it. */
+export interface ReservedCoinEntry {
+  /** The job's label — `the registration of hectest.night`. */
+  label: string;
+  /** The queue's id for the job that opened it, or `null` when none was running. */
+  jobId: string | null;
+  /** `held` before a submission, `submitted` after one. */
+  state: 'held' | 'submitted';
+  /** Whether the node acknowledged the transaction carrying these coins. */
+  acknowledged: boolean;
+  /** How many coins this reservation excludes — consumed and created together. */
+  coins: number;
+  ageMs: number;
+}
+
+export interface ReservedCoinsSummary {
+  /**
+   * Coins excluded by a reservation a JOB owns — held, or in flight for a
+   * submission the node never acknowledged. Coins in flight for a transaction
+   * the node took are deliberately not counted: the chain owns those, and no
+   * reclaim can or should take them back.
+   */
+  count: number;
+  held: number;
+  inFlight: number;
+  /** How long ago the oldest of those was taken. Zero when there are none. */
+  oldestAgeMs: number;
+  jobs: ReservedCoinEntry[];
+}
+
+/**
+ * How long a reservation may stand before it is worth reclaiming.
+ *
+ * Three minutes, and the figure is the orphan sweeper's own window with a
+ * margin: `balanceOrphanMs` is two minutes, so by three a submission the node
+ * never acknowledged has already been reverted and its DUST is back in the
+ * wallet's available list. Anything still excluded past that point is excluded
+ * by bookkeeping and by nothing else — which is exactly what the six-minute
+ * black-hole drill of 2026/09/07 left behind, and what a restart was needed to
+ * clear.
+ */
+export const RESERVATION_RECLAIM_MS = 180_000;
 
 export interface CoinReservation {
   open(label: string): CoinTicket;
@@ -736,14 +836,63 @@ export interface CoinReservation {
   observe(available: Iterable<string>, pending: Iterable<string>): void;
   /** Resolves on the next release or application, or after `maxMs`. True if something came free. */
   whenReleased(maxMs: number): Promise<boolean>;
+  /**
+   * Takes back the reservations that nothing is going to settle.
+   *
+   * THE SIX MINUTES OF 2026/09/07. The node's addresses were black-holed at
+   * 16:38 UTC. Four spend jobs balanced, could not submit, and were told by the
+   * indexer that their transactions were not on chain; each one's coins stayed
+   * excluded as a possibly-in-flight submission, which is right for the two
+   * minutes the orphan sweeper needs to rule on them and wrong for the
+   * twenty-eight after that. The node came back at 16:44 and every registration
+   * from then on reported `waiting for a reserved coin` for 30 s and failed,
+   * over and over, against a wallet holding 1.1e20 Specks of DUST with nothing
+   * pending. Only a restart cleared it.
+   *
+   * Two rules, and both are about a reservation whose owner is gone:
+   *
+   *   - A ticket still HOLDING coins whose job is no longer on the queue. The
+   *     structural release in {@link CoinReservationOptions.attachToJob} means
+   *     this should never be reachable; it is the backstop that says so out
+   *     loud when it is.
+   *   - A flight for a submission the node NEVER ACKNOWLEDGED whose coins the
+   *     wallet has back in its available list. The sweeper has reverted it; the
+   *     exclusion is now the only thing keeping the coin from the next job.
+   *
+   * A flight whose coins the chain has taken is DROPPED rather than reclaimed —
+   * there is nothing to give back, and holding the record helps nobody. An
+   * ACKNOWLEDGED flight is never touched: the node has those bytes, and handing
+   * their inputs to another job is the double spend this whole module exists to
+   * prevent.
+   */
+  reclaim(options?: ReclaimOptions): ReclaimResult;
+  /** What `/status` publishes: how many coins are reserved, by whom, and for how long. */
+  reservedCoins(): ReservedCoinsSummary;
+  /** Reservations reclaimed since this process started. */
+  reservationsReclaimed(): number;
 }
 
 /** One submitted transaction's coins, until the chain or the TTL settles it. */
 interface Flight {
   label: string;
+  jobId: string | null;
   consumed: Set<string>;
   created: Set<string>;
   expiresAt: number;
+  /** When the ticket behind it was opened — what the reclaim bound is measured from. */
+  openedAt: number;
+  /** Whether the node took the bytes. See {@link CoinTicket.submitted}. */
+  acknowledged: boolean;
+}
+
+/** One open ticket, for the reclaim sweep and for `/status`. */
+interface Booking {
+  label: string;
+  jobId: string | null;
+  openedAt: number;
+  consumed: Set<string>;
+  created: Set<string>;
+  release: () => void;
 }
 
 export function createCoinReservation(options: CoinReservationOptions = {}): CoinReservation {
@@ -756,6 +905,9 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
   const flights = new Set<Flight>();
   const inFlight = new Map<string, Flight>();
   const waiters = new Set<() => void>();
+  /** Every ticket still holding coins, for the reclaim sweep and for `/status`. */
+  const bookings = new Map<CoinTicket, Booking>();
+  let reclaimed = 0;
 
   const wake = (): void => {
     for (const waiter of [...waiters]) waiter();
@@ -848,6 +1000,7 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
     open(label) {
       const consumed = new Set<string>();
       const created = new Set<string>();
+      const openedAt = now();
       let state: 'open' | 'submitted' | 'released' = 'open';
       const ticket: CoinTicket = {
         label,
@@ -875,10 +1028,18 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
             held.set(key, ticket);
           }
         },
-        submitted(expiresAt) {
+        submitted(expiresAt, submitOptions) {
           if (state !== 'open') return;
           state = 'submitted';
-          const flight: Flight = { label, consumed: new Set(consumed), created: new Set(created), expiresAt };
+          const flight: Flight = {
+            label,
+            jobId: bookings.get(ticket)?.jobId ?? null,
+            consumed: new Set(consumed),
+            created: new Set(created),
+            expiresAt,
+            openedAt,
+            acknowledged: submitOptions?.acknowledged ?? true,
+          };
           flights.add(flight);
           for (const key of consumed) {
             if (held.get(key) === ticket) held.delete(key);
@@ -888,6 +1049,7 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
             if (held.get(key) === ticket) held.delete(key);
             inFlight.set(key, flight);
           }
+          bookings.delete(ticket);
         },
         release() {
           if (state === 'released') return;
@@ -900,9 +1062,17 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
           for (const [key, owner] of [...avoided]) if (owner === ticket) avoided.delete(key);
           consumed.clear();
           created.clear();
+          bookings.delete(ticket);
           if (wasHeld) wake();
         },
       };
+      /* OPENING AND RELEASING ARE ONE ACT. The release is attached to the
+         running job here, at the only place a ticket can come into existence,
+         rather than by whoever happens to call `open` remembering to do it —
+         see {@link CoinReservationOptions.attachToJob}. The queue runs these on
+         every exit a job has, the watchdog's abort included. */
+      const jobId = options.attachToJob?.(() => ticket.release()) ?? null;
+      bookings.set(ticket, { label, jobId, openedAt, consumed, created, release: () => ticket.release() });
       return ticket;
     },
 
@@ -978,6 +1148,111 @@ export function createCoinReservation(options: CoinReservationOptions = {}): Coi
       }
       if (applied > 0) wake();
     },
+
+    reclaim(reclaimOptions = {}) {
+      expireInFlight();
+      const olderThanMs = reclaimOptions.olderThanMs ?? RESERVATION_RECLAIM_MS;
+      const presence = reclaimOptions.presence ?? ((): CoinPresence => 'available');
+      const at = now();
+      const result: ReclaimResult = { reclaimed: 0, dropped: 0, coins: 0 };
+
+      /* A ticket still holding coins whose job has left the queue. The
+         structural release should have run; when it has not, this says so. */
+      for (const [ticket, booking] of [...bookings]) {
+        const ageMs = at - booking.openedAt;
+        if (ageMs < olderThanMs) continue;
+        if (booking.jobId !== null && (options.jobRunning?.(booking.jobId) ?? true)) continue;
+        const count = booking.consumed.size + booking.created.size;
+        booking.release();
+        bookings.delete(ticket);
+        if (count === 0) continue;
+        result.reclaimed += 1;
+        result.coins += count;
+        reclaimed += 1;
+        log(
+          `[coins] ${booking.label} still held ${count} coin(s) ${Math.round(ageMs / 1_000)} s after its job ended — reclaimed, selectable again`,
+        );
+      }
+
+      /* A submission the node never acknowledged, whose coins the wallet has
+         back. The sweeper has reverted it; nothing else will ever settle it. */
+      for (const flight of [...flights]) {
+        if (flight.acknowledged) continue;
+        const ageMs = at - flight.openedAt;
+        if (ageMs < olderThanMs) continue;
+        const consumed = [...flight.consumed];
+        const anyAvailable = consumed.some((key) => presence(key) === 'available');
+        const allGone = consumed.length > 0 && consumed.every((key) => presence(key) === 'gone');
+        if (!anyAvailable && !allGone) continue;
+        const count = flight.consumed.size + flight.created.size;
+        forget(flight);
+        result.coins += count;
+        if (allGone) {
+          result.dropped += 1;
+          log(
+            `[coins] ${flight.label}'s unacknowledged transaction spent its coins on chain after all — its reservation is dropped (${count} coins)`,
+          );
+          continue;
+        }
+        result.reclaimed += 1;
+        reclaimed += 1;
+        log(
+          `[coins] ${flight.label} was submitted ${Math.round(ageMs / 1_000)} s ago, the node never acknowledged it, and this wallet has its coins back — reclaimed, selectable again (${count} coins)`,
+        );
+      }
+
+      if (result.coins > 0) wake();
+      return result;
+    },
+
+    reservedCoins() {
+      expireInFlight();
+      const at = now();
+      const jobs: ReservedCoinEntry[] = [];
+      let heldCoins = 0;
+      let flightCoins = 0;
+      for (const booking of bookings.values()) {
+        const coins = booking.consumed.size + booking.created.size;
+        if (coins === 0) continue;
+        heldCoins += coins;
+        jobs.push({
+          label: booking.label,
+          jobId: booking.jobId,
+          state: 'held',
+          acknowledged: false,
+          coins,
+          ageMs: at - booking.openedAt,
+        });
+      }
+      /* ACKNOWLEDGED FLIGHTS ARE NOT COUNTED, and that is what keeps this
+         figure honest as a fault signal. The node has those bytes; their
+         inputs are the chain's until it applies them, and no reclaim can or
+         should take them back. What is counted is what a JOB owns — and with
+         no job on the queue, what a job owns is what nobody owns. */
+      for (const flight of flights) {
+        if (flight.acknowledged) continue;
+        const coins = flight.consumed.size + flight.created.size;
+        if (coins === 0) continue;
+        flightCoins += coins;
+        jobs.push({
+          label: flight.label,
+          jobId: flight.jobId,
+          state: 'submitted',
+          acknowledged: false,
+          coins,
+          ageMs: at - flight.openedAt,
+        });
+      }
+      return {
+        count: heldCoins + flightCoins,
+        held: heldCoins,
+        inFlight: flightCoins,
+        oldestAgeMs: jobs.reduce((oldest, entry) => Math.max(oldest, entry.ageMs), 0),
+        jobs,
+      };
+    },
+
+    reservationsReclaimed: () => reclaimed,
 
     whenReleased(maxMs) {
       return new Promise<boolean>((settle) => {

@@ -1086,6 +1086,19 @@ async function main(): Promise<void> {
       lanes: wallet.spendLanes(),
       lanesConfigured: config.spendLanes,
       jobsRunning: wallet.jobCount(),
+      /* Fee coins a spend job owns — held, or in flight for a submission the
+         node never acknowledged — with the job that owns each one and how long
+         it has. Read next to `jobsRunning`: a non-zero count with no job
+         running is the shape of 2026/09/07, where every registration reported
+         `waiting for a reserved coin` against a wallet holding 1.1e20 Specks.
+         Coins in flight for a transaction the node TOOK are deliberately not
+         counted here; the chain owns those. */
+      reservedCoins: wallet.reservedCoins(),
+      /* Reservations this process has taken back since it started, because
+         nothing was ever going to settle them. Non-zero is not a fault — it is
+         this service clearing up after an outage instead of needing a restart
+         to do it. */
+      reservationsReclaimed: wallet.reservationsReclaimed(),
       /* One entry per running job: what it is, the last step it reported, and
          how long ago. `sinceProgressMs` next to `proofInFlight` is the pair the
          droplet watchdog matches a wedge on — a job that has reported nothing
@@ -1336,6 +1349,9 @@ async function main(): Promise<void> {
        held by `./submission.ts` and needs neither the wallet state nor the
        indexer, so a wallet that cannot be read must not take it down with it. */
     const socket = wallet.socketHealth();
+    /* Read outside the try as well: the reservation ledger is this process's own
+       map and needs neither the wallet nor the indexer to answer. */
+    const reserved = wallet.reservedCoins();
     return {
       uptimeMs: Date.now() - startedAt,
       stateReadable,
@@ -1356,6 +1372,14 @@ async function main(): Promise<void> {
       proving: wallet.provingReadiness().state,
       reserved: wallet.isReserved(),
       busy: wallet.isBusy(),
+      /* The coins a spend job owns, read together with the lanes they are
+         judged against. With the queue idle a reservation nobody owns is this
+         process's bookkeeping and nothing else — the fault that took the
+         sponsor down for twenty-eight minutes on 2026/09/07 and that no fact in
+         this probe could see. */
+      reservedCoins: reserved.count,
+      lanes: wallet.spendLanes(),
+      oldestReservationAgeMs: reserved.oldestAgeMs,
       lastSponsorshipAt: lastSponsorship > 0 ? lastSponsorship : null,
       orphans: wallet.orphanStats().watching,
       /* The connection this service SUBMITS on, which is not the one it reads
@@ -1421,6 +1445,19 @@ async function main(): Promise<void> {
             );
             await wallet.reconnectNode('a refresh found the submission socket down');
           }
+        },
+        /* The rung a restart used to be the only answer to. On 2026/09/07 four
+           jobs balanced during a six-minute black-hole of the node's addresses,
+           could not submit, and ended holding every fee-capable coin; the DUST
+           was in the wallet the whole time and no registration could reach it.
+           This asks the wallet where each reserved coin stands and frees the
+           reservations nothing will settle. Nothing is submitted and no sync
+           position is lost. */
+        reclaim: async () => {
+          const result = await wallet.reclaimReservations();
+          console.warn(
+            `[health] reclaimed ${result.reclaimed} reservation(s) and dropped ${result.dropped}, freeing ${result.coins} coin(s) — ${wallet.reservedCoins().count} still reserved`,
+          );
         },
         /* The rung the ladder had no answer for: a fresh `WsProvider` and a
            fresh `ApiPromise` for submissions, the old pair disconnected and

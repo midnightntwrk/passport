@@ -64,6 +64,11 @@ const healthy = (overrides: Partial<HealthFacts> = {}): HealthFacts => ({
   proving: 'server',
   reserved: false,
   busy: false,
+  /* No coin reserved by anybody, and three lanes to reserve them in — the
+     reading a well service gives between jobs. */
+  reservedCoins: 0,
+  lanes: 3,
+  oldestReservationAgeMs: 0,
   syncAhead: null,
   lastSponsorshipAt: T0 - 5 * MINUTE,
   orphans: 0,
@@ -723,6 +728,9 @@ function harness(
       refresh: async () => {
         calls.push('refresh');
       },
+      reclaim: async () => {
+        calls.push('reclaim');
+      },
       reconnect: async () => {
         calls.push('reconnect');
       },
@@ -950,6 +958,7 @@ describe('the health loop', () => {
         refresh: async () => {
           throw new Error('the wallet did not answer');
         },
+        reclaim: async () => undefined,
         reconnect: async () => undefined,
         resubscribe: async () => undefined,
         rewarm: async () => undefined,
@@ -978,6 +987,7 @@ describe('the health loop', () => {
       store: { read: () => record, write: async (next) => { record = next; } },
       remedies: {
         refresh: async () => undefined,
+        reclaim: async () => undefined,
         reconnect: async () => undefined,
         resubscribe: async () => undefined,
         rewarm: async () => undefined,

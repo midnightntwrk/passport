@@ -242,6 +242,29 @@ export interface HealthFacts {
   /** A whole spend job on the queue, proving included — minutes. */
   busy: boolean;
   /**
+   * Fee coins a spend job owns right now: held by a ticket, or in flight for a
+   * submission the NODE NEVER ACKNOWLEDGED. Coins in flight for a transaction
+   * the node took are deliberately excluded — the chain owns those, and no
+   * remedy here may take them back.
+   *
+   * THE READING OF 2026/09/07 16:44. Four jobs balanced during a six-minute
+   * black-hole of the node's addresses, could not submit, and ended. Their
+   * coins stayed excluded for the whole thirty-minute TTL, so every
+   * registration after the node came back reported `waiting for a reserved
+   * coin` and failed, against a wallet holding 1.1e20 Specks with nothing
+   * pending. Not one fact in this interface moved. A restart was the only
+   * remedy anybody had, and it was the wrong one: the coins were there.
+   */
+  reservedCoins: number;
+  /**
+   * How many spend jobs may run at once right now — the bar the count above is
+   * read against. One reservation per lane is the most a healthy idle service
+   * can be sitting on.
+   */
+  lanes: number;
+  /** How long ago the oldest of those reservations was taken. Zero when there are none. */
+  oldestReservationAgeMs: number;
+  /**
    * The legs this wallet has applied PAST the indexer's last progress figure,
    * named — `unshielded applied 9549 > highest 9521` — or `null` when none is.
    *
@@ -435,6 +458,16 @@ export interface HealthAssessment {
    * minutes for as long as the subscribe kept failing.
    */
   subscriptionFault?: true;
+  /**
+   * This verdict is about the COIN RESERVATIONS, not the wallet, the socket, or
+   * the ledger.
+   *
+   * Carried because the remedy is neither a restart nor a resync: the coins are
+   * in the wallet, spendable, and the only thing keeping them from the next job
+   * is this process's own bookkeeping. Restarting would work — it did on
+   * 2026/09/07 — and it would also throw away the sync position to fix a map.
+   */
+  reservationFault?: true;
 }
 
 export interface HealthPolicy {
@@ -563,6 +596,17 @@ export interface HealthPolicy {
    * thrown away.
    */
   rebuildFailuresForRestart: number;
+  /**
+   * How long a fee-coin reservation may stand before an idle queue holding it
+   * is a fault rather than a moment.
+   *
+   * The same three minutes `RESERVATION_RECLAIM_MS` in `./coinReservation.ts`
+   * reclaims on, and for the same reason: the orphan sweeper rules on an
+   * unacknowledged submission within two, so anything still reserved past
+   * three is reserved by bookkeeping alone. Restated here rather than imported
+   * because this module is pure and knows nothing about coins.
+   */
+  reservationReclaimMs: number;
 }
 
 export const DEFAULT_HEALTH_POLICY: HealthPolicy = {
@@ -579,6 +623,7 @@ export const DEFAULT_HEALTH_POLICY: HealthPolicy = {
   orphanMs: 120_000,
   socketFailuresForDegraded: 3,
   rebuildFailuresForRestart: 3,
+  reservationReclaimMs: 180_000,
 };
 
 const seconds = (ms: number): string => `${Math.round(ms / 1_000)} s`;
@@ -823,6 +868,40 @@ export function assessHealth(
       restartEligible: true,
     };
   }
+  /* 7c. COINS RESERVED BY JOBS THAT NO LONGER EXIST.
+
+         Reachable only with the queue idle: `reserved`, `syncAhead`, and `busy`
+         all return above, so by here nothing is running. A job owns a
+         reservation; with no job on the queue, a reservation nobody owns is
+         held by this process's bookkeeping and by nothing else.
+
+         Both terms earn their place. `> lanes` because one reservation per lane
+         is the most an idle service can legitimately be carrying — a job that
+         has just ended may still have an unacknowledged submission the sweeper
+         has not ruled on. And the AGE, because that sweeper takes two minutes:
+         a reservation younger than the reclaim bound is not stuck, it is
+         recent, and firing on it would put this verdict on the journal after
+         every ordinary submission.
+
+         The remedy is `reclaim` and NOT a restart. On 2026/09/07 a restart is
+         what an operator had to reach for and it worked, which is the misleading
+         part: the DUST was in the wallet the whole time — 1.1e20 Specks, nothing
+         pending — and the chain walk it cost bought nothing that clearing a map
+         would not. */
+  if (
+    facts.reservedCoins > facts.lanes &&
+    facts.oldestReservationAgeMs >= policy.reservationReclaimMs
+  ) {
+    return {
+      verdict: 'degraded',
+      reason: `fee coins reserved by jobs that no longer exist — ${facts.reservedCoins} coin(s) against ${facts.lanes} lane(s) with nothing running, the oldest reserved for ${minutes(facts.oldestReservationAgeMs)}`,
+      act: true,
+      /* The coins are in the wallet. A restart would clear the map and lose the
+         sync position; the reclaim clears the map. */
+      restartEligible: false,
+      reservationFault: true,
+    };
+  }
   /* 7b. THE SUBMISSION SOCKET, JUDGED AGAINST A CHAIN IT DOES NOT CARRY.
 
          WHAT THIS BRANCH REPLACES, AND WHY. Until 2026/09/06 it compared the
@@ -1031,6 +1110,7 @@ export function assessHealth(
 export type HealthRemedy =
   | 'none'
   | 'refresh'
+  | 'reclaim'
   | 'resubscribe'
   | 'reconnect'
   | 'rewarm'
@@ -1259,6 +1339,19 @@ export function chooseRemedy(
      a subscribe that went on failing would have it discarding one every five
      minutes. No cooldown and no ladder — it is one RPC call, and the thing that
      bounds how often it is worth making is that a success ends the verdict. */
+  /* The coin reservations, and — like the head subscription — one cheap call on
+     the first tick rather than a climb up the soft ladder. There is nothing
+     transient about it: the queue is idle, the coins are the wallet's, and the
+     only thing between them and the next registration is a map in this process.
+     The in-use gate is not needed either; `assessHealth` cannot reach this
+     verdict with a job running. */
+  if (assessment.reservationFault) {
+    return {
+      remedy: 'reclaim',
+      reason: 'the coins are in the wallet and no job owns them — the reservations are taken back, not the process restarted',
+    };
+  }
+
   if (assessment.subscriptionFault) {
     return {
       remedy: 'resubscribe',
@@ -1408,6 +1501,15 @@ export interface HealthRemedies {
    * again would have discarded a working connection, and gone on doing so.
    */
   resubscribe(): Promise<void>;
+  /**
+   * Take back the fee coins reserved by jobs that have ended.
+   *
+   * In-process and cheap: it asks the wallet where each reserved coin stands
+   * and frees the reservations nothing will settle. Nothing is submitted,
+   * nothing is reconnected, and no sync position is lost — which is the whole
+   * argument for it over the restart an operator had to use on 2026/09/07.
+   */
+  reclaim(): Promise<void>;
   /** Re-fetch the proving key material, and checkpoint the sync snapshot. */
   rewarm(): Promise<void>;
   /**
@@ -1896,6 +1998,12 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
           proving: 'failed',
           reserved: false,
           busy: false,
+          /* A wallet that cannot be read cannot say where its coins stand, and
+             a reclaim verdict on a guess would free coins a live job owns. The
+             `wedged` branch above owns this case. */
+          reservedCoins: 0,
+          lanes: 1,
+          oldestReservationAgeMs: 0,
           syncAhead: null,
           lastSponsorshipAt: null,
           orphans: 0,
@@ -2006,6 +2114,9 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
         if (choice.remedy === 'refresh') {
           await options.remedies.refresh();
           log(`[health] refreshed the wallet state in ${seconds(now() - startedAt)}`);
+        } else if (choice.remedy === 'reclaim') {
+          await options.remedies.reclaim();
+          log('[health] reclaimed the fee coins reserved by jobs that had ended');
         } else if (choice.remedy === 'resubscribe') {
           await options.remedies.resubscribe();
           log(`[health] re-attached the head subscription in ${seconds(now() - startedAt)}`);
@@ -2126,6 +2237,11 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
             dustSpecks: 0n,
             utxoCount: 0,
             nightAtomic: 0n,
+            /* As in the loop's own fallback: a wallet that cannot be read
+               cannot say where its coins stand. */
+            reservedCoins: 0,
+            lanes: 1,
+            oldestReservationAgeMs: 0,
             dustGenerating: false,
             pendingTransactions: 0,
             proving: 'failed',
