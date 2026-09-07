@@ -594,11 +594,48 @@ export function polkadotConnection(
    * moment to ask the preferred provider whether it is back, and an outage that
    * is over should not need a restart to be noticed.
    */
+  /**
+   * Close a connection that arrived after this module stopped waiting for it.
+   *
+   * `bounded` is a RACE, not a cancellation: when an attempt exceeds
+   * `rebuildTimeoutMs` the `createApi` promise underneath it goes on running,
+   * and a node that was merely slow rather than unreachable eventually hands
+   * back a perfectly good `ApiPromise` that nothing holds a reference to. Each
+   * timed-out rebuild leaked one — an open websocket, with its own reconnect
+   * timers, for the life of the process. The drill of 2026/09/07 produced one.
+   *
+   * IT IS CLOSED RATHER THAN ADOPTED, deliberately. By the time it arrives the
+   * rebuild that asked for it has already failed and reported so, and the next
+   * one may have opened a connection of its own — possibly to a different node,
+   * since every attempt starts again at the front of the list. Adopting the
+   * late arrival would race that: two live sockets, and whichever resolved last
+   * silently deciding which one this service submits on. A connection nobody
+   * waited for is not a connection anybody asked for.
+   *
+   * Never throws and never touches `socketHead`: the arrival is not an
+   * observation of anything, and the connection that IS open must not have its
+   * reading disturbed by the closing of one that is not.
+   */
+  const closeLateArrival = (building: Promise<MidnightApi>, url: string): void => {
+    void building
+      .then((api) => {
+        log(`[node] a late connection to ${url} was closed`);
+        return api.disconnect().catch(() => undefined);
+      })
+      /* An attempt that REJECTED left nothing behind to close, and its refusal
+         has already been recorded by the caller. Swallowed here so an abandoned
+         promise cannot surface as an unhandled rejection. */
+      .catch(() => undefined);
+  };
+
   const openSomewhere = async (what: string): Promise<MidnightApi> => {
     const refusals: string[] = [];
     for (const url of relayUrls) {
+      /* Held apart from the race so the abandoned promise can still be reached:
+         `bounded` stops waiting on it, it does not stop it. */
+      const building = createApi(url);
       try {
-        const api = await bounded(createApi(url), rebuildTimeoutMs, what);
+        const api = await bounded(building, rebuildTimeoutMs, what);
         nodeUrlInUse = url;
         if (refusals.length > 0) {
           /* The line that matters most on the day this earns its keep: the
@@ -611,6 +648,7 @@ export function polkadotConnection(
         return api;
       } catch (cause) {
         refusals.push(`${url}: ${describeCause(cause)}`);
+        closeLateArrival(building, url);
       }
     }
     throw new Error(

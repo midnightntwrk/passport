@@ -314,11 +314,14 @@ function fakeApi(options: {
 }): MidnightApi & {
   sends: string[];
   disconnected: () => boolean;
+  /** How many times `disconnect()` was called — once, or a leak, or a double. */
+  disconnects: () => number;
   connects: () => number;
   unsubscribed: () => number;
 } {
   const sends: string[] = [];
   let wasDisconnected = false;
+  let disconnects = 0;
   let connects = 0;
   let unsubscribes = 0;
   const api = {
@@ -326,6 +329,7 @@ function fakeApi(options: {
     isReady: options.ready === false ? new Promise<void>(() => undefined) : Promise.resolve(),
     sends,
     disconnected: () => wasDisconnected,
+    disconnects: () => disconnects,
     connects: () => connects,
     unsubscribed: () => unsubscribes,
     async connect(): Promise<void> {
@@ -334,6 +338,7 @@ function fakeApi(options: {
     },
     async disconnect(): Promise<void> {
       wasDisconnected = true;
+      disconnects += 1;
     },
     rpc: {
       chain: {
@@ -998,5 +1003,139 @@ describe('re-attaching the head watch to every connection', () => {
     assert.equal(head?.subscribed, false);
     assert.equal(head?.offered, true, 'repairable: the client does offer the subscription');
     assert.equal(connection.socketHealth?.().nodeSocket, 'connected');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The connection that arrives after nobody is waiting for it                 */
+/* -------------------------------------------------------------------------- */
+
+const after = (ms: number): Promise<void> =>
+  new Promise((settle) => {
+    setTimeout(settle, ms);
+  });
+
+describe('a connection that arrives after the attempt gave up on it', () => {
+  it('closes it, does not adopt it, and leaves the live socket untouched', async () => {
+    /* `bounded` is a race rather than a cancellation: an attempt that exceeds
+       the ceiling stops being WAITED on, and the `ApiPromise` underneath goes on
+       being built. A node that was merely slow then hands back a perfectly good
+       connection that nothing holds — one leaked websocket, with its own
+       reconnect timers, per timed-out rebuild. The drill of 2026/09/07 produced
+       exactly one. */
+    const lines: string[] = [];
+    const late = fakeApi({ name: 'late', connected: true, heads: () => undefined });
+    let emit: ((height: number) => void) | null = null;
+    const fresh = fakeApi({ name: 'fresh', connected: true, heads: (send) => (emit = send) });
+    let attempt = 0;
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: (line) => lines.push(line),
+        rebuildTimeoutMs: 50,
+        createApi: async () => {
+          attempt += 1;
+          /* The first attempt is slow rather than broken: it times out, and
+             then succeeds into nobody's hands. */
+          if (attempt === 1) {
+            await after(200);
+            return late;
+          }
+          return fresh;
+        },
+      },
+    );
+
+    /* The first open times out; `connected()` rebuilds, and the second attempt
+       is what this service actually submits on. */
+    assert.equal(await connection.send(PAYLOAD), '0xfresh');
+    assert.equal(connection.socketHealth?.().nodeSocket, 'connected');
+
+    /* The head as the LIVE connection sees it, before the straggler lands. */
+    (emit as unknown as (height: number) => void)(342_015);
+    const before = connection.socketHealth?.().socketHead;
+    assert.equal(before?.height, 342_015);
+    assert.equal(before?.headers, 1);
+
+    /* Now let the abandoned attempt finish. */
+    await after(300);
+
+    assert.equal(late.disconnects(), 1, 'the late arrival was closed');
+    assert.equal(fresh.disconnects(), 0, 'and the connection in use was not');
+    assert.ok(
+      lines.some((line) => line === `[node] a late connection to ${A.toString()} was closed`),
+      lines.join('\n'),
+    );
+
+    /* NOT ADOPTED. The head reading is still the live connection's — the
+       straggler was never subscribed to and never became the socket in use. */
+    const head = connection.socketHealth?.().socketHead;
+    assert.deepEqual(head, before, 'the live socket’s reading is untouched');
+    assert.equal(connection.socketHealth?.().nodeUrlInUse, A.toString());
+
+    /* And the next rebuild is unaffected: it builds a connection of its own and
+       is not racing a second live socket for the right to carry submissions. */
+    const rebuildsBefore = connection.socketHealth?.().rebuilds ?? 0;
+    await connection.rebuild?.('after the straggler landed');
+    assert.equal(attempt, 3, 'a fresh attempt, not the adopted straggler');
+    assert.equal(connection.socketHealth?.().rebuilds, rebuildsBefore + 1);
+    assert.equal(connection.socketHealth?.().nodeSocket, 'connected');
+    assert.equal(await connection.send(PAYLOAD), '0xfresh');
+    assert.equal(late.disconnects(), 1, 'and it is closed once, not once per rebuild');
+  });
+
+  it('closes a straggler on each node it walked past, and nothing it never built', async () => {
+    /* One list, both nodes slow. Each abandoned attempt is its own leak and
+       each is closed, named by the node it was aimed at. */
+    const lines: string[] = [];
+    const built: ReturnType<typeof fakeApi>[] = [];
+    const connection = polkadotConnection(
+      { relayURL: A, relayURLs: [A, B] },
+      {
+        log: (line) => lines.push(line),
+        rebuildTimeoutMs: 50,
+        createApi: async (url) => {
+          await after(200);
+          const api = fakeApi({ name: url, connected: true, heads: () => undefined });
+          built.push(api);
+          return api;
+        },
+      },
+    );
+    await assert.rejects(connection.rebuild!('both nodes are slow'));
+    await after(400);
+    assert.equal(built.length, 2, 'both nodes were tried');
+    assert.ok(
+      built.every((api) => api.disconnects() === 1),
+      built.map((api) => api.disconnects()).join(','),
+    );
+    for (const url of [A, B]) {
+      assert.ok(
+        lines.some((line) => line === `[node] a late connection to ${url.toString()} was closed`),
+        lines.join('\n'),
+      );
+    }
+  });
+
+  it('says nothing about an attempt that simply failed — there is nothing to close', async () => {
+    /* A node that REFUSED left no connection behind. Its refusal is already
+       reported; a "late connection was closed" line here would be a fiction. */
+    const lines: string[] = [];
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: (line) => lines.push(line),
+        rebuildTimeoutMs: 50,
+        createApi: async () => {
+          throw new Error('connection refused');
+        },
+      },
+    );
+    await assert.rejects(connection.rebuild!('the node refuses'));
+    await after(100);
+    assert.ok(
+      !lines.some((line) => line.includes('a late connection')),
+      lines.join('\n'),
+    );
   });
 });

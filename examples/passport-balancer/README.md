@@ -849,6 +849,17 @@ all three are fixed:
    sits ahead of the stall rule, so a socket in this state can never be read as
    a stalled one.
 
+A fourth thing was found while fixing those three, and closed with them: the
+per-attempt timeout is a **race, not a cancellation**. An attempt that exceeded
+the ceiling stopped being waited on while the `ApiPromise` underneath went on
+being built, so a node that was merely slow eventually handed back a good
+connection that nothing held — one leaked websocket, with its own reconnect
+timers, per timed-out rebuild. A late arrival is now **disconnected, never
+adopted** (`[node] a late connection to <url> was closed`). Adopting it would
+race the next rebuild, which may already have opened a connection of its own to
+a different node, and let whichever resolved last silently decide what this
+service submits on.
+
 `/status`'s `socketHead` is read **live** from the connection's own bookkeeping
 rather than from the health snapshot. The snapshot is the last tick's facts,
 gathered *before* that tick ran its remedy — during the drill it showed the
