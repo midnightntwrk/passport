@@ -122,6 +122,12 @@
 # /etc/passport-balancer-watchdog.env adds one droplet reboot per six hours at
 # that point; it is off by default.
 #
+# TWO STOCK FLOORS sit beside all of that and do none of it. `WATCHDOG_NIGHT_
+# FLOOR` (500 NIGHT) and `WATCHDOG_DUST_FLOOR_SPECKS` (5e18) alert at most once
+# per six hours each and take no other action, because the fault they match —
+# a sponsor running out of money — is the one fault a restart cannot repair.
+# Either set to 0 is off.
+#
 # `WATCHDOG_ALERT_WEBHOOK`, from the same file, receives a plain
 # `{"text": "..."}` on every action and on entering or leaving escalation, plus
 # a heartbeat at most once a day so a webhook that has quietly stopped
@@ -156,7 +162,16 @@ TIMEOUT="${BALANCER_WATCHDOG_TIMEOUT:-5}"
 # Seconds between two DUST resyncs by this script. Its own clock, and much
 # shorter than the restart cooldown: a wedge is proved rather than inferred, and
 # the repair costs the service ten seconds rather than a chain walk.
-DUST_COOLDOWN="${BALANCER_WATCHDOG_DUST_COOLDOWN:-300}"
+#
+# TEN MINUTES, NOT FIVE, and it is an alignment rather than a new figure. The
+# in-process ladder settled on `resyncDustMinUptimeMs: 600_000` on 2026/09/06 —
+# a resync ends with `process.exit(1)`, so a wallet that comes back still wedged
+# exits again on its first tick, and ten minutes is the period that cycle was
+# deliberately given. This script's own clock was still five, which meant the
+# two supervisors disagreed about how often the same repair may be attempted and
+# the shorter one won: a wedge that survived its repair could be resynced from
+# out here at five minutes while the process itself was still holding off.
+DUST_COOLDOWN="${BALANCER_WATCHDOG_DUST_COOLDOWN:-600}"
 # How long a running spend job may report no step, with nothing at the prover,
 # before this script restarts the unit. Five minutes, and deliberately twice the
 # in-process watchdog's own window: the process gets first refusal on its own
@@ -257,6 +272,45 @@ SUPERVISOR_HEARTBEAT="${BALANCER_WATCHDOG_HEARTBEAT:-86400}"
 # The thresholds `/status` is judged against.
 SOCKET_FAILURES_MAX="${BALANCER_WATCHDOG_SOCKET_FAILURES_MAX:-3}"
 BEHIND_HEAD_MAX="${BALANCER_WATCHDOG_BEHIND_HEAD_MAX:-50}"
+
+# --------------------------------------------------------------------------
+# THE TWO FLOORS, AND WHY THEY ALERT AND DO NOTHING ELSE.
+#
+# Every other rule in this script matches a fault a restart can repair. These
+# two match the one fault it cannot: a sponsor that is running out of money.
+# Restarting a wallet with 40 NIGHT in it produces a wallet with 40 NIGHT in it
+# and a cold chain walk, and no amount of supervision refills an address — only
+# a person with the faucet can. So the floors are ALERT-ONLY. They take no
+# strike, they restart nothing, they never reach the escalation ladder, and
+# they cannot turn `ok` into `degraded`: the summary line still describes the
+# path, and the floor is carried beside it.
+#
+# The figures are stock levels rather than fault thresholds, which is why they
+# are generous. 500 NIGHT is roughly a week of grants at the deployed ceilings,
+# so an alert is a reminder with a week in hand rather than an emergency. The
+# DUST floor of 5e18 Specks is about a fifth of a healthy balance — the sponsor
+# held 24,990,017,628,947,616,000 on a good day — and low DUST with NIGHT still
+# held is a different fault from an empty wallet, one the wedge leg above owns;
+# what this catches is the slow version of it that no single reading looks
+# wrong enough to report.
+#
+# ONCE PER SIX HOURS, per floor, and that is the whole of the rate limiting. A
+# balance below a floor stays below it — nothing here spends it back up — so a
+# floor that alerted every minute would post 1,440 identical lines a day and be
+# muted within the hour, which is the same as not having it. Six hours is four
+# reminders a day: enough that a top-up cannot be forgotten, few enough that
+# each one is still read.
+#
+# `WATCHDOG_NIGHT_FLOOR` is in whole NIGHT, because that is the unit a person
+# tops up in. `WATCHDOG_DUST_FLOOR_SPECKS` is in Specks, because DUST has no
+# other unit anybody uses. Either set to 0 switches its floor off.
+# --------------------------------------------------------------------------
+NIGHT_FLOOR="${WATCHDOG_NIGHT_FLOOR:-500}"
+DUST_FLOOR_SPECKS="${WATCHDOG_DUST_FLOOR_SPECKS:-5000000000000000000}"
+# Seconds between two alerts about the same floor.
+FLOOR_ALERT_INTERVAL="${WATCHDOG_FLOOR_ALERT_INTERVAL:-21600}"
+NIGHT_FLOOR_FILE="$STATE_DIR/supervisor-last-night-floor-alert"
+DUST_FLOOR_FILE="$STATE_DIR/supervisor-last-dust-floor-alert"
 # What `proving` must read. Empty switches the term off, for a deployment that
 # proves in-process on purpose.
 PROVING_EXPECT="${BALANCER_WATCHDOG_PROVING_EXPECT:-server}"
@@ -468,17 +522,24 @@ sv_http_code() {
 
 # `/status` read whole rather than grepped: these are seven terms, three of
 # them numeric, and a `grep` for `"synced":true` cannot tell a missing key from
-# a false one. Prints `verdict|busy|jobs|reasons`.
+# a false one. Prints `verdict|busy|jobs|floors|reasons`.
+#
+# `floors` is separated from `reasons` deliberately and is not a reason: a
+# sponsor running low on NIGHT is answering every request perfectly and must not
+# be struck, restarted, or called degraded for it. See the floors' own note
+# above. The comparison happens HERE rather than in the shell because these are
+# balances: 24,990,017,628,947,616,000 Specks overflows a 64-bit shell integer
+# and would compare as a negative number.
 SV_STATUS_PY=$(cat <<'PY'
 import json, os, sys
 
 try:
     body = json.load(sys.stdin)
 except Exception:
-    print('unreadable|0|0|status-unparseable')
+    print('unreadable|0|0||status-unparseable')
     raise SystemExit(0)
 if not isinstance(body, dict):
-    print('unreadable|0|0|status-not-an-object')
+    print('unreadable|0|0||status-not-an-object')
     raise SystemExit(0)
 
 def number(value, fallback=0):
@@ -512,7 +573,28 @@ if isinstance(behind, (int, float)) and not isinstance(behind, bool):
 
 busy = 1 if (body.get('busy') is True or body.get('balancing') is True) else 0
 jobs = number(body.get('jobsRunning', 0))
-print('%s|%d|%d|%s' % ('ok' if not reasons else 'unhealthy', busy, jobs, ','.join(reasons)))
+
+# The stock levels, named only where they are under. A floor of 0 is off, and a
+# balance the service did not publish is not a balance of nothing — an older
+# build, or a `/status` that could not read the wallet, must not be reported as
+# an empty sponsor.
+floors = []
+night_floor = number(os.environ.get('SV_NIGHT_FLOOR'), 0)
+if night_floor > 0:
+    held = body.get('balanceAtomic')
+    if isinstance(held, str) and held.isdigit():
+        # `balanceAtomic` is atomic NIGHT; NIGHT_DECIMALS is 6. See `src/wallet.ts`.
+        atomic = int(held)
+        if atomic < night_floor * 1000000:
+            floors.append('night=%s' % (atomic / 1000000.0))
+dust_floor = number(os.environ.get('SV_DUST_FLOOR_SPECKS'), 0)
+if dust_floor > 0:
+    specks = body.get('dustSpecks')
+    if isinstance(specks, str) and specks.isdigit() and int(specks) < dust_floor:
+        floors.append('dust=%s' % specks)
+
+print('%s|%d|%d|%s|%s' % ('ok' if not reasons else 'unhealthy', busy, jobs,
+                          ';'.join(floors), ','.join(reasons)))
 PY
 )
 
@@ -521,8 +603,10 @@ sv_read_status() {
     | SV_SOCKET_FAILURES_MAX="$SOCKET_FAILURES_MAX" \
       SV_BEHIND_HEAD_MAX="$BEHIND_HEAD_MAX" \
       SV_PROVING_EXPECT="$PROVING_EXPECT" \
+      SV_NIGHT_FLOOR="$NIGHT_FLOOR" \
+      SV_DUST_FLOOR_SPECKS="$DUST_FLOOR_SPECKS" \
       "$PYTHON" -c "$SV_STATUS_PY" 2>/dev/null \
-    || echo 'unreadable|0|0|status-unparseable'
+    || echo 'unreadable|0|0||status-unparseable'
 }
 
 strikes=$(cat "$STRIKES_FILE" 2>/dev/null || echo 0)
@@ -542,6 +626,7 @@ if [ -z "$status" ]; then
   sv_verdict=unreachable
   sv_busy=0
   sv_jobs=0
+  sv_floors=""
   sv_reasons="/status did not answer"
 else
   sv_parsed=$(sv_read_status)
@@ -550,6 +635,8 @@ else
   sv_busy=${sv_rest%%|*}
   sv_rest=${sv_rest#*|}
   sv_jobs=${sv_rest%%|*}
+  sv_rest=${sv_rest#*|}
+  sv_floors=${sv_rest%%|*}
   sv_reasons=${sv_rest#*|}
 fi
 case "$sv_busy" in ''|*[!0-9]*) sv_busy=0 ;; esac
@@ -582,7 +669,43 @@ sv_balancer_strikes=$(sv_account balancer "$sv_balancer_ok")
 sv_proof_strikes=$(sv_account proof "$sv_proof_ok")
 sv_caddy_strikes=$(sv_account caddy "$sv_caddy_ok")
 
-SV_FACTS="balancer=$sv_verdict${sv_reasons:+ ($sv_reasons)} busy=$sv_busy jobs=$sv_jobs; proof=$sv_proof_code container=$sv_container; caddy=$sv_caddy public=$sv_public_balancer/$sv_public_prover"
+SV_FACTS="balancer=$sv_verdict${sv_reasons:+ ($sv_reasons)} busy=$sv_busy jobs=$sv_jobs; proof=$sv_proof_code container=$sv_container; caddy=$sv_caddy public=$sv_public_balancer/$sv_public_prover${sv_floors:+; floors $sv_floors}"
+
+# --------------------------------------------------------------------------
+# The floors. Alert, at most once per six hours per floor, and nothing else.
+#
+# Deliberately placed AFTER `SV_FACTS` is built and BEFORE the escalation gate:
+# the figure belongs on the summary line whatever else the tick decides, and a
+# supervisor that has stopped restarting things has not stopped needing money.
+# It reads only what has already been fetched, so it costs no probe and cannot
+# fail the tick. `sv_floor_alert` is the whole of the logic: a clock per floor,
+# on disk because it has to outlive the restarts everything else here performs.
+# --------------------------------------------------------------------------
+sv_floor_alert() {
+  local file="$1" text="$2" last
+  last=$(read_num "$file")
+  if [ $((NOW - last)) -lt "$FLOOR_ALERT_INTERVAL" ]; then
+    return 0
+  fi
+  echo "$NOW" > "$file"
+  slog "$text"
+  alert "$text"
+}
+
+case "$sv_floors" in
+  *night=*)
+    sv_floor_night=${sv_floors#*night=}
+    sv_floor_night=${sv_floor_night%%;*}
+    sv_floor_alert "$NIGHT_FLOOR_FILE" \
+      "passport sponsor is low on NIGHT — holding ${sv_floor_night} NIGHT, under the ${NIGHT_FLOOR} NIGHT floor. Nothing is broken and nothing has been restarted; the address needs topping up from the faucet before it runs out." ;;
+esac
+case "$sv_floors" in
+  *dust=*)
+    sv_floor_dust=${sv_floors#*dust=}
+    sv_floor_dust=${sv_floor_dust%%;*}
+    sv_floor_alert "$DUST_FLOOR_FILE" \
+      "passport sponsor is low on DUST — ${sv_floor_dust} Specks, under the ${DUST_FLOOR_SPECKS} Speck floor. DUST is generated by the NIGHT this wallet holds, so this is either a wallet spending faster than it generates or NIGHT that has left it; nothing has been restarted." ;;
+esac
 if [ "$sv_balancer_ok" = 1 ] && [ "$sv_proof_ok" = 1 ] && [ "$sv_caddy_ok" = 1 ]; then
   SV_DEGRADED=0
 else

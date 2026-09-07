@@ -252,7 +252,7 @@ BALANCER_WATCHDOG_LOGGER="$WORK/logger" \
 WATCHDOG_TEST_JOURNAL="$WORK/journal" \
   bash "$SCRIPT" > "$WORK/out-cooldown" 2>&1
 if grep -q 'cooldown' "$WORK/out-cooldown"; then
-  pass "holds its own 300 s cooldown rather than resyncing every two minutes"
+  pass "holds its own 600 s cooldown rather than resyncing every two minutes"
 else
   fail "holds its own cooldown" "$(cat "$WORK/out-cooldown")"
 fi
@@ -880,6 +880,156 @@ if [ "$(sed 's/[0-9]//g' "$WORK/out-sv-first")" = "$(sed 's/[0-9]//g' "$WORK/out
   pass "decides the same thing twice about the same droplet"
 else
   fail "idempotent" "$(diff "$WORK/out-sv-first" "$WORK/out-sv")"
+fi
+
+echo
+echo "the supervisor's stock floors"
+
+# ---------------------------------------------------------------------------
+# THE FLOORS ALERT AND DO NOTHING ELSE, which is the whole of what has to be
+# proved about them: a sponsor running low on money is answering every request
+# perfectly, and a supervisor that struck it, restarted it, or called the
+# droplet degraded for it would be turning a top-up into an outage.
+
+# `healthy_bodies` holds 4,998.916 NIGHT and 24.99e18 Specks, both well over the
+# floors, so a case only has to lower the one it is about.
+sv_new floor-none
+healthy_bodies
+export WATCHDOG_ALERT_WEBHOOK="$SECRET_URL"
+sv_tick
+if ! grep -q 'low on' "$WORK/webhook" && ! grep -q 'floors' "$WORK/out-sv"; then
+  pass "says nothing about a sponsor that is well stocked"
+else
+  fail "silent above both floors" "$(cat "$WORK/webhook"); $(sv_out)"
+fi
+
+# ---------------------------------------------------------------------------
+# 412.305 NIGHT: under the 500 floor, and the sponsor is otherwise perfect.
+sv_new floor-night
+healthy_bodies
+sed -i.bak 's/"balanceAtomic":"4998916000"/"balanceAtomic":"412305000"/' "$BODIES/status.json"
+export WATCHDOG_ALERT_WEBHOOK="$SECRET_URL"
+sv_tick
+if grep -q 'low on NIGHT' "$WORK/webhook" && grep -q '412.305' "$WORK/webhook"; then
+  pass "alerts once when the NIGHT balance falls under the floor, and names the figure"
+else
+  fail "alerts under the NIGHT floor" "$(cat "$WORK/webhook"); $(sv_out)"
+fi
+if [ -z "$(calls)" ] && grep -q '^\[supervisor\] ok:' "$WORK/out-sv"; then
+  pass "restarts nothing and stays ok — a top-up is not a fault a restart repairs"
+else
+  fail "alert-only" "$(calls); $(sv_out)"
+fi
+if grep -q 'floors night=412.305' "$WORK/out-sv"; then
+  pass "carries the floor on the summary line, beside the path it describes"
+else
+  fail "the floor is on the summary line" "$(sv_out)"
+fi
+
+# ---------------------------------------------------------------------------
+# The six-hour clock. A balance under a floor STAYS under it — nothing here
+# spends it back up — so a floor that alerted every tick would post 1,440
+# identical lines a day and be muted within the hour.
+sv_ticks 5
+if [ "$(grep -c 'low on NIGHT' "$WORK/webhook")" = 1 ]; then
+  pass "alerts once per six hours, not once a tick"
+else
+  fail "one alert per six hours" "$(cat "$WORK/webhook")"
+fi
+
+# And the clock is honoured because it is a clock, not because the balance
+# stopped being low: with the interval set to zero the next tick alerts again.
+WATCHDOG_FLOOR_ALERT_INTERVAL=0 sv_tick
+if [ "$(grep -c 'low on NIGHT' "$WORK/webhook")" = 2 ]; then
+  pass "alerts again once the interval has elapsed"
+else
+  fail "the interval is a clock" "$(cat "$WORK/webhook")"
+fi
+
+# ---------------------------------------------------------------------------
+# The DUST floor, and the arithmetic that makes it worth having in python: a
+# healthy balance of 24,990,017,628,947,616,000 Specks overflows a 64-bit shell
+# integer, so a shell comparison would read it as negative and alert on a
+# perfectly stocked wallet.
+sv_new floor-dust
+healthy_bodies
+sed -i.bak 's/"dustSpecks":"24990017628947616000"/"dustSpecks":"1000000000000000000"/' "$BODIES/status.json"
+export WATCHDOG_ALERT_WEBHOOK="$SECRET_URL"
+sv_tick
+if grep -q 'low on DUST' "$WORK/webhook" && [ -z "$(calls)" ]; then
+  pass "alerts under the DUST floor and restarts nothing"
+else
+  fail "alerts under the DUST floor" "$(cat "$WORK/webhook"); $(calls)"
+fi
+
+sv_new floor-dust-high
+healthy_bodies
+export WATCHDOG_ALERT_WEBHOOK="$SECRET_URL"
+sv_tick
+if ! grep -q 'low on DUST' "$WORK/webhook"; then
+  pass "does not mistake a 24.99e18-Speck balance for an empty one"
+else
+  fail "no overflow on a healthy DUST balance" "$(cat "$WORK/webhook")"
+fi
+
+# ---------------------------------------------------------------------------
+# Both floors are their own clock, so a sponsor that is low on both says both
+# things rather than whichever was noticed first.
+sv_new floor-both
+healthy_bodies
+sed -i.bak 's/"balanceAtomic":"4998916000"/"balanceAtomic":"1000000"/' "$BODIES/status.json"
+sed -i.bak 's/"dustSpecks":"24990017628947616000"/"dustSpecks":"0"/' "$BODIES/status.json"
+export WATCHDOG_ALERT_WEBHOOK="$SECRET_URL"
+sv_tick
+if grep -q 'low on NIGHT' "$WORK/webhook" && grep -q 'low on DUST' "$WORK/webhook"; then
+  pass "reports both floors, each on its own clock"
+else
+  fail "both floors" "$(cat "$WORK/webhook")"
+fi
+
+# ---------------------------------------------------------------------------
+# A floor of 0 is off, which is how a deployment that funds itself another way
+# switches these off entirely.
+sv_new floor-off
+healthy_bodies
+sed -i.bak 's/"balanceAtomic":"4998916000"/"balanceAtomic":"0"/' "$BODIES/status.json"
+sed -i.bak 's/"dustSpecks":"24990017628947616000"/"dustSpecks":"0"/' "$BODIES/status.json"
+export WATCHDOG_ALERT_WEBHOOK="$SECRET_URL"
+WATCHDOG_NIGHT_FLOOR=0 WATCHDOG_DUST_FLOOR_SPECKS=0 sv_tick
+if ! grep -q 'low on' "$WORK/webhook"; then
+  pass "a floor of 0 is off"
+else
+  fail "a floor of 0 is off" "$(cat "$WORK/webhook")"
+fi
+
+# ---------------------------------------------------------------------------
+# A build that publishes no balance is not a sponsor with no balance. This is
+# the one reading that must never alert, because it would alert for ever on a
+# `/status` that could not read the wallet.
+sv_new floor-absent
+cat > "$BODIES/status.json" <<'JSON'
+{"synced":true,"pendingTransactions":0,"balancesWatched":0,"balancing":false,
+ "busy":false,"settling":false,"ready":true,"jobsRunning":0,"proofInFlight":false,
+ "nodeSocket":"connected","consecutiveSocketFailures":0,
+ "aliasSponsorship":"available","accountFunding":"available","proving":"server"}
+JSON
+export WATCHDOG_ALERT_WEBHOOK="$SECRET_URL"
+sv_tick
+if ! grep -q 'low on' "$WORK/webhook"; then
+  pass "a balance the service did not publish is not a balance of nothing"
+else
+  fail "no alert on an absent balance" "$(cat "$WORK/webhook")"
+fi
+unset WATCHDOG_ALERT_WEBHOOK
+
+# ---------------------------------------------------------------------------
+# The DUST resync cooldown, aligned with the in-process ladder's own
+# ten-minute floor on the same repair. Two supervisors disagreeing about how
+# often a repair may be attempted means the shorter one wins.
+if grep -q 'DUST_COOLDOWN="${BALANCER_WATCHDOG_DUST_COOLDOWN:-600}"' "$SCRIPT"; then
+  pass "holds a ten-minute DUST cooldown, the same figure the process holds"
+else
+  fail "the DUST cooldown matches the process" "$(grep DUST_COOLDOWN= "$SCRIPT")"
 fi
 
 echo

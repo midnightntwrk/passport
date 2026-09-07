@@ -1127,7 +1127,10 @@ conjunction is *proved*, not inferred, and six minutes of a demo is the demo. It
 stops the unit first (a running service rewrites the snapshot every minute and
 would overwrite the repair), runs `dist/dust-rollback.mjs`, falls back to moving
 the snapshot aside for a cold walk, and starts the unit again. Its own cooldown,
-`BALANCER_WATCHDOG_DUST_COOLDOWN`, defaults to **300 s**.
+`BALANCER_WATCHDOG_DUST_COOLDOWN`, defaults to **600 s** — the same figure the
+in-process ladder holds for the same repair (`resyncDustMinUptimeMs`), because
+two supervisors disagreeing about how often one repair may be attempted means
+the shorter one wins.
 
 It has a second leg, for a spend job that has gone silent while holding a lane.
 That failure looks perfectly healthy from outside — through both hangs of
@@ -1138,6 +1141,29 @@ deliberately twice the in-process window, so the service gets first refusal on
 its own stall). `proofInFlight` is not optional there: a proof is minutes of
 silence and perfectly healthy, and restarting through one would fail a
 registration somebody is watching.
+
+### The two stock floors
+
+Every other rule in the watchdog matches a fault a restart repairs. These two
+match the one it cannot: a sponsor running out of money. Restarting a wallet
+holding 40 NIGHT produces a wallet holding 40 NIGHT and a cold chain walk, and
+only a person with the faucet refills an address. So they are **alert-only** —
+no strike, no restart, no escalation, and they never turn `ok` into `degraded`.
+The figure is carried on the summary line beside the path it describes.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `WATCHDOG_NIGHT_FLOOR` | `500` | Whole NIGHT. Roughly a week of grants at the deployed ceilings, so an alert is a reminder with a week in hand. **`0` turns it off.** |
+| `WATCHDOG_DUST_FLOOR_SPECKS` | `5000000000000000000` | Specks — about a fifth of a healthy balance. **`0` turns it off.** |
+| `WATCHDOG_FLOOR_ALERT_INTERVAL` | `21600` | Seconds between two alerts about the same floor. |
+
+Six hours, and per floor. A balance under a floor stays under it — nothing in
+the watchdog spends it back up — so a floor that alerted every tick would post
+1,440 identical lines a day and be muted within the hour. Both comparisons are
+made in `python3` rather than the shell: a healthy DUST balance of
+24,990,017,628,947,616,000 Specks overflows a 64-bit shell integer and would
+compare as negative. A `/status` that publishes no balance at all is **not** a
+sponsor with no balance and never alerts.
 
 `bash test/watchdog.test.sh` drives the whole script against a stub HTTP server,
 with recorders standing in for `systemctl` and `node`, and checks each term of
