@@ -102,12 +102,17 @@ export function createWalletSnapshotCheckpointer(
 
     async stop(): Promise<void> {
       if (!active) return;
+      clearTimer();
+      /* The first flush runs with the checkpointer still ACTIVE, so a state
+         that arrives while it writes is recorded as dirty and picked up by the
+         second flush below. Deactivating first would make that second write
+         unreachable, and the newest state would be lost at shutdown. */
+      await flush();
       active = false;
       clearTimer();
       /* A state may have arrived while a periodic write was in flight. One
          follow-up makes shutdown's final snapshot the newest one observed,
          without retrying a permanently unavailable IndexedDB forever. */
-      await flush();
       if (dirty) await flush();
     },
   };
