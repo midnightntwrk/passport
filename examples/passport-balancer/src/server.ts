@@ -137,6 +137,7 @@ import { createChainHeadProbe, type ChainHeadProbe } from './chainHead.js';
 import { ASSET_SYMBOL, applyEnvFile, loadConfig, type BalancerConfig } from './config.js';
 import { queryIndexerHeight, rawContractAddress } from './contractRuntime.js';
 import { rollbackDustSnapshot } from './dustRollback.js';
+import { NO_SOCKET_HEAD } from './submission.js';
 import { indexerUrlInUse } from './endpoints.js';
 import {
   DEFAULT_HEALTH_POLICY,
@@ -1240,7 +1241,17 @@ async function main(): Promise<void> {
          that concerns this wallet, so a healthy idle sponsor stood still and
          was called degraded 614 times in a day. Published on every tick,
          healthy ones included, so the rule can be watched not firing. */
-      socketHead: healthMonitor?.snapshot().socketHead ?? null,
+      /* READ LIVE, from `./submission.ts`'s own bookkeeping — not from the
+         health snapshot. The snapshot is the last TICK's facts, gathered before
+         that tick ran its remedy, so during the 2026/09/07 drill `/status`
+         showed the corpse of a connection that had already been rebuilt and
+         re-subscribed forty-seven seconds earlier. Every other socket field
+         here is live; this one now is too, and it agrees with them.
+
+         `socketHeadLagBlocks` still comes from the tick, because it is the only
+         figure of the two that needs a reference head to exist — and the
+         reference is the tick's to gather. */
+      socketHead: socketHealth?.socketHead ?? null,
       socketHeadLagBlocks: healthMonitor?.snapshot().socketHead?.socketHeadLagBlocks ?? null,
       /* Reported and never acted on: a public node that will not answer says
          nothing about this wallet, and since the indexer became the other half
@@ -1357,7 +1368,7 @@ async function main(): Promise<void> {
          on the `ApiPromise` this service submits on. A wallet whose facade has
          not been built yet has no socket to have a view, which reads as
          unknown rather than as a stalled one. */
-      socketHead: socket?.socketHead ?? { height: null, at: null, subscribed: false, headers: 0 },
+      socketHead: socket?.socketHead ?? NO_SOCKET_HEAD,
       fingerprint,
     };
   };
@@ -1419,7 +1430,19 @@ async function main(): Promise<void> {
           await wallet.reconnectNode(reason);
           const socket = wallet.socketHealth();
           console.warn(
-            `[health] the submission socket now reads ${socket?.nodeSocket ?? 'unknown'} after ${socket?.rebuilds ?? 0} rebuild(s)`,
+            `[health] the submission socket now reads ${socket?.nodeSocket ?? 'unknown'} after ${socket?.rebuilds ?? 0} rebuild(s), head subscription ${socket?.socketHead.subscribed ? 'attached' : 'NOT attached'}`,
+          );
+        },
+        /* The rung `reconnect` is the wrong answer to. On 2026/09/07 a rebuilt
+           socket came back submitting perfectly well and streaming no heads;
+           rebuilding it again would have thrown away a working connection, and
+           gone on throwing one away every five minutes. This re-attaches the
+           watch to the api that is already open. */
+        resubscribe: async () => {
+          await wallet.resubscribeNode();
+          const socket = wallet.socketHealth();
+          console.warn(
+            `[health] the head subscription now reads ${socket?.socketHead.subscribed ? 'attached' : 'NOT attached'} on ${socket?.nodeUrlInUse ?? 'no open connection'}`,
           );
         },
         /* Rung two, and the one that actually repairs something in place:

@@ -306,6 +306,10 @@ function fakeApi(options: {
    * implement it.
    */
   heads?: false | ((emit: (height: number) => void) => void);
+  /** The subscribe call rejects, like a client asked one moment too early. */
+  subscribeRejects?: boolean;
+  /** `false` never settles, standing in for a client that never gets ready. */
+  ready?: false;
   name: string;
 }): MidnightApi & {
   sends: string[];
@@ -319,6 +323,7 @@ function fakeApi(options: {
   let unsubscribes = 0;
   const api = {
     isConnected: options.connected,
+    isReady: options.ready === false ? new Promise<void>(() => undefined) : Promise.resolve(),
     sends,
     disconnected: () => wasDisconnected,
     connects: () => connects,
@@ -339,6 +344,9 @@ function fakeApi(options: {
               async subscribeNewHeads(
                 callback: (header: { number: { toNumber(): number } }) => void,
               ): Promise<() => void> {
+                if (options.subscribeRejects) {
+                  throw new Error('RPC-CORE: subscribeNewHeads: client is not ready');
+                }
                 if (typeof options.heads === 'function') {
                   options.heads((height: number) =>
                     callback({ number: { toNumber: () => height } }),
@@ -797,5 +805,198 @@ describe('the head this connection watches', () => {
     assert.equal(head?.subscribed, false);
     assert.equal(head?.height, null);
     assert.equal(connection.socketHealth?.().nodeSocket, 'connected', 'still a usable socket');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The head watch across a rebuild — the drill of 2026/09/07                   */
+/* -------------------------------------------------------------------------- */
+
+describe('re-attaching the head watch to every connection', () => {
+  it('re-subscribes on the REBUILT api, and a header on it updates the head', async () => {
+    /* The defect the droplet drill found. Detection worked, the connection was
+       rebuilt — and what came back carried no subscription, so the service was
+       blind on a socket it was submitting through perfectly well. */
+    const emits: Array<(height: number) => void> = [];
+    const lines: string[] = [];
+    let built = 0;
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: (line) => lines.push(line),
+        createApi: async () => {
+          built += 1;
+          return fakeApi({
+            name: `api-${built}`,
+            connected: true,
+            heads: (send) => emits.push(send),
+          });
+        },
+      },
+    );
+    await connection.send(PAYLOAD);
+    emits[0]!(342_015);
+    assert.equal(connection.socketHealth?.().socketHead.height, 342_015);
+
+    await connection.rebuild?.('the drill');
+    assert.equal(emits.length, 2, 'the rebuilt api was subscribed to as well');
+    const fresh = connection.socketHealth?.().socketHead;
+    assert.equal(fresh?.subscribed, true);
+    assert.equal(fresh?.offered, true);
+    assert.equal(fresh?.height, null, 'unknown until its first header, never the old one');
+    assert.equal(fresh?.at, null);
+    assert.equal(fresh?.headers, 0);
+
+    emits[1]!(342_100);
+    const moved = connection.socketHealth?.().socketHead;
+    assert.equal(moved?.height, 342_100, 'a header on the NEW api moves the head');
+    assert.equal(moved?.headers, 1);
+    assert.ok(
+      lines.filter((line) => line.includes('subscribed to new heads on')).length === 2,
+      lines.join('\n'),
+    );
+  });
+
+  it('leaves NOTHING of a dead connection behind when a rebuild fails', async () => {
+    /* THE FOREVER-LOOP, and its actual mechanism. `unwatchHead` used to keep the
+       dead connection's height, instant, and header count and clear only
+       `subscribed` — so a rebuild that failed left a corpse: a height from
+       minutes ago against a reference still climbing. `./health.ts` read that as
+       a socket falling further behind on every tick and rebuilt it again, and
+       again, for as long as the outage lasted. A connection that is gone knows
+       nothing. */
+    let emit: ((height: number) => void) | null = null;
+    let firstBuild = true;
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: () => undefined,
+        rebuildTimeoutMs: 50,
+        createApi: async () => {
+          if (!firstBuild) throw new Error('connection refused');
+          firstBuild = false;
+          return fakeApi({ name: 'first', connected: true, heads: (send) => (emit = send) });
+        },
+      },
+    );
+    await connection.send(PAYLOAD);
+    (emit as unknown as (height: number) => void)(342_015);
+    assert.equal(connection.socketHealth?.().socketHead.height, 342_015);
+
+    await assert.rejects(connection.rebuild!('the node is black-holed'));
+    const after = connection.socketHealth?.().socketHead;
+    assert.deepEqual(
+      after,
+      { height: null, at: null, subscribed: false, offered: false, headers: 0 },
+      'a torn-down connection reports no view of the chain at all',
+    );
+  });
+
+  it('logs a subscribe that rejects, keeps the socket, and never throws', async () => {
+    /* Failure to subscribe is not failure to connect. The connection is kept
+       and goes on submitting; what it costs is one signal — and `offered` stays
+       true, which is what marks this as the repairable kind of blindness. */
+    const lines: string[] = [];
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: (line) => lines.push(line),
+        createApi: async () =>
+          fakeApi({ name: 'node', connected: true, subscribeRejects: true }),
+      },
+    );
+    await connection.send(PAYLOAD);
+    const head = connection.socketHealth?.().socketHead;
+    assert.equal(head?.subscribed, false);
+    assert.equal(head?.offered, true, 'the client offers it; the attempt is what failed');
+    assert.equal(head?.height, null);
+    assert.equal(connection.socketHealth?.().nodeSocket, 'connected', 'still a usable socket');
+    assert.ok(
+      lines.some((line) => line.includes('the head subscription could not be opened on')),
+      lines.join('\n'),
+    );
+  });
+
+  it('marks a client that offers no subscription as such, so nothing retries it', async () => {
+    /* The other way `subscribed` is false, and it wants the opposite response:
+       a client without `subscribeNewHeads` can never be made to stream heads,
+       so `offered: false` is what keeps the `resubscribe` rung from looping. */
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: () => undefined,
+        createApi: async () => fakeApi({ name: 'node', connected: true, heads: false }),
+      },
+    );
+    await connection.send(PAYLOAD);
+    const head = connection.socketHealth?.().socketHead;
+    assert.equal(head?.subscribed, false);
+    assert.equal(head?.offered, false);
+  });
+
+  it('re-attaches on demand, without rebuilding the connection', async () => {
+    /* The `resubscribe` remedy. The socket is live and submitting; only the
+       watch is missing, and rebuilding would discard a working connection. */
+    const emits: Array<(height: number) => void> = [];
+    let rejectSubscribe = true;
+    let built = 0;
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: () => undefined,
+        createApi: async () => {
+          built += 1;
+          return {
+            ...fakeApi({ name: 'node', connected: true, heads: (send) => emits.push(send) }),
+            rpc: {
+              chain: {
+                getHeader: async () => ({ number: { toNumber: () => 1 } }),
+                async subscribeNewHeads(
+                  callback: (header: { number: { toNumber(): number } }) => void,
+                ): Promise<() => void> {
+                  if (rejectSubscribe) throw new Error('client is not ready');
+                  emits.push((height: number) =>
+                    callback({ number: { toNumber: () => height } }),
+                  );
+                  return () => undefined;
+                },
+              },
+            },
+          } as unknown as MidnightApi;
+        },
+      },
+    );
+    await connection.send(PAYLOAD);
+    assert.equal(connection.socketHealth?.().socketHead.subscribed, false);
+    assert.equal(built, 1);
+
+    rejectSubscribe = false;
+    await connection.resubscribe?.();
+    assert.equal(connection.socketHealth?.().socketHead.subscribed, true);
+    assert.equal(built, 1, 'the connection was kept — only the watch was re-attached');
+
+    emits[emits.length - 1]!(342_222);
+    assert.equal(connection.socketHealth?.().socketHead.height, 342_222);
+  });
+
+  it('waits for the client to be ready before subscribing, and gives up bounded', async () => {
+    /* `ApiPromise.create` is built with `throwOnConnect: false`, so it can hand
+       back a client whose provider is still settling — and `subscribeNewHeads`
+       on one of those rejects. A client that never gets ready costs the
+       subscription and not the connection. */
+    const connection = polkadotConnection(
+      { relayURL: A },
+      {
+        log: () => undefined,
+        rebuildTimeoutMs: 50,
+        createApi: async () =>
+          fakeApi({ name: 'node', connected: true, ready: false, heads: () => undefined }),
+      },
+    );
+    await connection.send(PAYLOAD);
+    const head = connection.socketHealth?.().socketHead;
+    assert.equal(head?.subscribed, false);
+    assert.equal(head?.offered, true, 'repairable: the client does offer the subscription');
+    assert.equal(connection.socketHealth?.().nodeSocket, 'connected');
   });
 });

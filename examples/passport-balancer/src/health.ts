@@ -153,7 +153,7 @@
  *   - Never twice without an intervening healthy tick, likewise persisted.
  */
 
-import type { NodeSocketState, SocketHead } from './submission.js';
+import { NO_SOCKET_HEAD, type NodeSocketState, type SocketHead } from './submission.js';
 import type { ProvingState } from './availability.js';
 import type { ChainHeadProbe, ChainHeadReading } from './chainHead.js';
 
@@ -425,6 +425,16 @@ export interface HealthAssessment {
    * it was looking at would be guessing from a sentence.
    */
   socketFault?: true;
+  /**
+   * This verdict is about the head SUBSCRIPTION, not the connection under it.
+   *
+   * Carried separately from {@link socketFault} because the remedies are
+   * opposites. A socket fault wants the connection thrown away; this one wants
+   * it kept — it is a live, submitting socket that is merely not streaming
+   * heads, and rebuilding it would discard a working connection every five
+   * minutes for as long as the subscribe kept failing.
+   */
+  subscriptionFault?: true;
 }
 
 export interface HealthPolicy {
@@ -872,6 +882,46 @@ export function assessHealth(
          The remedy is `reconnect`, by way of `socketFault`, because the fault
          this catches IS the connection: a `refresh` re-reads the wallet from
          the indexer, which was never the thing that died. */
+  /* 7a. A LIVE SOCKET THAT IS NOT STREAMING HEADS — re-subscribe, never rebuild.
+
+         Found on the droplet on 2026/09/07, in a drill that black-holed the
+         node for nine minutes. Detection worked and the connection was rebuilt;
+         what came back was a socket that submitted perfectly well and carried
+         no head subscription. Nothing retried it, and nothing could act on it:
+         the stall rule reads an unsubscribed socket with no header as UNKNOWN,
+         which is correct — it is not evidence of a stall — but it also meant
+         this service would have stayed blind on that connection for the rest of
+         the process's life.
+
+         `offered` is what makes this safe to act on. A client that does not
+         implement `subscribeNewHeads` can never be made to stream heads, so
+         asking again is a loop and this branch never fires for it; a client
+         that offers the subscription and whose attempt failed is one call away
+         from working. See `SocketHead.offered` in `./submission.ts`.
+
+         AND THE REMEDY IS NOT A REBUILD. That is the whole point of the branch
+         existing rather than letting the stall rule catch it later: the
+         connection is fine. `resubscribe` re-attaches the watch to the api that
+         is already open. It is `restartEligible: false` for the same reason —
+         there is nothing here a fresh process would fix that one call does not.
+
+         It sits ahead of the stall rule so that a socket in this state can
+         never be read as a stalled one, whatever a stale reading might suggest. */
+  if (
+    facts.nodeSocket === 'connected' &&
+    facts.socketHead.offered &&
+    !facts.socketHead.subscribed
+  ) {
+    return {
+      verdict: 'degraded',
+      reason:
+        'the submission socket is connected and submitting, but carries no new-head subscription — this service is blind to whether that connection is following the chain',
+      act: true,
+      subscriptionFault: true as const,
+      restartEligible: false,
+    };
+  }
+
   const head = facts.chainHead;
   const socketKnown = facts.socketHead.subscribed || facts.socketHead.height !== null;
   if (head !== undefined && head.ageMs <= policy.chainHeadMaxAgeMs && socketKnown) {
@@ -981,6 +1031,7 @@ export function assessHealth(
 export type HealthRemedy =
   | 'none'
   | 'refresh'
+  | 'resubscribe'
   | 'reconnect'
   | 'rewarm'
   | 'resyncDust'
@@ -1202,6 +1253,19 @@ export function chooseRemedy(
      never is. A RECONNECT while a job is in flight is allowed, and deliberately
      so: the job's own submission is the thing that is failing, and a rebuilt
      socket is what its retry needs. */
+  /* The head subscription, and it takes its rung before the socket fault below
+     for the reason the branch that raises it exists: this connection is WORKING.
+     One call re-attaches the watch; a rebuild would discard a live socket, and
+     a subscribe that went on failing would have it discarding one every five
+     minutes. No cooldown and no ladder — it is one RPC call, and the thing that
+     bounds how often it is worth making is that a success ends the verdict. */
+  if (assessment.subscriptionFault) {
+    return {
+      remedy: 'resubscribe',
+      reason: 'the socket is connected and submitting but streams no heads — the watch is re-attached, not the connection rebuilt',
+    };
+  }
+
   if (assessment.socketFault) {
     if (assessment.restartEligible) {
       if (facts.reserved || facts.busy) {
@@ -1336,6 +1400,14 @@ export interface HealthRemedies {
    * socket would fix.
    */
   reconnect(reason: string): Promise<void>;
+  /**
+   * Re-attach the head subscription to the connection that is already open.
+   *
+   * The rung `reconnect` is the wrong answer to. On 2026/09/07 a rebuilt socket
+   * came back submitting perfectly well and streaming no heads; rebuilding it
+   * again would have discarded a working connection, and gone on doing so.
+   */
+  resubscribe(): Promise<void>;
   /** Re-fetch the proving key material, and checkpoint the sync snapshot. */
   rewarm(): Promise<void>;
   /**
@@ -1759,13 +1831,14 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
     };
   };
 
-  /** The socket head a tick that could not read the wallet has to assume. */
-  const UNKNOWN_SOCKET_HEAD: SocketHead = {
-    height: null,
-    at: null,
-    subscribed: false,
-    headers: 0,
-  };
+  /**
+   * The socket head a tick that could not read the wallet has to assume.
+   *
+   * `./submission.ts`'s own constant, not a second literal: a wallet that
+   * cannot be read says nothing about the socket, and "nothing" has one
+   * definition here so the two files cannot drift apart on what it means.
+   */
+  const UNKNOWN_SOCKET_HEAD: SocketHead = NO_SOCKET_HEAD;
 
   const publishRecord = (record: HealthRecord): void => {
     snapshot.restartsRequestedTotal = record.restarts;
@@ -1933,6 +2006,9 @@ export function startHealthLoop(options: HealthLoopOptions): HealthMonitor {
         if (choice.remedy === 'refresh') {
           await options.remedies.refresh();
           log(`[health] refreshed the wallet state in ${seconds(now() - startedAt)}`);
+        } else if (choice.remedy === 'resubscribe') {
+          await options.remedies.resubscribe();
+          log(`[health] re-attached the head subscription in ${seconds(now() - startedAt)}`);
         } else if (choice.remedy === 'reconnect') {
           warn(
             `[health] REBUILDING THE SUBMISSION SOCKET — ${assessment.reason}. Nothing this service submits reaches the node until it is back.`,

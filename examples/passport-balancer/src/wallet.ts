@@ -1154,6 +1154,8 @@ export interface BalancerWallet {
    * repairs nothing, which is exactly what the 15:28 remedy did.
    */
   reconnectNode(reason: string): Promise<void>;
+  /** Re-attach the head subscription without rebuilding the connection. */
+  resubscribeNode(): Promise<void>;
   /** Coins no job may currently be handed, as keys — for `/status` and the journal. */
   excludedCoins(): string[];
   /**
@@ -2120,6 +2122,24 @@ export async function openBalancerWallet(
         () => connection.rebuild!(reason),
         30_000,
         (waitedMs) => new WalletCallTimeout('rebuilding the submission connection', waitedMs),
+      );
+    },
+
+    /**
+     * Re-attach the head subscription to the connection already open, WITHOUT
+     * rebuilding it — the `resubscribe` rung in `./health.ts`.
+     *
+     * Bounded for the same reason `reconnectNode` is: this is called from the
+     * health loop, and a remedy that hangs stops the next tick and the
+     * escalation that would have followed it.
+     */
+    async resubscribeNode(): Promise<void> {
+      const connection = nodeConnection;
+      if (!connection?.resubscribe) return;
+      await withDeadline(
+        () => connection.resubscribe!(),
+        30_000,
+        (waitedMs) => new WalletCallTimeout('re-attaching the head subscription', waitedMs),
       );
     },
 

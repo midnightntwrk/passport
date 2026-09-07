@@ -563,10 +563,14 @@ chainHead.referenceHead                    max of the two: what "how far the
 chainHead.indexerBehindHeadBlocks          past 100 for five minutes this is
                                            `degraded` with no remedy
 socketHead                                 the chain as the SUBMISSION socket
-                                           sees it — height, when the last
-                                           header arrived, whether the
-                                           subscription is up, and how many
-                                           headers this connection has delivered
+                                           sees it, read LIVE — height, when the
+                                           last header arrived, whether the
+                                           subscription is up, whether the
+                                           client offers one at all, and how
+                                           many headers this connection has
+                                           delivered. All null/zero on a
+                                           connection that is torn down: gone
+                                           means gone, never a stale height
 socketHeadLagBlocks                        referenceHead minus that height. Zero
                                            on a socket keeping up, which is what
                                            you should expect to see
@@ -743,15 +747,18 @@ DUST is on its way back:
 5. `degraded` — unsynced; a dropped subscription; `proving: failed`;
    `proving: warming` long past a cold start; no DUST *and no NIGHT*, so nothing
    to explain it.
-6. `degraded`, with a `reconnect` — **the submission socket has stopped
+6. `degraded`, with a `resubscribe` — the socket is connected and submitting
+   but carries **no head subscription**, and its client offers one. The
+   connection is kept; only the watch is re-attached.
+7. `degraded`, with a `reconnect` — **the submission socket has stopped
    following the chain**. See [Watching the socket, not the wallet](#watching-the-socket-not-the-wallet).
-7. `degraded` — sync indices that have not moved in half an hour.
-8. `degraded`, **alert-only** — the indexer is 100 blocks or more behind the
+8. `degraded` — sync indices that have not moved in half an hour.
+9. `degraded`, **alert-only** — the indexer is 100 blocks or more behind the
    reference head, and has been for five minutes. Last, and `act: false`: it
    names a fault in somebody else's server, there is no rung that reaches it,
    and it must never mask one this service could repair or build a streak that
    hurries a later fault towards a restart.
-9. `healthy`.
+10. `healthy`.
 
 #### Watching the socket, not the wallet
 
@@ -807,6 +814,46 @@ it costs is one signal. `/status` publishes `socketHead` and
 `socketHeadLagBlocks` on every tick, healthy ones included: a rule that fired
 614 times in a day on a well sponsor is one an operator has to be able to watch
 *not* firing.
+
+#### The watch is re-attached to every connection, and a blind one is repaired
+
+A drill on 2026/09/07 black-holed the node for nine minutes. Detection worked;
+the connection was rebuilt on the second attempt — and came back **submitting
+perfectly well with no head subscription on it**. Three things were wrong, and
+all three are fixed:
+
+1. **A failed rebuild left a corpse.** Tearing the watch down cleared only
+   `subscribed` and kept the dead connection's `height`, `at`, and `headers`.
+   So a rebuild that failed left a height from minutes ago against a reference
+   that was still climbing — which the silence limb reads as a socket falling
+   further behind on every tick, rebuilding it again and again for as long as
+   the outage lasted. A torn-down connection now reports `NO_SOCKET_HEAD`:
+   every field the absence of an observation rather than a stale one.
+2. **The watch was attached in one place only.** It went on inside the open
+   path, so a connection revived by `connect()`, or one whose subscribe call
+   failed, streamed nothing for the rest of the process's life. It is now
+   attached on **every** successful open — initial, rebuilt, and revived — after
+   awaiting `api.isReady` (the client is built `throwOnConnect: false`, so it
+   can be handed back still settling, and `subscribeNewHeads` on one of those
+   rejects). Each attach logs `[node] subscribed to new heads on <url>`, and the
+   reading resets to unknown *before* the attempt, so a fresh socket earns its
+   own five minutes and its first header is what gives it a height.
+3. **A blind socket had no remedy.** `SocketHead.offered` now says whether the
+   client implements the subscription at all, which separates the two ways
+   `subscribed` can be false. A client that does not offer it can never be made
+   to stream heads, so nothing retries it. A client that offers it and whose
+   attempt failed earns `degraded` with a **`resubscribe`** rung — re-attaching
+   the watch to the api that is already open. Deliberately **not** a rebuild:
+   the connection is fine, and rebuilding it would discard a working socket
+   every five minutes for as long as the subscribe kept failing. That branch
+   sits ahead of the stall rule, so a socket in this state can never be read as
+   a stalled one.
+
+`/status`'s `socketHead` is read **live** from the connection's own bookkeeping
+rather than from the health snapshot. The snapshot is the last tick's facts,
+gathered *before* that tick ran its remedy — during the drill it showed the
+corpse of a connection that had already been rebuilt and re-subscribed
+forty-seven seconds earlier.
 
 The half-hour indices rule is kept exactly as it was, and for exactly the reason
 it is worth keeping — it is looking at something else.

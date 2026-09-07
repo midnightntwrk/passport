@@ -142,7 +142,7 @@ const facts = (overrides: Partial<HealthFacts> = {}): HealthFacts => ({
   /* A socket that is following the chain: subscribed, delivering headers. The
      stall rule needs a reference head as well, and these cases supply none, so
      it is skipped here regardless. */
-  socketHead: { height: 342_015, at: 1_800_000_000_000, subscribed: true, headers: 50 },
+  socketHead: { height: 342_015, at: 1_800_000_000_000, subscribed: true, offered: true, headers: 50 },
   ...overrides,
 });
 

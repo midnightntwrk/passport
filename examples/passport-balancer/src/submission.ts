@@ -132,6 +132,14 @@ export interface NodeConnection {
    * underneath it stayed dead for another four and a half hours.
    */
   rebuild?(reason: string): Promise<void>;
+  /**
+   * Re-attach the head watch to the connection that is already open.
+   *
+   * The `resubscribe` remedy in `./health.ts`. Optional so a test's fake
+   * connection need not carry it, and deliberately NOT a rebuild: the fault it
+   * repairs is a live, submitting socket that is merely not streaming heads.
+   */
+  resubscribe?(): Promise<void>;
   /** What the socket looks like right now. Published on `/status`. */
   socketHealth?(): NodeSocketHealth;
   close(): Promise<void>;
@@ -200,9 +208,39 @@ export interface SocketHead {
   at: number | null;
   /** Whether a head subscription is currently established on this socket. */
   subscribed: boolean;
+  /**
+   * Whether this connection's client OFFERS `subscribeNewHeads` at all.
+   *
+   * The field that separates the two ways `subscribed` can be false, which want
+   * opposite responses. A client that does not implement the subscription can
+   * never be made to stream heads, so asking again is a loop; a client that
+   * offers it and whose attempt failed is one call away from working. Only the
+   * second is worth a remedy — see the `resubscribe` rung in `./health.ts`.
+   */
+  offered: boolean;
   /** Headers delivered since this connection was last built. */
   headers: number;
 }
+
+/**
+ * A connection that has no view of the chain, and is not pretending to.
+ *
+ * Used wherever a socket is torn down or has not been opened: every field is
+ * the absence of an observation rather than a stale one. THIS IS LOAD BEARING.
+ * On 2026/09/07 `unwatchHead` kept the dead connection's `height`, `at`, and
+ * `headers` and cleared only `subscribed`, so a rebuild that FAILED left a
+ * corpse behind — a height from ten minutes ago against a reference that was
+ * still climbing. `./health.ts` read that as a socket falling further behind
+ * every tick and rebuilt it again, and again, for as long as the outage lasted.
+ * A connection that is gone knows nothing, and says so.
+ */
+export const NO_SOCKET_HEAD: SocketHead = {
+  height: null,
+  at: null,
+  subscribed: false,
+  offered: false,
+  headers: 0,
+};
 
 /**
  * The socket-failure family: a submission that failed because the transport
@@ -307,6 +345,15 @@ interface Serialisable {
    of this needs generated types: the node publishes the `midnight` pallet and
    polkadot-js builds `api.tx.midnight.sendMnTransaction` from it. */
 export interface MidnightApi {
+  /**
+   * Resolves when the client has its metadata and its RPC methods.
+   *
+   * Optional because a test's fake api need not carry it, and awaited before
+   * the head subscription is opened: `ApiPromise.create` is built here with
+   * `throwOnConnect: false`, so it can hand back a client whose provider is
+   * still settling, and `subscribeNewHeads` on one of those rejects.
+   */
+  isReady?: Promise<unknown>;
   isConnected: boolean;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -421,7 +468,7 @@ export function polkadotConnection(
   let nodeUrlInUse = relayUrls[0] as string;
   /* The head as seen THROUGH THIS SOCKET, and the unsubscribe for the watch
      that supplies it. See `subscribeHead` below for why this exists. */
-  let socketHead: SocketHead = { height: null, at: null, subscribed: false, headers: 0 };
+  let socketHead: SocketHead = { ...NO_SOCKET_HEAD };
   let unsubscribeHead: (() => void) | null = null;
 
   /** Bounds one wait without leaving the loser of the race unhandled. */
@@ -449,29 +496,49 @@ export function polkadotConnection(
   };
 
   /**
-   * The head watch, re-established on every connection this module opens.
+   * The head watch, attached to EVERY connection this module opens — the
+   * initial one, a rebuilt one, and one revived by `connect()`.
    *
-   * One subscription, never more: it is torn down before a rebuild and set up
-   * again after it, so `socketHead.headers` counts what the CURRENT socket has
-   * delivered and a fresh connection that delivers nothing is visibly a fresh
-   * connection that delivers nothing rather than a stale count carried over.
+   * WHY EVERY PATH, AND NOT JUST THE FIRST. On 2026/09/07 the subscription was
+   * attached only inside `openSomewhere`, so a connection that came back any
+   * other way, or one whose subscribe call failed, submitted perfectly well and
+   * streamed nothing for the rest of the process's life. Nothing retried it and
+   * nothing could see that it was blind.
    *
-   * Failure to subscribe is not failure to connect. A node client that does not
-   * offer `subscribeNewHeads`, or one that refuses it, leaves `subscribed:
-   * false` and the health ladder with no evidence either way — which is the
-   * correct reading, and much better than a `null` height that could be
-   * mistaken for a stall.
+   * WHAT IS RESET, AND WHEN. The whole reading goes to {@link NO_SOCKET_HEAD}
+   * FIRST, before the subscription is attempted — so a fresh socket reads as
+   * UNKNOWN rather than as the previous connection's frozen height. That is
+   * what stops `./health.ts` reading a new connection as a stalled one and
+   * rebuilding it for ever; a fresh socket earns its own five minutes from the
+   * moment its watch begins, and its first header is what gives it a height.
+   *
+   * `api.isReady` is awaited before subscribing. `ApiPromise.create` is built
+   * with `throwOnConnect: false`, so it can hand back a client whose provider
+   * is still settling, and `subscribeNewHeads` on one of those rejects — which
+   * is a blind socket produced by asking one moment too early.
+   *
+   * Failure to subscribe is never failure to connect: a connection that submits
+   * but cannot stream heads is worth keeping, and what it costs is one signal.
+   * The two ways that happens are told apart by `offered`, because they want
+   * opposite responses — see {@link SocketHead.offered}.
    */
-  const subscribeHead = async (api: MidnightApi): Promise<void> => {
-    socketHead = { height: null, at: null, subscribed: false, headers: 0 };
+  const subscribeHead = async (api: MidnightApi, url: string): Promise<void> => {
     const subscribe = api.rpc.chain.subscribeNewHeads;
-    if (!subscribe) return;
+    /* Unknown, not stalled. Every field of the previous connection's view is
+       dropped here, at the one moment we know it no longer describes anything. */
+    socketHead = { ...NO_SOCKET_HEAD, offered: Boolean(subscribe) };
+    if (!subscribe) {
+      log(`[node] ${url} offers no new-head subscription — this socket streams no heads`);
+      return;
+    }
     try {
+      if (api.isReady) await bounded(Promise.resolve(api.isReady), rebuildTimeoutMs, 'the client');
       const stop = await bounded(
         Promise.resolve(
           subscribe.call(api.rpc.chain, (header) => {
             const height = header.number.toNumber();
             socketHead = {
+              ...socketHead,
               height:
                 socketHead.height === null ? height : Math.max(socketHead.height, height),
               at: now(),
@@ -485,14 +552,23 @@ export function polkadotConnection(
       );
       unsubscribeHead = stop;
       socketHead = { ...socketHead, subscribed: true };
+      log(`[node] subscribed to new heads on ${url}`);
     } catch (cause) {
-      /* Logged and left alone. A connection that submits perfectly well but
-         cannot stream heads is worth keeping; what it costs is one signal. */
-      log(`[node] the head subscription could not be opened: ${describeCause(cause)}`);
+      /* Logged and left alone, with `offered` still true — which is what marks
+         this as the repairable kind of blindness and earns the `resubscribe`
+         rung rather than another rebuild of a connection that is fine. */
+      log(`[node] the head subscription could not be opened on ${url}: ${describeCause(cause)}`);
     }
   };
 
-  /** Ends the current head watch, if there is one. Never throws. */
+  /**
+   * Ends the current head watch, if there is one. Never throws.
+   *
+   * The reading goes to {@link NO_SOCKET_HEAD} rather than merely losing its
+   * `subscribed` flag. A torn-down connection has no view of the chain, and
+   * keeping its last height was what turned one failed rebuild into an endless
+   * series of them on 2026/09/07 — see `NO_SOCKET_HEAD`.
+   */
   const unwatchHead = (): void => {
     try {
       unsubscribeHead?.();
@@ -500,7 +576,7 @@ export function polkadotConnection(
       // A subscription the node has already closed is not a failure.
     }
     unsubscribeHead = null;
-    socketHead = { ...socketHead, subscribed: false };
+    socketHead = { ...NO_SOCKET_HEAD };
   };
 
   /**
@@ -531,7 +607,7 @@ export function polkadotConnection(
              noticed. */
           log(`[node] fell through to ${url} — ${refusals.join('; ')}`);
         }
-        await subscribeHead(api);
+        await subscribeHead(api, url);
         return api;
       } catch (cause) {
         refusals.push(`${url}: ${describeCause(cause)}`);
@@ -676,6 +752,29 @@ export function polkadotConnection(
 
     async rebuild(reason: string): Promise<void> {
       await rebuild(reason);
+    },
+
+    /**
+     * Attach the head watch to the CURRENT connection, without rebuilding it.
+     *
+     * The remedy for the one fault a rebuild is the wrong answer to: a socket
+     * that is connected and submitting perfectly well, whose client offers the
+     * subscription, and which is nevertheless streaming no heads because the
+     * subscribe call failed. Rebuilding that throws away a working connection —
+     * and, if the subscribe went on failing, would throw one away every five
+     * minutes for ever.
+     *
+     * Never throws: `subscribeHead` swallows and logs, so a re-subscribe that
+     * cannot be made leaves `subscribed: false` and the ladder where it was.
+     */
+    async resubscribe(): Promise<void> {
+      const api = opening ? await opening.catch(() => null) : null;
+      if (!api) {
+        log('[node] there is no open connection to subscribe to new heads on');
+        return;
+      }
+      unwatchHead();
+      await subscribeHead(api, nodeUrlInUse);
     },
 
     socketHealth(): NodeSocketHealth {

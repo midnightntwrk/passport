@@ -79,7 +79,7 @@ const healthy = (overrides: Partial<HealthFacts> = {}): HealthFacts => ({
      header a moment ago. `342,015` is the height stagenet actually reported on
      2026/09/06 — `0x537ff` — so the arithmetic in these assertions is at the
      scale of the real chain rather than a convenient small integer. */
-  socketHead: { height: 342_015, at: T0 - 6_000, subscribed: true, headers: 3_000 },
+  socketHead: { height: 342_015, at: T0 - 6_000, subscribed: true, offered: true, headers: 3_000 },
   ...overrides,
 });
 
@@ -726,6 +726,9 @@ function harness(
       reconnect: async () => {
         calls.push('reconnect');
       },
+      resubscribe: async () => {
+        calls.push('resubscribe');
+      },
       rewarm: async () => {
         calls.push('rewarm');
       },
@@ -948,6 +951,7 @@ describe('the health loop', () => {
           throw new Error('the wallet did not answer');
         },
         reconnect: async () => undefined,
+        resubscribe: async () => undefined,
         rewarm: async () => undefined,
         resyncDust: async () => undefined,
         restart: async () => undefined,
@@ -975,6 +979,7 @@ describe('the health loop', () => {
       remedies: {
         refresh: async () => undefined,
         reconnect: async () => undefined,
+        resubscribe: async () => undefined,
         rewarm: async () => undefined,
         resyncDust: async () => undefined,
         restart: async () => undefined,
@@ -1255,7 +1260,7 @@ describe('the stall verdict on the submission socket', () => {
       const verdict = assessHealth(
         healthy({
           lastStateChangeAt: T0 - stillFor * MINUTE,
-          socketHead: { height: 342_015, at: T0 - 6_000, subscribed: true, headers: 9_000 },
+          socketHead: { height: 342_015, at: T0 - 6_000, subscribed: true, offered: true, headers: 9_000 },
           chainHead: head(),
         }),
       );
@@ -1279,7 +1284,7 @@ describe('the stall verdict on the submission socket', () => {
        whole window. Nothing about the wallet is consulted. */
     const verdict = assessHealth(
       healthy({
-        socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, headers: 9_000 },
+        socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, offered: true, headers: 9_000 },
         chainHead: head({
           nodeHeight: 342_065,
           indexerHeight: 342_065,
@@ -1303,7 +1308,7 @@ describe('the stall verdict on the submission socket', () => {
        exists to protect a possibly-transient signal from acting on a live
        sponsor; five minutes of a socket not following the chain is neither. */
     const facts = healthy({
-      socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, headers: 9_000 },
+      socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, offered: true, headers: 9_000 },
       chainHead: head({
         referenceHead: 342_065,
         socketLagBlocks: FIVE_MINUTES_OF_BLOCKS,
@@ -1325,7 +1330,7 @@ describe('the stall verdict on the submission socket', () => {
        blocks is the same fault seen from the other side. */
     const verdict = assessHealth(
       healthy({
-        socketHead: { height: null, at: null, subscribed: true, headers: 0 },
+        socketHead: { height: null, at: null, subscribed: true, offered: true, headers: 0 },
         chainHead: head({
           referenceHead: 342_065,
           socketLagBlocks: null,
@@ -1373,7 +1378,7 @@ describe('the stall verdict on the submission socket', () => {
     /* The asymmetry this whole module is built on: acting on a wallet somebody
        is spending from is worse than any diagnosis is worth. */
     const dead = {
-      socketHead: { height: 342_015, at: T0 - 60 * MINUTE, subscribed: true, headers: 9_000 },
+      socketHead: { height: 342_015, at: T0 - 60 * MINUTE, subscribed: true, offered: true, headers: 9_000 },
       chainHead: head({
         referenceHead: 348_015,
         socketLagBlocks: 6_000,
@@ -1392,13 +1397,14 @@ describe('the stall verdict on the submission socket', () => {
   });
 
   it('treats a connection with no subscription as unknown, never as stalled', () => {
-    /* A node client that does not offer `subscribeNewHeads`, or one that
-       refused it. `subscribed: false` with no header ever is NO EVIDENCE, and
-       reading it as a dead socket would restart a connection that is submitting
-       perfectly well. */
+    /* A node client that does not offer `subscribeNewHeads` at all.
+       `subscribed: false` with no header ever is NO EVIDENCE, and reading it as
+       a dead socket would restart a connection that is submitting perfectly
+       well. (A client that DOES offer it and failed to attach is a different
+       verdict entirely — see the `resubscribe` cases below.) */
     const verdict = assessHealth(
       healthy({
-        socketHead: { height: null, at: null, subscribed: false, headers: 0 },
+        socketHead: { height: null, at: null, subscribed: false, offered: false, headers: 0 },
         chainHead: head({
           referenceHead: 348_015,
           socketLagBlocks: null,
@@ -1412,7 +1418,7 @@ describe('the stall verdict on the submission socket', () => {
 
   it('escalates to a restart only once rebuilding itself has failed', () => {
     const stalled = {
-      socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, headers: 9_000 },
+      socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, offered: true, headers: 9_000 },
       chainHead: head({
         referenceHead: 342_065,
         socketLagBlocks: FIVE_MINUTES_OF_BLOCKS,
@@ -1443,7 +1449,7 @@ describe('the reference head, when one observer goes blind', () => {
        protocol, and on its own it is enough. */
     const verdict = assessHealth(
       healthy({
-        socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, headers: 9_000 },
+        socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, offered: true, headers: 9_000 },
         chainHead: head({
           nodeHeight: null,
           probeFailures: 12,
@@ -1464,7 +1470,7 @@ describe('the reference head, when one observer goes blind', () => {
        thirty-minute rule is what is left, exactly as it was before any of this
        existed. */
     const blind = {
-      socketHead: { height: 342_015, at: T0 - 60 * MINUTE, subscribed: true, headers: 9_000 },
+      socketHead: { height: 342_015, at: T0 - 60 * MINUTE, subscribed: true, offered: true, headers: 9_000 },
     };
     assert.equal(
       assessHealth(healthy({ ...blind, lastStateChangeAt: T0 - 10 * MINUTE })).verdict,
@@ -1481,7 +1487,7 @@ describe('the reference head, when one observer goes blind', () => {
        conclusion no probe here is entitled to. */
     const verdict = assessHealth(
       healthy({
-        socketHead: { height: 342_015, at: T0 - 10 * MINUTE, subscribed: true, headers: 9_000 },
+        socketHead: { height: 342_015, at: T0 - 10 * MINUTE, subscribed: true, offered: true, headers: 9_000 },
         chainHead: head({
           ageMs: DEFAULT_HEALTH_POLICY.chainHeadMaxAgeMs + 1,
           referenceHead: 342_415,
@@ -1555,7 +1561,7 @@ describe('an indexer that has fallen behind', () => {
        about. */
     const verdict = assessHealth(
       healthy({
-        socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, headers: 9_000 },
+        socketHead: { height: 342_015, at: T0 - 5 * MINUTE, subscribed: true, offered: true, headers: 9_000 },
         chainHead: head({
           referenceHead: 342_065,
           socketLagBlocks: FIVE_MINUTES_OF_BLOCKS,
@@ -1636,6 +1642,7 @@ const frozenSocket = (at: number) => ({
   height: 342_015,
   at,
   subscribed: true,
+  offered: true,
   headers: 9_000,
 });
 
@@ -1655,6 +1662,7 @@ describe('the loop watching the socket against the chain', () => {
         height: climbingFrom(clock.at()),
         at: clock.at(),
         subscribed: true,
+        offered: true,
         headers: 9_000,
       }),
     );
@@ -1715,7 +1723,7 @@ describe('the loop watching the socket against the chain', () => {
       [reading({ fingerprint: 'a' })],
       clock.head(climbingFrom),
       () => climbingFrom(clock.at()),
-      () => ({ height: 342_015, at: clock.at(), subscribed: true, headers: 9_000 }),
+      () => ({ height: 342_015, at: clock.at(), subscribed: true, offered: true, headers: 9_000 }),
     );
     assert.equal((await h.monitor.tick())?.verdict, 'healthy');
     h.advance(4 * MINUTE);
@@ -1740,7 +1748,7 @@ describe('the loop watching the socket against the chain', () => {
       [reading({ fingerprint: 'frozen' })],
       clock.head(climbingFrom),
       () => climbingFrom(clock.at()),
-      () => ({ height: null, at: null, subscribed: true, headers: 0 }),
+      () => ({ height: null, at: null, subscribed: true, offered: true, headers: 0 }),
     );
     assert.equal((await h.monitor.tick())?.verdict, 'healthy');
     h.advance(5 * MINUTE);
@@ -1807,6 +1815,7 @@ describe('the loop watching the socket against the chain', () => {
         height: climbingFrom(clock.at()),
         at: clock.at(),
         subscribed: true,
+        offered: true,
         headers: 9_000,
       }),
     );
@@ -1834,6 +1843,7 @@ describe('the loop watching the socket against the chain', () => {
         height: climbingFrom(clock.at()),
         at: clock.at(),
         subscribed: true,
+        offered: true,
         headers: 9_000,
       }),
     );
@@ -1859,6 +1869,117 @@ describe('the loop watching the socket against the chain', () => {
       h.monitor.snapshot().socketHead?.socketHeadLagBlocks,
       null,
       'the socket is still published; there is simply nothing to compare it with',
+    );
+    h.monitor.stop();
+  });
+});
+
+describe('a live socket that is not streaming heads', () => {
+  it('asks for a RE-SUBSCRIBE, never another rebuild', () => {
+    /* The droplet drill of 2026/09/07. The rebuild worked — the socket was
+       connected and submitting — and it came back with no head subscription.
+       Rebuilding it again would throw away a connection that is fine, and go on
+       throwing one away every five minutes for as long as the subscribe kept
+       failing. */
+    const facts = healthy({
+      nodeSocket: 'connected',
+      socketHead: { height: null, at: null, subscribed: false, offered: true, headers: 0 },
+    });
+    const verdict = assessHealth(facts);
+    assert.equal(verdict.verdict, 'degraded');
+    assert.equal(verdict.act, true);
+    assert.equal(verdict.subscriptionFault, true);
+    assert.equal(verdict.socketFault, undefined, 'the connection is not the fault');
+    assert.equal(verdict.restartEligible, false);
+    assert.match(verdict.reason, /carries no new-head subscription/);
+
+    assert.equal(
+      chooseRemedy(verdict, facts, {
+        lastRewarmAt: null,
+        lastResyncDustAt: null,
+        record: { ...EMPTY_HEALTH_RECORD },
+      }).remedy,
+      'resubscribe',
+    );
+  });
+
+  it('says nothing about a client that offers no subscription at all', () => {
+    /* The other way `subscribed` is false, and it must never be acted on: a
+       client without `subscribeNewHeads` can never be made to stream heads, so
+       a remedy here would be a rung asked for on every tick for ever. */
+    const verdict = assessHealth(
+      healthy({
+        nodeSocket: 'connected',
+        socketHead: { height: null, at: null, subscribed: false, offered: false, headers: 0 },
+      }),
+    );
+    assert.equal(verdict.verdict, 'healthy');
+  });
+
+  it('leaves a socket that is already streaming alone', () => {
+    assert.equal(assessHealth(healthy()).verdict, 'healthy');
+  });
+
+  it('does not fire while the connection itself is down — that is a rebuild', () => {
+    /* A dead socket has no subscription by definition, and the fault is the
+       connection. This branch is only for a socket that is CONNECTED. */
+    const verdict = assessHealth(
+      healthy({
+        nodeSocket: 'dead',
+        consecutiveSocketFailures: DEFAULT_HEALTH_POLICY.socketFailuresForDegraded,
+        socketHead: { height: null, at: null, subscribed: false, offered: true, headers: 0 },
+      }),
+    );
+    assert.equal(verdict.socketFault, true, 'the socket branch owns this one');
+    assert.equal(verdict.subscriptionFault, undefined);
+  });
+
+  it('re-subscribes through the loop, and stops once the watch is attached', async () => {
+    /* End to end, and the assertion that matters most: the connection is never
+       rebuilt. */
+    let subscribed = false;
+    const h = harness(
+      [reading({})],
+      undefined,
+      undefined,
+      () => ({
+        height: null,
+        at: null,
+        subscribed,
+        offered: true,
+        headers: 0,
+      }),
+    );
+    const first = await h.monitor.tick();
+    assert.equal(first?.verdict, 'degraded');
+    assert.deepEqual(h.calls, ['resubscribe'], 'not a rebuild');
+
+    /* The remedy worked. The next tick has nothing to say. */
+    subscribed = true;
+    h.advance(2 * MINUTE);
+    assert.equal((await h.monitor.tick())?.verdict, 'healthy');
+    assert.deepEqual(h.calls, ['resubscribe'], 'and it is not asked for again');
+    h.monitor.stop();
+  });
+
+  it('never rebuilds a socket whose subscription simply will not attach', async () => {
+    /* The failure mode the guard exists to prevent, run out to ten ticks: a
+       subscribe that never succeeds asks for the same cheap rung every time and
+       never once escalates to throwing the connection away. */
+    const h = harness(
+      [reading({})],
+      undefined,
+      undefined,
+      () => ({ height: null, at: null, subscribed: false, offered: true, headers: 0 }),
+    );
+    for (let tick = 0; tick < 10; tick += 1) {
+      await h.monitor.tick();
+      h.advance(2 * MINUTE);
+    }
+    assert.equal(h.calls.length, 10);
+    assert.ok(
+      h.calls.every((remedy) => remedy === 'resubscribe'),
+      `a working connection was thrown away: ${h.calls.join(', ')}`,
     );
     h.monitor.stop();
   });
