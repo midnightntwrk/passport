@@ -15,6 +15,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import {
   PASSPORT_CALLBACK_PROTOCOL,
   PASSPORT_CALLBACK_SIGNATURE_SCHEME,
+  PASSPORT_CALLBACK_SIGNATURE_TAG,
   buildPassportLaunchUrl,
   createPassportNonceLedger,
   newPassportState,
@@ -35,6 +36,14 @@ import {
 import { bech32m } from '@scure/base';
 import { PassportProtocolError } from '../src/protocol/errors.js';
 import { installFakeDom, removeFakeDom } from './domStub.js';
+import {
+  PRODUCTION_AUDIENCE,
+  PRODUCTION_ISSUED_AT,
+  PRODUCTION_PUBLIC_KEY,
+  PRODUCTION_SIGNATURE,
+  PRODUCTION_STATE,
+  PRODUCTION_TAGGED_ENVELOPE,
+} from './fixtures/productionReply.js';
 
 const AUDIENCE = 'https://doorman.example';
 const SECRET_KEY = new Uint8Array(32).fill(7);
@@ -210,6 +219,118 @@ describe('the return, off the fragment', () => {
     );
     expect(parsed).toMatchObject({ kind: 'response' });
     expect(parsed.kind === 'response' && parsed.envelope.scheme).toBe('none');
+  });
+});
+
+/**
+ * The wire mismatch that cost a day on 2026/09/08, and the two shapes a key or
+ * a signature may arrive in. See the header of `src/redirect/protocol.ts`.
+ */
+describe('the key and the signature, tagged or bare', () => {
+  const fragment = (envelope: unknown) =>
+    `#passportResponse=${toBase64Url(new TextEncoder().encode(JSON.stringify(envelope)))}`;
+  const reason = (envelope: unknown) => {
+    const parsed = parsePassportCallbackReturn(fragment(envelope));
+    return parsed.kind === 'malformed' ? parsed.reason : `unexpectedly ${parsed.kind}`;
+  };
+  const signedShape = {
+    protocol: PASSPORT_CALLBACK_PROTOCOL,
+    type: 'passport.callback.response',
+    payload: 'x',
+    scheme: PASSPORT_CALLBACK_SIGNATURE_SCHEME,
+  };
+  const SIGNATURE = signBytes(new TextEncoder().encode('anything'));
+
+  it('reads the tagged form production actually sends, and hands on bare hex', () => {
+    /* THE REGRESSION, on the real capture. This envelope came off a real
+       address bar; the receiver used to call it malformed before verifying
+       anything, and a partner saw "the signature or key is malformed" over a
+       reply that was in fact perfectly good. */
+    const parsed = parsePassportCallbackReturn(fragment(PRODUCTION_TAGGED_ENVELOPE));
+    expect(parsed.kind).toBe('response');
+    /* The tag is stripped here so nothing downstream has to know about it. */
+    expect(parsed.kind === 'response' && parsed.envelope.publicKey).toBe(PRODUCTION_PUBLIC_KEY);
+    expect(parsed.kind === 'response' && parsed.envelope.signature).toBe(PRODUCTION_SIGNATURE);
+  });
+
+  it('verifies the captured production reply against production’s own key', () => {
+    /* Not a shape check: a real BIP-340 signature over the real bytes, walked
+       by the untouched verifier. If the wire changes again this fails. */
+    const parsed = parsePassportCallbackReturn(fragment(PRODUCTION_TAGGED_ENVELOPE));
+    if (parsed.kind !== 'response') throw new Error(`parse said ${parsed.kind}`);
+    const verdict = verifyPassportCallbackReply(parsed.envelope, {
+      expectedAudience: PRODUCTION_AUDIENCE,
+      expectedState: PRODUCTION_STATE,
+      now: PRODUCTION_ISSUED_AT + 1_000,
+    });
+    expect(verdict.ok).toBe(true);
+    expect(verdict.ok && verdict.signed).toBe(true);
+    expect(verdict.ok && verdict.signerKey).toBe(PRODUCTION_PUBLIC_KEY);
+    /* What that Passport shared, warts and all — see the fixture's note. */
+    expect(verdict.ok && verdict.payload.profile).toEqual({ displayName: 'Midnight Passport' });
+  });
+
+  it('reads the bare form to exactly the same envelope', () => {
+    /* The older shape is not deprecated and is not going away: a producer that
+       sends bare hex and one that tags it are saying the same thing. */
+    const { envelope } = seal(profilePayload());
+    const bare = parsePassportCallbackReturn(fragment(envelope));
+    const withTags = parsePassportCallbackReturn(
+      fragment({
+        ...envelope,
+        publicKey: `${PASSPORT_CALLBACK_SIGNATURE_TAG}:${envelope.publicKey}`,
+        signature: `${PASSPORT_CALLBACK_SIGNATURE_TAG}:${envelope.signature}`,
+      }),
+    );
+    expect(bare).toEqual({ kind: 'response', envelope });
+    expect(withTags).toEqual(bare);
+  });
+
+  it('refuses a tag that disagrees with the scheme, and names the disagreement', () => {
+    /* The tag exists so a receiver can tell a schnorr key from an ECDSA one.
+       A reply that names one scheme and tags the other is the confusion the
+       tag was added to prevent, so it is refused rather than untagged. */
+    expect(reason({ ...signedShape, publicKey: `ecdsa:${PUBLIC_KEY}`, signature: SIGNATURE })).toBe(
+      'the reply tags its key "ecdsa:" but names the bip340-schnorr-secp256k1-sha256 scheme, which is tagged "schnorr:"',
+    );
+    expect(reason({ ...signedShape, publicKey: PUBLIC_KEY, signature: `ecdsa:${SIGNATURE}` })).toBe(
+      'the reply tags its signature "ecdsa:" but names the bip340-schnorr-secp256k1-sha256 scheme, which is tagged "schnorr:"',
+    );
+  });
+
+  it('splits the tag on the first colon, so a second one cannot smuggle one through', () => {
+    expect(
+      reason({ ...signedShape, publicKey: `schnorr:x:${PUBLIC_KEY}`, signature: SIGNATURE }),
+    ).toBe('the key is malformed behind its "schnorr:" tag');
+    expect(reason({ ...signedShape, publicKey: `a:schnorr:${PUBLIC_KEY}`, signature: SIGNATURE })).toBe(
+      'the reply tags its key "a:" but names the bip340-schnorr-secp256k1-sha256 scheme, which is tagged "schnorr:"',
+    );
+  });
+
+  it('says when a value is tagged correctly and the hex behind it is not hex', () => {
+    /* The tag was right, so "the signature or key is malformed" would send a
+       developer looking at the wrong half of the value. */
+    expect(reason({ ...signedShape, publicKey: 'schnorr:short', signature: SIGNATURE })).toBe(
+      'the key is malformed behind its "schnorr:" tag',
+    );
+    expect(reason({ ...signedShape, publicKey: PUBLIC_KEY, signature: 'schnorr:short' })).toBe(
+      'the signature is malformed behind its "schnorr:" tag',
+    );
+  });
+
+  it('keeps the old sentence for a bare value of the wrong shape, or none at all', () => {
+    expect(reason({ ...signedShape, publicKey: 'short', signature: SIGNATURE })).toBe(
+      'the signature or key is malformed',
+    );
+    expect(reason({ ...signedShape, publicKey: PUBLIC_KEY, signature: 'short' })).toBe(
+      'the signature or key is malformed',
+    );
+    expect(reason({ ...signedShape, signature: SIGNATURE })).toBe(
+      'the signature or key is malformed',
+    );
+    expect(reason({ ...signedShape, publicKey: PUBLIC_KEY })).toBe(
+      'the signature or key is malformed',
+    );
   });
 });
 

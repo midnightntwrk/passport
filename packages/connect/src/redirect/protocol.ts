@@ -54,6 +54,36 @@
  * sent, and the same honesty invariants the postMessage protocol enforces
  * apply here too: `submitted` requires a `txId`, `sponsored: true` is only
  * possible on `submitted`.
+ *
+ * ---------------------------------------------------------------------------
+ * THE KEY AND SIGNATURE ON THE WIRE: TAGGED, OR BARE
+ * ---------------------------------------------------------------------------
+ *
+ * An envelope carries three things about its signature, and the third of them
+ * was being read too strictly:
+ *
+ *   scheme     `bip340-schnorr-secp256k1-sha256`, or `none`. It names the
+ *              curve, the construction, and the pre-hash, and it is the field
+ *              a receiver decides by.
+ *   publicKey  64 hex characters, optionally preceded by `schnorr:`.
+ *   signature  128 hex characters, optionally preceded by `schnorr:`.
+ *
+ * The `<word>:` prefix is what a ledger-9 keystore hands its caller: it returns
+ * `{ tag, value }`, where the tag names the scheme, and Passport puts both on
+ * the wire rather than throwing the tag away — an unqualified hex string of a
+ * schnorr key and of an ECDSA key are indistinguishable, so a receiver handed
+ * only hex cannot tell which scheme signed.
+ *
+ * This receiver used to require BARE hex, so every reply from a ledger-9
+ * Passport came back `malformed` before a single cryptographic step ran, and
+ * the app got "the signature or key is malformed" over a reply that was in fact
+ * perfectly good (seen live on 2026/09/08, against production Passport). Both
+ * forms are read now. The tag is not extra information to be trusted: it is
+ * checked AGAINST `scheme` and a tag that disagrees is a refusal that names the
+ * disagreement, because a key labelled one way and a scheme named another is
+ * exactly the confusion the tag exists to prevent. Once checked it is stripped,
+ * so everything downstream — the verifier, the key binding, the address — sees
+ * bare hex and no part of this package has to know the wire had two shapes.
  * ========================================================================= */
 
 import {
@@ -77,6 +107,17 @@ export const PASSPORT_CALLBACK_PROTOCOL = 'org.midnight.passport.callback/v1' as
  * key" is not something a receiver can implement.
  */
 export const PASSPORT_CALLBACK_SIGNATURE_SCHEME = 'bip340-schnorr-secp256k1-sha256' as const;
+
+/**
+ * The tag word that may precede the key and the signature on the wire, and the
+ * only one this scheme accepts.
+ *
+ * Named as a constant rather than written into the check, because it is half of
+ * a pair: the tag says `schnorr` exactly when `scheme` says
+ * `bip340-schnorr-secp256k1-sha256`, and a reader looking at one should be able
+ * to find the other. See the module header for why the tag is on the wire.
+ */
+export const PASSPORT_CALLBACK_SIGNATURE_TAG = 'schnorr' as const;
 
 /** The profile launch and return parameters. */
 export const PASSPORT_CALLBACK_PARAM = 'passportCallback' as const;
@@ -172,7 +213,13 @@ export interface PassportCallbackEnvelope {
   /** base64url of the exact bytes that were signed. */
   readonly payload: string;
   readonly scheme: typeof PASSPORT_CALLBACK_SIGNATURE_SCHEME | 'none';
+  /**
+   * 64 hex characters — the x-only BIP-340 verifying key, with any
+   * `schnorr:` tag already stripped by {@link parsePassportCallbackReturn}.
+   * Everything downstream reads bare hex; see the module header.
+   */
   readonly publicKey?: string;
+  /** 128 hex characters, likewise untagged. */
   readonly signature?: string;
 }
 
@@ -194,6 +241,61 @@ const AMOUNT_PATTERN = /^[0-9]{1,20}$/;
 
 function isHex(value: unknown, length: number): value is string {
   return typeof value === 'string' && value.length === length && /^[0-9a-f]+$/i.test(value);
+}
+
+/**
+ * What reading one tagged-or-bare hex value off the wire can come to.
+ *
+ * Three outcomes rather than two, because "the tag disagrees with the scheme"
+ * is a different fact from "this is not hex" and deserves a different sentence:
+ * the first is a producer that named two schemes at once, the second is a value
+ * of the wrong shape.
+ */
+type TaggedHex =
+  | { readonly kind: 'hex'; readonly value: string }
+  | { readonly kind: 'wrong-tag'; readonly tag: string }
+  | { readonly kind: 'malformed'; readonly tag: string | null };
+
+/**
+ * Reads `"<hex>"` or `"<tag>:<hex>"`, and returns the bare hex.
+ *
+ * The tag is split on the FIRST colon only. Hex contains no colon, so a second
+ * one is part of a value that is not going to be hex anyway, and splitting on
+ * the last would let `a:b:<hex>` through as though it were tagged `a:b`.
+ */
+function readTaggedHex(value: unknown, length: number, expectedTag: string): TaggedHex {
+  if (typeof value !== 'string') return { kind: 'malformed', tag: null };
+  const colon = value.indexOf(':');
+  if (colon === -1) {
+    return isHex(value, length)
+      ? { kind: 'hex', value }
+      : { kind: 'malformed', tag: null };
+  }
+  const tag = value.slice(0, colon);
+  if (tag !== expectedTag) return { kind: 'wrong-tag', tag };
+  const hex = value.slice(colon + 1);
+  return isHex(hex, length) ? { kind: 'hex', value: hex } : { kind: 'malformed', tag };
+}
+
+/**
+ * The sentence for a key or signature this receiver could not read.
+ *
+ * It says which of the two it is and whether the value was tagged, because
+ * those are the two facts that tell a developer whether they are looking at a
+ * wire-format mismatch or at a genuinely broken value — and being told only
+ * "the signature or key is malformed" over a reply that was fine is what cost a
+ * day on 2026/09/08.
+ */
+function taggedHexReason(
+  what: 'key' | 'signature',
+  outcome: Exclude<TaggedHex, { kind: 'hex' }>,
+): string {
+  if (outcome.kind === 'wrong-tag') {
+    return `the reply tags its ${what} "${outcome.tag}:" but names the ${PASSPORT_CALLBACK_SIGNATURE_SCHEME} scheme, which is tagged "${PASSPORT_CALLBACK_SIGNATURE_TAG}:"`;
+  }
+  return outcome.tag === null
+    ? 'the signature or key is malformed'
+    : `the ${what} is malformed behind its "${outcome.tag}:" tag`;
 }
 
 function readVersion(value: Record<string, unknown>): number | null {
@@ -242,10 +344,16 @@ function parseEnvelope(raw: string): PassportCallbackReturn {
       reason: 'the reply names a signature scheme this app cannot check',
     };
   }
-  /* 32-byte x-only verifying key, 64-byte signature. Lengths are checked here
-     so a curve implementation is never handed something shapeless. */
-  if (!isHex(value.publicKey, 64) || !isHex(value.signature, 128)) {
-    return { kind: 'malformed', reason: 'the signature or key is malformed' };
+  /* 32-byte x-only verifying key, 64-byte signature — either bare or behind
+     the `schnorr:` tag a ledger-9 keystore puts on them. Lengths are checked
+     here so a curve implementation is never handed something shapeless, and
+     the tag is stripped here so nothing below this line has to know the wire
+     had two shapes. */
+  const key = readTaggedHex(value.publicKey, 64, PASSPORT_CALLBACK_SIGNATURE_TAG);
+  if (key.kind !== 'hex') return { kind: 'malformed', reason: taggedHexReason('key', key) };
+  const signature = readTaggedHex(value.signature, 128, PASSPORT_CALLBACK_SIGNATURE_TAG);
+  if (signature.kind !== 'hex') {
+    return { kind: 'malformed', reason: taggedHexReason('signature', signature) };
   }
   return {
     kind: 'response',
@@ -254,8 +362,8 @@ function parseEnvelope(raw: string): PassportCallbackReturn {
       type: 'passport.callback.response',
       payload: value.payload,
       scheme: PASSPORT_CALLBACK_SIGNATURE_SCHEME,
-      publicKey: value.publicKey,
-      signature: value.signature,
+      publicKey: key.value,
+      signature: signature.value,
     },
   };
 }

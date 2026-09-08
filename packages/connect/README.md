@@ -101,6 +101,49 @@ change with a test:
    state, freshness, and replay checks as the profile exchange, plus an echo of
    the intent inside the signed bytes.
 
+## The signed redirect reply, on the wire
+
+The reply travels in the URL fragment as base64url of this envelope:
+
+```jsonc
+{
+  "protocol": "org.midnight.passport.callback/v1",
+  "type": "passport.callback.response",
+  "payload": "<base64url of the exact bytes that were signed>",
+  "scheme": "bip340-schnorr-secp256k1-sha256",   // or "none"
+  "publicKey": "schnorr:24addff…",               // 64 hex, tag optional
+  "signature": "schnorr:5c4a887a…"               // 128 hex, tag optional
+}
+```
+
+`scheme` is the field a receiver decides by: it names the curve, the signature
+construction, and the pre-hash, because "signed with the Midnight key" is not
+something a receiver can implement.
+
+`publicKey` and `signature` may arrive **tagged** — `schnorr:` followed by the
+hex — or **bare**. Both are read, and both mean the same thing. The tag is what
+a ledger-9 keystore hands its caller, and Passport puts it on the wire rather
+than dropping it, because an unqualified hex string of a schnorr key and of an
+ECDSA key are indistinguishable. `parsePassportCallbackReturn` checks the tag
+against `scheme`, refuses a reply whose tag and scheme disagree with a message
+naming both, and then strips it — so `envelope.publicKey` and
+`envelope.signature` are always bare hex by the time you hold them, and nothing
+you write has to know the wire had two shapes.
+
+Verification is unchanged either way:
+
+```ts
+const returned = parsePassportCallbackReturn(location.hash);
+if (returned.kind === 'response') {
+  const verdict = verifyPassportCallbackReply(returned.envelope, {
+    expectedAudience: location.origin,
+    expectedState: takePassportState(),
+  });
+  if (verdict.ok) greet(verdict.payload.profile.displayName);
+  else show(verdict.reason);          // and verdict.checks shows the walk
+}
+```
+
 ## The reference integration
 
 `examples/doorman` in this repository is one page, three acts, each a real call
