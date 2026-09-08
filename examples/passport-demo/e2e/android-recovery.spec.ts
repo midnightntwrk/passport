@@ -243,18 +243,31 @@ async function backToLanding(h: Harness): Promise<void> {
   await h.page.goto('/');
   const signOut = h.page.getByRole('button', { name: /Sign out of this Passport/i });
   const landing = h.page.getByRole('button', { name: /Continue with Passport/i });
-  /* PRESSED UNTIL IT TAKES, and the loop is not politeness. The silent restore
-     is several awaits long and used to put back the state a sign-out had just
-     torn down, so the button did nothing and the user stayed on Home — found
-     here on 2026/09/04, on exactly the journey somebody escaping an orphaned
-     Passport takes. `signOutPassport` now cancels the restore first, and this
-     stays a loop so a regression shows up as a slow test rather than as a
-     flake nobody can reproduce. */
+  /* Wait for the persisted session that this journey deliberately created.
+     The landing screen is rendered while IndexedDB is still being read, so it
+     is visible for a moment before a real session returns to Home. Treating
+     that transient screen as a completed sign-out races the next press against
+     the restore — which is a test race, not a user having left Passport.
+
+     Once Home is present, press until it takes. The silent restore is several
+     awaits long and used to put back the state a sign-out had just torn down,
+     so the button did nothing and the user stayed on Home — found here on
+     2026/09/04, on exactly the journey somebody escaping an orphaned Passport
+     takes. `signOutPassport` now cancels the restore first; waiting for the
+     restored session before exercising that rule keeps the assertion honest. */
   const deadline = Date.now() + 120_000;
+  let restoredSession = false;
   for (;;) {
-    if (await landing.isVisible().catch(() => false)) return;
     if (await signOut.isVisible().catch(() => false)) {
+      restoredSession = true;
       await signOut.click().catch(() => undefined);
+    }
+    if (
+      restoredSession &&
+      (await landing.isVisible().catch(() => false)) &&
+      !(await signOut.isVisible().catch(() => false))
+    ) {
+      return;
     }
     if (Date.now() > deadline) break;
     await h.page.waitForTimeout(500);

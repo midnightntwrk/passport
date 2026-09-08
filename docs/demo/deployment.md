@@ -202,7 +202,7 @@ The release is tagged `v<N>`, where N is one past the highest `v<N>` that alread
 
 **It is not a pre-release** (changed 2026/09/07). It used to be, and that was the bug: GitHub never shows a pre-release as "Latest", so a reviewer reading the repository front page saw a three-day-old release and concluded nothing had shipped since. The naming rule — `v<N> - <date>` — is Hector's, from the same review.
 
-It is idempotent: a build that already has a release, under a `v<N>` tag or a legacy `demo-…` one, is reported rather than released twice. It verifies that release has the ZK bundle; if it does not, it stops rather than claiming the immutable release was repaired. `--dry-run` prints the `gh` command without creating anything. The derivation of the number and the title is unit-tested — `npm run test:release-naming`.
+It is idempotent for a **commit and build**: re-running the same release is reported rather than released twice. A later gate-only commit may carry identical PWA bytes after an immutable release failed before deployment, and it receives a replacement release instead of being trapped behind the old build id. It verifies that a same-commit release has the ZK bundle; if it does not, it stops rather than claiming the immutable release was repaired. `--dry-run` prints the `gh` command without creating anything. The derivation of the number and the title is unit-tested — `npm run test:release-naming`.
 
 Options, for releasing something other than "what was just built here":
 

@@ -1,6 +1,10 @@
 Build notes for the NEXT production deploy. Rewrite this file before every deploy; `scripts/tag-release.mjs` refuses to tag without a "## Fixed" section.
 
 ## Fixed
+- **A passing Android recovery journey could be mistaken for a failed browser gate** (v6 release verification, 2026/09/08). The test that removes an Android passkey reloads Passport, waits for its saved session to return, signs out, then creates a new passkey. On a fast page load it mistook the landing screen briefly shown while IndexedDB was still checking the saved session for the completed sign-out. The session then finished restoring before the test could press Continue, and the test failed despite the same journey succeeding locally and every later browser check passing.
+
+  The test now waits for the saved session it deliberately set up, then signs out and verifies the stable landing state. The production journey is unchanged. The release tool also now permits a later gate-only commit with the same PWA build ID to supersede a failed immutable release, while remaining idempotent for the same commit and build.
+
 - **Two fee sponsors could turn the same permanent refusal into a second attempt** (found by the production release gate, 2026/09/08). One sponsor has always carried its own answer through to Passport: a `400 INVALID_TRANSACTION` means the transaction is not one that service can ever cover, so Passport stops rather than rebuilding and sending it again. Once a second sponsor was added, two such answers were combined into an ordinary error so the app could retain both diagnostics. That accidentally made the result look like a connection failure, and Passport tried the same doomed transaction once more.
 
   The combined error now keeps both endpoint diagnostics for operators and carries the same retry decision as the individual answers. When every sponsor has given a terminal answer, Passport stops straight away; when any sponsor was busy, temporarily unavailable, or could not be reached, it still retries exactly as before. The release test suite now runs with the two hosted sponsors configured, so a one-sponsor assumption cannot slip back in.

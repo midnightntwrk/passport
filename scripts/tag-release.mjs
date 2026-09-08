@@ -43,11 +43,13 @@
  * for. It also refuses an unstamped `__BUILD_ID__`, which means the build did
  * not run, and RELEASE-NOTES.md with no "## Fixed" section.
  *
- * It is idempotent: a build that already has a release — under a `v<N>` tag or
- * under a legacy `demo-…` one — is reported rather than released twice. A
- * release missing its ZK artefact bundle is refused: published GitHub releases
- * are immutable, so that omission needs a new replacement release, not a
- * misleading successful re-run.
+ * It is idempotent for one commit and build: a release that already names both
+ * is reported rather than released twice. A later gate-only commit may carry
+ * identical PWA bytes after an immutable release failed before deployment, so
+ * it receives a replacement release rather than being trapped behind the old
+ * build id. A release missing its ZK artefact bundle is refused: published
+ * GitHub releases are immutable, so that omission needs a new replacement
+ * release, not a misleading successful re-run.
  *
  * USAGE
  * -----
@@ -306,13 +308,19 @@ try {
 } catch {
   fail('`gh api releases` did not return JSON.');
 }
-// Already released? A re-deploy of the same build is not an error. The build id
-// is in the body of every release this script writes, and in the tag of every
-// legacy `demo-…` one.
+// Already released? A re-deploy of the same COMMIT and build is not an error.
+// The build id is in the body of every release this script writes, and in the
+// tag of every legacy `demo-…` one. A later commit can carry unchanged PWA
+// bytes solely to repair a failed immutable release gate, and must be allowed
+// to publish a replacement release.
 
 const already = releases.find((release) => (release.tagName ?? '').endsWith(`-${buildId.slice(0, 8)}`));
 const existingRelease = releaseDetails.find(
-  (release) => typeof release.body === 'string' && release.body.includes(`Build id: ${buildId}`),
+  (release) =>
+    typeof release.body === 'string' &&
+    release.body.includes(`Build id: ${buildId}`) &&
+    (release.target_commitish === commit ||
+      release.body.startsWith(`Build id: ${buildId} · Commit: ${commit.slice(0, 7)} ·`)),
 );
 if (already || existingRelease) {
   const tag = existingRelease?.tag_name ?? already?.tagName;
