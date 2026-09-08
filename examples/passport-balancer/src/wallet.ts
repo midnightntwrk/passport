@@ -338,6 +338,40 @@ export function syncAheadDetail(progress: SyncSnapshotProgress): string | null {
   return ahead.length > 0 ? ahead.join(', ') : null;
 }
 
+/** What `/status` publishes about this wallet's sync, in three fields. */
+export interface PublishedSync {
+  /** Can this wallet select coins right now — complete, or merely ahead. */
+  synced: boolean;
+  /** The SDK's own strict verdict, kept so an operator can still see it. */
+  syncedStrict: boolean;
+  /** Which leg is ahead and by how much, or `null` when none is. */
+  syncAhead: string | null;
+}
+
+/**
+ * The three sync fields `/status` publishes, from one reading of the wallet.
+ *
+ * `synced` is the READINESS answer, because that is the question every reader
+ * of `/status` is actually asking — the droplet's supervisor, a monitor, and
+ * (through the client's fee preflight) a person about to send NIGHT. Published
+ * as the SDK's strict verdict it went false for under a minute after every
+ * spend this service made, which on 2026/09/08 struck a healthy sponsor as
+ * degraded and made the app tell somebody mid-send that "the fee arrangement
+ * changed" — twice — when nothing about the arrangement had.
+ *
+ * `syncedStrict` keeps the old figure under its own name so nothing is hidden,
+ * and `syncAhead` says in the indexer's own numbers why the two disagree. A
+ * reading that could not be taken at all is not synced by either measure.
+ */
+export function publishedSync(progress: SyncSnapshotProgress | null): PublishedSync {
+  if (progress === null) return { synced: false, syncedStrict: false, syncAhead: null };
+  return {
+    synced: isEffectivelySynced(progress),
+    syncedStrict: progress.isSynced,
+    syncAhead: syncAheadDetail(progress),
+  };
+}
+
 /**
  * One spendable shielded coin, flattened to the three fields a Compact
  * `ShieldedCoinInfo` argument needs.

@@ -22,6 +22,7 @@ import { describe, it } from 'node:test';
 import { assessHealth, type HealthFacts } from '../src/health.js';
 import {
   isEffectivelySynced,
+  publishedSync,
   syncAheadDetail,
   type SyncSnapshotProgress,
   type WalletProgress,
@@ -109,6 +110,70 @@ describe('naming what is ahead', () => {
       dust: leg({ applied: '9400', highestRelevant: '9521', complete: false }),
     });
     assert.equal(syncAheadDetail(behind), null);
+  });
+});
+
+/**
+ * What `/status` says out loud, which is the half that reached production.
+ *
+ * On 2026/09/08, 17:00–17:02 UTC, `/status` answered `synced: false` for under
+ * a minute directly after one of this service's own spends landed. The sponsor
+ * was healthy throughout; the supervisor logged one degraded tick and cleared
+ * it by itself, and a live send was refused twice by the client's fee check.
+ * These cases pin the published field to the readiness question.
+ */
+describe('what /status publishes about sync', () => {
+  it('calls a wallet that is one submission ahead of the indexer synced', () => {
+    const published = publishedSync(afterOurOwnSpend());
+    assert.equal(published.synced, true);
+    /* Nothing is hidden: the SDK's own verdict keeps its own field, and the
+       reason the two disagree is named beside it. */
+    assert.equal(published.syncedStrict, false);
+    assert.equal(published.syncAhead, 'unshielded applied 9549 > highest 9521');
+  });
+
+  it('calls a wallet that is genuinely behind the indexer unsynced', () => {
+    const published = publishedSync(
+      progress({
+        isSynced: false,
+        dust: leg({ applied: '9400', highestRelevant: '9521', complete: false }),
+      }),
+    );
+    assert.equal(published.synced, false);
+    assert.equal(published.syncedStrict, false);
+    assert.equal(published.syncAhead, null);
+  });
+
+  it('calls a wallet whose indexer subscription has dropped unsynced, ahead or not', () => {
+    const published = publishedSync(
+      progress({
+        isSynced: false,
+        shielded: leg({
+          applied: '9549',
+          highestRelevant: '9521',
+          complete: false,
+          connected: false,
+        }),
+      }),
+    );
+    assert.equal(published.synced, false);
+    assert.equal(published.syncAhead, 'shielded applied 9549 > highest 9521');
+  });
+
+  it('agrees with the SDK on a wallet that is simply level', () => {
+    assert.deepEqual(publishedSync(progress()), {
+      synced: true,
+      syncedStrict: true,
+      syncAhead: null,
+    });
+  });
+
+  it('is unsynced by both measures when the wallet could not be read at all', () => {
+    assert.deepEqual(publishedSync(null), {
+      synced: false,
+      syncedStrict: false,
+      syncAhead: null,
+    });
   });
 });
 

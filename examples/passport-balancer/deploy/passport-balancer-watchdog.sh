@@ -549,6 +549,12 @@ def number(value, fallback=0):
         return fallback
 
 reasons = []
+# `synced`, which is the sponsor's READINESS answer, and deliberately not
+# `syncedStrict` beside it. A wallet that has applied its own submission ahead
+# of the indexer's last progress report is strictly incomplete and perfectly
+# able to pay: judging the strict field struck a healthy sponsor once a spend
+# on 2026/09/08. `syncedStrict` and `syncAhead` are published for an operator
+# reading the body by hand, and are not grounds for a strike.
 if body.get('synced') is not True:
     reasons.append('synced:%s' % body.get('synced'))
 # `connected`, or the key missing altogether on a build that predates it.

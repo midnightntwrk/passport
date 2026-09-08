@@ -189,6 +189,7 @@ import {
   isLegEffectivelySynced,
   markDustColdStart,
   openBalancerWallet,
+  publishedSync,
   syncAheadDetail,
   withDustWait,
   type BalancerWallet,
@@ -1047,7 +1048,10 @@ async function main(): Promise<void> {
       balanceAtomic: night.toString(),
       balanceNight: formatNight(night),
       dustSpecks: dust.toString(),
-      synced: progress?.isSynced ?? false,
+      /* `synced` is the readiness answer and NOT the SDK's strict one — see
+         `publishedSync`. The strict figure is still published, under
+         `syncedStrict`, next to the reason the two differ. */
+      ...publishedSync(progress),
       syncSeconds,
       progress,
       proving: wallet.provingMode,
