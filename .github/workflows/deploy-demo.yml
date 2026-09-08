@@ -2,11 +2,12 @@
 #
 # THE RULE
 # --------
-# Only what is on `main` is deployed. A release is the trigger, and the guard
-# below refuses any ref whose commit is not an ancestor of `origin/main` — so a
-# release cut from a feature branch cannot ship, however it was tagged. This
-# replaces `npm run deploy:passport` from a developer laptop, which is now
-# `deploy:passport:manual` and is break-glass only. See docs/demo/deployment.md.
+# Only a published release from `demo/pwa-demo` is deployed. `main` is the
+# planning branch and does not contain this PWA, so requiring it here turned
+# every genuine demo release into a failed workflow and pushed production back
+# to the break-glass laptop path. The guard below instead verifies that the
+# release tag is on the PWA release branch, checks out that immutable tag, and
+# builds those exact bytes. See docs/demo/deployment.md.
 #
 # WHY THIS IS NOT A PLAIN `npm ci && npm run build`
 # --------------------------------------------------
@@ -36,8 +37,8 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release whose ZK artefact bundle to use. Blank uses the latest published release. The commit deployed is this run''s ref, which must still be on main.'
-        required: false
+        description: 'Published Passport-demo release tag to deploy. The workflow checks out this immutable tag.'
+        required: true
         type: string
 
 permissions:
@@ -53,6 +54,7 @@ env:
   VERCEL_CLI_VERSION: '59.3.0'
   ZK_BUNDLE_ASSET: passport-zk-artefacts.tar.zst
   MANAGED_ROOT: examples/passport-balancer/contracts-stagenet/managed
+  DEPLOY_BRANCH: demo/pwa-demo
 
   # Exactly the values the old `deploy:passport` built with. Kept here rather
   # than in the npm script so that what ships is visible in the run log, and so
@@ -130,46 +132,47 @@ jobs:
     timeout-minutes: 60
     steps:
       # fetch-depth: 0 — `git merge-base --is-ancestor` below needs real
-      # history, and a shallow clone has none.
-      - name: Checkout
+      # history, and the release tag is the only source we build from.
+      - name: Checkout the immutable release tag
         uses: actions/checkout@v6
         with:
+          ref: ${{ github.event_name == 'release' && format('refs/tags/{0}', github.event.release.tag_name) || format('refs/tags/{0}', inputs.release_tag) }}
           fetch-depth: 0
 
       # ---------------------------------------------------------------------
       # THE GUARD. Nothing installs, builds, or deploys before this passes.
       # ---------------------------------------------------------------------
-      - name: Refuse to deploy a commit that is not on main
+      - name: Refuse to deploy a release outside the Passport-demo branch
         env:
           # Through env, never interpolated into the shell: a tag name is
           # attacker-shaped input the moment anyone can cut a release.
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --quiet origin main
+          test -n "$RELEASE_TAG" || {
+            echo "::error::A published release tag is required."
+            exit 1
+          }
+          git fetch --no-tags --quiet origin "refs/heads/${DEPLOY_BRANCH}:refs/remotes/origin/${DEPLOY_BRANCH}"
+          git fetch --quiet origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          target="$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
+          checked_out="$(git rev-parse HEAD)"
+          echo "Release ${RELEASE_TAG} points at ${target}."
 
-          if [ "$EVENT_NAME" = "release" ]; then
-            git fetch --quiet origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}" || true
-            target="$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
-            echo "Release ${RELEASE_TAG} points at ${target}."
-          else
-            target="${GITHUB_SHA}"
-            echo "Manual run against ${GITHUB_REF} (${target})."
-          fi
-
-          if git merge-base --is-ancestor "$target" origin/main; then
-            echo "${target} is on origin/main ($(git rev-parse origin/main)). Proceeding."
-          else
-            echo "::error::${target} is NOT an ancestor of origin/main ($(git rev-parse origin/main))."
-            echo "::error::Only what is on main is deployed. Merge this work into main and cut the release from main."
+          if [ "$checked_out" != "$target" ]; then
+            echo "::error::Checked out ${checked_out}, but ${RELEASE_TAG} names ${target}."
             exit 1
           fi
 
-      # main did not carry examples/passport-demo when this workflow was
-      # written — the app was still on a stack of feature branches. Without this
-      # step, a release cut before the merge lands would sail through every gate
-      # (npm test on nothing, a build of nothing) and upload an empty directory
+          if git merge-base --is-ancestor "$target" "origin/${DEPLOY_BRANCH}"; then
+            echo "${target} is on origin/${DEPLOY_BRANCH} ($(git rev-parse "origin/${DEPLOY_BRANCH}")). Proceeding."
+          else
+            echo "::error::${target} is NOT an ancestor of origin/${DEPLOY_BRANCH} ($(git rev-parse "origin/${DEPLOY_BRANCH}"))."
+            echo "::error::Only a release from ${DEPLOY_BRANCH} is deployed. Land the work there and cut a new release."
+            exit 1
+          fi
+
+      # A release branch that loses the app must not upload an empty directory
       # over the live site.
       - name: Refuse to deploy a ref that has no demo
         run: |
@@ -226,21 +229,8 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: |
           set -euo pipefail
-
-          # Written as two calls rather than one with an array argument: under
-          # `set -u`, expanding an empty array is an unbound-variable error on
-          # bash 3.2. Runners carry bash 5, but this costs nothing to avoid.
-          download() {
-            if [ -n "${RELEASE_TAG}" ]; then
-              echo "Downloading ${ZK_BUNDLE_ASSET} from release ${RELEASE_TAG}."
-              gh release download "${RELEASE_TAG}" --pattern "${ZK_BUNDLE_ASSET}" --dir /tmp --clobber
-            else
-              echo "Downloading ${ZK_BUNDLE_ASSET} from the latest published release."
-              gh release download --pattern "${ZK_BUNDLE_ASSET}" --dir /tmp --clobber
-            fi
-          }
-
-          if ! download; then
+          echo "Downloading ${ZK_BUNDLE_ASSET} from release ${RELEASE_TAG}."
+          if ! gh release download "${RELEASE_TAG}" --pattern "${ZK_BUNDLE_ASSET}" --dir /tmp --clobber; then
             echo "::error::Could not download ${ZK_BUNDLE_ASSET} from the release."
             echo "::error::The PWA build stages ~97 MB of prover keys and ZKIR that are not in git and cannot be rebuilt in CI (compiler 0.33.0-rc.2 is not installable)."
             echo "::error::Attach the bundle to the release and re-run. docs/demo/deployment.md has the command."
@@ -353,14 +343,18 @@ jobs:
         working-directory: examples/passport-demo
 
       - name: Summarise
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: |
+          commit="$(git rev-parse HEAD)"
           {
             echo "### Passport demo deployed"
             echo
             echo "| | |"
             echo "|---|---|"
-            echo "| Commit | \`${GITHUB_SHA}\` |"
-            echo "| Trigger | ${{ github.event_name }} ${{ github.event.release.tag_name }} |"
+            echo "| Commit | \`${commit}\` |"
+            echo "| Release | ${RELEASE_TAG} |"
+            echo "| Trigger | ${{ github.event_name }} |"
             echo "| Deployment | ${{ steps.vercel.outputs.url }} |"
             echo "| Live | https://midnightpassport.com |"
           } >> "$GITHUB_STEP_SUMMARY"

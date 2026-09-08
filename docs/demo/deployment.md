@@ -1,7 +1,8 @@
 # Deploying the Passport demo
 
-**The rule: only what is on `main` is deployed, and a deploy is a published
-GitHub release.** Manual `vercel deploy` from a laptop is no longer the path.
+**The rule: only what is on `demo/pwa-demo` is deployed, and a deploy is a
+published GitHub release.** `main` is the planning branch and does not contain
+the PWA. Manual `vercel deploy` from a laptop is no longer the normal path.
 
 ## What deploys, and from where
 
@@ -18,16 +19,20 @@ The sibling services under `examples/` — `passport-balancer` and
 shipped by rsync, as described in `examples/passport-balancer/README.md`. This
 page is about the PWA on Vercel only.
 
-The workflow refuses to run unless the commit being deployed is an **ancestor of
-`origin/main`**, so a release tagged on a feature branch cannot ship. It also
-refuses a ref that does not actually contain the demo, rather than uploading an
-empty build over the live site.
+The workflow refuses to run unless the release commit is an **ancestor of
+`origin/demo/pwa-demo`**, then checks out that immutable tag before building.
+This makes the release body, the checked-out code, and the production upload the
+same revision. It also refuses a ref that does not actually contain the demo,
+rather than uploading an empty build over the live site.
 
 ## Cutting a release
 
-1. Merge to `main` and let [`verify-demo.yml`](../../.github/workflows/verify-demo.yml)
-   go green on the pull request.
-2. Pack the ZK artefacts from a tree that has them (see below):
+1. Land the change on `demo/pwa-demo` and let
+   [`verify-demo.yml`](../../.github/workflows/verify-demo.yml) go green on the
+   pull request.
+2. Pack the ZK artefacts from a tree that has them (see below). The
+   break-glass `scripts/tag-release.mjs` command does this automatically; use
+   the following when creating the release directly:
 
    ```sh
    tar --zstd -cf passport-zk-artefacts.tar.zst \
@@ -37,10 +42,10 @@ empty build over the live site.
      examples/passport-balancer/contracts-stagenet/managed/midnames/zkir
    ```
 
-3. Cut the release from `main` and attach that file:
+3. Cut the release from `demo/pwa-demo` and attach that file:
 
    ```sh
-   gh release create v2026.08.26 --target main \
+   gh release create v2026.08.26 --target demo/pwa-demo \
      --title 'Passport demo 2026/08/26' \
      --notes 'What changed.' \
      passport-zk-artefacts.tar.zst
@@ -174,8 +179,8 @@ vercel promote <deployment-url>          # make it production again
 ```
 
 Or in the dashboard: **midnight-passport-app → Deployments → … → Promote to
-Production**. Then fix forward on `main` and cut a new release; a promotion is
-not a state `main` knows about.
+Production**. Then fix forward on `demo/pwa-demo` and cut a new release; a
+promotion is not a state that branch knows about.
 
 ## The break-glass path
 
@@ -183,20 +188,21 @@ not a state `main` knows about.
 `deploy:passport` used to. It is for the case where GitHub Actions itself is
 unavailable. It runs **no gates** — no typecheck, no tests, no PWA check — and
 it ships whatever is in the working tree, including uncommitted changes. That is
-precisely the incoherence between `main` and production this page exists to end.
+precisely the incoherence between the release branch and production this page
+exists to end.
 
 If you use it, say so in the pull request or the channel, and cut a release from
-`main` afterwards so the two agree again.
+`demo/pwa-demo` afterwards so the two agree again.
 
 ## Every deploy is backed by a release
 
-Every production deploy must be backed by a GitHub release (Hector, 2026/09/03: "nothing fancy, just the release tag"). `deploy:passport:manual` ends by running `scripts/tag-release.mjs`, which reads the service-worker build id from `examples/passport-demo/dist/sw.js`, refuses a dirty tree, and creates a release on `midnightntwrk/passport` targeting the deployed commit.
+Every production deploy must be backed by a GitHub release (Hector, 2026/09/03: "nothing fancy, just the release tag"). `deploy:passport:manual` ends by running `scripts/tag-release.mjs`, which reads the service-worker build id from `examples/passport-demo/dist/sw.js`, refuses a dirty tree, verifies and packages the pinned ZK artefacts, and creates a release on `midnightntwrk/passport` targeting the deployed commit. Re-running it repairs a release for the same build if its ZK bundle is missing.
 
 The release is tagged `v<N>`, where N is one past the highest `v<N>` that already exists — counted from both the tag refs (`git ls-remote --tags`) and the releases (`gh release list`), so a tag pushed without a release, or a release whose tag was deleted, still counts. A repository holding only the older `demo-YYYY.MM.DD-<build id>` tags therefore starts at `v1`. The title is `v<N> - YYYY/MM/DD` (UTC). The body opens with the build id, the commit, and the production URL, then carries the "## Fixed" section of `RELEASE-NOTES.md` (`PASSPORT_RELEASE_NOTES` appends a gate summary).
 
 **It is not a pre-release** (changed 2026/09/07). It used to be, and that was the bug: GitHub never shows a pre-release as "Latest", so a reviewer reading the repository front page saw a three-day-old release and concluded nothing had shipped since. The naming rule — `v<N> - <date>` — is Hector's, from the same review.
 
-It is idempotent: a build that already has a release, under a `v<N>` tag or a legacy `demo-…` one, is reported and left alone. `--dry-run` prints the `gh` command without creating anything. The derivation of the number and the title is unit-tested — `npm run test:release-naming`.
+It is idempotent: a build that already has a release, under a `v<N>` tag or a legacy `demo-…` one, is reported rather than released twice. It verifies that release has the ZK bundle and attaches one when it does not. `--dry-run` prints the `gh` command without creating anything. The derivation of the number and the title is unit-tested — `npm run test:release-naming`.
 
 Options, for releasing something other than "what was just built here":
 

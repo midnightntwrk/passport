@@ -44,8 +44,9 @@
  * not run, and RELEASE-NOTES.md with no "## Fixed" section.
  *
  * It is idempotent: a build that already has a release — under a `v<N>` tag or
- * under a legacy `demo-…` one — is reported and left alone, so re-running
- * after a re-deploy of the same build creates nothing.
+ * under a legacy `demo-…` one — is reported rather than released twice. If a
+ * legacy release is missing its ZK artefact bundle, the re-run repairs that
+ * omission before it returns.
  *
  * USAGE
  * -----
@@ -84,7 +85,8 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -92,6 +94,13 @@ import { fixedSection, nextReleaseNumber, releaseDate, releaseTag, releaseTitle 
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const serviceWorker = path.join(repositoryRoot, 'examples/passport-demo/dist/sw.js');
+const zkBundleName = 'passport-zk-artefacts.tar.zst';
+const zkArtefactDirectories = [
+  'examples/passport-balancer/contracts-stagenet/managed/account/keys',
+  'examples/passport-balancer/contracts-stagenet/managed/account/zkir',
+  'examples/passport-balancer/contracts-stagenet/managed/midnames/keys',
+  'examples/passport-balancer/contracts-stagenet/managed/midnames/zkir',
+];
 
 const dryRun = process.argv.includes('--dry-run');
 const releaseRepository = option('--repo') || process.env.PASSPORT_RELEASE_REPO || 'midnightntwrk/passport';
@@ -117,8 +126,12 @@ function fail(message) {
   process.exit(1);
 }
 
-function run(command, args) {
-  const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+    ...options,
+  });
   if (result.error?.code === 'ENOENT') {
     fail(`\`${command}\` is not on PATH.`);
   }
@@ -131,6 +144,48 @@ function git(...args) {
     fail(`\`git ${args.join(' ')}\` failed: ${(result.stderr || '').trim()}`);
   }
   return result.stdout.trim();
+}
+
+/**
+ * The deploy workflow cannot rebuild these keys: the deployed contracts know
+ * only this compiler output. Packaging them at release time makes the release
+ * self-contained, rather than hoping an Actions cache happens to be warm.
+ */
+function packageZkArtefacts() {
+  for (const directory of zkArtefactDirectories) {
+    if (!existsSync(path.join(repositoryRoot, directory))) {
+      fail(`${directory} is missing, so the release cannot carry the pinned ZK artefacts.`);
+    }
+  }
+
+  const verified = run(process.execPath, [
+    path.join(repositoryRoot, '.github/workflows/scripts/verify-zk-artefacts.mjs'),
+  ], { cwd: repositoryRoot });
+  if (verified.status !== 0) {
+    fail(
+      `the pinned ZK artefacts do not match their manifests:\n${(verified.stderr || verified.stdout).trim()}`,
+    );
+  }
+
+  const directory = mkdtempSync(path.join(tmpdir(), 'passport-zk-'));
+  const archive = path.join(directory, zkBundleName);
+  const packed = run('tar', [
+    '--zstd',
+    '-cf',
+    archive,
+    '-C',
+    repositoryRoot,
+    ...zkArtefactDirectories,
+  ]);
+  if (packed.status !== 0) {
+    rmSync(directory, { force: true, recursive: true });
+    fail(`could not create ${zkBundleName}: ${(packed.stderr || packed.stdout).trim()}`);
+  }
+  return { archive, directory };
+}
+
+function removeZkBundle(bundle) {
+  if (bundle) rmSync(bundle.directory, { force: true, recursive: true });
 }
 
 // Preflight. Read-only, so it runs under --dry-run too.
@@ -238,22 +293,57 @@ try {
   fail('`gh release list --json` did not return JSON.');
 }
 
-/* `gh release list` cannot return bodies, and the build id lives in the body,
-   so the bodies come from the API. A repository we cannot read the bodies of
-   still gets a release — the tag check below is the weaker guard, not the only
-   one. */
-const bodies = run('gh', ['api', `repos/${releaseRepository}/releases?per_page=100`, '--jq', '.[].body']);
-const releaseBodies = bodies.status === 0 ? bodies.stdout : '';
-
+/* The asset list and the body live in the API response. The former lets a
+   re-run repair the exact omission that made v1–v3 non-reproducible. */
+const releaseDetailsRequest = run('gh', ['api', `repos/${releaseRepository}/releases?per_page=100`]);
+let releaseDetails = [];
+if (releaseDetailsRequest.status === 0) {
+  try {
+    releaseDetails = JSON.parse(releaseDetailsRequest.stdout || '[]');
+  } catch {
+    fail('`gh api releases` did not return JSON.');
+  }
+}
 // Already released? A re-deploy of the same build is not an error. The build id
 // is in the body of every release this script writes, and in the tag of every
 // legacy `demo-…` one.
 
 const already = releases.find((release) => (release.tagName ?? '').endsWith(`-${buildId.slice(0, 8)}`));
-if (already || releaseBodies.includes(`Build id: ${buildId}`)) {
+const existingRelease = releaseDetails.find(
+  (release) => typeof release.body === 'string' && release.body.includes(`Build id: ${buildId}`),
+);
+if (already || existingRelease) {
+  const tag = existingRelease?.tag_name ?? already?.tagName;
+  const releaseForTag = releaseDetails.find((release) => release.tag_name === tag);
+  const hasBundle = releaseForTag?.assets?.some((asset) => asset?.name === zkBundleName) === true;
+  if (tag && !hasBundle) {
+    if (dryRun) {
+      console.log(`tag-release: --dry-run, would attach ${zkBundleName} to ${releaseRepository} ${tag}.`);
+      process.exit(0);
+    }
+    const bundle = packageZkArtefacts();
+    let uploaded;
+    try {
+      uploaded = run('gh', [
+        'release',
+        'upload',
+        tag,
+        bundle.archive,
+        '--repo',
+        releaseRepository,
+        '--clobber',
+      ]);
+    } finally {
+      removeZkBundle(bundle);
+    }
+    if (uploaded.status !== 0) {
+      fail(`\`gh release upload\` failed: ${(uploaded.stderr || '').trim()}`);
+    }
+    console.log(`tag-release: attached ${zkBundleName} to ${releaseRepository} ${tag}.`);
+  }
   console.log(
     `tag-release: ${releaseRepository} already has a release for build ${buildId}` +
-      `${already ? ` (${already.tagName})` : ''}; nothing to do.`,
+      `${tag ? ` (${tag})` : ''}; nothing to create.`,
   );
   process.exit(0);
 }
@@ -288,11 +378,17 @@ if (dryRun) {
   const quoted = args
     .map((arg) => (/^[\w.:/@-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", "'\\''")}'`))
     .join(' ');
-  console.log(`tag-release: --dry-run, creating nothing. Would run:\n\ngh ${quoted}\n`);
+  console.log(`tag-release: --dry-run, creating nothing. Would run:\n\ngh ${quoted} ${zkBundleName}\n`);
   process.exit(0);
 }
 
-const created = run('gh', args);
+const bundle = packageZkArtefacts();
+let created;
+try {
+  created = run('gh', [...args, bundle.archive]);
+} finally {
+  removeZkBundle(bundle);
+}
 process.stdout.write(created.stdout);
 if (created.status !== 0) {
   fail(`\`gh release create\` failed: ${(created.stderr || '').trim()}`);
