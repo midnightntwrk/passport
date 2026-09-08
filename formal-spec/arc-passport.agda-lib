@@ -1,0 +1,7 @@
+name: arc-passport
+depend: standard-library
+        standard-library-classes
+        standard-library-meta
+        agda-categories
+        categorical-crypto
+include: .
