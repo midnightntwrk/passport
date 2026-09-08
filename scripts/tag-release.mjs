@@ -44,9 +44,10 @@
  * not run, and RELEASE-NOTES.md with no "## Fixed" section.
  *
  * It is idempotent: a build that already has a release — under a `v<N>` tag or
- * under a legacy `demo-…` one — is reported rather than released twice. If a
- * legacy release is missing its ZK artefact bundle, the re-run repairs that
- * omission before it returns.
+ * under a legacy `demo-…` one — is reported rather than released twice. A
+ * release missing its ZK artefact bundle is refused: published GitHub releases
+ * are immutable, so that omission needs a new replacement release, not a
+ * misleading successful re-run.
  *
  * USAGE
  * -----
@@ -297,12 +298,13 @@ try {
    re-run repair the exact omission that made v1–v3 non-reproducible. */
 const releaseDetailsRequest = run('gh', ['api', `repos/${releaseRepository}/releases?per_page=100`]);
 let releaseDetails = [];
-if (releaseDetailsRequest.status === 0) {
-  try {
-    releaseDetails = JSON.parse(releaseDetailsRequest.stdout || '[]');
-  } catch {
-    fail('`gh api releases` did not return JSON.');
-  }
+if (releaseDetailsRequest.status !== 0) {
+  fail(`\`gh api releases\` failed: ${(releaseDetailsRequest.stderr || '').trim()}`);
+}
+try {
+  releaseDetails = JSON.parse(releaseDetailsRequest.stdout || '[]');
+} catch {
+  fail('`gh api releases` did not return JSON.');
 }
 // Already released? A re-deploy of the same build is not an error. The build id
 // is in the body of every release this script writes, and in the tag of every
@@ -315,31 +317,15 @@ const existingRelease = releaseDetails.find(
 if (already || existingRelease) {
   const tag = existingRelease?.tag_name ?? already?.tagName;
   const releaseForTag = releaseDetails.find((release) => release.tag_name === tag);
+  if (!tag || !releaseForTag) {
+    fail('could not inspect the asset list for the existing release; refusing to create an ambiguous duplicate.');
+  }
   const hasBundle = releaseForTag?.assets?.some((asset) => asset?.name === zkBundleName) === true;
-  if (tag && !hasBundle) {
-    if (dryRun) {
-      console.log(`tag-release: --dry-run, would attach ${zkBundleName} to ${releaseRepository} ${tag}.`);
-      process.exit(0);
-    }
-    const bundle = packageZkArtefacts();
-    let uploaded;
-    try {
-      uploaded = run('gh', [
-        'release',
-        'upload',
-        tag,
-        bundle.archive,
-        '--repo',
-        releaseRepository,
-        '--clobber',
-      ]);
-    } finally {
-      removeZkBundle(bundle);
-    }
-    if (uploaded.status !== 0) {
-      fail(`\`gh release upload\` failed: ${(uploaded.stderr || '').trim()}`);
-    }
-    console.log(`tag-release: attached ${zkBundleName} to ${releaseRepository} ${tag}.`);
+  if (!hasBundle) {
+    fail(
+      `${releaseRepository} release ${tag} is missing ${zkBundleName}. Published GitHub releases are immutable; ` +
+        'create a new release with the bundle instead of reusing this build id.',
+    );
   }
   console.log(
     `tag-release: ${releaseRepository} already has a release for build ${buildId}` +

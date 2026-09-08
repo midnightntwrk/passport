@@ -196,13 +196,13 @@ If you use it, say so in the pull request or the channel, and cut a release from
 
 ## Every deploy is backed by a release
 
-Every production deploy must be backed by a GitHub release (Hector, 2026/09/03: "nothing fancy, just the release tag"). `deploy:passport:manual` ends by running `scripts/tag-release.mjs`, which reads the service-worker build id from `examples/passport-demo/dist/sw.js`, refuses a dirty tree, verifies and packages the pinned ZK artefacts, and creates a release on `midnightntwrk/passport` targeting the deployed commit. Re-running it repairs a release for the same build if its ZK bundle is missing.
+Every production deploy must be backed by a GitHub release (Hector, 2026/09/03: "nothing fancy, just the release tag"). `deploy:passport:manual` ends by running `scripts/tag-release.mjs`, which reads the service-worker build id from `examples/passport-demo/dist/sw.js`, refuses a dirty tree, verifies and packages the pinned ZK artefacts, and creates a release on `midnightntwrk/passport` targeting the deployed commit. A published release without that bundle is invalid: GitHub makes published releases immutable, so it must be superseded by a new release that includes the artefact.
 
 The release is tagged `v<N>`, where N is one past the highest `v<N>` that already exists — counted from both the tag refs (`git ls-remote --tags`) and the releases (`gh release list`), so a tag pushed without a release, or a release whose tag was deleted, still counts. A repository holding only the older `demo-YYYY.MM.DD-<build id>` tags therefore starts at `v1`. The title is `v<N> - YYYY/MM/DD` (UTC). The body opens with the build id, the commit, and the production URL, then carries the "## Fixed" section of `RELEASE-NOTES.md` (`PASSPORT_RELEASE_NOTES` appends a gate summary).
 
 **It is not a pre-release** (changed 2026/09/07). It used to be, and that was the bug: GitHub never shows a pre-release as "Latest", so a reviewer reading the repository front page saw a three-day-old release and concluded nothing had shipped since. The naming rule — `v<N> - <date>` — is Hector's, from the same review.
 
-It is idempotent: a build that already has a release, under a `v<N>` tag or a legacy `demo-…` one, is reported rather than released twice. It verifies that release has the ZK bundle and attaches one when it does not. `--dry-run` prints the `gh` command without creating anything. The derivation of the number and the title is unit-tested — `npm run test:release-naming`.
+It is idempotent: a build that already has a release, under a `v<N>` tag or a legacy `demo-…` one, is reported rather than released twice. It verifies that release has the ZK bundle; if it does not, it stops rather than claiming the immutable release was repaired. `--dry-run` prints the `gh` command without creating anything. The derivation of the number and the title is unit-tested — `npm run test:release-naming`.
 
 Options, for releasing something other than "what was just built here":
 
