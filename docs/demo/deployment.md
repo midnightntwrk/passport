@@ -343,11 +343,30 @@ change nothing about what it emits. Both were confirmed by preview deployment on
 
 Every production deploy must be backed by a GitHub release (Hector, 2026/09/03: "nothing fancy, just the release tag"). `deploy:passport:manual` ends by running `scripts/tag-release.mjs`, which reads the service-worker build id from `examples/passport-demo/dist/sw.js`, refuses a dirty tree, verifies and packages the pinned ZK artefacts, and creates a release on `midnightntwrk/passport` targeting the deployed commit. A published release without that bundle is invalid: GitHub makes published releases immutable, so it must be superseded by a new release that includes the artefact.
 
-The release is tagged `v<N>`, where N is one past the highest `v<N>` that already exists — counted from both the tag refs (`git ls-remote --tags`) and the releases (`gh release list`), so a tag pushed without a release, or a release whose tag was deleted, still counts. A repository holding only the older `demo-YYYY.MM.DD-<build id>` tags therefore starts at `v1`. The title is `v<N> - YYYY/MM/DD` (UTC). The body opens with the build id, the commit, and the production URL, then carries the "## Fixed" section of `RELEASE-NOTES.md` (`PASSPORT_RELEASE_NOTES` appends a gate summary).
+The release is tagged `v<N>`, where N is one past the highest `v<N>` that already exists — counted from both the tag refs (`git ls-remote --tags`) and the releases (`gh release list`), so a tag pushed without a release, or a release whose tag was deleted, still counts. A repository holding only the older `demo-YYYY.MM.DD-<build id>` tags therefore starts at `v1`. The title is `v<N> - YYYY/MM/DD` (UTC).
+
+### The body is the delta, not the whole changelog
+
+`RELEASE-NOTES.md` is **cumulative**: every "## Fixed" entry written since 2026/09/03 is still in it, because it is the changelog. Its header line used to say the file was rewritten before every deploy, and it never was — so publishing the whole section made v10 a 51,000-character page listing forty-two fixes, the same text v1 to v8 had carried, and the reviewer could not tell from it what that deploy had changed (Hector, 2026/09/08).
+
+So the file stays cumulative and the release page carries only what is new. The body is:
+
+```
+Build <first 8 of the build id> · commit <sha7> · https://midnightpassport.com
+
+## Fixed in this release
+- **<bold title>.** <first sentence of the entry>
+```
+
+The previous release is the highest `v<N>` below the one being created; its `RELEASE-NOTES.md` is read with `git show v<N>:RELEASE-NOTES.md`, and an entry counts as new when its **bold title** is not in that file. The title is therefore the identity of a fix — do not reword one after it has shipped, or it will be published twice. Each entry becomes one line: the provenance parenthetical it opens with ("(found by the production release gate, 2026/09/08)") is dropped, and the first sentence is capped at about 220 characters. If nothing is new — a redeploy of the same notes, or a tooling-only change — the body says `## This release` / `- Release tooling only; no user-facing change.` instead.
+
+If the tag of the previous release is not in the local checkout (`git fetch --tags`) or has no `RELEASE-NOTES.md`, the run says so and treats every entry as new rather than guessing.
+
+The whole body is capped at **4,000 characters**. Over that, the script refuses: a release that long means one deploy carried several deploys' worth of change, which is the thing worth noticing. `--allow-long` publishes it anyway. `PASSPORT_RELEASE_NOTES` still appends a gate summary, and counts towards the cap.
 
 **It is not a pre-release** (changed 2026/09/07). It used to be, and that was the bug: GitHub never shows a pre-release as "Latest", so a reviewer reading the repository front page saw a three-day-old release and concluded nothing had shipped since. The naming rule — `v<N> - <date>` — is Hector's, from the same review.
 
-It is idempotent for a **commit and build**: re-running the same release is reported rather than released twice. A later gate-only commit may carry identical PWA bytes after an immutable release failed before deployment, and it receives a replacement release instead of being trapped behind the old build id. It verifies that a same-commit release has the ZK bundle; if it does not, it stops rather than claiming the immutable release was repaired. `--dry-run` prints the `gh` command without creating anything. The derivation of the number and the title is unit-tested — `npm run test:release-naming`.
+It is idempotent for a **commit and build**: re-running the same release is reported rather than released twice. A later gate-only commit may carry identical PWA bytes after an immutable release failed before deployment, and it receives a replacement release instead of being trapped behind the old build id. It verifies that a same-commit release has the ZK bundle; if it does not, it stops rather than claiming the immutable release was repaired. `--dry-run` prints the `gh` command and the body without creating anything — and on a build that is already released it says so and still prints the body that release's delta comes to, because seeing the body is the point of a dry run. The derivation of the number, the title, the delta, and the body is unit-tested — `npm run test:release-naming`.
 
 Options, for releasing something other than "what was just built here":
 
@@ -356,6 +375,7 @@ Options, for releasing something other than "what was just built here":
 | `--repo <owner/name>` | The repository to release in. Default `midnightntwrk/passport` (or `PASSPORT_RELEASE_REPO`). The carry into `midnightntwrk/passport-demo` passes that repository, so the same deploy is released the same way in both places. |
 | `--commit <sha>` | The commit the release points at. Default HEAD. The carried commit has a different sha in `passport-demo`, and an older deploy is no longer at HEAD. Naming it also makes the notes come from THAT commit's `RELEASE-NOTES.md`, so the release says what that build shipped rather than what has been fixed since. |
 | `--build-id <id>` | The service-worker build id, when `dist/` has moved on — mirroring into `passport-demo`, or filling in a release after the fact. Default: read from the stamped `dist/sw.js`. |
+| `--allow-long` | Publish a body over 4,000 characters. Only when the long body really is one release; otherwise the refusal is telling you the deploy was too big. |
 
 The mirror of a deploy into `passport-demo` is run from a **checkout of `passport-demo`**, after the carry — the carried commit only exists there, and the script resolves `--commit` against the repository it is run in (which is also where it reads that commit's `RELEASE-NOTES.md`). The carry brings the script itself along, so it is already present:
 

@@ -102,6 +102,173 @@ export function fixedSection(notes) {
   return match ? notes.slice(match.index).trim() : '';
 }
 
+/**
+ * WHAT A RELEASE BODY SAYS (2026/09/08)
+ * -------------------------------------
+ * RELEASE-NOTES.md is CUMULATIVE: every "## Fixed" entry written since
+ * 2026/09/03 is still in it, because it is the changelog. Its header line used
+ * to tell whoever wrote it next to rewrite the file before every deploy, and
+ * nobody ever did — so publishing the whole section made v10 on GitHub a
+ * 51,000-character page listing forty-two fixes, the same text v1 to v8 had
+ * carried. A reviewer opening it cannot tell what THIS deploy changed, which
+ * is the only question a release page exists to answer.
+ *
+ * So the file stays cumulative and the release page carries the DELTA: the
+ * entries whose bold title was not already there at the previous release, one
+ * line each. The full prose stays in the repository, where whoever wants it
+ * will look for it.
+ */
+
+/** How long one entry's summary sentence may run before it is trimmed. */
+export const SUMMARY_SENTENCE_LIMIT = 220;
+
+/**
+ * How long the whole body may run. A release over this means someone deployed
+ * far too much at once — the interesting failure, not a formatting problem —
+ * so it is refused rather than truncated, and the operator can insist with
+ * `--allow-long`.
+ */
+export const RELEASE_BODY_LIMIT = 4000;
+
+/* A sentence end is a full stop followed by whitespace, so neither `0.1.1` nor
+   `` `.night` `` splits one. These are the remaining cases where that rule
+   would end a sentence too early. */
+const ABBREVIATIONS = ['e.g.', 'i.e.', 'etc.', 'vs.', 'mr.', 'mrs.', 'ms.', 'dr.'];
+
+/**
+ * The entries of the "## Fixed" section, as `{ title, detail }`.
+ *
+ * An entry opens with `- **Title**` at the start of a line and runs until the
+ * next one (or the next heading); its indented continuation paragraphs are
+ * folded into `detail`, so a summary can be taken from the whole of it.
+ */
+export function fixedEntries(notes) {
+  const section = fixedSection(notes);
+  if (!section) {
+    return [];
+  }
+  const entries = [];
+  let current = null;
+  for (const line of section.split('\n').slice(1)) {
+    const opening = /^-\s+\*\*(.+?)\*\*\s*(.*)$/.exec(line);
+    if (opening) {
+      current = { title: opening[1].trim(), detail: [opening[2].trim()].filter(Boolean) };
+      entries.push(current);
+      continue;
+    }
+    if (/^#{1,6}\s/.test(line)) {
+      current = null;
+      continue;
+    }
+    if (current && line.trim()) {
+      current.detail.push(line.trim());
+    }
+  }
+  return entries.map(({ title, detail }) => ({ title, detail: detail.join(' ') }));
+}
+
+/**
+ * The entries in `notes` that were not already in `previousNotes`, matched on
+ * the bold title. A title is what a human would recognise as "the same fix";
+ * the prose under it is edited between deploys and the commits are not in the
+ * file at all, so neither can be the identity.
+ */
+export function newEntries(notes, previousNotes) {
+  const previous = new Set(fixedEntries(previousNotes).map((entry) => entry.title));
+  return fixedEntries(notes).filter((entry) => !previous.has(entry.title));
+}
+
+/**
+ * One entry as one line: `- **Title.** First sentence of the entry.`
+ *
+ * The "(found by the release gate, 2026/09/08)" parenthetical every entry
+ * opens with is dropped — it is provenance for the changelog, not news for the
+ * release page — and the sentence is capped, so one very long sentence cannot
+ * push the body over its limit by itself.
+ */
+export function summariseEntry(entry, limit = SUMMARY_SENTENCE_LIMIT) {
+  const title = String(entry?.title ?? '').trim().replace(/[.\s]+$/, '');
+  const detail = String(entry?.detail ?? '').replace(/^\s*\([^()]*\)\s*[.,;:]?\s*/, '');
+  const sentence = capSentence(firstSentence(detail), limit);
+  return sentence ? `- **${title}.** ${sentence}` : `- **${title}.**`;
+}
+
+/**
+ * The body of a release: the header line, then this release's delta.
+ *
+ * Throws a `RangeError` when the result is over `bodyLimit` and `allowLong` is
+ * not set, because a body that long is a deploy that should have been two.
+ */
+export function releaseBody({
+  buildId,
+  commit,
+  productionUrl = 'https://midnightpassport.com',
+  entries = [],
+  gateSummary,
+  sentenceLimit = SUMMARY_SENTENCE_LIMIT,
+  bodyLimit = RELEASE_BODY_LIMIT,
+  allowLong = false,
+} = {}) {
+  const header =
+    `Build ${String(buildId ?? '').slice(0, 8)} · ` +
+    `commit ${String(commit ?? '').slice(0, 7)} · ${productionUrl}`;
+  const delta = entries.length
+    ? ['## Fixed in this release', ...entries.map((entry) => summariseEntry(entry, sentenceLimit))]
+    : ['## This release', '- Release tooling only; no user-facing change.'];
+  const body = [
+    header,
+    '',
+    ...delta,
+    ...(gateSummary ? ['', 'Gates', '-----', gateSummary] : []),
+  ].join('\n');
+  if (!allowLong && body.length > bodyLimit) {
+    throw new RangeError(
+      `the release body is ${body.length} characters, over the ${bodyLimit}-character limit ` +
+        `(${entries.length} new ${entries.length === 1 ? 'entry' : 'entries'}). That is more than ` +
+        "one deploy's worth of change: deploy less at a time, or pass --allow-long to publish it anyway.",
+    );
+  }
+  return body;
+}
+
+/**
+ * The release before number `below`: the highest `v<N>` among the given tags
+ * and titles that is lower than it, or `null` when there is none. That is the
+ * release whose RELEASE-NOTES.md the delta is taken against.
+ */
+export function previousReleaseNumber(candidates, below) {
+  assertNumber(below);
+  const previous = (candidates ?? []).reduce((highest, candidate) => {
+    const number = releaseNumberOf(candidate);
+    return number !== null && number < below && number > highest ? number : highest;
+  }, 0);
+  return previous > 0 ? previous : null;
+}
+
+function firstSentence(text) {
+  const ends = /[.!?](?=\s|$)/g;
+  let match;
+  while ((match = ends.exec(text)) !== null) {
+    const head = text.slice(0, match.index + 1);
+    const lowered = head.toLowerCase();
+    if (ABBREVIATIONS.some((abbreviation) => lowered.endsWith(abbreviation))) {
+      continue;
+    }
+    return head.trim();
+  }
+  return text.trim();
+}
+
+function capSentence(sentence, limit) {
+  if (sentence.length <= limit) {
+    return sentence;
+  }
+  const cut = sentence.slice(0, limit - 1);
+  const lastSpace = cut.lastIndexOf(' ');
+  const trimmed = lastSpace > limit / 2 ? cut.slice(0, lastSpace) : cut;
+  return `${trimmed.replace(/[\s,;:.]+$/, '')}…`;
+}
+
 function assertNumber(number) {
   if (!Number.isSafeInteger(number) || number < 1) {
     throw new TypeError(`release number must be a positive integer, got ${JSON.stringify(number)}`);

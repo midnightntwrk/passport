@@ -12,12 +12,27 @@
  * It is the LAST step of `deploy:passport:manual`, after Vercel has accepted
  * the upload. A tag for a deploy that failed would be worse than no tag.
  *
- * WHAT THE RELEASE IS (2026/09/07)
+ * WHAT THE RELEASE IS (2026/09/08)
  * --------------------------------
  *   tag     v<N>              N is one past the highest v<N> that exists
  *   title   v<N> - YYYY/MM/DD
- *   body    the build id, the commit, and the production URL, then the
- *           "## Fixed" section of RELEASE-NOTES.md
+ *   body    the build id, the commit, and the production URL, then ONLY the
+ *           RELEASE-NOTES.md entries that were not already there at the
+ *           previous release
+ *
+ * THE BODY IS A DELTA (2026/09/08)
+ * --------------------------------
+ * It used to be the whole "## Fixed" section, on the assumption stated in
+ * RELEASE-NOTES.md's own header that the file was rewritten before every
+ * deploy. It never was — it is the changelog, and it is cumulative. So v10
+ * published forty-two fixes in 51,000 characters, the same text v1 to v8 had
+ * carried, and the reviewer could not tell from it what that deploy changed.
+ *
+ * The previous release is the highest v<N> below the one being created; its
+ * RELEASE-NOTES.md is read with `git show v<N>:RELEASE-NOTES.md`, and the body
+ * carries the entries whose bold title is not in it, one line each. The full
+ * prose stays in the file. A body over 4,000 characters is refused: that is a
+ * deploy that should have been two (`--allow-long` insists).
  *
  * It is NOT a pre-release. That was the first scheme's real mistake: GitHub
  * never shows a pre-release as "Latest", so a reviewer reading the repository
@@ -41,7 +56,9 @@
  * untracked) and an unauthenticated `gh`. Both mean the release would name a
  * commit that is not what was uploaded, which is the whole thing the rule is
  * for. It also refuses an unstamped `__BUILD_ID__`, which means the build did
- * not run, and RELEASE-NOTES.md with no "## Fixed" section.
+ * not run, RELEASE-NOTES.md with no "## Fixed" section, and a body over 4,000
+ * characters — which means one deploy carried several deploys' worth of change
+ * (`--allow-long` publishes it anyway).
  *
  * It is idempotent for one commit and build: a release that already names both
  * is reported rather than released twice. A later gate-only commit may carry
@@ -57,7 +74,15 @@
  *
  *   --dry-run            print the `gh release create` command and exit,
  *                        creating nothing. The preflight checks still run —
- *                        they are read-only.
+ *                        they are read-only. On a build that is ALREADY
+ *                        released it says so and still prints the body that
+ *                        release's delta comes to, rather than stopping at
+ *                        "nothing to create": the point of a dry run is to see
+ *                        the body.
+ *   --allow-long         publish a body over 4,000 characters anyway. Reach
+ *                        for it only when the long body is genuinely one
+ *                        release; the refusal is usually telling you that a
+ *                        deploy carried more than it should have.
  *   --repo <owner/name>  the repository to release in. Default
  *                        `midnightntwrk/passport`, this one. The carry into
  *                        `midnightntwrk/passport-demo` passes that, so the same
@@ -93,7 +118,17 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { fixedSection, nextReleaseNumber, releaseDate, releaseTag, releaseTitle } from './release-naming.mjs';
+import {
+  fixedSection,
+  newEntries,
+  nextReleaseNumber,
+  previousReleaseNumber,
+  releaseBody,
+  releaseDate,
+  releaseNumberOf,
+  releaseTag,
+  releaseTitle,
+} from './release-naming.mjs';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const serviceWorker = path.join(repositoryRoot, 'examples/passport-demo/dist/sw.js');
@@ -106,6 +141,7 @@ const zkArtefactDirectories = [
 ];
 
 const dryRun = process.argv.includes('--dry-run');
+const allowLong = process.argv.includes('--allow-long');
 const releaseRepository = option('--repo') || process.env.PASSPORT_RELEASE_REPO || 'midnightntwrk/passport';
 const requestedCommit = option('--commit');
 const requestedBuildId = option('--build-id');
@@ -216,10 +252,14 @@ const commit = git('rev-parse', requestedCommit ?? 'HEAD');
    With `--commit`, the notes come from that commit, because a release for an
    earlier deploy must say what THAT deploy shipped, not what has been fixed
    since. */
+function notesAt(ref) {
+  const shown = run('git', ['-C', repositoryRoot, 'show', `${ref}:RELEASE-NOTES.md`]);
+  return shown.status === 0 ? shown.stdout : null;
+}
+
 let issueNotes = '';
 if (requestedCommit) {
-  const shown = run('git', ['-C', repositoryRoot, 'show', `${commit}:RELEASE-NOTES.md`]);
-  issueNotes = shown.status === 0 ? shown.stdout : '';
+  issueNotes = notesAt(commit) ?? '';
 } else {
   try {
     issueNotes = readFileSync(path.join(repositoryRoot, 'RELEASE-NOTES.md'), 'utf8');
@@ -315,14 +355,22 @@ try {
 // to publish a replacement release.
 
 const already = releases.find((release) => (release.tagName ?? '').endsWith(`-${buildId.slice(0, 8)}`));
+/* Two header shapes are recognised, because both have been published: the
+   original `Build id: <full id> · Commit: <sha7> ·`, and the delta scheme's
+   `Build <id8> · commit <sha7> ·` (2026/09/08). Losing the match would make a
+   re-run publish a duplicate of a release that already exists. */
+const namesThisBuild = (body) =>
+  typeof body === 'string' &&
+  (body.includes(`Build id: ${buildId}`) ||
+    body.startsWith(`Build ${buildId.slice(0, 8)} · commit ${commit.slice(0, 7)} ·`));
 const existingRelease = releaseDetails.find(
   (release) =>
-    typeof release.body === 'string' &&
-    release.body.includes(`Build id: ${buildId}`) &&
+    namesThisBuild(release.body) &&
     (release.target_commitish === commit ||
-      release.body.startsWith(`Build id: ${buildId} · Commit: ${commit.slice(0, 7)} ·`)),
+      release.body.startsWith(`Build id: ${buildId} · Commit: ${commit.slice(0, 7)} ·`) ||
+      release.body.startsWith(`Build ${buildId.slice(0, 8)} · commit ${commit.slice(0, 7)} ·`)),
 );
-if (already || existingRelease) {
+if ((already || existingRelease) && !dryRun) {
   const tag = existingRelease?.tag_name ?? already?.tagName;
   const releaseForTag = releaseDetails.find((release) => release.tag_name === tag);
   if (!tag || !releaseForTag) {
@@ -342,16 +390,56 @@ if (already || existingRelease) {
   process.exit(0);
 }
 
-const number = nextReleaseNumber([...refNames, ...releases.flatMap((r) => [r.tagName, r.name])]);
+const existingNames = [...refNames, ...releases.flatMap((r) => [r.tagName, r.name])];
+
+/* Under --dry-run on a build that is already released, the release "being
+   created" is the one that exists, so the body printed is the body THAT
+   release's delta comes to — which is the thing a dry run is asked for. Every
+   other run takes the next free number. */
+const alreadyReleasedNumber = dryRun
+  ? [existingRelease?.tag_name, existingRelease?.name, already?.tagName, already?.name]
+      .map((name) => releaseNumberOf(name))
+      .find((candidate) => candidate !== null) ?? null
+  : null;
+const number = alreadyReleasedNumber ?? nextReleaseNumber(existingNames);
 const tag = releaseTag(number);
 const date = releaseDate();
 
-const body = [
-  `Build id: ${buildId} · Commit: ${commit.slice(0, 7)} · Production: ${productionUrl}`,
-  '',
-  fixed,
-  ...(gateSummary ? ['', 'Gates', '-----', gateSummary] : []),
-].join('\n');
+/* The delta is against the release before this one. Its RELEASE-NOTES.md is
+   read from its tag; a tag that was never fetched, or a release made before
+   the file existed, leaves the previous set empty — every entry is then new,
+   and the run says so rather than pretending it knows. */
+const previousNumber = previousReleaseNumber(existingNames, number);
+let previousNotes = null;
+if (previousNumber === null) {
+  console.warn(
+    `tag-release: no release before ${tag}, so every "## Fixed" entry counts as new.`,
+  );
+} else {
+  previousNotes = notesAt(releaseTag(previousNumber));
+  if (previousNotes === null) {
+    console.warn(
+      `tag-release: could not read RELEASE-NOTES.md at ${releaseTag(previousNumber)} ` +
+        '(the tag or the file is missing there), so every "## Fixed" entry counts as new. ' +
+        '`git fetch --tags` may be all that is wanted.',
+    );
+  }
+}
+
+const delta = newEntries(issueNotes, previousNotes ?? '');
+let body;
+try {
+  body = releaseBody({
+    buildId,
+    commit,
+    productionUrl,
+    entries: delta,
+    gateSummary,
+    allowLong,
+  });
+} catch (error) {
+  fail(error instanceof RangeError ? error.message : String(error?.message ?? error));
+}
 
 const args = [
   'release',
@@ -372,7 +460,21 @@ if (dryRun) {
   const quoted = args
     .map((arg) => (/^[\w.:/@-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", "'\\''")}'`))
     .join(' ');
-  console.log(`tag-release: --dry-run, creating nothing. Would run:\n\ngh ${quoted} ${zkBundleName}\n`);
+  if (alreadyReleasedNumber !== null) {
+    console.log(
+      `tag-release: --dry-run. Build ${buildId} is already released in ${releaseRepository} ` +
+        `as ${tag}; nothing would be created. Its body, against ` +
+        `${previousNumber === null ? 'no previous release' : releaseTag(previousNumber)}:`,
+    );
+  } else {
+    console.log(
+      `tag-release: --dry-run, creating nothing. ${delta.length} new ` +
+        `${delta.length === 1 ? 'entry' : 'entries'} against ` +
+        `${previousNumber === null ? 'no previous release' : releaseTag(previousNumber)}; ` +
+        `body is ${body.length} characters. Would run:\n\ngh ${quoted} ${zkBundleName}`,
+    );
+  }
+  console.log(`\n${'-'.repeat(72)}\n${body}\n${'-'.repeat(72)}\n`);
   process.exit(0);
 }
 
