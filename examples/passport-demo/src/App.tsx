@@ -25,6 +25,7 @@ import {
   type AccountFromBlobAccount,
 } from './lib/accountOnPasskey.js';
 import { compactAddress } from './lib/address.js';
+import { passportIsSetUp, shareableDisplayName } from './lib/passportIdentity.js';
 import { describeEndpointRefusals, parseEndpointList } from './lib/endpoints.js';
 import {
   firstFunderThatAnswers,
@@ -8238,27 +8239,25 @@ export default function PassportDemo() {
    * The display name Passport is willing to SHARE — the `displayName` field of
    * the profile a dApp may ask for, and the row the consent sheet offers.
    *
-   * Until 2026/08/06 this was hardcoded to null on the passkey route, so the
-   * very first field a developer requests came back withheld: the consent sheet
-   * had nothing to tick, and every integration's "Hello, {name}" rendered
-   * blank. A passkey Passport does have a name — the `.night` name it claimed
-   * on its own wallet network, and failing that the label the passkey was
-   * enrolled under — so it says so.
+   * IT IS THE `.night` NAME, AND ONLY THAT (2026/09/08). It used to fall back
+   * to the label the passkey was enrolled under, which on nearly every device
+   * is the string 'Midnight Passport' — so a Passport with no name answered an
+   * app with the name of the app, presented as the user's own. Captured off
+   * production that morning, signed, in a partner's address bar. An app that
+   * keys anything on `displayName` would have keyed every unnamed Passport in
+   * the world onto one value; withholding it is both honest and something the
+   * protocol already has words for. See `lib/passportIdentity.ts`.
    *
    * Keyed on the CONFIGURED wallet network, not the selected one: this is the
-   * name attached to the Passport whose addresses are being shared, and a name
-   * claimed on preview says nothing about who holds it on pre-production.
-   * Sharing is still consent-gated — nothing here changes what leaves without
-   * a tick.
+   * name attached to the Passport whose account is being shared, and a name
+   * claimed on preview says nothing about who holds it on pre-production. A
+   * devnet build is configured for no public network at all, so there is no
+   * record to read and there is no name to share. Sharing is still
+   * consent-gated — nothing here changes what leaves without a tick.
    */
-  /* `configuredWalletNetwork` is null on a devnet build, which signs on no
-     public network at all — there is then no per-network record to read, and
-     the enrolled passkey's label is the honest answer. */
-  const passkeyDisplayName =
-    (configuredWalletNetwork ? aliasByNetwork[configuredWalletNetwork]?.domain : null) ??
-    profile?.passkey.label ??
-    null;
-  const sessionDisplayName = passkeyDisplayName;
+  const sessionDisplayName = shareableDisplayName(
+    configuredWalletNetwork ? aliasByNetwork[configuredWalletNetwork] : null,
+  );
 
   /**
    * The greeting's subject on Home, which is a different question from the name
@@ -8340,6 +8339,32 @@ export default function PassportDemo() {
     activeContractRecord?.status === 'deployed' && activeContractRecord.address
       ? { address: activeContractRecord.address, network: activeContractRecord.network }
       : null;
+
+  /**
+   * Whether there is a Passport here for an app to be told about — the gate
+   * both consent sheets arm on, and the whole of the fix of 2026/09/08 on the
+   * asking side.
+   *
+   * A SESSION IS NOT AN IDENTITY. `sessionActive` goes true the moment a passkey
+   * has opened a wallet, which is several screens before the user has a name or
+   * an account; the sheets used to read the passkey's label as a display name
+   * and arm right there, over the Welcome screen, with a backdrop across the
+   * only button that could have finished the setup. The rule lives in
+   * `lib/passportIdentity.ts` so the two sheets and this file cannot each hold
+   * their own version of it.
+   *
+   * The name step is read from storage rather than from `identityStep`, because
+   * `identityStep` is null both before the step has been decided and after it
+   * has been left behind, and those are opposite answers. Read on every render
+   * rather than memoised: `storeNameStep` is written by the same handlers that
+   * change state, so a render always follows it, and a dependency list would
+   * only be a second, weaker statement of that.
+   */
+  const passportSetUp = passportIsSetUp({
+    registeredName: sessionDisplayName,
+    accountDeployed: consentPassportContract !== null,
+    nameStepSettled: profile ? storedNameStep(profile.passkey.credentialId) === 'done' : false,
+  });
 
   /**
    * Why the deploy action cannot run right now, or null when it can. Same
@@ -8455,6 +8480,7 @@ export default function PassportDemo() {
     <>
       <PassportProfileConsent
         sessionActive={sessionActive}
+        passportSetUp={sessionActive && passportSetUp}
         displayName={sessionActive ? sessionDisplayName : null}
         passportContract={consentPassportContract}
         midnightAddresses={
@@ -8478,6 +8504,7 @@ export default function PassportDemo() {
       <PassportCallbackConsent
         launch={passportCallbackLaunch}
         sessionActive={sessionActive}
+        passportSetUp={sessionActive && passportSetUp}
         displayName={sessionActive ? sessionDisplayName : null}
         passportContract={consentPassportContract}
         midnightAddresses={

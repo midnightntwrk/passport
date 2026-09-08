@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { AlertTriangle, ArrowRight, Check, ExternalLink, Loader2, ShieldCheck, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, Check, ExternalLink, Loader2, ShieldCheck } from 'lucide-react';
+import { ConsentNotice } from '../consentNotice.js';
+import { PASSPORT_SETUP_WAITING_MESSAGE } from '../lib/passportIdentity.js';
 import {
   buildPassportCallbackPayload,
   passportCallbackErrorUrl,
@@ -44,13 +46,17 @@ import {
  *   - A malformed launch produces a dismissible notice over the normal app —
  *     never a broken screen, and never a redirect. A launch we could not parse
  *     is a launch whose return address we may not be able to trust.
+ *   - A launch that arrives before the Passport is set up produces a notice
+ *     too, and nothing modal. Until 2026/09/08 it armed the sheet instead, over
+ *     the Welcome screen and the name step, because the enrolled passkey's
+ *     label read as a display name — so the backdrop covered the only action
+ *     that could have finished the answer, and the app waited out its three
+ *     minutes. See `../lib/passportIdentity.ts`.
  *
  * STYLING. This reuses the `.profile-consent*` classes from `../styles.css`
  * deliberately: the two sheets are the same object in the user's mind and
- * should not drift apart. The malformed-launch notice is the one thing with no
- * existing class, so it carries inline styles rather than growing the
- * stylesheet for a surface that appears only when a developer has made a
- * mistake.
+ * should not drift apart. The two notices have no such class and live in
+ * `../consentNotice.tsx`, shared with the popup sheet rather than copied.
  */
 
 interface CallbackConsentProps {
@@ -63,6 +69,15 @@ interface CallbackConsentProps {
    * "unavailable" during one would refuse every first-time user.
    */
   sessionActive: boolean;
+  /**
+   * Whether this Passport is enough of a Passport to answer an app — see
+   * `../lib/passportIdentity.ts`. A session being open is NOT the same
+   * question: a passkey exists long before there is an identity behind it, and
+   * this sheet used to arm on the difference, putting a modal backdrop over the
+   * Welcome screen and the name step. Nothing modal renders until this is true.
+   */
+  passportSetUp: boolean;
+  /** The `.night` name, or null. Never the device's label. */
   displayName: string | null;
   passportContract: { address: string; network: string } | null;
   /**
@@ -149,50 +164,10 @@ type Phase =
   /** `location.assign` has been called; this document is on its way out. */
   | { kind: 'returning'; outcome: Outcome };
 
-const noticeStyles = {
-  wrapper: {
-    position: 'fixed',
-    zIndex: 130,
-    right: 16,
-    bottom: 16,
-    left: 16,
-    display: 'flex',
-    justifyContent: 'center',
-    pointerEvents: 'none',
-  },
-  notice: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 12,
-    width: 'min(520px, 100%)',
-    padding: '14px 16px',
-    border: '1px solid #111',
-    borderLeftWidth: 3,
-    color: '#111',
-    background: '#f8f8f6',
-    boxShadow: '0 18px 48px rgba(0, 0, 0, .28)',
-    font: 'inherit',
-    fontSize: 13,
-    lineHeight: 1.5,
-    pointerEvents: 'auto',
-  },
-  dismiss: {
-    display: 'grid',
-    placeItems: 'center',
-    width: 26,
-    height: 26,
-    flex: '0 0 auto',
-    padding: 0,
-    border: '1px solid #111',
-    color: '#111',
-    background: 'transparent',
-    cursor: 'pointer',
-  },
-} as const satisfies Record<string, CSSProperties>;
-
 export function PassportCallbackConsent({
   launch,
   sessionActive,
+  passportSetUp,
   displayName,
   passportContract,
   getSigningKeystore,
@@ -235,15 +210,19 @@ export function PassportCallbackConsent({
     return { resolved, missing };
   }, [displayName, passportContract, pinned]);
 
-  /* The grace timer starts only once a session exists — before that the user
-     may still be mid-ceremony — and is cancelled the moment every requested
-     field has arrived. */
+  /* The grace timer starts only once a session exists AND the Passport is one —
+     before either, the user is mid-ceremony or mid-setup — and is cancelled the
+     moment every requested field has arrived.
+     `passportSetUp` was added on 2026/09/08: it used to run against a Passport
+     that had a passkey and nothing else, elapse, and arm a modal sheet over the
+     name step the user was in the middle of. What runs instead until then is
+     the waiting notice below, which blocks nothing. */
   const everythingResolved = available.missing.length === 0;
   useEffect(() => {
-    if (!pinned || !sessionActive || everythingResolved || graceElapsed) return;
+    if (!pinned || !sessionActive || !passportSetUp || everythingResolved || graceElapsed) return;
     const timer = window.setTimeout(() => setGraceElapsed(true), PROFILE_WAIT_MS);
     return () => window.clearTimeout(timer);
-  }, [everythingResolved, graceElapsed, pinned, sessionActive]);
+  }, [everythingResolved, graceElapsed, passportSetUp, pinned, sessionActive]);
 
   const leave = (href: string, outcome: Outcome) => {
     if (answered.current) return;
@@ -260,34 +239,23 @@ export function PassportCallbackConsent({
      rather than being left on a spinner. This is the one automatic redirect —
      it needs no consent, because no data leaves. */
   useEffect(() => {
-    if (!pinned || !sessionActive || !graceElapsed) return;
+    if (!pinned || !sessionActive || !passportSetUp || !graceElapsed) return;
     if (available.resolved.length > 0) return;
     leave(passportCallbackErrorUrl(pinned, 'profile_unavailable'), 'unavailable');
-  }, [available.resolved.length, graceElapsed, pinned, sessionActive]);
+  }, [available.resolved.length, graceElapsed, passportSetUp, pinned, sessionActive]);
 
   if (malformed) {
     if (noticeDismissed) return null;
     return (
-      <div style={noticeStyles.wrapper}>
-        <div style={noticeStyles.notice} role="status">
-          <AlertTriangle size={16} aria-hidden />
-          <span style={{ flex: 1 }}>
-            <strong>An app asked Passport for your profile, and the request was not valid.</strong>{' '}
-            {malformed.message} Nothing was shared and no one was contacted.
-          </span>
-          <button
-            type="button"
-            style={noticeStyles.dismiss}
-            aria-label="Dismiss"
-            onClick={() => {
-              settlePassportCallbackLaunch(launch);
-              setNoticeDismissed(true);
-            }}
-          >
-            <X size={13} aria-hidden />
-          </button>
-        </div>
-      </div>
+      <ConsentNotice
+        onDismiss={() => {
+          settlePassportCallbackLaunch(launch);
+          setNoticeDismissed(true);
+        }}
+      >
+        <strong>An app asked Passport for your profile, and the request was not valid.</strong>{' '}
+        {malformed.message} Nothing was shared and no one was contacted.
+      </ConsentNotice>
     );
   }
 
@@ -296,6 +264,19 @@ export function PassportCallbackConsent({
      period has not elapsed. Either way the app is not owed an answer yet, and
      a sheet over a passkey prompt would be worse than nothing. */
   if (!sessionActive) return null;
+  /* SIGNED IN, BUT NOT SET UP YET (2026/09/08). The user is on the Welcome
+     screen or the name step, and this sheet used to arm straight over it —
+     backdrop and all — because the passkey's label read as a display name. The
+     one action that could have finished the answer was behind the backdrop.
+     Say so beside the task instead, block nothing, and arm by itself the moment
+     the Passport becomes one. */
+  if (!passportSetUp && phase.kind === 'asking') {
+    return (
+      <ConsentNotice icon={<ShieldCheck size={16} aria-hidden />}>
+        {PASSPORT_SETUP_WAITING_MESSAGE}
+      </ConsentNotice>
+    );
+  }
   if (!everythingResolved && !graceElapsed && phase.kind === 'asking') return null;
 
   const approve = () => {

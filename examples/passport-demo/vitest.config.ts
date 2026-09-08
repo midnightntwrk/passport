@@ -347,6 +347,22 @@
  * `Onboarding.tsx` that renders its answer, stay out with the rest of the app
  * shell and the `.tsx`.
  *
+ * `src/lib/passportIdentity.ts` went IN on 2026/09/08, the day it was written,
+ * and it is in the denominator because both rules in it were caught being
+ * wrong in production on the same morning. It decides what Passport is willing
+ * to call itself to another application, and whether there is a Passport there
+ * to be asked at all. Getting the first wrong shared the label the passkey was
+ * enrolled under — 'Midnight Passport', the same string on nearly every device
+ * — as though it were the user's own name, so an app keying anything on it
+ * would key every unnamed Passport in the world onto one value. Getting the
+ * second wrong armed a modal consent sheet over the Welcome screen, where its
+ * backdrop covered the only action that could have finished the setup, and the
+ * asking app waited out its three-minute timeout in silence. It holds no DOM,
+ * no React, and no storage — records and flags in, decisions out — so every
+ * branch is drilled directly in `src/lib/passportIdentity.test.ts`. The three
+ * surfaces that consult it (`App.tsx`, `profileConsent.tsx`, and
+ * `screens/callbackConsent.tsx`) stay out with the rest of the `.tsx`.
+ *
  * `src/lib/feeReadinessPoll.ts` went IN on 2026/08/25 rather than out with the
  * screens it serves: it is the sponsor watcher, it holds no DOM and no React,
  * and its whole contract — probe now, probe again every five seconds, publish
@@ -546,6 +562,7 @@ export default mergeConfig(
           'src/lib/networks.ts',
           'src/lib/notifications.ts',
           'src/lib/passkeyRecovery.ts',
+          'src/lib/passportIdentity.ts',
           'src/lib/qrPayload.ts',
           'src/lib/qrScan.ts',
           'src/lib/recipientName.ts',

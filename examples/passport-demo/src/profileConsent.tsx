@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ExternalLink, ShieldCheck, X } from 'lucide-react';
+import { ConsentNotice } from './consentNotice.js';
+import { PASSPORT_SETUP_WAITING_MESSAGE } from './lib/passportIdentity.js';
 import { passportCallbackLaunch } from './identity/callbackLaunch.js';
 import {
   createPassportProfileReady,
@@ -19,6 +21,15 @@ interface ProfileConsentProps {
    * "unavailable" then would refuse every standalone popup connect.
    */
   sessionActive: boolean;
+  /**
+   * Whether this Passport is enough of a Passport to answer an app — see
+   * `./lib/passportIdentity.ts`. A session being open is NOT the same question:
+   * a passkey exists long before there is an identity behind it, and this sheet
+   * used to arm on the difference, putting a modal backdrop over the Welcome
+   * screen and the name step. Nothing modal renders until this is true.
+   */
+  passportSetUp: boolean;
+  /** The `.night` name, or null. Never the device's label. */
   displayName: string | null;
   passportContract: {
     address: string;
@@ -137,6 +148,7 @@ export const CONSENT_NO_CHANNEL_MESSAGE =
 
 export function PassportProfileConsent({
   sessionActive,
+  passportSetUp,
   displayName,
   passportContract,
 }: ProfileConsentProps) {
@@ -235,27 +247,40 @@ export function PassportProfileConsent({
     return () => window.removeEventListener('message', onMessage);
   }, [launch, channel]);
 
+  /**
+   * Whether this window can answer the request in front of it.
+   *
+   * TWO CONDITIONS, and the first of them was missing until 2026/09/08. A
+   * Passport that is SET UP — see `./lib/passportIdentity.ts` — and whose
+   * requested fields have hydrated can answer. `displayName` alone used to
+   * stand for both, and because it fell back to the enrolled passkey's label it
+   * was truthy the instant a passkey existed: this sheet armed over the Welcome
+   * screen of a Passport with no identity at all, and its backdrop covered the
+   * one action that would have given it one.
+   */
   const profileReady =
-    !pending ||
-    pending.request.fields.every((field) => {
-      if (field === 'displayName') return Boolean(displayName);
-      return true;
-    });
+    passportSetUp &&
+    (!pending ||
+      pending.request.fields.every((field) => {
+        if (field === 'displayName') return Boolean(displayName);
+        return true;
+      }));
 
   /* A request this Passport cannot serve must still be answered — silence
      leaves the opener disabled forever. But "cannot serve" is only knowable
-     once a session is open: before then the user is mid-sign-in, so wait
-     indefinitely. With a session open, if the profile has not hydrated within
-     the grace period, tell the opener so; the timer is cancelled the moment
-     the fields arrive. */
+     once a session is open AND the Passport is one: before either, the user is
+     mid-sign-in or mid-setup, so wait — the notice below says an app is
+     waiting, and the wait ends when they finish. With a set-up Passport, if the
+     profile has not hydrated within the grace period, tell the opener so; the
+     timer is cancelled the moment the fields arrive. */
   useEffect(() => {
-    if (!pending || !sessionActive || profileReady || outcome) return;
+    if (!pending || !sessionActive || !passportSetUp || profileReady || outcome) return;
     const timer = window.setTimeout(() => {
       if (!replyOnce(pending, { approved: false, error: 'profile_unavailable' })) return;
       setOutcome('unavailable');
     }, PROFILE_WAIT_MS);
     return () => window.clearTimeout(timer);
-  }, [pending, sessionActive, profileReady, outcome]);
+  }, [pending, sessionActive, passportSetUp, profileReady, outcome]);
 
   /* THE FAST FAIL. A launch arrived, and nothing in this window can answer it.
      Three minutes of a sign-in page is not an answer, and it is what a reader
@@ -287,6 +312,17 @@ export function PassportProfileConsent({
     );
   }
   if (!launch || channel !== 'opener' || !pending) return null;
+  /* SIGNED IN, BUT NOT SET UP YET (2026/09/08). The user is on the Welcome
+     screen or the name step, and a modal backdrop over it is what stopped them
+     finishing. Say so beside the task, block nothing, and let the sheet arm by
+     itself the moment the Passport becomes one. */
+  if (!passportSetUp && !outcome) {
+    return (
+      <ConsentNotice icon={<ShieldCheck size={16} aria-hidden />}>
+        {PASSPORT_SETUP_WAITING_MESSAGE}
+      </ConsentNotice>
+    );
+  }
   /* Not ready and not yet answered: the grace timer above is running. */
   if (!profileReady && !outcome) return null;
 
@@ -381,6 +417,14 @@ export function PassportProfileConsent({
                   <span>{FIELD_LABELS[field]}</span>
                   {field === 'passportContract' && !passportContract && (
                     <small>Not deployed yet</small>
+                  )}
+                  {/* Said here for the same reason the row above says it, and
+                      the redirect sheet has said it all along: a Passport with
+                      no `.night` name has no display name, and the user should
+                      read that on the sheet rather than discover it in what the
+                      app did or did not receive. */}
+                  {field === 'displayName' && !displayName && (
+                    <small>Not set — will not be shared</small>
                   )}
                 </li>
               ))}
