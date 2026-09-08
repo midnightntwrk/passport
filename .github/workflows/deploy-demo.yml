@@ -184,7 +184,11 @@ jobs:
             examples/passport-demo/.vercel-output-exclude \
             scripts/build-vercel-output.mjs \
             demo-backend/package.json \
+            "${MANAGED_ROOT}/account/contract/index.js" \
+            "${MANAGED_ROOT}/account/contract/index.d.ts" \
             "${MANAGED_ROOT}/account/compiler/contract-manifest.json" \
+            "${MANAGED_ROOT}/midnames/contract/index.js" \
+            "${MANAGED_ROOT}/midnames/contract/index.d.ts" \
             "${MANAGED_ROOT}/midnames/compiler/contract-manifest.json"
           do
             if [ ! -f "$path" ]; then
@@ -240,6 +244,12 @@ jobs:
 
       - name: Verify the ZK artefacts against the committed manifests
         run: node .github/workflows/scripts/verify-zk-artefacts.mjs
+
+      # TypeScript imports the generated contract modules from this workspace.
+      # They are deliberately ignored build output, so restore and stage them
+      # before typechecking rather than relying on a developer's local files.
+      - name: Stage the verified Passport contract modules
+        run: npm run prepare:zk --workspace passport-demo
 
       # zk-params are the in-tab prover's KZG SRS slices — ~45 MB fetched from a
       # public bucket, not part of the contract build and not in the manifests.

@@ -21,13 +21,13 @@
  * would serve. No ZK artefacts are involved — circuit EXECUTION is separate
  * from proving, and only proving needs the keys.
  *
- * THE TWO-RUNTIME SEAM, AND WHY THE FIXTURE BYPASSES VITE
- * -------------------------------------------------------
- * There are two installed copies of `@midnight-ntwrk/compact-runtime` in this
- * workspace: the root one, and `experiments/account-custody-prototype`'s own.
- * They are the same version and structurally identical, and objects still do
- * not cross between them — a `ContractState` minted by one is refused by the
- * other's `coerceToChargedState` with "has unexpected type".
+ * THE GENERATED-RUNTIME SEAM, AND WHY THE FIXTURE BYPASSES VITE
+ * -------------------------------------------------------------
+ * This workspace retains a legacy prototype with its own Compact runtime, but
+ * the PWA contract is staged beside the PWA and resolves the root runtime.
+ * Objects do not cross between runtime copies — a `ContractState` minted by
+ * one is refused by another's `coerceToChargedState` with "has unexpected
+ * type" — so a test must load the contract and runtime through one resolver.
  *
  * Which copy a module gets depends on WHO resolved the specifier, and under
  * vitest that is not one answer:
@@ -36,8 +36,8 @@
  *     and Vite resolves its `@midnight-ntwrk/compact-runtime` import. Run from
  *     `examples/passport-demo`, `vite.config.ts` is picked up and its
  *     `resolve.dedupe` list collapses that to the ROOT copy; run from the
- *     workspace root there is no config, no dedupe, and it resolves to the
- *     PROTOTYPE copy;
+ *     workspace root there is no config, no dedupe, and a legacy module can
+ *     resolve to the prototype copy;
  *   - anything inside `node_modules` is externalised and resolved by NODE,
  *     which always walks up from the importer and is indifferent to both.
  *
@@ -49,7 +49,7 @@
  * The fix is to take Vite out of the fixture entirely. Both halves are loaded
  * through NODE's own resolver, anchored at the contract module's own resolved
  * path: `require(contractPath)` makes Node resolve that module's runtime import
- * from the prototype's directory, and `createRequire(contractPath)` asks Node
+ * from the staged PWA contract's directory, and `createRequire(contractPath)` asks Node
  * the identical question. One resolver, one importer directory, one answer —
  * in any working directory, under any Vite config.
  *
@@ -60,10 +60,12 @@
  * have to be internally consistent, and is: `vite.config.ts`'s `dedupe` gives
  * the browser bundle one copy, which is the case that ships.)
  *
- * The fixture anchors on `contracts/managed/account/contract/index.js` rather
- * than on the `src/wallet/contract.js` specifier `./accountCustody.ts` imports,
- * for the plain reason that the latter is TypeScript and Node cannot load it.
- * It is a re-export of this exact module, so it is the same compiled contract.
+ * The fixture anchors on `contracts/stagenet/account/index.js` rather than on
+ * the TypeScript import `./accountCustody.ts` uses, for the plain reason that
+ * Node cannot load the latter. `prepare-zk-assets.mjs` stages that module from
+ * the pinned stagenet build before tests run, so the fixture executes the same
+ * contract the PWA bundles rather than a generated file left on a developer's
+ * machine.
  *
  * Runs identically from the workspace root and from `examples/passport-demo`:
  * `npx vitest run src/identity/accountCustody.test.ts`.
@@ -73,7 +75,7 @@ import { createRequire } from 'node:module';
 
 import { describe, expect, it } from 'vitest';
 
-import type { Ledger as AccountLedger } from '../../../../experiments/account-custody-prototype/src/wallet/contract.js';
+import type { Ledger as AccountLedger } from '../../contracts/stagenet/account/index.js';
 
 import {
   AccountCustodyError,
@@ -261,13 +263,16 @@ describe('commitment derivation', () => {
 
 /** Just enough of a circuit context to hand back into the next circuit. */
 interface FixtureCircuitContext {
-  currentQueryContext: { state: unknown };
+  callContext: { currentQueryContext: { state: unknown } };
 }
 
 interface FixtureContractModule {
   Contract: new (witnesses: unknown) => {
-    initialState(...args: unknown[]): { currentContractState: unknown };
-    impureCircuits: Record<string, (...args: unknown[]) => { context: FixtureCircuitContext }>;
+    initialState(...args: unknown[]): Promise<{ currentContractState: unknown }>;
+    impureCircuits: Record<
+      string,
+      (...args: unknown[]) => Promise<{ context: FixtureCircuitContext }>
+    >;
   };
   ledger(state: unknown): AccountLedger;
   pureCircuits: {
@@ -280,6 +285,7 @@ interface FixtureContractModule {
 interface FixtureRuntime {
   createConstructorContext(privateState: unknown, coinPublicKey: string): unknown;
   createCircuitContext(
+    circuitId: string,
     address: string,
     coinPublicKey: string,
     contractState: unknown,
@@ -294,7 +300,7 @@ interface FixtureRuntime {
  *
  * `requireFromTest(contractPath)` makes Node load the contract module, so
  * Node resolves ITS `@midnight-ntwrk/compact-runtime` import by walking up from
- * `contracts/managed/account/contract/`. `createRequire(contractPath)` asks
+ * `contracts/stagenet/account/`. `createRequire(contractPath)` asks
  * Node the same question from the same directory, so it cannot answer
  * differently. If that ever stops being true the fixture fails loudly with the
  * runtime's own "has unexpected type" rather than decoding something wrong.
@@ -302,7 +308,7 @@ interface FixtureRuntime {
 function fixtureModules(): { contract: FixtureContractModule; runtime: FixtureRuntime } {
   const requireFromTest = createRequire(import.meta.url);
   const contractPath = requireFromTest.resolve(
-    '../../../../experiments/account-custody-prototype/contracts/managed/account/contract/index.js',
+    '../../contracts/stagenet/account/index.js',
   );
   return {
     contract: requireFromTest(contractPath) as FixtureContractModule,
@@ -320,7 +326,7 @@ const DEPOSIT = 1_000n;
  * Runs the real contract: construct with one device, register one grant, and
  * deposit NIGHT. Returns the ledger the indexer would end up serving.
  */
-function executedLedger(): { grantCommitment: bigint; ledger: AccountLedger } {
+async function executedLedger(): Promise<{ grantCommitment: bigint; ledger: AccountLedger }> {
   const { contract: module_, runtime } = fixtureModules();
   const contract = new module_.Contract({
     device_secret: (ctx: { privateState: unknown }) => [ctx.privateState, DEVICE_SECRET],
@@ -328,7 +334,7 @@ function executedLedger(): { grantCommitment: bigint; ledger: AccountLedger } {
     recovery_secret: (ctx: { privateState: unknown }) => [ctx.privateState, RECOVERY_SECRET],
   });
 
-  const initial = contract.initialState(
+  const initial = await contract.initialState(
     runtime.createConstructorContext({}, '0'.repeat(64)),
     module_.pureCircuits.derive_device_commitment(DEVICE_SECRET),
     module_.pureCircuits.derive_recovery_commitment(RECOVERY_SECRET),
@@ -340,23 +346,24 @@ function executedLedger(): { grantCommitment: bigint; ledger: AccountLedger } {
   const grantCommitment = module_.pureCircuits.derive_grant_commitment(GRANT_SECRET);
   const colour = nightColourBytes();
   let context = runtime.createCircuitContext(
+    'add_grant',
     '02'.padEnd(64, '0'),
     '0'.repeat(64),
     initial.currentContractState,
     {},
   );
-  context = contract.impureCircuits.add_grant(context, grantCommitment, colour, CAP).context;
-  context = contract.impureCircuits.deposit_night(context, colour, DEPOSIT).context;
+  context = (await contract.impureCircuits.add_grant(context, grantCommitment, colour, CAP)).context;
+  context = (await contract.impureCircuits.deposit_night(context, colour, DEPOSIT)).context;
 
   return {
     grantCommitment,
-    ledger: module_.ledger(context.currentQueryContext.state),
+    ledger: module_.ledger(context.callContext.currentQueryContext.state),
   };
 }
 
 describe('decodeAccountState', () => {
-  it('projects a real executed ledger onto the shape the surfaces read', () => {
-    const { grantCommitment, ledger } = executedLedger();
+  it('projects a real executed ledger onto the shape the surfaces read', async () => {
+    const { grantCommitment, ledger } = await executedLedger();
     const state = decodeAccountState(ledger);
 
     // `deposit_night` credits the mirror the contract keeps of its own NIGHT.
@@ -400,8 +407,8 @@ describe('decodeAccountState', () => {
     expect(grant.epoch).toBe(state.deviceEpoch);
   });
 
-  it('keys balances by the same colour hex `colourHexToBytes` accepts', () => {
-    const { ledger } = executedLedger();
+  it('keys balances by the same colour hex `colourHexToBytes` accepts', async () => {
+    const { ledger } = await executedLedger();
     const [colourHex] = [...decodeAccountState(ledger).nightBalances.keys()];
     // The round trip a caller makes when it withdraws what it just read.
     expect(colourHexToBytes(colourHex)).toEqual(nightColourBytes());
