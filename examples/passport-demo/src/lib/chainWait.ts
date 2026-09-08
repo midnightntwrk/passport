@@ -49,6 +49,31 @@
 export const SUBMIT_WAIT_MS = 60_000;
 
 /**
+ * How long the ONE further attempt at that bound is given.
+ *
+ * THE BOUND WAS AN ASSUMPTION UNTIL 2026/09/08. {@link SUBMIT_WAIT_MS} ends a
+ * wait and answers with the identifier this tab already holds, on the
+ * reasoning that the bytes had reached the node and only the answer was lost.
+ * That morning the reasoning was shown to be optimistic. Two transactions were
+ * balanced by the sponsor between 09:15 and 09:33 UTC and were still not on
+ * chain 122 seconds later — the sponsor released the fees it had booked for
+ * them — and the person in front of the screen was told "Step 2 did not
+ * finish" after a three-minute wait for a settlement that could never come.
+ * The socket was already dead when the submit was made, so nothing was ever
+ * sent, and every second after that was spent waiting for a transaction that
+ * did not exist.
+ *
+ * So the bound now ASKS rather than assumes: the same signed bytes are offered
+ * to the node once more. Twenty seconds, because everything expensive is
+ * already behind it — the transaction is balanced, signed, and proved, and
+ * this is one call over a socket that either exists or does not. It is over
+ * three times the six-second block time and a third of the wait it follows, so
+ * somebody who is already waiting is not asked to wait meaningfully longer for
+ * an answer that changes what they are told.
+ */
+export const RESUBMIT_WAIT_MS = 20_000;
+
+/**
  * How long the deployment watch is given before the contract's own state is
  * read back instead.
  *
@@ -318,4 +343,142 @@ export function transactionIdentifierOf(tx: unknown): string | null {
   if (!Array.isArray(list)) return null;
   const last: unknown = list.at(-1);
   return typeof last === 'string' && last.length > 0 ? last : null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* A submission the node never acknowledged                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How long the wait that FOLLOWS an unacknowledged submission is given.
+ *
+ * The fourth rule in this module, and the one 2026/09/08 bought. A submission
+ * that was offered twice and acknowledged neither time is not the same thing as
+ * a submission that was taken: it may be on chain, and it may equally never
+ * have left the device. Both waits that follow one — three minutes between a
+ * payment's two steps, two minutes on a new account's deployment — were chosen
+ * against an indexer that had ALREADY accepted the transaction, where every
+ * second past about fourteen is congestion rather than doubt. Against a
+ * transaction nobody can say was sent, those minutes buy nothing and cost the
+ * person the whole of them before they are told anything at all.
+ *
+ * A minute, then: still four times the worst indexer lag measured here, and
+ * still long enough for a transaction that DID land to turn up, but a third of
+ * the wait before somebody is told what happened and offered the card that
+ * carries on. Nothing about the outcome changes — the record is left where it
+ * was and the chain is asked again from Home — only how long the screen holds
+ * them first.
+ */
+export const UNCONFIRMED_SETTLE_WAIT_MS = 60_000;
+
+/**
+ * The words a node uses for a transaction it is ALREADY holding.
+ *
+ * Three of them, and each is grounded rather than guessed. Substrate's author
+ * RPC answers a resubmission of something already in its pool with error 1013,
+ * "Transaction Already Imported", and the pool's own type spells the same fact
+ * "Transaction is already in the pool"; 1012, "Transaction is temporarily
+ * banned", is the pool saying it has seen these exact bytes recently and will
+ * not take them again. polkadot-js turns all three into an `RpcError` whose
+ * message is the code, a colon, and the node's own text
+ * (`@polkadot/rpc-provider` `coder/index.js`) — the same shape as the refusal
+ * already known here: `1010: Invalid Transaction: Custom error: 231`.
+ *
+ * The codes are matched WITH their colon, so a 1010 refusal carrying a custom
+ * error that happens to read 1013 cannot be mistaken for one of these. "already
+ * known" is deliberately absent: that is the wording an Ethereum node uses, and
+ * this one never produces it.
+ *
+ * All three mean the same thing for a resubmission — the node has the
+ * transaction, so offering it again achieves nothing and the indexer is what
+ * decides whether it landed. None of them is a refusal of the transaction
+ * itself, which is why none of them gives the sponsor its fee back.
+ */
+const ALREADY_WITH_THE_NODE = /Transaction Already Imported|already in the pool|(?:^|\s)101[23]:/i;
+
+/** How far down a `cause` chain the words are looked for. */
+const CAUSE_DEPTH = 8;
+
+/**
+ * Everything an error and its causes say, as one string.
+ *
+ * The reason this exists rather than a look at `error.message`: the wallet
+ * SDK's submission service wraps every node refusal in an Effect tagged error
+ * whose own message is the constant "Transaction submission error", and the
+ * node client wraps it again as "Transaction submission failed". The node's own
+ * words — the only ones that say WHICH refusal this is — are two `cause` levels
+ * further down, on the polkadot-js `RpcError`. A matcher that read the top
+ * message alone would never match anything real.
+ *
+ * Bounded and cycle-safe, because an error chain is arbitrary data: an SDK that
+ * sets a cause to itself must not take the tab with it.
+ */
+export function refusalText(cause: unknown): string {
+  const parts: string[] = [];
+  const seen = new Set<object>();
+  let current: unknown = cause;
+  for (let depth = 0; depth < CAUSE_DEPTH; depth += 1) {
+    if (typeof current === 'object' && current !== null) {
+      if (seen.has(current)) break;
+      seen.add(current);
+      /* An object with no message of its own has nothing worth reading: the
+         words are further down, on the cause it wraps. */
+      const message: unknown = (current as { message?: unknown }).message;
+      if (typeof message === 'string') parts.push(message);
+      current = (current as { cause?: unknown }).cause;
+      continue;
+    }
+    /* A chain that simply ends adds nothing. One that ends in a thrown STRING
+       is carrying its whole message there — a `reject('…')` is the shape that
+       produces one, and it is the only non-object worth reading. */
+    if (typeof current === 'string') parts.push(current);
+    break;
+  }
+  return parts.join(' | ');
+}
+
+/** True when `cause` is a node saying it already holds the transaction. */
+export function nodeAlreadyHasTransaction(cause: unknown): boolean {
+  return ALREADY_WITH_THE_NODE.test(refusalText(cause));
+}
+
+/**
+ * The identifiers this tab offered to the node twice without ever being told
+ * they had arrived.
+ *
+ * A SET RATHER THAN A FIELD ON THE ANSWER, and not for want of trying. What a
+ * submit hands back through midnight-js is `tx.identifiers().at(-1)` — a string
+ * — and every layer between the submit and the wait that follows it passes that
+ * string through `String(...)`. There is nowhere on a primitive to hang a fact,
+ * so the fact is kept beside it, keyed by the one value both ends already agree
+ * on.
+ *
+ * Tab-lifetime and unbounded on purpose: a session submits a handful of
+ * transactions, an entry is a few dozen bytes, and forgetting one would
+ * silently restore the long wait this exists to shorten.
+ */
+const unconfirmedSubmissions = new Set<string>();
+
+/** Remembers that `identifier` was offered twice and acknowledged neither time. */
+export function markSubmissionUnconfirmed(identifier: string): void {
+  unconfirmedSubmissions.add(identifier);
+}
+
+/**
+ * How long to wait for `identifier` to settle: the caller's own window, or the
+ * shorter one where nobody can say the transaction was ever sent.
+ *
+ * Never LONGER than the window asked for. A caller whose ordinary wait is
+ * already under a minute has its own reason for being brief, and "shortening"
+ * it into a longer wait would be the opposite of this rule.
+ */
+export function settleDeadlineFor(identifier: string | null, normalMs: number): number {
+  if (identifier === null) return normalMs;
+  if (!unconfirmedSubmissions.has(identifier)) return normalMs;
+  return Math.min(UNCONFIRMED_SETTLE_WAIT_MS, normalMs);
+}
+
+/** Empties the register. For tests; nothing in the app forgets a submission. */
+export function forgetUnconfirmedSubmissions(): void {
+  unconfirmedSubmissions.clear();
 }

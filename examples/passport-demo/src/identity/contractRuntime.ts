@@ -51,8 +51,11 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 
 import {
   connectionWatchFor,
+  markSubmissionUnconfirmed,
+  nodeAlreadyHasTransaction,
   transactionIdentifierOf,
   waitBounded,
+  RESUBMIT_WAIT_MS,
   SUBMIT_WAIT_MS,
 } from '../lib/chainWait.js';
 import { describeEndpointRefusals, firstEndpointThatServes } from '../lib/endpoints.js';
@@ -742,59 +745,162 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
     } catch (cause) {
       /* What the facade does here, and for its reason: a transaction the node
          would not take must not be left booked against this wallet's coins. */
-      try {
-        await facade.revert(tx);
-      } catch (revertCause) {
-        console.debug('[contract] could not revert a refused submission', revertCause);
-      }
+      await releaseRefused(tx);
       throw cause;
     }
   };
 
+  /** The facade's own rule, in one place: a refused transaction is unbooked. */
+  const releaseRefused = async (tx: unknown): Promise<void> => {
+    try {
+      await facade.revert(tx);
+    } catch (revertCause) {
+      console.debug('[contract] could not revert a refused submission', revertCause);
+    }
+  };
+
   /**
-   * The submit, with a bound on how long it may wait for the node.
+   * ONE more offer of the SAME signed bytes to the node.
    *
-   * WHAT IT ANSWERS WITH AT THE BOUND, AND WHY THAT IS NOT A GUESS. The value
-   * `submitTransaction` resolves with is `tx.identifiers().at(-1)` — a value
-   * this tab computed before anything was sent. So at the deadline this returns
-   * the identifier the unbounded wait would eventually have returned, and the
-   * caller carries on to the indexer, which is where the question "did it land"
-   * is actually answered. Nothing is claimed about the transaction here.
+   * Nothing is rebuilt, rebalanced, or re-proved: this is the identical
+   * transaction, so the node either takes it, tells us it already has it, or
+   * refuses it — and each of those three is an answer, which is the whole point
+   * of asking. Compare with the alternative, which is what this code did until
+   * 2026/09/08: assume.
    *
-   * NOTHING IS REVERTED AND NOTHING IS GIVEN BACK at the bound. The transaction
-   * may be in a block already — the defect this was written for is exactly that
-   * case — and handing the sponsor back a fee that has been spent, or dropping
-   * a pending transaction that is about to apply, would turn a slow wait into a
-   * wrong one. Only a real refusal does either, and that path is unchanged.
+   * IT DOES NOT WRITE THE PENDING SET AGAIN. The first attempt already did, and
+   * the transaction is still booked against this wallet's coins because nothing
+   * at the bound gave it back.
    *
-   * A connection that goes away during the wait ends it the same way: it is the
-   * signal that no answer is coming, whereas the deadline is only the signal
-   * that none has come yet. Both are logged, by name, so an operator reading a
-   * console can tell one from the other.
+   * A refusal that means "I already have this" must NOT unbook it either — that
+   * would be the wrong half of the facade's rule, dropping a pending entry for
+   * something that is about to apply. Every other refusal keeps the rule
+   * exactly, and travels unchanged so `submitTx`'s sponsor-abandon test and the
+   * retry rules above it see precisely what they saw before.
+   */
+  const offerAgain = async (tx: unknown): Promise<void> => {
+    const service = facade.submissionService;
+    try {
+      if (service && typeof service.submitTransaction === 'function') {
+        await service.submitTransaction(tx, 'InBlock');
+      } else {
+        await facade.submitTransaction(tx);
+      }
+    } catch (cause) {
+      if (!nodeAlreadyHasTransaction(cause)) await releaseRefused(tx);
+      throw cause;
+    }
+  };
+
+  /** What a bounded submit ends with, and whether anyone confirmed it. */
+  interface BoundedSubmission {
+    /** The value `submitTx` answers with — what the SDK's callers carry on. */
+    result: unknown;
+    /**
+     * True when the same bytes were offered TWICE and the node acknowledged
+     * neither. It is not "this failed": it is "nobody can say this was sent",
+     * and the only thing it changes is how long the wait that follows is given.
+     */
+    unconfirmed: boolean;
+  }
+
+  /**
+   * The submit, with a bound on how long it may wait for the node — and, at
+   * that bound, one more attempt rather than an assumption.
+   *
+   * WHAT IT ANSWERS WITH AT THE BOUND. The value `submitTransaction` resolves
+   * with is `tx.identifiers().at(-1)` — a value this tab computed before
+   * anything was sent. So at the deadline this returns the identifier the
+   * unbounded wait would eventually have returned, and the caller carries on to
+   * the indexer, which is where the question "did it land" is actually
+   * answered.
+   *
+   * WHAT WAS WRONG WITH LEAVING IT THERE (2026/09/08). Returning the identifier
+   * at the bound carried an assumption with it: that the bytes had reached the
+   * node and only the answer was lost. On the morning of 2026/09/08 two client
+   * transactions were balanced by the sponsor between 09:15 and 09:33 UTC and
+   * were still not on chain 122 seconds later — the sponsor released the fees
+   * it had booked — and a reviewer was shown "Step 2 did not finish" after a
+   * three-minute wait for a settlement that could not come. The socket was
+   * already dead at the moment of the submit, so nothing was ever sent, and
+   * every second after the bound was spent waiting for a transaction that did
+   * not exist.
+   *
+   * So the bound ASKS. The same signed bytes go to the node once more, with a
+   * short window of its own ({@link RESUBMIT_WAIT_MS}), and there are exactly
+   * four ways that ends:
+   *
+   *  - the node takes it — carry on, and this was a lost answer after all;
+   *  - the node says it ALREADY HAS IT — carry on, and the first attempt did
+   *    reach it. This is not a refusal and gives nothing back to the sponsor;
+   *  - the node REFUSES it — that refusal travels unchanged, so the
+   *    sponsor-abandon rule in `submitTx` and every retry rule above it behave
+   *    exactly as they did before;
+   *  - nothing answers again — carry on with the identifier as before, but say
+   *    so, and mark it unconfirmed so the wait that follows is a minute rather
+   *    than two or three.
+   *
+   * NOTHING IS REVERTED AND NOTHING IS GIVEN BACK at either bound. The
+   * transaction may be in a block already, and handing the sponsor back a fee
+   * that has been spent, or dropping a pending transaction that is about to
+   * apply, would turn a slow wait into a wrong one. Only a real refusal does
+   * either, and that path is unchanged.
+   *
+   * A connection that goes away during a wait ends it the same way as the
+   * deadline: it is the signal that no answer is coming, whereas the deadline
+   * is only the signal that none has come yet. Both are named in the one line
+   * this prints, so an operator reading a console can tell them apart.
    *
    * With NO identifier to answer with there is nothing to carry on with, so the
    * wait is the SDK's own and unbounded. That shape does not occur on this
    * build; answering `undefined` early would be worse than waiting.
    */
-  const boundedSubmit = async (tx: unknown): Promise<unknown> => {
+  const boundedSubmit = async (tx: unknown): Promise<BoundedSubmission> => {
     const identifier = transactionIdentifierOf(tx);
-    if (identifier === null) return facade.submitTransaction(tx);
-    const outcome = await waitBounded(submitWithoutWaitingForFinality(tx), {
-      deadlineMs: SUBMIT_WAIT_MS,
-      /* The submission service's node client is built behind a closed-over
-         `Deferred` on this build, so neither candidate answers and the device's
-         own radio is what is watched — which is the thing that actually moves
-         during an Android handoff. See `../lib/chainWait.ts`. */
-      watch: connectionWatchFor(
+    if (identifier === null) {
+      return { result: await facade.submitTransaction(tx), unconfirmed: false };
+    }
+    /* The submission service's node client is built behind a closed-over
+       `Deferred` on this build, so neither candidate answers and the device's
+       own radio is what is watched — which is the thing that actually moves
+       during an Android handoff. See `../lib/chainWait.ts`. A fresh watch per
+       attempt, because the first one is unregistered when its wait ends. */
+    const watch = (): ReturnType<typeof connectionWatchFor> =>
+      connectionWatchFor(
         [facade.submissionService, (facade.submissionService as { api?: unknown })?.api],
         globalThis,
-      ),
+      );
+
+    const first = await waitBounded(submitWithoutWaitingForFinality(tx), {
+      deadlineMs: SUBMIT_WAIT_MS,
+      watch: watch(),
     });
-    if (outcome.via === 'answer') return outcome.value;
+    if (first.via === 'answer') return { result: first.value, unconfirmed: false };
+
+    let second;
+    try {
+      second = await waitBounded(offerAgain(tx), {
+        deadlineMs: RESUBMIT_WAIT_MS,
+        watch: watch(),
+      });
+    } catch (cause) {
+      if (!nodeAlreadyHasTransaction(cause)) throw cause;
+      console.info(
+        `[contract] ${identifier} is already with the node — ${first.reason} on the first attempt. Carrying on; the indexer decides whether it landed.`,
+      );
+      return { result: identifier, unconfirmed: false };
+    }
+    if (second.via === 'answer') {
+      console.info(
+        `[contract] the node did not answer for ${identifier} — ${first.reason}. It took the transaction on a second attempt.`,
+      );
+      return { result: identifier, unconfirmed: false };
+    }
     console.info(
-      `[contract] the node has not answered for ${identifier} — ${outcome.reason}. Carrying on with the transaction identifier; the indexer decides whether it landed.`,
+      `[contract] ${identifier} is unconfirmed after two attempts — ${first.reason}, then ${second.reason}. Carrying on; the indexer decides whether it landed, and it is given less time to.`,
     );
-    return identifier;
+    markSubmissionUnconfirmed(identifier);
+    return { result: identifier, unconfirmed: true };
   };
 
   const walletProvider = {
@@ -820,8 +926,10 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
     /**
      * Submits, and on a NODE REJECTION gives the sponsor its fee back at once.
      *
-     * THE WAIT IS BOUNDED, AND IT IS NOT A WAIT FOR FINALITY (2026/09/07).
-     * See {@link submitWithoutWaitingForFinality} and `../lib/chainWait.ts`.
+     * THE WAIT IS BOUNDED, AND IT IS NOT A WAIT FOR FINALITY (2026/09/07), AND
+     * AT THAT BOUND THE NODE IS ASKED ONCE MORE (2026/09/08). See
+     * {@link boundedSubmit}, {@link submitWithoutWaitingForFinality}, and
+     * `../lib/chainWait.ts`.
      *
      * A rejected transaction is never going to land, so the whole DUST coin the
      * sponsor booked for it would otherwise sit spoken-for until the sweeper
@@ -840,7 +948,12 @@ export function walletProviderFor(wallet: LocalMidnightWallet) {
       const booked = lastBalance;
       const submitStartedAt = Date.now();
       try {
-        return await boundedSubmit(tx);
+        /* Only `result` can travel: midnight-js takes whatever this answers
+           with and passes it through `String(...)`, so the `unconfirmed` half
+           was recorded against the identifier before it got here — see
+           `markSubmissionUnconfirmed` in `../lib/chainWait.ts`. */
+        const submission = await boundedSubmit(tx);
+        return submission.result;
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (booked && NODE_REJECTION_PATTERN.test(message)) {

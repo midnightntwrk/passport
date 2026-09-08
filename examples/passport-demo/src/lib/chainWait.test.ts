@@ -14,12 +14,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   connectionWatchFor,
   deviceConnectionWatch,
+  forgetUnconfirmedSubmissions,
+  markSubmissionUnconfirmed,
+  nodeAlreadyHasTransaction,
   pollUntilTrue,
   providerConnectionWatch,
+  refusalText,
+  settleDeadlineFor,
   transactionIdentifierOf,
   waitBounded,
+  RESUBMIT_WAIT_MS,
   SETTLE_WATCH_MS,
   SUBMIT_WAIT_MS,
+  UNCONFIRMED_SETTLE_WAIT_MS,
 } from './chainWait.js';
 
 /* -------------------------------------------------------------------------- */
@@ -332,5 +339,164 @@ describe('transactionIdentifierOf', () => {
         },
       }),
     ).toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* A submission the node never acknowledged                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The rule 2026/09/08 bought, and the reason it is not a guess.
+ *
+ * The bound above used to answer with the identifier and ASSUME the bytes had
+ * reached the node. Two transactions balanced by the sponsor that morning were
+ * still not on chain 122 seconds later, and the person in front of the screen
+ * waited three minutes for a settlement that could never come. So the bound
+ * asks the node once more, and what the node says back decides which of four
+ * things happens next — including the one case where nothing is said twice, and
+ * every wait after it is shortened rather than left to run out.
+ */
+describe('refusalText', () => {
+  it('reads the node’s own words out of the wrappers the SDK puts round them', () => {
+    /* The real shape: the capabilities layer's tagged error, the node client's
+       own, and the polkadot-js `RpcError` that is the only one carrying the
+       node's answer. A matcher on the top message alone would see a constant. */
+    const rpc = new Error('1013: Transaction Already Imported');
+    const inner = new Error('Transaction submission failed', { cause: rpc });
+    const outer = new Error('Transaction submission error', { cause: inner });
+    expect(refusalText(outer)).toBe(
+      'Transaction submission error | Transaction submission failed | 1013: Transaction Already Imported',
+    );
+  });
+
+  it('reads an object that is not an Error, and a cause that is a bare string', () => {
+    /* Effect's tagged errors and a `reject('…')` are both shapes this has to
+       survive; neither is an `Error` with a `cause` chain of Errors. */
+    expect(refusalText({ message: 'wrapped', cause: 'the socket went away' })).toBe(
+      'wrapped | the socket went away',
+    );
+    expect(refusalText('1010: Invalid Transaction')).toBe('1010: Invalid Transaction');
+  });
+
+  it('says nothing where there is nothing to say, rather than "[object Object]"', () => {
+    /* A wrapper with no message of its own is not a message: the node's words
+       are further down, and the placeholder would only be noise in front of
+       them. */
+    expect(refusalText({ _tag: 'SubmissionError' })).toBe('');
+    expect(refusalText({ _tag: 'SubmissionError', cause: new Error('1013: x') })).toBe(
+      '1013: x',
+    );
+    expect(refusalText(undefined)).toBe('');
+    expect(refusalText(null)).toBe('');
+    expect(refusalText(1013)).toBe('');
+    expect(refusalText({ message: 'alone', cause: null })).toBe('alone');
+  });
+
+  it('stops on a chain that points at itself, rather than taking the tab with it', () => {
+    const looped: { message: string; cause?: unknown } = { message: 'round and round' };
+    looped.cause = looped;
+    expect(refusalText(looped)).toBe('round and round');
+  });
+
+  it('stops at a depth, rather than reading a chain somebody built on purpose', () => {
+    let deepest: { message: string; cause?: unknown } = { message: 'level 20' };
+    for (let level = 19; level >= 0; level -= 1) {
+      deepest = { message: `level ${level}`, cause: deepest };
+    }
+    expect(refusalText(deepest).split(' | ')).toHaveLength(8);
+  });
+});
+
+describe('nodeAlreadyHasTransaction', () => {
+  it('knows each of the three wordings a node uses for a transaction it holds', () => {
+    expect(nodeAlreadyHasTransaction(new Error('1013: Transaction Already Imported'))).toBe(true);
+    expect(nodeAlreadyHasTransaction(new Error('1013: Transaction is already in the pool'))).toBe(
+      true,
+    );
+    expect(nodeAlreadyHasTransaction(new Error('1012: Transaction is temporarily banned'))).toBe(
+      true,
+    );
+  });
+
+  it('finds them however deeply the SDK has wrapped them', () => {
+    const wrapped = new Error('Transaction submission error', {
+      cause: new Error('Transaction submission failed', {
+        cause: new Error('1013: Transaction Already Imported'),
+      }),
+    });
+    expect(nodeAlreadyHasTransaction(wrapped)).toBe(true);
+  });
+
+  it('is NOT fooled by a refusal, which has to keep travelling', () => {
+    /* The two the sponsor-abandon rule and the retry rules are built on. A
+       transaction the node threw out is not a transaction the node is holding,
+       and treating one as the other would carry on with something dead. */
+    expect(
+      nodeAlreadyHasTransaction(new Error('1010: Invalid Transaction: Custom error: 231')),
+    ).toBe(false);
+    expect(
+      nodeAlreadyHasTransaction(new Error('1010: Invalid Transaction: Custom error: 239')),
+    ).toBe(false);
+    /* A 1010 whose custom error happens to READ like one of the pool codes.
+       This is why the codes are matched with their colon. */
+    expect(
+      nodeAlreadyHasTransaction(new Error('1010: Invalid Transaction: Custom error: 1013')),
+    ).toBe(false);
+    expect(nodeAlreadyHasTransaction(new Error('the connection to Midnight dropped'))).toBe(false);
+    expect(nodeAlreadyHasTransaction(undefined)).toBe(false);
+  });
+});
+
+describe('settleDeadlineFor', () => {
+  afterEach(() => {
+    forgetUnconfirmedSubmissions();
+  });
+
+  it('leaves every ordinary wait exactly as its caller set it', () => {
+    expect(settleDeadlineFor('ab'.repeat(33), 180_000)).toBe(180_000);
+    expect(settleDeadlineFor('ab'.repeat(33), SETTLE_WATCH_MS)).toBe(SETTLE_WATCH_MS);
+    /* Leg one resolved its own ledger hash, so there is no identifier to ask
+       about — and a wait with nothing to shorten is the ordinary one. */
+    expect(settleDeadlineFor(null, 180_000)).toBe(180_000);
+  });
+
+  it('shortens BOTH waits an unacknowledged submission is followed by', () => {
+    const sent = 'ab'.repeat(33);
+    markSubmissionUnconfirmed(sent);
+    /* The payment's two steps — three minutes — and a new account's own
+       deployment — two. Both become a minute, and neither outcome changes. */
+    expect(settleDeadlineFor(sent, 180_000)).toBe(UNCONFIRMED_SETTLE_WAIT_MS);
+    expect(settleDeadlineFor(sent, SETTLE_WATCH_MS)).toBe(UNCONFIRMED_SETTLE_WAIT_MS);
+    // Only that transaction. Nothing else in the session is hurried along.
+    expect(settleDeadlineFor('cd'.repeat(33), 180_000)).toBe(180_000);
+  });
+
+  it('never LENGTHENS a wait that was already shorter than a minute', () => {
+    const sent = 'ef'.repeat(33);
+    markSubmissionUnconfirmed(sent);
+    expect(settleDeadlineFor(sent, 10_000)).toBe(10_000);
+  });
+
+  it('forgets nothing until it is told to', () => {
+    const sent = 'ba'.repeat(33);
+    markSubmissionUnconfirmed(sent);
+    expect(settleDeadlineFor(sent, 180_000)).toBe(UNCONFIRMED_SETTLE_WAIT_MS);
+    forgetUnconfirmedSubmissions();
+    expect(settleDeadlineFor(sent, 180_000)).toBe(180_000);
+  });
+});
+
+describe('the windows themselves', () => {
+  it('gives the second attempt a small fraction of the first wait', () => {
+    /* Everything expensive is behind it — balanced, signed, and proved — so
+       this is one call over a socket that either exists or does not. */
+    expect(RESUBMIT_WAIT_MS).toBe(20_000);
+    expect(RESUBMIT_WAIT_MS).toBeLessThan(SUBMIT_WAIT_MS);
+  });
+
+  it('leaves a minute for a transaction nobody can say was sent', () => {
+    expect(UNCONFIRMED_SETTLE_WAIT_MS).toBe(60_000);
+    expect(UNCONFIRMED_SETTLE_WAIT_MS).toBeLessThan(SETTLE_WATCH_MS);
   });
 });

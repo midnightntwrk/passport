@@ -20,7 +20,14 @@ import {
   BalancingFailure,
 } from './contractRuntime.js';
 import { hexToBytes as verifierHexToBytes } from '../verify/indexer.js';
-import { SUBMIT_WAIT_MS } from '../lib/chainWait.js';
+import {
+  forgetUnconfirmedSubmissions,
+  settleDeadlineFor,
+  RESUBMIT_WAIT_MS,
+  SETTLE_WATCH_MS,
+  SUBMIT_WAIT_MS,
+  UNCONFIRMED_SETTLE_WAIT_MS,
+} from '../lib/chainWait.js';
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
 import { createSponsorError, resetSponsorReadinessCache } from '../lib/sponsor.js';
 import type { SponsorReadiness } from '../lib/sponsor.js';
@@ -432,6 +439,15 @@ describe('submitTx, bounded and not waiting for finality', () => {
   /** A finalized transaction, which carries its own identifiers. */
   const TX = { identifiers: () => ['xy'.repeat(33)] };
   const IDENTIFIER = 'xy'.repeat(33);
+  /* The two paths that submit, told apart so each can be followed to its own
+     settlement wait. A shielded send's first leg is followed by the wait
+     between the payment's two steps; a deployment by the account's own. */
+  const SEND_IDENTIFIER = 'a1'.repeat(33);
+  const SEND_TX = { identifiers: () => [SEND_IDENTIFIER] };
+  const DEPLOY_IDENTIFIER = 'b2'.repeat(33);
+  const DEPLOY_TX = { identifiers: () => [DEPLOY_IDENTIFIER] };
+  /** `SETTLE_DEADLINE_MS` in `App.tsx`: three minutes between a send's legs. */
+  const SEND_SETTLE_MS = 180_000;
 
   /** A facade whose submission service can be told how to behave. */
   function walletWithSubmission(service: {
@@ -467,6 +483,10 @@ describe('submitTx, bounded and not waiting for finality', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    /* The register is tab-lifetime by design, so a suite that shares a module
+       instance has to empty it between cases or one test's unacknowledged
+       submission would shorten the next one's wait. */
+    forgetUnconfirmedSubmissions();
   });
 
   it('asks the node for inclusion, not finality, and answers with the identifier', async () => {
@@ -483,25 +503,155 @@ describe('submitTx, bounded and not waiting for finality', () => {
     expect(pending).toEqual([TX]);
   });
 
-  it('stops waiting at the deadline and carries on with what it already knows', async () => {
+  it('stops waiting at the deadline and asks the node once more', async () => {
     vi.useFakeTimers();
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
-    const { wallet, reverted } = walletWithSubmission({
-      // The subscription that lost its socket: silent, for ever.
-      submitTransaction: () => new Promise(() => {}),
+    const asked: (string | undefined)[] = [];
+    let attempt = 0;
+    const { wallet, reverted, pending } = walletWithSubmission({
+      submitTransaction: (_tx, waitForStatus) => {
+        asked.push(waitForStatus);
+        attempt += 1;
+        // The subscription that lost its socket: silent, for ever.
+        if (attempt === 1) return new Promise(() => {});
+        return Promise.resolve({ _tag: 'InBlock' });
+      },
     });
     const submitted = walletProviderFor(wallet).submitTx(TX);
     await vi.advanceTimersByTimeAsync(SUBMIT_WAIT_MS);
     expect(await submitted).toBe(IDENTIFIER);
+    // The same bytes, asked for at inclusion again — nothing was rebuilt.
+    expect(asked).toEqual(['InBlock', 'InBlock']);
+    /* The pending set is written ONCE. The first attempt booked it and nothing
+       at the bound gave it back, so writing it again would be writing a fact
+       that is already true. */
+    expect(pending).toEqual([TX]);
     /* NOTHING is given back at the deadline. The transaction may be in a block
        already — that is the whole defect — and reverting it, or handing the
        sponsor back a fee that has been spent, would turn a slow wait into a
        wrong one. */
     expect(reverted).toEqual([]);
+    // ONE line, naming what happened to both attempts.
+    expect(info).toHaveBeenCalledTimes(1);
     expect(info.mock.calls[0]?.[0]).toMatch(/nothing answered within 60s/);
+    expect(info.mock.calls[0]?.[0]).toMatch(/took the transaction on a second attempt/);
+    /* Answered on the second attempt is ANSWERED. The wait that follows is the
+       full one, because the node has said it has the transaction. */
+    expect(settleDeadlineFor(IDENTIFIER, SEND_SETTLE_MS)).toBe(SEND_SETTLE_MS);
   });
 
-  it('stops the moment the device loses its network, saying so', async () => {
+  it('carries on, saying so, when the node answers that it already has it', async () => {
+    vi.useFakeTimers();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    let attempt = 0;
+    const { wallet, reverted } = walletWithSubmission({
+      submitTransaction: () => {
+        attempt += 1;
+        if (attempt === 1) return new Promise(() => {});
+        /* The real shape, three layers deep: the capabilities layer's tagged
+           error, the node client's own, and the polkadot-js `RpcError` that is
+           the only one carrying the node's own words. */
+        return Promise.reject(
+          new Error('Transaction submission error', {
+            cause: new Error('Transaction submission failed', {
+              cause: new Error('1013: Transaction Already Imported'),
+            }),
+          }),
+        );
+      },
+    });
+    const submitted = walletProviderFor(wallet).submitTx(TX);
+    await vi.advanceTimersByTimeAsync(SUBMIT_WAIT_MS);
+    expect(await submitted).toBe(IDENTIFIER);
+    /* NOT unbooked. "I already have this" is the opposite of a refusal, and
+       dropping the pending entry would drop a transaction about to apply. */
+    expect(reverted).toEqual([]);
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(info.mock.calls[0]?.[0]).toMatch(/already with the node/);
+    // The first attempt did reach the node, so the wait after it is the full one.
+    expect(settleDeadlineFor(IDENTIFIER, SEND_SETTLE_MS)).toBe(SEND_SETTLE_MS);
+  });
+
+  it('lets a refusal at the second attempt travel, and hands the fee straight back', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const abandons: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown, init?: { body?: string }) => {
+        const url = String(input);
+        if (url.includes('/wallet-status')) {
+          return new Response(JSON.stringify(READY_WALLET_STATUS), { status: 200 });
+        }
+        if (url.includes('/balance-only/abandon')) {
+          abandons.push(init?.body ?? '');
+          return new Response('{}', { status: 200 });
+        }
+        return new Response(
+          JSON.stringify({ txHash: 'ab'.repeat(32), txBytes: '00ff', expiresAt: '' }),
+          { status: 200 },
+        );
+      }),
+    );
+    const cause = new Error('RpcError: 1010: Invalid Transaction: Custom error: 231');
+    let attempt = 0;
+    const { wallet, reverted } = walletWithSubmission({
+      submitTransaction: () => {
+        attempt += 1;
+        if (attempt === 1) return new Promise(() => {});
+        return Promise.reject(cause);
+      },
+    });
+    const provider = walletProviderFor(wallet);
+    // Balances (and fails on the sponsor's bytes) so a booking is remembered.
+    await provider.balanceTx({}).catch(() => undefined);
+    const submitted = provider.submitTx(TX);
+    const thrown = submitted.catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(SUBMIT_WAIT_MS);
+    /* UNCHANGED, and that is the whole requirement: `submitTx`'s
+       sponsor-abandon test and every retry rule above it read this error's own
+       words, so a second attempt must not re-wrap or reclassify it. */
+    expect(await thrown).toBe(cause);
+    expect(reverted.at(-1)).toBe(TX);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(abandons).toEqual([JSON.stringify({ txHash: 'ab'.repeat(32) })]);
+    vi.unstubAllGlobals();
+  });
+
+  it('marks a transaction nothing answered for twice, and shortens what follows', async () => {
+    vi.useFakeTimers();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    /* BOTH PATHS THAT SUBMIT. A shielded send's first leg and a new account's
+       deployment go through this one provider, and each is followed by its own
+       settlement wait — three minutes and two. */
+    for (const [name, tx, identifier, normalMs] of [
+      ['the shielded send', SEND_TX, SEND_IDENTIFIER, SEND_SETTLE_MS],
+      ['the deployment', DEPLOY_TX, DEPLOY_IDENTIFIER, SETTLE_WATCH_MS],
+    ] as const) {
+      info.mockClear();
+      const { wallet, reverted } = walletWithSubmission({
+        // Dead both times: the socket the sponsor's bytes never left through.
+        submitTransaction: () => new Promise(() => {}),
+      });
+      const submitted = walletProviderFor(wallet).submitTx(tx);
+      await vi.advanceTimersByTimeAsync(SUBMIT_WAIT_MS);
+      await vi.advanceTimersByTimeAsync(RESUBMIT_WAIT_MS);
+      expect(await submitted, name).toBe(identifier);
+      // Still nothing given back: it may be on chain, and nobody can say.
+      expect(reverted, name).toEqual([]);
+      expect(info, name).toHaveBeenCalledTimes(1);
+      expect(info.mock.calls[0]?.[0], name).toMatch(/unconfirmed after two attempts/);
+      /* THE POINT OF THE WHOLE CHANGE. The settlement that follows is given a
+         minute rather than the two or three it would have had, so the person
+         is told what happened — and offered the card that carries on — instead
+         of watching a spinner for a transaction that may never have been
+         sent. */
+      expect(settleDeadlineFor(identifier, normalMs), name).toBe(UNCONFIRMED_SETTLE_WAIT_MS);
+    }
+  });
+
+  it('stops the moment the device loses its network, and still asks once more', async () => {
+    vi.useFakeTimers();
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const listeners = new Set<() => void>();
     const device = {
@@ -517,10 +667,14 @@ describe('submitTx, bounded and not waiting for finality', () => {
         submitTransaction: () => new Promise(() => {}),
       });
       const submitted = walletProviderFor(wallet).submitTx(TX);
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
       for (const handler of listeners) handler();
+      await vi.advanceTimersByTimeAsync(RESUBMIT_WAIT_MS);
       expect(await submitted).toBe(IDENTIFIER);
+      /* Both bounds are named, in order and by their own words, so an operator
+         can tell a radio handoff from a node that simply did not speak. */
       expect(info.mock.calls[0]?.[0]).toMatch(/this device lost its network connection/);
+      expect(info.mock.calls[0]?.[0]).toMatch(/nothing answered within 20s/);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -588,6 +742,34 @@ describe('submitTx, bounded and not waiting for finality', () => {
     await expect(walletProviderFor(wallet).submitTx(TX)).resolves.toBe(
       'the facade waited for finality',
     );
+  });
+
+  it('asks again through the facade too, where that is the only way to ask', async () => {
+    vi.useFakeTimers();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    let attempt = 0;
+    const wallet = {
+      facade: {
+        /* No submission service at all, so both attempts are the facade's own
+           method — which waits for FINALITY and has no bound of its own. The
+           second attempt is bounded here exactly like the first. */
+        submitTransaction: () => {
+          attempt += 1;
+          if (attempt === 1) return new Promise(() => {});
+          return Promise.resolve('the facade waited for finality');
+        },
+        revert: async () => ({}),
+      },
+      keys: {
+        shieldedSecretKeys: { coinPublicKey: '00', encryptionPublicKey: '00' },
+        unshieldedKeystore: { signDataAsync: async () => ({}) },
+      },
+    } as unknown as LocalMidnightWallet;
+    const submitted = walletProviderFor(wallet).submitTx(TX);
+    await vi.advanceTimersByTimeAsync(SUBMIT_WAIT_MS);
+    expect(await submitted).toBe(IDENTIFIER);
+    expect(attempt).toBe(2);
+    expect(info.mock.calls[0]?.[0]).toMatch(/took the transaction on a second attempt/);
   });
 
   it('says so and carries on when even the revert fails', async () => {

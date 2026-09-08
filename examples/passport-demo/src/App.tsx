@@ -108,6 +108,9 @@ import {
   type SendLegTiming,
   type PendingSendKind,
 } from './lib/sendLegs.js';
+/* How long to wait for a step to settle, where the node never said it had the
+   transaction. See `lib/chainWait.ts`. */
+import { settleDeadlineFor } from './lib/chainWait.js';
 /* The note a shielded transfer's two legs are joined by. Type-only, so the rule
    itself is still loaded beside the account module at the moment of the send. */
 import type { WalletShieldedNote } from './lib/shieldedNote.js';
@@ -6926,7 +6929,15 @@ export default function PassportDemo() {
             },
             now: () => Date.now(),
             sleep: pause,
-            deadlineMs: SETTLE_DEADLINE_MS,
+            /* A MINUTE INSTEAD OF THREE where nobody could say step one was
+               ever sent (2026/09/08). Three minutes is the right window for a
+               transaction the node took and the indexer has yet to serve; it is
+               three minutes of a person watching a spinner for one that was
+               offered twice without ever being acknowledged. The outcome is
+               unchanged — the record stays at `settle`, the amount is still at
+               their Passport, and Home still offers to carry on — they are just
+               told sooner. See `lib/chainWait.ts`. */
+            deadlineMs: settleDeadlineFor(identifier, SETTLE_DEADLINE_MS),
           }),
         );
         /* LEG ONE IS OVER EITHER WAY. Its own wait is what this measured, so

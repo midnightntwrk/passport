@@ -61,7 +61,12 @@
 
 
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
-import { pollUntilTrue, waitBounded, SETTLE_WATCH_MS } from '../lib/chainWait.js';
+import {
+  pollUntilTrue,
+  settleDeadlineFor,
+  waitBounded,
+  SETTLE_WATCH_MS,
+} from '../lib/chainWait.js';
 import { beginFeeWait, endFeeWait } from '../lib/claimSteps.js';
 import type { SponsorReadiness } from '../lib/sponsor.js';
 import { sponsorFeeRefusal, sponsorReadiness } from '../lib/sponsor.js';
@@ -818,12 +823,18 @@ async function settlePassportContract(
    * `ledgerConfirmed` carries whether the read-back found the contract. Only a
    * watch that ANSWERS with a failing status is a failure, and that path is
    * exactly as it was.
+   *
+   * THE WINDOW IS SHORTER WHERE THE SUBMISSION WAS NEVER ACKNOWLEDGED
+   * (2026/09/08). Two minutes is the right window for a transaction the node
+   * took; it is two wasted minutes for one that was offered twice without the
+   * node ever saying it had it. {@link settleDeadlineFor} is where that is
+   * decided, and it is the only difference.
    */
   let finalized: { status: string } | null = null;
   try {
     const watched = await waitBounded(
       providers.publicDataProvider.watchForTxData(submitted.identifier),
-      { deadlineMs: SETTLE_WATCH_MS },
+      { deadlineMs: settleDeadlineFor(submitted.identifier, SETTLE_WATCH_MS) },
     );
     if (watched.via === 'answer') {
       finalized = watched.value;
