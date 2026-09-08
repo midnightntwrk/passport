@@ -2,7 +2,21 @@
  * Assembles a Vercel Build Output API v3 directory for one of the demo apps,
  * from a `dist/` that was produced LOCALLY.
  *
- * WHY THIS EXISTS — the demos cannot be built on a Vercel builder
+ * THE PASSPORT DEMO NO LONGER NEEDS THIS (2026/09/08)
+ * ---------------------------------------------------
+ * `vercel --prod` from the repository root builds it remotely: the project's
+ * Root Directory is `examples/passport-demo` with source files outside it
+ * included, and `scripts/fetch-zk-artefacts.mjs` puts the untracked half of the
+ * contract build on the builder from a sha256-pinned release asset. The finding
+ * below — that a builder cannot COMPILE the artefacts — still holds and is why
+ * they are downloaded rather than rebuilt; what changed is that downloading
+ * them turned out to be enough. docs/demo/deployment.md has both paths.
+ *
+ * This script stays because the prebuilt upload is the fallback for when the
+ * builder cannot reach those inputs, and because the other deploy:* apps below
+ * still use it.
+ *
+ * WHY IT EXISTS — the demos could not be built on a Vercel builder
  * ---------------------------------------------------------------
  * Verified on 2026/08/05 in a clean `git worktree` + `npm ci` of this branch:
  * `tsc --noEmit` and `vite build` both fail outright, because two generated

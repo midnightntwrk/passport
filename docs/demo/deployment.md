@@ -2,7 +2,8 @@
 
 **The rule: only what is on `demo/pwa-demo` is deployed, and a deploy is a
 published GitHub release.** `main` is the planning branch and does not contain
-the PWA. Manual `vercel deploy` from a laptop is no longer the normal path.
+the PWA. Deploying by hand is possible and is documented below, but it is not
+the normal path and it runs none of the gates.
 
 ## What deploys, and from where
 
@@ -18,6 +19,19 @@ The sibling services under `examples/` — `passport-balancer` and
 `passport-funder` — are **not** part of this. They run on the droplet and are
 shipped by rsync, as described in `examples/passport-balancer/README.md`. This
 page is about the PWA on Vercel only.
+
+## The deploy command
+
+```sh
+vercel --prod          # from the REPOSITORY ROOT, not from examples/passport-demo
+```
+
+That is the whole command, and it works from a fresh clone with nothing built.
+The builder produces the ZK artefacts itself; see [Deploying by
+hand](#deploying-by-hand) below for how, and for the one-off `vercel link` a new
+working copy needs. It is still not the *sanctioned* path — it runs no gates and
+uploads whatever is on disk, uncommitted changes included — so the rest of this
+page, about releases, remains the procedure.
 
 The workflow refuses to run unless the release commit is an **ancestor of
 `origin/demo/pwa-demo`**, then checks out that immutable tag before building.
@@ -73,6 +87,12 @@ the tracked `contract-manifest.json` by
 [`verify-zk-artefacts.mjs`](../../.github/workflows/scripts/verify-zk-artefacts.mjs)
 before anything is built. Bundles are cached by manifest hash, so only the first
 run after a contract rebuild pays the download.
+
+The attachment is no longer only CI's. A remote build downloads the same asset,
+pinned by sha256 in [`scripts/zk-artefacts.lock.json`](../../scripts/zk-artefacts.lock.json)
+— see [How the builder gets artefacts it cannot compile](#how-the-builder-gets-artefacts-it-cannot-compile).
+So a release without the bundle now breaks both paths, and the lock file has to
+be moved forward in the same commit that lands new manifests.
 
 ## Secrets
 
@@ -182,17 +202,142 @@ Or in the dashboard: **midnight-passport-app → Deployments → … → Promote
 Production**. Then fix forward on `demo/pwa-demo` and cut a new release; a
 promotion is not a state that branch knows about.
 
-## The break-glass path
+## Deploying by hand
 
-`npm run deploy:passport:manual` still exists, and still does what
-`deploy:passport` used to. It is for the case where GitHub Actions itself is
-unavailable. It runs **no gates** — no typecheck, no tests, no PWA check — and
-it ships whatever is in the working tree, including uncommitted changes. That is
-precisely the incoherence between the release branch and production this page
-exists to end.
+Two commands reach production without GitHub Actions. Both run **no gates** — no
+typecheck, no tests, no PWA check, no end-to-end run — and both ship whatever is
+in the working tree, including uncommitted changes. That is precisely the
+incoherence between the release branch and production this page exists to end,
+so if you use either, say so in the pull request or the channel and cut a
+release from `demo/pwa-demo` afterwards so the two agree again.
 
-If you use it, say so in the pull request or the channel, and cut a release from
-`demo/pwa-demo` afterwards so the two agree again.
+### `vercel --prod` — the deploy command
+
+```sh
+vercel --prod        # from the repository root
+```
+
+Run once per working copy first, to write the gitignored root
+`.vercel/project.json`:
+
+```sh
+vercel link --scope dominion-webisoft --project midnight-passport-app --yes
+rm -f .env.local     # link leaves a VERCEL_OIDC_TOKEN behind; nothing here needs it
+```
+
+Everything else is committed. The Vercel project carries two settings that make
+it work, both already applied:
+
+| Setting | Value | Why |
+|---|---|---|
+| Root Directory | `examples/passport-demo` | Where the app and its `vercel.json` live. |
+| Include source files outside of the Root Directory | on | The build reaches `examples/passport-balancer`, `demo-backend`, `packages/connect`, and the root lockfile — none of which are under the app. |
+| Automatically expose System Environment Variables | **off** | See below. It has to be off, and the reason is the service worker. |
+
+**Why system environment variables are off.** With it on, Vercel injects
+`VITE_VERCEL_DEPLOYMENT_ID`, `VITE_VERCEL_URL`, and a dozen more into the build,
+and because this app reads `import.meta.env` as an object in several places,
+Vite inlines the whole record into the main chunk. Two of those values are
+unique per deployment, so `main-*.js` — a content hash — changed on every build,
+and with it the service-worker `BUILD_ID`, which is a digest of the emitted
+asset filenames. That is exactly the "a rebuild with no source change stamps the
+same id" property `stampServiceWorkerBuildId` in
+[`vite.config.ts`](../../examples/passport-demo/vite.config.ts) exists to hold:
+without it every deploy installs a new worker on every client whether or not the
+client changed. Nothing in the app reads a `VITE_VERCEL_*` value, and turning
+the setting off also stops the project and deployment ids being compiled into a
+public bundle. Measured both ways on 2026/09/08: with it on, two consecutive
+builds of one tree gave `187b9233…` and `9103d568…`; with it off, both gave
+`bfad1f8e87ebcfb2` and identical asset hashes.
+
+`examples/passport-demo/vercel.json` names the rest: `installCommand`
+(`cd ../.. && npm ci`), `buildCommand` (`npm run vercel-build`, which hands back
+to the root's `build:passport:remote`), and `outputDirectory` (`dist`). The
+root `.vercelignore` decides what is uploaded — a deny list, so a new workspace
+is included by default, and it deliberately withholds every generated ZK tree so
+that what ships does not depend on what a laptop happens to have built.
+
+The `VITE_*` values a remote build compiles in come from the **project's
+Environment Variables**, not from this repository — a builder cannot see
+`package.json`'s script line or `deploy-demo.yml`'s `env:` block. `vercel env ls`
+reads them back; they are the same five values as those two copies, and all
+three change together.
+
+Measured on a first, cold build (no build cache), 2026/09/08:
+
+| Step | |
+|---|---|
+| `npm ci` at the root | 27 s |
+| ZK bundle: download, sha256, manifest check | 2.5 s |
+| `zk-params` from the upstream bucket | 7 s |
+| `prepare:zk`, `tsc --noEmit`, `vite build` | 40 s |
+| **Total, queued to READY** | **91 s** |
+
+With a warm build cache it is 61–63 s. The prebuilt fallback's upload, for
+comparison, is 7 s — but it is preceded by the full build on the laptop.
+
+#### How the builder gets artefacts it cannot compile
+
+`node scripts/fetch-zk-artefacts.mjs` runs first. It downloads the
+`passport-zk-artefacts.tar.zst` asset named by
+[`scripts/zk-artefacts.lock.json`](../../scripts/zk-artefacts.lock.json), which
+pins the release tag, the sha256, and the byte length; the repository is public,
+so the download needs no token. Nothing is extracted until the digest matches.
+It then runs the same
+[`verify-zk-artefacts.mjs`](../../.github/workflows/scripts/verify-zk-artefacts.mjs)
+the workflow does, so every file is checked against the tracked
+`compiler/contract-manifest.json` before a build starts. It is idempotent: a
+tree that already matches the manifests is left alone and nothing is downloaded.
+
+**Compiling instead was ruled out, and not because a builder is limited.** The
+manifests name compactc **0.33.0-rc.2**, and no such release exists in
+`midnightntwrk/compact` — the published set goes 0.31.1 then 0.34.0, and the
+`compact` CLI's own artefact list offers no 0.33.x for any of `x86_macos`,
+`aarch64_macos`, `x86_linux`, or `aarch64_linux` (re-checked against the GitHub
+releases API on 2026/09/08). A different compiler is a different verifier key,
+and the contract deployed on stagenet knows only the key it was deployed with.
+
+**The integrity check is not optional and does not stop at the build.**
+midnight-js 5 verifies every artefact the PWA fetches against
+`compiler/contract-manifest.json`, and its integrity mode defaults to `require`
+— fail-closed. A PWA that shipped an unverified tree would throw
+`ZkArtifactIntegrityError` on the first prove rather than quietly proving with
+the wrong key. So the pin is the supply chain, the manifests are the
+correctness, and the browser checks the same manifests again at run time.
+
+**When the contracts are rebuilt**, attach the new bundle to the release and
+update `tag`, `sha256`, and `bytes` in `scripts/zk-artefacts.lock.json` in the
+same commit that lands the new manifests. A stale pin fails at the manifest
+check, loudly, before anything is built.
+
+### `npm run deploy:passport:manual` — the fallback
+
+Builds locally and uploads the finished output with `vercel deploy --prebuilt`,
+which is how this repository deployed before the remote build existed. Use it
+when the builder cannot get the artefacts — the pinned release asset is gone,
+the upstream parameter bucket is down — or when what you are shipping is not a
+tree any release describes.
+
+```sh
+npm run deploy:passport:manual
+```
+
+It fetches and verifies the pinned artefacts first (so it works on a fresh
+clone), builds, assembles a Build Output API directory with
+`scripts/build-vercel-output.mjs`, uploads it from `examples/passport-demo`, and
+ends by cutting the release tag. That directory needs its own one-off link:
+
+```sh
+cd examples/passport-demo
+vercel link --scope dominion-webisoft --project midnight-passport-app --yes
+rm -f .env.local .gitignore     # both written by `link`; neither is wanted here
+```
+
+The prebuilt upload is unaffected by the Root Directory setting — there is no
+build step for it to apply to — and `scripts/build-vercel-output.mjs` reads only
+`headers` and `rewrites` out of `vercel.json`, so the build settings added there
+change nothing about what it emits. Both were confirmed by preview deployment on
+2026/09/08.
 
 ## Every deploy is backed by a release
 

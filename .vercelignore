@@ -1,0 +1,56 @@
+# What `vercel` uploads from the REPOSITORY ROOT.
+#
+# https://midnightpassport.com is deployed by `vercel --prod` run here, at the
+# root. The Vercel project's Root Directory is `examples/passport-demo` and
+# "Include source files outside of the Root Directory" is on, so the builder
+# gets this whole tree and the build can reach `examples/passport-balancer`,
+# `demo-backend`, `packages/connect`, and the root lockfile — none of which
+# live under the app.
+#
+# WITHOUT THIS FILE THE CLI FALLS BACK TO .gitignore. That fallback is not
+# something to rely on when the upload is the build's only input, so the rules
+# are written out here. It is a DENY list: anything not named is uploaded, so a
+# new workspace is included by default rather than silently missing.
+#
+# `experiments/account-custody-prototype` is deliberately NOT excluded: the
+# demo's `vite.config.ts` aliases `isomorphic-ws` to a shim inside it.
+
+node_modules
+.git
+.vercel
+dist
+coverage
+playwright-report
+test-results
+
+# Prose and imagery. Nothing under here is read by a build.
+docs
+research
+site
+assets
+
+# Heavy experiment trees. Both are upstream subtrees, not build inputs.
+experiments/nearfall-evaluation
+experiments/redjubjub-wallet-rs
+
+# THE GENERATED ZK TREES, EXCLUDED ON PURPOSE — this is the load-bearing part.
+#
+# A working copy that has built the demo carries ~250 MB of prover keys, ZKIR,
+# and SRS slices under these paths. Uploading them would make what ships depend
+# on what happens to be on the laptop, which is the whole failure this deploy
+# path exists to end. The builder fetches them instead, from a pinned release
+# asset (`scripts/zk-artefacts.lock.json`) and from the upstream bucket, and
+# verifies the first against the tracked contract manifests. So the upload is
+# the same whether or not anyone has ever built here.
+examples/passport-balancer/contracts-stagenet/managed/*/keys
+examples/passport-balancer/contracts-stagenet/managed/*/zkir
+examples/passport-demo/public/zk
+examples/passport-demo/public/zk-params
+examples/passport-demo/contracts/stagenet
+examples/passport-demo/.generated
+
+# Local state and credentials, in case a working copy carries them.
+.env
+.env.local
+.planning
+.serena

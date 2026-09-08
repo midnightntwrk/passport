@@ -1,7 +1,15 @@
-# Vercel CLI upload rules for the Passport demo.
+# Vercel CLI upload rules for a deploy run FROM THIS DIRECTORY.
 #
-# Deployments are PREBUILT (`vercel deploy --prebuilt`), so the only tree the
-# CLI ever uploads is `.vercel/output`. This file still has to exist: with no
+# Since 2026/09/08 that is the fallback path only. The deploy command is
+# `vercel --prod` from the REPOSITORY ROOT, which builds remotely and obeys the
+# root `.vercelignore`; this file has no part in it. Do not run a plain
+# (non-prebuilt) `vercel` from here — the project's Root Directory is
+# `examples/passport-demo`, so an upload rooted here would have Vercel look for
+# that path inside it and find nothing.
+#
+# Deployments from here are PREBUILT (`vercel deploy --prebuilt`), so the only
+# tree the CLI ever uploads is `.vercel/output`. This file still has to exist:
+# with no
 # .vercelignore the CLI falls back to .gitignore, and .gitignore excludes
 # precisely the trees the deployed demo must serve — `public/zk/**` (Compact
 # proving keys) and `dist/` — because they are built locally and cannot be

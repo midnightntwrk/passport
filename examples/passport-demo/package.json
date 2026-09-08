@@ -15,8 +15,19 @@
     "test:pwa": "npm run build && npm run check:pwa",
     "dev": "npm run prepare:zk && vite",
     "preview": "vite preview --host localhost",
-    "build": "npm run prepare:zk && tsc --noEmit && vite build"
+    "build": "npm run prepare:zk && tsc --noEmit && vite build",
+    "vercel-build": "cd ../.. && npm run build:passport:remote"
   },
+  "//vercel-build": [
+    "The name Vercel looks for. A remote build runs with this directory as the",
+    "cwd, so this hands straight back to the repository root, where the real",
+    "sequence lives as `build:passport:remote` — every input it needs (the",
+    "lockfile, `demo-backend`, the balancer's contract build) is above here.",
+    "",
+    "`vercel.json` names it as `buildCommand` as well. That is redundant to",
+    "Vercel and deliberate for the reader: the build settings a deploy uses are",
+    "then all in one committed file rather than half of them in a dashboard."
+  ],
   "dependencies": {
     "@fontsource/space-grotesk": "^5.2.10",
     "@midnight-ntwrk/compact-js": "2.5.5-rc.7",
