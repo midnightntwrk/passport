@@ -169,7 +169,9 @@ describe('balanceTx, by the step that failed', () => {
 
   it('reports what the sponsor itself refused as `sponsor`', async () => {
     resetSponsorReadinessCache();
-    /* A 400 rather than a 503 so the round is not repeated: the ten-minute
+    /* A 400 rather than a 503 so the round is not repeated: every configured
+       sponsor has terminally refused, and a list must preserve that verdict
+       rather than turn it into a generic retryable failure. The ten-minute
        contract retry window is right in production and would be the whole test
        here. Which sponsor refusals are worth repeating is drilled below and,
        exhaustively, in `../lib/sponsor.test.ts`. */

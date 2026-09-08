@@ -66,6 +66,7 @@ import type { LocalMidnightWallet } from '../lib/localWallet.js';
 import { memoisingZkConfigProvider } from '../lib/zkArtefactCache.js';
 import type { ZkArtefactSource } from '../lib/zkArtefactCache.js';
 import {
+  SponsorEndpointRefusalsError,
   SponsorError,
   sponsorAbandonBalance,
   sponsorBalanceOnly,
@@ -482,9 +483,9 @@ const PROVE_FAILURE_MESSAGE =
 /** Whether a failure at {@link BalancingStage} `sponsor` clears by itself. */
 function sponsorFailureIsRetryable(cause: unknown): boolean {
   if (cause instanceof SponsorError) return cause.isRetryable;
-  /* Anything else thrown out of `sponsorBalanceOnly` is a transport failure or
-     the "no sponsor would balance this" summary of a list that all refused;
-     both are conditions that clear. */
+  if (cause instanceof SponsorEndpointRefusalsError) return cause.isRetryable;
+  /* Anything else thrown out of `sponsorBalanceOnly` is a transport failure,
+     which is a condition that may clear. */
   return true;
 }
 

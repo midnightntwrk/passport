@@ -987,6 +987,26 @@ function refusalIsRetryable(cause: unknown): boolean {
 }
 
 /**
+ * Every configured sponsor declined one balancing round.
+ *
+ * The message deliberately retains each endpoint's diagnostic for the
+ * operator-facing log, while {@link isRetryable} retains the decision the
+ * caller needs for the next round. A list must not turn two terminal `400`
+ * refusals into a generic, retryable transport failure simply because there
+ * was more than one endpoint.
+ */
+export class SponsorEndpointRefusalsError extends Error {
+  /** True when at least one endpoint may succeed on a later round. */
+  readonly isRetryable: boolean;
+
+  constructor(refusals: readonly { url: string; reason: string; cause?: unknown }[]) {
+    super(`no fee sponsor would balance this transaction — ${describeEndpointRefusals(refusals)}`);
+    this.name = 'SponsorEndpointRefusalsError';
+    this.isRetryable = refusals.some((refusal) => refusalIsRetryable(refusal.cause));
+  }
+}
+
+/**
  * `POST /balance-only` with a raw serialised PROVEN transaction, against the
  * first sponsor in the list that will take it.
  *
@@ -1185,11 +1205,7 @@ export async function sponsorBalanceOnly(
        catch — a typed SponsorError, a raw transport TypeError — reaches it
        unchanged, because a list of one must not be a new failure mode. */
     if (outcome.refusals.length === 1) throw (outcome.refusals[0] as { cause?: unknown }).cause;
-    throw new Error(
-      `no fee sponsor would balance this transaction — ${describeEndpointRefusals(
-        outcome.refusals,
-      )}`,
-    );
+    throw new SponsorEndpointRefusalsError(outcome.refusals);
   }
 }
 

@@ -37,6 +37,7 @@ import {
   validateSponsorBalanceResult,
   SPONSOR_PROBE_RETRY_DELAY_MS,
   SponsorError,
+  SponsorEndpointRefusalsError,
 } from './sponsor.js';
 
 /** The exact body `https://api-preview.1am.xyz/wallet-status` returned on 2026/08/05. */
@@ -689,8 +690,12 @@ describe('the zero-argument forms the app calls', () => {
     resetSponsorReadinessCache();
     const fetchSpy = vi.fn(async () => new Response('{}', { status: 500 }));
     const readiness = await sponsorReadiness({ fetch: fetchSpy as never });
+    const configured = sponsorConfigs();
     if (readiness.state === 'disabled') expect(fetchSpy).not.toHaveBeenCalled();
-    else expect(fetchSpy).toHaveBeenCalledTimes(1);
+    /* An unavailable first endpoint falls through to every configured
+       alternative. This asserts the zero-argument seam without assuming that
+       a production build has only one sponsor. */
+    else expect(fetchSpy).toHaveBeenCalledTimes(configured.length);
     resetSponsorReadinessCache();
   });
 
@@ -1475,6 +1480,22 @@ describe('failover, end to end through the client', () => {
       'Network fees on this Passport are covered by the fee sponsor, and the sponsor cannot cover this one right now.',
     );
     expect(refusal.message).not.toContain(GATEWAY);
+  });
+
+  it('keeps a list of terminal refusals terminal', async () => {
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({ error: 'INVALID_TRANSACTION' }), { status: 400 }),
+    );
+    const failure = await sponsorBalanceOnly(bytes, {
+      configs,
+      fetch: fetchSpy as never,
+      pendingRetryWindowMs: 0,
+    }).catch((cause: unknown) => cause);
+    expect(failure).toBeInstanceOf(SponsorEndpointRefusalsError);
+    expect((failure as SponsorEndpointRefusalsError).isRetryable).toBe(false);
+    expect((failure as Error).message).toContain(GATEWAY);
+    expect((failure as Error).message).toContain(BALANCER);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });
 
