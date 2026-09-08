@@ -355,6 +355,14 @@
  * lines of `useEffect` in `SendSheet.tsx`, which stays out with the rest of the
  * `.tsx`.
  *
+ * `src/lib/feeRecheck.ts` went IN on 2026/09/08, the day it was written, and
+ * for the same reasons: it is the confirm-time half of the same probe, it holds
+ * no DOM and no React, and every branch in it decides whether a person who has
+ * pressed Send is sent on or told the fee arrangement changed. Getting it wrong
+ * in one direction refuses a healthy send — which is what it was written to
+ * stop — and in the other sends somebody on an arrangement they did not
+ * confirm. Its whole contract is drivable on an injected clock.
+ *
  * `src/lib/sendLegs.ts` and `src/lib/walletProver.ts` went IN on 2026/09/02.
  * Both were written on 2026/09/02 WITH their drills — `sendLegs.test.ts` and
  * `walletProver.test.ts` — and both were left out of this list, which is worse
@@ -529,6 +537,7 @@ export default mergeConfig(
           'src/lib/colour.ts',
           'src/lib/endpoints.ts',
           'src/lib/feeReadinessPoll.ts',
+          'src/lib/feeRecheck.ts',
           'src/lib/funderFailover.ts',
           'src/lib/walletSnapshotCheckpoint.ts',
           'src/lib/indexerFailover.ts',

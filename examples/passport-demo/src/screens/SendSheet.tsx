@@ -31,6 +31,7 @@ import type { FeeReadiness, LocalWalletProvingMode } from '../lib/localWallet.js
    enables itself. It pulls in no wallet SDK — only a type from `localWallet`,
    which is erased. */
 import { startFeeReadinessPoll, type FeeReadinessPoll } from '../lib/feeReadinessPoll.js'
+import { settleFeeRecheck } from '../lib/feeRecheck.js'
 
 /* Whether a refusal is a passkey ceremony the host could not complete. Pure,
    drilled, and imports nothing — see `lib/passkeyRecovery.ts`. */
@@ -661,6 +662,11 @@ export default function SendSheet(props: SendSheetProps) {
   const [feeUnknown, setFeeUnknown] = useState<string | null>(null)
   const [feeProbing, setFeeProbing] = useState(false)
   const [feeChanged, setFeeChanged] = useState(false)
+  /* Set only while the confirm-time re-check is giving a momentarily busy
+     sponsor its twenty seconds — see `lib/feeRecheck.ts`. Nothing has been
+     submitted while this is true, so the primary control says what is really
+     happening instead of "Sending…". */
+  const [feeRechecking, setFeeRechecking] = useState(false)
   /* `null` while nothing has been read yet — never a stand-in for an account
      that holds nothing, which is `[]` and gets its own sentence. */
   const [holdings, setHoldings] = useState<SendSheetHolding[] | null>(null)
@@ -1076,8 +1082,13 @@ export default function SendSheet(props: SendSheetProps) {
    * the ledger hash — by which point the transaction is already finalised. Only
    * that step names where proving happened; the others have not reached it.
    */
-  const busyLine =
-    phase === 'checking'
+  const busyLine = feeRechecking
+    ? /* Before any of the steps below, and true of none of them: the sheet is
+         waiting on the fee sponsor and has submitted nothing. Saying so is the
+         whole difference between a short pause and a person watching "Proving
+         and submitting" for a transaction that does not exist. */
+      'Checking the fee. The fee sponsor is busy for a moment, so nothing has been sent yet.'
+    : phase === 'checking'
       ? 'Checking your account’s balance and the fee sponsor.'
       : phase === 'connecting'
         ? 'Opening your account and checking it against this build.'
@@ -1151,19 +1162,37 @@ export default function SendSheet(props: SendSheetProps) {
        outright is handled the same way: the line falls back to "could not
        check", and a second confirm against that sentence — the modes then
        match — proceeds, because the probe is advisory and the send path keeps
-       its own authoritative checks. */
+       its own authoritative checks.
+
+       "Different" is not the same as "worse for a moment", and reading it that
+       way is what refused two live sends on 2026/09/08: a sponsor that has just
+       settled a transaction of its own has nothing free for a few seconds and
+       is otherwise perfectly healthy. That is waited out, for twenty seconds,
+       before anybody is told anything — see `lib/feeRecheck.ts`. A real change
+       of arrangement, in either direction, is still reported at once. */
     const quotedMode = fee?.mode ?? null
     let recheckedMode: FeeReadiness['mode'] | null
     try {
       const readiness = await readFeeReadiness({ force: true })
-      recheckedMode = readiness.mode
       setFee(readiness)
       setFeeUnknown(null)
+      const settled = await settleFeeRecheck({
+        quoted: quotedMode,
+        first: readiness,
+        probe: () => readFeeReadiness({ force: true }),
+        onReadiness: (next) => {
+          setFee(next)
+          setFeeUnknown(null)
+        },
+        onWaiting: () => setFeeRechecking(true),
+      })
+      recheckedMode = settled.readiness.mode
     } catch (cause) {
       recheckedMode = null
       setFee(null)
       setFeeUnknown(messageOf(cause))
     }
+    setFeeRechecking(false)
     if (recheckedMode !== quotedMode) {
       setBusy(false)
       setFeeChanged(true)
@@ -1865,7 +1894,9 @@ export default function SendSheet(props: SendSheetProps) {
                 {busy ? (
                   <>
                     <Loader2 className="mnhome-send-spinner" size={15} aria-hidden="true" />
-                    <span>Sending…</span>
+                    {/* Nothing has been submitted while the fee is being
+                        checked again, so the control does not claim it has. */}
+                    <span>{feeRechecking ? 'Checking the fee…' : 'Sending…'}</span>
                   </>
                 ) : feeBlocksSend ? (
                   /* The sponsor stood down between Review and here. The control
