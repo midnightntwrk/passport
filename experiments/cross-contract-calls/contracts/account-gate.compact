@@ -1,0 +1,77 @@
+pragma language_version 0.26;
+
+// AccountGate — a counterparty contract that drives ONE owner-authorised
+// operation of the passport account custody contract as a cross-contract
+// CALLEE, atomically with its own bookkeeping (P5).
+//
+// The gated operation chosen is rotate_enc_key_with_jubjub: it is
+// seam-gated (MIP-0012 §4 / MIP-0013), coinless, witness-free (callees must
+// not invoke witnesses), and has the smallest client-side signing surface
+// of the candidates — the operation payload is a single Bytes<32> and its
+// challenge builder takes only (self, sig_r, pk, new_key, auth_nonce,
+// grind_nonce).
+//
+// The declaration below is the STRUCTURAL contract type (CoIP-0002): only
+// the one circuit this gate calls, extracted verbatim from the vendored
+// account.compact (arc-passport k1-arm, commit 2b0b55d). Structural typing
+// means the account satisfies it although it exports many more circuits.
+//
+// What compose_gated demonstrates when it succeeds: a counterparty contract
+// forwards the owner's signature bundle through the call boundary, the
+// account's seam verifies it in the callee's own circuit (its challenge
+// recomputed over kernel.self() and the live auth_nonce), and the gate's
+// own counter advances in the SAME transaction — an owner-authorised
+// account operation composed atomically with third-party contract state.
+// The gate cannot bypass the seam: it holds no signing capability, it only
+// carries the bundle, and a corrupted bundle must fail through the call
+// boundary (the P5 negative records where: construction, prover, or node).
+//
+// Compile with --compact-path contracts/managed so the declared type name
+// 'Account' resolves to the account's compiled artefact directory.
+
+import CompactStandardLibrary;
+
+contract Account {
+  circuit rotate_enc_key_with_jubjub(
+    new_key:     Bytes<32>,
+    pk:          JubjubPoint,
+    use_counter: Uint<64>,
+    sig_r:       JubjubPoint,
+    sig_s:       Field,
+    grind_nonce: Uint<64>,
+  ): [];
+}
+
+export ledger account: Account;
+export ledger composed: Counter;
+
+constructor(a: Account) {
+  account = disclose(a);
+}
+
+// Forwards the full argument bundle to the account's gated circuit and
+// increments the gate's own counter.
+//
+// Toolchain drift note: compactc 0.33.0-rc.2 accepted cross-contract call
+// arguments WITHOUT disclose() (measured by the passport-fit probes);
+// stable 0.34.0 extends the disclosure analysis to contract call arguments
+// ("contract call argument N might disclose the witness value"), so every
+// forwarded argument below is wrapped in disclose(). The compiler therefore
+// now treats the forwarded signature material as formally disclosed at the
+// call boundary — a datapoint for the MIP-0013 "signature material appears
+// in no public output" claim, whose call-mode fate rests on the hiding
+// property of the communications commitment.
+export circuit compose_gated(
+  new_key:     Bytes<32>,
+  pk:          JubjubPoint,
+  use_counter: Uint<64>,
+  sig_r:       JubjubPoint,
+  sig_s:       Field,
+  grind_nonce: Uint<64>,
+): [] {
+  composed.increment(1);
+  account.rotate_enc_key_with_jubjub(
+    disclose(new_key), disclose(pk), disclose(use_counter),
+    disclose(sig_r), disclose(sig_s), disclose(grind_nonce),
+  );
+}
