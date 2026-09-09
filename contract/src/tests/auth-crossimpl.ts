@@ -17,6 +17,7 @@ import { standardSetup } from './flow.js';
 import { userAddressBytes } from '../node/wallet.js';
 import { bytesToHex } from '../wallet/hex.js';
 import { SIGNER_BIN, rustKeygenK256, rustSignWithdrawUnshieldedK256 } from './crossimpl-offline.js';
+import { K256_ENVELOPE_NONE } from '../wallet/signer.js';
 import { pureCircuits } from '../wallet/contract.js';
 
 const NIGHT = new Uint8Array(32);
@@ -47,7 +48,7 @@ await runScenario('auth-crossimpl', async () => {
   // use counter 0) — the same path a cross-arm add takes.
   const l0 = await s.account.ledgerState();
   const rustEntry = pureCircuits.derive_device_entry_with_k256(
-    { bytes: s.account.addressBytes }, rust.pk, l0.device_epoch, 0n,
+    { bytes: s.account.addressBytes }, rust.pk, K256_ENVELOPE_NONE, l0.device_epoch, 0n,
   );
   await s.account.addDeviceEntry(s.device, rustEntry);
   s.account.registerDevice(rust.pk);
@@ -76,6 +77,7 @@ await runScenario('auth-crossimpl', async () => {
     pk: sig.pk,
     use_counter: 0n,
     sig: sig.sig,
+    envelope: K256_ENVELOPE_NONE,
   });
   details.withdrawTx = r.txId;
   await waitForLedger(
