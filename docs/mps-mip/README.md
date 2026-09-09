@@ -59,8 +59,11 @@ together; the upstream copies are canonical.
   `GrantRequest`, passkey consent, one device-gated `issue_grant`, and a
   return leg the dApp verifies against chain state. Read access is the
   MIP-0012 viewing capability sealed to a dApp key and recorded
-  declaratively. Requires a `spec_version = 2` redeploy. Open rulings
-  are tagged in the text; the external co-author is not yet named.
+  declaratively. Requires a `spec_version = 2` redeploy. Reviewed
+  through four lenses; the open items for editors and the Foundation
+  (co-author, companion erratum wording, salt and commitment rulings)
+  are collected in an editors' note at the head of the file, and the
+  external co-author is not yet named.
 - **Recovery paths (building block three; not yet drafted)**:
   total-loss recovery behind the seam; the prototype realises this
   with BUSS, and the standard stays scheme-agnostic at the contract
