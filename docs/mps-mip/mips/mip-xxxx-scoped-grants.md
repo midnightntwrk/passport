@@ -2247,7 +2247,7 @@ the following. Each item names the invariants it exercises.
 - E3 (Implementation): the findings at `contract/GRANTS-E3.md` and the
   evidence at `contract/evidence/block-time-unit.json` and
   `contract/evidence/block-time-sweep.json` on the branch
-  `nicolasdp/grants-e3-block-time` of the
+  `nicolasdp/grants-seam-e1` of the
   [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
   repository.
 
