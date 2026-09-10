@@ -66,19 +66,35 @@
 //!    "recipient":"…64 hex…"}
 //!     → {"pk":{…},"grant_id":"…","challenge":"…","digest":"…",
 //!        "sig":{"r":"0x…","s":"0x…"},"origin_hash":"…"}
+//!   {"cmd":"sign_grant","arm":"jubjub","circuit":"withdraw_shielded",
+//!    "sk":"0x…","contract_address":"…64 hex…","client_id":"…","slot":0,
+//!    "issued_at":"7","grant_nonce":"1","color":"…64 hex…","amount":"500",
+//!    "recipient":"…64 hex…","change_entry":"…384 hex…",
+//!    "enc_pk":"…64 hex…","coin":{"nonce":"…","color":"…","value":"…",
+//!    "mt_index":"…"}}
+//!     → {"arm":"jubjub","circuit":"…","pk":{…},"origin_hash":"…",
+//!        "grant_id":"…","challenge":"…","sig_r":{…},"sig_s":"0x…",
+//!        "grind_nonce":"3","attempts":4}
 //!   {"cmd":"derive_grant","arm":"k256"|"jubjub","sk":"0x…","envelope":0,
 //!    "contract_address":"…","client_id":"…","slot":0,"scope_salt":"…",
 //!    "scope":{…the plaintext scope…},"spent":"200",
 //!    "device":{"sk":"0x…","auth_nonce":"7"}}
 //!     → {"pk":{…},"origin_hash":"…","grant_id":"…","object_commit":"…",
 //!        "spent_commit_at_issue":"…","spent_commit":"…","rp_commit":"…",
-//!        "scope_digest":"…","grant_dsts":{…},
+//!        "scope_digest":"…","grant_dsts":{…},"device_pk":{…},
 //!        "lifecycle_challenges":{"issue_grant":"…","revoke_grant":"…",
 //!                                "revoke_all_grants":"…"}}
+//!     with, on the jubjub arm, `lifecycle_signatures` in place of
+//!     `lifecycle_challenges`: one {"sig_r":{…},"sig_s":"0x…",
+//!     "grind_nonce":"…","challenge":"…","attempts":n} per circuit,
+//!     because a JubJub challenge commits to its own nonce point and to
+//!     the grinding nonce and so cannot be published before it is signed.
 //!
 //! The grant seam is the `grants` module: the identity, commitment, scope
 //! digest, and challenge recipes of the scoped-grants MIP, built from the
-//! published byte recipes rather than from the compiled contract.
+//! published byte recipes rather than from the compiled contract. Both
+//! grantee arms are implemented there: k256 (ECDSA over the envelope
+//! digest) and jubjub (ground Schnorr over the challenge itself).
 //!
 //! All bigint fields are 0x-prefixed big-endian hex; raw byte strings are
 //! plain hex.
@@ -279,7 +295,7 @@ enum Request {
     Keygen { arm: Arm },
     Sign(SignRequest),
     /// A grant call signed by a grantee key (scoped-grants MIP section 6.3),
-    /// on the k256 grantee arm.
+    /// on either grantee arm.
     SignGrant(grants::GrantSignRequest),
     /// The issuance-side derivations of scoped-grants MIP sections 4.3 to
     /// 4.5 over one plaintext scope, on either grantee arm.

@@ -21,7 +21,13 @@ import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 
 import { deployAccountInWaves } from './wave-deploy.js';
 
-import { ledger, type Ledger, type ShieldedCoin, type QualifiedCoin } from './contract.js';
+import {
+  ledger,
+  type Ledger,
+  type ShieldedCoin,
+  type QualifiedCoin,
+  type GrantRecord,
+} from './contract.js';
 import {
   emptyCoinStore,
   withCoin,
@@ -33,9 +39,20 @@ import {
   jubjubChallenges,
   k256Challenges,
   authArgs,
+  jubjubGrantChallenges,
+  k256GrantChallenges,
+  grantAuthArgs,
+  scopeArgs,
+  scopeDigest,
+  assertIssueRules,
   type AnyDevice,
   type Authorisation,
   type CallContext,
+  type AnyGrantee,
+  type GrantAuthorisation,
+  type GrantContext,
+  type GrantOpening,
+  type PlainScope,
 } from './signer.js';
 import type { EncKeyPair } from './inbox.js';
 
@@ -98,6 +115,19 @@ function circuitResult(r: any): any {
 function changeOf(r: any): ShieldedCoin | null {
   const value = circuitResult(r);
   return value && value.is_some ? (value.value as ShieldedCoin) : null;
+}
+
+/** The `[sent, change]` pair a direct (contract-recipient) spend returns. */
+function directOutcomeOf(r: any, name: string): { sent: ShieldedCoin; change: ShieldedCoin | null } {
+  const result = circuitResult(r);
+  if (!Array.isArray(result) || !result[0]?.nonce) {
+    throw new Error(`${name}: [sent, change] result not found on the call surface`);
+  }
+  const maybeChange = result[1];
+  return {
+    sent: result[0] as ShieldedCoin,
+    change: maybeChange?.is_some ? (maybeChange.value as ShieldedCoin) : null,
+  };
 }
 
 export class CustodyAccount {
@@ -503,6 +533,236 @@ export class CustodyAccount {
     const name = `remove_device_with_${a.arm}`;
     const r = await submitWithDustRetry(name, () => this.handle.callTx[name](entry, ...authArgs(a)));
     return { txId: txId(r) };
+  }
+
+  // ── Scoped grants (scoped-grants MIP): ledger reads ──────────────────────
+
+  /** The record under a grant id, or null when the map has no entry (a
+   *  revoked grant is a record with `active == false`, not null). */
+  async grantRecord(grantId: Uint8Array): Promise<GrantRecord | null> {
+    const l = await this.ledgerState();
+    return l.grants.member(grantId) ? l.grants.lookup(grantId) : null;
+  }
+
+  /** The signing context of the next call under a grant (section 6.3):
+   *  the record's `issued_at` and `nonce` as the ledger holds them now. */
+  async grantContext(grantId: Uint8Array): Promise<GrantContext> {
+    const g = await this.grantRecord(grantId);
+    if (!g) throw new Error(`no grant record under ${bytesToHex(grantId)}`);
+    return { contractAddress: this.addressBytes, grantId, issuedAt: g.issued_at, grantNonce: g.nonce };
+  }
+
+  /** The `grant_generation` cell, bumped only by `revoke_all_grants`. */
+  async grantGeneration(): Promise<bigint> {
+    const l = await this.ledgerState();
+    return l.grant_generation;
+  }
+
+  /** The id of a grantee at this account for an origin and slot, on the
+   *  grantee's own arm. */
+  grantIdOf(grantee: AnyGrantee, originHash: Uint8Array, slot: bigint): Uint8Array {
+    return grantee.grantId(this.addressBytes, originHash, slot);
+  }
+
+  // ── Scoped grants: lifecycle (device-gated, high level) ──────────────────
+  //
+  // Device-signed on the device's arm over auth_nonce, advancing the roster
+  // counter like every other gated call. The issue challenge binds the
+  // salted scope digest, not the plaintext fields (section 6.1).
+
+  /**
+   * Issue a grant: `grantId` is the grantee's identity (`grantIdOf`), the
+   * scope the plaintext of section 4.2, `scopeSalt` 32 fresh random bytes
+   * the caller keeps for the grantee's opening and never reuses. The issue
+   * rules are checked client-side first so a refused scope never reaches a
+   * device signature.
+   */
+  async issueGrant(device: AnyDevice, grantId: Uint8Array, scope: PlainScope, scopeSalt: Uint8Array): Promise<TxResult> {
+    assertIssueRules(scope);
+    const digest = scopeDigest(scopeSalt, scope);
+    const ctx = await this.callContext();
+    const counter = await this.resolveUseCounter(device);
+    const auth = device.arm === 'jubjub'
+      ? device.sign(jubjubChallenges.issueGrant(ctx, device.pk, grantId, digest), counter)
+      : device.sign(k256Challenges.issueGrant(ctx, device.pk, grantId, digest), counter);
+    const r = await this.issueGrantWithAuth(grantId, scope, scopeSalt, auth);
+    this.advanceCounter(device.pk, counter);
+    return r;
+  }
+
+  /** Revoke one grant: the record becomes a tombstone (`active == false`)
+   *  and the id may be re-issued later under a fresh salt. */
+  async revokeGrant(device: AnyDevice, grantId: Uint8Array): Promise<TxResult> {
+    const ctx = await this.callContext();
+    const counter = await this.resolveUseCounter(device);
+    const auth = device.arm === 'jubjub'
+      ? device.sign(jubjubChallenges.revokeGrant(ctx, device.pk, grantId), counter)
+      : device.sign(k256Challenges.revokeGrant(ctx, device.pk, grantId), counter);
+    const r = await this.revokeGrantWithAuth(grantId, auth);
+    this.advanceCounter(device.pk, counter);
+    return r;
+  }
+
+  /** Revoke every grant: bumps `grant_generation` and clears the map. */
+  async revokeAllGrants(device: AnyDevice): Promise<TxResult> {
+    const ctx = await this.callContext();
+    const counter = await this.resolveUseCounter(device);
+    const auth = device.arm === 'jubjub'
+      ? device.sign(jubjubChallenges.revokeAllGrants(ctx, device.pk), counter)
+      : device.sign(k256Challenges.revokeAllGrants(ctx, device.pk), counter);
+    const r = await this.revokeAllGrantsWithAuth(auth);
+    this.advanceCounter(device.pk, counter);
+    return r;
+  }
+
+  // ── Scoped grants: lifecycle (low level: caller supplies the Authorisation)
+
+  async issueGrantWithAuth(grantId: Uint8Array, scope: PlainScope, scopeSalt: Uint8Array, a: Authorisation): Promise<TxResult> {
+    const name = `issue_grant_with_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
+      grantId, ...scopeArgs(scope), scopeSalt, ...authArgs(a),
+    ));
+    return { txId: txId(r) };
+  }
+
+  async revokeGrantWithAuth(grantId: Uint8Array, a: Authorisation): Promise<TxResult> {
+    const name = `revoke_grant_with_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](grantId, ...authArgs(a)));
+    return { txId: txId(r) };
+  }
+
+  async revokeAllGrantsWithAuth(a: Authorisation): Promise<TxResult> {
+    const name = `revoke_all_grants_with_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](...authArgs(a)));
+    return { txId: txId(r) };
+  }
+
+  // ── Scoped grants: the grant twins (grantee-signed, high level) ──────────
+  //
+  // Each call reads the record's context (issued_at, nonce) under the id
+  // the grantee and opening determine, collects the witness value the
+  // shielded twins will consume (the held coin, AUTH-10), builds the arm's
+  // challenge, has the grantee sign it, and targets
+  // `<operation>_with_grant_<arm>`. The opening's `spentPrev` must equal
+  // the cumulative value released so far; the caller advances it by
+  // `amount` after a successful call. `auth_nonce` and the device roster
+  // are untouched by a grant call (GR-5).
+  //
+  // The shielded twins take the change entry the grantee pre-encrypted to
+  // the account's `enc_key` (appended in the same circuit when the send
+  // produces change): the caller supplies `changeEntry`; no helper
+  // precomputes it here, since whether the change coin's nonce is
+  // predictable before the call is a question the E2 suite tests. `encPk`
+  // defaults to the live `enc_key` cell; a stale value aborts the call
+  // in-circuit rather than orphaning the change.
+
+  async withdrawUnshieldedWithGrant(
+    grantee: AnyGrantee,
+    opening: GrantOpening,
+    color: Uint8Array,
+    amount: bigint,
+    recipient: Uint8Array,
+  ): Promise<TxResult> {
+    const g = await this.grantContext(this.grantIdOf(grantee, opening.originHash, opening.slot));
+    const auth = grantee.arm === 'jubjub'
+      ? grantee.sign(jubjubGrantChallenges.withdrawUnshielded(g, grantee.pk, color, amount, recipient))
+      : grantee.sign(k256GrantChallenges.withdrawUnshielded(g, grantee.pk, color, amount, recipient));
+    return this.withdrawUnshieldedWithGrantAuth(color, amount, recipient, opening, auth);
+  }
+
+  async withdrawShieldedWithGrant(
+    grantee: AnyGrantee,
+    opening: GrantOpening,
+    recipient: Uint8Array,
+    color: Uint8Array,
+    amount: bigint,
+    changeEntry: Uint8Array,
+    encPk?: Uint8Array,
+  ): Promise<SpendOutcome> {
+    const g = await this.grantContext(this.grantIdOf(grantee, opening.originHash, opening.slot));
+    const enc = encPk ?? await this.encKey();
+    const coin = await this.heldCoin(color);
+    const auth = grantee.arm === 'jubjub'
+      ? grantee.sign(jubjubGrantChallenges.withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
+      : grantee.sign(k256GrantChallenges.withdrawShielded(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
+    return this.withdrawShieldedWithGrantAuth(recipient, color, amount, changeEntry, enc, opening, auth);
+  }
+
+  async withdrawShieldedToContractWithGrant(
+    grantee: AnyGrantee,
+    opening: GrantOpening,
+    recipient: Uint8Array,
+    color: Uint8Array,
+    amount: bigint,
+    changeEntry: Uint8Array,
+    encPk?: Uint8Array,
+  ): Promise<DirectSpendOutcome> {
+    const g = await this.grantContext(this.grantIdOf(grantee, opening.originHash, opening.slot));
+    const enc = encPk ?? await this.encKey();
+    const coin = await this.heldCoin(color);
+    const auth = grantee.arm === 'jubjub'
+      ? grantee.sign(jubjubGrantChallenges.withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin))
+      : grantee.sign(k256GrantChallenges.withdrawShieldedToContract(g, grantee.pk, recipient, color, amount, changeEntry, enc, coin));
+    return this.withdrawShieldedToContractWithGrantAuth(recipient, color, amount, changeEntry, enc, opening, auth);
+  }
+
+  /** The live `enc_key` cell: what a grantee seals change entries to. */
+  async encKey(): Promise<Uint8Array> {
+    const l = await this.ledgerState();
+    return l.enc_key;
+  }
+
+  // ── Scoped grants: the grant twins (low level, for fault injection) ──────
+  //
+  // The authorisation's arm selects the `_with_grant_<arm>` circuit; the
+  // opening and the authorisation expand to the section 6.1 trailer
+  // (grantAuthArgs). Conformance tests inject faults here: a stale grant
+  // nonce, a wrong spent_prev, a foreign key, a mismatched salt.
+
+  async withdrawUnshieldedWithGrantAuth(
+    color: Uint8Array,
+    amount: bigint,
+    recipient: Uint8Array,
+    opening: GrantOpening,
+    a: GrantAuthorisation,
+  ): Promise<TxResult> {
+    const name = `withdraw_unshielded_with_grant_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
+      color, amount, { bytes: recipient }, ...grantAuthArgs(opening, a),
+    ));
+    return { txId: txId(r) };
+  }
+
+  async withdrawShieldedWithGrantAuth(
+    recipient: Uint8Array,
+    color: Uint8Array,
+    amount: bigint,
+    changeEntry: Uint8Array,
+    encPk: Uint8Array,
+    opening: GrantOpening,
+    a: GrantAuthorisation,
+  ): Promise<SpendOutcome> {
+    const name = `withdraw_shielded_with_grant_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
+      { bytes: recipient }, color, amount, changeEntry, encPk, ...grantAuthArgs(opening, a),
+    ));
+    return { txId: txId(r), change: changeOf(r) };
+  }
+
+  async withdrawShieldedToContractWithGrantAuth(
+    recipient: Uint8Array,
+    color: Uint8Array,
+    amount: bigint,
+    changeEntry: Uint8Array,
+    encPk: Uint8Array,
+    opening: GrantOpening,
+    a: GrantAuthorisation,
+  ): Promise<DirectSpendOutcome> {
+    const name = `withdraw_shielded_to_contract_with_grant_${a.arm}`;
+    const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
+      { bytes: recipient }, color, amount, changeEntry, encPk, ...grantAuthArgs(opening, a),
+    ));
+    return { txId: txId(r), ...directOutcomeOf(r, name) };
   }
 
   /** Raw call-tx surface, for tests that need shapes not modelled above. */

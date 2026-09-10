@@ -16,7 +16,9 @@
 // published byte recipe and compared bit-exactly against the compiled
 // circuit, over pinned fixtures, with the vectors written out for the Rust
 // signer. Nothing in that section imports a hash from the contract module;
-// the compiled circuits are the thing under test.
+// the compiled circuits are the thing under test. It covers both grantee
+// arms (`k1` and `v1`) and both lifecycle families, so the pinned preimage
+// widths of section 6.3 are settled here for every twin.
 
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -41,12 +43,17 @@ import { pureCircuits } from '../wallet/contract.js';
 import {
   JubjubDevice,
   K256Device,
+  JubjubGrantee,
+  K256Grantee,
   jubjubChallenges,
   k256Challenges,
+  jubjubGrantChallenges,
+  k256GrantChallenges,
   JUBJUB_R,
   SECP256K1_N,
   bytesToBigIntLE,
   type CallContext,
+  type GrantContext,
   K256_ENVELOPE_CONNECTOR,
   K256_ENVELOPE_NONE,
 } from '../wallet/signer.js';
@@ -524,6 +531,14 @@ await runScenario('unit-offline', async () => {
       return got;
     };
 
+    /** The preimage width a pinned vector recorded, so that the recipe
+     *  widths of section 6.3 are asserted and not merely printed. */
+    const widthOf = (circuit: string, name = 'pinned'): number => {
+      const found = vectors.find((v) => v.circuit === circuit && v.name === name);
+      if (found === undefined) throw new Error(`no pinned vector for ${circuit} ${name}`);
+      return found.preimage_len;
+    };
+
     step('[grant] grant identity, both k1 envelopes and the v1 arm (§4.3)');
     const idTagK1 = padTag(32, 'midnight:account:grant:id:k1:v1');
     const grantIds: Record<string, Uint8Array> = {};
@@ -907,12 +922,377 @@ await runScenario('unit-offline', async () => {
       });
     }
 
+    step('[grant] the k1 withdraw_shielded_to_contract challenge (§6.3)');
+    // The third k256 twin. Its declared members are the shielded twin's, so
+    // the DST is the only thing that separates the two preimages, and the
+    // width is the same 568 bytes.
+    const dstToContractK1 = dstOf('midnight:account:grant:auth:k1:v1:withdraw_shielded_to_contract');
+    pin(
+      'pinned', 'challenge_withdraw_shielded_to_contract_with_grant_k256', '6.3',
+      {
+        self: bytesToHex(gSelfBytes), pk_x: bytesToHex(kx), pk_y: bytesToHex(ky),
+        grant_id: bytesToHex(gid), issued_at: issuedAt.toString(),
+        recipient: bytesToHex(gContract), color: bytesToHex(gColor),
+        amount: gAmount.toString(), change_entry: bytesToHex(gChangeEntry),
+        enc_pk: bytesToHex(gEncPk),
+        coin: {
+          nonce: bytesToHex(gCoin.nonce), color: bytesToHex(gCoin.color),
+          value: gCoin.value.toString(), mt_index: gCoin.mt_index.toString(),
+        },
+        nonce: '1',
+        dst_tag: 'midnight:account:grant:auth:k1:v1:withdraw_shielded_to_contract',
+      },
+      pureCircuits.challenge_withdraw_shielded_to_contract_with_grant_k256(
+        gSelf, gPkK256, gid, issuedAt, { bytes: gContract }, gColor, gAmount,
+        gChangeEntry, gEncPk, gCoin, 1n,
+      ),
+      [
+        dstToContractK1, gSelfBytes, kx, ky, gid, u64(issuedAt), gContract, gColor,
+        u128(gAmount), gChangeEntry, gEncPk,
+        gCoin.nonce, gCoin.color, u128(gCoin.value), u64(gCoin.mt_index), u64(1n),
+      ],
+    );
+    // Recipient kind 3 travels in a ContractAddress rather than a
+    // ZswapCoinPublicKey, but both encode as the struct's `bytes` field, so
+    // the twins are separated by their DST alone. Asserted over one and the
+    // same recipient bytes, which is where a collision could actually occur.
+    assert(
+      !Buffer.from(
+        pureCircuits.challenge_withdraw_shielded_with_grant_k256(
+          gSelf, gPkK256, gid, issuedAt, { bytes: gContract }, gColor, gAmount,
+          gChangeEntry, gEncPk, gCoin, 1n,
+        ),
+      ).equals(
+        Buffer.from(
+          pureCircuits.challenge_withdraw_shielded_to_contract_with_grant_k256(
+            gSelf, gPkK256, gid, issuedAt, { bytes: gContract }, gColor, gAmount,
+            gChangeEntry, gEncPk, gCoin, 1n,
+          ),
+        ),
+      ),
+      '[grant] the two k1 shielded twins separate on the DST alone',
+    );
+
+    step('[grant] the v1 grant-twin challenges (§6.3), fixture sig_r = 2·G');
+    // The v1 head inserts the signature nonce point before the key and
+    // closes the preimage with the grinding nonce (MIP-0013 §5.1 and §5.2),
+    // so every v1 challenge is 72 bytes wider than its k1 twin: 64 for the
+    // point element and 8 for the nonce. The fixture nonce point is 2·G and
+    // the fixture grinding nonce is 0; these vectors are hash vectors, not
+    // signatures, so no grinding is performed over them.
+    const gSigR = pureCircuits.compute_public_point_with_jubjub(2n);
+    const rx = fe(gSigR.x);
+    const ry = fe(gSigR.y);
+    const gidV1 = grantIds.v1_slot0;
+    const gidV1Other = grantIds.v1_slot1;
+    /** The six head elements every v1 grant challenge opens with. */
+    const v1Head = (dst: Uint8Array): Uint8Array[] =>
+      [dst, gSelfBytes, rx, ry, jx, jy, gidV1, u64(issuedAt)];
+    /** The head arguments, as the Rust reader consumes them. */
+    const v1HeadArgs = {
+      self: bytesToHex(gSelfBytes), sig_r_x: bytesToHex(rx), sig_r_y: bytesToHex(ry),
+      pk_x: bytesToHex(jx), pk_y: bytesToHex(jy),
+      grant_id: bytesToHex(gidV1), issued_at: issuedAt.toString(),
+    };
+    const hUnshieldedV1 = pin(
+      'pinned', 'challenge_withdraw_unshielded_with_grant_jubjub', '6.3',
+      {
+        ...v1HeadArgs,
+        color: bytesToHex(gColor), amount: gAmount.toString(),
+        recipient: bytesToHex(gUserAddr), nonce: '0', grind_nonce: '0',
+        dst_tag: 'midnight:account:grant:auth:v1:withdraw_unshielded',
+      },
+      pureCircuits.challenge_withdraw_unshielded_with_grant_jubjub(
+        gSelf, gSigR, gPkJubjub, gidV1, issuedAt, gColor, gAmount, { bytes: gUserAddr }, 0n, 0n,
+      ),
+      [
+        ...v1Head(dstOf('midnight:account:grant:auth:v1:withdraw_unshielded')),
+        gColor, u128(gAmount), gUserAddr, u64(0n), u64(0n),
+      ],
+    );
+    const v1CoinArgs = {
+      nonce: bytesToHex(gCoin.nonce), color: bytesToHex(gCoin.color),
+      value: gCoin.value.toString(), mt_index: gCoin.mt_index.toString(),
+    };
+    pin(
+      'pinned', 'challenge_withdraw_shielded_with_grant_jubjub', '6.3',
+      {
+        ...v1HeadArgs,
+        recipient: bytesToHex(gZswapPk), color: bytesToHex(gColor),
+        amount: gAmount.toString(), change_entry: bytesToHex(gChangeEntry),
+        enc_pk: bytesToHex(gEncPk), coin: v1CoinArgs,
+        nonce: '1', grind_nonce: '0',
+        dst_tag: 'midnight:account:grant:auth:v1:withdraw_shielded',
+      },
+      pureCircuits.challenge_withdraw_shielded_with_grant_jubjub(
+        gSelf, gSigR, gPkJubjub, gidV1, issuedAt, { bytes: gZswapPk }, gColor, gAmount,
+        gChangeEntry, gEncPk, gCoin, 1n, 0n,
+      ),
+      [
+        ...v1Head(dstOf('midnight:account:grant:auth:v1:withdraw_shielded')),
+        gZswapPk, gColor, u128(gAmount), gChangeEntry, gEncPk,
+        gCoin.nonce, gCoin.color, u128(gCoin.value), u64(gCoin.mt_index), u64(1n), u64(0n),
+      ],
+    );
+    pin(
+      'pinned', 'challenge_withdraw_shielded_to_contract_with_grant_jubjub', '6.3',
+      {
+        ...v1HeadArgs,
+        recipient: bytesToHex(gContract), color: bytesToHex(gColor),
+        amount: gAmount.toString(), change_entry: bytesToHex(gChangeEntry),
+        enc_pk: bytesToHex(gEncPk), coin: v1CoinArgs,
+        nonce: '1', grind_nonce: '0',
+        dst_tag: 'midnight:account:grant:auth:v1:withdraw_shielded_to_contract',
+      },
+      pureCircuits.challenge_withdraw_shielded_to_contract_with_grant_jubjub(
+        gSelf, gSigR, gPkJubjub, gidV1, issuedAt, { bytes: gContract }, gColor, gAmount,
+        gChangeEntry, gEncPk, gCoin, 1n, 0n,
+      ),
+      [
+        ...v1Head(dstOf('midnight:account:grant:auth:v1:withdraw_shielded_to_contract')),
+        gContract, gColor, u128(gAmount), gChangeEntry, gEncPk,
+        gCoin.nonce, gCoin.color, u128(gCoin.value), u64(gCoin.mt_index), u64(1n), u64(0n),
+      ],
+    );
+
+    step('[grant] the v1 lifecycle challenges (§6.1), in the device tag family');
+    // Device-gated, so these sit in `midnight:account:auth:v1:*` beside the
+    // existing jubjub device challenges and take the device preimage shape:
+    // DST, self, sig_r, pk, ...args, auth_nonce, grind_nonce.
+    const v1LifecycleHead = (tag: string): Uint8Array[] => [dstOf(tag), gSelfBytes, rx, ry, jx, jy];
+    pin(
+      'pinned', 'challenge_issue_grant_with_jubjub', '6.1',
+      {
+        self: bytesToHex(gSelfBytes), sig_r_x: bytesToHex(rx), sig_r_y: bytesToHex(ry),
+        pk_x: bytesToHex(jx), pk_y: bytesToHex(jy),
+        grant_id: bytesToHex(gidV1), scope_digest: bytesToHex(scopeDigest),
+        auth_nonce: '1', grind_nonce: '0',
+        dst_tag: 'midnight:account:auth:v1:issue_grant',
+      },
+      pureCircuits.challenge_issue_grant_with_jubjub(gSelf, gSigR, gPkJubjub, gidV1, scopeDigest, 1n, 0n),
+      [...v1LifecycleHead('midnight:account:auth:v1:issue_grant'), gidV1, scopeDigest, u64(1n), u64(0n)],
+    );
+    pin(
+      'pinned', 'challenge_revoke_grant_with_jubjub', '6.1',
+      {
+        self: bytesToHex(gSelfBytes), sig_r_x: bytesToHex(rx), sig_r_y: bytesToHex(ry),
+        pk_x: bytesToHex(jx), pk_y: bytesToHex(jy),
+        grant_id: bytesToHex(gidV1), auth_nonce: '2', grind_nonce: '0',
+        dst_tag: 'midnight:account:auth:v1:revoke_grant',
+      },
+      pureCircuits.challenge_revoke_grant_with_jubjub(gSelf, gSigR, gPkJubjub, gidV1, 2n, 0n),
+      [...v1LifecycleHead('midnight:account:auth:v1:revoke_grant'), gidV1, u64(2n), u64(0n)],
+    );
+    pin(
+      'pinned', 'challenge_revoke_all_grants_with_jubjub', '6.1',
+      {
+        self: bytesToHex(gSelfBytes), sig_r_x: bytesToHex(rx), sig_r_y: bytesToHex(ry),
+        pk_x: bytesToHex(jx), pk_y: bytesToHex(jy),
+        auth_nonce: '3', grind_nonce: '0',
+        dst_tag: 'midnight:account:auth:v1:revoke_all_grants',
+      },
+      pureCircuits.challenge_revoke_all_grants_with_jubjub(gSelf, gSigR, gPkJubjub, 3n, 0n),
+      [...v1LifecycleHead('midnight:account:auth:v1:revoke_all_grants'), u64(3n), u64(0n)],
+    );
+
+    step('[grant] the pinned preimage widths of §6.3 and §6.1');
+    // Measured from the compiled encoding, not predicted. The MIP's own
+    // figure for the v1 shielded challenge (640) is the one the circuit
+    // gives; the v1 unshielded challenge is 328, its k1 twin's 256 plus the
+    // 64-byte sig_r element and the 8-byte grinding nonce. Every v1 recipe
+    // is exactly 72 bytes wider than its k1 twin for that reason.
+    const pinnedWidths: [string, number][] = [
+      ['challenge_withdraw_unshielded_with_grant_k256', 256],
+      ['challenge_withdraw_shielded_with_grant_k256', 568],
+      ['challenge_withdraw_shielded_to_contract_with_grant_k256', 568],
+      ['challenge_withdraw_unshielded_with_grant_jubjub', 328],
+      ['challenge_withdraw_shielded_with_grant_jubjub', 640],
+      ['challenge_withdraw_shielded_to_contract_with_grant_jubjub', 640],
+      ['challenge_issue_grant_with_k256', 200],
+      ['challenge_revoke_grant_with_k256', 168],
+      ['challenge_revoke_all_grants_with_k256', 136],
+      ['challenge_issue_grant_with_jubjub', 272],
+      ['challenge_revoke_grant_with_jubjub', 240],
+      ['challenge_revoke_all_grants_with_jubjub', 208],
+    ];
+    for (const [circuit, width] of pinnedWidths) {
+      assert(widthOf(circuit) === width, `[grant] ${circuit} preimage is ${width} bytes`);
+    }
+    for (const [k1Circuit, v1Circuit] of [
+      ['challenge_withdraw_unshielded_with_grant_k256', 'challenge_withdraw_unshielded_with_grant_jubjub'],
+      ['challenge_withdraw_shielded_with_grant_k256', 'challenge_withdraw_shielded_with_grant_jubjub'],
+      ['challenge_withdraw_shielded_to_contract_with_grant_k256', 'challenge_withdraw_shielded_to_contract_with_grant_jubjub'],
+      ['challenge_issue_grant_with_k256', 'challenge_issue_grant_with_jubjub'],
+      ['challenge_revoke_grant_with_k256', 'challenge_revoke_grant_with_jubjub'],
+      ['challenge_revoke_all_grants_with_k256', 'challenge_revoke_all_grants_with_jubjub'],
+    ] as const) {
+      assert(
+        widthOf(v1Circuit) - widthOf(k1Circuit) === 72,
+        `[grant] ${v1Circuit} is 72 bytes wider than its k1 twin (sig_r and grind_nonce)`,
+      );
+    }
+
+    step('[grant] the v1 grant and lifecycle families are disjoint from the device families (AUTH-3)');
+    // Every tag family that can meet at one account, evaluated over one and
+    // the same arguments wherever the shapes allow: the three v1 grant
+    // twins, the three v1 lifecycle circuits, and the v1 device circuits
+    // they sit beside. A collision here would let one signature authorise
+    // another operation.
+    {
+      const family = [
+        hUnshieldedV1,
+        pureCircuits.challenge_withdraw_shielded_with_grant_jubjub(
+          gSelf, gSigR, gPkJubjub, gidV1, issuedAt, { bytes: gZswapPk }, gColor, gAmount,
+          gChangeEntry, gEncPk, gCoin, 1n, 0n,
+        ),
+        pureCircuits.challenge_withdraw_shielded_to_contract_with_grant_jubjub(
+          gSelf, gSigR, gPkJubjub, gidV1, issuedAt, { bytes: gZswapPk }, gColor, gAmount,
+          gChangeEntry, gEncPk, gCoin, 1n, 0n,
+        ),
+        pureCircuits.challenge_issue_grant_with_jubjub(gSelf, gSigR, gPkJubjub, gidV1, scopeDigest, 1n, 0n),
+        pureCircuits.challenge_revoke_grant_with_jubjub(gSelf, gSigR, gPkJubjub, gidV1, 1n, 0n),
+        pureCircuits.challenge_revoke_all_grants_with_jubjub(gSelf, gSigR, gPkJubjub, 1n, 0n),
+        pureCircuits.challenge_withdraw_unshielded_with_jubjub(
+          gSelf, gSigR, gPkJubjub, gColor, gAmount, { bytes: gUserAddr }, 1n, 0n,
+        ),
+        pureCircuits.challenge_withdraw_shielded_with_jubjub(
+          gSelf, gSigR, gPkJubjub, { bytes: gZswapPk }, gColor, gAmount, gCoin, 1n, 0n,
+        ),
+        pureCircuits.challenge_withdraw_shielded_to_contract_with_jubjub(
+          gSelf, gSigR, gPkJubjub, { bytes: gZswapPk }, gColor, gAmount, gCoin, 1n, 0n,
+        ),
+        pureCircuits.challenge_add_device_with_jubjub(gSelf, gSigR, gPkJubjub, gidV1, 1n, 0n),
+        pureCircuits.challenge_remove_device_with_jubjub(gSelf, gSigR, gPkJubjub, gidV1, 1n, 0n),
+        pureCircuits.challenge_rotate_enc_key_with_jubjub(gSelf, gSigR, gPkJubjub, gEncPk, 1n, 0n),
+      ].map((d) => bytesToHex(d));
+      assert(
+        new Set(family).size === family.length,
+        `[grant] the ${family.length} v1 challenge families are pairwise distinct (AUTH-3)`,
+      );
+      // Across arms as well: the same call on the k1 grant arm is another
+      // message, so a v1 signature can never be replayed as a k1 one.
+      assert(
+        !family.includes(bytesToHex(hUnshielded)),
+        '[grant] the arm marker separates the k1 and v1 grant challenge families',
+      );
+    }
+
+    step('[grant] a v1 grantee signs a grant challenge, and one signature fits one grant only');
+    {
+      const grantee = JubjubGrantee.generate();
+      const grantId = grantee.grantId(gSelfBytes, gOriginHash, 0n);
+      const gctx: GrantContext = {
+        contractAddress: gSelfBytes, grantId, issuedAt, grantNonce: 0n,
+      };
+      const build = jubjubGrantChallenges.withdrawUnshielded(
+        gctx, grantee.pk, gColor, gAmount, gUserAddr,
+      );
+      const auth = grantee.sign(build);
+      const h = build(auth.sig_r, auth.grind_nonce);
+      const c = bytesToBigIntLE(h);
+      assert(c < JUBJUB_R, '[grant] the ground grant challenge is below r_J (§6.4 step 4)');
+      assert(auth.sig_s < JUBJUB_R, '[grant] s in the scalar domain');
+      const lhs = ecMulGenerator(auth.sig_s);
+      assert(
+        pointsEqual(lhs, ecAdd(auth.sig_r, ecMul(grantee.pk, c))),
+        '[grant] s·G == R + c·pk over the grant challenge (the seam equation, off-circuit)',
+      );
+      assert(
+        !pointsEqual(lhs, ecAdd(auth.sig_r, ecMul(JubjubGrantee.generate().pk, c))),
+        '[grant] the equation fails for another grantee key (non-vacuous verifier, S10)',
+      );
+      /** The equation under a challenge rebuilt over a changed context. */
+      const holdsUnder = (over: Partial<GrantContext>): boolean => {
+        const other = jubjubGrantChallenges.withdrawUnshielded(
+          { ...gctx, ...over }, grantee.pk, gColor, gAmount, gUserAddr,
+        )(auth.sig_r, auth.grind_nonce);
+        return pointsEqual(lhs, ecAdd(auth.sig_r, ecMul(grantee.pk, bytesToBigIntLE(other) % JUBJUB_R)));
+      };
+      assert(
+        !holdsUnder({ grantId: grantee.grantId(gSelfBytes, gOriginHash, 1n) }),
+        '[grant] the signature does not verify under another grant_id (GR-3)',
+      );
+      assert(
+        !holdsUnder({ issuedAt: issuedAt + 1n }),
+        '[grant] the signature does not verify under another issued_at (GR-6)',
+      );
+      assert(
+        !holdsUnder({ grantNonce: 1n }),
+        '[grant] the signature does not verify under the next record nonce (GR-5)',
+      );
+      // The same call on the k1 arm is a different message under a different
+      // DST, so a v1 signature cannot be carried across the arms.
+      const k1Grantee = K256Grantee.generate();
+      const k1Challenge = k256GrantChallenges.withdrawUnshielded(
+        { ...gctx, grantId: k1Grantee.grantId(gSelfBytes, gOriginHash, 0n) },
+        k1Grantee.pk, gColor, gAmount, gUserAddr,
+      );
+      assert(
+        !pointsEqual(lhs, ecAdd(auth.sig_r, ecMul(grantee.pk, bytesToBigIntLE(k1Challenge) % JUBJUB_R))),
+        '[grant] the signature does not verify under the k1 arm’s challenge for the same call',
+      );
+    }
+
+    step('[grant] a pinned v1 grant signature (sk = 1, nonce r = 2, ground)');
+    // The v1 arm has no deterministic nonce rule, so a reproducible vector
+    // has to pin the nonce scalar as well as the key: r = 2 and sk = 1. The
+    // grinding nonce is whatever the loop lands on over these arguments and
+    // is recorded, so the Rust side reproduces it rather than reading it.
+    {
+      const buildPinned = (grind: bigint): Uint8Array =>
+        pureCircuits.challenge_withdraw_unshielded_with_grant_jubjub(
+          gSelf, gSigR, gPkJubjub, gidV1, issuedAt, gColor, gAmount, { bytes: gUserAddr }, 0n, grind,
+        );
+      let grind = 0n;
+      let cPinned = 0n;
+      for (;;) {
+        const value = bytesToBigIntLE(buildPinned(grind));
+        if (value < JUBJUB_R) {
+          cPinned = value;
+          break;
+        }
+        grind++;
+      }
+      const hPinned = buildPinned(grind);
+      // s = r + c·sk with r = 2 and sk = 1.
+      const sPinned = (2n + cPinned) % JUBJUB_R;
+      assert(
+        pointsEqual(ecMulGenerator(sPinned), ecAdd(gSigR, ecMul(gPkJubjub, cPinned))),
+        `[grant] the pinned v1 signature satisfies s·G == R + c·pk (grind_nonce ${grind})`,
+      );
+      assert(
+        !pointsEqual(ecMulGenerator(sPinned), ecAdd(gSigR, ecMul(gPkJubjub, (cPinned + 1n) % JUBJUB_R))),
+        '[grant] the pinned v1 signature fails under a tampered challenge',
+      );
+      gSignatures.push({
+        name: 'withdraw_unshielded_grant_challenge_jubjub',
+        arm: 'v1',
+        scheme: 'schnorr_jubjub_sha256',
+        circuit: 'challenge_withdraw_unshielded_with_grant_jubjub',
+        sk: '1',
+        nonce_scalar: '2',
+        args: {
+          ...v1HeadArgs,
+          color: bytesToHex(gColor), amount: gAmount.toString(),
+          recipient: bytesToHex(gUserAddr), nonce: '0',
+          grind_nonce: grind.toString(),
+        },
+        challenge: bytesToHex(hPinned),
+        grind_nonce: grind.toString(),
+        sig_s: sPinned.toString(),
+        // §3.4 wire form after correction 2: R.x || R.y || s, each a 32-byte
+        // little-endian integer, so 96 bytes and not 64.
+        sig_le: bytesToHex(concat([rx, ry, fe(sPinned)])),
+        note: 'the nonce scalar is pinned because the v1 arm has no deterministic nonce rule',
+      });
+    }
+
     step('[grant] writing the cross-implementation vectors for signer-rs');
     const vectorsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'vectors');
     mkdirSync(vectorsDir, { recursive: true });
     const vectorsFile = path.join(vectorsDir, 'grants-e1.json');
     writeFileSync(vectorsFile, `${JSON.stringify({
-      title: 'Scoped grants, stage-one cross-implementation vectors (Testing item 5)',
+      title: 'Scoped grants, cross-implementation vectors, both grantee arms (Testing item 5)',
       source: 'contract/src/tests/unit-offline.ts, section [grant]',
       recipe: {
         hash: 'SHA-256 over the raw concatenation of fixed-width elements (persistentHash over byte atoms)',
@@ -938,8 +1318,13 @@ await runScenario('unit-offline', async () => {
         change_entry: bytesToHex(gChangeEntry),
         pk_k1: { sk: '1', x_le: bytesToHex(kx), y_le: bytesToHex(ky) },
         pk_v1: { sk: '1', x_le: bytesToHex(jx), y_le: bytesToHex(jy) },
+        sig_r_v1: { scalar: '2', x_le: bytesToHex(rx), y_le: bytesToHex(ry) },
         slots: [0, 1],
       },
+      // Measured from the compiled encoding. Every v1 recipe is its k1
+      // twin plus 72 bytes: the 64-byte sig_r element and the 8-byte
+      // grinding nonce.
+      preimage_widths: Object.fromEntries(pinnedWidths),
       mismatches: [{
         element: 'the v1 (JubJub) key element of the grant_id preimage',
         mip: 'section 3.4 and section 4.3: a 32-byte JubjubPoint encoding, giving a 129-byte preimage',
@@ -949,7 +1334,8 @@ await runScenario('unit-offline', async () => {
       vectors,
       signatures: gSignatures,
     }, null, 2)}\n`);
-    assert(vectors.length === 27, `[grant] ${vectors.length} pinned vectors written to src/tests/vectors/grants-e1.json`);
+    assert(vectors.length === 34, `[grant] ${vectors.length} pinned vectors written to src/tests/vectors/grants-e1.json`);
+    assert(gSignatures.length === 3, `[grant] ${gSignatures.length} pinned signatures written (two k1 envelopes and one v1)`);
   }
 
   // ── Shared ─────────────────────────────────────────────────────────────────

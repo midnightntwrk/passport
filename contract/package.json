@@ -8,6 +8,7 @@
     "compile": "compact compile +0.33.0-rc.2 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.33.0-rc.2 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.33.0-rc.2 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet",
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
+    "test:grants-offline": "tsx src/tests/grants-offline.ts",
     "test:crossimpl-offline": "tsx src/tests/crossimpl-offline.ts",
     "test:auth-crossimpl": "tsx src/tests/auth-crossimpl.ts",
     "test:auth": "tsx src/tests/auth-conformance.ts",

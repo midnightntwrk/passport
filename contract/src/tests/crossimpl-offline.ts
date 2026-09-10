@@ -5,6 +5,12 @@
 // pure circuit of the same arm, and that the signature verifies over that
 // challenge on an independent stack. The on-node half (auth-crossimpl.ts)
 // then submits a Rust-signed withdrawal.
+//
+// The `[k256/grant]`, `[jubjub/grant]`, and `[k256/grant/to_contract]`
+// sections do the same for the scoped-grants seam: origin_hash and
+// grant_id derived by the Rust side alone, then the section 6.3 challenge
+// of each grantee arm recomputed through the compiled pure circuit and the
+// grantee signature verified in the arm's own form.
 
 import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
@@ -155,6 +161,95 @@ export function rustSignWithdrawUnshieldedGrantK256(req: GrantCallParams): K256R
       encoding: 'utf-8',
     }),
   );
+  return {
+    pk: { x: BigInt(out.pk.x), y: BigInt(out.pk.y), identity: false },
+    sig: { r: BigInt(out.sig.r), s: BigInt(out.sig.s) },
+    challenge: out.challenge,
+    digest: out.digest,
+    envelope: out.envelope,
+    originHash: out.origin_hash,
+    grantId: out.grant_id,
+  };
+}
+
+// ── Arm jubjub, grantee seam (scoped grants, MIP sections 4.3, 4.4, 6.3) ─────
+
+/** The shielded-only half of a grant call, which the two shielded twins add
+ *  to the request (the qualified coin is bound by AUTH-10). */
+export interface ShieldedGrantParams {
+  changeEntry: Uint8Array;
+  encPk: Uint8Array;
+  coin: { nonce: Uint8Array; color: Uint8Array; value: bigint; mt_index: bigint };
+}
+
+/** One `sign_grant` request, either arm and any of the three operations. */
+function grantSignRequest(
+  arm: 'jubjub' | 'k256',
+  circuit: string,
+  req: GrantCallParams,
+  shielded?: ShieldedGrantParams,
+): any {
+  const body: Record<string, unknown> = {
+    cmd: 'sign_grant',
+    arm,
+    circuit,
+    sk: req.sk,
+    contract_address: bytesToHex(req.contractAddress),
+    client_id: req.clientId,
+    slot: Number(req.slot),
+    issued_at: req.issuedAt.toString(),
+    grant_nonce: req.grantNonce.toString(),
+    color: bytesToHex(req.color),
+    amount: req.amount.toString(),
+    recipient: bytesToHex(req.recipient),
+  };
+  // The v1 arm refuses the field outright, so it is sent only on k256.
+  if (arm === 'k256') body.envelope = req.envelope ?? 0;
+  if (shielded !== undefined) {
+    body.change_entry = bytesToHex(shielded.changeEntry);
+    body.enc_pk = bytesToHex(shielded.encPk);
+    body.coin = {
+      nonce: bytesToHex(shielded.coin.nonce),
+      color: bytesToHex(shielded.coin.color),
+      value: shielded.coin.value.toString(),
+      mt_index: shielded.coin.mt_index.toString(),
+    };
+  }
+  return JSON.parse(execFileSync(SIGNER_BIN, [], { input: JSON.stringify(body), encoding: 'utf-8' }));
+}
+
+export interface JubjubRustGrantSignature extends JubjubRustSignature {
+  /** hex; SHA-256(pad(32, origin tag) || client_id bytes). */
+  originHash: string;
+  /** hex; the identity the Rust side recomputed from the presented key. */
+  grantId: string;
+}
+
+/** The Rust signer signs a `withdraw_unshielded_with_grant_jubjub` call as a
+ *  v1 grantee: it derives origin_hash and grant_id itself, samples the
+ *  signature nonce, grinds the section 6.3 challenge that commits to that
+ *  nonce, and signs the ground challenge. */
+export function rustSignWithdrawUnshieldedGrantJubjub(req: GrantCallParams): JubjubRustGrantSignature {
+  const out = grantSignRequest('jubjub', 'withdraw_unshielded', req);
+  return {
+    pk: { x: BigInt(out.pk.x), y: BigInt(out.pk.y) },
+    sig_r: { x: BigInt(out.sig_r.x), y: BigInt(out.sig_r.y) },
+    sig_s: BigInt(out.sig_s),
+    grind_nonce: BigInt(out.grind_nonce),
+    challenge: out.challenge,
+    originHash: out.origin_hash,
+    grantId: out.grant_id,
+  };
+}
+
+/** The Rust signer signs a `withdraw_shielded_to_contract_with_grant_k256`
+ *  call, the third k1 twin: the same thirteen declared members as the
+ *  shielded twin under its own DST. */
+export function rustSignShieldedToContractGrantK256(
+  req: GrantCallParams,
+  shielded: ShieldedGrantParams,
+): K256RustGrantSignature {
+  const out = grantSignRequest('k256', 'withdraw_shielded_to_contract', req, shielded);
   return {
     pk: { x: BigInt(out.pk.x), y: BigInt(out.pk.y), identity: false },
     sig: { r: BigInt(out.sig.r), s: BigInt(out.sig.s) },
@@ -334,5 +429,133 @@ if (isMain) {
       gOtherDigest, gPkBytes, { prehash: false, lowS: false },
     )) throw new Error('grantee signature verified under another grant_id');
     console.log('  ✓ the same signature does not verify under the next slot’s grant_id (GR-3)');
+
+    step('[jubjub/grant] Rust grantee keygen and signature over a withdraw_unshielded grant call');
+    // The v1 grantee seam. The Rust side samples its own signature nonce,
+    // derives origin_hash and grant_id, and grinds the section 6.3
+    // challenge that commits to that nonce; every value it emits is then
+    // recomputed through the compiled pure circuits.
+    const jGrantee = rustKeygenJubjub();
+    const jGrantNonce = 4n;
+    const jIssuedAt = 9n;
+    const jg = rustSignWithdrawUnshieldedGrantJubjub({
+      sk: jGrantee.sk, contractAddress, color, amount, recipient, authNonce: 0n,
+      clientId, slot, issuedAt: jIssuedAt, grantNonce: jGrantNonce,
+    });
+
+    step('[jubjub/grant] origin_hash (§4.4): Rust vs the by-hand recipe');
+    if (jg.originHash !== bytesToHex(originHash)) {
+      throw new Error(`origin_hash mismatch:\n  rust:    ${jg.originHash}\n  by hand: ${bytesToHex(originHash)}`);
+    }
+    console.log(`  ✓ identical: ${jg.originHash.slice(0, 32)}…`);
+
+    step('[jubjub/grant] grant_id (§4.3): Rust stack vs the contract’s pure circuit');
+    const jgId = pureCircuits.derive_grant_id_with_jubjub(
+      { bytes: contractAddress }, jg.pk, originHash, slot,
+    );
+    if (bytesToHex(jgId) !== jg.grantId) {
+      throw new Error(`grant_id mismatch:\n  rust:     ${jg.grantId}\n  contract: ${bytesToHex(jgId)}`);
+    }
+    console.log(`  ✓ identical: ${jg.grantId.slice(0, 32)}…`);
+
+    step('[jubjub/grant] challenge (§6.3): Rust stack vs the contract’s pure circuit');
+    // The challenge commits to the nonce point and the grinding nonce, so
+    // both travel in the response and the preimage is rebuilt from it.
+    const jgExpected = pureCircuits.challenge_withdraw_unshielded_with_grant_jubjub(
+      { bytes: contractAddress }, jg.sig_r, jg.pk, jgId, jIssuedAt, color, amount,
+      { bytes: recipient }, jGrantNonce, jg.grind_nonce,
+    );
+    if (bytesToHex(jgExpected) !== jg.challenge) {
+      throw new Error(`grant challenge mismatch:\n  rust:     ${jg.challenge}\n  contract: ${bytesToHex(jgExpected)}`);
+    }
+    console.log(`  ✓ identical: ${jg.challenge.slice(0, 32)}… (grind_nonce ${jg.grind_nonce})`);
+
+    step('[jubjub/grant] the Schnorr signature verifies over the ground challenge');
+    const jgC = bytesToBigIntLE(jgExpected);
+    if (!(jgC < JUBJUB_R)) throw new Error('ground grant challenge not below r_J');
+    if (!(jg.sig_s < JUBJUB_R)) throw new Error('s outside the scalar domain');
+    const jgLhs = ecMulGenerator(jg.sig_s);
+    const jgRhs = ecAdd(jg.sig_r, ecMul(jg.pk, jgC));
+    if (jgLhs.x !== jgRhs.x || jgLhs.y !== jgRhs.y) {
+      throw new Error('Rust grantee signature does not satisfy s·G == R + c·pk over the grant challenge');
+    }
+    console.log('  ✓ s·G == R + c·pk with the Rust-produced grantee signature');
+    // GR-3: the same key at the next slot is another grantee, so its
+    // challenge is another message and the signature does not carry over.
+    const jgOtherId = pureCircuits.derive_grant_id_with_jubjub(
+      { bytes: contractAddress }, jg.pk, originHash, slot + 1n,
+    );
+    const jgOtherC = bytesToBigIntLE(
+      pureCircuits.challenge_withdraw_unshielded_with_grant_jubjub(
+        { bytes: contractAddress }, jg.sig_r, jg.pk, jgOtherId, jIssuedAt, color, amount,
+        { bytes: recipient }, jGrantNonce, jg.grind_nonce,
+      ),
+    ) % JUBJUB_R;
+    const jgOtherRhs = ecAdd(jg.sig_r, ecMul(jg.pk, jgOtherC));
+    if (jgLhs.x === jgOtherRhs.x && jgLhs.y === jgOtherRhs.y) {
+      throw new Error('grantee signature verified under another grant_id');
+    }
+    console.log('  ✓ the same signature does not satisfy the equation under the next slot’s grant_id (GR-3)');
+
+    step('[k256/grant/to_contract] the third k1 twin: Rust challenge vs the pure circuit');
+    // Recipient kind 3. The declared members are the shielded twin's, so
+    // this exercises the DST and nothing else in the recipe, over a
+    // qualified coin and a change entry the Rust side hashes element by
+    // element (AUTH-10).
+    const tcGrantee = rustKeygenK256();
+    const shielded = {
+      changeEntry: new Uint8Array(randomBytes(192)),
+      encPk: new Uint8Array(randomBytes(32)),
+      coin: {
+        nonce: new Uint8Array(randomBytes(32)),
+        color,
+        value: 4_000n,
+        mt_index: 17n,
+      },
+    };
+    const tcRecipient = new Uint8Array(randomBytes(32));
+    const tc = rustSignShieldedToContractGrantK256(
+      {
+        sk: tcGrantee.sk, contractAddress, color, amount, recipient: tcRecipient,
+        authNonce: 0n, clientId, slot, issuedAt, grantNonce,
+      },
+      shielded,
+    );
+    const tcId = pureCircuits.derive_grant_id_with_k256(
+      { bytes: contractAddress }, tc.pk, K256_ENVELOPE_NONE, originHash, slot,
+    );
+    if (bytesToHex(tcId) !== tc.grantId) {
+      throw new Error(`grant_id mismatch:\n  rust:     ${tc.grantId}\n  contract: ${bytesToHex(tcId)}`);
+    }
+    const tcExpected = pureCircuits.challenge_withdraw_shielded_to_contract_with_grant_k256(
+      { bytes: contractAddress }, tc.pk, tcId, issuedAt, { bytes: tcRecipient }, color, amount,
+      shielded.changeEntry, shielded.encPk, shielded.coin, grantNonce,
+    );
+    if (bytesToHex(tcExpected) !== tc.challenge) {
+      throw new Error(`to_contract grant challenge mismatch:\n  rust:     ${tc.challenge}\n  contract: ${bytesToHex(tcExpected)}`);
+    }
+    console.log(`  ✓ identical: ${tc.challenge.slice(0, 32)}…`);
+    // The twin's DST is the whole difference from the shielded twin, so the
+    // shielded recipe over the same arguments must give another challenge.
+    const tcShielded = pureCircuits.challenge_withdraw_shielded_with_grant_k256(
+      { bytes: contractAddress }, tc.pk, tcId, issuedAt, { bytes: tcRecipient }, color, amount,
+      shielded.changeEntry, shielded.encPk, shielded.coin, grantNonce,
+    );
+    if (bytesToHex(tcShielded) === tc.challenge) {
+      throw new Error('the two shielded k1 grant twins share a challenge');
+    }
+    console.log('  ✓ the shielded twin over the same arguments gives another challenge (AUTH-3)');
+    const tcDigest = pureCircuits.envelope_digest(K256_ENVELOPE_NONE, tcExpected);
+    if (tc.digest !== bytesToHex(tcDigest)) {
+      throw new Error('Rust to_contract digest differs from envelope_digest(0, challenge)');
+    }
+    const tcOk = secp256k1.verify(
+      new secp256k1.Signature(tc.sig.r, tc.sig.s).toBytes('compact'),
+      tcDigest,
+      secp256k1.Point.fromAffine({ x: tc.pk.x, y: tc.pk.y }).toBytes(false),
+      { prehash: false, lowS: false },
+    );
+    if (!tcOk) throw new Error('Rust to_contract signature does not verify over the envelope-0 digest');
+    console.log('  ✓ verify(envelope_digest(0, challenge), (r, s), pk) with the Rust-produced signature');
   });
 }

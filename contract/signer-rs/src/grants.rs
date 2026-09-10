@@ -1,5 +1,5 @@
 //! Scoped grants: identity, commitments, the scope digest, and the grant
-//! challenges of the k256 grantee arm.
+//! challenges of both grantee arms, k256 and jubjub.
 //!
 //! Built from the published byte recipes of the scoped-grants MIP (sections
 //! 4.3 to 4.5 for the derivations, 6.3 for the challenges), not from the
@@ -24,15 +24,19 @@
 //! `.planning/grants-e1/verify-rs.md`.
 
 use anyhow::{anyhow, bail, Context, Result};
+use ff::Field as _;
+use group::Group as _;
 use k256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
 use k256::ecdsa::Signature;
+use midnight_curves::{Fr as JubjubScalar, JubjubSubgroup};
 use midnight_transient_crypto::curve::EmbeddedGroupAffine;
 use serde::Deserialize;
 use serde_json::json;
 
 use crate::{
-    bytes32_from_hex, circuit_dst, el_bytes, el_point, el_uint, envelope_digest,
-    k256_point_json, k256_signing_key_from_hex, persistent_hash, pk_coords_le, Arm, Element,
+    bytes32_from_hex, circuit_dst, el_bytes, el_point, el_uint, envelope_digest, hash_below_r,
+    jubjub_point_json, jubjub_scalar_from_hex, jubjub_scalar_to_hex, k256_point_json,
+    k256_signing_key_from_hex, persistent_hash, pk_coords_le, Arm, Element,
 };
 use midnight_base_crypto::fab::{AlignmentAtom, AlignmentSegment, ValueAtom};
 
@@ -500,15 +504,264 @@ pub fn challenge_revoke_all_grants_k256(
     ])
 }
 
+// ── Section 6.3: grant challenge preimages, v1 grantee arm ────────────────
+//
+// The v1 head differs from the ECDSA head in two ways the MIP fixes: the
+// signature nonce point `sig_r` precedes the key (a Schnorr message commits
+// to its own nonce, MIP-0013 section 5.1), and a grinding nonce closes the
+// preimage so that the challenge can be read as a JubJub scalar (section
+// 6.4 step 4). Both points are 64-byte elements, two field atoms each, as
+// section 3.4 states after correction 1.
+
+/// The head of every v1 grant challenge:
+/// `DST || self || sig_r || pk || grant_id || u64(issued_at)`, 232 bytes.
+#[derive(Clone, Debug)]
+pub struct GrantCallHeadJubjub {
+    pub self_addr: [u8; 32],
+    /// The signature nonce point `R = r·G`, bound into the message.
+    pub sig_r: EmbeddedGroupAffine,
+    /// The grantee key `pk = sk·G`.
+    pub pk: EmbeddedGroupAffine,
+    pub grant_id: [u8; 32],
+    /// `auth_nonce` as advanced by the issuing call, read from the record.
+    pub issued_at: u64,
+    /// The record's `nonce`, read from the record, hashed before the
+    /// grinding nonce.
+    pub record_nonce: u64,
+}
+
+fn head_elements_jubjub(head: &GrantCallHeadJubjub, dst: &[u8; 32]) -> Result<Vec<Element>> {
+    Ok(vec![
+        el_bytes(32, dst),
+        el_bytes(32, &head.self_addr),
+        el_point(&head.sig_r)?,
+        el_point(&head.pk)?,
+        el_bytes(32, &head.grant_id),
+        el_uint(8, u128::from(head.issued_at)),
+    ])
+}
+
+/// `challenge_withdraw_unshielded_with_grant_jubjub`: eleven members,
+/// thirteen atoms, 328 preimage bytes. The operation arguments follow in
+/// declaration order (`color`, `amount`, `recipient`), there is no witness
+/// value, and the record nonce then the grinding nonce close the preimage.
+pub fn challenge_withdraw_unshielded_with_grant_jubjub(
+    head: &GrantCallHeadJubjub,
+    color: &[u8; 32],
+    amount: u128,
+    recipient: &[u8; 32],
+    grind_nonce: u64,
+) -> Result<[u8; 32]> {
+    let dst = grant_dst("", "withdraw_unshielded")?;
+    let mut elements = head_elements_jubjub(head, &dst)?;
+    elements.push(el_bytes(32, color));
+    elements.push(el_uint(16, amount));
+    elements.push(el_bytes(32, recipient));
+    elements.push(el_uint(8, u128::from(head.record_nonce)));
+    elements.push(el_uint(8, u128::from(grind_nonce)));
+    persistent_hash(&elements)
+}
+
+/// The shielded v1 grant challenge: fourteen declared members (the
+/// qualified coin is one of them), seventeen encoded elements, nineteen
+/// atoms, and 640 preimage bytes. As on the k256 arm `operation` selects
+/// the DST only, so this covers `withdraw_shielded_to_contract` unchanged.
+// The argument list mirrors the circuit's own, in declaration order, which
+// is what makes the preimage auditable against section 6.3; grouping them
+// into a struct would hide the order the recipe fixes.
+#[allow(clippy::too_many_arguments)]
+pub fn challenge_withdraw_shielded_with_grant_jubjub(
+    operation: &str,
+    head: &GrantCallHeadJubjub,
+    recipient: &[u8; 32],
+    color: &[u8; 32],
+    amount: u128,
+    change_entry: &[u8; 192],
+    enc_pk: &[u8; 32],
+    coin: &QualifiedCoin,
+    grind_nonce: u64,
+) -> Result<[u8; 32]> {
+    if operation == "withdraw_unshielded" {
+        bail!("withdraw_unshielded is not a shielded grant twin");
+    }
+    let dst = grant_dst("", operation)?;
+    let mut elements = head_elements_jubjub(head, &dst)?;
+    elements.push(el_bytes(32, recipient));
+    elements.push(el_bytes(32, color));
+    elements.push(el_uint(16, amount));
+    elements.push(el_bytes(192, change_entry));
+    elements.push(el_bytes(32, enc_pk));
+    elements.push(el_bytes(32, &coin.nonce));
+    elements.push(el_bytes(32, &coin.color));
+    elements.push(el_uint(16, coin.value));
+    elements.push(el_uint(8, u128::from(coin.mt_index)));
+    elements.push(el_uint(8, u128::from(head.record_nonce)));
+    elements.push(el_uint(8, u128::from(grind_nonce)));
+    persistent_hash(&elements)
+}
+
+// ── Section 6.1: the lifecycle challenges on the jubjub device arm ────────
+//
+// Device-gated, so they live in the existing jubjub device tag family
+// (`midnight:account:auth:v1:<circuit>`, hashed from a 64-byte pad by
+// `circuit_dst`) and take the existing jubjub device preimage shape:
+// `DST || self || sig_r || pk || ...args || u64(auth_nonce) ||
+// u64(grind_nonce)`. The whole plaintext scope enters `issue_grant` through
+// the single `scope_digest` element, exactly as on the k256 device arm.
+
+fn lifecycle_head_jubjub(
+    circuit: &str,
+    self_addr: &[u8; 32],
+    sig_r: &EmbeddedGroupAffine,
+    pk: &EmbeddedGroupAffine,
+) -> Result<Vec<Element>> {
+    Ok(vec![
+        el_bytes(32, &circuit_dst(&Arm::Jubjub, circuit)?),
+        el_bytes(32, self_addr),
+        el_point(sig_r)?,
+        el_point(pk)?,
+    ])
+}
+
+/// `challenge_issue_grant_with_jubjub`: eight members, ten atoms, 272
+/// preimage bytes, argument list `[grant_id, scope_digest]`.
+pub fn challenge_issue_grant_jubjub(
+    self_addr: &[u8; 32],
+    sig_r: &EmbeddedGroupAffine,
+    pk: &EmbeddedGroupAffine,
+    grant_id: &[u8; 32],
+    scope_digest: &[u8; 32],
+    auth_nonce: u64,
+    grind_nonce: u64,
+) -> Result<[u8; 32]> {
+    let mut elements = lifecycle_head_jubjub("issue_grant", self_addr, sig_r, pk)?;
+    elements.push(el_bytes(32, grant_id));
+    elements.push(el_bytes(32, scope_digest));
+    elements.push(el_uint(8, u128::from(auth_nonce)));
+    elements.push(el_uint(8, u128::from(grind_nonce)));
+    persistent_hash(&elements)
+}
+
+/// `challenge_revoke_grant_with_jubjub`: seven members, nine atoms, 240
+/// preimage bytes.
+pub fn challenge_revoke_grant_jubjub(
+    self_addr: &[u8; 32],
+    sig_r: &EmbeddedGroupAffine,
+    pk: &EmbeddedGroupAffine,
+    grant_id: &[u8; 32],
+    auth_nonce: u64,
+    grind_nonce: u64,
+) -> Result<[u8; 32]> {
+    let mut elements = lifecycle_head_jubjub("revoke_grant", self_addr, sig_r, pk)?;
+    elements.push(el_bytes(32, grant_id));
+    elements.push(el_uint(8, u128::from(auth_nonce)));
+    elements.push(el_uint(8, u128::from(grind_nonce)));
+    persistent_hash(&elements)
+}
+
+/// `challenge_revoke_all_grants_with_jubjub`: six members, eight atoms, 208
+/// preimage bytes; no argument beyond the seam's own.
+pub fn challenge_revoke_all_grants_jubjub(
+    self_addr: &[u8; 32],
+    sig_r: &EmbeddedGroupAffine,
+    pk: &EmbeddedGroupAffine,
+    auth_nonce: u64,
+    grind_nonce: u64,
+) -> Result<[u8; 32]> {
+    let mut elements = lifecycle_head_jubjub("revoke_all_grants", self_addr, sig_r, pk)?;
+    elements.push(el_uint(8, u128::from(auth_nonce)));
+    elements.push(el_uint(8, u128::from(grind_nonce)));
+    persistent_hash(&elements)
+}
+
+// ── The v1 grinding and signing loop ──────────────────────────────────────
+
+/// One ground JubJub Schnorr signature: the challenge that came out of the
+/// grinding loop, the grinding nonce that produced it, the scalar `s`, and
+/// how many candidates were hashed.
+pub struct GroundSignature {
+    pub s: JubjubScalar,
+    pub grind_nonce: u64,
+    pub challenge: [u8; 32],
+    pub attempts: u64,
+}
+
+/// Grind and sign, given a closure that rebuilds the challenge at a
+/// candidate grinding nonce (MIP section 6.4 step 4, and the authorisation
+/// MIP section 5.2 for the rule itself).
+///
+/// The nonce scalar `r` is the caller's, so that `sig_r = r·G` is already
+/// inside the preimage the closure builds; only `grind_nonce` moves. The
+/// signature is self-verified against `s·G == R + c·pk` before it is
+/// returned, exactly as the device path does.
+fn grind_and_sign(
+    sk: &JubjubScalar,
+    r: &JubjubScalar,
+    challenge_at: impl Fn(u64) -> Result<[u8; 32]>,
+) -> Result<GroundSignature> {
+    let mut grind_nonce: u64 = 0;
+    let challenge = loop {
+        let h = challenge_at(grind_nonce)?;
+        if hash_below_r(&h) {
+            break h;
+        }
+        grind_nonce += 1;
+        anyhow::ensure!(grind_nonce < 10_000, "grinding did not converge");
+    };
+
+    let c: Option<JubjubScalar> = JubjubScalar::from_bytes(&challenge).into();
+    let c = c.ok_or_else(|| anyhow!("ground challenge not a scalar"))?;
+    let s = r + c * sk;
+
+    let pk = JubjubSubgroup::generator() * sk;
+    let sig_r = JubjubSubgroup::generator() * r;
+    anyhow::ensure!(
+        JubjubSubgroup::generator() * s == sig_r + pk * c,
+        "self-verification failed"
+    );
+
+    Ok(GroundSignature {
+        s,
+        grind_nonce,
+        challenge,
+        attempts: grind_nonce + 1,
+    })
+}
+
+/// A fresh nonce scalar and its point, the pair every v1 signature opens
+/// with.
+fn fresh_nonce() -> (JubjubScalar, EmbeddedGroupAffine) {
+    let r = JubjubScalar::random(&mut rand::rngs::OsRng);
+    let sig_r = EmbeddedGroupAffine(JubjubSubgroup::generator() * r);
+    (r, sig_r)
+}
+
+/// The four fields a v1 signature adds to a response, in the shape
+/// `sign_jubjub` already emits them.
+fn ground_signature_json(
+    sig_r: &EmbeddedGroupAffine,
+    ground: &GroundSignature,
+) -> Result<serde_json::Value> {
+    Ok(json!({
+        "sig_r": jubjub_point_json(sig_r)?,
+        "sig_s": jubjub_scalar_to_hex(&ground.s),
+        "grind_nonce": ground.grind_nonce.to_string(),
+        "challenge": hex::encode(ground.challenge),
+        "attempts": ground.attempts,
+    }))
+}
+
 // ── The sign_grant request path ────────────────────────────────────────────
 
-/// `{"cmd":"sign_grant","arm":"k256", ...}`: one grant call signed by a
-/// grantee key on the k256 arm. The signature covers
-/// `envelope_digest(envelope, challenge)`, never the challenge itself.
+/// `{"cmd":"sign_grant","arm":"k256"|"jubjub", ...}`: one grant call signed
+/// by a grantee key. On the k256 arm the signature covers
+/// `envelope_digest(envelope, challenge)`, never the challenge itself; on
+/// the jubjub arm it is a ground Schnorr signature over the challenge, and
+/// the response carries the nonce point and the grinding nonce that the
+/// challenge itself commits to.
 #[derive(Deserialize)]
 pub struct GrantSignRequest {
-    /// Optional and only ever `"k256"`: the jubjub grantee arm is not
-    /// implemented here.
+    /// `"k256"` (the default) or `"jubjub"`.
     #[serde(default)]
     pub arm: Option<String>,
     /// `withdraw_unshielded`, `withdraw_shielded`, or
@@ -519,7 +772,9 @@ pub struct GrantSignRequest {
     /// prefix, `1` the dApp-connector `signData` prefix. Note that an
     /// envelope-1 grantee is restricted to `read` scopes by section 3.2, so
     /// a withdraw signed under envelope 1 is a negative vector rather than
-    /// a conforming call.
+    /// a conforming call. The `v1` arm carries no envelope member at all
+    /// (section 3.4), so this arm refuses a non-zero value rather than
+    /// accepting one it would silently drop.
     #[serde(default)]
     pub envelope: u8,
     /// The account's contract address, 64 hex.
@@ -566,21 +821,88 @@ fn bytes_n_from_hex<const N: usize>(s: &str) -> Result<[u8; N]> {
         .map_err(|_| anyhow!("expected {N} bytes, got {}", bytes.len()))
 }
 
+/// The shielded-only half of a grant call's arguments.
+struct ShieldedGrantArgs {
+    change_entry: [u8; 192],
+    enc_pk: [u8; 32],
+    coin: QualifiedCoin,
+}
+
+/// The operation arguments of a grant call, parsed once so that the v1
+/// grinding loop does not re-parse them per candidate. `shielded` is
+/// present exactly when the circuit is not `withdraw_unshielded`; the
+/// operation name itself is validated by the challenge recipe.
+struct GrantCallArgs {
+    color: [u8; 32],
+    amount: u128,
+    recipient: [u8; 32],
+    shielded: Option<Box<ShieldedGrantArgs>>,
+}
+
+fn grant_call_args(req: &GrantSignRequest) -> Result<GrantCallArgs> {
+    let color = bytes32_from_hex(&req.color)?;
+    let amount: u128 = req.amount.parse().context("bad amount")?;
+    let recipient = bytes32_from_hex(&req.recipient)?;
+    let shielded = if req.circuit == "withdraw_unshielded" {
+        None
+    } else {
+        let change_entry: [u8; 192] = bytes_n_from_hex(
+            req.change_entry
+                .as_deref()
+                .ok_or_else(|| anyhow!("a shielded grant twin needs change_entry"))?,
+        )?;
+        let enc_pk = bytes32_from_hex(
+            req.enc_pk
+                .as_deref()
+                .ok_or_else(|| anyhow!("a shielded grant twin needs enc_pk"))?,
+        )?;
+        let coin_json = req
+            .coin
+            .as_ref()
+            .ok_or_else(|| anyhow!("a shielded grant twin needs the qualified coin"))?;
+        Some(Box::new(ShieldedGrantArgs {
+            change_entry,
+            enc_pk,
+            coin: QualifiedCoin {
+                nonce: bytes32_from_hex(&coin_json.nonce)?,
+                color: bytes32_from_hex(&coin_json.color)?,
+                value: coin_json.value.parse().context("bad coin value")?,
+                mt_index: coin_json.mt_index.parse().context("bad coin mt_index")?,
+            },
+        }))
+    };
+    Ok(GrantCallArgs {
+        color,
+        amount,
+        recipient,
+        shielded,
+    })
+}
+
+/// The `origin_hash` of a request, from either of the two accepted forms.
+fn request_origin(client_id: &Option<String>, given: &Option<String>) -> Result<[u8; 32]> {
+    match (client_id, given) {
+        (Some(id), None) => origin_hash(id),
+        (None, Some(h)) => bytes32_from_hex(h),
+        _ => bail!("give exactly one of client_id and origin_hash"),
+    }
+}
+
 pub fn sign_grant(req: &GrantSignRequest) -> Result<serde_json::Value> {
     match req.arm.as_deref() {
-        None | Some("k256") => {}
+        None | Some("k256") => sign_grant_k256(req),
+        Some("jubjub") => sign_grant_jubjub(req),
         Some(other) => bail!("the grantee arm {other} is not implemented in this signer"),
     }
+}
+
+fn sign_grant_k256(req: &GrantSignRequest) -> Result<serde_json::Value> {
     let sk = k256_signing_key_from_hex(&req.sk)?;
     let vk = sk.verifying_key();
     let (pk_x_le, pk_y_le) = pk_coords_le(vk)?;
     let self_addr = bytes32_from_hex(&req.contract_address)?;
 
-    let origin = match (&req.client_id, &req.origin_hash) {
-        (Some(id), None) => origin_hash(id)?,
-        (None, Some(h)) => bytes32_from_hex(h)?,
-        _ => bail!("give exactly one of client_id and origin_hash"),
-    };
+    let origin = request_origin(&req.client_id, &req.origin_hash)?;
 
     let grant_id = grant_id_k256(
         &self_addr,
@@ -600,43 +922,25 @@ pub fn sign_grant(req: &GrantSignRequest) -> Result<serde_json::Value> {
         record_nonce: req.grant_nonce.parse().context("bad grant_nonce")?,
     };
 
-    let color = bytes32_from_hex(&req.color)?;
-    let amount: u128 = req.amount.parse().context("bad amount")?;
-    let recipient = bytes32_from_hex(&req.recipient)?;
+    let args = grant_call_args(req)?;
 
-    let challenge = if req.circuit == "withdraw_unshielded" {
-        challenge_withdraw_unshielded_with_grant_k256(&head, &color, amount, &recipient)?
-    } else {
-        let change_entry: [u8; 192] = bytes_n_from_hex(
-            req.change_entry
-                .as_deref()
-                .ok_or_else(|| anyhow!("a shielded grant twin needs change_entry"))?,
-        )?;
-        let enc_pk = bytes32_from_hex(
-            req.enc_pk
-                .as_deref()
-                .ok_or_else(|| anyhow!("a shielded grant twin needs enc_pk"))?,
-        )?;
-        let coin_json = req
-            .coin
-            .as_ref()
-            .ok_or_else(|| anyhow!("a shielded grant twin needs the qualified coin"))?;
-        let coin = QualifiedCoin {
-            nonce: bytes32_from_hex(&coin_json.nonce)?,
-            color: bytes32_from_hex(&coin_json.color)?,
-            value: coin_json.value.parse().context("bad coin value")?,
-            mt_index: coin_json.mt_index.parse().context("bad coin mt_index")?,
-        };
-        challenge_withdraw_shielded_with_grant_k256(
+    let challenge = match &args.shielded {
+        None => challenge_withdraw_unshielded_with_grant_k256(
+            &head,
+            &args.color,
+            args.amount,
+            &args.recipient,
+        )?,
+        Some(shielded) => challenge_withdraw_shielded_with_grant_k256(
             &req.circuit,
             &head,
-            &recipient,
-            &color,
-            amount,
-            &change_entry,
-            &enc_pk,
-            &coin,
-        )?
+            &args.recipient,
+            &args.color,
+            args.amount,
+            &shielded.change_entry,
+            &shielded.enc_pk,
+            &shielded.coin,
+        )?,
     };
 
     // The signature covers the envelope digest, exactly as on the device
@@ -662,6 +966,66 @@ pub fn sign_grant(req: &GrantSignRequest) -> Result<serde_json::Value> {
             "r": format!("0x{}", hex::encode(sig_r)),
             "s": format!("0x{}", hex::encode(sig_s)),
         },
+    }))
+}
+
+/// The v1 grantee half: a ground Schnorr signature over the section 6.3
+/// challenge. The challenge cannot be built before the nonce point exists,
+/// and cannot be read as a scalar before it is ground, so nonce, grinding,
+/// and signature are one operation and the response carries all three.
+fn sign_grant_jubjub(req: &GrantSignRequest) -> Result<serde_json::Value> {
+    if req.envelope != 0 {
+        bail!("the v1 grantee arm carries no envelope member; omit the field");
+    }
+    let sk = jubjub_scalar_from_hex(&req.sk)?;
+    let pk = EmbeddedGroupAffine(JubjubSubgroup::generator() * sk);
+    let self_addr = bytes32_from_hex(&req.contract_address)?;
+    let origin = request_origin(&req.client_id, &req.origin_hash)?;
+    let grant_id = grant_id_jubjub(&self_addr, &pk, &origin, req.slot)?;
+
+    let (r, sig_r) = fresh_nonce();
+    let head = GrantCallHeadJubjub {
+        self_addr,
+        sig_r,
+        pk,
+        grant_id,
+        issued_at: req.issued_at.parse().context("bad issued_at")?,
+        record_nonce: req.grant_nonce.parse().context("bad grant_nonce")?,
+    };
+    let args = grant_call_args(req)?;
+
+    let ground = grind_and_sign(&sk, &r, |grind_nonce| match &args.shielded {
+        None => challenge_withdraw_unshielded_with_grant_jubjub(
+            &head,
+            &args.color,
+            args.amount,
+            &args.recipient,
+            grind_nonce,
+        ),
+        Some(shielded) => challenge_withdraw_shielded_with_grant_jubjub(
+            &req.circuit,
+            &head,
+            &args.recipient,
+            &args.color,
+            args.amount,
+            &shielded.change_entry,
+            &shielded.enc_pk,
+            &shielded.coin,
+            grind_nonce,
+        ),
+    })?;
+
+    Ok(json!({
+        "arm": "jubjub",
+        "circuit": req.circuit,
+        "pk": jubjub_point_json(&pk)?,
+        "origin_hash": hex::encode(origin),
+        "grant_id": hex::encode(grant_id),
+        "challenge": hex::encode(ground.challenge),
+        "sig_r": jubjub_point_json(&sig_r)?,
+        "sig_s": jubjub_scalar_to_hex(&ground.s),
+        "grind_nonce": ground.grind_nonce.to_string(),
+        "attempts": ground.attempts,
     }))
 }
 
@@ -694,20 +1058,25 @@ pub struct DeriveGrantRequest {
     /// beside the issue-time one at zero.
     #[serde(default)]
     pub spent: Option<String>,
-    /// Optional: the k256 device key that will sign the lifecycle calls,
-    /// with the `auth_nonce` the device seam will read. When given, the
-    /// three lifecycle challenges of section 6.1 (`issue_grant` over
+    /// Optional: the device key that will sign the lifecycle calls, with
+    /// the `auth_nonce` the device seam will read. When given, the three
+    /// lifecycle challenges of section 6.1 (`issue_grant` over
     /// `[grant_id, scope_digest]`, `revoke_grant` over `[grant_id]`,
     /// `revoke_all_grants`) are emitted at that nonce, which is what the
-    /// authoriser hands the device to sign.
+    /// authoriser hands the device to sign. The device arm follows `arm`:
+    /// a k256 request emits the three challenges as bare digests under
+    /// `lifecycle_challenges`, a jubjub request emits three signed triples
+    /// under `lifecycle_signatures`, because a v1 challenge cannot exist
+    /// before its nonce point and its grinding nonce do.
     #[serde(default)]
     pub device: Option<DeviceJson>,
 }
 
 #[derive(Deserialize)]
 pub struct DeviceJson {
-    /// The k256 device signing key (the lifecycle circuits are device-gated
-    /// on the k256 device arm in this stage).
+    /// The device signing key, on the same arm as `arm`: a secp256k1
+    /// scalar for `k256`, a JubJub scalar for `jubjub`, big-endian hex in
+    /// both cases.
     pub sk: String,
     /// The account's `auth_nonce` as the device seam will read it.
     pub auth_nonce: String,
@@ -750,11 +1119,7 @@ fn parse_reserved(value: &str) -> Result<u128> {
 pub fn derive_grant(req: &DeriveGrantRequest) -> Result<serde_json::Value> {
     let self_addr = bytes32_from_hex(&req.contract_address)?;
     let scope_salt = bytes32_from_hex(&req.scope_salt)?;
-    let origin = match (&req.client_id, &req.origin_hash) {
-        (Some(id), None) => origin_hash(id)?,
-        (None, Some(h)) => bytes32_from_hex(h)?,
-        _ => bail!("give exactly one of client_id and origin_hash"),
-    };
+    let origin = request_origin(&req.client_id, &req.origin_hash)?;
 
     let scope = GrantScopePlain {
         op_withdraw_unshielded: req.scope.op_withdraw_unshielded,
@@ -787,10 +1152,8 @@ pub fn derive_grant(req: &DeriveGrantRequest) -> Result<serde_json::Value> {
             )
         }
         Some("jubjub") => {
-            let sk = crate::jubjub_scalar_from_hex(&req.sk)?;
-            let pk = EmbeddedGroupAffine(
-                <midnight_curves::JubjubSubgroup as group::Group>::generator() * sk,
-            );
+            let sk = jubjub_scalar_from_hex(&req.sk)?;
+            let pk = EmbeddedGroupAffine(JubjubSubgroup::generator() * sk);
             // The identity over the point and over its wire form (x || y,
             // canonical little-endian coordinates) are one recipe; both are
             // computed and must agree.
@@ -811,7 +1174,7 @@ pub fn derive_grant(req: &DeriveGrantRequest) -> Result<serde_json::Value> {
             if over_point != over_wire {
                 bail!("v1 grant_id over the point and over its wire form disagree");
             }
-            ("jubjub", over_point, crate::jubjub_point_json(&pk)?)
+            ("jubjub", over_point, jubjub_point_json(&pk)?)
         }
         Some(other) => bail!("unknown grantee arm {other}"),
     };
@@ -845,28 +1208,97 @@ pub fn derive_grant(req: &DeriveGrantRequest) -> Result<serde_json::Value> {
     }
     out["grant_dsts"] = serde_json::Value::Object(dsts);
 
-    // The lifecycle challenges the device signs, on the k256 device arm.
+    // The lifecycle challenges the device signs, on the device arm that
+    // matches the grantee arm of the request.
     if let Some(device) = &req.device {
-        let device_sk = k256_signing_key_from_hex(&device.sk)?;
-        let device_vk = device_sk.verifying_key();
-        let (dx, dy) = pk_coords_le(device_vk)?;
         let auth_nonce: u64 = device.auth_nonce.parse().context("bad auth_nonce")?;
         let sd = scope_digest(&scope_salt, &scope)?;
-        out["device_pk"] = k256_point_json(device_vk)?;
-        out["lifecycle_challenges"] = json!({
-            "auth_nonce": auth_nonce,
-            "issue_grant": hex::encode(challenge_issue_grant_k256(
-                &self_addr, &dx, &dy, &grant_id, &sd, auth_nonce,
-            )?),
-            "revoke_grant": hex::encode(challenge_revoke_grant_k256(
-                &self_addr, &dx, &dy, &grant_id, auth_nonce,
-            )?),
-            "revoke_all_grants": hex::encode(challenge_revoke_all_grants_k256(
-                &self_addr, &dx, &dy, auth_nonce,
-            )?),
-        });
+        if arm == "k256" {
+            let device_sk = k256_signing_key_from_hex(&device.sk)?;
+            let device_vk = device_sk.verifying_key();
+            let (dx, dy) = pk_coords_le(device_vk)?;
+            out["device_pk"] = k256_point_json(device_vk)?;
+            out["lifecycle_challenges"] = json!({
+                "auth_nonce": auth_nonce,
+                "issue_grant": hex::encode(challenge_issue_grant_k256(
+                    &self_addr, &dx, &dy, &grant_id, &sd, auth_nonce,
+                )?),
+                "revoke_grant": hex::encode(challenge_revoke_grant_k256(
+                    &self_addr, &dx, &dy, &grant_id, auth_nonce,
+                )?),
+                "revoke_all_grants": hex::encode(challenge_revoke_all_grants_k256(
+                    &self_addr, &dx, &dy, auth_nonce,
+                )?),
+            });
+        } else {
+            let device_sk = jubjub_scalar_from_hex(&device.sk)?;
+            let device_pk = EmbeddedGroupAffine(JubjubSubgroup::generator() * device_sk);
+            out["device_pk"] = jubjub_point_json(&device_pk)?;
+            out["lifecycle_signatures"] = sign_lifecycle_jubjub(
+                &self_addr,
+                &device_sk,
+                &device_pk,
+                &grant_id,
+                &sd,
+                auth_nonce,
+            )?;
+        }
     }
     Ok(out)
+}
+
+/// The three signed lifecycle triples of the jubjub device arm, each with
+/// its own fresh nonce point and its own grinding nonce. A v1 challenge
+/// commits to both, so the authoriser cannot hand a device a bare digest
+/// the way the k256 arm does: it hands over the whole signature.
+fn sign_lifecycle_jubjub(
+    self_addr: &[u8; 32],
+    device_sk: &JubjubScalar,
+    device_pk: &EmbeddedGroupAffine,
+    grant_id: &[u8; 32],
+    scope_digest: &[u8; 32],
+    auth_nonce: u64,
+) -> Result<serde_json::Value> {
+    let mut out = serde_json::Map::new();
+    out.insert("auth_nonce".into(), json!(auth_nonce));
+
+    let (r, sig_r) = fresh_nonce();
+    let ground = grind_and_sign(device_sk, &r, |grind_nonce| {
+        challenge_issue_grant_jubjub(
+            self_addr,
+            &sig_r,
+            device_pk,
+            grant_id,
+            scope_digest,
+            auth_nonce,
+            grind_nonce,
+        )
+    })?;
+    out.insert("issue_grant".into(), ground_signature_json(&sig_r, &ground)?);
+
+    let (r, sig_r) = fresh_nonce();
+    let ground = grind_and_sign(device_sk, &r, |grind_nonce| {
+        challenge_revoke_grant_jubjub(
+            self_addr,
+            &sig_r,
+            device_pk,
+            grant_id,
+            auth_nonce,
+            grind_nonce,
+        )
+    })?;
+    out.insert("revoke_grant".into(), ground_signature_json(&sig_r, &ground)?);
+
+    let (r, sig_r) = fresh_nonce();
+    let ground = grind_and_sign(device_sk, &r, |grind_nonce| {
+        challenge_revoke_all_grants_jubjub(self_addr, &sig_r, device_pk, auth_nonce, grind_nonce)
+    })?;
+    out.insert(
+        "revoke_all_grants".into(),
+        ground_signature_json(&sig_r, &ground)?,
+    );
+
+    Ok(serde_json::Value::Object(out))
 }
 
 // ── A minimal SHA-256 writer for the one off-chain, unpadded derivation ────
@@ -1731,12 +2163,17 @@ mod tests {
             enc_pk: None,
             coin: None,
         };
-        // A shielded twin needs the change entry, enc_pk, and the coin.
+        // A shielded twin needs the change entry, enc_pk, and the coin, on
+        // either arm.
         assert!(sign_grant(&base()).is_err());
-        // The jubjub grantee arm is stage-two work.
         let mut jubjub = base();
         jubjub.arm = Some("jubjub".into());
         assert!(sign_grant(&jubjub).is_err());
+        // No third grantee arm is implemented: r1 is a later stage.
+        let mut p256 = base();
+        p256.circuit = "withdraw_unshielded".into();
+        p256.arm = Some("p256".into());
+        assert!(sign_grant(&p256).is_err());
         // An unknown envelope id aborts, as it does in the circuit.
         let mut bad_envelope = base();
         bad_envelope.circuit = "withdraw_unshielded".into();
@@ -1977,6 +2414,599 @@ mod tests {
         );
     }
 
+    // ── The v1 grantee and lifecycle recipes ──────────────────────────────
+    //
+    // Every v1 preimage carries two point elements, and a point element is
+    // two `Field` atoms written as canonical 32-byte little-endian
+    // coordinates (`a_field_atom_is_thirty_two_little_endian_bytes` above),
+    // so the by-hand oracle is the same plain SHA-256 over concatenated
+    // fixed-width elements as on the k1 arm, with `x || y` for each point.
+
+    /// `[sk]G` on the JubJub prime-order subgroup.
+    fn jubjub_point(sk: u64) -> EmbeddedGroupAffine {
+        EmbeddedGroupAffine(JubjubSubgroup::generator() * JubjubScalar::from(sk))
+    }
+
+    /// The 64 preimage bytes of a point element: `x || y`, each canonical
+    /// little-endian.
+    fn point_le(p: &EmbeddedGroupAffine) -> Vec<u8> {
+        let mut v = p.x().unwrap().as_le_bytes();
+        v.extend_from_slice(&p.y().unwrap().as_le_bytes());
+        assert_eq!(v.len(), 64);
+        v
+    }
+
+    /// The grantee key, its nonce point, and the resulting head, over the
+    /// fixed keys the v1 tests share: grantee `sk = 5`, nonce `r = 3`.
+    fn jubjub_head() -> (EmbeddedGroupAffine, EmbeddedGroupAffine, GrantCallHeadJubjub) {
+        let pk = jubjub_point(5);
+        let sig_r = jubjub_point(3);
+        let grant_id = grant_id_jubjub(&SELF, &pk, &origin(), 0).unwrap();
+        (
+            pk,
+            sig_r,
+            GrantCallHeadJubjub {
+                self_addr: SELF,
+                sig_r,
+                pk,
+                grant_id,
+                issued_at: ISSUED_AT,
+                record_nonce: RECORD_NONCE,
+            },
+        )
+    }
+
+    const GRIND: u64 = 9;
+
+    #[test]
+    fn unshielded_v1_grant_challenge_matches_the_by_hand_derivation() {
+        let (pk, sig_r, h) = jubjub_head();
+        let via_fab = challenge_withdraw_unshielded_with_grant_jubjub(
+            &h, &COLOR, AMOUNT, &RECIPIENT, GRIND,
+        )
+        .unwrap();
+        let parts = [
+            grant_dst("", "withdraw_unshielded").unwrap().to_vec(),
+            SELF.to_vec(),
+            point_le(&sig_r),
+            point_le(&pk),
+            h.grant_id.to_vec(),
+            u8le(ISSUED_AT),
+            COLOR.to_vec(),
+            u16le(AMOUNT),
+            RECIPIENT.to_vec(),
+            u8le(RECORD_NONCE),
+            u8le(GRIND),
+        ];
+        // Eleven members, thirteen atoms, 328 preimage bytes: the k1
+        // unshielded 256 plus the 64-byte nonce point and the grinding
+        // nonce.
+        assert_eq!(parts.len(), 11);
+        assert_eq!(parts.iter().map(Vec::len).sum::<usize>(), 328);
+        assert_eq!(via_fab, sha256_concat(&parts));
+
+        // The nonce point, the record nonce, and the grinding nonce are all
+        // bound, so no two grinding attempts and no two submissions share a
+        // challenge.
+        assert_ne!(
+            via_fab,
+            challenge_withdraw_unshielded_with_grant_jubjub(
+                &h, &COLOR, AMOUNT, &RECIPIENT, GRIND + 1
+            )
+            .unwrap()
+        );
+        let mut other_r = h.clone();
+        other_r.sig_r = jubjub_point(4);
+        assert_ne!(
+            via_fab,
+            challenge_withdraw_unshielded_with_grant_jubjub(
+                &other_r, &COLOR, AMOUNT, &RECIPIENT, GRIND
+            )
+            .unwrap()
+        );
+        let mut next = h.clone();
+        next.record_nonce = RECORD_NONCE + 1;
+        assert_ne!(
+            via_fab,
+            challenge_withdraw_unshielded_with_grant_jubjub(
+                &next, &COLOR, AMOUNT, &RECIPIENT, GRIND
+            )
+            .unwrap()
+        );
+        // The arm is separated by its DST marker, which is empty on v1.
+        let (x_le, y_le) = pk_le();
+        let k1_head = GrantCallHead {
+            self_addr: SELF,
+            pk_x_le: x_le,
+            pk_y_le: y_le,
+            grant_id: h.grant_id,
+            issued_at: ISSUED_AT,
+            record_nonce: RECORD_NONCE,
+        };
+        assert_ne!(
+            via_fab,
+            challenge_withdraw_unshielded_with_grant_k256(&k1_head, &COLOR, AMOUNT, &RECIPIENT)
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn shielded_v1_grant_challenge_matches_the_by_hand_derivation() {
+        let (pk, sig_r, h) = jubjub_head();
+        let coin = QualifiedCoin {
+            nonce: COIN_NONCE,
+            color: COLOR,
+            value: COIN_VALUE,
+            mt_index: COIN_MT_INDEX,
+        };
+        let via_fab = challenge_withdraw_shielded_with_grant_jubjub(
+            "withdraw_shielded",
+            &h,
+            &RECIPIENT,
+            &COLOR,
+            AMOUNT,
+            &CHANGE_ENTRY,
+            &ENC_PK,
+            &coin,
+            GRIND,
+        )
+        .unwrap();
+        let parts = [
+            grant_dst("", "withdraw_shielded").unwrap().to_vec(),
+            SELF.to_vec(),
+            point_le(&sig_r),
+            point_le(&pk),
+            h.grant_id.to_vec(),
+            u8le(ISSUED_AT),
+            RECIPIENT.to_vec(),
+            COLOR.to_vec(),
+            u16le(AMOUNT),
+            CHANGE_ENTRY.to_vec(),
+            ENC_PK.to_vec(),
+            COIN_NONCE.to_vec(),
+            COLOR.to_vec(),
+            u16le(COIN_VALUE),
+            u8le(COIN_MT_INDEX),
+            u8le(RECORD_NONCE),
+            u8le(GRIND),
+        ];
+        // Fourteen declared members (the qualified coin is one), seventeen
+        // encoded elements, nineteen atoms, 640 preimage bytes: the k1
+        // shielded 568 plus the nonce point and the grinding nonce, which
+        // is what MIP section 6.3 predicts for this arm.
+        assert_eq!(parts.len(), 17);
+        assert_eq!(parts.iter().map(Vec::len).sum::<usize>(), 640);
+        assert_eq!(via_fab, sha256_concat(&parts));
+
+        // The DST is the only difference to the to-contract twin, and the
+        // unshielded operation is not a twin of this shape at all.
+        let to_contract = challenge_withdraw_shielded_with_grant_jubjub(
+            "withdraw_shielded_to_contract",
+            &h,
+            &RECIPIENT,
+            &COLOR,
+            AMOUNT,
+            &CHANGE_ENTRY,
+            &ENC_PK,
+            &coin,
+            GRIND,
+        )
+        .unwrap();
+        assert_ne!(via_fab, to_contract);
+        assert!(challenge_withdraw_shielded_with_grant_jubjub(
+            "withdraw_unshielded",
+            &h,
+            &RECIPIENT,
+            &COLOR,
+            AMOUNT,
+            &CHANGE_ENTRY,
+            &ENC_PK,
+            &coin,
+            GRIND,
+        )
+        .is_err());
+
+        // Every witness value is bound element by element (AUTH-10).
+        let sign = |c: &QualifiedCoin, change: &[u8; 192], enc: &[u8; 32]| {
+            challenge_withdraw_shielded_with_grant_jubjub(
+                "withdraw_shielded",
+                &h,
+                &RECIPIENT,
+                &COLOR,
+                AMOUNT,
+                change,
+                enc,
+                c,
+                GRIND,
+            )
+            .unwrap()
+        };
+        for mutated in [
+            QualifiedCoin { nonce: [0x89; 32], ..coin.clone() },
+            QualifiedCoin { color: [0x45; 32], ..coin.clone() },
+            QualifiedCoin { value: COIN_VALUE + 1, ..coin.clone() },
+            QualifiedCoin { mt_index: COIN_MT_INDEX + 1, ..coin.clone() },
+        ] {
+            assert_ne!(via_fab, sign(&mutated, &CHANGE_ENTRY, &ENC_PK));
+        }
+        let mut other_change = CHANGE_ENTRY;
+        other_change[191] = 0x67;
+        assert_ne!(via_fab, sign(&coin, &other_change, &ENC_PK));
+        assert_ne!(via_fab, sign(&coin, &CHANGE_ENTRY, &[0x78; 32]));
+    }
+
+    #[test]
+    fn v1_lifecycle_challenges_match_the_by_hand_derivation_in_the_device_family() {
+        let device_pk = jubjub_point(7);
+        let sig_r = jubjub_point(3);
+        let grant_id = grant_id_jubjub(&SELF, &jubjub_point(5), &origin(), 0).unwrap();
+        let sd = scope_digest(&SALT, &spend_scope()).unwrap();
+        let dst = |circuit: &str| {
+            sha256_concat(&[pad_to(
+                64,
+                format!("midnight:account:auth:v1:{circuit}").as_bytes(),
+            )])
+        };
+
+        let issue = challenge_issue_grant_jubjub(
+            &SELF, &sig_r, &device_pk, &grant_id, &sd, 1, GRIND,
+        )
+        .unwrap();
+        let parts = [
+            dst("issue_grant").to_vec(),
+            SELF.to_vec(),
+            point_le(&sig_r),
+            point_le(&device_pk),
+            grant_id.to_vec(),
+            sd.to_vec(),
+            u8le(1),
+            u8le(GRIND),
+        ];
+        assert_eq!(parts.iter().map(Vec::len).sum::<usize>(), 272);
+        assert_eq!(issue, sha256_concat(&parts));
+
+        let revoke =
+            challenge_revoke_grant_jubjub(&SELF, &sig_r, &device_pk, &grant_id, 2, GRIND).unwrap();
+        let parts = [
+            dst("revoke_grant").to_vec(),
+            SELF.to_vec(),
+            point_le(&sig_r),
+            point_le(&device_pk),
+            grant_id.to_vec(),
+            u8le(2),
+            u8le(GRIND),
+        ];
+        assert_eq!(parts.iter().map(Vec::len).sum::<usize>(), 240);
+        assert_eq!(revoke, sha256_concat(&parts));
+
+        let revoke_all =
+            challenge_revoke_all_grants_jubjub(&SELF, &sig_r, &device_pk, 3, GRIND).unwrap();
+        let parts = [
+            dst("revoke_all_grants").to_vec(),
+            SELF.to_vec(),
+            point_le(&sig_r),
+            point_le(&device_pk),
+            u8le(3),
+            u8le(GRIND),
+        ];
+        assert_eq!(parts.iter().map(Vec::len).sum::<usize>(), 208);
+        assert_eq!(revoke_all, sha256_concat(&parts));
+
+        // Each preimage is 72 bytes longer than its k1 twin (200, 168, 136):
+        // the 64-byte nonce point and the grinding nonce. The two arms never
+        // share a challenge, because the DST carries the arm marker.
+        let (x_le, y_le) = pk_le();
+        assert_ne!(
+            issue,
+            challenge_issue_grant_k256(&SELF, &x_le, &y_le, &grant_id, &sd, 1).unwrap()
+        );
+    }
+
+    #[test]
+    fn the_v1_lifecycle_and_grant_families_are_pairwise_distinct_under_equal_arguments() {
+        // One key, one nonce point, one grant_id, one nonce value, one
+        // grinding nonce: only the DST separates the four families (AUTH-3),
+        // and the two lifecycle circuits that take an argument list are
+        // separated from the one that does not.
+        let pk = jubjub_point(5);
+        let sig_r = jubjub_point(3);
+        let grant_id = grant_id_jubjub(&SELF, &pk, &origin(), 0).unwrap();
+        let sd = scope_digest(&SALT, &spend_scope()).unwrap();
+        let nonce = 4u64;
+
+        let head = GrantCallHeadJubjub {
+            self_addr: SELF,
+            sig_r,
+            pk,
+            grant_id,
+            issued_at: nonce,
+            record_nonce: nonce,
+        };
+        let coin = QualifiedCoin {
+            nonce: COIN_NONCE,
+            color: COLOR,
+            value: COIN_VALUE,
+            mt_index: COIN_MT_INDEX,
+        };
+        let shielded = |operation: &str| {
+            challenge_withdraw_shielded_with_grant_jubjub(
+                operation,
+                &head,
+                &RECIPIENT,
+                &COLOR,
+                AMOUNT,
+                &CHANGE_ENTRY,
+                &ENC_PK,
+                &coin,
+                GRIND,
+            )
+            .unwrap()
+        };
+        let all = [
+            challenge_issue_grant_jubjub(&SELF, &sig_r, &pk, &grant_id, &sd, nonce, GRIND)
+                .unwrap(),
+            challenge_revoke_grant_jubjub(&SELF, &sig_r, &pk, &grant_id, nonce, GRIND).unwrap(),
+            challenge_revoke_all_grants_jubjub(&SELF, &sig_r, &pk, nonce, GRIND).unwrap(),
+            challenge_withdraw_unshielded_with_grant_jubjub(
+                &head, &COLOR, AMOUNT, &RECIPIENT, GRIND,
+            )
+            .unwrap(),
+            shielded("withdraw_shielded"),
+            shielded("withdraw_shielded_to_contract"),
+        ];
+        for i in 0..all.len() {
+            for j in (i + 1)..all.len() {
+                assert_ne!(all[i], all[j], "families {i} and {j} collide");
+            }
+        }
+    }
+
+    /// The emitted point coordinates come back as big-endian hex, the shape
+    /// `jubjub_point_json` publishes; a verifier reads them back through
+    /// the curve's own constructor, which checks the point is on the curve.
+    fn point_from_json(v: &serde_json::Value) -> EmbeddedGroupAffine {
+        let coord = |k: &str| {
+            let mut b = hex::decode(v[k].as_str().unwrap().trim_start_matches("0x")).unwrap();
+            b.reverse();
+            midnight_transient_crypto::curve::Fr::from_le_bytes(&b).unwrap()
+        };
+        EmbeddedGroupAffine::new(coord("x"), coord("y")).unwrap()
+    }
+
+    /// `s·G == R + c·pk` over the ground challenge, read back from the
+    /// response alone.
+    fn verify_ground_response(out: &serde_json::Value) {
+        let pk = point_from_json(&out["pk"]);
+        let sig_r = point_from_json(&out["sig_r"]);
+        let s = jubjub_scalar_from_hex(out["sig_s"].as_str().unwrap()).unwrap();
+        let challenge: [u8; 32] = hex::decode(out["challenge"].as_str().unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap();
+        // The grinding rule: the challenge reads as a JubJub scalar.
+        assert!(hash_below_r(&challenge));
+        let c: Option<JubjubScalar> = JubjubScalar::from_bytes(&challenge).into();
+        let c = c.unwrap();
+        assert_eq!(
+            JubjubSubgroup::generator() * s,
+            sig_r.0 + pk.0 * c,
+            "the Schnorr equation does not hold over the emitted values"
+        );
+        // attempts counts the candidate that succeeded.
+        assert_eq!(
+            out["attempts"].as_u64().unwrap(),
+            out["grind_nonce"].as_str().unwrap().parse::<u64>().unwrap() + 1
+        );
+    }
+
+    #[test]
+    fn sign_grant_on_the_v1_arm_grinds_and_self_verifies_with_a_fixed_sk() {
+        let base = || GrantSignRequest {
+            arm: Some("jubjub".into()),
+            circuit: "withdraw_unshielded".into(),
+            // The fixed grantee key of the v1 recipe tests, [5]G.
+            sk: "0x05".into(),
+            envelope: 0,
+            contract_address: hex::encode(SELF),
+            client_id: Some(CLIENT_ID.into()),
+            origin_hash: None,
+            slot: 0,
+            issued_at: ISSUED_AT.to_string(),
+            grant_nonce: RECORD_NONCE.to_string(),
+            color: hex::encode(COLOR),
+            amount: AMOUNT.to_string(),
+            recipient: hex::encode(RECIPIENT),
+            change_entry: Some(hex::encode(CHANGE_ENTRY)),
+            enc_pk: Some(hex::encode(ENC_PK)),
+            coin: Some(QualifiedCoinJson {
+                nonce: hex::encode(COIN_NONCE),
+                color: hex::encode(COLOR),
+                value: COIN_VALUE.to_string(),
+                mt_index: COIN_MT_INDEX.to_string(),
+            }),
+        };
+
+        for circuit in GRANT_OPERATIONS {
+            let mut req = base();
+            req.circuit = circuit.into();
+            let out = sign_grant(&req).unwrap();
+            assert_eq!(out["arm"].as_str().unwrap(), "jubjub");
+            assert_eq!(out["circuit"].as_str().unwrap(), circuit);
+            assert!(out.get("digest").is_none(), "v1 signs the challenge itself");
+            assert!(out.get("envelope").is_none());
+            verify_ground_response(&out);
+
+            // The identity is the v1 one over the presented key, and the
+            // challenge is the recipe's over the emitted nonce point and
+            // grinding nonce.
+            let pk = jubjub_point(5);
+            let grant_id = grant_id_jubjub(&SELF, &pk, &origin(), 0).unwrap();
+            assert_eq!(out["grant_id"].as_str().unwrap(), hex::encode(grant_id));
+            assert_eq!(out["origin_hash"].as_str().unwrap(), hex::encode(origin()));
+            let head = GrantCallHeadJubjub {
+                self_addr: SELF,
+                sig_r: point_from_json(&out["sig_r"]),
+                pk,
+                grant_id,
+                issued_at: ISSUED_AT,
+                record_nonce: RECORD_NONCE,
+            };
+            let grind: u64 = out["grind_nonce"].as_str().unwrap().parse().unwrap();
+            let coin = QualifiedCoin {
+                nonce: COIN_NONCE,
+                color: COLOR,
+                value: COIN_VALUE,
+                mt_index: COIN_MT_INDEX,
+            };
+            let expected = if circuit == "withdraw_unshielded" {
+                challenge_withdraw_unshielded_with_grant_jubjub(
+                    &head, &COLOR, AMOUNT, &RECIPIENT, grind,
+                )
+                .unwrap()
+            } else {
+                challenge_withdraw_shielded_with_grant_jubjub(
+                    circuit,
+                    &head,
+                    &RECIPIENT,
+                    &COLOR,
+                    AMOUNT,
+                    &CHANGE_ENTRY,
+                    &ENC_PK,
+                    &coin,
+                    grind,
+                )
+                .unwrap()
+            };
+            assert_eq!(
+                out["challenge"].as_str().unwrap(),
+                hex::encode(expected),
+                "{circuit}"
+            );
+        }
+
+        // Two calls with the same arguments differ: the nonce is fresh.
+        let a = sign_grant(&base()).unwrap();
+        let b = sign_grant(&base()).unwrap();
+        assert_ne!(a["challenge"], b["challenge"]);
+        assert_ne!(a["sig_s"], b["sig_s"]);
+
+        // A shielded twin still needs its witness material.
+        let mut bare = base();
+        bare.circuit = "withdraw_shielded".into();
+        bare.change_entry = None;
+        assert!(sign_grant(&bare).is_err());
+        // The v1 arm carries no envelope member, so a non-zero one is
+        // refused rather than silently dropped.
+        let mut enveloped = base();
+        enveloped.envelope = 1;
+        assert!(sign_grant(&enveloped).is_err());
+        // An origin_hash given directly is accepted here too.
+        let mut direct = base();
+        direct.client_id = None;
+        direct.origin_hash = Some(hex::encode(origin()));
+        verify_ground_response(&sign_grant(&direct).unwrap());
+    }
+
+    #[test]
+    fn derive_grant_signs_the_three_lifecycle_calls_on_the_v1_arm() {
+        let req = DeriveGrantRequest {
+            arm: Some("jubjub".into()),
+            sk: "0x05".into(),
+            envelope: 0,
+            contract_address: hex::encode(SELF),
+            client_id: Some(CLIENT_ID.into()),
+            origin_hash: None,
+            slot: 0,
+            scope_salt: hex::encode(SALT),
+            scope: ScopeJson {
+                op_withdraw_unshielded: true,
+                op_withdraw_shielded: true,
+                op_withdraw_shielded_to_contract: false,
+                read: true,
+                color: hex::encode(COLOR),
+                recipient_kind: RECIPIENT_KIND,
+                recipient: hex::encode(RECIPIENT),
+                max_coin_value: MAX_COIN_VALUE.to_string(),
+                per_call_cap: PER_CALL_CAP.to_string(),
+                cap: CAP.to_string(),
+                expires_at: EXPIRES_AT.to_string(),
+                rp_id_hash: hex::encode([0u8; 32]),
+                read_pk_hash: hex::encode(READ_PK_HASH),
+                window_len: String::new(),
+                window_cap: String::new(),
+            },
+            spent: None,
+            // The device key is a JubJub scalar on this arm, [7]G.
+            device: Some(DeviceJson {
+                sk: "0x07".into(),
+                auth_nonce: "7".into(),
+            }),
+        };
+        let out = derive_grant(&req).unwrap();
+        assert!(
+            out.get("lifecycle_challenges").is_none(),
+            "a v1 challenge cannot be published before its nonce point"
+        );
+        let device_pk = jubjub_point(7);
+        assert_eq!(out["device_pk"], jubjub_point_json(&device_pk).unwrap());
+
+        let grant_id = grant_id_jubjub(&SELF, &jubjub_point(5), &origin(), 0).unwrap();
+        let sd = scope_digest(&SALT, &spend_scope()).unwrap();
+        let signed = &out["lifecycle_signatures"];
+        assert_eq!(signed["auth_nonce"].as_u64().unwrap(), 7);
+
+        let mut challenges = Vec::new();
+        for circuit in ["issue_grant", "revoke_grant", "revoke_all_grants"] {
+            let triple = &signed[circuit];
+            let sig_r = point_from_json(&triple["sig_r"]);
+            let grind: u64 = triple["grind_nonce"].as_str().unwrap().parse().unwrap();
+            let expected = match circuit {
+                "issue_grant" => challenge_issue_grant_jubjub(
+                    &SELF, &sig_r, &device_pk, &grant_id, &sd, 7, grind,
+                ),
+                "revoke_grant" => {
+                    challenge_revoke_grant_jubjub(&SELF, &sig_r, &device_pk, &grant_id, 7, grind)
+                }
+                _ => challenge_revoke_all_grants_jubjub(&SELF, &sig_r, &device_pk, 7, grind),
+            }
+            .unwrap();
+            assert_eq!(
+                triple["challenge"].as_str().unwrap(),
+                hex::encode(expected),
+                "{circuit}"
+            );
+
+            // Each triple verifies as a signature by the device key.
+            let response = json!({
+                "pk": jubjub_point_json(&device_pk).unwrap(),
+                "sig_r": triple["sig_r"],
+                "sig_s": triple["sig_s"],
+                "challenge": triple["challenge"],
+                "grind_nonce": triple["grind_nonce"],
+                "attempts": triple["attempts"],
+            });
+            verify_ground_response(&response);
+            challenges.push(triple["challenge"].as_str().unwrap().to_string());
+        }
+        // Three fresh nonces, so three distinct challenges even where the
+        // argument lists would otherwise collide.
+        challenges.sort();
+        challenges.dedup();
+        assert_eq!(challenges.len(), 3);
+
+        // The k256 arm still publishes bare digests and no signature.
+        let mut k1 = req;
+        k1.arm = Some("k256".into());
+        k1.sk = "0x01".into();
+        k1.device = Some(DeviceJson {
+            sk: "0x02".into(),
+            auth_nonce: "7".into(),
+        });
+        let out = derive_grant(&k1).unwrap();
+        assert!(out.get("lifecycle_signatures").is_none());
+        assert!(out["lifecycle_challenges"]["issue_grant"].is_string());
+    }
+
     /// The cross-implementation vector file the TypeScript suite writes
     /// (`npm run test:unit`, section `[grant]`) is recomputed here from its
     /// own arguments through this crate's independent recipe implementation.
@@ -2016,6 +3046,21 @@ mod tests {
             assert_eq!(h32(&doc["fixtures"]["pk_v1"]["x_le"]), x);
             assert_eq!(h32(&doc["fixtures"]["pk_v1"]["y_le"]), y);
         }
+        {
+            use group::Group as _;
+            use midnight_curves::JubjubSubgroup;
+            let scalar: u64 = doc["fixtures"]["sig_r_v1"]["scalar"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap();
+            let sig_r =
+                EmbeddedGroupAffine(JubjubSubgroup::generator() * JubjubScalar::from(scalar));
+            let x: [u8; 32] = sig_r.x().unwrap().as_le_bytes().try_into().unwrap();
+            let y: [u8; 32] = sig_r.y().unwrap().as_le_bytes().try_into().unwrap();
+            assert_eq!(h32(&doc["fixtures"]["sig_r_v1"]["x_le"]), x);
+            assert_eq!(h32(&doc["fixtures"]["sig_r_v1"]["y_le"]), y);
+        }
         assert_eq!(
             origin_hash(doc["fixtures"]["origin"].as_str().unwrap()).unwrap(),
             h32(&doc["fixtures"]["origin_hash"])
@@ -2030,7 +3075,52 @@ mod tests {
             record_nonce: uint(&a["nonce"]) as u64,
         };
 
+        // A v1 vector carries its two points as wire coordinates, so the
+        // reader rebuilds the curve points from the vector's own arguments
+        // rather than from a scalar it happens to know. `new` checks the
+        // pair is on the curve, which is also the wire-form rule of section
+        // 3.4 after correction 1.
+        let point_le = |x: &Value, y: &Value| -> EmbeddedGroupAffine {
+            use midnight_transient_crypto::curve::Fr;
+            let fx = Fr::from_le_bytes(&h32(x)).expect("canonical x coordinate");
+            let fy = Fr::from_le_bytes(&h32(y)).expect("canonical y coordinate");
+            EmbeddedGroupAffine::new(fx, fy).expect("the coordinates are an on-curve point")
+        };
+        let head_jubjub = |a: &Value| GrantCallHeadJubjub {
+            self_addr: h32(&a["self"]),
+            sig_r: point_le(&a["sig_r_x"], &a["sig_r_y"]),
+            pk: point_le(&a["pk_x"], &a["pk_y"]),
+            grant_id: h32(&a["grant_id"]),
+            issued_at: uint(&a["issued_at"]) as u64,
+            record_nonce: uint(&a["nonce"]) as u64,
+        };
+        // The three arguments the shielded twins add, in the shape both
+        // arms consume them.
+        let shielded_args = |a: &Value| -> ([u8; 192], [u8; 32], QualifiedCoin) {
+            let change_entry: [u8; 192] = hex::decode(a["change_entry"].as_str().unwrap())
+                .unwrap()
+                .try_into()
+                .unwrap();
+            let coin = QualifiedCoin {
+                nonce: h32(&a["coin"]["nonce"]),
+                color: h32(&a["coin"]["color"]),
+                value: uint(&a["coin"]["value"]),
+                mt_index: uint(&a["coin"]["mt_index"]) as u64,
+            };
+            (change_entry, h32(&a["enc_pk"]), coin)
+        };
+        // The two shielded twins of an arm share a recipe and differ in
+        // their DST alone, which the operation name selects.
+        let operation_of = |circuit: &str| {
+            if circuit.contains("to_contract") {
+                "withdraw_shielded_to_contract"
+            } else {
+                "withdraw_shielded"
+            }
+        };
+
         let mut reproduced = 0usize;
+        let mut skipped: Vec<String> = Vec::new();
         for vector in doc["vectors"].as_array().unwrap() {
             let a = &vector["args"];
             let circuit = vector["circuit"].as_str().unwrap();
@@ -2106,26 +3196,42 @@ mod tests {
                         &h32(&a["recipient"]),
                     )
                 }
-                "challenge_withdraw_shielded_with_grant_k256" => {
-                    let change_entry: [u8; 192] = hex::decode(a["change_entry"].as_str().unwrap())
-                        .unwrap()
-                        .try_into()
-                        .unwrap();
-                    let coin = QualifiedCoin {
-                        nonce: h32(&a["coin"]["nonce"]),
-                        color: h32(&a["coin"]["color"]),
-                        value: uint(&a["coin"]["value"]),
-                        mt_index: uint(&a["coin"]["mt_index"]) as u64,
-                    };
+                "challenge_withdraw_shielded_with_grant_k256"
+                | "challenge_withdraw_shielded_to_contract_with_grant_k256" => {
+                    let (change_entry, enc_pk, coin) = shielded_args(a);
                     challenge_withdraw_shielded_with_grant_k256(
-                        "withdraw_shielded",
+                        operation_of(circuit),
                         &head(a),
                         &h32(&a["recipient"]),
                         &h32(&a["color"]),
                         uint(&a["amount"]),
                         &change_entry,
-                        &h32(&a["enc_pk"]),
+                        &enc_pk,
                         &coin,
+                    )
+                }
+                "challenge_withdraw_unshielded_with_grant_jubjub" => {
+                    challenge_withdraw_unshielded_with_grant_jubjub(
+                        &head_jubjub(a),
+                        &h32(&a["color"]),
+                        uint(&a["amount"]),
+                        &h32(&a["recipient"]),
+                        uint(&a["grind_nonce"]) as u64,
+                    )
+                }
+                "challenge_withdraw_shielded_with_grant_jubjub"
+                | "challenge_withdraw_shielded_to_contract_with_grant_jubjub" => {
+                    let (change_entry, enc_pk, coin) = shielded_args(a);
+                    challenge_withdraw_shielded_with_grant_jubjub(
+                        operation_of(circuit),
+                        &head_jubjub(a),
+                        &h32(&a["recipient"]),
+                        &h32(&a["color"]),
+                        uint(&a["amount"]),
+                        &change_entry,
+                        &enc_pk,
+                        &coin,
+                        uint(&a["grind_nonce"]) as u64,
                     )
                 }
                 "challenge_issue_grant_with_k256" => challenge_issue_grant_k256(
@@ -2149,14 +3255,56 @@ mod tests {
                     &h32(&a["pk_y"]),
                     uint(&a["auth_nonce"]) as u64,
                 ),
+                "challenge_issue_grant_with_jubjub" => challenge_issue_grant_jubjub(
+                    &h32(&a["self"]),
+                    &point_le(&a["sig_r_x"], &a["sig_r_y"]),
+                    &point_le(&a["pk_x"], &a["pk_y"]),
+                    &h32(&a["grant_id"]),
+                    &h32(&a["scope_digest"]),
+                    uint(&a["auth_nonce"]) as u64,
+                    uint(&a["grind_nonce"]) as u64,
+                ),
+                "challenge_revoke_grant_with_jubjub" => challenge_revoke_grant_jubjub(
+                    &h32(&a["self"]),
+                    &point_le(&a["sig_r_x"], &a["sig_r_y"]),
+                    &point_le(&a["pk_x"], &a["pk_y"]),
+                    &h32(&a["grant_id"]),
+                    uint(&a["auth_nonce"]) as u64,
+                    uint(&a["grind_nonce"]) as u64,
+                ),
+                "challenge_revoke_all_grants_with_jubjub" => challenge_revoke_all_grants_jubjub(
+                    &h32(&a["self"]),
+                    &point_le(&a["sig_r_x"], &a["sig_r_y"]),
+                    &point_le(&a["pk_x"], &a["pk_y"]),
+                    uint(&a["auth_nonce"]) as u64,
+                    uint(&a["grind_nonce"]) as u64,
+                ),
                 "envelope_digest" => envelope_digest(small(&a["envelope"]), &h32(&a["challenge"])),
-                other => panic!("no recipe for {other}"),
+                // A later stage extends this file with vector kinds this
+                // crate does not implement yet. An unknown kind is counted
+                // and reported, never a failure: the assertion below is that
+                // every KNOWN kind reproduces, not that the file is frozen.
+                other => {
+                    skipped.push(other.to_string());
+                    continue;
+                }
             }
             .unwrap();
             assert_eq!(got, want, "{label}");
             reproduced += 1;
         }
-        assert_eq!(reproduced, 27, "every published vector has a recipe here");
+        skipped.sort();
+        skipped.dedup();
+        assert!(
+            skipped.is_empty(),
+            "every kind in the vector file must reproduce here; no recipe for: {}",
+            skipped.join(", ")
+        );
+        assert_eq!(
+            reproduced,
+            doc["vectors"].as_array().unwrap().len(),
+            "every vector reproduces from its own arguments"
+        );
 
         // The pinned signatures: deterministic RFC 6979 under sk = 1 over
         // the envelope digest of the pinned unshielded grant challenge, in
@@ -2164,9 +3312,75 @@ mod tests {
         // Both S forms verify (SIG-4).
         let sk = k256_signing_key_from_hex("0x01").unwrap();
         let vk = *sk.verifying_key();
-        let mut signatures = 0usize;
+        let mut k1_signatures = 0usize;
+        let mut v1_signatures = 0usize;
         for pinned in doc["signatures"].as_array().unwrap() {
             assert_eq!(pinned["sk"].as_str().unwrap(), "1");
+            if pinned["arm"].as_str().unwrap() == "v1" {
+                // The v1 arm has no deterministic nonce rule, so the vector
+                // pins the nonce scalar beside the key and this side
+                // reproduces the whole signature: the nonce point, the
+                // grinding loop, and s.
+                let a = &pinned["args"];
+                let sk_v1 =
+                    JubjubScalar::from(pinned["sk"].as_str().unwrap().parse::<u64>().unwrap());
+                let r_v1 = JubjubScalar::from(
+                    pinned["nonce_scalar"]
+                        .as_str()
+                        .unwrap()
+                        .parse::<u64>()
+                        .unwrap(),
+                );
+                let pk = EmbeddedGroupAffine(JubjubSubgroup::generator() * sk_v1);
+                let sig_r = EmbeddedGroupAffine(JubjubSubgroup::generator() * r_v1);
+                assert_eq!(pk, point_le(&a["pk_x"], &a["pk_y"]));
+                assert_eq!(sig_r, point_le(&a["sig_r_x"], &a["sig_r_y"]));
+                let head_v1 = GrantCallHeadJubjub {
+                    self_addr: h32(&a["self"]),
+                    sig_r,
+                    pk,
+                    grant_id: h32(&a["grant_id"]),
+                    issued_at: uint(&a["issued_at"]) as u64,
+                    record_nonce: uint(&a["nonce"]) as u64,
+                };
+                let color = h32(&a["color"]);
+                let amount = uint(&a["amount"]);
+                let recipient = h32(&a["recipient"]);
+                let ground = grind_and_sign(&sk_v1, &r_v1, |grind_nonce| {
+                    challenge_withdraw_unshielded_with_grant_jubjub(
+                        &head_v1,
+                        &color,
+                        amount,
+                        &recipient,
+                        grind_nonce,
+                    )
+                })
+                .unwrap();
+                assert_eq!(
+                    ground.grind_nonce.to_string(),
+                    pinned["grind_nonce"].as_str().unwrap(),
+                    "v1: the grinding loop lands on the pinned nonce"
+                );
+                assert_eq!(
+                    hex::encode(ground.challenge),
+                    pinned["challenge"].as_str().unwrap(),
+                    "v1: the ground challenge"
+                );
+                // Section 3.4 after correction 2: the off-chain v1
+                // signature is `R.x || R.y || s`, each a 32-byte
+                // little-endian integer, so 96 bytes and not 64.
+                let mut wire = sig_r.x().unwrap().as_le_bytes();
+                wire.extend_from_slice(&sig_r.y().unwrap().as_le_bytes());
+                wire.extend_from_slice(&ground.s.to_bytes());
+                assert_eq!(wire.len(), 96);
+                assert_eq!(
+                    hex::encode(&wire),
+                    pinned["sig_le"].as_str().unwrap(),
+                    "v1: the wire form"
+                );
+                v1_signatures += 1;
+                continue;
+            }
             let envelope = small(&pinned["envelope"]);
             let challenge = h32(&pinned["challenge"]);
             let digest = h32(&pinned["signed_digest"]);
@@ -2200,8 +3414,9 @@ mod tests {
             let normalised = high.normalize_s().expect("the twin really is high-S");
             assert_eq!(normalised, sig, "envelope {envelope}: normalising the twin gives back (r, s)");
             assert!(vk.verify_prehash(&digest, &normalised).is_ok(), "envelope {envelope}: high-S");
-            signatures += 1;
+            k1_signatures += 1;
         }
-        assert_eq!(signatures, 2);
+        assert_eq!(k1_signatures, 2);
+        assert_eq!(v1_signatures, 1);
     }
 }
