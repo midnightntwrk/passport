@@ -116,6 +116,29 @@ export function clientAddress(input: ClientAddressInput): string {
 }
 
 /* -------------------------------------------------------------------------- */
+/* How much body one request may carry                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The ceiling on a request body, and what it has to clear.
+ *
+ * Four mebibytes: bigger than any Midnight transaction the demo builds, small
+ * enough that a body this service is streaming into memory is bounded. The
+ * shapes it has to hold, largest first:
+ *
+ *   - the chain's own `transaction_byte_limit` is 1,048,576 (stagenet block
+ *     299524, `LedgerParameters.toString()` — see `./coinReservation.ts`), so
+ *     no transaction the node would accept can be larger than a quarter of it;
+ *   - a one-transaction Passport send carries two contract calls and two
+ *     proofs, some 26 KB proven — 0.6% of this;
+ *   - the two-leg send it replaces was 22,526 bytes, measured 2026/09/03.
+ *
+ * Here rather than in `./server.ts` because `server.ts` runs `main()` on
+ * import: a constant nothing can read is a constant nothing can pin.
+ */
+export const MAX_BODY_BYTES = 4 * 1024 * 1024;
+
+/* -------------------------------------------------------------------------- */
 /* The per-client token bucket                                                */
 /* -------------------------------------------------------------------------- */
 

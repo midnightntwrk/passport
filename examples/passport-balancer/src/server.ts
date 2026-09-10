@@ -156,6 +156,7 @@ import {
   type ResolverEntry,
 } from './ledgers.js';
 import {
+  MAX_BODY_BYTES,
   RefusalCounts,
   SpendAdmission,
   TokenBucket,
@@ -232,8 +233,6 @@ function refusal(
   return { status, error, message, ...(extra ? { extra } : {}) };
 }
 
-/** Bigger than any Midnight transaction the demo builds, small enough to bound. */
-const MAX_BODY_BYTES = 4 * 1024 * 1024;
 /** How often the start-up DUST registration is retried while it cannot run yet. */
 const REGISTRATION_RETRY_MS = 60_000;
 

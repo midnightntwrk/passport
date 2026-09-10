@@ -489,6 +489,130 @@ export function crumbsForDeficit(message: string): number {
 }
 
 /**
+ * A PROVEN transaction's shape against the size rule: what it takes, what it
+ * weighs, and how much of its budget that is.
+ *
+ * Read from `Transaction.cost(params)` — `readTime` and `computeTime` in
+ * picoseconds, `blockUsage` in bytes — rather than from a ledger refusal,
+ * because a refusal only arrives at 100% of the bound and the node's own
+ * estimate runs some milliseconds ABOVE the ledger's local one: it accepted a
+ * grant at 74% of its bound on 2026/09/03 and refused one at 81%. Waiting for
+ * the local throw means learning at the node what could have been known here.
+ */
+export interface FeeShape {
+  takesMs: number;
+  bytes: number;
+  boundMs: number;
+  /** `takesMs / boundMs`. Compare against {@link TIME_TO_DISMISS_TARGET}. */
+  useOfBound: number;
+}
+
+/**
+ * {@link FeeShape} from a cost record, or `null` when the numbers cannot be
+ * trusted to mean what this arithmetic needs them to mean.
+ *
+ * SELF-DISABLING, ON PURPOSE. `blockUsage` is documented as "the number of
+ * bytes of blockspace used" and the rule's own sentence quotes a byte count;
+ * this arithmetic is only sound while those are the same quantity. A count
+ * outside half to twice the serialised length says they have stopped agreeing —
+ * a unit change, a model change, a ledger upgrade — and the honest answer then
+ * is to measure nothing rather than to pad on a number that means something
+ * else. `fees(params, true)` is the hard guard underneath either way.
+ */
+export function feeShapeFromCost(input: {
+  readTimePs: bigint;
+  computeTimePs: bigint;
+  blockUsageBytes: bigint;
+  serialisedBytes: number;
+}): FeeShape | null {
+  const bytes = Number(input.blockUsageBytes);
+  if (!Number.isFinite(bytes) || bytes <= 0) return null;
+  if (input.serialisedBytes <= 0) return null;
+  if (bytes * 2 < input.serialisedBytes || bytes > input.serialisedBytes * 2) return null;
+  /* Picoseconds to milliseconds: 1 ms is 1e9 ps. */
+  const takesMs = Number(input.readTimePs + input.computeTimePs) / 1e9;
+  if (!Number.isFinite(takesMs) || takesMs <= 0) return null;
+  const boundMs = boundMsFor(bytes);
+  return { takesMs, bytes, boundMs, useOfBound: takesMs / boundMs };
+}
+
+/**
+ * The ledger's own sentence, written out for a shape the ledger has not
+ * refused yet — so that one padding rule reads both, and the journal line an
+ * operator sees for a near miss is the line they already know from a refusal.
+ */
+export function timeToDismissSentence(shape: FeeShape): string {
+  return `this transaction would take ${shape.takesMs.toFixed(3)} ms to dismiss, but given its size of ${Math.round(shape.bytes)} bytes, it may take at most ${shape.boundMs.toFixed(3)} ms`;
+}
+
+/**
+ * The most crumb DUST inputs one fee leg will ever be padded with. Eight, which
+ * is where {@link crumbsForShape} and {@link crumbsForDeficit} already stop and
+ * where the contract-call climb in `./wallet.ts` has always stopped.
+ */
+export const MAX_FEE_LEG_PADDING = 8;
+
+/**
+ * The padding the ledger's sentence calls for: parse what the transaction takes
+ * and weighs WITHOUT the crumbs it already carries, then the crumbs that bring
+ * it under the target — one step, not a climb. Falls back to the deficit rule
+ * when the line cannot be read.
+ *
+ * Hoisted out of `createBalancerWallet` so BOTH balancing paths can read it —
+ * the contract-call climb and, since the one-transaction Passport send, the fee
+ * leg `/balance-only` builds — and so a test can pin it against a ledger
+ * sentence without standing a wallet up.
+ */
+export function paddingForVerdict(message: string, carrying: number): number {
+  const parsed = parseTimeToDismiss(message);
+  if (!parsed) return Math.min(MAX_FEE_LEG_PADDING, carrying + crumbsForDeficit(message));
+  const bareMs = parsed.takesMs - carrying * CRUMB_MS;
+  const bareBytes = parsed.bytes - carrying * CRUMB_BYTES;
+  return Math.max(carrying + 1, crumbsForShape(bareMs, bareBytes));
+}
+
+/**
+ * The padding a `/balance-only` fee leg should be balanced with after the
+ * ledger refused the PROVEN transaction on the size rule — or `null` when there
+ * is nothing left to try.
+ *
+ * WHY `null` RATHER THAN A REFUSAL, which is where this differs from the climb
+ * the balancer's own jobs run. A job of ours may fail: nobody is waiting on the
+ * other end of a resolver deploy. A user's send is not like that, and the
+ * transaction handed back unpadded is EXACTLY the transaction this service
+ * handed back before this guard existed — so a node that then refuses it leaves
+ * the caller no worse off than a service that refused it first. The climb
+ * therefore stops the moment it cannot actually raise the padding: at
+ * {@link MAX_FEE_LEG_PADDING}, or when no more crumbs are free to pad with.
+ *
+ * `applied` is what the last balance CARRIED, which is not what it asked for
+ * whenever the crumbs ran out — the same distinction `appliedPadding` draws on
+ * the contract path, and the reason the ledger's arithmetic is read against it.
+ */
+export function nextFeeLegPadding(input: {
+  /** The ledger's own sentence, verbatim. */
+  message: string;
+  /** The padding the last balance ASKED for. */
+  asked: number;
+  /** The crumbs the last balance actually CARRIED. */
+  applied: number;
+  /** Crumbs free to be handed out right now. */
+  freeCrumbs: number;
+  cap?: number;
+}): number | null {
+  const cap = input.cap ?? MAX_FEE_LEG_PADDING;
+  if (input.asked >= cap) return null;
+  /* Nothing more to pad WITH: another round would rebuild the same shape. */
+  if (input.freeCrumbs <= input.applied) return null;
+  const wanted = Math.min(
+    cap,
+    Math.max(input.asked + 1, paddingForVerdict(input.message, input.applied)),
+  );
+  const next = Math.min(wanted, input.freeCrumbs);
+  return next > input.asked ? next : null;
+}
+
+/**
  * The unshielded inputs a balanced recipe will spend, read from the built
  * transaction's intents rather than from the wallet.
  *

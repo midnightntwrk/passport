@@ -104,19 +104,23 @@ import {
   coinKey,
   createCoinReservation,
   createDustFeeSelector,
-  crumbsForDeficit,
-  crumbsForShape,
   describeCoin,
+  feeShapeFromCost,
   isBlockLimit,
   isCrumb,
   isTimeToDismiss,
   maxDustInputsFor,
+  nextFeeLegPadding,
+  paddingForVerdict,
   parseBlockLimits,
-  parseTimeToDismiss,
+  timeToDismissSentence,
+  MAX_FEE_LEG_PADDING,
+  TIME_TO_DISMISS_TARGET,
   nightPayloadFirst,
   smallestOfType,
   unshieldedInputsOf,
   type CoinPresence,
+  type FeeShape,
   type CoinTicket,
   type ReclaimResult,
   type ReservedCoinsSummary,
@@ -1570,20 +1574,6 @@ export async function openBalancerWallet(
     merged.fees(paramsOf(recipe), true);
   };
 
-  /**
-   * The padding the ledger's sentence calls for: parse what the transaction
-   * takes and weighs WITHOUT the crumbs it already carries, then the crumbs
-   * that bring it under the target — one step, not a climb. Falls back to
-   * the deficit rule when the line cannot be read.
-   */
-  const paddingFromVerdict = (message: string, carrying: number): number => {
-    const parsed = parseTimeToDismiss(message);
-    if (!parsed) return Math.min(8, carrying + crumbsForDeficit(message));
-    const bareMs = parsed.takesMs - carrying * 2.65;
-    const bareBytes = parsed.bytes - carrying * 3_000;
-    return Math.max(carrying + 1, crumbsForShape(bareMs, bareBytes));
-  };
-
   let balanceLock: Promise<unknown> = Promise.resolve();
   const oneBalanceAtATime = <T>(work: () => Promise<T>): Promise<T> => {
     const run = balanceLock.then(work, work);
@@ -2572,7 +2562,7 @@ export async function openBalancerWallet(
                 if (!isTimeToDismiss(cause)) throw cause;
                 const message = cause instanceof Error ? cause.message : String(cause);
                 console.warn(
-                  `[fee] ${label}: the ledger would refuse this shape (${message.slice(0, 320)}) — reverting and balancing again with ${Math.min(8, paddingFromVerdict(message, appliedPadding))} crumb DUST inputs for size`,
+                  `[fee] ${label}: the ledger would refuse this shape (${message.slice(0, 320)}) — reverting and balancing again with ${Math.min(8, paddingForVerdict(message, appliedPadding))} crumb DUST inputs for size`,
                 );
                 try {
                   await facade.revert(result);
@@ -2608,7 +2598,7 @@ export async function openBalancerWallet(
                      transaction CARRIED, which can be fewer than the round
                      asked for; without the `padRounds + 1` a scarce-crumb job
                      would ask for the same number for ever. */
-                  padRounds = Math.min(8, Math.max(padRounds + 1, paddingFromVerdict(message, appliedPadding)));
+                  padRounds = Math.min(8, Math.max(padRounds + 1, paddingForVerdict(message, appliedPadding)));
                   continue;
                 }
                 /* THE OPPOSITE OF THE CLIMB. `exceeded block limit in
@@ -2731,7 +2721,7 @@ export async function openBalancerWallet(
               }
               if (!isTimeToDismiss(cause) || padRounds >= 8) throw cause;
               const message = cause instanceof Error ? cause.message : String(cause);
-              const next = Math.min(8, Math.max(padRounds + 1, paddingFromVerdict(message, appliedPadding)));
+              const next = Math.min(8, Math.max(padRounds + 1, paddingForVerdict(message, appliedPadding)));
               console.warn(
                 `[fee] ${label}: the PROVEN transaction would be refused (${message.slice(0, 320)}) — reverting and rebuilding with ${next} crumb DUST inputs`,
               );
@@ -2954,50 +2944,162 @@ export async function openBalancerWallet(
            own deserialisation above is the structural guard; the node is the
            judge of validity, and it rejects what it rejects with a real reason. */
 
-        /* DUST and nothing else. The caller balanced its own shielded and
-           unshielded legs before it asked (`BALANCE_WITHOUT_DUST` in
-           `sponsor.ts`); adding to those here would spend the balancer's NIGHT
-           on somebody else's transfer. */
-        const reserved = await reserve(
-          () => {
-            /* A BALANCE, ticket-less — see `beginBalance` in
-               `./coinReservation.ts`. It holds nothing, exactly as before, but
-               it bounds the DUST inputs the SDK's loop may take and stops the
-               same coin being offered twice. Without it `dustPadding()` was
-               read against a `balanceAsks()` frozen at zero, and every ask from
-               13:12:42 on 2026/09/03 was answered with a crumb until the ledger
-               refused to price the result. */
-            coins.beginBalance(null);
-            return facade
-              .balanceFinalizedTransaction(
-                incoming,
-                { shieldedSecretKeys, dustSecretKey },
-                { ttl, tokenKindsToBalance: ['dust'] },
-              )
-              .finally(() => {
-                coins.endBalance();
+        /* THE SIZE RULE, AND WHY IT IS ASKED OF THE PROVEN TRANSACTION HERE
+           AND OF THE ERASED ONE ON THE CONTRACT PATH.
+           `1010: Custom error: 231` — `FeeCalculation.OutsideTimeToDismiss` —
+           bounds a transaction's processing time by a budget that grows with
+           its BYTE size, 2 µs per byte over a 15 ms floor. The balancer's own
+           jobs check it with `assertWithinTimeToDismiss`, which erases proofs
+           first: their base transaction is UNPROVEN at that point, so erasing
+           costs nothing and the check is merely strict.
+
+           A `/balance-only` caller's transaction arrives PROVEN, and its proofs
+           are most of its bytes — 22,526 for the Passport send measured on
+           2026/09/03, and some 26 KB for the one-transaction send, which
+           carries a second contract call and a second proof. Erasing those
+           would throw away exactly the bytes that buy the transaction its
+           budget and refuse a shape the node accepts every day. The ledger says
+           so itself: `fees` "is *only* accurate when called with proven
+           transactions" (`ledger-v9.d.ts:2559`). So the rule is asked AFTER
+           proving, of the merged transaction the caller will actually submit —
+           the node's own question, on the node's own bytes.
+
+           A refusal is remedied the way every other fee leg in this service
+           remedies it: crumb DUST inputs, which are bytes the transaction is
+           charged almost no processing for. What it is NOT is a refusal to the
+           caller — see `nextFeeLegPadding`. */
+        const freeCrumbs = coins.freeCrumbs(null, walletCoins(state, 'available'));
+        let padding = 0;
+        let balanced: ledger.FinalizedTransaction;
+        for (let round = 0; ; round += 1) {
+          const asking = padding;
+          /* What this round's balance actually CARRIED, which is fewer than it
+             asked for whenever the crumbs ran out. */
+          let applied = 0;
+
+          /* DUST and nothing else. The caller balanced its own shielded and
+             unshielded legs before it asked (`BALANCE_WITHOUT_DUST` in
+             `sponsor.ts`); adding to those here would spend the balancer's NIGHT
+             on somebody else's transfer. */
+          const reserved = await reserve(
+            () => {
+              /* A BALANCE, ticket-less — see `beginBalance` in
+                 `./coinReservation.ts`. It holds nothing, exactly as before, but
+                 it bounds the DUST inputs the SDK's loop may take and stops the
+                 same coin being offered twice. Without it `dustPadding()` was
+                 read against a `balanceAsks()` frozen at zero, and every ask from
+                 13:12:42 on 2026/09/03 was answered with a crumb until the ledger
+                 refused to price the result. */
+              coins.setDustPadding(asking);
+              coins.beginBalance(null);
+              return facade
+                .balanceFinalizedTransaction(
+                  incoming,
+                  { shieldedSecretKeys, dustSecretKey },
+                  { ttl, tokenKindsToBalance: ['dust'] },
+                )
+                .finally(() => {
+                  applied = coins.endBalance().filter(isCrumb).length;
+                });
+            },
+            'fee-leg balancing',
+          );
+          recipe = reserved;
+
+          /* A DUST-only balancing leg has no signable segment, so this signs
+             nothing today. It stays in the pipeline because it is the step that
+             would sign one if a future balancing leg ever carried an unshielded
+             input, and a silently missing signature is a node rejection with no
+             useful error. */
+          const signed = await reserve(
+            () => facade.signRecipe(reserved, unshieldedKeystore.signDataAsync),
+            'fee-leg signing',
+          );
+          recipe = signed;
+
+          /* Proving happens here — the WASM prover or the configured server —
+             and outside the claim, for the reason `./reservation.ts` gives: the
+             DUST this leg spends is already booked as spent, so another caller's
+             balancing in this window picks a different coin. */
+          const finalized = await facade.finalizeRecipe(signed);
+
+          const params = paramsOf(signed);
+          /* TWO TRIGGERS, ONE REMEDY. The ledger's own refusal is the hard one;
+             the measured shape is the one that catches a near miss, because the
+             node's estimate runs above the ledger's local one — 74% of the bound
+             accepted, 81% refused, 2026/09/03 — and a transaction handed back at
+             90% is a `231` the caller cannot do anything about. */
+          let message: string | null = null;
+          let unpriceable: unknown = null;
+          try {
+            finalized.fees(params, true);
+          } catch (cause) {
+            if (isTimeToDismiss(cause)) {
+              message = cause instanceof Error ? cause.message : String(cause);
+            } else {
+              /* `exceeded block limit in transaction fee computation`, or
+                 anything else `fees` can refuse on. Bytes are the problem there,
+                 not the remedy, so there is nothing to pad towards. */
+              unpriceable = cause;
+            }
+          }
+          if (unpriceable !== null) {
+            /* Nothing this service can do about it, and refusing here would
+               only take the caller's last chance away — see below. */
+            console.warn(
+              `[balance] the ledger would not price this transaction (${(unpriceable instanceof Error ? unpriceable.message : String(unpriceable)).slice(0, 240)}) — handing it back as balanced`,
+            );
+            balanced = finalized;
+            break;
+          }
+          let shape: FeeShape | null = null;
+          if (message === null) {
+            try {
+              const cost = finalized.cost(params, false);
+              shape = feeShapeFromCost({
+                readTimePs: cost.readTime,
+                computeTimePs: cost.computeTime,
+                blockUsageBytes: cost.blockUsage,
+                serialisedBytes: finalized.serialize().length,
               });
-          },
-          'fee-leg balancing',
-        );
-        recipe = reserved;
-
-        /* A DUST-only balancing leg has no signable segment, so this signs
-           nothing today. It stays in the pipeline because it is the step that
-           would sign one if a future balancing leg ever carried an unshielded
-           input, and a silently missing signature is a node rejection with no
-           useful error. */
-        const signed = await reserve(
-          () => facade.signRecipe(reserved, unshieldedKeystore.signDataAsync),
-          'fee-leg signing',
-        );
-        recipe = signed;
-
-        /* Proving happens here — the WASM prover or the configured server —
-           and outside the claim, for the reason `./reservation.ts` gives: the
-           DUST this leg spends is already booked as spent, so another caller's
-           balancing in this window picks a different coin. */
-        const balanced = await facade.finalizeRecipe(signed);
+            } catch {
+              shape = null;
+            }
+            if (shape && shape.useOfBound > TIME_TO_DISMISS_TARGET) {
+              message = timeToDismissSentence(shape);
+            }
+          }
+          if (message === null) {
+            if (shape) {
+              console.log(
+                `[balance] ${shape.takesMs.toFixed(2)} ms of a ${shape.boundMs.toFixed(2)} ms bound in ${shape.bytes} bytes (${Math.round(shape.useOfBound * 100)}% of the size rule), ${applied} crumb DUST input${applied === 1 ? '' : 's'} of padding`,
+              );
+            }
+            balanced = finalized;
+            break;
+          }
+          const next = nextFeeLegPadding({ message, asked: asking, applied, freeCrumbs });
+          if (next === null || round >= MAX_FEE_LEG_PADDING) {
+            /* Handed back exactly as it would have been before this guard
+               existed. The node may refuse it; refusing it here as well would
+               only take away the caller's one remaining chance. */
+            console.warn(
+              `[balance] the ledger would refuse this shape and no more padding is available (${message.slice(0, 240)}) — handing the transaction back with ${applied} crumb DUST input${applied === 1 ? '' : 's'}`,
+            );
+            balanced = finalized;
+            break;
+          }
+          console.warn(
+            `[balance] the ledger would refuse this shape (${message.slice(0, 240)}) — releasing it and balancing again with ${next} crumb DUST input${next === 1 ? '' : 's'} for size`,
+          );
+          try {
+            await reserve(() => facade.revert(finalized), 'oversized fee-leg release');
+            recipe = null;
+          } catch {
+            // Best effort; the rebalance selects afresh and the sweeper has the rest.
+          }
+          padding = next;
+        }
 
         /* `finalizeRecipe` books the merged transaction as pending so the
            wallet does not double-spend its DUST while it is in flight. The
