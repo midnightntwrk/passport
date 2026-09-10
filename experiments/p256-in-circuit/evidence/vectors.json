@@ -1,0 +1,80 @@
+{
+  "cavp_sigver_p256_sha256": {
+    "expected": "pass",
+    "hash_hex": "d1b8ef21eb4182ee270638061063a3f3c16c114e33937f69fb232cc833965a94",
+    "note": "NIST CAVP FIPS 186-4 SigVer.rsp [P-256,SHA-256], Result = P case; cross-checked with RustCrypto p256 before use",
+    "pk_x_hex": "e424dc61d4bb3cb7ef4344a7f8957a0c5134e16f7a67c074f82e6e12f49abf3c",
+    "pk_y_hex": "970eed7aa2bc48651545949de1dddaf0127e5965ac85d1243d6f60e7dfaee927",
+    "r_hex": "bf96b99aa49c705c910be33142017c642ff540c76349b9dab72f981fd9347f4f",
+    "s_hex": "17c55095819089c2e03b9cd415abdf12444e323075d98f31920b9e0f57ec871c"
+  },
+  "format": "p256-gate-vectors-v1",
+  "generated_valid": {
+    "message_hex": "502d32353620696e2061206d69646e696768742d7a6b20636972637569743a20706173736b65792065766964656e636520666f7220746865204d50532f4d4950",
+    "vector": {
+      "expected": "pass",
+      "hash_hex": "d652683d6e642b86493c654a1c68667f8c1ccda006007c75bfc8dd3739deaf52",
+      "note": "RFC 6979 deterministic signature generated with the RustCrypto p256 crate, low-S normalised",
+      "pk_x_hex": "515c3d6eb9e396b904d3feca7f54fdcd0cc1e997bf375dca515ad0a6c3b4035f",
+      "pk_y_hex": "4536be3a50f318fbf9a5475902a221502bef0d57e08c53b2cc0a56f17d9f9354",
+      "r_hex": "89527fb04db4eb8ad0b1fde37da832007ed574c6b37d58aacbe8362d5b97f6fb",
+      "s_hex": "53a26ee62a6075cbe508aa154c727acdd78542b0061ed1935bb358b0c11bc8b8"
+    }
+  },
+  "high_s_twin": {
+    "expected": "pass",
+    "hash_hex": "d652683d6e642b86493c654a1c68667f8c1ccda006007c75bfc8dd3739deaf52",
+    "note": "(r, n - s) twin of generated_valid (which is low-S), hence the high-S form; passes by design, documenting ECDSA malleability for the low-S policy discussion",
+    "pk_x_hex": "515c3d6eb9e396b904d3feca7f54fdcd0cc1e997bf375dca515ad0a6c3b4035f",
+    "pk_y_hex": "4536be3a50f318fbf9a5475902a221502bef0d57e08c53b2cc0a56f17d9f9354",
+    "r_hex": "89527fb04db4eb8ad0b1fde37da832007ed574c6b37d58aacbe8362d5b97f6fb",
+    "s_hex": "ac5d9118d59f8a351af755eab38d8531e561b7fda0f8ccf1980672123b475c99"
+  },
+  "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
+  "negative_flipped_r": {
+    "expected": "fail",
+    "hash_hex": "d652683d6e642b86493c654a1c68667f8c1ccda006007c75bfc8dd3739deaf52",
+    "note": "low bit of r flipped",
+    "pk_x_hex": "515c3d6eb9e396b904d3feca7f54fdcd0cc1e997bf375dca515ad0a6c3b4035f",
+    "pk_y_hex": "4536be3a50f318fbf9a5475902a221502bef0d57e08c53b2cc0a56f17d9f9354",
+    "r_hex": "89527fb04db4eb8ad0b1fde37da832007ed574c6b37d58aacbe8362d5b97f6fa",
+    "s_hex": "53a26ee62a6075cbe508aa154c727acdd78542b0061ed1935bb358b0c11bc8b8"
+  },
+  "negative_flipped_s": {
+    "expected": "fail",
+    "hash_hex": "d652683d6e642b86493c654a1c68667f8c1ccda006007c75bfc8dd3739deaf52",
+    "note": "low bit of s flipped",
+    "pk_x_hex": "515c3d6eb9e396b904d3feca7f54fdcd0cc1e997bf375dca515ad0a6c3b4035f",
+    "pk_y_hex": "4536be3a50f318fbf9a5475902a221502bef0d57e08c53b2cc0a56f17d9f9354",
+    "r_hex": "89527fb04db4eb8ad0b1fde37da832007ed574c6b37d58aacbe8362d5b97f6fb",
+    "s_hex": "53a26ee62a6075cbe508aa154c727acdd78542b0061ed1935bb358b0c11bc8b9"
+  },
+  "negative_wrong_hash": {
+    "expected": "fail",
+    "hash_hex": "2952683d6e642b86493c654a1c68667f8c1ccda006007c75bfc8dd3739deaf52",
+    "note": "first hash byte inverted",
+    "pk_x_hex": "515c3d6eb9e396b904d3feca7f54fdcd0cc1e997bf375dca515ad0a6c3b4035f",
+    "pk_y_hex": "4536be3a50f318fbf9a5475902a221502bef0d57e08c53b2cc0a56f17d9f9354",
+    "r_hex": "89527fb04db4eb8ad0b1fde37da832007ed574c6b37d58aacbe8362d5b97f6fb",
+    "s_hex": "53a26ee62a6075cbe508aa154c727acdd78542b0061ed1935bb358b0c11bc8b8"
+  },
+  "negative_wrong_pk": {
+    "expected": "fail",
+    "hash_hex": "d652683d6e642b86493c654a1c68667f8c1ccda006007c75bfc8dd3739deaf52",
+    "note": "public key of an unrelated keypair",
+    "pk_x_hex": "c6559d416dfb56af714f146d917c24abf818b2fb121604129649848230a2d258",
+    "pk_y_hex": "b2a6d82dc6c6734cf092ffaa9fc012f10f7008d3952a08d5797e85feaba5d977",
+    "r_hex": "89527fb04db4eb8ad0b1fde37da832007ed574c6b37d58aacbe8362d5b97f6fb",
+    "s_hex": "53a26ee62a6075cbe508aa154c727acdd78542b0061ed1935bb358b0c11bc8b8"
+  },
+  "webauthn": {
+    "authenticator_data_hex": "0ac0ff523bc1d865cc44b4be2b59e1d6aa2201ef001ceb682a26502f3f9ba0ba0500000001",
+    "client_data_hash_hex": "2b74a13be107633bf7e22131bc680cb72d0c09d0497f6a0ce384e62db26a72ce",
+    "expected": "pass",
+    "note": "signature over SHA-256(authenticator_data || client_data_hash)",
+    "pk_x_hex": "515c3d6eb9e396b904d3feca7f54fdcd0cc1e997bf375dca515ad0a6c3b4035f",
+    "pk_y_hex": "4536be3a50f318fbf9a5475902a221502bef0d57e08c53b2cc0a56f17d9f9354",
+    "r_hex": "e96f055e8aa23581ca18ce8097423663a6cdd3a9735ca3ad506ab88f357d8983",
+    "s_hex": "779eac4c4fe6ddb7c7422da2ab3f8e66692242c31bc5796571129225d1273b96"
+  }
+}

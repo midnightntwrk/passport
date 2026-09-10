@@ -1,0 +1,22 @@
+{
+  "connector": {
+    "advice_columns": 9,
+    "estimated_proof_size_bytes": 4064,
+    "fixed_columns": 54,
+    "lookups": 3,
+    "max_deg": 5,
+    "optimal_k": 16,
+    "rows": 32900
+  },
+  "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
+  "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "sdk": {
+    "advice_columns": 9,
+    "estimated_proof_size_bytes": 4064,
+    "fixed_columns": 54,
+    "lookups": 3,
+    "max_deg": 5,
+    "optimal_k": 15,
+    "rows": 31046
+  }
+}

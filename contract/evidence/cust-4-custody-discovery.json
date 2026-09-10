@@ -3,15 +3,15 @@
   "name": "custody-discovery",
   "description": "MIP-0012 third-party deposit and discovery (inbox walk + chain data)",
   "verdict": "PASS",
-  "txHash": "00b53737afeea7f7dfa7b622eb2db5c1d88e3b70ec9c3d672b4388c004e99d5797",
+  "txHash": "00137f2efe1174689b72720505cfe72d49fa02e2ef828f50070cbd07d7556d2451",
   "note": "Full loop with no off-band channel: B deposited against the advertised key; A replayed the contract history from its address alone (contractActions subscription), recovered the coin via the inbox walk, and spent with a device signature.",
   "details": {
-    "account": "e556df897e6532d5c0f51cfa47044ffb130ac6fe328fcea56717348b46cdef2b",
-    "mintTx": "006c40136c2a9392acf5836cf1ea480311d5ef72be3dc3c6e722d6a9878045f28a",
-    "advertisedKeyHex": "6c66b5d197619d02b03a46eac3061395815d481561d5f7263b24a4b10d54550f",
-    "depositTx": "00752c2c9aafada4e75980a3239ce89dcc0100b11b1995021b963b17964fb95238",
+    "account": "e4052233a38b54b997da6a51cb42afce54b77f1ca6ee8e5cb378e600a6a6bc3a",
+    "mintTx": "00a92ee598bae068e246773161ecc650f707bf25d6aa7785869bf212c8a8118fa0",
+    "advertisedKeyHex": "fa9b59008360d8afe9d51a642d75e716b89ebdbf8c3dd58bf299bc7e5bed9d6d",
+    "depositTx": "00dc757eb5a528afd9615c5674ced24e6eddec66b94ccb303ac1e3e3fc32324db0",
     "discoveredCoin": {
-      "colorHex": "38b285d2f817c087ab2b9503259e3a234b685951ae2668209e6871aa2fe9f684",
+      "colorHex": "d5b756622250a745811f008b0755c6b91e62cf0268d3be61c7ff2d5fe110a177",
       "value": "350",
       "matches": true
     },
@@ -19,63 +19,74 @@
       {
         "kind": "ContractDeploy",
         "entryPoint": null,
-        "txHash": "5478d15fb74975e30afa37bb01076a680d3275d31b4e3d025418a6bc9e160bbf",
+        "txHash": "b81db756c749301268e817281c22b5948638433549bbbd94a645c6c9b35561a0",
         "identifiers": [
-          "00a32bf7a2dec699fce480713b74ffcca644a2b14c97ad2263b327b9d20645244a",
-          "00b9b347608ef4914673f57fe07a03a5d895196f5a0fd1ce90896bbc42b4dca75e"
+          "009b36fd958f4282cd5d8bf06ab739ccb369875a6724b801ad7ac141c2d0c97f8d",
+          "007aa14cc91301fc01272dc58ba017947b66ca8a0aaaa813ab43cc25bea5ed500e"
         ],
-        "blockHeight": 182,
-        "window": "[35, 35)"
+        "blockHeight": 415,
+        "window": "[33, 33)"
+      },
+      {
+        "kind": "ContractUpdate",
+        "entryPoint": null,
+        "txHash": "03082b3d226bb90f583beb4d8b0b5b75d8d3f2d46c3539f426b270c674e081da",
+        "identifiers": [
+          "008b90781c3d2d824ff92bc2af0770b8bcab3a07840341d0db4bcff667484a7b09",
+          "00044cf3b02c67d99363e070df3e348a815d5c3ee6f5eac3b71bc9c07e2369bfde"
+        ],
+        "blockHeight": 418,
+        "window": "[33, 33)"
       },
       {
         "kind": "ContractCall",
-        "entryPoint": "activate_initial_device",
-        "txHash": "c0e3eece8d42392619522ca90e34b6723c3fb2aa61097323fb9ebee32ee94f1e",
+        "entryPoint": "activate_initial_device_with_k256",
+        "txHash": "c707ac6b69d439187f6896095820f957a53ca7da3bf85c7bb9ce788c8580906d",
         "identifiers": [
-          "003ee751463247bb2013d4a01d5948f05559248fc3befee38f76923aa97a2103c9",
-          "004f7174313648efcdf01e703d8da9e8bae5904dc4a0ecddf6ed5554f164aaa945"
+          "003f84fbfb0658933195ab63a3d42ce57f1294b6639e2e2644ebac7b5ba87b3e64",
+          "0082db934001bc8597343583fd3e500aa47d12c9febcdce2f1092ddb281dc53ce6"
         ],
-        "blockHeight": 185,
-        "window": "[35, 35)"
+        "blockHeight": 421,
+        "window": "[33, 33)"
       },
       {
         "kind": "ContractCall",
         "entryPoint": "deposit_shielded",
-        "txHash": "bd6d963c35f9e55efd8e83769d89986c4a9d68aa57ac4fb1330b46be1dc33f68",
+        "txHash": "09f303cfabbce24a7d4842cd6258fd1e371da7106f291456627da98fbe6095f6",
         "identifiers": [
-          "007303493eef3ef3c0f57a7fdcd7ea0258237faaba55d65578b924226ac11086bc",
-          "004f5993404d8b1e92d8e846d8359753812ecfe977e20df0be7fe5d4b1a3b9215e",
-          "00c78b0cd3a84ad29e47e586c34afca55fbb08abf31b93cf99f885953ba407ea6c",
-          "00752c2c9aafada4e75980a3239ce89dcc0100b11b1995021b963b17964fb95238"
+          "0056fbd5b3f1e753b29afc46e78fa218002c02970d02a5182596c43dae25d39d4e",
+          "0075085ec9fc752b19f707aa4d640816b9b8112be1b1b31c83df6c15e24636c814",
+          "00fd579279a7961dec79263f14fb53e94bccfeeeabaf857016424c337e73191ce2",
+          "00dc757eb5a528afd9615c5674ced24e6eddec66b94ccb303ac1e3e3fc32324db0"
         ],
-        "blockHeight": 202,
-        "window": "[36, 37)"
+        "blockHeight": 439,
+        "window": "[34, 35)"
       }
     ],
     "depositTxEnumerated": true,
     "candidateSets": [
       {
-        "source": "enumerated ContractCall deposit_shielded @ block 202",
+        "source": "enumerated ContractCall deposit_shielded @ block 439",
         "candidates": [
-          "36"
+          "34"
         ]
       }
     ],
     "spendAttempts": [
       {
-        "source": "enumerated ContractCall deposit_shielded @ block 202",
-        "mtIndex": "36",
+        "source": "enumerated ContractCall deposit_shielded @ block 439",
+        "mtIndex": "34",
         "outcome": "accepted",
-        "txId": "00b53737afeea7f7dfa7b622eb2db5c1d88e3b70ec9c3d672b4388c004e99d5797"
+        "txId": "00137f2efe1174689b72720505cfe72d49fa02e2ef828f50070cbd07d7556d2451"
       }
     ],
-    "mtIndexSource": "enumerated ContractCall deposit_shielded @ block 202 @ index 36",
-    "spendTx": "00b53737afeea7f7dfa7b622eb2db5c1d88e3b70ec9c3d672b4388c004e99d5797"
+    "mtIndexSource": "enumerated ContractCall deposit_shielded @ block 439 @ index 34",
+    "spendTx": "00137f2efe1174689b72720505cfe72d49fa02e2ef828f50070cbd07d7556d2451"
   },
-  "ranAt": "2026-07-17T16:07:20.245Z",
+  "ranAt": "2026-08-27T12:45:32.632Z",
   "stack": {
-    "node": "midnightntwrk/midnight-node:1.0.0",
-    "indexer": "midnightntwrk/indexer-standalone:4.3.3",
-    "proofServer": "midnightntwrk/proof-server:8.1.0"
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
   }
 }

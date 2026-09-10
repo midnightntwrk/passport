@@ -42,9 +42,14 @@ import CompactStandardLibrary;
 // Two client-side rules are load-bearing (see
 // research/anarkey-buss-recovery-assessment.md):
 //   - Every publish_recovery_backup MUST use a fresh session nonce AND a
-//     fresh recovery secret. Correlated φ vectors across sessions degrade
-//     the threshold; stale φ of a superseded secret is harmless only
-//     because the commitment is rotated with it.
+//     fresh recovery secret (ANARKey Remark 6.1). Reusing a session nonce
+//     with the same guardian roster does not merely degrade the threshold:
+//     both ceremonies' polynomials agree at every guardian point, so their
+//     difference is solvable from the public φ vectors alone, and one
+//     (t+1) quorum on either ceremony opens both secrets. The circuit
+//     enforces an inequality backstop against accidental reuse; genuine
+//     freshness remains a client obligation. Stale φ of a superseded
+//     secret is harmless only because the commitment is rotated with it.
 //   - recover() clears φ: after recovery the account has a recovery secret
 //     but no published backup until the owner runs a new guardian ceremony.
 //
@@ -117,10 +122,14 @@ export ledger device_count: Uint<8>;
 export ledger recovery: Field;
 // Commitment to the recovery secret (derive_recovery_commitment).
 
-export ledger recovery_phi: Map<Uint<8>, Bytes<32>>;
-// BUSS public vector φ, keyed 1..recovery_phi_len. Each entry is the
-// canonical 32-byte encoding of a BLS12-381 scalar field element. Opaque to
-// the contract; interpreted only by the client (buss-wasm).
+export ledger recovery_phi: Map<Uint<8>, Field>;
+// BUSS public vector φ, keyed 1..recovery_phi_len. Each entry is a BLS12-381
+// scalar field element, canonical by construction: the Field type makes a
+// non-canonical encoding unrepresentable on-chain, so a malformed backup is
+// rejected when the publishing transaction is built instead of blocking
+// every guardian's decode at recovery time. Interpreted only by the client
+// (buss-wasm); the client boundary encoding is the canonical little-endian
+// 32-byte repr (buss-core phiFieldFromBytes / phiBytesFromField).
 
 export ledger recovery_phi_len: Uint<8>;
 // Number of live φ entries. 0 = no backup published (recovery possible only
@@ -402,21 +411,30 @@ export circuit revoke_grant(grant: Field): [] {
 // (covers e.g. three guardians at threshold two, φ = 2, or five guardians
 // at threshold three, φ = 3); unused slots must be zero and are gated by
 // recovery_phi_len. The client MUST rotate the recovery secret and use a
-// fresh session nonce on every call — re-publishing φ for the same secret
-// with correlated guardian shares degrades the threshold (see header).
+// fresh session nonce on every call — nonce reuse under the same roster
+// collapses the independence of the two ceremonies (see header). The
+// circuit rejects the previous nonce and commitment as a backstop.
 
 export circuit publish_recovery_backup(
   new_recovery_commitment: Field,
   session_nonce: Bytes<32>,
-  phi_1: Bytes<32>,
-  phi_2: Bytes<32>,
-  phi_3: Bytes<32>,
-  phi_4: Bytes<32>,
+  phi_1: Field,
+  phi_2: Field,
+  phi_3: Field,
+  phi_4: Field,
   phi_len: Uint<8>,
 ): [] {
   require_device();
   assert(phi_len >= (1 as Uint<8>), "phi must not be empty");
   assert(phi_len <= (4 as Uint<8>), "phi length out of range");
+  // On-chain backstop for the freshness MUST above: reject reuse of the
+  // stored session nonce or recovery commitment. Equality with the stored
+  // value is the only reuse the contract can see — genuine freshness
+  // (independent randomness in the client) stays a client obligation.
+  // The constructor's all-zero recovery_session sentinel also makes an
+  // all-zero nonce (broken client RNG) unacceptable on the first backup.
+  assert(session_nonce != recovery_session, "session nonce reused");
+  assert(new_recovery_commitment != recovery, "recovery commitment reused");
   recovery         = disclose(new_recovery_commitment);
   recovery_session = disclose(session_nonce);
   recovery_phi.insert(1 as Uint<8>, disclose(phi_1));

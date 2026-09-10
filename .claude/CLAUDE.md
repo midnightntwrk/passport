@@ -22,7 +22,7 @@ This repository is the planning and knowledge-gathering workspace for Midnight P
 
 ## Repository layout
 
-- `site/` — static web artefacts deployed to GitHub Pages. `site/index.html` is the unified entry point; `site/demo.html` and `site/standards.html` are the stakeholder-facing artefacts. Earlier plan documents (`the-plan.html`, `delivery-plan.html`, plus their Plan-B variants) live in `site/archive/` for historical reference. Uses `../assets/logos/…` so it still renders locally.
+- `site/` — static web artefacts deployed to GitHub Pages. Five pages: `index.html` (landing: pitch, status, role routing), `demo.html` (how it works + the October demo), `standards.html` (MIP register and implementer path), `architecture.html`, and `plan.html` (working surface: promises, canvases, dependencies, parallelisation). `site/check.js` gates the deploy on link/anchor/data integrity. Earlier artefacts (plan pages, the onboarding mockup) live in `site/archive/`; retired URLs keep redirect stubs. Uses `../assets/logos/…` so it still renders locally.
 - `docs/` — plan and design documents in prose (markdown and PDF).
 - `research/` — background research informing the plan.
 - `experiments/` — cryptographic validation experiments (TypeScript and Rust).

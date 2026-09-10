@@ -36,6 +36,18 @@ together; the upstream copies are canonical.
 
 ## In draft
 
+- `mips/mip-xxxx-signature-schemes.md` — **Signature Schemes for
+  Custody-Account Authorisation (C5 signing primitive)**: the scheme
+  registry MIP-0013's Versioning section anticipates (schemes as
+  arm-marked DST tag families: v1 JubJub Schnorr, k1 interim, r1
+  WebAuthn ECDSA over secp256r1), the per-scheme dedicated-circuit
+  pattern with the scheme-generic challenge core and its ECDSA
+  deltas, the r1 envelope binding, and the SIG invariant family.
+  Filled from the evidence base (the P-256 in-circuit experiment and
+  the k1 arm). Remaining tags: [DEP] Compact r1 surface, [CIRCUIT]
+  length-agnostic client-data hashing, [CRYPTO] envelope-binding and
+  malleability-inertness review, [RULING] the k1 Interim-status
+  registration. Tracked by passport issue #51 and PR #146.
 - **Recovery paths (building block three; not yet drafted)**:
   total-loss recovery behind the seam; the prototype realises this
   with BUSS, and the standard stays scheme-agnostic at the contract

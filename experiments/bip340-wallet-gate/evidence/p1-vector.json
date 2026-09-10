@@ -1,0 +1,18 @@
+{
+  "generated": "2026-09-05T06:14:34.526Z",
+  "pins": {
+    "wallet-sdk": "account-custody-prototype lockfile",
+    "noble": "1.9.7"
+  },
+  "secretKeyHex": "0707070707070707070707070707070707070707070707070707070707070707",
+  "challengeHex": "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+  "publicKeyHex": "989c0b76cb563971fdc9bef31ec06c3560f3249d6ee9e5d83c57625596e05f6f",
+  "signatureHex": "998ededb3eae44fb13ad2e3aee44b5b2059c2ba866eac104c68b174374256167a08658eb6e82d5d609b7fe8d9c9f517afd5f7deb7e420c076e1925035cd63268",
+  "ledgerVerify": true,
+  "characterisation": "BIP-340 Schnorr over secp256k1; message = SHA-256(data), untagged pre-hash (k256 RandomizedSigner); pk x-only 32B; sig 64B; signature randomised (aux_rand), not deterministic",
+  "nobleTrials": [
+    "noble BIP340 pk=as-is-32 sig=as-is-64 msg=raw: false",
+    "noble BIP340 pk=as-is-32 sig=as-is-64 msg=sha256(raw): true",
+    "noble BIP340 pk=as-is-32 sig=as-is-64 msg=sha256(sha256(raw)): false"
+  ]
+}

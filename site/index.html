@@ -3,92 +3,186 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Midnight Passport — Plan, Promises, Components</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23E52321'/><text x='50' y='74' font-size='68' font-weight='700' font-family='Arial,Helvetica,sans-serif' fill='%23FFFFFF' text-anchor='middle'>P</text></svg>">
+<title>Midnight Passport</title>
+<meta name="description" content="Midnight Passport: the identity and account layer for the Midnight network. Named accounts, passkeys instead of seed phrases, guardian recovery — how it works and where the work stands.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="shared.css">
 <style>
-  body {
-    font-size: 17px;
-    line-height: 1.65;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  main { flex: 1; }
 
   .container {
-    max-width: clamp(820px, 76vw, 1280px);
+    max-width: clamp(820px, 80vw, 1280px);
     margin: 0 auto;
     padding: 0 clamp(24px, 5vw, 80px);
     width: 100%;
   }
-  .container.wide { max-width: clamp(820px, 92vw, 1600px); }
 
   /* ---------- Hero ---------- */
 
-  section.hero { padding: 72px 0 56px; }
+  section.hero { padding: 64px 0 48px; }
 
-  .doc-logo, .doc-logo-dark {
-    height: clamp(48px, 5vw, 88px);
-    width: auto;
-    display: block;
-    margin-bottom: 48px;
-  }
-  .doc-logo-dark { display: none; }
-  html[data-theme="dark"] .doc-logo { display: none; }
-  html[data-theme="dark"] .doc-logo-dark { display: block; }
-  @media (not (prefers-color-scheme: light)) {
-    html:not([data-theme="light"]) .doc-logo { display: none; }
-    html:not([data-theme="light"]) .doc-logo-dark { display: block; }
-  }
+  .doc-logo, .doc-logo-dark { height: clamp(44px, 4.5vw, 76px); margin-bottom: 40px; }
 
-  .kind {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--iog-infared);
-    font-weight: 600;
-    margin-bottom: 20px;
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: clamp(28px, 4vw, 64px);
+    align-items: center;
+  }
+  @media (max-width: 900px) {
+    .hero-grid { grid-template-columns: 1fr; }
   }
 
   h1 {
     font-family: var(--font-display);
-    font-size: clamp(2.6rem, 5.2vw, 4.2rem);
+    font-size: clamp(2.4rem, 4.8vw, 3.8rem);
     font-weight: 500;
     letter-spacing: -0.03em;
-    line-height: 1.04;
+    line-height: 1.05;
     margin-bottom: 18px;
     color: var(--text);
   }
-
   p.subtitle {
-    font-size: 1.2rem;
+    font-size: 1.14rem;
     color: var(--text-mute);
     font-weight: 300;
-    line-height: 1.55;
-    max-width: 62ch;
-    margin-bottom: 0;
+    line-height: 1.6;
+    max-width: 58ch;
+    margin-bottom: 28px;
   }
-
-  /* ---------- Section heads ---------- */
-
-  .section-head { margin-bottom: 32px; }
-  .section-kind {
+  p.subtitle b { color: var(--text); font-weight: 600; }
+  p.subtitle code {
     font-family: var(--font-mono);
-    font-size: 0.74rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
+    font-size: 0.88em;
     color: var(--iog-infared);
-    font-weight: 600;
-    margin-bottom: 12px;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 6px;
+    white-space: nowrap;
   }
+
+  .hero-ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-body);
+    font-size: 0.98rem;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 12px 24px;
+    text-decoration: none;
+    border: 1px solid var(--line-strong);
+    color: var(--text);
+    background: var(--bg);
+    transition: border-color .15s ease, background .15s ease, filter .15s ease;
+  }
+  .cta:hover { border-color: var(--iog-infared); }
+  .cta.primary {
+    background: var(--iog-infared);
+    border-color: var(--iog-infared);
+    color: #fff;
+  }
+  .cta.primary:hover { filter: brightness(1.08); }
+
+  /* Hero visual — a compact copy of the two-zone picture.
+     demo.html's "The whole system on one screen" is the source of truth
+     for this diagram; keep the two in step. */
+  .mini-stage-wrap { min-width: 0; }
+  .mini-stage {
+    display: grid;
+    grid-template-columns: 1fr 1.1fr;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg-soft);
+    overflow: hidden;
+  }
+  .mini-zone { padding: 14px 16px 16px; min-width: 0; }
+  .mini-zone.off { border-right: 2px dashed var(--line-strong); }
+  .mini-zone-label {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+  }
+  .mini-zone.off .mini-zone-label { color: var(--info); }
+  .mini-zone.on .mini-zone-label { color: var(--iog-infared); }
+  .mini-actor {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    padding: 8px 10px;
+    margin-bottom: 8px;
+  }
+  .mini-actor:last-child { margin-bottom: 0; }
+  .mini-actor-name {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .mini-chip {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--bad);
+    color: var(--bad);
+    background: var(--bad-soft);
+  }
+  .mini-contract {
+    border: 1.5px solid var(--card-stroke);
+    border-radius: 8px;
+    background: var(--card-fill);
+    overflow: hidden;
+  }
+  .mini-contract-head {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-alt);
+  }
+  .mini-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px dashed var(--line);
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+  }
+  .mini-row:last-child { border-bottom: none; }
+  .mini-row .k { color: var(--text-mute); width: 74px; flex: none; }
+  .mini-row .v { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mini-caption {
+    font-size: 0.84rem;
+    color: var(--text-mute);
+    line-height: 1.5;
+    margin-top: 10px;
+  }
+  .mini-caption a { color: var(--iog-infared); text-decoration: none; border-bottom: 1px solid currentColor; }
+  .mini-caption a:hover { color: var(--iog-dawn); }
+
+  /* ---------- Section scaffold ---------- */
+
+  section.section {
+    padding: 48px 0;
+    border-top: 1px solid var(--line);
+  }
+  .section-head { margin-bottom: 28px; }
   .section-head h2 {
     font-family: var(--font-display);
-    font-size: clamp(1.7rem, 3vw, 2.4rem);
+    font-size: clamp(1.7rem, 3vw, 2.3rem);
     font-weight: 500;
     letter-spacing: -0.02em;
     line-height: 1.1;
@@ -97,618 +191,112 @@
   }
   .section-head p {
     color: var(--text-mute);
-    max-width: 70ch;
+    max-width: 72ch;
+  }
+  .status-updated {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    margin-top: 10px;
   }
 
-  /* ---------- Promises ---------- */
+  /* ---------- Facts strip ---------- */
 
-  section.promises {
-    padding: 48px 0;
-    border-top: 1px solid var(--line);
-  }
-
-  .promises-grid {
+  .facts {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    gap: 14px;
   }
-
-  .promise-card {
+  .fact {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 8px;
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 22px 22px 16px;
+    padding: 20px 22px;
     background: var(--bg);
     color: inherit;
-    text-align: left;
-    font-family: inherit;
-    cursor: pointer;
+    text-decoration: none;
     transition: border-color .15s ease, background .15s ease, transform .15s ease;
   }
-  .promise-card:hover {
+  .fact:hover {
     border-color: var(--iog-infared);
     background: var(--bg-soft);
     transform: translateY(-1px);
   }
-  .promise-card:focus-visible {
-    outline: 2px solid var(--iog-infared);
-    outline-offset: 2px;
-  }
-
-  .promise-card-head {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-  }
-  .promise-id {
+  .fact-kicker {
     font-family: var(--font-mono);
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--iog-infared);
-    letter-spacing: 0.06em;
-  }
-  .promise-name {
-    font-family: var(--font-display);
-    font-size: 1.15rem;
-    font-weight: 500;
-    letter-spacing: -0.01em;
-    color: var(--text);
-    margin: 0;
-  }
-  .promise-statement {
-    font-size: 0.94rem;
-    color: var(--text-mute);
-    line-height: 1.55;
-    flex: 1;
-    margin: 0;
-  }
-  .promise-card-foot {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    padding-top: 12px;
-    border-top: 1px dashed var(--line);
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    color: var(--text-faint);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 600;
-  }
-  .promise-card:hover .promise-card-foot { color: var(--iog-infared); }
-  .promise-arrow { transition: transform .12s ease; }
-  .promise-card:hover .promise-arrow { transform: translateX(2px); }
-
-  /* ---------- Principle history (Section 1, below promises) ---------- */
-
-  .principle-history {
-    margin-top: 48px;
-    padding-top: 36px;
-    border-top: 1px dashed var(--line);
-  }
-  .history-head { margin-bottom: 24px; }
-  .history-head .section-kind { margin-bottom: 8px; }
-  .history-head h3 {
-    font-family: var(--font-display);
-    font-size: 1.4rem;
-    font-weight: 500;
-    letter-spacing: -0.015em;
-    color: var(--text);
-    margin-bottom: 12px;
-  }
-  .history-head p {
-    font-size: 0.96rem;
-    color: var(--text-mute);
-    line-height: 1.6;
-    max-width: 78ch;
-  }
-  .history-head em {
-    font-style: normal;
-    color: var(--text);
-    font-weight: 600;
-    background: var(--bg-soft);
-    padding: 0 5px;
-    border-radius: 3px;
-    font-size: 0.92em;
-  }
-
-  .mapping-table-wrap {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    overflow: hidden;
-    margin-bottom: 18px;
-  }
-  .mapping-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--bg);
-  }
-  .mapping-table thead th {
-    text-align: left;
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-faint);
-    padding: 12px 16px;
-    background: var(--bg-soft);
-    border-bottom: 1px solid var(--line);
-  }
-  .mapping-table td {
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--line);
-    font-size: 0.92rem;
-    color: var(--text);
-    vertical-align: top;
-    line-height: 1.55;
-  }
-  .mapping-table tbody tr:last-child td { border-bottom: 0; }
-  .mapping-table .op-id {
-    font-family: var(--font-mono);
-    font-weight: 700;
-    color: var(--iog-infared);
-    margin-right: 6px;
-  }
-  .disp {
-    font-family: var(--font-mono);
-    font-size: 0.84rem;
-    color: var(--text-mute);
-  }
-  .map-pill {
-    display: inline-block;
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    font-weight: 600;
-    color: var(--iog-infared);
-    border: 1px solid var(--iog-infared);
-    border-radius: 4px;
-    padding: 1px 7px;
-    text-decoration: none;
-    margin-right: 4px;
-    transition: background .12s ease;
-  }
-  .map-pill:hover { background: var(--bad-soft); }
-  .map-note {
-    font-size: 0.86rem;
-    color: var(--text-mute);
-    margin-left: 6px;
-  }
-  .mapping-additions {
-    font-size: 0.95rem;
-    color: var(--text-mute);
-    line-height: 1.7;
-    padding: 16px 20px 8px;
-    background: var(--bg-soft);
-    border: 1px solid var(--line);
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
-    border-bottom: 0;
-  }
-  .mapping-additions strong { color: var(--text); font-weight: 600; }
-
-  .mapping-implicit {
-    list-style: none;
-    margin: 0;
-    padding: 0 20px 16px;
-    background: var(--bg-soft);
-    border: 1px solid var(--line);
-    border-top: 0;
-    border-bottom-left-radius: 6px;
-    border-bottom-right-radius: 6px;
-    display: grid;
-    gap: 8px;
-  }
-  .mapping-implicit li {
-    display: grid;
-    grid-template-columns: 44px auto 1fr;
-    gap: 10px;
-    align-items: baseline;
-    font-size: 0.92rem;
-    color: var(--text-mute);
-    line-height: 1.55;
-    padding: 8px 0;
-    border-top: 1px dashed var(--line);
-  }
-  .mapping-implicit li:first-child { border-top: 0; padding-top: 4px; }
-  .mapping-implicit .map-pill { margin-right: 0; }
-  .imp-name {
-    font-family: var(--font-display);
-    font-weight: 600;
-    color: var(--text);
-    font-size: 0.96rem;
-  }
-  .imp-source {
-    color: var(--text-mute);
-  }
-  .imp-source code {
-    font-family: var(--font-mono);
-    font-size: 0.86em;
-    background: var(--bg);
-    padding: 1px 5px;
-    border-radius: 3px;
-    border: 1px solid var(--line);
-  }
-  @media (max-width: 640px) {
-    .mapping-implicit li {
-      grid-template-columns: 44px 1fr;
-    }
-    .mapping-implicit .imp-source { grid-column: 2 / -1; }
-  }
-
-  /* ---------- Components table ---------- */
-
-  section.components-table {
-    padding: 48px 0 56px;
-    border-top: 1px solid var(--line);
-  }
-
-  .table-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin: 24px 0 18px;
-  }
-  .table-controls-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px 18px;
-    align-items: center;
-  }
-
-  .search-input {
-    flex: 1 1 320px;
-    min-width: 240px;
-    padding: 11px 14px;
-    font-family: inherit;
-    font-size: 0.94rem;
-    color: var(--text);
-    background: var(--bg);
-    border: 1px solid var(--line-strong);
-    border-radius: 4px;
-    transition: border-color .12s ease, box-shadow .12s ease;
-  }
-  .search-input::placeholder { color: var(--text-faint); }
-  .search-input:focus {
-    outline: none;
-    border-color: var(--iog-infared);
-  }
-
-  .filter-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .filter-label {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: 0.66rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    color: var(--text-faint);
-  }
-
-  .promise-filters { display: inline-flex; gap: 4px; flex-wrap: wrap; }
-
-  .filter-pill {
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    font-weight: 600;
-    background: transparent;
-    color: var(--text-mute);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 4px 10px;
-    cursor: pointer;
-    transition: border-color .12s ease, color .12s ease, background .12s ease;
-    letter-spacing: 0.04em;
-  }
-  .filter-pill:hover {
-    border-color: var(--iog-infared);
-    color: var(--iog-infared);
-  }
-  .filter-pill[aria-pressed="true"] {
-    background: var(--bad-soft);
-    border-color: var(--iog-infared);
-    color: var(--iog-infared);
-  }
-
-  .category-select {
-    padding: 7px 12px;
-    font-family: inherit;
-    font-size: 0.88rem;
-    color: var(--text);
-    background: var(--bg);
-    border: 1px solid var(--line-strong);
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  .category-select:focus { outline: none; border-color: var(--iog-infared); }
-
-  .clear-filters {
-    background: transparent;
-    border: 0;
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-faint);
-    cursor: pointer;
-    padding: 4px 4px;
-  }
-  .clear-filters:hover { color: var(--iog-infared); }
-
-  .result-count {
-    margin-left: auto;
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    color: var(--text-faint);
-    letter-spacing: 0.04em;
-  }
-
-  .comp-table-wrap {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-
-  .comp-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--bg);
-  }
-  .comp-table thead th {
-    text-align: left;
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-faint);
-    padding: 12px 16px;
-    background: var(--bg-soft);
-    border-bottom: 1px solid var(--line);
-  }
-  .comp-table tbody td {
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--line);
-    vertical-align: top;
-  }
-  .comp-table tbody tr:last-child td { border-bottom: 0; }
-  .comp-row {
-    cursor: pointer;
-    transition: background .12s ease;
-  }
-  .comp-row:hover { background: var(--bg-soft); }
-  .comp-row:focus-visible {
-    outline: 2px solid var(--iog-infared);
-    outline-offset: -2px;
-  }
-  .comp-row.is-empty td {
-    text-align: center;
-    color: var(--text-faint);
-    font-style: italic;
-    padding: 36px 16px;
-  }
-
-  .col-id { width: 64px; }
-  .col-cat { width: 22%; }
-  .col-serves { width: 22%; }
-  .col-flag { width: 110px; }
-  @media (max-width: 900px) {
-    .col-cat, .col-serves, .col-flag { display: none; }
-    .comp-table thead .col-cat,
-    .comp-table thead .col-serves,
-    .comp-table thead .col-flag { display: none; }
-  }
-
-  .comp-id {
-    font-family: var(--font-mono);
-    font-size: 0.84rem;
-    font-weight: 700;
-    color: var(--iog-infared);
-    letter-spacing: 0.04em;
-  }
-  .comp-name {
-    font-family: var(--font-display);
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--text);
-    margin-bottom: 4px;
-  }
-  .comp-outcome {
-    font-size: 0.86rem;
-    color: var(--text-mute);
-    line-height: 1.45;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .comp-category {
-    font-size: 0.86rem;
-    color: var(--text-mute);
-  }
-  .comp-serves-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .serves-pill {
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: var(--iog-infared);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 1px 7px;
-    letter-spacing: 0.04em;
-    background: transparent;
-  }
-  .ws-badge {
-    display: inline-block;
-    font-family: var(--font-mono);
-    font-size: 0.66rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--iog-infared);
-    background: var(--bad-soft);
-    border: 1px solid var(--iog-infared);
-    border-radius: 4px;
-    padding: 2px 8px;
-  }
-  .done-badge {
-    display: inline-block;
-    font-family: var(--font-mono);
-    font-size: 0.66rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
     color: var(--good);
-    background: var(--good-soft);
-    border: 1px solid var(--good);
-    border-radius: 4px;
-    padding: 2px 8px;
-    white-space: nowrap;
   }
-  .decided-badge {
-    display: inline-block;
-    font-family: var(--font-mono);
-    font-size: 0.66rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--info);
-    background: var(--info-soft);
-    border: 1px solid var(--info);
-    border-radius: 4px;
-    padding: 2px 8px;
-    white-space: nowrap;
+  .fact-kicker.plan { color: var(--iog-infared); }
+  .fact h3 {
+    font-family: var(--font-display);
+    font-size: 1.08rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+    line-height: 1.3;
   }
-
-  /* ---------- Graph ---------- */
-
-  section.graph,
-  section.cascade {
-    padding: 56px 0 80px;
-    border-top: 1px solid var(--line);
+  .fact p {
+    font-size: 0.9rem;
+    color: var(--text-mute);
+    line-height: 1.55;
+    margin: 0;
+    flex: 1;
   }
-
-  .graph-shell {
-    position: relative;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--bg-soft);
-    overflow: hidden;
-    height: 720px;
-    box-shadow: 0 1px 0 var(--line);
-  }
-  .graph-shell.short { height: 520px; }
-  @media (max-width: 900px) {
-    .graph-shell { height: 560px; }
-    .graph-shell.short { height: 460px; }
-  }
-
-  .cy-canvas {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-  }
-
-  /* Graph toolbar (top-right of canvas) */
-  .graph-controls {
-    position: absolute;
-    top: 14px;
-    right: 14px;
-    z-index: 5;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .graph-toggle {
+  .fact-foot {
     font-family: var(--font-mono);
     font-size: 0.72rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    background: var(--bg);
-    color: var(--text-mute);
-    border: 1px solid var(--line-strong);
-    border-radius: 4px;
-    padding: 7px 12px;
-    cursor: pointer;
-    transition: border-color .12s ease, color .12s ease, background .12s ease;
+    color: var(--text-faint);
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
   }
-  .graph-toggle:hover {
-    border-color: var(--iog-infared);
-    color: var(--iog-infared);
-  }
-  .graph-toggle[aria-pressed="true"] {
-    background: var(--bad-soft);
-    border-color: var(--iog-infared);
-    color: var(--iog-infared);
-  }
+  .fact:hover .fact-foot { color: var(--iog-infared); }
 
-  /* Legend (bottom-left of canvas) */
-  .graph-legend {
-    position: absolute;
-    left: 14px;
-    bottom: 14px;
-    z-index: 5;
-    display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-    background: var(--bg);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    padding: 10px 14px;
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    color: var(--text-mute);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-  .legend-item { display: inline-flex; align-items: center; gap: 6px; }
-  .legend-swatch {
-    width: 16px;
-    height: 12px;
-    border-radius: 3px;
-    border: 1.5px solid var(--card-stroke-soft);
-    background: var(--card-fill);
-  }
-  .legend-swatch.core { background: var(--iog-volt-yellow); border-color: var(--card-stroke); }
-  .legend-swatch.workstream { background: var(--bad-soft); border-color: var(--iog-infared); }
-  .legend-swatch.specified { background: var(--good-soft); border-color: var(--good); }
-  .legend-swatch.decided { background: var(--info-soft); border-color: var(--info); }
-  .legend-swatch.component { background: var(--card-fill); border-color: var(--card-stroke-soft); }
-  .legend-swatch.question { background: var(--warn-soft); border-color: var(--warn); }
-  .legend-swatch.edge-hard,
-  .legend-swatch.edge-assoc,
-  .legend-swatch.edge-coupling {
-    height: 0;
-    border-top: 1.5px solid var(--line-strong);
-    background: transparent;
-    border-radius: 0;
-    border-left: 0; border-right: 0; border-bottom: 0;
-  }
-  .legend-swatch.edge-assoc { border-top-style: dashed; }
-  .legend-swatch.edge-coupling { border-top-style: dotted; }
+  /* ---------- Role router ---------- */
 
-  /* ---------- At a glance ---------- */
-
-  section.glance {
-    padding: 48px 0 56px;
-    border-top: 1px solid var(--line);
-  }
-  .glance-stats {
+  .router {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    gap: 14px;
+  }
+  .route {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 22px 24px;
+    background: var(--bg);
+  }
+  .route h3 {
+    font-family: var(--font-display);
+    font-size: 1.12rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 10px;
+  }
+  .route ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .route li { font-size: 0.92rem; color: var(--text-mute); line-height: 1.5; }
+  .route a {
+    color: var(--iog-infared);
+    text-decoration: none;
+    border-bottom: 1px solid var(--line);
+    transition: border-color .12s ease;
+  }
+  .route a:hover { border-bottom-color: var(--iog-infared); }
+
+  /* ---------- Status board ---------- */
+
+  .status-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
     gap: 14px;
     margin-bottom: 28px;
   }
@@ -725,6 +313,7 @@
     letter-spacing: -0.02em;
     line-height: 1;
     color: var(--text);
+    font-variant-numeric: tabular-nums;
   }
   .stat-label {
     font-family: var(--font-mono);
@@ -737,20 +326,13 @@
     align-items: center;
     gap: 7px;
   }
-  .stat-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    flex: none;
-  }
+  .stat-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   .stat-dot.s-specified { background: var(--good); }
   .stat-dot.s-decided   { background: var(--info); }
   .stat-dot.s-open      { background: var(--iog-infared); }
   .stat-dot.s-neutral   { background: var(--text-faint); }
-  .glance-map {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
+
+  .glance-map { display: flex; flex-direction: column; gap: 10px; margin-bottom: 40px; }
   .map-row {
     display: grid;
     grid-template-columns: 200px 1fr;
@@ -789,61 +371,16 @@
     .map-row { grid-template-columns: 1fr; gap: 8px; }
   }
 
-  /* ---------- What remains ---------- */
-
-  .next-head { margin: 48px 0 22px; }
-  .next-head h3 {
+  /* Milestones — reverse-chronological, earlier entries collapsed */
+  .timeline-head {
     font-family: var(--font-display);
-    font-size: 1.4rem;
+    font-size: 1.35rem;
     font-weight: 500;
     letter-spacing: -0.015em;
     color: var(--text);
-    margin: 6px 0 10px;
+    margin: 0 0 6px;
   }
-  .next-head p { color: var(--text-mute); max-width: 70ch; margin: 0; }
-  .next-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 14px;
-  }
-  .next-card {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 16px 18px;
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .next-lane {
-    font-family: var(--font-mono);
-    font-size: 0.66rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--iog-infared);
-  }
-  .next-title {
-    font-family: var(--font-display);
-    font-size: 1.02rem;
-    font-weight: 500;
-    color: var(--text);
-    margin: 0;
-  }
-  .next-detail {
-    font-size: 0.88rem;
-    line-height: 1.5;
-    color: var(--text-mute);
-    margin: 0;
-    flex: 1;
-  }
-
-  /* ---------- Progress (Section 5) ---------- */
-
-  section.progress {
-    padding: 56px 0 64px;
-    border-top: 1px solid var(--line);
-  }
+  .timeline-hint { color: var(--text-mute); max-width: 70ch; margin: 0 0 20px; font-size: 0.96rem; }
   .progress-timeline {
     list-style: none;
     margin: 0;
@@ -918,236 +455,81 @@
     border-color: var(--iog-infared);
     color: var(--text);
   }
+  .progress-chip.progress-evi {
+    border-style: dashed;
+    color: var(--text-faint);
+  }
+  details.timeline-more { margin-top: 4px; }
+  details.timeline-more > summary {
+    cursor: pointer;
+    list-style: none;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-mute);
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    padding: 10px 16px;
+    display: inline-block;
+    transition: border-color .12s ease, color .12s ease;
+  }
+  details.timeline-more > summary::-webkit-details-marker { display: none; }
+  details.timeline-more > summary:hover { border-color: var(--iog-infared); color: var(--iog-infared); }
+  details.timeline-more[open] > summary { margin-bottom: 8px; }
   @media (max-width: 640px) {
     .progress-item { grid-template-columns: 1fr; gap: 6px; }
   }
 
-  /* ---------- Delivery (Section 6) ---------- */
+  /* ---------- Asks + engage ---------- */
 
-  section.delivery {
-    padding: 56px 0 80px;
-    border-top: 1px solid var(--line);
-  }
-
-  .delivery-grid {
+  .asks {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 18px;
-    margin-bottom: 40px;
-  }
-
-  .delivery-card {
-    display: flex;
-    flex-direction: column;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
     gap: 14px;
+    margin-bottom: 32px;
+  }
+  .ask {
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 26px 28px;
+    padding: 18px 20px;
     background: var(--bg);
-    color: inherit;
-    text-decoration: none;
-    transition: border-color .15s ease, background .15s ease, transform .15s ease;
-  }
-  .delivery-card:hover {
-    border-color: var(--iog-infared);
-    background: var(--bg-soft);
-    transform: translateY(-1px);
-  }
-  .delivery-kind {
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--iog-infared);
-    font-weight: 600;
-  }
-  .delivery-title {
-    font-family: var(--font-display);
-    font-size: 1.5rem;
-    font-weight: 500;
-    letter-spacing: -0.015em;
-    color: var(--text);
-    margin: 0;
-  }
-  .delivery-summary {
-    font-size: 0.96rem;
-    color: var(--text-mute);
-    line-height: 1.55;
-    margin: 0;
-    flex: 1;
-  }
-  .delivery-open {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--iog-infared);
-    margin-top: 4px;
-  }
-
-  .crossover {
-    margin-top: 8px;
-  }
-  .crossover-head { margin-bottom: 22px; }
-  .crossover-head .section-kind { margin-bottom: 8px; }
-  .crossover-title {
-    font-family: var(--font-display);
-    font-size: 1.3rem;
-    font-weight: 500;
-    letter-spacing: -0.015em;
-    line-height: 1.2;
-    color: var(--text);
-    margin: 0 0 10px;
-  }
-  .crossover-head p {
-    font-size: 0.95rem;
-    color: var(--text-mute);
-    line-height: 1.55;
-    max-width: 70ch;
-    margin: 0;
-  }
-
-  /* Crossover grid — 4 primitives, each split demo / standards */
-  .cx-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-    gap: 16px;
-  }
-
-  .cx-card {
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--bg);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    transition: border-color .15s ease, transform .15s ease;
-  }
-  .cx-card:hover {
-    border-color: var(--card-stroke-soft);
-    transform: translateY(-1px);
-  }
-
-  .cx-card-head {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    padding: 16px 22px;
-    background: var(--bg-soft);
-    border-bottom: 1px solid var(--line);
-  }
-  .cx-card-id {
-    font-family: var(--font-mono);
-    font-size: 0.86rem;
-    font-weight: 700;
-    color: var(--iog-infared);
-    letter-spacing: 0.04em;
-    text-decoration: none;
-    border: 1px solid var(--iog-infared);
-    border-radius: 4px;
-    padding: 2px 8px;
-    transition: background .12s ease;
-  }
-  .cx-card-id:hover { background: var(--bad-soft); }
-  .cx-card-name {
-    font-family: var(--font-display);
-    font-size: 1.05rem;
-    font-weight: 500;
-    color: var(--text);
-    margin: 0;
-    letter-spacing: -0.01em;
-  }
-
-  .cx-roles {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    flex: 1;
-  }
-  @media (max-width: 720px) {
-    .cx-roles { grid-template-columns: 1fr; }
-  }
-
-  .cx-role {
-    padding: 16px 20px;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    position: relative;
   }
-  .cx-role-demo {
-    border-right: 1px solid var(--line);
-  }
-  @media (max-width: 720px) {
-    .cx-role-demo {
-      border-right: 0;
-      border-bottom: 1px solid var(--line);
-    }
-  }
-  .cx-role-label {
+  .ask-who {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: 0.66rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    align-self: flex-start;
-    padding: 2px 8px;
-    border-radius: 3px;
-  }
-  .cx-role-demo .cx-role-label {
+    letter-spacing: 0.12em;
     color: var(--iog-infared);
-    background: var(--bad-soft);
   }
-  .cx-role-std .cx-role-label {
-    color: var(--info);
-    background: var(--info-soft);
-  }
-  .cx-role-text {
-    font-size: 0.92rem;
+  .ask h3 {
+    font-family: var(--font-display);
+    font-size: 1.02rem;
+    font-weight: 600;
     color: var(--text);
-    line-height: 1.55;
     margin: 0;
   }
-  .cx-role-text a {
-    color: var(--iog-infared);
-    text-decoration: none;
-    border-bottom: 1px solid currentColor;
-  }
-  .cx-role-text a:hover { color: var(--iog-dawn); }
-  .cx-role-text code {
-    font-family: var(--font-mono);
-    font-size: 0.86em;
-    background: var(--bg-soft);
-    padding: 1px 5px;
-    border-radius: 3px;
+  .ask p { font-size: 0.88rem; color: var(--text-mute); line-height: 1.5; margin: 0; flex: 1; }
+  .ask a { color: var(--iog-infared); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .ask a:hover { border-bottom-color: var(--iog-infared); }
+  .ask .glance-chip { align-self: flex-start; }
+
+  .engage {
     border: 1px solid var(--line);
+    border-left: 3px solid var(--iog-infared);
+    border-radius: 8px;
+    background: var(--bg);
+    padding: 20px 24px;
   }
+  .engage p { font-size: 0.94rem; color: var(--text-mute); margin: 0; max-width: 80ch; }
+  .engage a { color: var(--iog-infared); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .engage a:hover { border-bottom-color: var(--iog-infared); }
 
-  /* Side panel styling moved to shared.css (used by index, demo, standards). */
-
-  /* ---------- Footer ---------- */
-
-  footer.landing-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 16px;
-    flex-wrap: wrap;
-    border-top: 1px solid var(--line);
-    padding: 28px clamp(24px, 5vw, 80px);
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: var(--text-faint);
-    max-width: clamp(820px, 92vw, 1600px);
-    margin: 0 auto;
-    width: 100%;
-  }
-  footer.landing-footer a { color: var(--text-mute); text-decoration: none; border-bottom: 1px solid var(--line); }
-  footer.landing-footer a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
-  .footer-meta { font-size: 0.74rem; color: var(--text-faint); }
 </style>
 </head>
 <body>
@@ -1157,10 +539,9 @@
   <div class="navbar-links">
     <a href="index.html" class="active">Overview</a>
     <a href="demo.html">How it works</a>
-    <a href="parallelisation.html">Parallelisation</a>
-    <a href="architecture.html">Architecture</a>
     <a href="standards.html">Standards</a>
-    <a href="onboarding-mockup.html">Onboarding</a>
+    <a href="architecture.html">Architecture</a>
+    <a href="plan.html">Plan</a>
   </div>
 </nav>
 
@@ -1181,339 +562,185 @@
       <img class="doc-logo" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red POS.png" alt="Input Output">
       <img class="doc-logo-dark" src="../assets/logos/Full Logo/Input Output_Full Logo_RGB_Red NEG.png" alt="Input Output">
 
-      <div class="kind">ARC · Midnight Passport</div>
-      <h1>Midnight Passport</h1>
-      <p class="subtitle">A named, self-sovereign, privacy-preserving identity on the Midnight network — without seeds, raw addresses, or required operators on the critical path. This page sets out the user-facing promises we are making, the components we have to build to keep them, and the design space underneath each one.</p>
+      <div class="hero-grid">
+        <div>
+          <div class="kind">ARC · Midnight Passport</div>
+          <h1>An account that is a name, not a seed phrase</h1>
+          <p class="subtitle">Midnight Passport is the identity and account layer for the Midnight network. You are <code>alice.passport.night</code>: created with a passkey instead of a seed phrase, usable from any of your devices, recoverable after losing all of them, and held by a contract that only your proofs can move. This site shows <b>how the system works</b> and <b>exactly where the work stands</b>.</p>
+          <div class="hero-ctas">
+            <a class="cta primary" href="demo.html">See how it works →</a>
+            <a class="cta" href="#status">Where the work stands</a>
+            <a class="cta" href="https://github.com/midnightntwrk/passport/tree/main/contract" target="_blank" rel="noopener">The reference implementation ↗</a>
+          </div>
+        </div>
+
+        <div class="mini-stage-wrap" aria-hidden="true">
+          <!-- Simplified copy of the two-zone picture; demo.html owns the full version. -->
+          <div class="mini-stage">
+            <div class="mini-zone off">
+              <div class="mini-zone-label">Off-chain · yours</div>
+              <div class="mini-actor">
+                <div class="mini-actor-name">Your devices</div>
+                <span class="mini-chip">⚿ device secrets</span>
+              </div>
+              <div class="mini-actor">
+                <div class="mini-actor-name">Guardians &amp; paper</div>
+                <span class="mini-chip">⚿ their own keys</span>
+              </div>
+              <div class="mini-actor">
+                <div class="mini-actor-name">A dApp</div>
+                <span class="mini-chip">⚿ scoped grant</span>
+              </div>
+            </div>
+            <div class="mini-zone on">
+              <div class="mini-zone-label">On-chain · public</div>
+              <div class="mini-contract">
+                <div class="mini-contract-head">Your account contract</div>
+                <div class="mini-row"><span class="k">devices</span><span class="v">commitments only</span></div>
+                <div class="mini-row"><span class="k">assets</span><span class="v">NIGHT public · shielded sealed</span></div>
+                <div class="mini-row"><span class="k">grants</span><span class="v">scope enforced in-circuit</span></div>
+                <div class="mini-row"><span class="k">recovery</span><span class="v">one hash + public points</span></div>
+              </div>
+            </div>
+          </div>
+          <p class="mini-caption">Secrets stay on the left; only commitments and proofs cross the line. <a href="demo.html">The whole picture, one screen →</a></p>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section class="glance" id="glance">
+  <section class="section" id="facts">
     <div class="container">
       <header class="section-head">
-        <div class="section-kind">At a glance</div>
-        <h2>Where Passport stands</h2>
-        <p>Two problem statements are merged upstream (MPS-0018, MPS-0027), the account keystone they recommend is published upstream as MIP-0012 and MIP-0013 with a reference implementation whose conformance suites pass, and every load-bearing claim below is backed by an experiment run against a real node. The map shows how much of the design space is locked; <a href="#progress">the timeline</a> shows how it got there and what remains.</p>
+        <div class="section-kind">Today</div>
+        <h2>Four things that are true right now</h2>
       </header>
-      <div class="glance-stats" id="glanceStats"></div>
+      <div class="facts">
+        <a class="fact" href="standards.html">
+          <span class="fact-kicker">Published</span>
+          <h3>The account standards are upstream</h3>
+          <p>MIP-0012 (contract custody) and MIP-0013 (multi-key authorisation) are published in the Midnight improvement-proposal repository as Proposed, with a reference implementation whose conformance suites pass.</p>
+          <span class="fact-foot">Standards →</span>
+        </a>
+        <a class="fact" href="https://github.com/midnightntwrk/passport/tree/main/experiments/dust-sponsorship-feasibility" target="_blank" rel="noopener">
+          <span class="fact-kicker">Validated</span>
+          <h3>Zero-token onboarding works</h3>
+          <p>A user holding no tokens at all had their account contract deployed and their first calls paid by a sponsor, end to end on a production node. No airdrop prerequisite exists.</p>
+          <span class="fact-foot">The sponsorship experiment ↗</span>
+        </a>
+        <a class="fact" href="demo.html#recover">
+          <span class="fact-kicker">Validated</span>
+          <h3>Losing every device is survivable</h3>
+          <p>Recovery uses guardians who store nothing between ceremonies, running in the working prototype. One transaction retires every old device and grant; the account, name, and balances never move.</p>
+          <span class="fact-foot">How recovery works →</span>
+        </a>
+        <a class="fact" href="demo.html#demo">
+          <span class="fact-kicker plan">In delivery</span>
+          <h3>Public demo in October 2026</h3>
+          <p id="phaseFact">Six monthly phases run to October; the demo consumes the published standards as they firm up.</p>
+          <span class="fact-foot">The demo plan →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="start">
+    <div class="container">
+      <header class="section-head">
+        <div class="section-kind">Start here</div>
+        <h2>Three doors, by role</h2>
+      </header>
+      <div class="router">
+        <div class="route">
+          <h3>Midnight Foundation &amp; partners</h3>
+          <ul>
+            <li><a href="#status">Where the work stands</a> — standards, components, and the dated evidence trail.</li>
+            <li><a href="demo.html#demo">The October demo plan</a> — phases, what ships, and which picks are shortcuts.</li>
+            <li><a href="#asks">What we need from the ecosystem</a> — four concrete asks.</li>
+          </ul>
+        </div>
+        <div class="route">
+          <h3>Wallet &amp; dApp engineers</h3>
+          <ul>
+            <li><a href="demo.html">How a Passport account works</a> — the whole system on one screen, then the lifecycle.</li>
+            <li><a href="standards.html#implementers">Start implementing</a> — the reading order and the reference implementation.</li>
+            <li><a href="architecture.html">The architecture map</a> — where the components live and who they talk to.</li>
+          </ul>
+        </div>
+        <div class="route">
+          <h3>Standards community</h3>
+          <ul>
+            <li><a href="standards.html">The MIP register</a> — every proposal, its upstream lifecycle, and its evidence.</li>
+            <li><a href="#engage">Comment upstream</a> — review is what moves the keystone pair toward acceptance.</li>
+            <li><a href="plan.html">The full plan</a> — the promises, each component&rsquo;s design record (its canvas), the dependencies, and the open decisions.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="status">
+    <div class="container">
+      <header class="section-head">
+        <div class="section-kind">Status</div>
+        <h2>Where the work stands</h2>
+        <p>One vocabulary throughout: a component is <b>specified</b> when a published standard covers it, <b>decided</b> when the choice is set in stone but the specification is pending, an <b>open decision</b> when the design space is still live, and <b>in design</b> otherwise. Standards are counted separately from components.</p>
+        <p class="status-updated" id="statusUpdated"></p>
+      </header>
+
+      <div class="status-tiles" id="statusTiles"></div>
       <div class="glance-map" id="glanceMap"></div>
+
+      <h3 class="timeline-head">The evidence trail</h3>
+      <p class="timeline-hint">Newest first; every entry is backed by an artefact — an experiment against a real node, a merge in the upstream proposal repository, or a decision record. Component chips open the component&rsquo;s design record (its canvas) in place; experiment links go to the code.</p>
+      <ol class="progress-timeline" id="progressTimeline"></ol>
+      <details class="timeline-more" id="timelineMore">
+        <summary id="timelineMoreLabel">Show the earlier evidence</summary>
+        <ol class="progress-timeline" id="progressTimelineEarlier"></ol>
+      </details>
     </div>
   </section>
 
-  <section class="promises" id="promises">
-    <div class="container wide">
-      <header class="section-head">
-        <div class="section-kind">Section 1</div>
-        <h2>The promises</h2>
-        <p>Ten user-facing invariants that v1.0 must hold. Each is stated as something a user (or ecosystem partner) can rely on, with falsifiable invariants underneath. Click any card to see its full statement, the testable invariants, and the components that serve it.</p>
-      </header>
-      <div id="promisesGrid" class="promises-grid"></div>
-
-      <div class="principle-history">
-        <header class="history-head">
-          <div class="section-kind">How we got here</div>
-          <h3>From the secure-onboarding six to the working ten</h3>
-          <p>
-            Pass 1 of the planning work started from the six principles in the secure-onboarding document — <em>Key-bound TEE; ZK witnesses</em>, <em>Single seed, three wallets</em>, <em>Chain abstraction via intent</em>, <em>One key per device</em>, <em>Privacy-by-design identity</em>, and <em>Seedless UX</em>. The ten promises above are not a different vision — they are the same six pressure-tested for falsifiability, with mechanism statements peeled off and previously-implicit assumptions made explicit so each can be individually tested. Every promise traces back to something the original document said or assumed; nothing here is invented.
-          </p>
-        </header>
-
-        <div class="mapping-table-wrap">
-          <table class="mapping-table">
-            <thead>
-              <tr>
-                <th style="width:34%;">Original principle</th>
-                <th style="width:18%;">Disposition</th>
-                <th>New mapping</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><span class="op-id">#1</span> Key-bound TEE; ZK witnesses</td>
-                <td><span class="disp">Split, abstracted</span></td>
-                <td>
-                  <a href="#P6" class="map-pill">P6</a>
-                  <span class="map-note">TEE specificity removed; ZK witnesses move to mechanism layer.</span>
-                </td>
-              </tr>
-              <tr>
-                <td><span class="op-id">#2</span> Single seed, three wallets</td>
-                <td><span class="disp">Dropped</span></td>
-                <td><span class="map-note">Implementation specification, not a v1.0 invariant.</span></td>
-              </tr>
-              <tr>
-                <td><span class="op-id">#3</span> Chain abstraction via intent</td>
-                <td><span class="disp">Preserved, promoted</span></td>
-                <td>
-                  <a href="#P10" class="map-pill">P10</a>
-                  <span class="map-note">Same concept, now stated as a v1.0 promise instead of a later-milestone concern.</span>
-                </td>
-              </tr>
-              <tr>
-                <td><span class="op-id">#4</span> One key per device</td>
-                <td><span class="disp">Rewritten, split</span></td>
-                <td>
-                  <a href="#P3" class="map-pill">P3</a><a href="#P6" class="map-pill">P6</a><a href="#P7" class="map-pill">P7</a>
-                  <span class="map-note">Mechanism statement; surfaces multi-device peerage, no exfiltration, and scoped grants as separate principles.</span>
-                </td>
-              </tr>
-              <tr>
-                <td><span class="op-id">#5</span> Privacy-by-design identity</td>
-                <td><span class="disp">Kept, renamed</span></td>
-                <td>
-                  <a href="#P9" class="map-pill">P9</a>
-                  <span class="map-note">Renamed for sharper testability.</span>
-                </td>
-              </tr>
-              <tr>
-                <td><span class="op-id">#6</span> Seedless UX</td>
-                <td><span class="disp">Split</span></td>
-                <td>
-                  <a href="#P1" class="map-pill">P1</a><a href="#P5" class="map-pill">P5</a>
-                  <span class="map-note">No-mnemonic UX is P1; total-loss recovery without seed is P5.</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <p class="mapping-additions">
-          <strong>Five made explicit</strong> — promises that were implicit in the original document and surfaced as their own principles by Pass 1's pressure-testing.
-        </p>
-        <ul class="mapping-implicit">
-          <li><a href="#P2" class="map-pill">P2</a><span class="imp-name">Named</span><span class="imp-source">— the original mentioned <code>alice.midnight</code> throughout as the user-facing handle, but never elevated naming to a principle.</span></li>
-          <li><a href="#P3" class="map-pill">P3</a><span class="imp-name">Peer-device</span><span class="imp-source">— implicit in #4; multi-device peerage was the premise of the device-add flow.</span></li>
-          <li><a href="#P4" class="map-pill">P4</a><span class="imp-name">Revoke-and-continue</span><span class="imp-source">— implicit in the multi-device story; the QR-code device-add flow shadowed a revoke-old-and-continue mode.</span></li>
-          <li><a href="#P7" class="map-pill">P7</a><span class="imp-name">Scoped grants</span><span class="imp-source">— function-call keys appeared as a sub-feature of #4 but were never named as their own primitive.</span></li>
-          <li><a href="#P8" class="map-pill">P8</a><span class="imp-name">Chain-only</span><span class="imp-source">— assumed throughout the document (no operator was required for any flow), but never stated as a constraint.</span></li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <section class="components-table">
-    <div class="container wide">
-      <header class="section-head">
-        <div class="section-kind">Section 2</div>
-        <h2>The components</h2>
-        <p>Every functional surface Passport needs to deliver, in a single searchable list. Filter by promise, category, or open-decision status. Click any row to open the component's full canvas — outcome, dependencies, alternatives, open questions, failure modes.</p>
-      </header>
-
-      <div class="table-controls">
-        <div class="table-controls-row">
-          <input type="search" id="compSearch" class="search-input" placeholder="Search id, name, outcome, alternatives, questions, failure modes…" aria-label="Search components">
-        </div>
-        <div class="table-controls-row">
-          <div class="filter-group">
-            <span class="filter-label">Promise</span>
-            <div class="promise-filters" id="promiseFilters" role="group" aria-label="Filter by promise"></div>
-          </div>
-          <div class="filter-group">
-            <span class="filter-label">Category</span>
-            <select id="categoryFilter" class="category-select" aria-label="Filter by category">
-              <option value="">All categories</option>
-            </select>
-          </div>
-          <button class="filter-pill" id="workstreamOnly" type="button" aria-pressed="false">
-            Open decisions only
-          </button>
-          <button class="filter-pill" id="specifiedOnly" type="button" aria-pressed="false">
-            ✓ Decided / specified only
-          </button>
-          <button class="clear-filters" id="clearFilters" type="button">Clear</button>
-          <span class="result-count" id="resultCount" aria-live="polite"></span>
-        </div>
-      </div>
-
-      <div class="comp-table-wrap">
-        <table class="comp-table">
-          <thead>
-            <tr>
-              <th class="col-id">ID</th>
-              <th class="col-name">Component</th>
-              <th class="col-cat">Category</th>
-              <th class="col-serves">Serves</th>
-              <th class="col-flag"></th>
-            </tr>
-          </thead>
-          <tbody id="compTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <section class="graph" id="dependencies-graph">
-    <div class="container wide">
-      <header class="section-head">
-        <div class="section-kind">Section 3</div>
-        <h2>The dependency graph</h2>
-        <p>Hard-precedence edges between components (B must be settled before A); the identity-and-account core is collapsed into one super-node — click it to see what it contains. Click any other node to open its design space. Toggle the associations to see softer "interacts-with" edges.</p>
-      </header>
-
-      <div class="graph-shell">
-        <div id="cy" class="cy-canvas"></div>
-
-        <div class="graph-controls">
-          <button class="graph-toggle" id="toggleAssoc" type="button" aria-pressed="false"
-                  title="Show or hide ‘associations’ — soft co-design edges, not hard precedence">
-            Show associations
-          </button>
-        </div>
-
-        <div class="graph-legend" aria-hidden="true">
-          <span class="legend-item"><span class="legend-swatch core"></span> Core (SCC)</span>
-          <span class="legend-item"><span class="legend-swatch workstream"></span> Open decision</span>
-          <span class="legend-item"><span class="legend-swatch specified"></span> Specified</span>
-          <span class="legend-item"><span class="legend-swatch decided"></span> Decided</span>
-          <span class="legend-item"><span class="legend-swatch component"></span> Component</span>
-          <span class="legend-item"><span class="legend-swatch edge-hard"></span> Hard precedence</span>
-          <span class="legend-item"><span class="legend-swatch edge-assoc"></span> Association</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="cascade">
-    <div class="container wide">
-      <header class="section-head">
-        <div class="section-kind">Section 4</div>
-        <h2>The open decisions</h2>
-        <p>Five open decisions whose answer cascades into multiple component canvases. The bigger the fan-out, the more downstream design unlocks once the question is answered. Dotted lines between decisions mark cross-decision couplings — when these resolve they constrain each other, but neither precedes the other.</p>
-      </header>
-
-      <div class="graph-shell short">
-        <div id="cascadeCy" class="cy-canvas"></div>
-
-        <div class="graph-legend" aria-hidden="true">
-          <span class="legend-item"><span class="legend-swatch question"></span> Open decision</span>
-          <span class="legend-item"><span class="legend-swatch workstream"></span> Open-decision component</span>
-          <span class="legend-item"><span class="legend-swatch specified"></span> Specified component</span>
-          <span class="legend-item"><span class="legend-swatch decided"></span> Decided component</span>
-          <span class="legend-item"><span class="legend-swatch component"></span> Affected component</span>
-          <span class="legend-item"><span class="legend-swatch edge-hard"></span> Cascades to</span>
-          <span class="legend-item"><span class="legend-swatch edge-coupling"></span> Cross-coupling</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="progress" id="progress">
+  <section class="section" id="asks">
     <div class="container">
       <header class="section-head">
-        <div class="section-kind">Section 5</div>
-        <h2>Progress to date — and what remains</h2>
-        <p>What has moved from open question to evidence, and from evidence to published standard. Every entry is backed by an artefact — experiments run against real nodes, problem statements merged upstream in the Midnight improvement-proposal repository, and MIPs that make the validated patterns normative. The headline result so far: the account keystone recommended by MPS-0018 is published upstream as MIP-0012 and MIP-0013, each resting on end-to-end evidence, with a reference implementation that passes both conformance suites.</p>
-      </header>
-      <ol class="progress-timeline" id="progressTimeline"></ol>
-
-      <div class="next-head">
-        <div class="section-kind">What remains</div>
-        <h3>The open work, by lane</h3>
-        <p>Everything still between here and a ratified, feature-complete v1.0 — standards to submit, reviews commissioned as acceptance criteria, evidence still to gather, client policies to pin down, and the workstreams that remain open decision spaces.</p>
-      </div>
-      <div class="next-grid" id="nextSteps"></div>
-    </div>
-  </section>
-
-  <section class="delivery">
-    <div class="container wide">
-      <header class="section-head">
-        <div class="section-kind">Section 6</div>
-        <h2>The delivery</h2>
-        <p>Feature-complete v1.0 is a body of deliverables — ratified MIPs, formal-methods sign-off on critical components, cryptographer reviews. The October demo is an MVP that consumes those deliverables early, built with partners. Where a deliverable is not yet mature, the MVP picks the simplest workable mechanism and records a migration plan back to the principled spec. Symbiotic — same primitives evolve in lockstep, MVP findings push back into deliverables, and deliverable drafts inform MVP choices.</p>
+        <div class="section-kind">Asks</div>
+        <h2>What we need from the ecosystem</h2>
+        <p>Adoption is the point: a standard nobody else implements is shelfware. These are the four concrete things the wider ecosystem can do next.</p>
       </header>
 
-      <div class="delivery-grid">
-        <a class="delivery-card" href="demo.html#demo">
-          <div class="delivery-kind">October 2026</div>
-          <h3 class="delivery-title">The demo</h3>
-          <p class="delivery-summary">An end-to-end Passport account, on a screen, with a recovery sad-path. Six phases running to October, built against the components that exist by then. Pragmatic mechanism choices carry a migration plan to the principled spec.</p>
-          <span class="delivery-open">Open<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span>
-        </a>
-
-        <a class="delivery-card" href="standards.html">
-          <div class="delivery-kind">Continuous</div>
-          <h3 class="delivery-title">The v1.0 deliverables</h3>
-          <p class="delivery-summary">MIPs ratified or in advanced draft; formal-methods sign-off and cryptographer reviews on critical components. The body of work that defines feature-complete v1.0; the MVP consumes them as they firm up.</p>
-          <span class="delivery-open">Open<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span>
-        </a>
+      <div class="asks">
+        <div class="ask">
+          <span class="ask-who">Midnight Foundation</span>
+          <h3>Acquire passport.night</h3>
+          <p>The decided name shape (<code>alice.passport.night</code>) hangs on the Foundation holding the parent domain in the upstream name service and offering sub-domains free, first come, first served.</p>
+          <button class="glance-chip" data-component="C2" type="button">C2 · Name service</button>
+        </div>
+        <div class="ask">
+          <span class="ask-who">Everyone</span>
+          <h3>Review MIP-0012 and MIP-0013</h3>
+          <p>Both keystone standards are open for comment upstream, with the errata the implementation surfaced already folded in; ecosystem review is what moves them toward acceptance.</p>
+          <span><a href="standards.html">The register, with upstream links →</a></span>
+        </div>
+        <div class="ask">
+          <span class="ask-who">Partner wallets</span>
+          <h3>Build the second implementation</h3>
+          <p>The reference implementation exists and its conformance suites pass. A second, independent implementation by another team is the remaining evidence the standards&rsquo; path to Active calls for.</p>
+          <span><a href="standards.html#implementers">Start here →</a></span>
+        </div>
+        <div class="ask">
+          <span class="ask-who">Operators &amp; cryptographers</span>
+          <h3>Sponsors, committees, reviews</h3>
+          <p>Zero-token onboarding needs a substitutable sponsor-operator model; the signing standard needs a FROST committee demonstration and its cryptographer review.</p>
+          <span>
+            <button class="glance-chip" data-component="C24" type="button">C24 · Fee model</button>
+            <button class="glance-chip" data-component="C5" type="button">C5 · Signing primitive</button>
+          </span>
+        </div>
       </div>
 
-      <div class="crossover">
-        <div class="crossover-head">
-          <div class="section-kind">How they connect</div>
-          <h3 class="crossover-title">Four primitives, two complementary roles</h3>
-          <p>Each shared primitive plays a complementary role: the MVP's implementation IS the v1.0 deliverable. One body of code where the MVP and the v1.0 deliverable converge.</p>
-        </div>
-
-        <div class="cx-grid">
-          <article class="cx-card">
-            <header class="cx-card-head">
-              <a href="#C1" class="cx-card-id">C1</a>
-              <h4 class="cx-card-name">Account-custody contract</h4>
-            </header>
-            <div class="cx-roles">
-              <div class="cx-role cx-role-demo">
-                <span class="cx-role-label">MVP</span>
-                <p class="cx-role-text">Deploys one Compact contract per account. Mirrors the reference implementation; on-chain by Phase A.</p>
-              </div>
-              <div class="cx-role cx-role-std">
-                <span class="cx-role-label">v1.0 spec</span>
-                <p class="cx-role-text">Published upstream as two building blocks: <a href="standards.html#MIP-0012">MIP-0012</a> (contract custody, stateless shielded) and <a href="standards.html#MIP-0013">MIP-0013</a> (multi-key authorisation), with a reference implementation. Formal-methods sign-off post-ratification.</p>
-              </div>
-            </div>
-          </article>
-
-          <article class="cx-card">
-            <header class="cx-card-head">
-              <a href="#C5" class="cx-card-id">C5</a>
-              <h4 class="cx-card-name">Signing primitive</h4>
-            </header>
-            <div class="cx-roles">
-              <div class="cx-role cx-role-demo">
-                <span class="cx-role-label">MVP</span>
-                <p class="cx-role-text">Threshold Schnorr-on-Jubjub via a partner-operated MPC committee. Verified end-to-end against <code>experiments/redjubjub-wallet/</code>.</p>
-              </div>
-              <div class="cx-role cx-role-std">
-                <span class="cx-role-label">v1.0 spec</span>
-                <p class="cx-role-text">Per-device Schnorr-on-Jubjub published upstream as <a href="standards.html#MIP-0013">MIP-0013</a> — same verification equation the MVP committee satisfies. Key derivation adopted upstream from <a href="standards.html#MIP-0003">MIP-0003</a>.</p>
-              </div>
-            </div>
-          </article>
-
-          <article class="cx-card">
-            <header class="cx-card-head">
-              <a href="#C8" class="cx-card-id">C8</a>
-              <h4 class="cx-card-name">Domain-separation registry</h4>
-            </header>
-            <div class="cx-roles">
-              <div class="cx-role cx-role-demo">
-                <span class="cx-role-label">MVP</span>
-                <p class="cx-role-text">Central registry document; cryptographer review pre-October so every hash use site is prefixed before the demo ships.</p>
-              </div>
-              <div class="cx-role cx-role-std">
-                <span class="cx-role-label">v1.0 spec</span>
-                <p class="cx-role-text"><a href="standards.html#STD-03">STD-03</a> prerequisite. Unblocks every MIP that hashes user state — credentials, signing, naming.</p>
-              </div>
-            </div>
-          </article>
-
-          <article class="cx-card">
-            <header class="cx-card-head">
-              <a href="#C16" class="cx-card-id">C16</a>
-              <h4 class="cx-card-name">Wallet local storage</h4>
-            </header>
-            <div class="cx-roles">
-              <div class="cx-role cx-role-demo">
-                <span class="cx-role-label">MVP</span>
-                <p class="cx-role-text">Holds session and auth state to the MPC provider. Encryption envelope keyed off WebAuthn-derived material on the device.</p>
-              </div>
-              <div class="cx-role cx-role-std">
-                <span class="cx-role-label">v1.0 spec</span>
-                <p class="cx-role-text">Encryption envelope and storage substrate spec'd against multi-platform wrapping-key APIs (iOS Keychain, Android StrongBox, browser IndexedDB).</p>
-              </div>
-            </div>
-          </article>
-        </div>
+      <div class="engage" id="engage">
+        <p>Engage: comment in the <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/discussions" target="_blank" rel="noopener">upstream discussions ↗</a> where the standards live, or open a <a href="https://github.com/midnightntwrk/passport/issues" target="_blank" rel="noopener">workspace issue ↗</a>. The full engagement surface, with direct links to each proposal, is on <a href="standards.html#engage">Standards</a>.</p>
       </div>
     </div>
   </section>
@@ -1527,26 +754,31 @@
 </aside>
 
 <footer class="landing-footer">
-  <span>ARC · Input Output Global · Midnight Passport planning workspace</span>
+  <span>ARC (Advanced Research and Creativity) · Input Output Global · Midnight Passport planning workspace</span>
   <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/01<!--/DEPLOY--></span>
 </footer>
 
-<script src="https://unpkg.com/cytoscape@3.30.4/dist/cytoscape.min.js" integrity="sha384-H3uzGzTfGHUAumB8+s4GEdfFwzAceN9wCCndN8AXubWKFIPuBSWKKtWDx7RhSf/z" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js" integrity="sha384-2IH3T69EIKYC4c+RXZifZRvaH5SRUdacJW7j6HtE5rQbvLhKKdawxq6vpIzJ7j9M" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js" integrity="sha384-u69h9ebXeSjlg6q/rb1zKTRAGu/h8deCl0409xpS/QJctMKnc4M9Fzkm01VOQdeF" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/layout-base@2.0.1/layout-base.js" integrity="sha384-5E2lB9AIGE6LRCnOOSTnZRlYZFZ01iMeN2fw97Z1r4Z/kXALxKw2AC+ZzQqoeDsG" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/cose-base@2.2.0/cose-base.js" integrity="sha384-RswRBkrMsPUYpJLbZ1CVA08zbNzAkykE2oGJTujBwfjWNdfxv2WVjLJNqv1LhAOp" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js" integrity="sha384-uk5Wbjq1+KqUdHO30w7N7GrEGdzBhaJeW9o/ANF6v9+yx3M/cBmoX51C000JNCUf" crossorigin="anonymous"></script>
 <script>
-  if (window.cytoscape && window.cytoscapeDagre) {
-    window.cytoscape.use(window.cytoscapeDagre);
-  }
-  if (window.cytoscape && window.cytoscapeFcose) {
-    window.cytoscape.use(window.cytoscapeFcose);
-  }
+  // Deep links to sections that moved with the restructure keep working:
+  // canvas fragments (#C4 / #P3 / #Q4) and the planning sections forward
+  // to the Plan page; the old status anchors map to the status board.
+  (function () {
+    var h = window.location.hash || '';
+    if (/^#(C\d+|P\d+|Q\d+)$/.test(h)) {
+      window.location.replace('plan.html' + h);
+      return;
+    }
+    var moved = {
+      '#promises': 'plan.html#promises',
+      '#dependencies-graph': 'plan.html#dependencies-graph',
+      '#glance': '#status',
+      '#progress': '#status',
+    };
+    if (moved[h]) window.location.replace(moved[h]);
+  })();
 </script>
 <script src="data.js"></script>
-<script src="app.js"></script>
+<script src="panel.js"></script>
 <script>
 (function () {
   'use strict';
@@ -1556,85 +788,114 @@
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-  // ---- Progress timeline ----
-  const timelineHost = document.getElementById('progressTimeline');
-  if (timelineHost) {
-    const KIND_LABEL = { validated: 'Validated', upstream: 'Upstream', standard: 'Standard drafted', decided: 'Decided' };
-    timelineHost.innerHTML = (data.milestones || []).map(m => `
-      <li class="progress-item kind-${esc(m.kind)}">
-        <div class="progress-when">${esc(m.when)}</div>
-        <div class="progress-body">
-          <span class="progress-kind">${esc(KIND_LABEL[m.kind] || m.kind)}</span>
-          <h3 class="progress-title">${esc(m.title)}</h3>
-          <p class="progress-detail">${esc(m.detail)}</p>
-          ${(m.components || []).length
-            ? `<div class="progress-chips">${m.components.map(c =>
-                `<a class="progress-chip" href="#${esc(c)}" data-component="${esc(c)}">${esc(c)}</a>`).join('')}</div>`
-            : ''}
-        </div>
-      </li>`).join('');
+  // ---- The October fact card: name the current phase from data ----
+  const phaseFact = document.getElementById('phaseFact');
+  if (phaseFact) {
+    const phases = data.demo_phases || [];
+    const current = phases.find(p => p.status === 'current');
+    if (current) {
+      phaseFact.textContent =
+        `Six monthly phases run to October — currently in Phase ${current.id} of ${phases.length} (${current.name.toLowerCase()}), consuming the published standards as they firm up.`;
+    }
   }
 
-  // ---- At a glance: scoreboard + status map ----
+  // ---- Status board freshness stamp ----
+  const updated = document.getElementById('statusUpdated');
+  if (updated && data.meta && data.meta.updated) {
+    updated.textContent = 'Data updated ' + data.meta.updated;
+  }
+
+  // ---- Status tiles: standards counted separately from components ----
   const comps = data.components || [];
   const wsSet = new Set(data.workstreams || []);
   const groups = {
     specified: comps.filter(c => c.status === 'specified'),
     decided:   comps.filter(c => c.status === 'decided'),
-    open:      comps.filter(c => !c.status && (wsSet.has(c.id) || c.workstream)),
+    open:      comps.filter(c => wsSet.has(c.id) && !c.status),
   };
   groups.design = comps.filter(c =>
     !groups.specified.includes(c) && !groups.decided.includes(c) && !groups.open.includes(c));
 
-  const statsHost = document.getElementById('glanceStats');
-  if (statsHost) {
-    const mipsUpstream = (data.mips || []).filter(m => m.kind === 'mip' && /^Published/.test(m.status || '')).length;
-    const expDone = (data.experiments || []).filter(e => /^Complete/.test(e.status || '')).length;
+  const tilesHost = document.getElementById('statusTiles');
+  if (tilesHost) {
+    const mips = data.mips || [];
+    const publishedOurs = mips.filter(m => m.kind === 'mip' && /^Published/.test(m.status || '')).length;
+    const mergedMps = mips.filter(m => (m.upstream || '').includes('/mps/')).length;
+    const adopted = mips.filter(m => m.kind === 'upstream' && !(m.upstream || '').includes('/mps/')).length;
+    const pipeline = mips.filter(m => m.lifecycle === 'Not yet filed').length;
     const tiles = [
-      { v: groups.specified.length, label: 'Specified — published standards', dot: 's-specified' },
-      { v: groups.decided.length,   label: 'Decided — spec pending',        dot: 's-decided' },
-      { v: groups.open.length,      label: 'Open decisions',                dot: 's-open' },
-      { v: groups.design.length,    label: 'In design',                     dot: 's-neutral' },
-      { v: mipsUpstream,            label: 'MIPs published upstream (the keystone)', dot: 's-neutral' },
-      { v: expDone,                 label: 'Experiments complete',          dot: 's-neutral' },
+      { v: publishedOurs, label: 'MIPs published upstream — ours', dot: 's-specified' },
+      { v: mergedMps,     label: 'Problem statements merged upstream — ours', dot: 's-specified' },
+      { v: adopted,       label: 'Upstream standards adopted', dot: 's-decided' },
+      { v: pipeline,      label: 'MIPs drafted, not yet filed', dot: 's-neutral' },
+      { v: (data.experiments || []).filter(e => /^Complete/.test(e.status || '')).length,
+        label: 'Experiments complete', dot: 's-neutral' },
     ];
-    statsHost.innerHTML = tiles.map(t => `
+    tilesHost.innerHTML = tiles.map(t => `
       <div class="stat-tile">
         <div class="stat-value">${t.v}</div>
         <div class="stat-label"><span class="stat-dot ${t.dot}"></span>${esc(t.label)}</div>
       </div>`).join('');
   }
 
+  // ---- Component status map (of 26) ----
   const mapHost = document.getElementById('glanceMap');
   if (mapHost) {
+    const total = comps.length;
     const rows = [
-      { key: 'specified', label: '✓ Specified',     chip: 'g-specified', items: groups.specified },
-      { key: 'decided',   label: '● Decided',       chip: 'g-decided',   items: groups.decided },
-      { key: 'open',      label: 'Open decisions',  chip: 'g-open',      items: groups.open },
-      { key: 'design',    label: 'In design',       chip: '',            items: groups.design },
+      { label: '✓ Specified',    chip: 'g-specified', items: groups.specified },
+      { label: '● Decided',      chip: 'g-decided',   items: groups.decided },
+      { label: 'Open decisions', chip: 'g-open',      items: groups.open },
+      { label: 'In design',      chip: '',            items: groups.design },
     ];
     mapHost.innerHTML = rows.map(r => `
       <div class="map-row">
-        <div class="map-row-label">${esc(r.label)} <span class="map-count">· ${r.items.length}</span></div>
+        <div class="map-row-label">${esc(r.label)} <span class="map-count">· ${r.items.length} of ${total}</span></div>
         <div class="map-chips">${r.items.map(c =>
-          `<a class="glance-chip ${r.chip}" href="#${esc(c.id)}" data-component="${esc(c.id)}"
+          `<a class="glance-chip ${r.chip}" href="plan.html#${esc(c.id)}" data-component="${esc(c.id)}"
               title="${esc(c.name)}${c.status_note ? ' — ' + c.status_note : ''}">${esc(c.id)} ${esc(c.name)}</a>`).join('')}</div>
       </div>`).join('');
   }
 
-  // ---- What remains ----
-  const nextHost = document.getElementById('nextSteps');
-  if (nextHost) {
-    nextHost.innerHTML = (data.next_steps || []).map(n => `
-      <div class="next-card">
-        <span class="next-lane">${esc(n.lane)}</span>
-        <h4 class="next-title">${esc(n.title)}</h4>
-        <p class="next-detail">${esc(n.detail)}</p>
-        ${(n.components || []).length
-          ? `<div class="progress-chips">${n.components.map(c =>
-              `<a class="progress-chip" href="#${esc(c)}" data-component="${esc(c)}">${esc(c)}</a>`).join('')}</div>`
-          : ''}
-      </div>`).join('');
+  // ---- Evidence trail: newest first, earlier entries collapsed ----
+  const KIND_LABEL = { validated: 'Validated', upstream: 'Upstream', standard: 'Standard drafted', decided: 'Decided' };
+  const compById = Object.fromEntries(comps.map(c => [c.id, c]));
+  const expById = Object.fromEntries((data.experiments || []).map(e => [e.id, e]));
+  function timelineItem(m) {
+    const chips = (m.components || []).map(c => {
+      const comp = compById[c];
+      return `<a class="progress-chip" href="plan.html#${esc(c)}" data-component="${esc(c)}"
+                 title="${comp ? esc(comp.name) : esc(c)}">${esc(c)}</a>`;
+    });
+    const evidence = (m.evidence || []).map(eid => {
+      const ex = expById[eid];
+      if (!ex || !ex.url) return '';
+      return `<a class="progress-chip progress-evi" href="${esc(ex.url)}" target="_blank" rel="noopener"
+                 title="${esc(ex.summary || ex.name)}">${esc(ex.name)} ↗</a>`;
+    });
+    const trail = chips.concat(evidence).filter(Boolean);
+    return `
+      <li class="progress-item kind-${esc(m.kind)}">
+        <div class="progress-when">${esc(m.when)}</div>
+        <div class="progress-body">
+          <span class="progress-kind">${esc(KIND_LABEL[m.kind] || m.kind)}</span>
+          <h4 class="progress-title">${esc(m.title)}</h4>
+          <p class="progress-detail">${esc(m.detail)}</p>
+          ${trail.length ? `<div class="progress-chips">${trail.join('')}</div>` : ''}
+        </div>
+      </li>`;
+  }
+  const recentHost = document.getElementById('progressTimeline');
+  const earlierHost = document.getElementById('progressTimelineEarlier');
+  if (recentHost && earlierHost) {
+    const newestFirst = (data.milestones || []).slice().reverse();
+    const RECENT = 5;
+    recentHost.innerHTML = newestFirst.slice(0, RECENT).map(timelineItem).join('');
+    const earlier = newestFirst.slice(RECENT);
+    earlierHost.innerHTML = earlier.map(timelineItem).join('');
+    const label = document.getElementById('timelineMoreLabel');
+    if (label) label.textContent = `Show the earlier evidence (${earlier.length} more)`;
+    if (!earlier.length) document.getElementById('timelineMore').hidden = true;
   }
 })();
 </script>

@@ -4,7 +4,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { firstValueFrom } from 'rxjs';
-import { rawTokenType, encodeRawTokenType } from '@midnight-ntwrk/ledger-v8';
+import { rawTokenType, encodeRawTokenType } from '@midnightntwrk/ledger-v9';
 
 import { sleep, step } from './runner.js';
 import {
@@ -16,7 +16,7 @@ import {
 } from '../node/setup.js';
 import { coinPublicKeyBytes } from '../node/wallet.js';
 import { CustodyAccount } from '../wallet/account.js';
-import { Device } from '../wallet/signer.js';
+import { K256Device } from '../wallet/signer.js';
 import {
   generateEncKeyPair,
   sealInboxEntry,
@@ -59,7 +59,7 @@ export interface AccountSetup {
   ctx: TestContext;
   faucet: FaucetHandle;
   account: CustodyAccount;
-  device: Device;
+  device: K256Device;
   encKeys: EncKeyPair;
 }
 
@@ -68,7 +68,7 @@ export async function standardSetup(): Promise<AccountSetup> {
   const ctx = await setupWallet();
   const faucet = await deployFaucet(ctx.walletCtx);
   console.log(`  faucet  @ ${faucet.address}`);
-  const device = Device.generate();
+  const device = K256Device.generate();
   const encKeys = generateEncKeyPair();
   const account = await deployAccount(ctx, device, encKeys);
   console.log(`  account @ ${account.address}`);
@@ -119,7 +119,7 @@ export async function depositAndCapture(
  */
 export async function captureChange(
   account: CustodyAccount,
-  device: Device,
+  device: K256Device,
   encKeys: EncKeyPair,
   spendTxId: string,
   change: PlainCoin,
@@ -150,7 +150,7 @@ export interface RetrySpendOutcome {
  */
 export async function withdrawShieldedWithRetry(
   account: CustodyAccount,
-  device: Device,
+  device: K256Device,
   recipient: Uint8Array,
   coin: PlainCoin,
   amount: bigint,

@@ -1,0 +1,11 @@
+# Opengrep/semgrep ignore list. Providing this file replaces the scanner's
+# default ignores, so the first two lines carry the useful defaults forward.
+.git/
+:include .gitignore
+
+# Localnet infra compose files: the plaintext WebSocket URLs the
+# insecure-websocket rule flags are container-to-container connections on a
+# private compose bridge network, and the localnet node terminates no TLS,
+# so secure WebSocket is unavailable by construction. Justification
+# comments sit on the flagged lines.
+**/infra/docker-compose*.yml

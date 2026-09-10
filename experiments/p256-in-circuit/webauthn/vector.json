@@ -1,0 +1,10 @@
+{
+  "format": "p256-gate-webauthn-v1",
+  "credential_id_b64url": "IRRX5ngd6vOxGJ9gGHK2TgQ5QO4",
+  "pk_x_hex": "4545bfee657716d0b4f7fa59ad82658caa31f817f7c43bebcea131d079ff1a4f",
+  "pk_y_hex": "d786704d369ae957f7d89c2c0aa02dfbbc6ee549708d2a412b56cbe3b738127a",
+  "signature_der_hex": "3046022100fafcb32570a0f575b34667d15908e6693f55781e618cd5c24a2b32c4aeb515b4022100cadf3f56530b380bcc17ed4de5ab26ed6255a7672929435124e2f31057bd548b",
+  "authenticator_data_hex": "49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97631d00000000",
+  "client_data_json_b64url": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoidGczSkJCSjMzd2dwMHpVc3daaEdldjlfZWNDbkJkVWUwSlhEQWlwYlYtWSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6ODk3MyIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+  "challenge_hex": "b60dc9041277df0829d3352cc198467aff7f79c0a705d51ed095c3022a5b57e6"
+}

@@ -23,10 +23,11 @@ passport/
 ├── demo/                        Client-facing runnable demos
 │   └── mn-passport-foundations/ End-to-end MN Passport foundations demo
 ├── site/                        Static web artefacts deployed to GitHub Pages
-│   ├── index.html               Landing page and unified entry point
+│   ├── index.html               Landing page — what Passport is, status, role routing
 │   ├── demo.html                How Passport works, plus the October demo plan
-│   ├── standards.html           The v1.0 deliverables — promises ↔ MIPs map
-│   └── archive/                 Earlier plan artefacts kept for historical reference
+│   ├── standards.html           The MIP register, reviews, and implementer path
+│   ├── plan.html                Working surface — promises, canvases, dependencies
+│   └── archive/                 Earlier artefacts kept for historical reference
 ├── docs/
 │   ├── plans/                   v1.0 promises, components, MIPs
 │   ├── PRINCIPLES.md            Inherited secure-onboarding principles

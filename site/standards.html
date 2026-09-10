@@ -3,20 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23E52321'/><text x='50' y='74' font-size='68' font-weight='700' font-family='Arial,Helvetica,sans-serif' fill='%23FFFFFF' text-anchor='middle'>P</text></svg>">
+<meta name="description" content="The Midnight Passport standards register: the MIP pipeline with upstream lifecycles and evidence, scheduled reviews, promise coverage, and the implementer quick-start.">
 <title>Midnight Passport — Standards & v1.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="shared.css">
 <style>
-  body {
-    font-size: 17px;
-    line-height: 1.65;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-  main { flex: 1; }
   .container {
     max-width: clamp(820px, 80vw, 1280px);
     margin: 0 auto;
@@ -26,50 +20,9 @@
 
   section.hero { padding: 64px 0 40px; }
 
-  .doc-logo, .doc-logo-dark {
-    height: clamp(40px, 4vw, 72px);
-    width: auto;
-    display: block;
-    margin-bottom: 36px;
-  }
-  .doc-logo-dark { display: none; }
-  html[data-theme="dark"] .doc-logo { display: none; }
-  html[data-theme="dark"] .doc-logo-dark { display: block; }
-  @media (not (prefers-color-scheme: light)) {
-    html:not([data-theme="light"]) .doc-logo { display: none; }
-    html:not([data-theme="light"]) .doc-logo-dark { display: block; }
-  }
+  .doc-logo, .doc-logo-dark { height: clamp(40px, 4vw, 72px); margin-bottom: 36px; }
 
-  .breadcrumb {
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-faint);
-    margin-bottom: 16px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: center;
-  }
-  .breadcrumb a {
-    color: var(--text-mute);
-    text-decoration: none;
-    border-bottom: 1px solid var(--line);
-    transition: color .12s ease, border-color .12s ease;
-  }
-  .breadcrumb a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
-  .breadcrumb .sep { opacity: 0.5; }
 
-  .kind {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--iog-infared);
-    font-weight: 600;
-    margin-bottom: 14px;
-  }
   h1 {
     font-family: var(--font-display);
     font-size: clamp(2.2rem, 4.6vw, 3.4rem);
@@ -88,27 +41,6 @@
     margin: 0;
   }
 
-  .symbiosis-banner {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 28px;
-    padding: 10px 16px;
-    border: 1px dashed var(--line-strong);
-    border-radius: 4px;
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    color: var(--text-mute);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-  .symbiosis-banner a {
-    color: var(--iog-infared);
-    text-decoration: none;
-    font-weight: 600;
-    border-bottom: 1px solid currentColor;
-  }
-  .symbiosis-banner a:hover { color: var(--iog-dawn); }
 
   /* Sections */
   section.section {
@@ -116,15 +48,6 @@
     border-top: 1px solid var(--line);
   }
   .section-head { margin-bottom: 28px; }
-  .section-kind {
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--iog-infared);
-    font-weight: 600;
-    margin-bottom: 12px;
-  }
   .section-head h2 {
     font-family: var(--font-display);
     font-size: clamp(1.6rem, 2.6vw, 2.1rem);
@@ -277,6 +200,25 @@
     font-weight: 600;
     color: var(--text);
   }
+  .review-state {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-radius: 4px;
+    padding: 2px 8px;
+    white-space: nowrap;
+    color: var(--text-faint);
+    background: var(--bg-soft);
+    border: 1px solid var(--line-strong);
+  }
+  .review-state.active {
+    color: var(--info);
+    background: var(--info-soft);
+    border-color: var(--info);
+  }
 
   /* Promise → MIP map */
   .promise-map {
@@ -343,7 +285,108 @@
     font-style: italic;
   }
 
-  /* Crossovers (shared with demo.html) */
+  /* Implementer quick-start */
+  .implementers-box {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--iog-infared);
+    border-radius: 8px;
+    background: var(--bg);
+    padding: 22px 26px;
+  }
+  .implementers-box h2 {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 10px;
+  }
+  .implementers-box ol {
+    margin: 0 0 12px;
+    padding-left: 22px;
+    display: grid;
+    gap: 8px;
+  }
+  .implementers-box li {
+    font-size: 0.95rem;
+    color: var(--text-mute);
+    line-height: 1.55;
+  }
+  .implementers-box li b { color: var(--text); }
+  .implementers-box a { color: var(--iog-infared); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .implementers-box a:hover { border-bottom-color: var(--iog-infared); }
+  .implementers-note {
+    font-size: 0.88rem;
+    color: var(--text-faint);
+    margin: 0;
+  }
+
+  /* Identifier footnote */
+  .id-footnote {
+    font-size: 0.86rem;
+    color: var(--text-faint);
+    line-height: 1.55;
+    margin-top: 16px;
+    max-width: 80ch;
+  }
+  .id-footnote code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+
+  /* Evidence chips inside MIP cards */
+  .evi-chip {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--iog-infared);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 2px 8px;
+    text-decoration: none;
+    margin: 0 4px 4px 0;
+    transition: border-color .12s ease, background .12s ease;
+  }
+  .evi-chip:hover { border-color: var(--iog-infared); background: var(--bad-soft); }
+
+  /* Engage block */
+  .engage {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--iog-infared);
+    border-radius: 8px;
+    background: var(--bg);
+    padding: 22px 26px;
+  }
+  .engage h2 {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 8px;
+  }
+  .engage p { font-size: 0.94rem; color: var(--text-mute); margin: 0 0 14px; max-width: 74ch; }
+  .engage-links { display: flex; flex-wrap: wrap; gap: 10px; }
+  .engage-links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--iog-infared);
+    border: 1px solid var(--iog-infared);
+    border-radius: 6px;
+    padding: 8px 14px;
+    text-decoration: none;
+    transition: background .12s ease;
+  }
+  .engage-links a:hover { background: var(--bad-soft); }
+
+  /* Crossovers (shared story — this page owns it) */
   .crossovers-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -387,25 +430,6 @@
   }
   .cx-chip:hover { background: var(--bad-soft); }
 
-  /* Footer */
-  footer.landing-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 16px;
-    flex-wrap: wrap;
-    border-top: 1px solid var(--line);
-    padding: 28px clamp(24px, 5vw, 80px);
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: var(--text-faint);
-    max-width: clamp(820px, 80vw, 1280px);
-    margin: 0 auto;
-    width: 100%;
-  }
-  footer.landing-footer a { color: var(--text-mute); text-decoration: none; border-bottom: 1px solid var(--line); }
-  footer.landing-footer a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
-  .footer-meta { font-size: 0.74rem; color: var(--text-faint); }
 </style>
 </head>
 <body>
@@ -415,10 +439,9 @@
   <div class="navbar-links">
     <a href="index.html">Overview</a>
     <a href="demo.html">How it works</a>
-    <a href="parallelisation.html">Parallelisation</a>
-    <a href="architecture.html">Architecture</a>
     <a href="standards.html" class="active">Standards</a>
-    <a href="onboarding-mockup.html">Onboarding</a>
+    <a href="architecture.html">Architecture</a>
+    <a href="plan.html">Plan</a>
   </div>
 </nav>
 
@@ -447,10 +470,25 @@
 
       <div class="kind">ARC · Delivery · Continuous</div>
       <h1>Standards &amp; feature-complete v1.0</h1>
-      <p class="subtitle">A standards-and-spec body that survives external review. Every MIP names an external co-author or committed reviewer from the start — a wallet partner or ecosystem reviewer — so what we ratify is a shared standard, portable across wallets. Cryptographer and formal-methods reviews are scheduled against component stability, not against a Passport-internal calendar.</p>
+      <p class="subtitle">Where the register stands: two standards published upstream (MIP-0012, contract custody; MIP-0013, multi-key account authorisation), two problem statements merged, three upstream standards adopted, and four proposals in the pipeline. Every MIP (Midnight Improvement Proposal) names an external co-author or committed reviewer from the start, so what we ratify is a shared standard, portable across wallets; cryptographer and formal-methods reviews are scheduled against component stability, not against a Passport-internal calendar.</p>
 
       <div class="symbiosis-banner">
-        Parallel delivery — see <a href="demo.html#demo">The October demo →</a>
+        The demo and the standards are one body of work at two speeds — the demo side lives at <a href="demo.html#demo">The October demo →</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="implementers">
+    <div class="container">
+      <div class="implementers-box">
+        <h2>For implementers: start here</h2>
+        <ol>
+          <li><b>Read <a href="#MIP-0012">MIP-0012</a></b> — how a contract holds and releases unshielded and shielded value, with authorisation abstracted to one seam.</li>
+          <li><b>Then <a href="#MIP-0013">MIP-0013</a></b> — the device set, revocation epochs, the bootstrap, and the seam instantiated with in-circuit Schnorr over JubJub.</li>
+          <li><b>Clone the <a href="https://github.com/midnightntwrk/passport/tree/main/contract" target="_blank" rel="noopener">reference implementation</a></b> — both standards in one deployment, with the conformance suites the standards require and an independent bit-exact Rust signer.</li>
+          <li><b>Build your signer first</b> — it needs only JubJub arithmetic and SHA-256, no Midnight stack, so approval is separable from proving from day one.</li>
+        </ol>
+        <p class="implementers-note">A second, independent implementation is the standards&rsquo; remaining path-to-Active evidence — if you build one, say so in the upstream discussions. Toolchain versions are pinned in the reference implementation&rsquo;s manifests; keep the prover and ledger payload formats version-paired, which is the first skew a fresh build hits.</p>
       </div>
     </div>
   </section>
@@ -460,10 +498,12 @@
       <header class="section-head">
         <div class="section-kind">Pipeline</div>
         <h2>The MIP pipeline</h2>
-        <p>Sequenced by dependency. Every MIP names an external co-author or committed reviewer from the start — that is what makes it portable across wallets rather than a Passport-shaped specification. STD-03 is a cryptographic prerequisite that ships before any MIP that hashes user state. A note on identifiers: four-digit ids (MIP-0003, MIP-0007, MIP-0012, MIP-0013) are upstream-assigned numbers — the account keystone pair now carries them; short ids (MIP-4…) are workspace pipeline labels for proposals not yet filed, which carry the literal <code>mip-xxxx</code> filename until an upstream editor assigns a number at merge.</p>
+        <p>Sequenced by dependency. Every MIP names an external co-author or committed reviewer from the start — that is what makes it portable across wallets rather than a Passport-shaped specification. STD-03 is a cryptographic prerequisite that ships before any MIP that hashes user state. Each card carries its upstream lifecycle state and links its evidence.</p>
       </header>
 
       <div class="mips" id="mipsList"></div>
+
+      <p class="id-footnote">A note on identifiers: four-digit ids (MIP-0003, MIP-0007, MIP-0008, MIP-0012, MIP-0013) are upstream-assigned numbers. Short ids (MIP-4…) are workspace pipeline labels for proposals not yet filed, which carry the literal <code>mip-xxxx</code> filename until an upstream editor assigns a number at merge. <code>STD-03</code> is likewise a workspace label: the domain-separation registry deliverable, whose problem statement is upstream as MPS-0027.</p>
     </div>
   </section>
 
@@ -481,8 +521,9 @@
             <tr>
               <th style="width:80px;">Component</th>
               <th>Touch point</th>
-              <th style="width:160px;">Reviewer</th>
+              <th style="width:140px;">Reviewer</th>
               <th>Trigger</th>
+              <th style="width:130px;">State</th>
             </tr>
           </thead>
           <tbody id="reviewsBody"></tbody>
@@ -508,10 +549,25 @@
       <header class="section-head">
         <div class="section-kind">Symbiosis</div>
         <h2>Shared with the MVP</h2>
-        <p>Where the v1.0 deliverable and the October MVP converge. Same primitives, same evidence, same direction.</p>
+        <p>Where the v1.0 deliverable and the October MVP converge — one body of work, not two. Same primitives, same evidence, same direction; the <a href="demo.html#picks">demo picks table</a> flags every temporary departure with its migration plan.</p>
       </header>
 
       <div class="crossovers-grid" id="crossovers"></div>
+    </div>
+  </section>
+
+  <section class="section" id="engage">
+    <div class="container">
+      <div class="engage">
+        <h2>Engage</h2>
+        <p>Both keystone MIPs are Proposed upstream and open for review; the errata the implementation surfaced are already merged, so what remains is exactly the ecosystem scrutiny that moves a proposal toward acceptance. Comment where the standards live; file issues where the plan lives.</p>
+        <div class="engage-links">
+          <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/discussions" target="_blank" rel="noopener">Upstream discussions ↗</a>
+          <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0012.md" target="_blank" rel="noopener">MIP-0012 upstream ↗</a>
+          <a href="https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0013.md" target="_blank" rel="noopener">MIP-0013 upstream ↗</a>
+          <a href="https://github.com/midnightntwrk/passport/issues" target="_blank" rel="noopener">Workspace issues ↗</a>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -524,7 +580,7 @@
 </aside>
 
 <footer class="landing-footer">
-  <span>ARC · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="demo.html">demo</a></span>
+  <span>ARC (Advanced Research and Creativity) · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="demo.html">demo</a></span>
   <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/01<!--/DEPLOY--></span>
 </footer>
 
@@ -556,7 +612,7 @@
       const compHtml = comps.map(cid => {
         const cc = componentById[cid];
         return cc
-          ? `<a href="index.html#${cid}" data-component="${cid}">${cid} · ${escapeHtml(cc.name)}</a>`
+          ? `<a href="plan.html#${cid}" data-component="${cid}">${cid} · ${escapeHtml(cc.name)}</a>`
           : escapeHtml(cid);
       }).join(' · ') || '—';
       const badge = m.kind === 'prerequisite' ? '<span class="mip-prereq-badge">Prerequisite</span>'
@@ -567,6 +623,18 @@
         : `<dt>Co-author target</dt><dd>${escapeHtml(m.co_author || '—')}</dd>`;
       const upstreamExtra = (m.kind !== 'upstream' && m.upstream)
         ? `<div><dt>Upstream</dt><dd><a href="${escapeHtml(m.upstream)}" target="_blank" rel="noopener">${escapeHtml(m.upstream_label || m.id)}</a></dd></div>`
+        : '';
+      const lifecycleExtra = m.lifecycle
+        ? `<div><dt>Upstream lifecycle</dt><dd>${escapeHtml(m.lifecycle)}</dd></div>`
+        : '';
+      const evidenceExtra = (m.evidence && m.evidence.length)
+        ? `<div><dt>Evidence</dt><dd>${m.evidence.map(eid => {
+            const ex = expById[eid];
+            if (!ex) return escapeHtml(eid);
+            return ex.url
+              ? `<a class="evi-chip" href="${escapeHtml(ex.url)}" target="_blank" rel="noopener" title="${escapeHtml(ex.summary || ex.name)}">${escapeHtml(ex.name)}</a>`
+              : `<span class="evi-chip" title="${escapeHtml(ex.summary || '')}">${escapeHtml(ex.name)}</span>`;
+          }).join('')}</dd></div>`
         : '';
       return `
         <div class="mip-card" id="${m.id}">
@@ -581,10 +649,12 @@
               <dt>Status</dt>
               <dd>${escapeHtml(m.status || '—')}</dd>
             </div>
+            ${lifecycleExtra}
             <div>
               ${secondMeta}
             </div>
             ${upstreamExtra}
+            ${evidenceExtra}
             <div>
               <dt>Component</dt>
               <dd>${compHtml}</dd>
@@ -593,7 +663,7 @@
               <dt>Promises</dt>
               <dd>${(m.promises || []).map(p => {
                 const pr = promiseById[p];
-                return pr ? `<a href="index.html#${p}" data-promise="${p}" title="${escapeHtml(pr.name)}">${p}</a>` : p;
+                return pr ? `<a href="plan.html#${p}" data-promise="${p}" title="${escapeHtml(pr.name)}">${p}</a>` : p;
               }).join(' · ') || '—'}</dd>
             </div>
           </dl>
@@ -606,13 +676,15 @@
   const reviewsHost = document.getElementById('reviewsBody');
   if (reviewsHost) {
     reviewsHost.innerHTML = (data.reviews || []).map(r => {
-      const c = componentById[r.target];
+      const stateClass = /^(Scheduling|In progress|Complete|To schedule)/.test(r.state || '')
+        ? 'review-state active' : 'review-state';
       return `
         <tr>
-          <td><a class="reviews-id" href="index.html#${r.target}" data-component="${r.target}">${r.target}</a></td>
+          <td><a class="reviews-id" href="plan.html#${r.target}" data-component="${r.target}">${r.target}</a></td>
           <td>${escapeHtml(r.label)}${r.note ? ` <span style="color:var(--text-faint);">— ${escapeHtml(r.note)}</span>` : ''}</td>
           <td><span class="review-kind">${escapeHtml(r.kind)}</span></td>
           <td>${escapeHtml(r.trigger)}</td>
+          <td><span class="${stateClass}">${escapeHtml(r.state || '—')}</span></td>
         </tr>
       `;
     }).join('');
@@ -644,6 +716,13 @@
         </div>
       `;
     }).join('');
+    promiseMapHost.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const head = e.target.closest('.promise-map-head');
+      if (!head) return;
+      e.preventDefault();
+      head.click();
+    });
   }
 
   // Crossovers
@@ -652,13 +731,16 @@
     cxHost.innerHTML = (data.crossovers || []).map(cx => {
       const items = (cx.items || []).map(id => {
         if (cx.kind === 'components' && componentById[id]) {
-          return `<a class="cx-chip" href="index.html#${id}" data-component="${id}" title="${escapeHtml(componentById[id].name)}">${id}</a>`;
+          return `<a class="cx-chip" href="plan.html#${id}" data-component="${id}" title="${escapeHtml(componentById[id].name)}">${id}</a>`;
         }
         if (cx.kind === 'mips' && mipById[id]) {
           return `<a class="cx-chip" href="#${id}" title="${escapeHtml(mipById[id].title)}">${id}</a>`;
         }
         if (cx.kind === 'experiments' && expById[id]) {
-          return `<span class="cx-chip" title="${escapeHtml(expById[id].name)}">${id}</span>`;
+          const ex = expById[id];
+          return ex.url
+            ? `<a class="cx-chip" href="${escapeHtml(ex.url)}" target="_blank" rel="noopener" title="${escapeHtml(ex.name)}">${id}</a>`
+            : `<span class="cx-chip" title="${escapeHtml(ex.name)}">${id}</span>`;
         }
         return `<span class="cx-chip">${escapeHtml(id)}</span>`;
       }).join('');

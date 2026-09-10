@@ -1,0 +1,7 @@
+// P4 probe E: infix point addition.
+pragma language_version 0.26;
+import CompactStandardLibrary;
+
+export circuit sum(p: Secp256k1Point, q: Secp256k1Point): Secp256k1Point {
+  return p + q;
+}

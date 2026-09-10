@@ -1,0 +1,11 @@
+{
+  "generated": "2026-09-05T08:00:50.478Z",
+  "results": {
+    "bytes_32": true,
+    "bytes_59": true,
+    "bytes_64": true,
+    "bytes_160": true,
+    "tuple_bytes27_bytes32": true,
+    "bip340_tagged_shape_160": true
+  }
+}

@@ -9,7 +9,7 @@
 //      The pair used is withdraw_shielded / withdraw_shielded_to_contract,
 //      whose argument lists are byte-identical ({bytes: 32}, color,
 //      amount) and whose witness values (the held coin) are identical too,
-//      so only the per-circuit tag separates the challenges. The account
+//      so only the per-circuit tag separates the k256Challenges. The account
 //      holds a real coin so the rejection demonstrably happens at the
 //      seam's signature check, not at the witness.
 
@@ -18,7 +18,7 @@ import { writeEvidence } from './evidence.js';
 import { standardSetup, mintToUser, depositAndCapture, expectAbort } from './flow.js';
 import { userAddressBytes } from '../node/wallet.js';
 import { deployAccount } from '../node/setup.js';
-import { challenges, Device } from '../wallet/signer.js';
+import { k256Challenges, K256Device } from '../wallet/signer.js';
 import { generateEncKeyPair } from '../wallet/inbox.js';
 
 const NIGHT = new Uint8Array(32);
@@ -49,7 +49,7 @@ await runScenario('auth-replay', async () => {
   step('test 3: a signature for account one is rejected by account two');
   const ctxOne = await s.account.callContext();
   const authForOne = s.device.sign(
-    challenges.withdrawUnshielded(ctxOne, s.device.pk, NIGHT, SPEND, recipient),
+    k256Challenges.withdrawUnshielded(ctxOne, s.device.pk, NIGHT, SPEND, recipient),
     await s.account.resolveUseCounter(s.device),
   );
   details.crossAccountRejection = await expectAbort(
@@ -82,7 +82,7 @@ await runScenario('auth-replay', async () => {
   const ctx = await s.account.callContext();
   const heldCoin = await s.account.heldCoin(minted.color);
   const authShielded = s.device.sign(
-    challenges.withdrawShielded(ctx, s.device.pk, dest, minted.color, SPEND, heldCoin),
+    k256Challenges.withdrawShielded(ctx, s.device.pk, dest, minted.color, SPEND, heldCoin),
     await s.account.resolveUseCounter(s.device),
   );
   details.crossCircuitRejection = await expectAbort(

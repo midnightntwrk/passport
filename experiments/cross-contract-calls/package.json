@@ -1,0 +1,55 @@
+{
+  "name": "midnight-cross-contract-calls",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Cross-contract call validation on the ledger-9 toolchain: how Compact contract-to-contract calls work end to end (compile, deploy, prove, submit, atomic failure), and whether the passport account contract can participate as a callee.",
+  "scripts": {
+    "compile": "npm run compile:tally && npm run compile:caller && npm run compile:till && npm run compile:payer && npm run compile:account && npm run compile:account-gate",
+    "compile:tally": "compact compile +0.34.0 contracts/tally.compact contracts/managed/Tally",
+    "compile:caller": "compact compile +0.34.0 --compact-path contracts/managed contracts/caller.compact contracts/managed/Caller",
+    "compile:till": "compact compile +0.34.0 contracts/till.compact contracts/managed/Till",
+    "compile:payer": "compact compile +0.34.0 --compact-path contracts/managed contracts/payer.compact contracts/managed/Payer",
+    "compile:account": "compact compile +0.34.0 --feature-zkir-v3 contracts/account.compact contracts/managed/Account",
+    "compile:account-gate": "compact compile +0.34.0 --compact-path contracts/managed contracts/account-gate.compact contracts/managed/AccountGate",
+    "typecheck": "tsc --noEmit",
+    "p0": "tsx src/tests/p0-keyed-compile.ts",
+    "p1": "tsx src/tests/p1-offline-exec.ts",
+    "p2": "tsx src/tests/p2-deploy.ts",
+    "p3": "tsx src/tests/p3-live-call.ts",
+    "p4": "tsx src/tests/p4-atomic-failure.ts",
+    "p5": "tsx src/tests/p5-passport-callee.ts",
+    "p6": "tsx src/tests/p6-unshielded-value.ts",
+    "p7": "tsx src/tests/p7-shielded-value.ts",
+    "findings": "tsx src/compose-findings.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-js": "2.5.5-rc.8",
+    "@midnight-ntwrk/compact-runtime": "0.19.0",
+    "@midnight-ntwrk/midnight-js-contracts": "5.0.0-beta.7",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-beta.7",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.0-beta.7",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "5.0.0-beta.7",
+    "@midnight-ntwrk/midnight-js-network-id": "5.0.0-beta.7",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0-beta.7",
+    "@midnight-ntwrk/midnight-js-types": "5.0.0-beta.7",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.3",
+    "@midnightntwrk/wallet-sdk-dust-wallet": "5.0.0-beta.2",
+    "@midnightntwrk/wallet-sdk-facade": "5.0.0-beta.2",
+    "@midnightntwrk/wallet-sdk-hd": "3.1.0-beta.1",
+    "@midnightntwrk/wallet-sdk-shielded": "4.0.0-beta.2",
+    "@midnightntwrk/wallet-sdk-unshielded-wallet": "4.0.0-beta.2",
+    "@noble/curves": "2.2.0",
+    "rxjs": "^7.8.2",
+    "ws": "^8.19.0"
+  },
+  "overrides": {
+    "@midnight-ntwrk/compact-runtime": "0.19.0"
+  }
+}

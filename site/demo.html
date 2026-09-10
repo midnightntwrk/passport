@@ -3,20 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23E52321'/><text x='50' y='74' font-size='68' font-weight='700' font-family='Arial,Helvetica,sans-serif' fill='%23FFFFFF' text-anchor='middle'>P</text></svg>">
+<meta name="description" content="How a Midnight Passport account works: the whole system on one screen, the six-step lifecycle, the evidence, and the October 2026 demo plan.">
 <title>Midnight Passport — How it works</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="shared.css">
 <style>
-  body {
-    font-size: 17px;
-    line-height: 1.65;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-  main { flex: 1; }
   .container {
     max-width: clamp(820px, 80vw, 1280px);
     margin: 0 auto;
@@ -26,50 +20,9 @@
 
   section.hero { padding: 64px 0 40px; }
 
-  .doc-logo, .doc-logo-dark {
-    height: clamp(40px, 4vw, 72px);
-    width: auto;
-    display: block;
-    margin-bottom: 36px;
-  }
-  .doc-logo-dark { display: none; }
-  html[data-theme="dark"] .doc-logo { display: none; }
-  html[data-theme="dark"] .doc-logo-dark { display: block; }
-  @media (not (prefers-color-scheme: light)) {
-    html:not([data-theme="light"]) .doc-logo { display: none; }
-    html:not([data-theme="light"]) .doc-logo-dark { display: block; }
-  }
+  .doc-logo, .doc-logo-dark { height: clamp(40px, 4vw, 72px); margin-bottom: 36px; }
 
-  .breadcrumb {
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-faint);
-    margin-bottom: 16px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: center;
-  }
-  .breadcrumb a {
-    color: var(--text-mute);
-    text-decoration: none;
-    border-bottom: 1px solid var(--line);
-    transition: color .12s ease, border-color .12s ease;
-  }
-  .breadcrumb a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
-  .breadcrumb .sep { opacity: 0.5; }
 
-  .kind {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--iog-infared);
-    font-weight: 600;
-    margin-bottom: 14px;
-  }
   h1 {
     font-family: var(--font-display);
     font-size: clamp(2.2rem, 4.6vw, 3.4rem);
@@ -88,27 +41,6 @@
     margin: 0;
   }
 
-  .symbiosis-banner {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 28px;
-    padding: 10px 16px;
-    border: 1px dashed var(--line-strong);
-    border-radius: 4px;
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    color: var(--text-mute);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-  .symbiosis-banner a {
-    color: var(--iog-infared);
-    text-decoration: none;
-    font-weight: 600;
-    border-bottom: 1px solid currentColor;
-  }
-  .symbiosis-banner a:hover { color: var(--iog-dawn); }
 
   /* Sections */
   section.section {
@@ -116,15 +48,6 @@
     border-top: 1px solid var(--line);
   }
   .section-head { margin-bottom: 28px; }
-  .section-kind {
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--iog-infared);
-    font-weight: 600;
-    margin-bottom: 12px;
-  }
   .section-head h2 {
     font-family: var(--font-display);
     font-size: clamp(1.6rem, 2.6vw, 2.1rem);
@@ -351,6 +274,52 @@
     border-top: 1px dashed var(--line);
   }
   .phase-artefact b { color: var(--iog-infared); margin-right: 6px; }
+  .phase-status {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin-top: 6px;
+    white-space: nowrap;
+  }
+  .phase-status.done    { color: var(--good); background: var(--good-soft); border: 1px solid var(--good); }
+  .phase-status.current { color: var(--iog-infared); background: var(--bad-soft); border: 1px solid var(--iog-infared); }
+  .phase-status.planned { color: var(--text-faint); background: var(--bg-soft); border: 1px solid var(--line-strong); }
+
+  /* MVP-shortcut markers */
+  .shortcut-chip {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--warn);
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    border-radius: 4px;
+    padding: 1px 7px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .diverges-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--warn);
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    border-radius: 4px;
+    padding: 1px 7px;
+    white-space: nowrap;
+  }
 
   /* Picks table */
   .picks-table-wrap {
@@ -398,25 +367,6 @@
   }
   .picks-note { color: var(--text-mute); }
 
-  /* Footer */
-  footer.landing-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 16px;
-    flex-wrap: wrap;
-    border-top: 1px solid var(--line);
-    padding: 28px clamp(24px, 5vw, 80px);
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: var(--text-faint);
-    max-width: clamp(820px, 80vw, 1280px);
-    margin: 0 auto;
-    width: 100%;
-  }
-  footer.landing-footer a { color: var(--text-mute); text-decoration: none; border-bottom: 1px solid var(--line); }
-  footer.landing-footer a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
-  .footer-meta { font-size: 0.74rem; color: var(--text-faint); }
 </style>
 </head>
 <body>
@@ -426,10 +376,9 @@
   <div class="navbar-links">
     <a href="index.html">Overview</a>
     <a href="demo.html" class="active">How it works</a>
-    <a href="parallelisation.html">Parallelisation</a>
-    <a href="architecture.html">Architecture</a>
     <a href="standards.html">Standards</a>
-    <a href="onboarding-mockup.html">Onboarding</a>
+    <a href="architecture.html">Architecture</a>
+    <a href="plan.html">Plan</a>
   </div>
 </nav>
 
@@ -461,7 +410,7 @@
       <p class="subtitle">One account is one contract on the Midnight ledger. No seed phrase exists anywhere: each device holds a secret derived from its passkey, the chain holds only hashes and proofs, and losing every device does not lose the account. This page shows the whole system on one screen, walks the account lifecycle in six steps, and ends with what the <a href="#demo">October demo</a> puts on a screen.</p>
 
       <div class="symbiosis-banner">
-        Parallel delivery — see <a href="standards.html">Standards &amp; v1.0 →</a>
+        The demo and the standards are one body of work at two speeds — the standards side lives at <a href="standards.html">Standards &amp; v1.0 →</a>
       </div>
     </div>
   </section>
@@ -609,7 +558,7 @@
             <div class="crosses"><b>Crosses</b> proofs · the scope is public, the grant secret is not</div>
           </div>
         </div>
-        <div class="step">
+        <div class="step" id="recover">
           <div class="step-n">6</div>
           <div>
             <h3>Recover</h3>
@@ -627,7 +576,7 @@
       <header class="section-head">
         <div class="section-kind">Evidence</div>
         <h2>Why we can claim this works</h2>
-        <p>Nothing above is speculative. Every mechanism runs for real: the reference implementation at <code>contract/</code> realises the two published standards in one deployment, with both conformance suites passing against a local Midnight network.</p>
+        <p>Nothing above is speculative. Every mechanism runs for real: the <a href="https://github.com/midnightntwrk/passport/tree/main/contract" target="_blank" rel="noopener">reference implementation at <code>contract/</code></a> realises the two published standards in one deployment, with both conformance suites passing against a local Midnight network.</p>
       </header>
 
       <div class="evidence">
@@ -671,17 +620,17 @@
       <header class="section-head">
         <div class="section-kind">Delivery · October 2026</div>
         <h2>The October demo</h2>
-        <p>The lifecycle above, made watchable: an end-to-end Passport account on a screen, with a recovery sad-path. The demo is an MVP that consumes the standards early. Where it takes a shortcut (single device, managed signing through a partner-operated MPC committee), the shortcut carries a migration plan back to the principled path; the <a href="standards.html">standards body</a> lands that path on a continuous timeline.</p>
+        <p>The lifecycle above, made watchable: an end-to-end Passport account on a screen, with a recovery sad-path. Where the demo departs from a decided standard (single device, managed signing through a partner-operated MPC committee), the departure carries a <span class="shortcut-chip" style="margin-left:0;">Shortcut</span> chip and a migration plan in the <a href="#picks">picks table</a>; how the demo and the v1.0 deliverables converge, primitive by primitive, is documented on the <a href="standards.html">Standards page</a>. A step-by-step <a href="archive/onboarding-mockup.html">onboarding click-through</a> of the first-run experience is kept in the archive.</p>
       </header>
 
       <ul class="ships-list">
-        <li><b>Passkey login</b><span>First visit registers a passkey (Face ID, Touch ID, Windows Hello). Subsequent visits authenticate biometrically. No seed phrase shown at any point.</span></li>
+        <li><b>Passkey login<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>First visit registers a passkey (Face ID, Touch ID, Windows Hello). Subsequent visits authenticate biometrically. No seed phrase shown at any point. The demo&rsquo;s passkey authenticates to a managed signing service; the v1.0 path derives the device key on-device from the passkey.</span></li>
         <li><b>Name registration</b><span>User registers <code>alice.passport.night</code> against the deployed upstream name service (MIP-0007); on-chain confirmation visible. Name uniqueness enforced at the registry.</span></li>
-        <li><b>Wallet view</b><span>Three role addresses (Shielded, Night, Dust) with balances synced via view key and a hosted indexer.</span></li>
-        <li><b>Signing primitive</b><span>User signs arbitrary data and a Night transfer. Signatures verify cross-implementation (TypeScript signer ↔ Rust verifier).</span></li>
+        <li><b>Wallet view<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>The account contract&rsquo;s holdings — the public Night balance and the shielded coins discovered through the account&rsquo;s encrypted inbox — plus the wallet-level Dust that pays fees (Midnight&rsquo;s fee resource, the one asset the ledger keeps outside the contract). Balances sync from a single hosted indexer for the demo; the v1.0 path is the substitutable multi-provider model, and account assets need no view-key handover.</span></li>
+        <li><b>Signing primitive<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>User signs arbitrary data and a Night transfer through the managed committee; the contract verifies the same equation either way. The cross-implementation evidence (TypeScript signer ↔ Rust verifier) backs the standards path, not the demo&rsquo;s signer.</span></li>
         <li><b>Function-call key grants</b><span>User issues, rotates, and revokes scoped function-call keys for dApp authorisation. Multi-device peer behaviour is deferred.</span></li>
         <li><b>Sign-in with Passport</b><span>A pseudo third-party app requests scoped access; user approves with biometric; transaction signed; function-call key issued.</span></li>
-        <li><b>Recovery walkthrough</b><span>User &quot;loses&quot; their passkey. Recovery via the auth provider&rsquo;s flow: alt-passkey on a fallback device or backup credential. On-chain account state unchanged; passkey-to-account binding re-established.</span></li>
+        <li><b>Recovery walkthrough<span class="shortcut-chip" title="Departs from the decided standard; migration plan applies">Shortcut</span></b><span>User &quot;loses&quot; their passkey. Recovery via the auth provider&rsquo;s flow: alt-passkey on a fallback device or backup credential. On-chain account state unchanged. The v1.0 path is the guardian recovery of lifecycle step 6, already running in the prototype.</span></li>
       </ul>
     </div>
   </section>
@@ -691,19 +640,19 @@
       <header class="section-head">
         <div class="section-kind">Phasing</div>
         <h2>Six phases, May to October</h2>
-        <p>Each phase ends with a demoable artefact: the smallest thing that proves that month&rsquo;s work landed. The early phases are behind us; the remaining ones consume the published standards and the reference implementation as they firm up. Component IDs link back to the canvas on the index page.</p>
+        <p>Each phase ends with a demoable artefact: the smallest thing that proves that month&rsquo;s work landed. The early phases are behind us; the remaining ones consume the standards and the reference implementation as they firm up. Component IDs open the canvas in place.</p>
       </header>
 
       <div class="phases" id="phases"></div>
     </div>
   </section>
 
-  <section class="section">
+  <section class="section" id="picks">
     <div class="container">
       <header class="section-head">
         <div class="section-kind">Picks</div>
         <h2>Component picks for the demo build</h2>
-        <p>Each component has alternatives in its canvas; this table records which alternative the demo build runs. Click any ID to open its full design space.</p>
+        <p><b>Picks are MVP shortcuts, never the specification.</b> Each component has alternatives in its canvas; this table records which alternative the demo build runs, and flags every pick that departs from a decided standard with its migration plan. <span id="picksCount"></span> Click any ID to open its full design space.</p>
       </header>
 
       <div class="picks-table-wrap">
@@ -731,7 +680,7 @@
 </aside>
 
 <footer class="landing-footer">
-  <span>ARC · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="standards.html">standards</a></span>
+  <span>ARC (Advanced Research and Creativity) · Input Output Global · Midnight Passport · <a href="index.html">overview</a> · <a href="standards.html">standards</a></span>
   <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/01<!--/DEPLOY--></span>
 </footer>
 
@@ -760,6 +709,7 @@
         <div>
           <div class="phase-marker">Phase ${p.id}</div>
           <div class="phase-window">${escapeHtml(p.window)}</div>
+          ${p.status ? `<span class="phase-status ${escapeHtml(p.status)}">${escapeHtml(p.status)}</span>` : ''}
         </div>
         <div>
           <div class="phase-name">${escapeHtml(p.name)}</div>
@@ -769,7 +719,7 @@
               ${p.components.map(cid => {
                 const c = componentById[cid];
                 return c
-                  ? `<a class="comp-chip" href="index.html#${cid}" data-component="${cid}" title="${escapeHtml(c.name)}">${cid}</a>`
+                  ? `<a class="comp-chip" href="plan.html#${cid}" data-component="${cid}" title="${escapeHtml(c.name)}">${cid}</a>`
                   : `<span class="comp-chip">${cid}</span>`;
               }).join('')}
             </div>
@@ -783,14 +733,20 @@
   // Picks
   const picksHost = document.getElementById('picksBody');
   if (picksHost) {
+    const picksCount = document.getElementById('picksCount');
+    if (picksCount) {
+      const total = (data.demo_selections || []).length;
+      const div = (data.demo_selections || []).filter(s => s.diverges).length;
+      picksCount.textContent = `${div} of the ${total} picks currently diverge.`;
+    }
     picksHost.innerHTML = (data.demo_selections || []).map(s => {
       const c = componentById[s.component];
       return `
         <tr>
-          <td><a class="picks-id" href="index.html#${s.component}" data-component="${s.component}">${s.component}</a></td>
+          <td><a class="picks-id" href="plan.html#${s.component}" data-component="${s.component}">${s.component}</a></td>
           <td>${c ? escapeHtml(c.name) : ''}</td>
           <td class="picks-alt">${escapeHtml(s.alt || '—')}</td>
-          <td class="picks-note">${escapeHtml(s.note || '')}</td>
+          <td class="picks-note">${s.diverges ? '<span class="diverges-badge" title="Departs from the decided standard; a migration plan applies">Shortcut</span> ' : ''}${escapeHtml(s.note || '')}</td>
         </tr>
       `;
     }).join('');

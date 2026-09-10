@@ -1,0 +1,114 @@
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Contract-to-wallet shielded transfer with an executor-attached ciphertext
+// — experiment contract.
+//
+// Question under test: a shielded output carries two independent things.
+// OWNERSHIP is the commitment to the recipient's CoinPublicKey.
+// DISCOVERABILITY is a ciphertext of the coin's opening, sealed to the
+// recipient's SEPARATE EncryptionPublicKey, which a scanning wallet trial
+// decrypts. A Compact circuit holds only the CoinPublicKey, so the contract
+// itself cannot seal that ciphertext. Does that make a contract-sent coin
+// undiscoverable by an unmodified wallet, or can the party who EXECUTES the
+// circuit supply the missing key, in the same transaction?
+//
+// The ledger states the escape hatch as a rule rather than an accident:
+// ZswapOutput.new documents the ciphertext as omissible "*only* if the
+// ShieldedCoinInfo is transferred to the recipient another way", and
+// ZswapLocalState.watchFor exists for recipients told out of band.
+//
+// The vault below is deliberately minimal. It holds shielded value and
+// spends it to a user key. There is no authentication: device auth is
+// proven in the account-custody reference implementation and would only add
+// variables. There is no encrypted inbox either — the inbox is precisely
+// the application-layer workaround this experiment is testing an
+// alternative to, so including it would beg the question.
+//
+// Two send circuits differ in ONE respect, what the contract tells the
+// caller about the coin it just sent:
+//
+//   send_to_user         returns [sent, change] — the contract cooperates.
+//   send_to_user_opaque  returns only the change — the shape MIP-0012 uses
+//                        for withdrawals, where the recipient's coin is
+//                        never disclosed by the circuit.
+//
+// If the executor can attach a working ciphertext even in the OPAQUE case,
+// the knowledge was never the contract's to give: it is in the caller's own
+// runtime, because the circuit ran there.
+// ---------------------------------------------------------------------------
+
+// ── Witness: the wallet-local coin store ────────────────────────────────────
+
+witness held_coin(color: Bytes<32>): QualifiedShieldedCoinInfo;
+
+// ── Public ledger state ─────────────────────────────────────────────────────
+
+export ledger round: Uint<64>;
+// Bumped by every circuit; gives the probes a cheap post-condition.
+
+constructor() {
+  round = 0 as Uint<64>;
+}
+
+circuit bump(): [] {
+  round = ((round + (1 as Uint<64>)) as Uint<64>);
+}
+
+// ── Deposit ─────────────────────────────────────────────────────────────────
+
+// Claims a coin addressed to this contract. The depositor builds the Zswap
+// output in the same transaction and knows the coin by construction, so
+// nothing needs to be recorded for it to be spendable later: the spend is
+// witness-supplied.
+export circuit deposit(coin: ShieldedCoinInfo): [] {
+  receiveShielded(disclose(coin));
+  bump();
+}
+
+// ── Spend to a user's Zswap key ─────────────────────────────────────────────
+
+// Cooperative shape: the contract returns the recipient's coin alongside
+// its own change. `sent` is the stdlib SendResult.sent; its nonce is the
+// deterministic nonce_evolve of the input coin's nonce.
+export circuit send_to_user(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  const result = sendShielded(
+    disclose(coin),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  bump();
+  if (disclose(result.change.is_some)) {
+    return [disclose(result.sent), some<ShieldedCoinInfo>(disclose(result.change.value))];
+  }
+  return [disclose(result.sent), none<ShieldedCoinInfo>()];
+}
+
+// Opaque shape, matching MIP-0012 section 6.3's withdrawal: the circuit
+// discloses its own change and says NOTHING about the recipient's coin.
+// Anything the executor knows about that coin here, it knows without the
+// contract's help.
+export circuit send_to_user_opaque(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  const result = sendShielded(
+    disclose(coin),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount),
+  );
+  bump();
+  if (disclose(result.change.is_some)) {
+    return some<ShieldedCoinInfo>(disclose(result.change.value));
+  }
+  return none<ShieldedCoinInfo>();
+}

@@ -9,14 +9,14 @@
 //   9. The proving pipeline's inputs for every gated call are enumerated
 //      and contain no device private key or key share (AUTH-4): the only
 //      witness is held_coin (coin descriptions), and the authorising
-//      material is (pk, use_counter, R, s, grind_nonce) — the signature and
-//      the rolling-entry position, never sk.
+//      material is (pk, use_counter, sig) — the signature and the
+//      rolling-entry position, never sk.
 
 import { runScenario, step, waitForLedger } from './runner.js';
 import { writeEvidence } from './evidence.js';
 import { standardSetup, expectAbort } from './flow.js';
 import { userAddressBytes } from '../node/wallet.js';
-import { challenges, Device, JUBJUB_R } from '../wallet/signer.js';
+import { k256Challenges, K256Device, SECP256K1_N } from '../wallet/signer.js';
 import { makeWitnesses } from '../wallet/witnesses.js';
 import { Contract } from '../wallet/contract.js';
 
@@ -39,9 +39,20 @@ await runScenario('auth-lifecycle', async () => {
 
   // ── Test 6: lifecycle ─────────────────────────────────────────────────────
 
+  // Note on what 6a does and does not prove. Since enrolment became
+  // entry-typed (the client derives the entry and the contract stores it
+  // verbatim, which is what makes cross-arm enrolment possible), the
+  // assertion below checks insertion and the count, NOT that the contract
+  // and the client agree on the derivation: entryAt calls the contract's own
+  // exported pure circuit, so both sides of the comparison come from the same
+  // place. The agreement is proven where it is observable \u2014 on-node at 6c,
+  // where the seam recomputes the entry in-circuit from the device's key and
+  // has to find it in the set, and offline in unit-offline and
+  // crossimpl-offline against the independent Rust signer. What nothing here
+  // constrains is the entry's epoch and counter: see README erratum 8.
   step('test 6a: add_device inserts the new key\u2019s entry at use counter 0');
-  const second = Device.generate();
-  const addTx = await s.account.addDevice(s.device, second.pk);
+  const second = K256Device.generate();
+  const addTx = await s.account.addDevice(s.device, second);
   details.addDeviceTx = addTx.txId;
   const entry0 = second.entryAt(s.account.addressBytes, 0n, 0n);
   await waitForLedger(
@@ -52,7 +63,7 @@ await runScenario('auth-lifecycle', async () => {
 
   step('test 6b: duplicate add of a device whose entry is present fails');
   await expectAbort('adding a device whose counter-0 entry is present', () =>
-    s.account.addDevice(s.device, second.pk));
+    s.account.addDevice(s.device, second));
 
   step('test 6c: the new device authorises a withdrawal (1-of-n); its entry rolls');
   const w = await s.account.withdrawUnshielded(second, NIGHT, SPEND, recipient);
@@ -97,26 +108,25 @@ await runScenario('auth-lifecycle', async () => {
   console.log(`  witnesses consumed by proving: [${witnessNames.join(', ')}] — coin descriptions only`);
 
   // Argument surface: the authorising material of every gated circuit is
-  // (pk, use_counter, sig_r, sig_s, grind_nonce). sig_s alone is key-derived, and it is
-  // a one-call response bound to this challenge: recovering sk from (R, s)
-  // is exactly the discrete-log/forgery game. Assert the values passed are
-  // in the scalar/point domains and that no argument equals sk.
-  const probe = Device.generate();
+  // (pk, use_counter, sig). sig alone is key-derived, and it is a one-call
+  // response bound to this challenge: recovering sk from (r, s) is exactly
+  // the discrete-log/forgery game. Assert the values passed are in the
+  // scalar/point domains and that no argument equals sk.
+  const probe = K256Device.generate();
   const ctx = await s.account.callContext();
-  const auth = probe.sign(challenges.withdrawUnshielded(ctx, probe.pk, NIGHT, 1n, recipient), 0n);
+  const auth = probe.sign(k256Challenges.withdrawUnshielded(ctx, probe.pk, NIGHT, 1n, recipient), 0n);
   const provingInputs: Array<[string, string]> = [
     ['pk.x', auth.pk.x.toString(16)],
     ['pk.y', auth.pk.y.toString(16)],
-    ['sig_r.x', auth.sig_r.x.toString(16)],
-    ['sig_r.y', auth.sig_r.y.toString(16)],
-    ['sig_s', auth.sig_s.toString(16)],
-    ['grind_nonce', auth.grind_nonce.toString(16)],
+    ['sig.r', auth.sig.r.toString(16)],
+    ['sig.s', auth.sig.s.toString(16)],
   ];
   const skHex = probe.sk.toString(16);
   for (const [name, value] of provingInputs) {
     if (value === skHex) throw new Error(`proving input ${name} equals the device private key`);
   }
-  if (!(auth.sig_s < JUBJUB_R)) throw new Error('sig_s outside the scalar domain');
+  if (!(auth.sig.r < SECP256K1_N)) throw new Error('sig.r outside the scalar domain');
+  if (!(auth.sig.s < SECP256K1_N)) throw new Error('sig.s outside the scalar domain');
   details.provingInputs = provingInputs.map(([n]) => n);
   details.contractWitnessArity = contractWitnessArity;
   console.log('  ✓ no gated-call proving input carries sk or a share of it (AUTH-4)');

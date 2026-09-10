@@ -31,9 +31,11 @@ export function writeEvidence(e: Omit<Evidence, 'ranAt' | 'stack'>): void {
     ...e,
     ranAt: new Date().toISOString(),
     stack: {
-      node: process.env.MIDNIGHT_NODE_TAG ?? 'midnightntwrk/midnight-node:1.0.0',
-      indexer: process.env.MIDNIGHT_INDEXER_TAG ?? 'midnightntwrk/indexer-standalone:4.3.3',
-      proofServer: process.env.MIDNIGHT_PROOF_TAG ?? 'midnightntwrk/proof-server:8.1.0',
+      // Defaults mirror infra/docker-compose.yml; override via env when
+      // running against a different stack.
+      node: process.env.MIDNIGHT_NODE_TAG ?? 'midnightntwrk/midnight-node:2.1.0-2e92c4ae642c',
+      indexer: process.env.MIDNIGHT_INDEXER_TAG ?? 'midnightntwrk/indexer-standalone:4.4.0-rc.2',
+      proofServer: process.env.MIDNIGHT_PROOF_TAG ?? 'midnightntwrk/proof-server:9.0.0-rc.6',
     },
   };
   const file = path.join(EVIDENCE_DIR, `${e.testId.toLowerCase()}-${e.name}.json`);

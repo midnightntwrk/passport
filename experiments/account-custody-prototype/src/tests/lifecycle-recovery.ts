@@ -28,6 +28,7 @@ import {
   buildPhi,
   reconstructRecoverySecret,
   paramsFromPhi,
+  phiBytesFromField,
   encodeGuardianRequest,
   decodeGuardianRequest,
   encodeGuardianReply,
@@ -107,7 +108,10 @@ await runScenario('lifecycle-recovery', async () => {
 
   step('TOTAL LOSS — rebuild everything from public state + a t+1 quorum');
   const l = await account.ledgerState();
-  const phiFromChain = [l.recovery_phi.lookup(1n), l.recovery_phi.lookup(2n)];
+  const phiFromChain = [
+    phiBytesFromField(l.recovery_phi.lookup(1n)),
+    phiBytesFromField(l.recovery_phi.lookup(2n)),
+  ];
   const sessionFromChain = bytesToHex(l.recovery_session);
 
   // Quorum member 1: the guardian passport, asked again with a request

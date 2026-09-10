@@ -1,0 +1,15 @@
+{
+  "generated": "2026-09-05T06:14:34.528Z",
+  "pins": {
+    "wallet-sdk": "account-custody-prototype lockfile",
+    "noble": "1.9.7"
+  },
+  "secretKeyHex": "0707070707070707070707070707070707070707070707070707070707070707",
+  "prefixAscii": "midnight_signed_message:32:",
+  "signedBytesHex": "6d69646e696768745f7369676e65645f6d6573736167653a33323ac0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+  "challengeHex": "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+  "publicKeyHex": "989c0b76cb563971fdc9bef31ec06c3560f3249d6ee9e5d83c57625596e05f6f",
+  "signatureHex": "c7bb0efda2cdb2daf16dfcaab328b898dea4d2eb21c8f66a5d47f3722113ca612d10c8a9260e6298b7542ff747903fddf4a2dc1eab4384de519837fcd838a779",
+  "ledgerVerify": true,
+  "characterisation": "connector path: BIP-340 over SHA-256(\"midnight_signed_message:32:\" || data); prefix normative per the dApp-connector SPECIFICATION.md"
+}

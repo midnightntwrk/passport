@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Midnight Passport — Onboarding mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared.css">
+<style>
+  body {
+    font-size: 17px;
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  main { flex: 1; }
+
+  .container {
+    max-width: clamp(820px, 92vw, 1600px);
+    margin: 0 auto;
+    padding: 0 clamp(20px, 4vw, 60px);
+    width: 100%;
+  }
+
+  /* ---------- Hero ---------- */
+
+  section.hero { padding: 56px 0 28px; }
+  .kind {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--iog-infared);
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.2rem, 4.4vw, 3.2rem);
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    margin-bottom: 16px;
+    color: var(--text);
+  }
+  p.subtitle {
+    font-size: 1.05rem;
+    color: var(--text-mute);
+    font-weight: 300;
+    line-height: 1.6;
+    max-width: 72ch;
+    margin: 0;
+  }
+
+  /* ---------- Stage ---------- */
+
+  section.stage {
+    padding: 24px 0 72px;
+  }
+
+  .stage-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+
+  @media (min-width: 1100px) {
+    .stage-grid {
+      grid-template-columns: minmax(260px, 320px) minmax(340px, 1fr) minmax(260px, 320px);
+      gap: 36px;
+    }
+  }
+
+  .side-panel {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg-soft);
+    padding: 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  @media (min-width: 1100px) {
+    .stage-grid > .side-panel {
+      position: sticky;
+      top: 24px;
+      max-height: calc(100vh - 48px);
+      overflow-y: auto;
+    }
+  }
+
+  .sp-head {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 14px;
+  }
+  .panel-kind {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-faint);
+    font-weight: 600;
+  }
+  .sp-title {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .sp-hint {
+    font-size: 0.82rem;
+    color: var(--text-mute);
+    line-height: 1.5;
+  }
+
+  .sp-section-label {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-faint);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .sp-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .sp-item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px;
+    align-items: baseline;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 12px;
+    background: var(--bg);
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    font-family: inherit;
+    font-size: inherit;
+    text-align: left;
+    width: 100%;
+    transition: border-color .15s ease, background .15s ease, transform .15s ease;
+  }
+  .sp-item:hover {
+    border-color: var(--iog-infared);
+    transform: translateY(-1px);
+  }
+  .sp-item:focus-visible {
+    outline: 2px solid var(--iog-infared);
+    outline-offset: 2px;
+  }
+  .sp-item .pi-ext {
+    grid-column: 1 / -1;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    color: var(--text-faint);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 4px;
+    opacity: 0;
+    transition: opacity .15s ease;
+  }
+  .sp-item:hover .pi-ext { opacity: 1; }
+  .sp-item.is-active {
+    border-color: var(--iog-infared);
+    background: var(--bad-soft);
+  }
+  .sp-item .pi-id {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-faint);
+    letter-spacing: 0.04em;
+  }
+  .sp-item.is-active .pi-id { color: var(--iog-infared); }
+  .sp-item .pi-name {
+    font-family: var(--font-display);
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.3;
+    margin-bottom: 2px;
+  }
+  .sp-item .pi-note {
+    font-size: 0.78rem;
+    color: var(--text-mute);
+    line-height: 1.4;
+  }
+
+  .sp-item.is-faded {
+    opacity: 0.45;
+  }
+
+  .sp-empty {
+    font-size: 0.82rem;
+    color: var(--text-faint);
+    font-style: italic;
+    padding: 4px 0 0;
+  }
+
+  /* ---------- Vendor panel (below the grid) ---------- */
+
+  .right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    min-width: 0;
+  }
+
+  .vendor-panel {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg-soft);
+    padding: 22px 22px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .vendor-head {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 14px;
+  }
+  .vendor-title {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .vendor-hint {
+    font-size: 0.82rem;
+    color: var(--text-mute);
+    line-height: 1.5;
+  }
+  .vendor-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .vendor-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: var(--bg);
+  }
+  .vendor-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .vendor-name {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .vendor-link {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    text-decoration: none;
+    border: 1px solid var(--line);
+    padding: 2px 8px;
+    border-radius: 4px;
+    transition: border-color .12s ease, color .12s ease;
+    white-space: nowrap;
+  }
+  .vendor-link:hover { border-color: var(--iog-infared); color: var(--iog-infared); }
+  .vendor-role {
+    font-size: 0.86rem;
+    color: var(--text);
+    line-height: 1.45;
+    margin: 0;
+  }
+  .vendor-caveat {
+    font-size: 0.82rem;
+    line-height: 1.45;
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--warn-soft);
+    color: var(--warn);
+    border-left: 3px solid var(--warn);
+  }
+  .vendor-caveat.is-block {
+    background: var(--bad-soft);
+    color: var(--iog-infared);
+    border-left-color: var(--iog-infared);
+  }
+  .vendor-caveat-label {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-weight: 700;
+    display: block;
+    margin-bottom: 2px;
+    opacity: 0.85;
+  }
+  .vendor-empty {
+    font-size: 0.86rem;
+    color: var(--text-faint);
+    font-style: italic;
+    padding: 4px 0;
+    grid-column: 1 / -1;
+  }
+
+  /* ---------- Phone ---------- */
+
+  .phone-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .step-meta {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .step-counter {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--iog-infared);
+    font-weight: 600;
+  }
+  .step-title {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.015em;
+  }
+  .step-subtitle {
+    font-size: 0.92rem;
+    color: var(--text-mute);
+    line-height: 1.4;
+    max-width: 36ch;
+    margin: 0 auto;
+  }
+
+  .phone-frame {
+    width: 340px;
+    height: 700px;
+    border: 12px solid #0E0E0E;
+    border-radius: 44px;
+    background: #050505;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.35),
+      0 0 0 1px rgba(255,255,255,0.04) inset;
+    flex-shrink: 0;
+  }
+  html[data-theme="light"] .phone-frame {
+    box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+  }
+
+  .phone-notch {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 26px;
+    background: #0E0E0E;
+    border-bottom-left-radius: 14px;
+    border-bottom-right-radius: 14px;
+    z-index: 4;
+  }
+
+  .phone-statusbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 32px;
+    padding: 8px 22px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: #F4F4F2;
+    z-index: 3;
+    letter-spacing: 0.04em;
+  }
+  .phone-statusbar .right { display: inline-flex; gap: 6px; align-items: center; }
+  .phone-statusbar svg { width: 12px; height: 12px; fill: #F4F4F2; }
+
+  .phone-screen {
+    position: absolute;
+    inset: 0;
+    padding: 44px 22px 22px;
+    display: flex;
+    flex-direction: column;
+    color: #F4F4F2;
+    overflow: hidden;
+  }
+
+  .screen-pad { padding: 8px 0 0; }
+
+  .screen-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(244,244,242,0.55);
+    margin-bottom: 6px;
+  }
+  .screen-heading {
+    font-family: var(--font-display);
+    font-size: 1.55rem;
+    font-weight: 500;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    color: #F4F4F2;
+    margin-bottom: 14px;
+  }
+  .screen-heading.smaller { font-size: 1.3rem; }
+  .screen-copy {
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: rgba(244,244,242,0.75);
+    margin-bottom: 18px;
+  }
+  .screen-copy.smaller { font-size: 0.84rem; }
+
+  .btn-primary {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    background: var(--iog-infared);
+    color: #FFFFFF;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 0.98rem;
+    letter-spacing: -0.005em;
+    padding: 13px 18px;
+    border-radius: 999px;
+    border: 0;
+    cursor: pointer;
+    box-shadow: 0 8px 18px rgba(229,35,33,0.32);
+    transition: transform .12s ease;
+  }
+  .btn-primary:hover { transform: translateY(-1px); }
+  .btn-secondary {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    background: transparent;
+    color: rgba(244,244,242,0.85);
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 0.92rem;
+    padding: 11px 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(244,244,242,0.18);
+    cursor: pointer;
+    margin-top: 10px;
+  }
+  .btn-ghost {
+    background: transparent;
+    color: rgba(244,244,242,0.62);
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 0.86rem;
+    border: 0;
+    padding: 10px 0;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: rgba(244,244,242,0.3);
+  }
+
+  .screen-spacer { flex: 1; }
+
+  /* NightFi visual mark */
+  .nf-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    color: #F4F4F2;
+  }
+  .nf-logo .nf-mark {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: #06FF89;
+    color: #000000;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .nf-logo svg { width: 14px; height: 14px; }
+  .nf-logo.large { font-size: 1.4rem; }
+  .nf-logo.large .nf-mark { width: 36px; height: 36px; border-radius: 10px; }
+  .nf-logo.large svg { width: 20px; height: 20px; }
+
+  .nf-card {
+    background: rgba(244,244,242,0.04);
+    border: 1px solid rgba(244,244,242,0.08);
+    border-radius: 14px;
+    padding: 16px 16px;
+    margin-bottom: 14px;
+  }
+  .nf-card .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .nf-card .row:last-child { margin-bottom: 0; }
+  .nf-card .row .label {
+    font-size: 0.78rem;
+    color: rgba(244,244,242,0.55);
+  }
+  .nf-card .row .value {
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+    color: #F4F4F2;
+  }
+
+  /* Passport visual mark */
+  .pp-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    color: #F4F4F2;
+  }
+  .pp-logo .pp-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--iog-infared);
+  }
+  .pp-logo .pp-name { letter-spacing: 0.02em; }
+
+  /* Biometric overlay */
+  .bio-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(5,5,5,0.6);
+    backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 22px;
+  }
+  .bio-card {
+    background: rgba(40,40,40,0.92);
+    border-radius: 14px;
+    padding: 22px;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .bio-face {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 2px solid rgba(244,244,242,0.6);
+    margin: 0 auto 12px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .bio-face::before, .bio-face::after {
+    content: '';
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: rgba(244,244,242,0.8);
+    top: 18px;
+  }
+  .bio-face::before { left: 16px; }
+  .bio-face::after { right: 16px; }
+  .bio-face .mouth {
+    position: absolute;
+    width: 18px;
+    height: 6px;
+    border-bottom: 2px solid rgba(244,244,242,0.8);
+    border-radius: 0 0 18px 18px;
+    bottom: 14px;
+  }
+  .bio-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1rem;
+    color: #F4F4F2;
+    margin-bottom: 4px;
+  }
+  .bio-sub {
+    font-size: 0.82rem;
+    color: rgba(244,244,242,0.65);
+    margin-bottom: 16px;
+  }
+  .bio-btn-row {
+    display: flex;
+    gap: 8px;
+  }
+  .bio-btn {
+    flex: 1;
+    background: rgba(244,244,242,0.08);
+    color: #F4F4F2;
+    border: 0;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-family: var(--font-display);
+    font-size: 0.86rem;
+    cursor: pointer;
+  }
+  .bio-btn.is-primary { background: var(--iog-infared); }
+
+  /* Option list (recovery / second-device choices) */
+  .opt-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .opt {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(244,244,242,0.04);
+    border: 1px solid rgba(244,244,242,0.08);
+    border-radius: 10px;
+    padding: 12px 14px;
+    cursor: pointer;
+  }
+  .opt .opt-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(244,244,242,0.1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.96rem;
+    color: #F4F4F2;
+  }
+  .opt .opt-icon.g { background: #FFFFFF; color: #000000; }
+  .opt .opt-icon.a { background: #FFFFFF; color: #000000; }
+  .opt .opt-icon.r { background: var(--iog-infared); color: #FFFFFF; }
+  .opt .opt-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .opt .opt-name {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 0.92rem;
+    color: #F4F4F2;
+  }
+  .opt .opt-hint {
+    font-size: 0.74rem;
+    color: rgba(244,244,242,0.6);
+  }
+
+  .req-tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    background: var(--iog-infared);
+    color: #FFFFFF;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .opt-tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    background: rgba(244,244,242,0.12);
+    color: rgba(244,244,242,0.75);
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  /* Name screen */
+  .name-suggest {
+    background: rgba(244,244,242,0.04);
+    border: 1px solid rgba(244,244,242,0.1);
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 14px;
+    text-align: center;
+  }
+  .name-suggest .name-value {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    color: #F4F4F2;
+    margin: 2px 0 4px;
+  }
+  .name-suggest .name-hint {
+    font-size: 0.78rem;
+    color: rgba(244,244,242,0.55);
+  }
+
+  /* Grant screen */
+  .grant-from {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(6,255,137,0.08);
+    border: 1px solid rgba(6,255,137,0.22);
+    border-radius: 10px;
+    margin-bottom: 14px;
+  }
+  .grant-scope {
+    list-style: none;
+    margin: 0 0 14px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .grant-scope li {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 10px;
+    padding: 9px 12px;
+    background: rgba(244,244,242,0.04);
+    border: 1px solid rgba(244,244,242,0.08);
+    border-radius: 8px;
+    font-size: 0.86rem;
+    color: #F4F4F2;
+  }
+  .grant-scope .check {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--iog-infared);
+    color: #FFFFFF;
+    font-size: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+  }
+  .grant-scope .scope-name { font-weight: 500; font-family: var(--font-display); }
+  .grant-scope .scope-note {
+    font-size: 0.74rem;
+    color: rgba(244,244,242,0.55);
+    margin-top: 1px;
+  }
+  .grant-limits {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: rgba(244,244,242,0.55);
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  /* Done screen — NightFi authenticated */
+  .nf-app-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(244,244,242,0.08);
+    margin-bottom: 14px;
+  }
+  .nf-user-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(244,244,242,0.06);
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    color: #F4F4F2;
+  }
+  .nf-user-pill .av {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--iog-infared), var(--iog-dawn));
+  }
+  .nf-headline {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: #F4F4F2;
+    margin-bottom: 6px;
+  }
+
+  /* ---------- Navigation ---------- */
+
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 12px;
+    justify-content: center;
+  }
+  .step-btn {
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 0.92rem;
+    padding: 9px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: border-color .12s ease, color .12s ease, background .12s ease;
+  }
+  .step-btn:hover {
+    border-color: var(--iog-infared);
+    color: var(--iog-infared);
+  }
+  .step-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .step-btn.is-primary {
+    background: var(--iog-infared);
+    border-color: var(--iog-infared);
+    color: #FFFFFF;
+  }
+  .step-btn.is-primary:hover { background: var(--iog-dawn); border-color: var(--iog-dawn); color: #FFFFFF; }
+
+  .step-dots {
+    display: inline-flex;
+    gap: 6px;
+    margin: 0 4px;
+  }
+  .step-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--line-strong);
+    cursor: pointer;
+    border: 0;
+    padding: 0;
+    transition: background .15s ease, transform .15s ease;
+  }
+  .step-dot.is-active {
+    background: var(--iog-infared);
+    transform: scale(1.18);
+  }
+  .step-dot.is-done {
+    background: var(--text-mute);
+  }
+
+  /* ---------- Footer ---------- */
+
+  footer.landing-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--line);
+    padding: 28px clamp(20px, 4vw, 60px);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    max-width: clamp(820px, 92vw, 1600px);
+    margin: 0 auto;
+    width: 100%;
+  }
+  footer.landing-footer a { color: var(--text-mute); text-decoration: none; border-bottom: 1px solid var(--line); }
+  footer.landing-footer a:hover { color: var(--iog-infared); border-bottom-color: var(--iog-infared); }
+  .footer-meta { font-size: 0.74rem; color: var(--text-faint); }
+
+  /* Small screens — phone shrinks slightly */
+  @media (max-width: 420px) {
+    .phone-frame { width: 300px; height: 620px; }
+    .screen-heading { font-size: 1.35rem; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar" aria-label="Primary">
+  <a class="navbar-brand" href="../index.html">Midnight Passport <span class="brand-tag">· ARC</span></a>
+  <div class="navbar-links">
+    <a href="../index.html">Overview</a>
+    <a href="../demo.html" class="active">How it works</a>
+    <a href="../standards.html">Standards</a>
+    <a href="../architecture.html">Architecture</a>
+    <a href="../plan.html">Plan</a>
+  </div>
+</nav>
+
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle colour scheme" title="Auto · Light · Dark">
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+  </svg>
+</button>
+
+<main>
+
+  <section class="hero">
+    <div class="container">
+      <div class="kind">ARC · Midnight Passport · Mockup</div>
+      <h1>First-time onboarding — Flow A</h1>
+      <p class="subtitle">A click-through of what onboarding looks like for a user signing in to <strong>NightFi</strong> — a fictional Midnight-native DeFi dApp — with Passport for the first time. On wide screens, the panels on either side show which <strong>components</strong> engage at each step and which <strong>promises</strong> are being honoured. Stakeholder-facing: pragma over realism.</p>
+    </div>
+  </section>
+
+  <section class="stage">
+    <div class="container">
+      <div class="stage-grid">
+
+        <aside class="side-panel" aria-label="Components engaged">
+          <header class="sp-head">
+            <div class="sp-title">Components engaged</div>
+            <div class="sp-hint">Which surfaces light up at this step. Click any item to open its canvas.</div>
+          </header>
+          <ul class="sp-list" id="activeComponents"></ul>
+        </aside>
+
+        <div class="phone-column">
+          <div class="step-meta">
+            <div class="step-counter" id="stepCounter"></div>
+            <div class="step-title" id="stepTitle"></div>
+            <div class="step-subtitle" id="stepSubtitle"></div>
+          </div>
+
+          <div class="phone-frame" id="phoneFrame">
+            <div class="phone-notch"></div>
+            <div class="phone-statusbar">
+              <span>22:13</span>
+              <span class="right">
+                <svg viewBox="0 0 24 24"><path d="M2 17h2v4H2zm4-3h2v7H6zm4-3h2v10h-2zm4-3h2v13h-2zm4-3h2v16h-2z"/></svg>
+                <svg viewBox="0 0 24 24"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/></svg>
+              </span>
+            </div>
+            <div class="phone-screen" id="phoneScreen"></div>
+          </div>
+
+          <div class="stepper">
+            <button class="step-btn" id="prevBtn" type="button">← Back</button>
+            <span class="step-dots" id="stepDots" role="tablist" aria-label="Steps"></span>
+            <button class="step-btn is-primary" id="nextBtn" type="button">Next →</button>
+          </div>
+        </div>
+
+        <div class="right-column">
+          <aside class="side-panel" aria-label="Promises honoured">
+            <header class="sp-head">
+              <div class="sp-title">Promises honoured</div>
+              <div class="sp-hint">v1.0 invariants from the <a href="index.html#promises" style="color: var(--iog-infared);">overview</a> that this step satisfies. Click any item to open the promise card.</div>
+            </header>
+            <ul class="sp-list" id="activePromises"></ul>
+          </aside>
+
+          <aside class="vendor-panel" aria-label="Potential vendors">
+            <header class="vendor-head">
+              <div class="vendor-title">Potential vendors at this step</div>
+              <div class="vendor-hint">Third parties who could provide pieces of this step at MVP. Listed for visibility — each comes with caveats. Not endorsements.</div>
+            </header>
+            <ul class="vendor-list" id="activeVendors"></ul>
+          </aside>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="panel-backdrop" id="panelBackdrop" aria-hidden="true"></div>
+<aside class="panel" id="panel" aria-hidden="true" aria-label="Detail panel">
+  <button class="panel-close" id="panelClose" aria-label="Close panel" title="Close">×</button>
+  <div class="panel-body" id="panelBody"></div>
+</aside>
+
+<footer class="landing-footer">
+  <span>ARC · Input Output Global · Midnight Passport planning workspace</span>
+  <span class="footer-meta"><!--DEPLOY-->Drafted 2026/05/13<!--/DEPLOY--> · onboarding mockup</span>
+</footer>
+
+<script src="../data.js"></script>
+<script src="../panel.js"></script>
+<script src="../theme-toggle.js"></script>
+
+<script>
+  // -------------------------------------------------------------------
+  // Reference data
+  // -------------------------------------------------------------------
+  const COMPONENTS = {
+    C1:  { name: 'Account-custody contract', note: 'On-chain account, holds signer set.' },
+    C2:  { name: 'Name service',              note: 'Maps human-readable name to account.' },
+    C5:  { name: 'Signing primitive',         note: 'Per-device key, never leaves device.' },
+    C9:  { name: 'Device-bound authentication', note: 'WebAuthn / OS passkey provider.' },
+    C10: { name: 'Scoped-grant primitive',    note: 'Operation × object × bounds.' },
+    C11: { name: 'Grant lifecycle',           note: 'Grants are issued, observed, revoked.' },
+    C12: { name: 'Chain-side enforcement',    note: 'Grant scope enforced at verification.' },
+    C13: { name: 'Lost-device flow',          note: 'Revoke from a remaining device.' },
+    C14: { name: 'Total-loss recovery',       note: 'Recover account with zero devices.' },
+    C15: { name: 'Helper protocol',           note: 'Role-substitutable recovery helpers.' },
+    C20: { name: 'Selective-disclosure proof', note: 'Prove a property, reveal nothing else.' },
+    C23: { name: 'dApp connection protocol',  note: 'Wallet ↔ dApp handshake & grants. Open Wallet Standard (OWS) is the chosen direction (in progress).' }
+  };
+
+  const PROMISES = {
+    P1:  { name: 'Seedless',             note: 'No seed material shown to the user.' },
+    P2:  { name: 'Named',                note: 'Every account has a human-readable name.' },
+    P3:  { name: 'Peer-device',          note: 'Every authorised device is a first-class peer.' },
+    P5:  { name: 'Recover-from-zero',    note: 'Recoverable even with no devices left.' },
+    P6:  { name: 'Key-bound',            note: 'Keys never leave the legitimate holder.' },
+    P7:  { name: 'Scoped grants',        note: 'Access is grantable along three axes.' },
+    P8:  { name: 'Chain-only',           note: 'Only the Midnight chain is required.' },
+    P9:  { name: 'Selective disclosure', note: 'Prove a property without revealing more.' },
+    P10: { name: 'Chain abstraction',    note: 'Single identity across every supported chain.' }
+  };
+
+  const VENDORS = {
+    dynamic: {
+      name: 'Dynamic',
+      url: 'https://www.dynamic.xyz/',
+      role: 'MPC key custody, used when on-device cryptography is unavailable.',
+      caveat: 'MPC primitives for this purpose remain nascent; engagement in progress. A candidate for the October demo\'s managed path rather than the standards path.',
+      caveatKind: 'warn'
+    },
+    bcw: {
+      name: 'BCW · ZK-PaaS',
+      url: 'https://www.bcw.group/exploring-the-power-of-zero-knowledge-proofs-and-bcws-zk-paas/',
+      role: 'Cloud TEE proof-server for Midnight contract interaction.',
+      caveat: 'Cloud-hosted — sacrifices some privacy and introduces a centralised dependency on the critical path (counter to P8).',
+      caveatKind: 'warn'
+    },
+    midnames: {
+      name: 'Midnames',
+      url: 'https://midnames.com/',
+      role: 'Name service behind the upstream registry (MIP-0007); Passport names are sub-domains of passport.night.',
+      caveat: 'Not audited; correctness unverified. Centralised dependency (counter to P8 / I-2.2).',
+      caveatKind: 'warn'
+    }
+  };
+
+  // -------------------------------------------------------------------
+  // Flow definition
+  // -------------------------------------------------------------------
+  const STEPS = [
+    {
+      id: 'nightfi-entry',
+      counter: 'Step 1 of 8',
+      title: 'User opens NightFi',
+      subtitle: 'First contact: dApp surface, no Passport yet engaged.',
+      components: ['C23'],
+      promises: [],
+      vendors: [],
+      screen: renderNightFiEntry
+    },
+    {
+      id: 'passport-welcome',
+      counter: 'Step 2 of 8',
+      title: 'Redirect to Passport onboarding',
+      subtitle: 'Single screen: "Create your private account with Face ID."',
+      components: ['C9', 'C23'],
+      promises: ['P1'],
+      vendors: [],
+      screen: renderPassportWelcome
+    },
+    {
+      id: 'biometric',
+      counter: 'Step 3 of 8',
+      title: 'WebAuthn registration',
+      subtitle: 'OS passkey provider creates the credential. The Midnight signing key is generated on-device alongside it.',
+      components: ['C9', 'C5', 'C1'],
+      promises: ['P1', 'P6', 'P8'],
+      vendors: ['dynamic', 'bcw'],
+      screen: renderBiometric
+    },
+    {
+      id: 'name',
+      counter: 'Step 4 of 8',
+      title: 'Name your account',
+      subtitle: 'Optional in this mockup\'s flow: accounts work nameless during onboarding, and C2 sits off the critical path. The v1.0 promise (P2, I-2.4) goes further — if the user does not choose a name, the system generates and assigns one before the account becomes operational; this screen shows the claim-or-defer variant under review against that invariant.',
+      components: ['C2'],
+      promises: ['P2'],
+      vendors: ['midnames', 'bcw'],
+      screen: renderName
+    },
+    {
+      id: 'recovery',
+      counter: 'Step 5 of 8',
+      title: 'Set up recovery',
+      subtitle: 'Required by the chain-side implementation (P5 invariant); the onboarding-UX framing is encouraged-not-blocking, pending user research to decide how hard to nudge.',
+      components: ['C14', 'C15'],
+      promises: ['P5'],
+      vendors: ['bcw'],
+      screen: renderRecovery
+    },
+    {
+      id: 'second-device',
+      counter: 'Step 6 of 8',
+      title: 'Add another device',
+      subtitle: 'Optional, encouraged. Makes Flow B available; reduces the probability that the recovery path is ever needed.',
+      components: ['C13'],
+      promises: ['P3'],
+      vendors: ['bcw'],
+      screen: renderSecondDevice
+    },
+    {
+      id: 'grant',
+      counter: 'Step 7 of 8',
+      title: 'Grant access to NightFi',
+      subtitle: 'Explicit scoped grant — operation × object × bounds. The dApp can only act within what the user approves.',
+      components: ['C10', 'C11', 'C12', 'C20'],
+      promises: ['P7', 'P9'],
+      vendors: ['bcw'],
+      screen: renderGrant
+    },
+    {
+      id: 'done',
+      counter: 'Step 8 of 8',
+      title: 'Back in NightFi, signed in',
+      subtitle: 'User returns to the dApp with a named account, a recovery path, and a scoped grant. Single identity, cross-chain capable.',
+      components: ['C23'],
+      promises: ['P10'],
+      vendors: [],
+      screen: renderDone
+    }
+  ];
+
+  // -------------------------------------------------------------------
+  // Screen renderers
+  // -------------------------------------------------------------------
+  function moonSvg() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  }
+
+  function renderNightFiEntry() {
+    return `
+      <div class="nf-app-bar">
+        <span class="nf-logo"><span class="nf-mark">${moonSvg()}</span> NightFi</span>
+        <span style="font-size: 0.78rem; color: rgba(244,244,242,0.5);">v0.4 · devnet</span>
+      </div>
+      <div class="screen-eyebrow">Trade</div>
+      <div class="screen-heading smaller">Swap tokens with private settlement</div>
+      <div class="nf-card">
+        <div class="row"><span class="label">You pay</span><span class="value">— USDM</span></div>
+        <div class="row"><span class="label">You receive</span><span class="value">— tDUST</span></div>
+        <div class="row"><span class="label">Rate</span><span class="value">—</span></div>
+      </div>
+      <p class="screen-copy smaller">Connect a Passport account to view balances, approve quotes, and sign.</p>
+      <div class="screen-spacer"></div>
+      <button class="btn-primary">Connect with Passport</button>
+      <button class="btn-secondary">Use another wallet</button>
+    `;
+  }
+
+  function renderPassportWelcome() {
+    return `
+      <div class="screen-pad">
+        <span class="pp-logo"><span class="pp-dot"></span> <span class="pp-name">Midnight Passport</span></span>
+      </div>
+      <div style="height: 30px;"></div>
+      <div class="screen-eyebrow">First-time setup</div>
+      <div class="screen-heading">Create your private account with Face ID.</div>
+      <p class="screen-copy">No seed phrases. No raw addresses. Your device handles the keys; the Midnight chain holds the account.</p>
+      <div class="screen-spacer"></div>
+      <button class="btn-primary">Continue</button>
+      <button class="btn-ghost">I already have an account</button>
+    `;
+  }
+
+  function renderBiometric() {
+    return `
+      <div class="screen-pad">
+        <span class="pp-logo"><span class="pp-dot"></span> <span class="pp-name">Midnight Passport</span></span>
+      </div>
+      <div style="height: 20px;"></div>
+      <div class="screen-eyebrow">Creating your account</div>
+      <div class="screen-heading smaller">Use Face ID to register your device.</div>
+      <p class="screen-copy smaller">The credential lives in your device's keychain. Passport never sees it.</p>
+      <div class="bio-overlay">
+        <div class="bio-card">
+          <div class="bio-face"><span class="mouth"></span></div>
+          <div class="bio-title">Use Face ID for Midnight</div>
+          <div class="bio-sub">Register a passkey for midnight-passport.app</div>
+          <div class="bio-btn-row">
+            <button class="bio-btn">Cancel</button>
+            <button class="bio-btn is-primary">Continue</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderName() {
+    return `
+      <div class="screen-pad">
+        <span class="pp-logo"><span class="pp-dot"></span> <span class="pp-name">Midnight Passport</span></span>
+      </div>
+      <div style="height: 20px;"></div>
+      <div class="screen-eyebrow">Step 2 · Your handle <span class="opt-tag">Optional</span></div>
+      <div class="screen-heading">Claim a name?</div>
+      <p class="screen-copy smaller">Your account works straight away with no name. Names are human-readable handles you can claim now, later, or never — they do not gate any operation.</p>
+      <div class="name-suggest">
+        <div style="font-size: 0.74rem; color: rgba(244,244,242,0.5); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;">Your account</div>
+        <div class="name-value" style="font-size: 0.84rem; color: rgba(244,244,242,0.75);">mn1q…7a4f</div>
+        <div class="name-hint">No name yet. You can claim one any time from settings.</div>
+      </div>
+      <div class="screen-spacer"></div>
+      <button class="btn-primary">Claim a name…</button>
+      <button class="btn-secondary">Skip for now</button>
+    `;
+  }
+
+  function renderRecovery() {
+    return `
+      <div class="screen-pad">
+        <span class="pp-logo"><span class="pp-dot"></span> <span class="pp-name">Midnight Passport</span></span>
+      </div>
+      <div style="height: 16px;"></div>
+      <div class="screen-eyebrow">Step 3 · Recovery <span class="opt-tag">Encouraged</span></div>
+      <div class="screen-heading smaller">If you lose every device, this is how you get back in.</div>
+      <p class="screen-copy smaller">Pick one now, or do it later from settings — your account always has a recovery anchor underneath. Guardians store nothing at all: they derive their piece only when you ask for help, and no one but you can put the pieces together.</p>
+      <ul class="opt-list">
+        <li class="opt"><span class="opt-icon r">R</span><div class="opt-text"><span class="opt-name">Recovery guardians</span><span class="opt-hint">people you trust; stateless, quorum-based</span></div></li>
+        <li class="opt"><span class="opt-icon a">A</span><div class="opt-text"><span class="opt-name">Paper key</span><span class="opt-hint">printable backstop; no social graph needed</span></div></li>
+        <li class="opt"><span class="opt-icon g">G</span><div class="opt-text"><span class="opt-name">Both</span><span class="opt-hint">guardians plus a paper key in a drawer</span></div></li>
+      </ul>
+      <div class="screen-spacer"></div>
+      <button class="btn-primary">Continue</button>
+      <button class="btn-ghost">Set up later</button>
+    `;
+  }
+
+  function renderSecondDevice() {
+    return `
+      <div class="screen-pad">
+        <span class="pp-logo"><span class="pp-dot"></span> <span class="pp-name">Midnight Passport</span></span>
+      </div>
+      <div style="height: 16px;"></div>
+      <div class="screen-eyebrow">Step 4 · Devices <span class="opt-tag">Encouraged</span></div>
+      <div class="screen-heading smaller">Add a second device?</div>
+      <p class="screen-copy smaller">A peer device — same access, no hierarchy. If one is lost or compromised, the other can revoke it and carry on.</p>
+      <ul class="opt-list">
+        <li class="opt"><span class="opt-icon">📱</span><div class="opt-text"><span class="opt-name">Pair another phone</span><span class="opt-hint">Show QR on this device, scan on the other</span></div></li>
+        <li class="opt"><span class="opt-icon">💻</span><div class="opt-text"><span class="opt-name">Pair a laptop</span><span class="opt-hint">Via passkey sync (iCloud / Google)</span></div></li>
+      </ul>
+      <div class="screen-spacer"></div>
+      <button class="btn-primary">Pair a device</button>
+      <button class="btn-ghost">Skip for now</button>
+    `;
+  }
+
+  function renderGrant() {
+    return `
+      <div class="screen-pad">
+        <span class="pp-logo"><span class="pp-dot"></span> <span class="pp-name">Midnight Passport</span></span>
+      </div>
+      <div style="height: 16px;"></div>
+      <div class="screen-eyebrow">Step 5 · Grant access</div>
+      <div class="screen-heading smaller">NightFi is asking for…</div>
+      <div class="grant-from">
+        <span class="nf-logo"><span class="nf-mark">${moonSvg()}</span> NightFi</span>
+        <span style="font-size: 0.74rem; color: rgba(244,244,242,0.55); margin-left: auto;">nightfi.app</span>
+      </div>
+      <ul class="grant-scope">
+        <li>
+          <span class="check">✓</span>
+          <div>
+            <div class="scope-name">Prove you are over 18</div>
+            <div class="scope-note">Selective disclosure — your date of birth is not revealed.</div>
+          </div>
+        </li>
+        <li>
+          <span class="check">✓</span>
+          <div>
+            <div class="scope-name">Prove your residence is allowed</div>
+            <div class="scope-note">Privacy-preserving — only the eligibility flag is shared.</div>
+          </div>
+        </li>
+        <li>
+          <span class="check">✓</span>
+          <div>
+            <div class="scope-name">Read and write your wallet</div>
+            <div class="scope-note">Bounds: ≤ 500 tDUST per tx · expires in 30 days.</div>
+          </div>
+        </li>
+      </ul>
+      <div class="grant-limits">All bounds can be revoked any time.</div>
+      <button class="btn-primary">Approve</button>
+      <button class="btn-secondary">Deny</button>
+    `;
+  }
+
+  function renderDone() {
+    return `
+      <div class="nf-app-bar">
+        <span class="nf-logo"><span class="nf-mark">${moonSvg()}</span> NightFi</span>
+        <span class="nf-user-pill"><span class="av"></span> alice-pebble</span>
+      </div>
+      <div class="screen-eyebrow">Welcome back</div>
+      <div class="nf-headline">Welcome back. Ready to trade.</div>
+      <p class="screen-copy smaller">Your account is named, recovery is set, and NightFi has a scoped grant valid for 30 days.</p>
+      <div class="nf-card">
+        <div class="row"><span class="label">Account</span><span class="value">alice-pebble.passport.night</span></div>
+        <div class="row"><span class="label">Balance</span><span class="value">— tDUST</span></div>
+        <div class="row"><span class="label">Grant expires</span><span class="value">in 30 days</span></div>
+      </div>
+      <div class="screen-spacer"></div>
+      <button class="btn-primary">Start trading</button>
+      <button class="btn-secondary">Account settings</button>
+    `;
+  }
+
+  // -------------------------------------------------------------------
+  // State / rendering
+  // -------------------------------------------------------------------
+  let stepIndex = 0;
+
+  function panelItemHTML(map, id, isActive, faded) {
+    const item = map[id];
+    if (!item) return '';
+    const kind = id.startsWith('C') ? 'component' : 'promise';
+    const label = kind === 'component' ? 'Open component canvas' : 'Open promise card';
+    const cls = ['sp-item'];
+    if (isActive) cls.push('is-active');
+    if (faded) cls.push('is-faded');
+    return `
+      <li>
+        <button class="${cls.join(' ')}" type="button" data-${kind}="${id}" title="${label} — ${id} ${item.name}">
+          <span class="pi-id">${id}</span>
+          <div>
+            <div class="pi-name">${item.name}</div>
+            <div class="pi-note">${item.note}</div>
+          </div>
+          <span class="pi-ext">${label} →</span>
+        </button>
+      </li>
+    `;
+  }
+
+  function render() {
+    const step = STEPS[stepIndex];
+
+    // Step meta
+    document.getElementById('stepCounter').textContent = step.counter;
+    document.getElementById('stepTitle').textContent = step.title;
+    document.getElementById('stepSubtitle').textContent = step.subtitle;
+
+    // Phone screen
+    document.getElementById('phoneScreen').innerHTML = step.screen();
+
+    // Buttons
+    const prev = document.getElementById('prevBtn');
+    const next = document.getElementById('nextBtn');
+    prev.disabled = stepIndex === 0;
+    next.disabled = stepIndex === STEPS.length - 1;
+    next.textContent = stepIndex === STEPS.length - 1 ? 'Done' : 'Next →';
+
+    // Dots
+    const dots = document.getElementById('stepDots');
+    dots.innerHTML = STEPS.map((s, i) => {
+      const cls = ['step-dot'];
+      if (i === stepIndex) cls.push('is-active');
+      else if (i < stepIndex) cls.push('is-done');
+      return `<button class="${cls.join(' ')}" data-step="${i}" aria-label="Go to step ${i+1}: ${s.title}"></button>`;
+    }).join('');
+    dots.querySelectorAll('.step-dot').forEach(d => {
+      d.addEventListener('click', () => {
+        stepIndex = parseInt(d.dataset.step, 10);
+        render();
+      });
+    });
+
+    // Components — active this step
+    const activeComps = document.getElementById('activeComponents');
+    const activeNow = step.components;
+    activeComps.innerHTML = activeNow.length
+      ? activeNow.map(c => panelItemHTML(COMPONENTS, c, true, false)).join('')
+      : '<div class="sp-empty">No Passport components engaged yet.</div>';
+
+    // Promises — active this step
+    const activePromsEl = document.getElementById('activePromises');
+    const activeProms = step.promises;
+    activePromsEl.innerHTML = activeProms.length
+      ? activeProms.map(p => panelItemHTML(PROMISES, p, true, false)).join('')
+      : '<div class="sp-empty">No promise being directly honoured at this step.</div>';
+
+    // Vendors — active this step
+    const activeVendorsEl = document.getElementById('activeVendors');
+    const stepVendors = step.vendors || [];
+    activeVendorsEl.innerHTML = stepVendors.length
+      ? stepVendors.map(v => vendorCardHTML(v)).join('')
+      : '<li class="vendor-empty">No vendor proposals for this step — Passport-internal or out-of-scope.</li>';
+  }
+
+  function vendorCardHTML(id) {
+    const v = VENDORS[id];
+    if (!v) return '';
+    const caveatCls = v.caveatKind === 'block' ? 'is-block' : '';
+    const caveatLabel = v.caveatKind === 'block' ? 'Blocker' : 'Caveat';
+    const link = v.url
+      ? `<a class="vendor-link" href="${v.url}" target="_blank" rel="noopener">Visit ↗</a>`
+      : '';
+    return `
+      <li class="vendor-card">
+        <header class="vendor-card-head">
+          <h4 class="vendor-name">${v.name}</h4>
+          ${link}
+        </header>
+        <p class="vendor-role">${v.role}</p>
+        <p class="vendor-caveat ${caveatCls}">
+          <span class="vendor-caveat-label">${caveatLabel}</span>
+          ${v.caveat}
+        </p>
+      </li>
+    `;
+  }
+
+  document.getElementById('prevBtn').addEventListener('click', () => {
+    if (stepIndex > 0) { stepIndex--; render(); }
+  });
+  document.getElementById('nextBtn').addEventListener('click', () => {
+    if (stepIndex < STEPS.length - 1) { stepIndex++; render(); }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' && stepIndex < STEPS.length - 1) { stepIndex++; render(); }
+    if (e.key === 'ArrowLeft' && stepIndex > 0) { stepIndex--; render(); }
+  });
+
+  render();
+</script>
+
+</body>
+</html>

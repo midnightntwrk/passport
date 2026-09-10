@@ -1,0 +1,48 @@
+[
+  {
+    "direct": {
+      "k": 11,
+      "proof_bytes": 2928,
+      "prove_ms": [
+        76,
+        75,
+        77
+      ],
+      "setup_pk_ms": 21,
+      "setup_vk_ms": 36,
+      "srs_load_ms": 2,
+      "verify_ms": 2
+    },
+    "environment": {
+      "arch": "aarch64",
+      "cpu": "Apple M4 Max",
+      "memory_bytes": "68719476736",
+      "midnight_zk_rev": "cd2c27b2659de157409a9b96dba0dbaf1218f00b",
+      "os": "macos",
+      "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)"
+    },
+    "inner_transcript": "poseidon",
+    "outer_transcript": "blake2b",
+    "runs": 3,
+    "scheme": "jubjub-schnorr",
+    "timestamp_utc": "2026-08-07T07:42:10Z",
+    "wrapped": {
+      "complete_verify_ms": 3,
+      "inner_proof_bytes": 2928,
+      "inner_prove_ms": 79,
+      "outer": {
+        "k": 17,
+        "proof_bytes": 5056,
+        "prove_ms": [
+          2748,
+          2737,
+          2795
+        ],
+        "setup_pk_ms": 1216,
+        "setup_vk_ms": 2254,
+        "srs_load_ms": 118
+      },
+      "outer_native_verify_ms": 2
+    }
+  }
+]
