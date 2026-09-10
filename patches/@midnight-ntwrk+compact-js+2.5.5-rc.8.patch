@@ -1,0 +1,88 @@
+# Surface each contract call's own Zswap local state.
+#
+# 2026/09/10. Upstream: midnightntwrk/midnight-js #967 / #1025. Companion to
+# patches/@midnight-ntwrk+midnight-js-contracts+5.0.0-beta.7.patch, which is
+# where the defect and its evidence are described in full.
+#
+# WHY. compact-runtime 0.19.0 keeps one Zswap local state per contract in a call
+# tree and stamps it onto every `callProofDataTrace` entry
+# (`circuit-context.js`, `finalizeCallProofData`). `ContractExecutable.circuit`
+# mapped that trace into `ContractCall` entries and dropped the field, so a
+# transaction builder could see only the root call's coin operations. A callee
+# that spends — `receiveShielded` merging the arriving coin with one the
+# recipient already holds — then claims nullifiers no offer carries, and the
+# node refuses the transaction with `NullifiersNeqClaimedNullifiers` (217).
+#
+# WHAT. One field, `zswapLocalState`, carried through from the trace entry that
+# already holds it, decoded with the runtime's own `decodeZswapLocalState` the
+# same way the root's is. Additive: nothing that ignores the field changes.
+diff --git a/node_modules/@midnight-ntwrk/compact-js/dist/cjs/effect/ContractExecutable.d.ts b/node_modules/@midnight-ntwrk/compact-js/dist/cjs/effect/ContractExecutable.d.ts
+index 002d8ac..306486e 100644
+--- a/node_modules/@midnight-ntwrk/compact-js/dist/cjs/effect/ContractExecutable.d.ts
++++ b/node_modules/@midnight-ntwrk/compact-js/dist/cjs/effect/ContractExecutable.d.ts
+@@ -125,6 +125,13 @@ export declare namespace ContractExecutable {
+         readonly circuitId: string;
+         readonly public: ContractCallPublic;
+         readonly private: ContractCallPrivate;
++        /**
++         * This call's own Zswap local state — the coins THIS contract consumed and produced
++         * while the call ran. The runtime keeps one per contract in the tree; surfacing it per
++         * call lets a transaction builder assemble the shielded offer over the whole tree,
++         * rather than from the root call alone.
++         */
++        readonly zswapLocalState: ZswapLocalState;
+         /**
+          * The communication commitment binding this call to its caller. Present (`Option.some`) for
+          * cross-contract sub-calls (callees); `Option.none` for the root call, which is no one's
+diff --git a/node_modules/@midnight-ntwrk/compact-js/dist/cjs/effect/ContractExecutable.js b/node_modules/@midnight-ntwrk/compact-js/dist/cjs/effect/ContractExecutable.js
+index ff403e3..1850747 100644
+--- a/node_modules/@midnight-ntwrk/compact-js/dist/cjs/effect/ContractExecutable.js
++++ b/node_modules/@midnight-ntwrk/compact-js/dist/cjs/effect/ContractExecutable.js
+@@ -187,6 +187,12 @@ class ContractExecutableImpl {
+                         output: entry.output,
+                         privateTranscriptOutputs: entry.privateTranscriptOutputs
+                     },
++                    // The runtime keeps one Zswap local state per contract in the call tree
++                    // (`circuit-context.js` stamps it onto every `callProofDataTrace` entry).
++                    // Surfacing it per call is what lets a transaction builder assemble the
++                    // shielded offer over the WHOLE tree: a callee that spends — a merge in
++                    // `receiveShielded`, say — claims nullifiers that live nowhere else.
++                    zswapLocalState: (0, compact_runtime_1.decodeZswapLocalState)(entry.zswapLocalState),
+                     communicationCommitment: effect_1.Option.fromNullable(entry.commCommData)
+                 };
+             }));
+diff --git a/node_modules/@midnight-ntwrk/compact-js/dist/dts/effect/ContractExecutable.d.ts b/node_modules/@midnight-ntwrk/compact-js/dist/dts/effect/ContractExecutable.d.ts
+index 002d8ac..306486e 100644
+--- a/node_modules/@midnight-ntwrk/compact-js/dist/dts/effect/ContractExecutable.d.ts
++++ b/node_modules/@midnight-ntwrk/compact-js/dist/dts/effect/ContractExecutable.d.ts
+@@ -125,6 +125,13 @@ export declare namespace ContractExecutable {
+         readonly circuitId: string;
+         readonly public: ContractCallPublic;
+         readonly private: ContractCallPrivate;
++        /**
++         * This call's own Zswap local state — the coins THIS contract consumed and produced
++         * while the call ran. The runtime keeps one per contract in the tree; surfacing it per
++         * call lets a transaction builder assemble the shielded offer over the whole tree,
++         * rather than from the root call alone.
++         */
++        readonly zswapLocalState: ZswapLocalState;
+         /**
+          * The communication commitment binding this call to its caller. Present (`Option.some`) for
+          * cross-contract sub-calls (callees); `Option.none` for the root call, which is no one's
+diff --git a/node_modules/@midnight-ntwrk/compact-js/dist/esm/effect/ContractExecutable.js b/node_modules/@midnight-ntwrk/compact-js/dist/esm/effect/ContractExecutable.js
+index 1c94720..45210db 100644
+--- a/node_modules/@midnight-ntwrk/compact-js/dist/esm/effect/ContractExecutable.js
++++ b/node_modules/@midnight-ntwrk/compact-js/dist/esm/effect/ContractExecutable.js
+@@ -183,6 +183,12 @@ class ContractExecutableImpl {
+                         output: entry.output,
+                         privateTranscriptOutputs: entry.privateTranscriptOutputs
+                     },
++                    // The runtime keeps one Zswap local state per contract in the call tree
++                    // (`circuit-context.js` stamps it onto every `callProofDataTrace` entry).
++                    // Surfacing it per call is what lets a transaction builder assemble the
++                    // shielded offer over the WHOLE tree: a callee that spends — a merge in
++                    // `receiveShielded`, say — claims nullifiers that live nowhere else.
++                    zswapLocalState: decodeZswapLocalState(entry.zswapLocalState),
+                     communicationCommitment: Option.fromNullable(entry.commCommData)
+                 };
+             }));

@@ -1,0 +1,277 @@
+# The shielded offer must be the union over the call tree, not the root call's alone.
+#
+# 2026/09/10. Upstream: midnightntwrk/midnight-js #967 (the cross-contract call
+# path) and #1025 (the callee state resolver). Reproduction and evidence:
+# docs/demo/one-tx-transfer-drill.md sections 3c and 3d, and the issue text in
+# docs/demo/midnight-js-callee-offer-issue.md.
+#
+# WHY. `createUnprovenLedgerCallTx` assembled the transaction's shielded offers
+# from `nextZswapLocalState` — the ROOT call's Zswap local state — while the
+# unshielded offers eleven lines above already aggregate across the whole tree
+# with `calls.flatMap(...)`, for the reason the comment there gives. A callee
+# that SPENDS therefore claims nullifiers that appear in no offer. Midnight
+# Passport's `transfer_shielded_to_account` hits this every time the recipient
+# already holds a coin of the colour being sent: the callee's `deposit_shielded`
+# takes its merge branch, `mergeCoinImmediate` spends both the held coin and the
+# arriving one, and the ledger's `EffectsCheck` refuses the transaction with
+# `NullifiersNeqClaimedNullifiers` — node error 217. Measured on stagenet: the
+# segment-0 claimed set held three nullifiers, the offer one.
+#
+# WHAT. The offer builder is generalised over a list of per-call states, each
+# carrying its own contract address, its own Zswap local state, its own
+# partitioned transcript for segment routing, and its own Zswap chain state for
+# `ZswapInput.newContractOwned` — a contract-owned nullifier is derived against
+# the commitment tree of the contract that OWNS the coin, so the root's will not
+# do. Outputs are collected across the tree first, then inputs are paired against
+# that whole set, so the root's `sendShielded` to the callee and the callee's
+# spend of it become one transient rather than an unmatched pair.
+# `makeCalleeStateResolver` fetches the callee's Zswap chain state alongside its
+# contract state, in the one `queryZSwapAndContractState` request the provider
+# pins to the same block, so the call tree is still read from one snapshot.
+#
+# The single-call path is unchanged by construction: `zswapStateToSegmentedOffer`
+# now delegates to the new function with a one-element list, and the loop bodies
+# are the originals. Checked on chain as well — rebuilding `withdraw_shielded`
+# against a pinned wallet seed on the patched and unpatched builds produces the
+# same nullifier, the same commitment, and the same claimed sets.
+#
+# Companion patch: @midnight-ntwrk+compact-js+2.5.5-rc.8.patch, which surfaces
+# the per-call Zswap local state this one consumes.
+diff --git a/node_modules/@midnight-ntwrk/midnight-js-contracts/dist/index.js b/node_modules/@midnight-ntwrk/midnight-js-contracts/dist/index.js
+index 7799fb7..33101ed 100644
+--- a/node_modules/@midnight-ntwrk/midnight-js-contracts/dist/index.js
++++ b/node_modules/@midnight-ntwrk/midnight-js-contracts/dist/index.js
+@@ -656,6 +656,7 @@ contractAddress) => {
+  */
+ const makeCalleeStateResolver = (publicDataProvider, blockHash) => {
+     const resolvedStates = new Map();
++    const resolvedZswapChainStates = new Map();
+     const stateProvider = {
+         getContractState: async (_blockHash, address) => {
+             const key = String(address);
+@@ -663,15 +664,24 @@ const makeCalleeStateResolver = (publicDataProvider, blockHash) => {
+             if (cached !== undefined) {
+                 return cached;
+             }
+-            const state = await publicDataProvider.queryContractState(address, { type: 'blockHash', blockHash });
+-            if (state === null) {
++            // `queryZSwapAndContractState` rather than `queryContractState`, because a callee that
++            // SPENDS a coin needs its own Zswap chain state to derive that spend's nullifier —
++            // `ZswapInput.newContractOwned` takes the owning contract's commitment tree, and the
++            // root's will not do. One request yields a coherent pair: the provider pins both halves
++            // to `blockHash`, the same block the root's states were read at, so the whole call tree
++            // is still read from one snapshot. It returns `null` — not a partial answer — when the
++            // contract does not exist as of that block, which is the unresolved-callee case below.
++            const states = await publicDataProvider.queryZSwapAndContractState(address, { type: 'blockHash', blockHash });
++            if (states === null || states === undefined) {
+                 return undefined;
+             }
++            const [zswapChainState, state] = states;
+             resolvedStates.set(key, state);
++            resolvedZswapChainStates.set(key, zswapChainState);
+             return state;
+         }
+     };
+-    return { stateProvider, resolvedStates, blockHash };
++    return { stateProvider, resolvedStates, resolvedZswapChainStates, blockHash };
+ };
+ 
+ /*
+@@ -848,7 +858,7 @@ const bucketToOffer = (bucket) => mergeOffers(unprovenOfferFromMap(bucket.inputs
+  * items fall back to the guaranteed segment for backwards compatibility —
+  * see {@link zswapStateToOffer}.
+  */
+-const zswapStateToSegmentedOffer = (zswapLocalState, encryptionPublicKeyOrResolver, addressAndChainStateTuple, partitionedTranscript = [undefined, undefined]) => {
++const zswapCallStatesToSegmentedOffer = (callStates, encryptionPublicKeyOrResolver) => {
+     const resolver = typeof encryptionPublicKeyOrResolver === 'function'
+         ? encryptionPublicKeyOrResolver
+         : () => encryptionPublicKeyOrResolver;
+@@ -856,58 +866,70 @@ const zswapStateToSegmentedOffer = (zswapLocalState, encryptionPublicKeyOrResolv
+         [GUARANTEED_SEGMENT_NUMBER]: emptyBucket(),
+         [FALLIBLE_SEGMENT_NUMBER]: emptyBucket()
+     };
+-    const rehashedChainState = addressAndChainStateTuple?.zswapChainState.postBlockUpdate(new Date(), ZSWAP_MERKLE_ROOT_RETENTION_SECONDS);
+-    for (const output of zswapLocalState.outputs) {
+-        if (output.recipient.is_left) {
+-            // coinCommitment avoids invoking the encryption-key resolver twice.
+-            const commitment = coinCommitment(output.coinInfo, output.recipient.left);
+-            const segment = segmentForCommitment(commitment, partitionedTranscript);
+-            buckets[segment].outputs.set(serializeCoinInfo(output.coinInfo), createZswapOutput(output, resolver, segment));
+-        }
+-        else {
+-            // No public commitment helper for contract-owned outputs; probe with segment 0.
+-            // The commitment is segment-independent (pinned by invariant tests), so the
+-            // probe is reused as the final output when routing settles on guaranteed.
+-            const contractAddress = output.recipient.right;
+-            const probe = ZswapOutput.newContractOwned(output.coinInfo, GUARANTEED_SEGMENT_NUMBER, contractAddress);
+-            const segment = segmentForCommitment(probe.commitment, partitionedTranscript);
+-            const finalOutput = segment === GUARANTEED_SEGMENT_NUMBER
+-                ? probe
+-                : ZswapOutput.newContractOwned(output.coinInfo, segment, contractAddress);
+-            buckets[segment].outputs.set(serializeCoinInfo(output.coinInfo), finalOutput);
++    // Pass 1 — every call's outputs, into segment buckets shared by the whole tree. Segment
++    // routing uses the transcript of the call that PRODUCED the output, because that is the
++    // transcript whose effects claim its commitment.
++    for (const { zswapLocalState, partitionedTranscript = [undefined, undefined] } of callStates) {
++        for (const output of zswapLocalState.outputs) {
++            if (output.recipient.is_left) {
++                // coinCommitment avoids invoking the encryption-key resolver twice.
++                const commitment = coinCommitment(output.coinInfo, output.recipient.left);
++                const segment = segmentForCommitment(commitment, partitionedTranscript);
++                buckets[segment].outputs.set(serializeCoinInfo(output.coinInfo), createZswapOutput(output, resolver, segment));
++            }
++            else {
++                // No public commitment helper for contract-owned outputs; probe with segment 0.
++                // The commitment is segment-independent (pinned by invariant tests), so the
++                // probe is reused as the final output when routing settles on guaranteed.
++                const contractAddress = output.recipient.right;
++                const probe = ZswapOutput.newContractOwned(output.coinInfo, GUARANTEED_SEGMENT_NUMBER, contractAddress);
++                const segment = segmentForCommitment(probe.commitment, partitionedTranscript);
++                const finalOutput = segment === GUARANTEED_SEGMENT_NUMBER
++                    ? probe
++                    : ZswapOutput.newContractOwned(output.coinInfo, segment, contractAddress);
++                buckets[segment].outputs.set(serializeCoinInfo(output.coinInfo), finalOutput);
++            }
+         }
+     }
+-    for (const qualifiedCoinInfo of zswapLocalState.inputs) {
+-        const serializedCoinInfo = serializeQualifiedShieldedCoinInfo(qualifiedCoinInfo);
+-        const guaranteedCandidate = buckets[GUARANTEED_SEGMENT_NUMBER].outputs.get(serializedCoinInfo);
+-        const fallibleCandidate = buckets[FALLIBLE_SEGMENT_NUMBER].outputs.get(serializedCoinInfo);
+-        if (guaranteedCandidate !== undefined && fallibleCandidate !== undefined) {
+-            throw new Error(`Ambiguous transient: outputs with serialized coin info ${serializedCoinInfo} ` +
+-                `exist in both segments — wallet-owned input cannot pair unambiguously.`);
+-        }
+-        if (guaranteedCandidate !== undefined || fallibleCandidate !== undefined) {
+-            const transientSegment = guaranteedCandidate !== undefined ? GUARANTEED_SEGMENT_NUMBER : FALLIBLE_SEGMENT_NUMBER;
+-            const candidateOutput = (guaranteedCandidate ?? fallibleCandidate);
+-            buckets[transientSegment].transients.set(serializedCoinInfo, ZswapTransient.newFromContractOwnedOutput(qualifiedCoinInfo, transientSegment, candidateOutput));
+-            buckets[transientSegment].outputs.delete(serializedCoinInfo);
+-            continue;
++    // Pass 2 — every call's inputs, paired against the outputs of the WHOLE tree. Pass 1 runs to
++    // completion first so that an input in one call can pair with an output produced by another:
++    // the root's `sendShielded` to a callee, spent by that callee's merge in the same transaction,
++    // is exactly such a pair and becomes one transient rather than an unmatched input.
++    for (const { zswapLocalState, addressAndChainState, partitionedTranscript = [undefined, undefined] } of callStates) {
++        const rehashedChainState = addressAndChainState?.zswapChainState?.postBlockUpdate(new Date(), ZSWAP_MERKLE_ROOT_RETENTION_SECONDS);
++        for (const qualifiedCoinInfo of zswapLocalState.inputs) {
++            const serializedCoinInfo = serializeQualifiedShieldedCoinInfo(qualifiedCoinInfo);
++            const guaranteedCandidate = buckets[GUARANTEED_SEGMENT_NUMBER].outputs.get(serializedCoinInfo);
++            const fallibleCandidate = buckets[FALLIBLE_SEGMENT_NUMBER].outputs.get(serializedCoinInfo);
++            if (guaranteedCandidate !== undefined && fallibleCandidate !== undefined) {
++                throw new Error(`Ambiguous transient: outputs with serialized coin info ${serializedCoinInfo} ` +
++                    `exist in both segments — wallet-owned input cannot pair unambiguously.`);
++            }
++            if (guaranteedCandidate !== undefined || fallibleCandidate !== undefined) {
++                const transientSegment = guaranteedCandidate !== undefined ? GUARANTEED_SEGMENT_NUMBER : FALLIBLE_SEGMENT_NUMBER;
++                const candidateOutput = (guaranteedCandidate ?? fallibleCandidate);
++                buckets[transientSegment].transients.set(serializedCoinInfo, ZswapTransient.newFromContractOwnedOutput(qualifiedCoinInfo, transientSegment, candidateOutput));
++                buckets[transientSegment].outputs.delete(serializedCoinInfo);
++                continue;
++            }
++            assertDefined(addressAndChainState, `Shielded input requires a chain state for ZswapInput.newContractOwned`);
++            assertDefined(rehashedChainState, `Shielded input spent by contract '${addressAndChainState.contractAddress}' requires that contract's own Zswap chain state for ZswapInput.newContractOwned`);
++            assertIsContractAddress(addressAndChainState.contractAddress);
++            // Probe segment 0 — nullifier is segment-independent (pinned by invariant test).
++            // Probe doubles as the final input when routing settles on guaranteed.
++            const probeInput = ZswapInput.newContractOwned(qualifiedCoinInfo, GUARANTEED_SEGMENT_NUMBER, addressAndChainState.contractAddress, rehashedChainState);
++            const segment = segmentForNullifier(probeInput.nullifier, partitionedTranscript);
++            buckets[segment].inputs.set(serializedCoinInfo, segment === GUARANTEED_SEGMENT_NUMBER
++                ? probeInput
++                : ZswapInput.newContractOwned(qualifiedCoinInfo, segment, addressAndChainState.contractAddress, rehashedChainState));
+         }
+-        assertDefined(addressAndChainStateTuple, `Wallet-owned input requires a chain state for ZswapInput.newContractOwned`);
+-        assertDefined(rehashedChainState, `Wallet-owned input requires a chain state for ZswapInput.newContractOwned`);
+-        assertIsContractAddress(addressAndChainStateTuple.contractAddress);
+-        // Probe segment 0 — nullifier is segment-independent (pinned by invariant test).
+-        // Probe doubles as the final input when routing settles on guaranteed.
+-        const probeInput = ZswapInput.newContractOwned(qualifiedCoinInfo, GUARANTEED_SEGMENT_NUMBER, addressAndChainStateTuple.contractAddress, rehashedChainState);
+-        const segment = segmentForNullifier(probeInput.nullifier, partitionedTranscript);
+-        buckets[segment].inputs.set(serializedCoinInfo, segment === GUARANTEED_SEGMENT_NUMBER
+-            ? probeInput
+-            : ZswapInput.newContractOwned(qualifiedCoinInfo, segment, addressAndChainStateTuple.contractAddress, rehashedChainState));
+     }
+     return {
+         guaranteed: bucketToOffer(buckets[GUARANTEED_SEGMENT_NUMBER]),
+         fallible: bucketToOffer(buckets[FALLIBLE_SEGMENT_NUMBER])
+     };
+ };
++const zswapStateToSegmentedOffer = (zswapLocalState, encryptionPublicKeyOrResolver, addressAndChainStateTuple, partitionedTranscript = [undefined, undefined]) => zswapCallStatesToSegmentedOffer([{ zswapLocalState, addressAndChainState: addressAndChainStateTuple, partitionedTranscript }], encryptionPublicKeyOrResolver);
+ /**
+  * Builds a single guaranteed-segment {@link UnprovenOffer} from a
+  * {@link ZswapLocalState} for callers with no partitioned transcript (deploy
+@@ -966,17 +988,17 @@ const extractUserAddressedOutputs = (transcript) => {
+  * @param contractStateFor Resolves the on-chain contract state for a given address — the root
+  * contract's input state, and each cross-contract callee's resolved state.
+  * @param zswapChainState The root contract's Zswap chain state.
+- * @param nextZswapLocalState The Zswap local state produced by the (root) circuit execution. Only
+- * the root contract performs shielded transfers, so the transaction's offers derive solely from
+- * the root call.
++ * @param nextZswapLocalState The Zswap local state produced by the root circuit execution.
+  * @param encryptionPublicKey Resolver for output encryption keys.
++ * @param zswapChainStateFor Resolves a cross-contract callee's own Zswap chain state, at the same
++ * pinned block as its contract state. Required whenever a callee spends a coin it already held.
+  *
+  * @remarks Precondition: every operation resolved via `contractStateFor` for an invoked circuit must
+  * carry its deployed verifier key — the call's key location embeds the key's hash so provers resolve
+  * artifacts by content. Contract states read from chain (or produced by a real deploy) satisfy this;
+  * a bare `ContractOperation` with no verifier key does not, and is rejected with a clear error.
+  */
+-const createUnprovenLedgerCallTx = (calls, contractStateFor, zswapChainState, nextZswapLocalState, encryptionPublicKey) => {
++const createUnprovenLedgerCallTx = (calls, contractStateFor, zswapChainState, nextZswapLocalState, encryptionPublicKey, zswapChainStateFor) => {
+     // Calls are in execution-trace order: cross-contract callees first, the root call last.
+     const rootCall = calls[calls.length - 1];
+     assertDefined(rootCall, 'Expected at least one contract call');
+@@ -1021,7 +1043,30 @@ const createUnprovenLedgerCallTx = (calls, contractStateFor, zswapChainState, ne
+     if (fallibleOutputs.length > 0) {
+         intent.fallibleUnshieldedOffer = UnshieldedOffer.new([], fallibleOutputs, []);
+     }
+-    const segmentedOffers = zswapStateToSegmentedOffer(nextZswapLocalState, encryptionPublicKey, { contractAddress: rootCall.contractAddress, zswapChainState }, rootCall.public.partitionedTranscript);
++    // A shielded spend, exactly like the user-addressed unshielded output above, can be produced by
++    // any call in the tree — a callee's `receiveShielded` that merges the arriving coin with one it
++    // already holds spends BOTH, and claims a nullifier for each. The transaction has one shielded
++    // offer per segment, so each must aggregate every call's Zswap local state. Assembling them from
++    // the root call alone drops the callee's spends: the segment's claimed nullifiers then outnumber
++    // the offer's, and the ledger's `EffectsCheck` refuses the transaction with
++    // `NullifiersNeqClaimedNullifiers` (node error 217). Pairing runs across the tree too, so the
++    // root's `sendShielded` output and the callee's spend of it become one transient.
++    // Each call brings its OWN contract address and OWN Zswap chain state, because a contract-owned
++    // input's nullifier is derived against the commitment tree of the contract that owns the coin.
++    const callStates = calls.map((call) => {
++        const isRootCall = call === rootCall;
++        const callZswapChainState = isRootCall ? zswapChainState : zswapChainStateFor?.(call.contractAddress);
++        return {
++            // The root's state is passed in explicitly (it is the circuit's application-facing
++            // result); a callee's rides on its own call entry.
++            zswapLocalState: isRootCall ? nextZswapLocalState : call.zswapLocalState,
++            addressAndChainState: callZswapChainState === undefined
++                ? undefined
++                : { contractAddress: call.contractAddress, zswapChainState: callZswapChainState },
++            partitionedTranscript: call.public.partitionedTranscript
++        };
++    }).filter((callState) => callState.zswapLocalState !== undefined);
++    const segmentedOffers = zswapCallStatesToSegmentedOffer(callStates, encryptionPublicKey);
+     return Transaction.fromPartsRandomized(getNetworkId(), segmentedOffers.guaranteed, segmentedOffers.fallible, intent);
+ };
+ 
+@@ -1495,6 +1540,11 @@ async function createUnprovenCallTxFromInitialStates(zkConfigProvider, options,
+         const contractStateFor = (address) => address === rootCall.contractAddress
+             ? initialContractState
+             : calleeResolver?.resolvedStates.get(String(address));
++        // The Zswap counterpart, resolved at the same pinned block by the same lazy fetch, for
++        // callees that spend a coin of their own (see `createUnprovenLedgerCallTx`).
++        const zswapChainStateFor = (address) => address === rootCall.contractAddress
++            ? initialZswapChainState
++            : calleeResolver?.resolvedZswapChainStates.get(String(address));
+         return {
+             public: {
+                 nextContractState: rootCall.public.contractState,
+@@ -1509,7 +1559,7 @@ async function createUnprovenCallTxFromInitialStates(zkConfigProvider, options,
+                 nextPrivateState: privateState,
+                 nextZswapLocalState: zswapLocalState,
+                 privateTranscriptOutputs: rootCall.private.privateTranscriptOutputs,
+-                unprovenTx: createUnprovenLedgerCallTx(calls, contractStateFor, initialZswapChainState, zswapLocalState, encryptionPublicKeyResolverForZswapState(zswapLocalState, options.coinPublicKey, walletEncryptionPublicKey, options.additionalCoinEncPublicKeyMappings)),
++                unprovenTx: createUnprovenLedgerCallTx(calls, contractStateFor, initialZswapChainState, zswapLocalState, encryptionPublicKeyResolverForZswapState(zswapLocalState, options.coinPublicKey, walletEncryptionPublicKey, options.additionalCoinEncPublicKeyMappings), zswapChainStateFor),
+                 newCoins: zswapStateToNewCoins(parseCoinPublicKeyToHex(coinPublicKey, getNetworkId()), zswapLocalState)
+             },
+             calls
