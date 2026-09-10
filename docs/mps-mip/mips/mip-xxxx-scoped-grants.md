@@ -47,6 +47,7 @@ MPS: MPS-0018
      | O11 | re-seal obligation toward other live read grants on every rotation | adopted as an authoriser MUST with a roster fallback |
      | O12 | Replaces: none per the brief and the published family | adopted |
      | O13 | Security Considerations rendered as a table where the published family uses bold-titled Sn bullets | table retained; the divergence is offered to the editors |
+     | O14 | approved deviation from brief T5: canonical JSON (RFC 8785, JCS) replaced by signing the `request` parameter bytes as received, with the proof carried as a detached `proof` fragment parameter and no canonicalisation step anywhere | adopted (sections 9.1 to 9.4, 9.6, R10, R21) |
 
      Upstream dependencies: secp256r1 in the Compact language surface (r1
      arm); secp256k1 point operations (schnorr_bip340); a connector
@@ -234,12 +235,16 @@ Out of scope:
 - **Browser binding**: delivery of a `GrantRequest` by top-level
   navigation to an authoriser page. **Non-browser binding**: any other
   delivery (a pasted or scanned object, a local channel).
+- **Proof**: the possession-and-origin proof object that travels beside
+  a `GrantRequest` as a separate parameter and is never part of the
+  signed bytes (section 9.2).
 - **Notation.** `H(x)` is SHA-256 of `x`. `pad(N, s)` is the ASCII bytes
   of `s` followed by zero bytes to `N` bytes; `s` longer than `N` is
   invalid. `u8(n)`, `u64(n)`, `u128(n)` serialise `n` little-endian at 1,
   8, and 16 bytes. `flag(b)` is `0x01` for true and `0x00` for false.
   `int_le(x)` is the integer whose little-endian encoding is `x`. `||`
-  is byte concatenation.
+  is byte concatenation. `base64url(x)` is the RFC 4648 section 5
+  encoding of `x` without padding.
 
 ### 3. Grantee keys and arms
 
@@ -1010,10 +1015,14 @@ public and need no capability.
 
 #### 9.1 The object
 
-One transport-independent `GrantRequest` object, canonical JSON per RFC
-8785 (JCS), base64url-encoded without padding. `Uint<128>` values are
-decimal strings. Field names follow RFC 6749 where a parameter has an
-OAuth analogue.
+One transport-independent `GrantRequest` object, a JSON object in any
+serialisation the dApp chooses, carried as `base64url(UTF-8 JSON)` in a
+`request` parameter. No canonical form exists and none is computed:
+what is signed is the parameter value as transmitted (section 9.2).
+`Uint<128>` values are decimal strings. Field names follow RFC 6749
+where a parameter has an OAuth analogue. The proof of possession is not
+a member of the object; it is a separate `Proof` object carried beside
+it in a `proof` parameter.
 
 ```json
 {
@@ -1042,15 +1051,7 @@ OAuth analogue.
   ],
   "read_pk": "<64 hex X25519>",
   "state": "<base64url, at least 128 bits>",
-  "nonce": "<64 hex, 32 bytes>",
-  "proof": {
-    "type": "webauthn",
-    "client_data_json": "<base64url>",
-    "authenticator_data": "<base64url>",
-    "signature": "<base64url>",
-    "credential_pk": "<hex, companion passkey only>",
-    "key_signature": "<hex, software and wallet-provider grantees only>"
-  }
+  "nonce": "<64 hex, 32 bytes>"
 }
 ```
 
@@ -1078,9 +1079,35 @@ calls into one transaction or submits them in sequence.
 | `read_pk` | MUST when `read` is requested or implied | per section 8 item 1 |
 | `state` | MUST | opaque, at least 128 bits of entropy, at most 512 characters, bound to the dApp's browser session, echoed verbatim |
 | `nonce` | MUST | 32 random bytes, hex; one-time within the validity window |
-| `proof` | MUST | possession and origin proof over `request_digest` (section 9.2) |
 
-Encodings of the `proof` members:
+Every member listed is the complete member set: an object carrying an
+unknown member, a duplicated member, or a member of the wrong JSON type
+is `invalid_request`. Parsing happens after hashing (section 9.4).
+
+**The `Proof` object.** The possession and origin proof over
+`request_digest` (section 9.2), a JSON object carried as
+`base64url(UTF-8 JSON)` in the `proof` parameter, subject to the same
+member rules. It is validated, never hashed or signed:
+
+```json
+{
+  "type": "webauthn",
+  "client_data_json": "<base64url>",
+  "authenticator_data": "<base64url>",
+  "signature": "<base64url>",
+  "credential_pk": "<128 hex, companion passkey only>",
+  "key_signature": "<128 hex, software and wallet-provider grantees only>"
+}
+```
+
+| Member | Required | Rule |
+|---|---|---|
+| `type` | MUST | `webauthn` or `signature`; `signature` in the browser binding is `invalid_proof` |
+| `client_data_json`, `authenticator_data`, `signature` | MUST when `type` is `webauthn`; MUST be absent otherwise | the assertion the authenticator returned, verified per section 9.2 |
+| `credential_pk` | MUST for a software or wallet-provider grantee under `webauthn`; MUST be absent for an `r1` grantee, whose assertion is by `grantee.pk` itself, and under `signature` | the companion passkey |
+| `key_signature` | MUST for every grantee other than `r1`; MUST be absent for `r1` | a signature by `grantee.pk` over `request_digest` in the arm's off-chain form |
+
+Encodings of the `Proof` members:
 
 | Member | Encoding |
 |---|---|
@@ -1091,7 +1118,24 @@ Encodings of the `proof` members:
 
 #### 9.2 Request digest and proof rules
 
-`request_digest = H(pad(64, "midnight:account:grant:request:v1") || H(JCS(request without "proof")))`.
+`request_digest = H(pad(64, "midnight:account:grant:request:v1") || request_param_bytes)`,
+
+where `request_param_bytes` is the ASCII bytes of the `request`
+parameter value exactly as received: the base64url text, not the
+decoded JSON. The dApp signs the very string it places in the URL, and
+an authoriser MUST hash the received parameter value before any
+decoding and MUST NOT re-serialise, re-encode, or otherwise transform it
+first. There is no canonicalisation step: two serialisations of the
+same object are two different requests, and a request whose bytes were
+altered in transit, by whitespace, key order, or percent-encoding,
+fails its proof and nothing else. A base64url value MUST consist of the
+RFC 4648 section 5 alphabet only, without padding, so no
+percent-encoding applies to it and the bytes the dApp wrote are the
+bytes the authoriser receives. The `Proof` object is outside the signed
+bytes; a change to it fails verification without changing
+`request_digest`. In a WebAuthn assertion the challenge is
+`request_digest` itself, so `clientDataJSON.challenge` is the 43-byte
+unpadded `base64url(request_digest)`.
 
 Proof rules in the browser binding:
 
@@ -1121,6 +1165,9 @@ Non-browser bindings (agents, `self:` delegates) carry
 `proof.type = "signature"` with `key_signature` only; the identity is
 displayed as operator-asserted or as the owner's own label.
 `proof.type = "signature"` in the browser binding is `invalid_proof`.
+In every binding the same two strings travel, `request` and `proof`,
+and the signed bytes are the `request` string as transmitted over that
+channel.
 
 **The binding is a property of the transport.** A request received by
 top-level navigation MUST get the browser binding regardless of the
@@ -1143,8 +1190,14 @@ extension.
 #### 9.3 Browser binding: request delivery
 
 Top-level GET navigation to
-`https://<authoriser>/grant#request=<base64url(JCS(GrantRequest))>`.
-The request travels in the fragment, never in the query component.
+`https://<authoriser>/grant#request=<base64url(UTF-8 JSON GrantRequest)>&proof=<base64url(UTF-8 JSON Proof)>`.
+Both travel in the fragment, never in the query component, as two
+form-encoded parameters in either order. The dApp serialises the
+`GrantRequest` once, base64url-encodes that serialisation, signs the
+resulting string (section 9.2), and places that same string in the URL
+unchanged; it MUST NOT re-serialise between signing and navigation.
+Each parameter MUST appear exactly once; a missing or repeated
+`request` or `proof` parameter is `invalid_request`.
 
 #### 9.4 Authoriser processing
 
@@ -1155,20 +1208,27 @@ In order:
    `Content-Security-Policy: frame-ancestors 'none'` and
    `Cross-Origin-Opener-Policy: same-origin`, and checks that it is the
    top window.
-2. Read and strip the fragment with `history.replaceState`.
-3. Verify `v`, `chain`, `aud`, `iat`, `exp`, `nonce` freshness, and
-   `proof`. Reject with an in-place error page (no redirect) if
-   `redirect_uri` is not `https`, not same-origin with `client_id`, or
-   carries a fragment.
-4. Verify the scheme is registered and the account is capable
+2. Read and strip the fragment with `history.replaceState`; take the
+   `request` and `proof` parameter values as received.
+3. Hash, then decode. Compute `request_digest` over the ASCII bytes of
+   the `request` value before any decoding (section 9.2). Then
+   base64url-decode and JSON-parse both values and validate them
+   against the member sets of section 9.1; a value that does not decode
+   or parse, or an object with an unknown, duplicated, or wrongly typed
+   member, is `invalid_request`.
+4. Verify `v`, `chain`, `aud`, `iat`, `exp`, `nonce` freshness, and
+   the `Proof` object against `request_digest`. Reject with an in-place
+   error page (no redirect) if `redirect_uri` is not `https`, not
+   same-origin with `client_id`, or carries a fragment.
+5. Verify the scheme is registered and the account is capable
    (`spec_version >= 2`, and the arm deployed per the authoriser's own
    record, since verifier keys are not a specified chain read); check
    `bounds`, the implications, and the envelope-1 read-only rule.
-5. Sign the user in with an authoriser credential whose relying-party
+6. Sign the user in with an authoriser credential whose relying-party
    (RP) identifier equals the full authoriser host, never a parent
    domain; this sign-in assertion yields no signing material.
-6. Render the consent screen of section 9.5.
-7. On approval, and only then, perform the authorising ceremony: the
+7. Render the consent screen of section 9.5.
+8. On approval, and only then, perform the authorising ceremony: the
    WebAuthn assertion whose PRF output derives the device key is
    requested with `challenge = challenge_issue_grant_with_<device arm>(...)`,
    so that `clientDataJSON` itself binds the approved scope and the
@@ -1257,7 +1317,7 @@ repetitions are index-aligned with the request.
 | `account` | granted, pending | contract address hex |
 | `grant_id` | granted, pending; per record | hex |
 | `scope_salt` | granted, pending; per record | hex |
-| `scope` | granted, pending; per record | the approved plaintext scope as a JCS object, base64url: the four flags, `color`, `recipient_kind`, `recipient`, `max_coin_value`, `per_call_cap`, `cap`, `expires_at` |
+| `scope` | granted, pending; per record | the approved plaintext scope as a JSON object, `base64url(UTF-8 JSON)`, in any serialisation: the four flags, `color`, `recipient_kind`, `recipient`, `max_coin_value`, `per_call_cap`, `cap`, `expires_at`; it is not signed, and the dApp verifies it against chain state (section 9.7) |
 | `tx` | pending, optionally granted | transaction identifier |
 | `view` | granted with `read` | GrantViewSeal v1, base64url (section 8) |
 | `error`, `error_description` | error, denied | from the tables below |
@@ -1271,13 +1331,15 @@ query component; if `redirect_uri` failed validation the authoriser MUST
 NOT redirect at all. In a non-browser binding the authoriser returns the
 same parameter set as a structured object over the channel that carried
 the request, omitting `state`, `iss`, and `redirect_uri`; the grantee
-performs the recomputation and chain read of section 9.7.
+performs the recomputation and chain read of section 9.7. Nothing on
+the return leg is signed, so no serialisation of it is normative;
+authority rests on the chain record.
 
 Errors rendered in place (never delivered to `redirect_uri`):
 
 | `error` | When |
 |---|---|
-| `invalid_request` | malformed object, missing member, bad encoding, `state` too short, `aud` mismatch, outside `[iat, exp]`, replayed `nonce`, `redirect_uri` invalid or not same-origin with `client_id`, `client_id` matching no production of section 4.4 or non-browser by navigation, invalid `read_pk`, re-seal to a `read_pk` other than the bound one |
+| `invalid_request` | a `request` or `proof` parameter missing, repeated, not base64url, or not JSON; an unknown, duplicated, or wrongly typed member; a missing member; `state` too short, `aud` mismatch, outside `[iat, exp]`, replayed `nonce`, `redirect_uri` invalid or not same-origin with `client_id`, `client_id` matching no production of section 4.4 or non-browser by navigation, invalid `read_pk`, re-seal to a `read_pk` other than the bound one |
 
 Errors delivered to a validated `redirect_uri`:
 
@@ -1483,7 +1545,7 @@ MIP's SIG-1 through SIG-5 for the arms it deploys.
 | GR-14 (key validity) | Every grantee key is rejected at every use, and at issuance, by exactly the per-arm checks of section 3.3, including the identity key on every arm and SEC 1 validation on `r1`. | authorisation MIP S2 and its erratum 6 on weak device keys |
 | GR-15 (bounded disclosure) | A grant call discloses `grant_id`, the record update, the kernel comparison argument, and the custody chip's disclosures, and never the grantee key, origin, dApp host, slot, salt, openings, or signature; no grant field records any part of a held coin's description in the clear. | INV-2; AUTH-9 as amended |
 | GR-16 (consent equals record) | Every plaintext scope field is an argument of `issue_grant` and enters the device challenge through `scope_digest`; consent renders from those fields and a possession-and-origin-proven request and precedes the ceremony that produces signing material; the dApp verifies the recorded grantee on return. | |
-| GR-17 (redirect binding) | The authoriser acts only on a request whose possession proof shows a credential on the requesting origin, whose `aud` names it, whose window is current and `nonce` unseen, whose `redirect_uri` is same-origin with the attested `client_id` and matched exactly, and whose `state` it echoes; the binding is chosen by the transport; the response carries no bearer artefact or key list; the dApp treats its grant as live only after recomputing `grant_id` and reading the record from chain. | RFC 9700 sections 2.1, 4.1.3, 4.10; RFC 9207 |
+| GR-17 (redirect binding) | The authoriser acts only on a request whose possession proof, computed over the request bytes as received, shows a credential on the requesting origin, whose `aud` names it, whose window is current and `nonce` unseen, whose `redirect_uri` is same-origin with the attested `client_id` and matched exactly, and whose `state` it echoes; the binding is chosen by the transport; the response carries no bearer artefact or key list; the dApp treats its grant as live only after recomputing `grant_id` and reading the record from chain. | RFC 9700 sections 2.1, 4.1.3, 4.10; RFC 9207 |
 | GR-18 (read is a capability, and it is total) | `read` is declarative and the ledger does not enforce a read scope; a grant with `read` confers the whole viewing capability until rotation; the secret is delivered sealed to a bound `read_pk`; rotate-before-share precedes every read issuance and every rotation re-seals or flags the other live read grants; a read revocation rotates `enc_key`; every inbox reader verifies each entry against chain data. | custody MIP R9, S2, section 6.5 |
 
 ### 14. Versioning
@@ -1611,13 +1673,36 @@ them as the object their signatures target, and reuses their vocabulary.
 MIP-0015's `deriveSecret` is seed-anchored and a seedless account cannot
 satisfy it.
 
+**R21. Signed as received, not a JWS container.** The request object
+has the shape of an OAuth request object (RFC 9101), and the obvious
+container for a signed JSON object is a JWS (RFC 7515). It was rejected
+for three reasons. First, the browser proof is a WebAuthn assertion,
+whose signing input is `authenticatorData || SHA-256(clientDataJSON)`
+with the challenge inside `clientDataJSON`; that is not the JWS signing
+input, so no JOSE library could verify the proof this MIP relies on and
+the container would be a wrapper around a signature it cannot check.
+Second, JOSE registers no algorithm for Schnorr over JubJub, the `v1`
+arm, and none for the connector's prefixed ECDSA envelope. Third, a JWT
+is a bearer token verified by machines at scale, and its known failure
+modes (`alg` confusion, `none`, key-id injection) are costs with no
+matching benefit for a request that a human approves once on a consent
+screen. What was borrowed from JWS is the rule that made it robust:
+sign the transmitted bytes rather than a canonicalised object, so no
+canonicalisation step exists to disagree about; carry the proof
+detached from the payload, as an RFC 7515 detached content signature
+does; and reuse the `aud`, `iat`, `exp`, and `nonce` claim names that
+JWT-family request objects carry (RFC 9101). RFC 8785 canonical JSON
+was the earlier choice; it added a specification every implementer had
+to get byte-exact for no gain once the parameter value itself is the
+signed unit.
+
 | Decision | Chosen | Rejected | Why |
 |---|---|---|---|
 | R3 identity element | one-byte `slot`; request `nonce` bound only in `request_digest` | a 32-byte request nonce in `grant_id` | an unbounded nonce let one key hold records the owner could not enumerate and made the nonce a capability secret in URLs |
 | R4 freshness | the record's `nonce`, read from state | the shared `auth_nonce`; a nonce argument | a grantee advancing `auth_nonce` could void the owner's pending signatures; a dead argument invites the omission of the check |
 | R5 incarnation | contract-written `issued_at` in every challenge | nonce continuity; never reusing an id | closes a pre-revocation signature verifying against a re-issue; every issuance is a distinct credential |
 | R7 change | `max_coin_value`; the change entry as a bound argument appended in the same circuit; `enc_pk == enc_key` | a standalone `append_inbox` twin | the twin wrote unbounded entries under a no-value scope; the equality makes a rotation abort the call rather than orphan change |
-| R10 request transport | one JCS object in the fragment on both legs | loose query parameters | canonical JSON has a published specification; the fragment stays out of logs and `Referer`, not out of history (S19) |
+| R10 request transport | one base64url JSON object in the fragment on both legs, signed as transmitted, with a detached `proof` parameter | loose query parameters; a canonicalised object; a JWS container (R21) | a single parameter value is the signed unit and needs no canonicalisation; the fragment stays out of logs and `Referer`, not out of history (S19) |
 | R12 sign-in | grant-backed, address-disclosing | an identity-only grant; a verifiable-random-function (VRF) identity | an identity-only grant costs a transaction for plain login; address hiding belongs to the sign-in MIP; the target credentials only sign |
 | R14 wire names | connector spellings plus two registry spellings | registry short names | wallets already emit the connector strings |
 | R15 network | no `network_id` cell; the wire `chain` member | a network cell; MIP-0008 in `Requires` | independent deployments already differ by address; a cell the ledger does not assert separates nothing; the record embeds no network identifier, so MIP-0008 is cited, not required; no cell defeats a state-preserving fork |
@@ -1761,7 +1846,7 @@ the salt.
 
 | | Attack | Mitigation |
 |---|---|---|
-| S1 | Grant injection (login CSRF) | possession proof over `request_digest`; browser-attested origin on every navigation; session-bound `state`. Residual (9.2): the proof shows a credential on the origin, not the dApp's front-end; consent and the roster are the remaining barriers |
+| S1 | Grant injection (login CSRF) | possession proof over `request_digest`, hashed from the `request` bytes as received (9.2); browser-attested origin on every navigation; session-bound `state`. Residual (9.2): the proof shows a credential on the origin, not the dApp's front-end; consent and the roster are the remaining barriers |
 | S2 | Open redirector | `redirect_uri` `https`, same-origin with the proven `client_id`, exact match; none in non-browser bindings (9.7) |
 | S3 | Binding downgrade by `client_id` form | the binding is a property of the transport (9.2) |
 | S4 | Mix-up between authorisers | `iss` string equality; the grant is read from chain, never from redirect parameters (9.7) |
@@ -1860,9 +1945,13 @@ the following. Each item names the invariants it exercises.
    mismatch; `iss`, `aud` mismatch; expired request; replayed `nonce`;
    proof failure; `clientDataJSON.origin` mismatch; an `rdns:`
    `client_id` by navigation refused; a `client_id` outside the
-   productions of section 4.4 refused; an r1 proof under the identity
-   key refused; an envelope-1 withdraw refused; a non-canonical or
-   low-order `read_pk` refused; a `grant_id` or opening mismatch on
+   productions of section 4.4 refused; a `request` value re-serialised
+   in transit (whitespace or key order changed) whose proof therefore
+   fails; a repeated `request` or `proof` parameter refused; an object
+   with an unknown, duplicated, or wrongly typed member refused; a
+   `proof` value altered with `request` unchanged refused; an r1 proof
+   under the identity key refused; an envelope-1 withdraw refused; a
+   non-canonical or low-order `read_pk` refused; a `grant_id` or opening mismatch on
    return treated as compromise; a narrowed request whose returned scope
    opens `object_commit`; a sibling-origin assertion against the
    authoriser credential; fragment leakage under a logging reverse proxy
@@ -1872,8 +1961,10 @@ the following. Each item names the invariants it exercises.
    including a read-only `object_commit`, `rp_commit` for an r1 and a
    non-r1 grant, and one recipient projection per kind; every challenge
    of section 6.3 with the qualified coin written out element by
-   element; `envelope_digest`, `origin_hash`, `request_digest`,
-   `signin_digest`, the `read_pk` derivation, and GrantViewSeal,
+   element; `envelope_digest`, `origin_hash`, `request_digest` over a
+   published `request` parameter string with its decoded object and
+   detached `Proof` beside it, `signin_digest`, the `read_pk`
+   derivation, and GrantViewSeal,
    bit-identical between the compiled contract, the TypeScript client,
    and a Rust implementation linking no compiled module; `pk`
    normalisation from SEC 1 and the `v1` wire form; one off-chain
@@ -1957,12 +2048,15 @@ the following. Each item names the invariants it exercises.
 
 **External standards**
 
-- RFC 2119; RFC 3986 (unreserved characters); RFC 6749 (OAuth 2.0
-  parameter names, section 4.1.2.1 errors); RFC 9700 (OAuth 2.0
-  Security Best Current Practice, sections 2.1, 4.1.3, 4.2, 4.10); RFC
-  9207 (`iss`); RFC 8785 (JSON Canonicalization Scheme); RFC 6454 (web
-  origin); RFC 7748 (X25519, clamping, contributory behaviour); RFC 5869
-  (HKDF).
+- RFC 2119; RFC 3986 (unreserved characters); RFC 4648 (base64url,
+  section 5); RFC 6749 (OAuth 2.0 parameter names, section 4.1.2.1
+  errors); RFC 9700 (OAuth 2.0 Security Best Current Practice, sections
+  2.1, 4.1.3, 4.2, 4.10); RFC 9207 (`iss`); RFC 9101 (OAuth 2.0
+  JWT-Secured Authorization Request, the request-object precedent and
+  the claim names, R21); RFC 7515 (JSON Web Signature, the
+  sign-the-transmitted-bytes and detached-signature precedents, R21);
+  RFC 6454 (web origin); RFC 7748 (X25519, clamping, contributory
+  behaviour); RFC 5869 (HKDF).
 - W3C Web Authentication Level 3 (client data, authenticator data, RP ID
   scoping, the PRF extension, Related Origin Requests).
 - SEC 1 (point encodings and validation); the Jubjub curve specification
