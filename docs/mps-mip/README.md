@@ -62,8 +62,8 @@ together; the upstream copies are canonical.
   declaratively. Requires a `spec_version = 2` redeploy. Reviewed
   through four lenses; the open items for editors and the Foundation
   (co-author, companion erratum wording, salt and commitment rulings)
-  are collected in an editors' note at the head of the file, and the
-  external co-author is not yet named.
+  are collected in an editors' note at the head of the file. Co-authored
+  with the Midnight Foundation.
 - **Recovery paths (building block three; not yet drafted)**:
   total-loss recovery behind the seam; the prototype realises this
   with BUSS, and the standard stays scheme-agnostic at the contract

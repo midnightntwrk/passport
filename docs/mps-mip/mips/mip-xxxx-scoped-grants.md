@@ -2,6 +2,7 @@
 MIP: xxxx
 Title: Scoped Grants and dApp Connection for Custody Accounts
 Authors:
+  - Hector Bulgarini (hbulgarini)
   - Nicolas Di Prima (NicolasDP)
 Status: Draft
 Category: Standards
@@ -33,7 +34,7 @@ MPS: MPS-0018
 
      | Id | Item | Current default in the text |
      |---|---|---|
-     | O1 | external co-author | the offer in upstream discussion #223 answered first; Acknowledgements reserves the slot |
+     | O1 | external co-author | named (Hector Bulgarini); the team that offered prior art in upstream discussion #223 is still to be answered and credited in Acknowledgements |
      | O2 | one spec_version = 2 redeploy carrying the grant cells and the device-identity remedy for MIP-0013 erratum 8 | SHOULD, in Backwards Compatibility |
      | O3 | companion erratum to MIP-0013 AUTH-1, AUTH-2, AUTH-9 (section 12); wordings in .planning/grants-mip/erratum-wordings.md, to travel in the erratum PR | acceptance is an acceptance criterion |
      | O4 | on-chain unit of kernel.blockTimeLessThan, and that the never-expires arm executes | pinned before Draft leaves; recorded in the registry entry |
