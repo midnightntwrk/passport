@@ -37,7 +37,7 @@ MPS: MPS-0018
      | O1 | external co-author | named (Hector Bulgarini); the team that offered prior art in upstream discussion #223 is still to be answered and credited in Acknowledgements |
      | O2 | one spec_version = 2 redeploy carrying the grant cells and the device-identity remedy for MIP-0013 erratum 8 | SHOULD, in Backwards Compatibility |
      | O3 | companion erratum to MIP-0013 AUTH-1, AUTH-2, AUTH-9 (section 12); wordings in .planning/grants-mip/erratum-wordings.md, to travel in the erratum PR | acceptance is an acceptance criterion |
-     | O4 | on-chain unit of kernel.blockTimeLessThan (the never-expires arm and both comparison directions execute in the local simulator, whose unit is seconds; the node's unit is not pinned) | pinned before Draft leaves; recorded in the registry entry |
+     | O4 | on-chain unit of kernel.blockTimeLessThan | resolved (E3): whole seconds since the UNIX epoch on ledger 9 (node 2.1.0), on the client and the node alike; the comparison is a transcript read enforced at client build (wall clock) and at node admission (block context), not a proof constraint; the never-expires arm records no read; the admission-time block time runs about one block interval plus a network-defined tolerance ahead of the wall clock (8.2 to 10.2 s measured on a 6 s-block localnet); recorded in the registry entry (section 14) |
      | O5 | tombstone pruning and window enforcement | deferred to a circuit revision |
      | O6 | one MIP or two | one MIP under MPS-0018; the split offered in the PR body |
      | O7 | editor deviation from brief T3: rp_id_hash is committed under scope_salt (rp_commit) rather than stored clear, so the "observer does not learn the origin" claim of brief 5.5 holds for r1 grants | commitment; one extra opening on the p256 seam |
@@ -48,7 +48,7 @@ MPS: MPS-0018
      | O12 | Replaces: none per the brief and the published family | adopted |
      | O13 | Security Considerations rendered as a table where the published family uses bold-titled Sn bullets | table retained; the divergence is offered to the editors |
      | O14 | approved deviation from brief T5: canonical JSON (RFC 8785, JCS) replaced by signing the `request` parameter bytes as received, with the proof carried as a detached `proof` fragment parameter and no canonicalisation step anywhere | adopted (sections 9.1 to 9.4, 9.6, R10, R21) |
-     | O15 | E1 stage one folded: the grant seam compiled and measured on the reference contract at spec_version 2 (k256 grantee arm, unshielded and shielded twins, lifecycle on the k256 device arm, 27 recipe vectors agreed three ways). The brief's section 13 [CIRCUIT] items are settled (struct as Map value, Boolean in a hash tuple, tuple arity above ten, kernel.blockTimeLessThan in an assert, if-guarded lifecycle bodies, the Map reset primitive, cost figures) except three: proving times per twin, the node's unit of block time (O4, E3), and the change-description precomputation on node (6.5) | fifteen corrections applied in the text; the remainder is stage two (Path to Active E1) |
+     | O15 | E1 stage one folded: the grant seam compiled and measured on the reference contract at spec_version 2 (k256 grantee arm, unshielded and shielded twins, lifecycle on the k256 device arm, 27 recipe vectors agreed three ways). The brief's section 13 [CIRCUIT] items are settled (struct as Map value, Boolean in a hash tuple, tuple arity above ten, kernel.blockTimeLessThan in an assert, if-guarded lifecycle bodies, the Map reset primitive, cost figures) except two: proving times per twin and the change-description precomputation on node (6.5); the node's unit of block time is settled by E3 (O4) | fifteen corrections applied in the text; the remainder is stage two (Path to Active E1) |
 
      Upstream dependencies: secp256r1 in the Compact language surface (r1
      arm); secp256k1 point operations (schnorr_bip340); a connector
@@ -408,7 +408,7 @@ export ledger grant_generation: Uint<32>;  // bumped only by revoke_all_grants
 | `object_commit` | `Bytes<32>` | 32 | salted commitment to `color`, `recipient_kind`, `recipient`, `max_coin_value` (section 4.5) |
 | `per_call_cap` | `Uint<128>` | 16 | `amount <= per_call_cap` on every call; MUST be `<= cap` |
 | `cap` | `Uint<128>` | 16 | `spent + amount <= cap` cumulatively |
-| `expires_at` | `Uint<64>` | 8 | in the unit of `kernel.blockTimeLessThan`; `0` means never |
+| `expires_at` | `Uint<64>` | 8 | whole seconds since the UNIX epoch, the unit of `kernel.blockTimeLessThan` (section 5.1); `0` means never |
 | `rp_commit` | `Bytes<32>` | 32 | salted commitment to `rp_id_hash` (SHA-256 of the dApp host for `r1`, zero otherwise); committed for every arm so the record reveals neither host nor arm |
 | `read_pk_hash` | `Bytes<32>` | 32 | SHA-256 of the delegate's X25519 `read_pk` when `read`; zero otherwise |
 | `window_len` | `Uint<64>` | 8 | reserved; MUST be `0` |
@@ -584,16 +584,29 @@ is the coin the grantee selects and could leave without change (R7);
 clients SHOULD recommend `max_coin_value == cap` where the owner can
 pre-split coins.
 
-`expires_at` is in the unit of `kernel.blockTimeLessThan` on the target
-ledger, with `0` meaning never, stated explicitly. The comparison
-compiles inside the seam and executes in both directions in the local
-circuit simulator, where the never-expires arm never expires and the
-unit is seconds; the node's unit is not yet pinned and is recorded from
-a ledger-9 network before this MIP leaves Draft, in the registry entry
-(E3). Clients MUST sanity-check a non-zero `expires_at`
-against a freshly read block time before signing, and an authoriser
-SHOULD refuse a value already in the past. There is no `network_id`
-cell (R15); the wire `chain` member remains normative for the request.
+`expires_at` is a count of whole seconds since the UNIX epoch, the unit
+of `kernel.blockTimeLessThan` on ledger 9 (node 2.1.0, recorded on-node,
+E3), with `0` meaning never, stated explicitly. The comparison is a
+ledger read whose Boolean result the transaction records in its public
+transcript and the node re-executes at mempool admission; it is not a
+proof constraint (one public input, no constraints). A record with
+`expires_at == 0` records no time read at all (the generated code and
+the ZKIR guard the query on `expires_at != 0`), so a never-expiring
+grant is insensitive to block time on the node exactly as in the
+simulator. The client evaluates the seam against its own wall clock,
+not a block time: a clock running ahead of the network refuses calls
+the chain would still accept, and a clock running behind builds calls
+the network refuses at admission. The node's admission-time block time
+runs about one block interval plus a network-defined tolerance ahead of
+the wall clock (measured 8.2 to 10.2 s ahead on a 6 s-block localnet;
+the tolerance is the node's and is not pinned here), so `expires_at` is
+a bound, and the grant stops being usable about that margin before it.
+Clients MUST sanity-check a non-zero `expires_at` against their own wall
+clock and a freshly read head block time before signing, SHOULD treat a
+value within one block interval plus the tolerance of the head block
+time as already expired, and an authoriser SHOULD refuse a value already
+in the past. There is no `network_id` cell (R15); the wire `chain`
+member remains normative for the request.
 
 #### 5.2 Feature strings and the mapping table
 
@@ -688,8 +701,11 @@ order:
 3. **Liveness.** Assert `g.active`, `g.epoch == device_epoch`,
    `g.gen == grant_generation`, and
    `g.scope.expires_at == 0 || kernel.blockTimeLessThan(g.scope.expires_at)`
-   (a select, both sides evaluated; the comparison argument reaches the
-   public transcript, harmless because the record is public).
+   (the ledger read is guarded on `expires_at != 0`, so a never-expiring
+   record records no time read; when the read happens its Boolean result
+   is one public input the proof asserts and the node re-executes at
+   admission, and the comparison argument reaches the public transcript,
+   harmless because the record is public).
 4. **Operation.** Assert the twin's own flag.
 5. **Object and bounds.** With `obj_color = coin.color` on the shielded
    twins and `obj_color = color` on the unshielded twin, the predicate
@@ -805,6 +821,22 @@ A grantee MUST re-read `nonce` and `enc_key` and re-sign if its
 transaction is not included, and MUST persist `scope_salt`, the
 returned scope, and its running `spent` alongside the key.
 
+Expiry surfaces as one of two signals, both leaving state untouched and
+the signed challenge valid: a build-time abort (`failed assert:
+expired`) when the grantee's own clock is at or past `expires_at`, and
+a mempool refusal when the network's admission-time block time is (the
+node answers `Invalid Transaction: Custom error: 104` on a transcript
+read mismatch, which the client submission layer surfaces as a
+`SubmissionError` whose reason is visible only in the RPC log line). On
+either signal the grantee MUST re-read the grant record and the chain
+head, and MUST re-sign only if `expires_at` is `0` or exceeds the head's
+block time by more than the inclusion margin of section 5.1; otherwise
+it treats the grant as expired and requests a new one. Retrying an
+admission refusal without re-reading is pointless, since the network's
+time only advances. A grantee SHOULD NOT take an indexer's latest-block
+timestamp as the head time (measured two blocks behind the node on the
+reference stack).
+
 #### 6.5 Grantee private state and coin selection
 
 A grantee spending shielded value maintains a wallet-local coin store per
@@ -825,7 +857,8 @@ evidenced; the fallback is a bounded standalone append twin with an
 
 Disclosed per grant call: `grant_id` (lookup and write-back), the
 rewritten `nonce` and `spent_commit`, the `expires_at` argument of the
-kernel comparison, and what the custody chip already discloses
+kernel comparison (no read is recorded when it is `0`), and what the
+custody chip already discloses
 (`color`, `amount`, and `recipient` on the unshielded twin, whose
 balances are public; the contract address of a contract-recipient
 output; the change-entry ciphertext on a shielded twin). Not disclosed:
@@ -1136,8 +1169,9 @@ it in a `proof` parameter.
 }
 ```
 
-`iat` and `exp` are Unix seconds; `bounds.expires_at` is in the ledger's
-block-time unit (section 5.1), a distinct unit. `recipient`, when
+`iat`, `exp`, and `bounds.expires_at` are all whole seconds since the
+UNIX epoch; the first two are evaluated by the authoriser and the third
+by the ledger (section 5.1). `recipient`, when
 present, is `{ "kind": "user" | "zswap" | "contract", "value": "<64 hex>" }`
 mapping to `recipient_kind` `1`, `2`, and `3`. `grants` carries one or more
 elements for the single grantee key, each with a distinct `slot`: one
@@ -1648,7 +1682,10 @@ MIP's SIG-1 through SIG-5 for the arms it deploys.
   with the schemes MIP's sunset, envelope-1 grantees `read`-only; `r1`
   Active upon the schemes MIP receiving a number and the secp256r1
   surface shipping; `schnorr_bip340` reserved. The registry entry
-  records the pinned block-time unit.
+  records the block-time unit as measured (E3): whole seconds since the
+  UNIX epoch on ledger 9 (node 2.1.0), enforced at client build and at
+  node admission, with the admission-time block time about one block
+  interval plus a network-defined tolerance ahead of the wall clock.
 - **Tag families**, all to be registered under the MPS-0027 registry (an
   acceptance criterion):
 
@@ -1774,6 +1811,17 @@ was the earlier choice; it added a specification every implementer had
 to get byte-exact for no gain once the parameter value itself is the
 signed unit.
 
+**R22. Expiry as a transcript read, not a constraint.** The kernel
+comparison compiles to a ledger read whose Boolean result is one public
+input the proof asserts; it adds no constraints, and a never-expiring
+record adds not even the read. The ledger applies no tolerance of its
+own to the comparison: the client evaluates it against its wall clock,
+and the node re-executes it at admission against an admission-time
+block time that runs about one block interval plus a tolerance ahead of
+the wall clock. That tolerance is the node's and is network-defined,
+measured rather than specified here, which is why section 5.1 states
+`expires_at` as a bound and leaves the margin to the client (E3).
+
 | Decision | Chosen | Rejected | Why |
 |---|---|---|---|
 | R3 identity element | one-byte `slot`; request `nonce` bound only in `request_digest` | a 32-byte request nonce in `grant_id` | an unbounded nonce let one key hold records the owner could not enumerate and made the nonce a capability secret in URLs |
@@ -1818,9 +1866,13 @@ signed unit.
       stage two lists the remainder).
 - [ ] E2: Testing item 2 green on a node, each case ending with the
       invariants it exercises.
-- [ ] E3: the on-chain unit of `kernel.blockTimeLessThan` and the
+- [x] E3: the on-chain unit of `kernel.blockTimeLessThan` and the
       never-expires arm pinned on a ledger-9 network and recorded in the
-      registry entry, with past, future, zero, and wrong-unit cases.
+      registry entry, with past, future, zero, and wrong-unit cases
+      (registry entry: ledger 9, node 2.1.0, whole seconds since the
+      UNIX epoch; enforcement at client build and at node admission;
+      admission-time block time about one block interval plus a
+      network-defined tolerance ahead of the wall clock).
 - [ ] E4: Testing item 4 with two origins and two platform passkeys, a
       read-only grant, a two-element batch, and a zero-DUST refusal.
 - [ ] E5: the vectors of Testing item 5 published, the Rust side linking
@@ -1849,8 +1901,8 @@ signed unit.
 1. Name the external co-author and settle the open items with the
    Foundation and the editors; fold the outcomes into the text.
 2. Extend the reference contract to `spec_version = 2` and run E1, E2,
-   E3, E6, E9, and E10; correct any byte recipe the compiled encoding
-   contradicts and publish the E5 vectors.
+   E6, E9, and E10 (E3 is held); correct any byte recipe the compiled
+   encoding contradicts and publish the E5 vectors.
 3. Build a reference authoriser page and a reference dApp against the
    text and run E4 and E7; then E8 with the reference signer as agent.
 4. Commission the cryptographer review; fold findings in before editor
@@ -1973,13 +2025,15 @@ the salt.
 | the wallet-key gate experiment on a ledger-9 network (k=15 and k=16; 31,046 and 32,900 rows; 0.5 to 0.8 s) | the k256 envelope arm compiled and measured; the connector prefix as envelope `1` |
 | the P-256 in-circuit experiment against a real platform assertion (k=16, 36,466 rows, 1.1 to 1.2 s) | the r1 WebAuthn envelope |
 | the reference implementation's wave deploy and block-limit numbers | the deploy budget rule of section 6.7 |
-| the kernel block-time comparison compiling and executing | lazy expiry is expressible; its unit is not held |
+| E3: the kernel block-time comparison on a ledger-9 node (node 2.1.0): 21 unit and enforcement cases and a 13-case admission-time sweep over a probe contract carrying the seam's comparison shape, each case recording the host clock, the node head, the client phase reached, and the node outcome | the unit is whole seconds since the UNIX epoch on the client and the node alike; the comparison is a transcript read (one public input, no constraints) enforced at client build against the wall clock and at node admission against the node's block context, never by the proof; the never-expires arm records no read; the admission-time block time ran 8.2 to 10.2 s ahead of the wall clock on a 6 s-block localnet; the client-side and node-side refusal texts of section 6.4 |
 | the cross-contract-calls experiment | composition in one transaction |
 | E1 stage one: the grant seam compiled on the reference contract at `spec_version = 2` (the two cells and structs, the pure derivations, the k256 seam chips, the unshielded and shielded k256 grant twins, and the three lifecycle circuits on the k256 device arm), measured at k=16 to 17, 58,771 to 91,862 rows, 2,745-byte k256 and 2,313-byte jubjub verifier keys, and executed off-node in a circuit simulator (lifecycle, the unshielded twin, its rejection matrix) | the circuit items settled: a struct as a `Map` value, `Boolean` as a one-byte hash element, tuple arities of thirteen and seventeen hashed as the raw concatenation, the kernel block-time comparison inside an assert, the `if`-guarded lifecycle bodies, and the `Map` reset primitive; the byte recipes of sections 4 and 6.3 reproduced two ways from the text alone (a TypeScript recipe and a Rust recipe linking no compiled module) against the compiled circuits, 27 vectors and two pinned signatures; the deploy budget of section 6.7 |
 
 Not yet held: any connection protocol on Midnight, origin binding,
-expiry on node, proving times per twin, the on-node matrix, the jubjub
-grantee twins, the remaining k256 twin
+proving times per twin, the on-node matrix (which carries the expiry
+rows of Testing items 1 and 2 onto the grant twins; E3 pinned the
+comparison on a probe contract), the jubjub grantee twins, the
+remaining k256 twin
 (`withdraw_shielded_to_contract_with_grant_k256`), and the lifecycle
 circuits on the jubjub device arm; these are stage two of E1 and the
 remaining experiments of Path to Active.
@@ -2006,15 +2060,27 @@ the following. Each item names the invariants it exercises.
 1. **Grant happy path.** Issue from a device; a grant call within scope
    executes; `nonce` advances, `spent_commit` re-commits, `round`
    advances, `auth_nonce` is unchanged (GR-1, GR-5, GR-13; INV-7).
+   Expiry rows: a record with `expires_at = 0` and one with
+   `expires_at = head + 3600` each execute on node with state advancing,
+   and the `0` record produces no time read in the transcript (GR-7).
    Status: green off-node for the unshielded k256 twin in the circuit
    simulator (no proof, no node); the shielded twins and the node run
-   are pending.
+   are pending; the expiry rows are green on node for the comparison
+   shape in a probe contract (E3) and pending on the grant twins.
 2. **Rejection matrix.** The same call aborts with no state change under
    each single fault: out-of-scope operation; over `per_call_cap`; over
    `cap`; a cumulative wrap attempt; a witness coin of another color; a
    witness coin above `max_coin_value`; wrong recipient under a pin;
-   recipient-kind mismatch; a stale `enc_pk`; revoked; expired; stale
-   epoch; stale generation; identical resubmission after success; a
+   recipient-kind mismatch; a stale `enc_pk`; revoked; `expires_at` in
+   the past (the grantee's build aborts with `failed assert: expired`,
+   nothing is submitted); `expires_at` within one block interval plus
+   tolerance of the wall clock (the build succeeds, the node refuses at
+   admission with `Custom error: 104` on a transcript read mismatch,
+   state unchanged); a client clock skewed behind the network by more
+   than the margin (the same admission refusal, showing the check does
+   not rest on the grantee's clock) and skewed ahead (the client refuses
+   a call the chain would accept, a client-quality control rather than
+   a protocol property); stale epoch; stale generation; identical resubmission after success; a
    prior-incarnation signature against a re-issue; a cross-scheme key; a
    wrong envelope (k1); an envelope-1 grantee against any withdraw twin
    refused in-circuit (k1); the identity, small-order, off-curve, and
@@ -2176,6 +2242,12 @@ the following. Each item names the invariants it exercises.
 - E1 stage one (Implementation): the findings at `contract/GRANTS-E1.md`
   and the vectors at `contract/src/tests/vectors/grants-e1.json` on the
   branch `nicolasdp/grants-seam-e1` of the
+  [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
+  repository.
+- E3 (Implementation): the findings at `contract/GRANTS-E3.md` and the
+  evidence at `contract/evidence/block-time-unit.json` and
+  `contract/evidence/block-time-sweep.json` on the branch
+  `nicolasdp/grants-e3-block-time` of the
   [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
   repository.
 
