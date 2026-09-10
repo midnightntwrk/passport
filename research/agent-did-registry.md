@@ -9,7 +9,7 @@
 ## 0. How to read this document
 
 This note is a case study of one working Midnight-native implementation —
-the [Midnight Agent DID Manager](https://github.com/mzf11125/midnight-agent-did-manager) —
+the [Midnight Agent DID Manager](https://github.com/apestchanker/midnight-agent-did-manager) —
 as prior art for the open C3 (DID surface) workstream and the credential
 cluster (C19 issuance, C20 selective disclosure). It records what the
 implementation commits to and which open canvas question each property

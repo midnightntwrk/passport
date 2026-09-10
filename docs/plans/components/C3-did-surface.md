@@ -207,6 +207,6 @@ name directly, which they may not support.
   become additive if profile-specific multiple DIDs are needed.
 - **External prior art.** A working Midnight-native DID registry with
   commitment-based selective disclosure
-  ([midnight-agent-did-manager](https://github.com/mzf11125/midnight-agent-did-manager))
+  ([midnight-agent-did-manager](https://github.com/apestchanker/midnight-agent-did-manager))
   exercises the delivery-model and DID-Document privacy questions above;
   see [research/agent-did-registry.md](../../../research/agent-did-registry.md).

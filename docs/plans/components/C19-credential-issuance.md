@@ -55,7 +55,7 @@ intended for issuer A's schema is accepted under issuer B's.
 
 - **External prior art.** A permissioned, commitment-holding issuer flow
   is realised by the agent-DID registry
-  ([midnight-agent-did-manager](https://github.com/mzf11125/midnight-agent-did-manager),
+  ([midnight-agent-did-manager](https://github.com/apestchanker/midnight-agent-did-manager),
   `contracts/did_registry.compact`): `issue_did` is gated on an on-chain
   issuer key, and request/issue state is stored as commitments; see
   [research/agent-did-registry.md](../../../research/agent-did-registry.md).
