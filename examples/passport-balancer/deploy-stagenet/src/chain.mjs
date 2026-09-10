@@ -7,9 +7,9 @@
  * `examples/passport-funder/src/contractRuntime.ts`, rewritten against the
  * stack the stagenet compatibility matrix names:
  *
- *   compact compiler 0.33.0-rc.2  →  runtime 0.18.0-rc.1
- *   compact.js       2.5.5-rc.7
- *   midnight.js      5.0.0-beta.6
+ *   compact compiler 0.34.0       →  runtime 0.19.0
+ *   compact.js       2.5.5-rc.8
+ *   midnight.js      5.0.0-beta.7
  *   wallet SDK       2.0.0-beta.2   (@midnightntwrk/ledger-v9, hyphenless)
  *   proof server     9.0.0-rc.6
  *

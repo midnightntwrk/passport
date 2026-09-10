@@ -1,6 +1,64 @@
-pragma language_version 0.25;
+pragma language_version 0.26;
 
 import CompactStandardLibrary;
+
+// ── How this is built ───────────────────────────────────────────────────────
+//
+// From `examples/passport-balancer/contracts-stagenet`, in TWO passes, because
+// the contract names itself as the peer it calls and so needs its own previous
+// build on the compact path to compile against:
+//
+//   SEED=$(mktemp -d) && cp -R managed/account "$SEED/account"
+//   compact compile +0.34.0 --compact-path "$SEED" \
+//     src/account_custody.compact /tmp/pass1
+//   SEED2=$(mktemp -d) && cp -R /tmp/pass1 "$SEED2/account"
+//   compact compile +0.34.0 --compact-path "$SEED2" \
+//     src/account_custody.compact managed/account
+//
+// The second pass is not ceremony: pass one was compiled against the OLD
+// artefacts, so only pass two is built against itself. `deposit_shielded` is a
+// fixed point across the two — checked with `cmp` on every verifier key,
+// 2026/09/10 — which is what makes the peer key the caller commits to the same
+// key every already-deployed Passport carries.
+//
+// The other two contracts take no peer and need no path:
+//
+//   compact compile +0.34.0 src/faucet.compact   managed/faucet
+//   compact compile +0.34.0 src/midnames.compact managed/midnames
+//
+// 0.34.0 refuses `pragma language_version 0.25`; the bump to 0.26 changes no
+// verifier key (`cmp` clean on all 23 pre-existing circuits). midnames declares
+// `>= 0.20` and needed no edit.
+
+// ── Peer account interface (cross-contract shielded transfer) ───────────────
+//
+// The declaration below is the callee surface a Passport account exposes to
+// another Passport account: `deposit_shielded` and nothing else. It carries no
+// body, so it adds no circuit of its own and leaves every existing verifier
+// key untouched; it exists so `transfer_shielded_to_account` can name the peer
+// it calls. Because the interface is the account's own `deposit_shielded`, the
+// key the caller commits to is the key already deployed on every live
+// Passport, and a sender on this version can pay an account deployed before it.
+//
+// THE NAME IS LOAD-BEARING, and it is why this file is `account_custody.compact`
+// rather than `account.compact`. compactc turns a peer declaration called `X`
+// into a literal `import … from '../../X/contract/index.js'` at the top of the
+// generated module — a path relative to the build's own `contract/` directory,
+// with no way to override it. This build's output directory is
+// `managed/account`, so the only name that resolves is `account`, and it then
+// resolves to the module itself, which is correct: the peer IS this contract.
+//
+// Two things fall out of that. `Account` would demand a SECOND directory,
+// `managed/Account`, which cannot coexist with `managed/account` on a
+// case-insensitive filesystem — every macOS checkout would be broken. And when
+// the peer name matches the source file's own basename, compactc decides the
+// reference is self-evident and emits `from '.'`, which Node refuses with
+// ERR_UNSUPPORTED_DIR_IMPORT; renaming the file is what avoids that. The
+// name changes no verifier key — checked with `cmp` across all twelve on
+// 2026/09/10.
+contract account {
+  circuit deposit_shielded(coin: ShieldedCoinInfo): [];
+}
 
 // ---------------------------------------------------------------------------
 // Passport account-custody contract — prototype (C1 + C4 + C10 + C14).
@@ -318,6 +376,43 @@ export circuit grant_withdraw_shielded(
     );
   } else {
     coins.remove(disclose(color));
+  }
+}
+
+// Device-authorised shielded transfer straight to another Passport account,
+// in one transaction: sendShielded hands the amount to the peer's address and
+// the peer's `deposit_shielded` runs in the same call tree, so the recipient's
+// ledger is credited without the sender's wallet ever holding the coin.
+//
+// Change follows the MIP-0012 §6.3 rule: the output sendShielded already
+// routes back to this contract is live and self-owned, so it is persisted as
+// is. There is no `sendImmediateShielded` re-owning step — that step is what
+// makes the deployed `withdraw_shielded` produce node error 239 on the next
+// spend of the change.
+export circuit transfer_shielded_to_account(
+  peer:      account,
+  peer_addr: ContractAddress,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+): [] {
+  require_device();
+  const c = disclose(color);
+  const coin = coins.lookup(c);
+  const result = sendShielded(
+    disclose(coin),
+    right<ZswapCoinPublicKey, ContractAddress>(disclose(peer_addr)),
+    disclose(amount),
+  );
+  const p = disclose(peer);
+  p.deposit_shielded(disclose(result.sent));
+  if (disclose(result.change.is_some)) {
+    coins.insertCoin(
+      c,
+      result.change.value,
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    );
+  } else {
+    coins.remove(c);
   }
 }
 

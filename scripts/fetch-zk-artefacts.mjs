@@ -6,16 +6,30 @@
  * ------------------------------------
  * `examples/passport-balancer/contracts-stagenet/managed/<contract>/` is split
  * down the middle by .gitignore: `contract/` and `compiler/` are tracked,
- * `keys/` and `zkir/` are ~97 MB of prover material that is not. Rebuilding
- * that half is not an option on any machine, not merely an awkward one on a
- * builder: `compiler/contract-manifest.json` names compactc **0.33.0-rc.2**,
- * and no such release exists in `midnightntwrk/compact` — the published set
- * goes 0.31.1 then 0.34.0, and the `compact` CLI's own artefact list offers no
- * 0.33.x for any of x86_macos, aarch64_macos, x86_linux, or aarch64_linux
- * (re-checked against the GitHub releases API on 2026/09/08). Two builds of one
- * contract are two verifier keys, and the contract deployed on stagenet knows
- * only the keys it was deployed with, so compiling with 0.34.0 would produce a
- * PWA whose proofs `findDeployedContract` rejects.
+ * `keys/` and `zkir/` are ~97 MB of prover material that is not.
+ *
+ * It is downloaded because a BUILDER cannot compile, not because the build
+ * cannot be reproduced. That distinction was the wrong way round here until
+ * 2026/09/10. This file used to say that the artefacts could not be rebuilt on
+ * any machine — `compiler/contract-manifest.json` named compactc 0.33.0-rc.2,
+ * no such release exists in `midnightntwrk/compact` (the published set goes
+ * 0.31.1 then 0.34.0), and a different compiler was assumed to mean a different
+ * verifier key and so a PWA whose proofs `findDeployedContract` rejects.
+ *
+ * The assumption was tested on 2026/09/10 and is false. compactc 0.34.0 rebuilds
+ * every one of these keys BIT-IDENTICALLY to the 0.33.0-rc.2 keys the stagenet
+ * contracts were deployed with — `cmp` clean on all 11 account circuits, the
+ * faucet circuit, and all 11 midnames circuits, across a language-version bump
+ * from 0.25 to 0.26 (which 0.34.0 requires) and a runtime bump from 0.18.0-rc.1
+ * to 0.19.0. The build is reproducible with a compiler anyone can install.
+ *
+ * The download stays, because none of the places that need these artefacts
+ * installs a compiler: neither the Vercel builder nor
+ * `.github/workflows/verify-demo.yml` has `compact` on PATH, and putting a
+ * ~50 s, 97 MB compile in front of every build to reproduce bytes we can pin by
+ * sha256 would buy nothing. A developer with the toolchain can rebuild instead
+ * — `compact compile +0.34.0` into the same `managed/` directories — and this
+ * script will then find the artefacts already on disk and download nothing.
  *
  * INTEGRITY IS TWO CHECKS, AND BOTH ARE MANDATORY
  * -----------------------------------------------

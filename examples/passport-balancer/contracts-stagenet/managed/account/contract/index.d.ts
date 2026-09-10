@@ -29,6 +29,11 @@ export type ImpureCircuits<PS> = {
                           recipient_0: { bytes: Uint8Array },
                           color_0: Uint8Array,
                           amount_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  transfer_shielded_to_account(context: __compactRuntime.CircuitContext<PS>,
+                               peer_0: { bytes: Uint8Array },
+                               peer_addr_0: { bytes: Uint8Array },
+                               color_0: Uint8Array,
+                               amount_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
   add_device(context: __compactRuntime.CircuitContext<PS>, new_device_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
   remove_device(context: __compactRuntime.CircuitContext<PS>, device_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
   add_grant(context: __compactRuntime.CircuitContext<PS>,
@@ -67,6 +72,11 @@ export type ProvableCircuits<PS> = {
                           recipient_0: { bytes: Uint8Array },
                           color_0: Uint8Array,
                           amount_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  transfer_shielded_to_account(context: __compactRuntime.CircuitContext<PS>,
+                               peer_0: { bytes: Uint8Array },
+                               peer_addr_0: { bytes: Uint8Array },
+                               color_0: Uint8Array,
+                               amount_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
   add_device(context: __compactRuntime.CircuitContext<PS>, new_device_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
   remove_device(context: __compactRuntime.CircuitContext<PS>, device_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
   add_grant(context: __compactRuntime.CircuitContext<PS>,
@@ -117,6 +127,11 @@ export type Circuits<PS> = {
                           recipient_0: { bytes: Uint8Array },
                           color_0: Uint8Array,
                           amount_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
+  transfer_shielded_to_account(context: __compactRuntime.CircuitContext<PS>,
+                               peer_0: { bytes: Uint8Array },
+                               peer_addr_0: { bytes: Uint8Array },
+                               color_0: Uint8Array,
+                               amount_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
   add_device(context: __compactRuntime.CircuitContext<PS>, new_device_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
   remove_device(context: __compactRuntime.CircuitContext<PS>, device_0: bigint): Promise<__compactRuntime.CircuitResults<PS, []>>;
   add_grant(context: __compactRuntime.CircuitContext<PS>,

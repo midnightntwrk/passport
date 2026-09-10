@@ -184,7 +184,7 @@ export type PassportContractName = 'account' | 'midnames';
  * They are staged INSIDE `examples/passport-demo` rather than imported from
  * where they were built, and that is load-bearing. A generated module opens
  * with `import * as __compactRuntime from '@midnight-ntwrk/compact-runtime'`
- * and then `checkRuntimeVersion('0.18.0-rc.1')`, resolved from the module's own
+ * and then `checkRuntimeVersion('0.19.0')`, resolved from the module's own
  * directory. Left under `examples/passport-balancer/` it would walk up to the
  * repository root, where the runtime is deliberately the ledger-8 one the
  * funder needs, and refuse to load.
@@ -202,8 +202,8 @@ export function loadContractModule(name: PassportContractName): Promise<Record<s
        workspace would ship a runtime `import()` of a file that is not in the
        build output. */
     loaded = (name === 'account'
-      ? import('../../contracts/stagenet/account/index.js')
-      : import('../../contracts/stagenet/midnames/index.js')) as unknown as Promise<
+      ? import('../../contracts/stagenet/account/contract/index.js')
+      : import('../../contracts/stagenet/midnames/contract/index.js')) as unknown as Promise<
       Record<string, unknown>
     >;
     contractModules.set(name, loaded);

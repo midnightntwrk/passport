@@ -1,5 +1,5 @@
 import * as __compactRuntime from '@midnight-ntwrk/compact-runtime';
-__compactRuntime.checkRuntimeVersion('0.18.0-rc.1');
+__compactRuntime.checkRuntimeVersion('0.19.0');
 
 export var AddressType;
 (function (AddressType) {
@@ -392,7 +392,7 @@ export class Contract {
                                      'CircuitContext',
                                      contextOrig_0)
         }
-        if (!(typeof(d_0) === 'object' && typeof(d_0.is_some) === 'boolean' && true)) {
+        if (!(typeof(d_0) === 'object' && typeof(d_0.is_some) === 'boolean' && typeof (d_0.value) === 'string')) {
           __compactRuntime.typeError('update_default_field',
                                      'argument 1 (argument 2 as invoked from Typescript)',
                                      'midnames.compact line 132 char 1',
@@ -429,7 +429,7 @@ export class Contract {
                                      'CircuitContext',
                                      contextOrig_0)
         }
-        if (!(Array.isArray(kvs_0) && kvs_0.length === 10 && kvs_0.every((t) => typeof(t) === 'object' && typeof(t.is_some) === 'boolean' && Array.isArray(t.value) && t.value.length === 2  && true && true))) {
+        if (!(Array.isArray(kvs_0) && kvs_0.length === 10 && kvs_0.every((t) => typeof(t) === 'object' && typeof(t.is_some) === 'boolean' && Array.isArray(t.value) && t.value.length === 2  && typeof (t.value[0]) === 'string' && typeof (t.value[1]) === 'string'))) {
           __compactRuntime.typeError('add_multiple_fields',
                                      'argument 1 (argument 2 as invoked from Typescript)',
                                      'midnames.compact line 137 char 1',
@@ -465,6 +465,13 @@ export class Contract {
                                      'midnames.compact line 146 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
+        }
+        if (!(typeof (k_0) === 'string')) {
+          __compactRuntime.typeError('clear_field',
+                                     'argument 1 (argument 2 as invoked from Typescript)',
+                                     'midnames.compact line 146 char 1',
+                                     'Opaque<"string">',
+                                     k_0)
         }
         const context = __compactRuntime.copyCircuitContext(contextOrig_0);
         const partialProofData = {
@@ -861,7 +868,7 @@ export class Contract {
                                  'Uint<0..340282366920938463463374607431768211456>',
                                  cost_long_0)
     }
-    if (!(typeof(default_field_0) === 'object' && typeof(default_field_0.is_some) === 'boolean' && true)) {
+    if (!(typeof(default_field_0) === 'object' && typeof(default_field_0.is_some) === 'boolean' && typeof (default_field_0.value) === 'string')) {
       __compactRuntime.typeError('Contract state constructor',
                                  'argument 9 (argument 10 as invoked from Typescript)',
                                  'midnames.compact line 63 char 1',
@@ -889,7 +896,7 @@ export class Contract {
                                  'struct UserAddress<bytes: Bytes<32>>',
                                  owner_address_0)
     }
-    if (!(Array.isArray(kvs_0) && kvs_0.length === 10 && kvs_0.every((t) => typeof(t) === 'object' && typeof(t.is_some) === 'boolean' && Array.isArray(t.value) && t.value.length === 2  && true && true))) {
+    if (!(Array.isArray(kvs_0) && kvs_0.length === 10 && kvs_0.every((t) => typeof(t) === 'object' && typeof(t.is_some) === 'boolean' && Array.isArray(t.value) && t.value.length === 2  && typeof (t.value[0]) === 'string' && typeof (t.value[1]) === 'string'))) {
       __compactRuntime.typeError('Contract state constructor',
                                  'argument 13 (argument 14 as invoked from Typescript)',
                                  'midnames.compact line 63 char 1',
@@ -2731,6 +2738,13 @@ export function ledger(stateOrChargedState) {
           throw new __compactRuntime.CompactError(`member: expected 1 argument, received ${args_0.length}`);
         }
         const key_0 = args_0[0];
+        if (!(typeof (key_0) === 'string')) {
+          __compactRuntime.typeError('member',
+                                     'argument 1',
+                                     'midnames.compact line 45 char 1',
+                                     'Opaque<"string">',
+                                     key_0)
+        }
         return _descriptor_4.fromValue(__compactRuntime.queryLedgerState(context,
                                                                          partialProofData,
                                                                          [
@@ -2753,6 +2767,13 @@ export function ledger(stateOrChargedState) {
           throw new __compactRuntime.CompactError(`lookup: expected 1 argument, received ${args_0.length}`);
         }
         const key_0 = args_0[0];
+        if (!(typeof (key_0) === 'string')) {
+          __compactRuntime.typeError('lookup',
+                                     'argument 1',
+                                     'midnames.compact line 45 char 1',
+                                     'Opaque<"string">',
+                                     key_0)
+        }
         return _descriptor_13.fromValue(__compactRuntime.queryLedgerState(context,
                                                                           partialProofData,
                                                                           [

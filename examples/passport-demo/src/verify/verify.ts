@@ -128,8 +128,8 @@ export interface VerificationReport {
 /* The compiled contracts                                                     */
 /* -------------------------------------------------------------------------- */
 
-type AccountModule = typeof import('../../contracts/stagenet/account/index.js');
-type MidnamesModule = typeof import('../../contracts/stagenet/midnames/index.js');
+type AccountModule = typeof import('../../contracts/stagenet/account/contract/index.js');
+type MidnamesModule = typeof import('../../contracts/stagenet/midnames/contract/index.js');
 type RuntimeModule = typeof import('@midnight-ntwrk/compact-runtime');
 
 let runtimePromise: Promise<RuntimeModule> | null = null;
@@ -145,12 +145,12 @@ function loadRuntime(): Promise<RuntimeModule> {
 }
 
 function loadAccount(): Promise<AccountModule> {
-  accountPromise ??= import('../../contracts/stagenet/account/index.js');
+  accountPromise ??= import('../../contracts/stagenet/account/contract/index.js');
   return accountPromise;
 }
 
 function loadMidnames(): Promise<MidnamesModule> {
-  midnamesPromise ??= import('../../contracts/stagenet/midnames/index.js');
+  midnamesPromise ??= import('../../contracts/stagenet/midnames/contract/index.js');
   return midnamesPromise;
 }
 

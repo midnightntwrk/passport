@@ -75,7 +75,7 @@ import * as Rx from 'rxjs';
 import type { LocalMidnightWallet } from '../lib/localWallet.js';
 /* Type-only, and through the SAME specifier {@link loadAccountContract} uses —
    a type has no instance, so this adds no module to either graph. */
-import type { Ledger as AccountLedger } from '../../contracts/stagenet/account/index.js';
+import type { Ledger as AccountLedger } from '../../contracts/stagenet/account/contract/index.js';
 import { sponsorFeeRefusal, sponsorReadiness } from '../lib/sponsor.js';
 import {
   createContractProviders,
@@ -470,7 +470,7 @@ export { derivePassportContractSecrets };
  */
 async function loadAccountContract() {
   return loadContractModule('account') as Promise<
-    typeof import('../../contracts/stagenet/account/index.js')
+    typeof import('../../contracts/stagenet/account/contract/index.js')
   >;
 }
 

@@ -5,12 +5,13 @@
  * --------------------
  * `examples/passport-balancer/contracts-stagenet/managed/<contract>` — the
  * ONE build of the Passport contracts that matches what is deployed on
- * stagenet. Compiled with compactc 0.33.0-rc.2 (language 0.25.0, runtime
- * 0.18.0-rc.1) on 2026/08/24, the same artefacts the deployment harness used,
- * so a verifier key the PWA ships is byte-identical to the one the deployed
- * contract carries. Nothing here compiles anything: two builds of the same
- * contract in one repository is exactly how a `findDeployedContract` mismatch
- * gets introduced.
+ * stagenet. Compiled with compactc 0.34.0 (language 0.26.0, runtime 0.19.0) on
+ * 2026/09/10, the same artefacts the deployment harness uses, so a verifier key
+ * the PWA ships is byte-identical to the one the deployed contract carries —
+ * every key 0.34.0 produces for the circuits that were already there is `cmp`
+ * identical to the 0.33.0-rc.2 keys the stagenet contracts were deployed with.
+ * Nothing here compiles anything: two builds of the same contract in one
+ * repository is exactly how a `findDeployedContract` mismatch gets introduced.
  *
  * This replaces the pair of ledger-8 scripts (`prepare-c1.mjs`, which invoked
  * whatever `compact` happened to be on PATH, and `prepare-midnames-assets.mjs`,
@@ -29,21 +30,32 @@
  *
  * The generated contract MODULE (`contract/index.js`, plus its `.d.ts`) does not
  * go into `public/` — the app imports it through the bundler. It is copied into
- * `contracts/stagenet/<contract>/` INSIDE this workspace instead, and that
- * location is load-bearing rather than tidy. The module's first two lines are
+ * `contracts/stagenet/<contract>/contract/` INSIDE this workspace instead, and
+ * that location is load-bearing rather than tidy. The module's first lines are
  *
  *     import * as __compactRuntime from '@midnight-ntwrk/compact-runtime';
- *     __compactRuntime.checkRuntimeVersion('0.18.0-rc.1');
+ *     import * as __compactContractsImport_account from '../../account/contract/index.js';
+ *     __compactRuntime.checkRuntimeVersion('0.19.0');
  *
- * and a bundler resolves that specifier from the MODULE's own directory,
- * walking upwards. Left where it was built — under
+ * and a bundler resolves both specifiers from the MODULE's own directory,
+ * walking upwards for the bare one. Left where it was built — under
  * `examples/passport-balancer/` — it would walk past this workspace into the
  * repository root, where the runtime is deliberately the LEDGER-8 0.16.0 that
  * the funder and the account-custody prototype need (see the root
  * `package.json`), and `checkRuntimeVersion` would refuse it. Copied here it
- * walks into `examples/passport-demo/node_modules`, finds 0.18.0-rc.1, and
- * loads. The same trap, from the other direction, is documented in
+ * walks into `examples/passport-demo/node_modules`, finds 0.19.0, and loads.
+ * The same trap, from the other direction, is documented in
  * `examples/passport-funder/src/midnames.ts`.
+ *
+ * The trailing `contract/` is why the RELATIVE specifier resolves. Since the
+ * one-transaction transfer, the account module names its own peer — the
+ * `deposit_shielded` it calls on the recipient Passport — as
+ * `../../account/contract/index.js`, a path compactc writes literally and
+ * relative to the build's `contract/` directory. Staged as
+ * `contracts/stagenet/account/contract/index.js`, that path resolves back to
+ * the module itself, which is what it means. Staged one level flatter, as this
+ * script used to, it pointed at `contracts/account/contract/index.js` and every
+ * test that touched the module died on a missing file.
  *
  * `public/zk/` and `contracts/stagenet/` are both gitignored; nothing this
  * writes is ever committed.
@@ -102,7 +114,7 @@ function replaceDirectory(next, destination) {
 function stage(name) {
   const source = resolve(managedRoot, name);
   const destination = resolve(appDirectory, 'public', 'zk', name);
-  const moduleDestination = resolve(appDirectory, 'contracts', 'stagenet', name);
+  const moduleDestination = resolve(appDirectory, 'contracts', 'stagenet', name, 'contract');
 
   if (!existsSync(resolve(source, 'contract', 'index.js'))) {
     fail(

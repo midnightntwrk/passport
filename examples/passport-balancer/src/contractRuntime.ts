@@ -9,9 +9,9 @@
  * `deploy-stagenet/src/chain.mjs` deployed the `.night` TLD and called
  * `register_domain_for` with:
  *
- *   compact compiler 0.33.0-rc.2  →  runtime 0.18.0-rc.1
- *   compact.js       2.5.5-rc.7
- *   midnight.js      5.0.0-beta.6
+ *   compact compiler 0.34.0       →  runtime 0.19.0
+ *   compact.js       2.5.5-rc.8
+ *   midnight.js      5.0.0-beta.7
  *   wallet SDK       2.0.0-beta.2   (@midnightntwrk/ledger-v9, hyphenless)
  *
  * Where the funder's v4 API and the beta diverge, `deploy-stagenet`'s shapes
@@ -417,9 +417,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * uses it, never imported from the path this returns; see the note on that
  * import in `./midnames.ts` for why the difference matters.
  *
- * The builds are `contracts-stagenet/managed/`, compiled by compactc 0.33.0
- * against runtime 0.18.0-rc.1 — the artefacts `deploy-stagenet` put the TLD, the
- * resolver leaf, and one account-custody contract on chain with. The preview
+ * The builds are `contracts-stagenet/managed/`, compiled by compactc 0.34.0
+ * against runtime 0.19.0 — key-for-key the artefacts `deploy-stagenet` put the
+ * TLD, the resolver leaf, and one account-custody contract on chain with. The preview
  * service's `experiments/account-custody-prototype` builds are compiled against
  * an older runtime and MUST NOT be substituted: `checkRuntimeVersion` in the
  * generated module refuses them, and a build that slipped past it would prove

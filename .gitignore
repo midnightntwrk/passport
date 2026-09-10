@@ -24,8 +24,16 @@ examples/passport-demo/public/zk/
 examples/passport-demo/contracts/stagenet/
 # The stagenet contract build itself: ~103 MB of prover and verifier keys,
 # produced by the deployment harness and shared with the demo through the
-# staging script above.
-examples/passport-balancer/contracts-stagenet/
+# staging script above. The rule lives in that directory's own .gitignore, which
+# ignores managed/*/keys and managed/*/zkir and leaves the sources, the generated
+# contract modules, and the manifests tracked.
+#
+# It used to be a blanket `examples/passport-balancer/contracts-stagenet/` here,
+# which was a trap rather than a shortcut: git does not descend into an excluded
+# directory, so a NEW file anywhere under it — a renamed contract source, say —
+# was invisible to `git status` and silently absent from the commit, while the
+# files already tracked went on being tracked. It hid nothing the local rule and
+# the `node_modules/` rule below do not already hide. Removed 2026/09/10.
 
 # Vercel CLI link state and the locally assembled Build Output (see
 # scripts/build-vercel-output.mjs). Never committed — the deployed artefacts

@@ -60,7 +60,7 @@
  * have to be internally consistent, and is: `vite.config.ts`'s `dedupe` gives
  * the browser bundle one copy, which is the case that ships.)
  *
- * The fixture anchors on `contracts/stagenet/account/index.js` rather than on
+ * The fixture anchors on `contracts/stagenet/account/contract/index.js` rather than on
  * the TypeScript import `./accountCustody.ts` uses, for the plain reason that
  * Node cannot load the latter. `prepare-zk-assets.mjs` stages that module from
  * the pinned stagenet build before tests run, so the fixture executes the same
@@ -75,7 +75,7 @@ import { createRequire } from 'node:module';
 
 import { describe, expect, it } from 'vitest';
 
-import type { Ledger as AccountLedger } from '../../contracts/stagenet/account/index.js';
+import type { Ledger as AccountLedger } from '../../contracts/stagenet/account/contract/index.js';
 
 import {
   AccountCustodyError,
@@ -308,7 +308,7 @@ interface FixtureRuntime {
 function fixtureModules(): { contract: FixtureContractModule; runtime: FixtureRuntime } {
   const requireFromTest = createRequire(import.meta.url);
   const contractPath = requireFromTest.resolve(
-    '../../contracts/stagenet/account/index.js',
+    '../../contracts/stagenet/account/contract/index.js',
   );
   return {
     contract: requireFromTest(contractPath) as FixtureContractModule,

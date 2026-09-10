@@ -20,9 +20,10 @@
  * ------------------------------------------
  * `examples/passport-balancer/contracts-stagenet/managed/account`, staged into
  * this workspace by `scripts/prepare-zk-assets.mjs`. That is the build the
- * stagenet deployment harness used — compactc 0.33.0-rc.2, language 0.25.0,
- * runtime 0.18.0-rc.1 — and the ONLY source change from the preview contracts
- * was the pragma. It replaces the reach into
+ * stagenet deployment harness used — compactc 0.34.0, language 0.26.0,
+ * runtime 0.19.0 since 2026/09/10, and every verifier key it produces for a
+ * circuit that already existed is `cmp` identical to the 0.33.0-rc.2 keys the
+ * deployed contracts carry. It replaces the reach into
  * `experiments/account-custody-prototype`, whose managed output is a 0.31.1 /
  * runtime-0.16 build that the ledger-9 runtime refuses on sight:
  * `checkRuntimeVersion` is the generated module's second line.

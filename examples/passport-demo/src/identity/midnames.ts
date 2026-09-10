@@ -43,7 +43,8 @@
  * The verifier-key agreement that makes the service's `findDeployedContract`
  * work is structural rather than a coincidence to re-verify: this app, the
  * service, and the harness that deployed the TLD ship the SAME artefacts, from
- * `examples/passport-balancer/contracts-stagenet` (compactc 0.33.0-rc.2). If
+ * `examples/passport-balancer/contracts-stagenet` (compactc 0.34.0, and
+ * bit-identical to the 0.33.0-rc.2 keys the TLD was deployed with). If
  * that ever stops being true the mismatch surfaces as a real failure
  * (`register-rejected`) and the UI queues the name — it is never papered over.
  *
