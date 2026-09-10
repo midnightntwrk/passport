@@ -63,7 +63,15 @@ import {
   ACTIVATION_EXHAUSTED_LABEL,
   activationRetryRowId,
   classifyFundAccountAnswer,
+  openingBalanceOnTheWay,
 } from './lib/activation.js';
+/* Which legs of the opening grant an account is already holding. Pure — the
+   same read both balance surfaces make of the same snapshot. */
+import { openingBalanceLegsHeld } from './lib/balanceWatch.js';
+/* The figures the balance surfaces paint while the ledger's own are not yet
+   the ones the reader is about to have: the opening grant on its way in, a
+   send on its way out and back. Pure — see `lib/pendingBalances.ts`. */
+import { pendingBalances } from './lib/pendingBalances.js';
 import type { FundAccountAnswer } from './lib/activation.js';
 import {
   activationGrantHeld,
@@ -7933,6 +7941,45 @@ export default function PassportDemo() {
     : null;
 
   /**
+   * THE FIGURES THAT ARE NOT THE LEDGER'S, FOR BOTH BALANCE SURFACES.
+   *
+   * Derived HERE rather than in each screen, because this is the only place
+   * that holds both halves of the question: what the account reports, and what
+   * this Passport has in flight. Home's strip and the Assets shelf are handed
+   * the same map, so a colour cannot read `0` on one tab and `Transferring` on
+   * the other.
+   *
+   * Two situations, one shape — see `lib/pendingBalances.ts` for the rules and
+   * why neither may overstate:
+   *
+   *   the opening grant — a Passport that has just been set up owns two
+   *                       figures the sponsor has not deposited yet, and a `0`
+   *                       in their place reads as "you own nothing" (issue #19).
+   *   a send in flight  — a shielded payment takes the whole coin out and puts
+   *                       the remainder back three transactions later, so the
+   *                       balance sat at `0` for minutes mid-transfer
+   *                       (reviewer, 2026/09/08).
+   *
+   * `homeAccount` is the same snapshot both screens paint from, and `activity`
+   * is the trail `openingBalanceOnTheWay` reads to know whether the sponsor has
+   * already refused — so the projection and the line under the balances cannot
+   * tell two different stories.
+   *
+   * NOT A HOLDING. `homeAccount` itself is untouched, so the Send sheet still
+   * offers only what the account really has.
+   */
+  const homePendingBalances = pendingBalances({
+    account: homeAccount,
+    openingBalanceOnTheWay: openingBalanceOnTheWay({
+      hasAccount: Boolean(homeAccount),
+      holdsOpeningNight: openingBalanceLegsHeld(homeAccount).night,
+      holdsOpeningStablecoin: openingBalanceLegsHeld(homeAccount).stablecoin,
+      entries: activity,
+    }),
+    pendingSends,
+  });
+
+  /**
    * The dApp payment seam, handed over only when there is genuinely an account
    * to pay from. Withheld, an app is answered `wallet-unavailable` before a
    * sheet is ever shown — the same rule the Send control keeps, and better than
@@ -8709,6 +8756,10 @@ export default function PassportDemo() {
                  Receive offers the ACCOUNT address, which Home derives for
                  itself. */
               account={homeAccount}
+              /* The figures that are not the ledger's, and the one word each
+                 gets — an opening grant on its way in, a send on its way out
+                 and back. See `homePendingBalances`. */
+              pendingBalances={homePendingBalances}
               legacyFunds={homeLegacyFunds}
               /* Payments that left this Passport and have not arrived. See
                  `runNameSend` for why a two-leg send is written down. */
@@ -8747,6 +8798,9 @@ export default function PassportDemo() {
                the screen says in one line rather than filling with zeros. */
             <AssetsScreen
               account={homeAccount}
+              /* The same projection Home's strip is handed, so the two screens
+                 cannot disagree about a figure that has not settled. */
+              pendingBalances={homePendingBalances}
               network={selectedNetwork}
               onSelectNetwork={handleSelectNetwork}
               onRefresh={refreshMobile}

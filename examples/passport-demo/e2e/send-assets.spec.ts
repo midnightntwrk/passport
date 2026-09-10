@@ -404,3 +404,109 @@ test('an almost-account is refused as the name it is not, never sent', async () 
   await expect(page.getByRole('button', { name: /^Review$/ })).toBeDisabled();
   expect(await refusal().innerText()).not.toContain(PASSPORT_ACCOUNT_ADDRESS);
 });
+
+/**
+ * TWO MOMENTS THAT MUST NOT PAINT A ZERO.
+ *
+ * "When the account is set up show the NIGHT and mUSD set already so the user
+ * is aware about the balances owned" (issue #19), and — reported against
+ * production on 2026/09/08 — a name send that showed `mUSD 0` until the change
+ * came back minutes later. A shielded payment takes the WHOLE coin out of the
+ * account and puts the remainder back three transactions later, so the ledger
+ * really does report none of that colour in between: the strip was painting the
+ * truth, and it is a truth that reads as permanent, which is what made it wrong.
+ *
+ * LAST IN THIS FILE, and it reloads: the seam the second half needs is an
+ * unfinished send in storage, which is only read when the app starts, and the
+ * reload is also what puts the balance strip back in front of the sheet every
+ * test above leaves open.
+ *
+ * The rules themselves — what is projected, what is left alone, and that the
+ * projection can never overstate — are pure and drilled on every branch in
+ * `src/lib/pendingBalances.test.ts`. What only a browser can answer is that the
+ * strip really paints the projected figure rather than the ledger's, and really
+ * says which word.
+ */
+test('a balance on its way is a figure with a word on it, never a zero', async () => {
+  /* The shielded asset's own colour, taken from the picker rather than
+     hard-coded: the option's value IS the colour — see `sendAssets.ts` — so the
+     record below names a colour this build really shows a row for. */
+  const colourHex = await picker().locator('option').nth(1).getAttribute('value');
+  expect(colourHex).toBeTruthy();
+
+  await page.reload();
+  const strip = page.locator('.mnhome-assets');
+  await expect(strip).toBeVisible({ timeout: 90_000 });
+
+  /* ISSUE #19. This walk's Passport has an account and no opening grant in it
+     yet, which is exactly the state a Passport is in for the first minutes of
+     its life. Every row that is waiting for one names the figure it is waiting
+     for and says `Arriving` — and none of them says `0`. */
+  const arriving = page
+    .locator('.mnhome-token-row')
+    .filter({ has: page.locator('.mnhome-token-pending', { hasText: 'Arriving' }) });
+  await expect(arriving.first()).toBeVisible({ timeout: 60_000 });
+  for (const cell of await arriving.locator('.mnhome-token-value').all()) {
+    expect(await cell.innerText()).not.toMatch(/^0\s*Arriving/);
+  }
+
+  /* THE SEND. A run big enough that its change cannot be mistaken for anything
+     the account holds, so the figure that appears is unambiguously the
+     projected one and not the ledger's. */
+  const change = 1_000_000_000n;
+  const seeded = await page.evaluate(
+    ({ colour, withdrawAmount }) => {
+      const credentialId = localStorage.getItem('passport-last-passkey');
+      if (!credentialId) return null;
+      const now = new Date().toISOString();
+      localStorage.setItem(
+        `midnight.passport.sends.v1:${credentialId}`,
+        JSON.stringify([
+          {
+            id: 'walk-transfer',
+            kind: 'shielded',
+            recipient: { label: 'alice.night', accountAddress: 'ee'.repeat(32) },
+            amount: '1',
+            tokenType: colour,
+            colourHex: colour,
+            ownReceivingAddress: 'ff'.repeat(32),
+            /* STOPPED, deliberately. A run still moving would be carried on by
+               itself three seconds after the reload — see
+               `PENDING_SEND_AUTO_RESUME_DELAY_MS` — and this tier has no prover
+               for it to finish with. A stopped run holds the same figure for
+               the same reason: the coin is out of the account either way, and
+               the card below the strip is where "it stopped" is said. */
+            leg: 'failed',
+            withdrawTxHash: 'aa'.repeat(32),
+            withdrawAmount,
+            attempts: { withdraw: 1, deposit: 1, change: 0 },
+            lastError: { message: 'The walk stopped it here.', retryable: true },
+            createdAt: now,
+            updatedAt: now,
+          },
+        ]),
+      );
+      return credentialId;
+    },
+    { colour: colourHex as string, withdrawAmount: (change + 1n).toString() },
+  );
+  expect(seeded).not.toBeNull();
+
+  await page.reload();
+  await expect(strip).toBeVisible({ timeout: 90_000 });
+
+  /* The balance the sender will be left with once the transfer finishes, with
+     the one word that says it is not the settled one yet. */
+  const transferring = page
+    .locator('.mnhome-token-row')
+    .filter({ has: page.locator('.mnhome-token-pending', { hasText: 'Transferring' }) });
+  await expect(transferring).toHaveCount(1, { timeout: 60_000 });
+  await expect(transferring.locator('.mnhome-token-value')).toContainText(change.toString());
+
+  /* Left as it was found: the next file's Passport is not this one's
+     half-finished payment. */
+  await page.evaluate(() => {
+    const credentialId = localStorage.getItem('passport-last-passkey');
+    if (credentialId) localStorage.removeItem(`midnight.passport.sends.v1:${credentialId}`);
+  });
+});

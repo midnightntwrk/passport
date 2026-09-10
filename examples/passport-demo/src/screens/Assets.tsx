@@ -27,6 +27,9 @@ import {
 } from './assetsOnTheWay.js'
 /* Whether the opening balance is still coming. Pure — see `lib/activation.ts`. */
 import { openingBalanceOnTheWay } from '../lib/activation.js'
+/* The figure a row should paint while the ledger's own is momentarily not the
+   one the reader is about to have. Pure — see `lib/pendingBalances.ts`. */
+import { PENDING_BALANCE_WORD, type PendingBalanceNotes } from '../lib/pendingBalances.js'
 /* When to read the account again, so a figure that moves on the chain moves on
    this screen without a reload. Rules in `lib/balanceWatch.ts`, wiring in
    `useBalanceWatch.ts`. */
@@ -77,6 +80,14 @@ export interface AssetsScreenProps {
    * that does not exist, and one line says so.
    */
   account: AssetsAccount | null
+  /**
+   * The figures that are not the ledger's, and the one word each gets — the
+   * SAME map Home's strip is handed, off the same derivation, so a colour
+   * cannot read `0` on one tab and `Transferring` on the other. See
+   * `HomeScreenProps.pendingBalances`. Omit it and every row is the ledger's
+   * own figure.
+   */
+  pendingBalances?: PendingBalanceNotes | null
   /** Selected network context, mirroring the other tabs' top bars. */
   network?: PassportNetwork
   /**
@@ -105,6 +116,12 @@ interface AssetRow {
   label: string
   /** The amount, or `null` for a figure that is not known yet. */
   value: string | null
+  /**
+   * `Arriving` or `Transferring`, when `value` is a figure the account is
+   * about to hold rather than the one it holds. `null` on every settled row,
+   * and always `null` on the item shelf. See `lib/pendingBalances.ts`.
+   */
+  pendingWord?: string | null
   /** The line beneath: what kind of thing this is, or the shortened colour. */
   unit: string
   /** True when that line is a colour rather than a word about the row. */
@@ -121,7 +138,7 @@ interface AssetRow {
 }
 
 export default function AssetsScreen(props: AssetsScreenProps) {
-  const { account, onRefresh, activity } = props
+  const { account, pendingBalances, onRefresh, activity } = props
 
   /* What has been announced and has not landed. One line under the token
      shelf, from the trail, gone the moment the balances themselves say it —
@@ -232,6 +249,10 @@ export default function AssetsScreen(props: AssetsScreenProps) {
          ordinary card. See `describeItem`. */
       const art = row.item ? describeItem(row.colourHex) : null
       const identity = identities[index]
+      /* The figure this row is ABOUT to carry, where the ledger's own is not it
+         yet. Items are never projected — an item is not a quantity, and "1 of
+         1" is not a figure anything can be on its way to. */
+      const projected = row.item ? null : (pendingBalances?.get(row.colourHex) ?? null)
       return {
       key: row.colourHex,
       /* The colour's OWN mark where this build has one — the Midnight symbol,
@@ -247,7 +268,8 @@ export default function AssetsScreen(props: AssetsScreenProps) {
          job is to say "one of a kind", the first word must not be "Token".
          See `nftTitle`. */
       label: art ? art.title : row.item ? nftTitle(identity.symbol) : identity.symbol,
-      value: row.value,
+      value: projected ? projected.value : row.value,
+      pendingWord: projected ? PENDING_BALANCE_WORD[projected.state] : null,
       /* Both shelves take their subtitle from the naming authority: a ticker
          gets "stablecoin", a colour nobody can name gets the shortened colour,
          and NOTHING gets the 64 characters. A known item overrides it with a
@@ -264,7 +286,7 @@ export default function AssetsScreen(props: AssetsScreenProps) {
       tokens: rows.filter((row) => !row.item),
       nfts: rows.filter((row) => row.item),
     }
-  }, [account])
+  }, [account, pendingBalances])
 
   const visibleTokens = showAllTokens ? tokens : tokens.slice(0, TOKENS_VISIBLE)
 
@@ -355,6 +377,7 @@ export default function AssetsScreen(props: AssetsScreenProps) {
                     unit={row.unit}
                     unitIsColour={row.unitIsColour}
                     loading={balancesLoading}
+                    pendingWord={row.pendingWord}
                   />
                 ))}
               </tbody>
@@ -453,6 +476,11 @@ interface TokenLineProps {
   /** True when `unit` is a shortened colour rather than a word about the row. */
   unitIsColour: boolean
   loading: boolean
+  /**
+   * Why this figure is not the ledger's own — `Arriving` or `Transferring` —
+   * or nothing. See `lib/pendingBalances.ts`.
+   */
+  pendingWord?: string | null
 }
 
 /**
@@ -469,7 +497,7 @@ interface TokenLineProps {
  * announce "NIGHT, 0.002" rather than "0.002" on its own.
  */
 function TokenLine(props: TokenLineProps) {
-  const { icon, label, value, unit, unitIsColour, loading } = props
+  const { icon, label, value, unit, unitIsColour, loading, pendingWord } = props
   const unknown = value === null
   return (
     <tr className="mnassets-row">
@@ -497,6 +525,11 @@ function TokenLine(props: TokenLineProps) {
       </th>
       <td className={`mnassets-row-value${unknown ? ' mnassets-row-value-muted' : ''}`}>
         {unknown ? (loading ? 'Syncing' : 'Unavailable') : value}
+        {/* One word under a figure that is not settled yet, inside the same
+            cell so a screen reader announces it as part of the row. */}
+        {!unknown && pendingWord ? (
+          <span className="mnassets-row-pending">{pendingWord}</span>
+        ) : null}
       </td>
     </tr>
   )

@@ -285,6 +285,23 @@
   font-weight: 600;
 }
 
+/* ONE WORD UNDER A FIGURE THAT IS NOT SETTLED YET — `Arriving` for the opening
+   grant, `Transferring` for a send in flight. Set like the unit line on the
+   other side of the row rather than like a number: it is a note ABOUT the
+   figure, and anything set as heavily as the figure would be read as part of
+   it. `display: block` puts it under rather than beside, so the digits stay on
+   the same right-hand grid the column is compared along. */
+.mnhome-token-pending {
+  display: block;
+  margin-top: 2px;
+  color: var(--mn-text-secondary);
+  font-family: var(--mn-font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
 /* The card is now the legacy-funds panel's alone: the balances that used to
    use it are line items above. It keeps its container query because the panel
    still sizes its own copy against itself rather than against the viewport. */

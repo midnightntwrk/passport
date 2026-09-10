@@ -335,6 +335,19 @@
   font-weight: 600;
 }
 
+/* ONE WORD UNDER A FIGURE THAT IS NOT SETTLED YET — the same note Home's strip
+   carries, set the same way, so the two shelves read as one system. */
+.mnassets-row-pending {
+  display: block;
+  margin-top: 2px;
+  color: var(--mn-text-secondary);
+  font-family: var(--mn-font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
 /* --- Card ---------------------------------------------------------------- */
 
 .mnassets-card {
