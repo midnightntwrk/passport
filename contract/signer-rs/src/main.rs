@@ -59,9 +59,31 @@
 //!        "challenge":"…64 hex…","attempts":18}
 //!   {"cmd":"sign","arm":"k256",…same fields…}
 //!     → {"pk":{…},"sig":{"r":"0x…","s":"0x…"},"challenge":"…64 hex…"}
+//!   {"cmd":"sign_grant","arm":"k256","circuit":"withdraw_unshielded",
+//!    "sk":"0x…","envelope":0,"contract_address":"…64 hex…",
+//!    "client_id":"https://bank.example","slot":0,"issued_at":"7",
+//!    "grant_nonce":"1","color":"…64 hex…","amount":"500",
+//!    "recipient":"…64 hex…"}
+//!     → {"pk":{…},"grant_id":"…","challenge":"…","digest":"…",
+//!        "sig":{"r":"0x…","s":"0x…"},"origin_hash":"…"}
+//!   {"cmd":"derive_grant","arm":"k256"|"jubjub","sk":"0x…","envelope":0,
+//!    "contract_address":"…","client_id":"…","slot":0,"scope_salt":"…",
+//!    "scope":{…the plaintext scope…},"spent":"200",
+//!    "device":{"sk":"0x…","auth_nonce":"7"}}
+//!     → {"pk":{…},"origin_hash":"…","grant_id":"…","object_commit":"…",
+//!        "spent_commit_at_issue":"…","spent_commit":"…","rp_commit":"…",
+//!        "scope_digest":"…","grant_dsts":{…},
+//!        "lifecycle_challenges":{"issue_grant":"…","revoke_grant":"…",
+//!                                "revoke_all_grants":"…"}}
+//!
+//! The grant seam is the `grants` module: the identity, commitment, scope
+//! digest, and challenge recipes of the scoped-grants MIP, built from the
+//! published byte recipes rather than from the compiled contract.
 //!
 //! All bigint fields are 0x-prefixed big-endian hex; raw byte strings are
 //! plain hex.
+
+mod grants;
 
 use std::io::Read;
 
@@ -252,10 +274,16 @@ enum Arm {
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "cmd", rename_all = "lowercase")]
+#[serde(tag = "cmd", rename_all = "snake_case")]
 enum Request {
     Keygen { arm: Arm },
     Sign(SignRequest),
+    /// A grant call signed by a grantee key (scoped-grants MIP section 6.3),
+    /// on the k256 grantee arm.
+    SignGrant(grants::GrantSignRequest),
+    /// The issuance-side derivations of scoped-grants MIP sections 4.3 to
+    /// 4.5 over one plaintext scope, on either grantee arm.
+    DeriveGrant(grants::DeriveGrantRequest),
 }
 
 #[derive(Deserialize)]
@@ -319,6 +347,8 @@ fn main() -> Result<()> {
             Arm::Jubjub => sign_jubjub(&req)?,
             Arm::K256 => sign_k256(&req)?,
         },
+        Request::SignGrant(req) => grants::sign_grant(&req)?,
+        Request::DeriveGrant(req) => grants::derive_grant(&req)?,
     };
     println!("{response}");
     Ok(())

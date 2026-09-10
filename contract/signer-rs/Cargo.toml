@@ -3,7 +3,7 @@ name = "account-custody-signer"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "Independent Rust signer for the account authorisation seam, both arms: JubJub Schnorr (MIP-0013) and ECDSA-secp256k1 (conformance test 7). No Midnight TypeScript, WASM, or npm dependency."
+description = "Independent Rust signer for the account authorisation seam, both arms: JubJub Schnorr (MIP-0013) and ECDSA-secp256k1 (conformance test 7), plus the scoped-grants derivations and the k256 grantee seam. No Midnight TypeScript, WASM, or npm dependency."
 
 [dependencies]
 # Midnight ledger crates — used ONLY for the field-aligned binary encoding
