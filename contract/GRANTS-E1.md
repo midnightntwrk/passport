@@ -1,8 +1,12 @@
-# E1 stage one: scoped grants on the reference contract, `spec_version = 2`
+# E1: scoped grants on the reference contract, `spec_version = 2`
 
-Worktree `arc-passport-k1-arm`, branch `nicolasdp/grants-seam-e1`. Scope of this
-stage: cells and structs, the pure derivations, the k256 grantee seam and two
-of its twins (unshielded, shielded), the three lifecycle circuits on the
+Worktree `arc-passport-k1-arm`, branch `nicolasdp/grants-seam-e1`. Stage one and
+stage two of the contract experiment; the on-node conformance run that consumes
+them is reported separately in `GRANTS-E2.md`.
+
+**Stage one.** Scope: cells and structs, the pure derivations, the k256
+grantee seam and two of its twins (unshielded, shielded), the three lifecycle
+circuits on the
 k256 device arm, the client half of Testing item 5 (byte-recipe vectors), and
 the Rust side of the cross-implementation check. Toolchain: `compact compile
 +0.33.0-rc.2 --feature-zkir-v3` (compactc 0.33.0, language 0.25.0,
@@ -29,6 +33,41 @@ into `unit-offline.ts`), `local-exec.ts` (off-node execution probe),
 `compile-full.log`, `skipzk-module/`, `grant-vectors.py` and
 `compare-ts-vectors.py` (the Rust verifier's independent generators),
 `verify-ts.md` and `verify-rs.md` (the two verifier reports).
+
+**Stage two.** Scope: the jubjub grantee seam and its three twins, the
+remaining k256 twin `withdraw_shielded_to_contract_with_grant_k256`, the three
+lifecycle circuits on the jubjub device arm, the client surface for both
+grantee arms, the jubjub half of the Rust signer, an off-node suite over both
+arms, and the full key-generating compile that measures the thirty-circuit
+roster. Same toolchain. Files changed, all under `contract/`:
+
+- `contracts/account.compact` (+485 lines against 6 comment lines removed, so
+  479 net, 2,405 lines in total: 14 new exports and 2 internal chips),
+  `contracts/managed/account/`
+  regenerated (gitignored, 30 non-pure circuits);
+- `src/wallet/signer.ts` (+482: grant challenge builders, `K256Grantee` and
+  `JubjubGrantee`), `src/wallet/account.ts` (+261: issue, revoke, revoke-all,
+  and the six grant-twin call paths), `src/wallet/contract.ts` (+4, a type
+  re-export), `src/wallet/wave-deploy.ts` (the 30-circuit roster and a wave
+  planner driven by a verifier-byte budget);
+- `src/tests/grants-offline.ts` (new, 1,026 lines, 121 checks over both arms),
+  `src/tests/unit-offline.ts` (+389), `src/tests/crossimpl-offline.ts` (+223),
+  `src/tests/vectors/grants-e1.json` (27 vectors to 34, two pinned signatures
+  to three, `preimage_widths` added);
+- `signer-rs/src/grants.rs` and `signer-rs/src/main.rs` (the jubjub grantee
+  and jubjub lifecycle halves; `cargo test` 36 passed, 0 failed; `cargo clippy
+  --all-targets` clean).
+
+No existing exported circuit changed ABI or behaviour in stage two either: the
+55 pre-existing exported signatures were compared on their full parameter block
+and return type, and none changed or was removed. Stage two compiled on the
+first pass as stage one did, and the constructs it exercised first are:
+destructuring `[ShieldedCoinInfo, Maybe<ShieldedCoinInfo>]` from a custody chip
+and returning the pair as a tuple literal; re-disclosing `change.is_some` in a
+statement-level `if`; a 14-member `persistentHash` tuple carrying two
+`JubjubPoint` members and a `QualifiedShieldedCoinInfo`; and
+`(challenge as Field) as JubjubScalar` inside `ecMul` in a chip that is not the
+device seam.
 
 ## 1. What compiled first time, and every compile error met
 
@@ -78,6 +117,11 @@ Final state, all offline, no node:
 | `cargo build`, `cargo clippy --all-targets` | clean, no warnings | |
 | `npx tsc --noEmit` | clean | |
 
+Stage two adds `npm run -s test:grants-offline` (121 checks over both arms,
+stable across five consecutive runs), takes `cargo test` to 36 passed and 0
+failed, and grows `test:unit` and `test:crossimpl-offline` as section 6
+records. `npx tsc --noEmit` stays clean.
+
 No existing exported circuit changed ABI or behaviour; the existing k256 and
 jubjub prover and verifier key sizes are byte-for-byte the same as before
 (section 5). No existing check, wallet file, or suite was altered beyond the
@@ -126,6 +170,27 @@ after the reset, so the generation check is never reached).
 Not executed off-node: the shielded grant twin (needs Zswap coins and the
 `held_coin` witness; a node run), and anything involving proving.
 
+Stage two promoted that harness into `src/tests/grants-offline.ts` and ran the
+whole scenario twice, once per arm: 121 checks, 50 per arm plus 10 arm-specific
+negatives, 4 existence checks on the twins that cannot execute off-node, and 7
+client-side issue rules. Two carried-forward expectations changed. The k256
+wrong-envelope item now refuses with `envelope not admitted for a spend grant`
+rather than `unknown grant`, because the envelope assert moved to the head of
+the chip (section 8 item 15). And a jubjub grant authorisation that does not
+match its call is refused either by the challenge cast's range check or by
+`invalid grant signature`, so those items admit either needle (section 8 item
+17). New off-node evidence: the JubJub identity `(0, 1)` is refused by the
+cofactor-clearing guard with `grantee key has small order`; the order-2 point
+`(0, q - 1)` never reaches the guard, because `ecMul` and `ecAdd` abort with
+`unreachable` on it (section 8 item 18); the k256 point at infinity is refused
+at the shared device guard; an envelope-1 grantee derives a different
+`grant_id`, issues, and is refused at the twin; and a record issued for a
+grantee on one arm is invisible to the other arm's twin, which sees
+`unknown grant`. The four shielded twins still cannot execute off-node, so the
+suite asserts instead that each exists on the compiled module with the argument
+count the MIP section 6.1 trailer implies, 15 on the k256 arm and 16 on jubjub,
+read from the generated wrapper's own arity error.
+
 ## 4. MIP section 13 `[CIRCUIT]` items settled
 
 | Item | Verdict | Evidence |
@@ -143,10 +208,11 @@ Not executed off-node: the shielded grant twin (needs Zswap coins and the
 ## 5. Final measurements
 
 `zkir-v3 mock-compile` for k and rows; `ls -l contracts/managed/account/keys`
-for key bytes. No Compact changed after the measurement sweep (section 7
-confirms every mismatch resolved against the MIP, not the circuit), so this
-is the final table for stage one. The five grant circuits are marked new;
-every other row is unchanged from the pre-grant contract byte for byte.
+for key bytes. The table below is the thirty-circuit roster as measured after
+stage two, which is the final state of the contract. The seven circuits marked
+new are stage two's; the five marked new in stage one are unmarked here and
+carry their stage-one figures, except for the two k256 grant twins reconciled
+below; every other row is unchanged from the pre-grant contract byte for byte.
 
 | Circuit | k | rows | prover key bytes | verifier key bytes |
 |---|---|---|---|---|
@@ -168,58 +234,139 @@ every other row is unchanged from the pre-grant contract byte for byte.
 | `withdraw_unshielded_with_k256` | 16 | 61,003 | 117,453,604 | 2,745 |
 | `withdraw_shielded_with_k256` | 17 | 74,587 | 234,894,869 | 2,745 |
 | `withdraw_shielded_to_contract_with_k256` | 17 | 80,290 | 234,895,388 | 2,745 |
-| `withdraw_unshielded_with_grant_k256` (new) | 17 | 64,352 | 234,896,013 | 2,745 |
-| `withdraw_shielded_with_grant_k256` (new) | 17 | 91,862 | 234,898,282 | 2,745 |
-| `issue_grant_with_k256` (new) | 17 | 78,604 | 234,898,194 | 2,745 |
-| `revoke_grant_with_k256` (new) | 16 | 58,997 | 117,453,434 | 2,745 |
-| `revoke_all_grants_with_k256` (new) | 16 | 58,771 | 117,452,209 | 2,745 |
+| `issue_grant_with_jubjub` (new) | 16 | 52,227 | 98,579,365 | 2,313 |
+| `revoke_grant_with_jubjub` (new) | 15 | 26,871 | 49,292,097 | 2,313 |
+| `revoke_all_grants_with_jubjub` (new) | 15 | 26,645 | 49,290,943 | 2,313 |
+| `withdraw_unshielded_with_grant_jubjub` (new) | 16 | 38,514 | 98,577,378 | 2,313 |
+| `withdraw_shielded_with_grant_jubjub` (new) | 17 | 66,014 | 197,145,788 | 2,313 |
+| `withdraw_shielded_to_contract_with_grant_jubjub` (new) | 17 | 71,717 | 197,146,307 | 2,313 |
+| `issue_grant_with_k256` | 17 | 78,604 | 234,898,194 | 2,745 |
+| `revoke_grant_with_k256` | 16 | 58,997 | 117,453,434 | 2,745 |
+| `revoke_all_grants_with_k256` | 16 | 58,771 | 117,452,209 | 2,745 |
+| `withdraw_unshielded_with_grant_k256` | 17 | 64,355 | 234,896,051 | 2,745 |
+| `withdraw_shielded_with_grant_k256` | 17 | 91,865 | 234,898,319 | 2,745 |
+| `withdraw_shielded_to_contract_with_grant_k256` (new) | 17 | 97,568 | 234,898,837 | 2,745 |
 
-Observations:
+### The two re-measured k256 grant twins
 
-- The unshielded grant twin costs 3,349 rows more than its device twin
-  (64,352 against 61,003) and lands at k=17, doubling the prover key
-  (235 MB against 117 MB). The shielded grant twin costs 17,275 rows more
-  than its device twin (91,862 against 74,587) and stays at the device
-  twin's k=17. `issue_grant` costs 78,604 rows (the 17-element scope digest,
-  seven issue rules, the three commitments, and the whole record write) at
-  k=17; `revoke_grant` and `revoke_all_grants` cost about the same as
-  `rotate_enc_key` (about 59,000 rows, k=16).
-- k is not a pure function of the reported rows: `append_inbox_with_k256`
-  (64,924 rows) and `remove_device_with_k256` (65,404 rows) fit k=16 while
-  the unshielded grant twin (64,352 rows) needs k=17. Some other resource
-  (a fixed or lookup column, or the public-input count) drives the k
-  choice; the MIP should quote k and rows as measured and not predict one
-  from the other.
+`withdraw_unshielded_with_grant_k256` and `withdraw_shielded_with_grant_k256`
+measure three rows higher than in stage one: 64,355 against 64,352 and 91,865
+against 91,862, with the prover keys 38 and 37 bytes larger. The cause is the
+review finding recorded as section 8 item 15: the `envelope == 0` assert moved
+to the head of `authenticate_grant_with_k256` after the stage-one measurement
+sweep. Item 15 states that the assert does not change k, and that remains
+exactly true: k is 17 before and after on both twins. What it should have said
+is that the assert costs three rows on each twin and leaves k untouched. The
+three lifecycle circuits on that arm are unchanged, because the assert is in the
+grantee chip only.
+
+Observations, stage one's carried forward and stage two's added:
+
 - Verifier key size depends on the circuit's shape, not on k: every k256
   circuit is 2,745 bytes at k=14, 16, or 17; every jubjub circuit 2,313;
-  `deposit_shielded` 2,121; `deposit_unshielded` 1,353.
-- The five new prover keys add about 940 MB on disk.
+  `deposit_shielded` 2,121; `deposit_unshielded` 1,353. Thirty circuits carry
+  74,286 verifier bytes.
+- k is not a pure function of the reported rows: `append_inbox_with_k256`
+  (64,924 rows) and `remove_device_with_k256` (65,404 rows) fit k=16 while the
+  k256 unshielded grant twin (64,355 rows) needs k=17. Some other resource
+  (a fixed or lookup column, or the public-input count) drives the k choice;
+  the MIP should quote k and rows as measured and not predict one from the
+  other.
+- The prover key is not a function of k alone either: at k=17 a jubjub circuit
+  measures 197 MB and a k256 circuit 235 MB, and at k=16 the same split is
+  99 MB against 117 MB.
+- The grant seam's row cost over the corresponding device twin is constant
+  within an arm and shape but differs across them: on the k256 arm the two
+  shielded twins each cost 17,278 rows more than their device twins (91,865
+  against 74,587, and 97,568 against 80,290) and the unshielded twin 3,352
+  more (64,355 against 61,003); on the jubjub arm the two shielded twins each
+  cost 15,959 more (66,014 against 50,055, and 71,717 against 55,758) and the
+  unshielded twin 9,637 more (38,514 against 28,877). The shielded figures
+  carry the inbox insert for the change entry, which no device twin performs.
+- The seam pushes four of the six grant twins up one k: the k256 unshielded
+  twin to 17, the jubjub unshielded twin to 16, and both jubjub shielded twins
+  to 17. The k256 shielded twins stay at their device twins' k=17.
+- Lifecycle is much cheaper on the normative arm: `issue_grant_with_jubjub`
+  costs 52,227 rows at k=16 against `issue_grant_with_k256` at 78,604 and
+  k=17, and the two jubjub revocation circuits cost about 26,800 rows at k=15
+  against about 58,900 at k=16 on the k256 arm. Issuance is the most expensive
+  lifecycle circuit on both arms (the 17-element scope digest, seven issue
+  rules, three commitments, and the whole record write).
+- The seven stage-two prover keys add about 925 MB on disk, on top of the
+  roughly 940 MB the five stage-one keys added.
 
 ### Deploy budget (MIP 6.7, Testing 6)
 
-Verifier bytes of the 23 impure circuits: 57,663 (18 existing: 43,938; the
-5 grant circuits: 13,725). The README records the 18-key deploy pricing at
-53,076 `bytes_written` against the 50,000 per-block limit, so the deploy
-overhead beyond verifier bytes is about 9,138 bytes. Consequences:
+The thirty impure circuits carry 74,286 verifier bytes:
 
-- One-transaction deploy of the 23-circuit `spec_version = 2` account:
-  about 66,800 bytes written, refused as before. Waves are mandatory.
-- Wave plan for this stage's roster: wave 1 as today (2 deposits + 8 k256
-  circuits, 25,434 verifier bytes, about 34.5 KB written); wave 2 as one
-  hand-built `MaintenanceUpdate` carrying the 8 jubjub keys (18,504) and the
-  5 grant keys (13,725): 32,229 verifier bytes plus the update's overhead,
-  under 50,000. **Two waves**, the same count as today. Putting the grant
-  keys into wave 1 instead would price at about 48,300 bytes written, under
-  the byte limit but close to it, and the 18-key deploy already priced at
-  2.011 s against the 2.000 s compute limit, so wave 1 should stay as it is.
-- Full stage-two roster (30 circuits: + 3 jubjub grant twins and 3 jubjub
-  lifecycle circuits at 2,313 each, + `withdraw_shielded_to_contract_with_grant_k256`
-  at 2,745): 74,286 verifier bytes. Wave 1 unchanged (25,434); the remaining
-  48,852 verifier bytes plus overhead do not fit one update under 50,000, so
-  **three waves** (two maintenance updates). Authority retirement moves to
-  the end of the last grant wave, as the MIP requires.
-- The MIP's "about 2,950 bytes of verifier key each" is an over-estimate;
-  measured 2,745 (k256) and 2,313 (jubjub).
+| Group | Circuits | Verifier bytes |
+|---|---|---|
+| Deposits | 2 | 3,474 |
+| Device arm, jubjub | 8 | 18,504 |
+| Device arm, k256 | 8 | 21,960 |
+| Grant arm, jubjub | 6 | 13,878 |
+| Grant arm, k256 | 6 | 16,470 |
+| Total | 30 | 74,286 |
+
+The README records the 18-key deploy pricing at 53,076 `bytes_written` against
+the 50,000 per-block limit, so the deploy overhead beyond verifier bytes is
+about 9,138 bytes, and a one-transaction deploy of the thirty-circuit roster is
+refused up front. Waves are mandatory, and `src/wallet/wave-deploy.ts` packs
+them greedily against a per-update verifier-byte budget, with wave 1 the deploy
+itself (the two deposits and the initial device's arm, 10 operations) and every
+later wave one hand-built `MaintenanceUpdate`.
+
+At the shipped default budget of 40,000 verifier bytes the planner produced
+**three waves** whichever arm was deployed first: 25,434 then 39,600 then 9,252
+with k256 first, and 21,978 then 38,583 then 13,725 with jubjub first. That is
+the count stage one predicted and the count MIP correction 10 records, but the
+plan behind it is one the chain refuses: the 16-key second wave does not fit a
+block.
+
+**The per-update ceiling is now measured** and is no longer an observation to
+reproduce. `npm run probe:wave-ceiling` (`evidence/wave-ceiling.json`, E2)
+bisects it by giving a throwaway wave-1 account one hand-built
+`MaintenanceUpdate` apiece. An update of 12 verifier keys (29,484 verifier
+bytes) is accepted and lands; 13 keys (32,229), 14 keys (34,974), and 16 keys
+(39,600) are each refused by node 2.1.0 at submission with the same verbatim
+line, `1010: Invalid Transaction: Transaction would exhaust the block limits`.
+The ceiling therefore sits in **(29,484, 32,229] verifier bytes per maintenance
+update**, closed to one key. The refusal is the node's alone: the client
+priced every refused payload without complaint, `normalizeFullness` never
+threw, and `fees` returned a figure. The client-side `exceeded block limit in
+transaction fee computation` bounds the all-operations DEPLOY instead, before a
+transaction exists, so the two refusals are different mechanisms at different
+points and nothing client-side warns an implementer about an over-large update.
+
+`VERIFIER_BYTE_BUDGET` therefore defaults to **25,000** verifier bytes, the
+largest accepted payload less a margin of 4,484 bytes, about 15 per cent,
+rounded down; the margin covers the Dust spend the wallet adds when it balances
+the update, block fullness at submission, and the per-block fee-price
+adjustment. At that default the roster lands in **three waves**, measured end
+to end on the localnet:
+
+| Wave | Kind | Circuits | Verifier bytes | Authority counter before | Result |
+|---|---|---|---|---|---|
+| 1 | deploy | 10 | 25,434 | (deploy) | SUCCESS at block 5,888 |
+| 2 | maintenance | 10 | 23,994 | 0 | SUCCESS at block 5,891 |
+| 3 | maintenance | 10 | 24,858 | 1 | SUCCESS at block 5,894, retires the authority |
+
+After the last wave the account reads `committee = 0, threshold = 1,
+counter = 2`, with 30 operations and `spec_version = 2`. The counter advances by
+exactly one per update, and the retirement lands in the same update as the last
+ten inserts. An earlier run at an interim budget of 18,504 verifier bytes,
+which predates the measurement, took four waves (25,434, then 18,504, 16,470,
+and 13,878) and is recorded in `GRANTS-E2.md`.
+
+Consequences. **MIP 6.7's three-wave figure is restored, and the correction
+this section previously carried against it is withdrawn.** Three waves is the
+right count; what the section gets wrong is the packing that reaches it, since
+its own arithmetic implies a 16-key update of 39,600 verifier bytes that the
+node refuses, whereas the measured budget reaches three waves as 10 and 10. A
+budget under the ceiling does not by itself fix the count: the planner packs
+greedily over one key order, so 18,504, 20,000, and 24,000 all cost four waves
+while 25,000 costs three. The MIP's "about 2,950 bytes of verifier key each"
+remains an over-estimate; measured 2,745 (k256) and 2,313 (jubjub).
 
 ## 6. Cross-implementation agreement (Testing item 5, offline half)
 
@@ -272,6 +419,52 @@ RustCrypto `k256` verifier enforces low-S and refuses the high-S twin as
 presented, while the circuit accepts both S forms (SIG-4). A Rust verifier
 of grant signatures MUST normalise S before verifying; the Rust test asserts
 the twin is refused raw and accepted once normalised.
+
+### Stage two: the v1 family, 34 vectors, and three pinned signatures
+
+Stage two extends the same three-way agreement to the jubjub grantee arm and to
+the remaining k256 twin. The vector file now publishes **34 vectors** and
+**three pinned signatures** (the two stage-one k1 signatures under `sk = 1`, at
+envelopes 0 and 1, each publishing both S forms, plus one deterministic v1
+signature under `sk = 1` with the nonce scalar fixed at 2, whose grinding nonce
+lands at 17), together with `fixtures.sig_r_v1` and a
+`preimage_widths` table. The Rust crate reads the file and reproduces every
+kind it implements from the arguments alone, counting and reporting an
+unimplemented kind on stderr rather than panicking, so a later stage can extend
+the file before the Rust side catches up.
+
+Measured preimage widths of the compiled encoding, not predicted:
+
+| Recipe | k1 | v1 |
+|---|---|---|
+| `withdraw_unshielded` grant challenge | 256 | 328 |
+| `withdraw_shielded` grant challenge | 568 | 640 |
+| `withdraw_shielded_to_contract` grant challenge | 568 | 640 |
+| `issue_grant` | 200 | 272 |
+| `revoke_grant` | 168 | 240 |
+| `revoke_all_grants` | 136 | 208 |
+
+Every v1 recipe is its k1 twin plus 72 bytes: the 64-byte `sig_r` point element
+and the 8-byte grinding nonce. A point element counts as one member and two
+atoms, and the qualified coin as one member and four atoms, so the jubjub
+shielded challenges have 14 members and 19 atoms and the unshielded one 11
+members and 13 atoms.
+
+`crossimpl-offline.ts` gains `[jubjub/grant]` and `[k256/grant/to_contract]`,
+and `unit-offline.ts` gains the k1 `withdraw_shielded_to_contract` challenge,
+the three v1 grant challenges, the three v1 lifecycle challenges, the pinned
+width table, a disjointness check over the v1 family, and a `JubjubGrantee`
+signature round trip with four negatives.
+
+One protocol consequence of the v1 challenge shape is visible only in the
+signer's wire protocol. On the k256 arm an authoriser can hand a device three
+bare lifecycle digests, so the Rust `derive_grant` response carries
+`lifecycle_challenges`. On the jubjub arm a challenge commits to its own nonce
+point and grinding nonce, so it cannot exist before it is signed: the response
+carries `lifecycle_signatures` instead, one signed triple per lifecycle circuit,
+each with a fresh nonce. Those values are not reproducible fixtures, so a suite
+verifies them rather than pinning them, and two `sign_grant` calls with
+identical arguments produce different challenges by construction.
 
 ## 7. Mismatch decisions: compiled encoding or recipe reading
 
@@ -333,10 +526,12 @@ Numbered for the MIP editor; each names the section and the exact change.
    version before Proposed" with: "The shielded ECDSA challenge has thirteen
    declared tuple members (the `QualifiedShieldedCoinInfo` is one member),
    sixteen encoded elements, and 568 preimage bytes; the JubJub one fourteen
-   members and seventeen encoded elements. Both arities compile and hash as
-   the raw concatenation." Drop the `args_digest` fallback for the ECDSA arms
-   (the JubJub fourteen-element preimage is stage two but compiles for the
-   same reason).
+   members, nineteen encoded elements, and 640 preimage bytes. Both arities
+   compile and hash as the raw concatenation." Drop the `args_digest` fallback
+   for the ECDSA arms. (The JubJub element count is the stage-two measurement;
+   the figure of seventeen this item first carried was read off the recipe
+   before the arm compiled, and counted the two point elements as one atom
+   each.)
 7. **Section 6.3, DST paragraph, and section 3.4 wire-name table.** State
    that `<marker>` is the registry arm's (`k1:`, empty, `r1:`) and is not
    derived from the wire `scheme` name. A registry table keyed by arm with
@@ -356,7 +551,9 @@ Numbered for the MIP editor; each names the section and the exact change.
     58,771. The envelope is not a circuit-shape parameter (both digests are
     computed on every call), so k does not vary by envelope. Verifier keys
     are 2,745 bytes (k256) and 2,313 (jubjub), not "about 2,950". Two waves
-    for the stage-one roster, three for the full 30-circuit roster.
+    for the stage-one roster, three for the full 30-circuit roster; the
+    three-wave figure is confirmed by measurement (correction 19), though not
+    by the packing the section's arithmetic implies.
 11. **Section 6.2, step 5.** Either state the predicate set as normative and
     the order informative (keeping "widened sum, then cap, then narrow" as
     the one normative order), or list the reference order: object
@@ -386,7 +583,116 @@ color, `u128(value)`, `u64(mt_index)`); the three lifecycle challenges 200,
 prefix; and the unconditional per-twin DST rule (SHA-256 of the tag
 zero-padded to 64 bytes).
 
-15. 3.2 and 6.2 step 1: the k1 grant seam enforces the envelope-1 read-only restriction in-circuit (`envelope == 0` asserted first in `authenticate_grant_with_k256`, message "envelope not admitted for a spend grant"), rather than delegating it to the authoriser; Testing item 2 gains the "envelope-1 withdraw refused" row. Review finding F1, applied after the measured build (recompiled; the assert does not change k).
+15. 3.2 and 6.2 step 1: the k1 grant seam enforces the envelope-1 read-only restriction in-circuit (`envelope == 0` asserted first in `authenticate_grant_with_k256`, message "envelope not admitted for a spend grant"), rather than delegating it to the authoriser; Testing item 2 gains the "envelope-1 withdraw refused" row. Review finding F1, applied after the measured build (recompiled; the assert does not change k, and the stage-two sweep prices it at three rows on each of the two k256 grant twins, section 5).
+
+16. **Section 6.3, preimage widths.** Add the measured width table of
+    section 6 above. The 640-byte figure the section predicts for the v1
+    shielded challenge is confirmed by the compiled encoding and needs no
+    correction; the other five v1 figures are new (unshielded 328, `issue_grant`
+    272, `revoke_grant` 240, `revoke_all_grants` 208, and the v1
+    `withdraw_shielded_to_contract` challenge 640 as its shielded sibling), as
+    is the k1 `withdraw_shielded_to_contract` figure of 568. State the rule that
+    makes them predictable: a v1 recipe is its k1 twin plus 72 bytes, the
+    64-byte `sig_r` element and the 8-byte grinding nonce.
+
+17. **Section 6.4, and Testing item 2's replay row.** A jubjub grant
+    authorisation that does not match the call it is presented with produces one
+    of two refusals, and a conforming client must expect both.
+    `settle_grant_with_jubjub` casts the challenge with `challenge as Field`
+    before evaluating the Schnorr equation, and a challenge the signer did not
+    grind is below the field modulus only about 45 per cent of the time, so
+    about 55 per cent of such calls abort at the cast's range check and the rest
+    at `invalid grant signature`. Which one fires is a property of the challenge
+    bytes and not of the seam, so a conformance suite MUST admit either needle
+    on this arm. This is the same behaviour the device arm already shows (the
+    reference implementation records it as an observation on MIP-0013 section
+    5.1), and it does not arise on the ECDSA arms, where the challenge is a
+    message and is never cast.
+
+18. **Section 3.3, the off-curve open item.** The open item is not resolved
+    off-node and cannot be, through this runtime. The JubJub identity `(0, 1)`
+    reaches the seam and is refused by the cofactor-clearing guard with
+    `grantee key has small order`, as correction 3 states. A non-identity
+    small-order point does not reach the guard at all: the order-2 point
+    `(0, q - 1)` is on the curve and hashes to a well-formed `grant_id`, but the
+    runtime's own curve built-ins refuse to operate on a point outside the
+    prime-order subgroup, and `ecMul` and `ecAdd` both abort with `unreachable`.
+    The in-circuit guard is therefore reachable only for the identity, and the
+    rejection of every other small-order point is the runtime's rather than the
+    contract's. An implementation cannot present such a point through this
+    runtime at all, which is worth stating in 3.3 alongside the requirement,
+    because a conformance suite can assert the abort but not the message. The
+    k256 point at infinity behaves as specified: a record can be issued at it,
+    and the twin refuses at the shared guard with `device key is the point at
+    infinity`.
+
+19. **Section 6.7, anchors (supersedes correction 10's table).** The whole
+    thirty-circuit roster is now measured, both arms and all six grant twins:
+    the table of section 5 above, with the k256 grant twins re-measured after
+    the envelope assert at 64,355 and 91,865 rows. The jubjub grant twins and
+    the remaining k256 twin are no longer expectations. The section's
+    row-and-k commentary holds as written for the k256 arm and needs the jubjub
+    figures added: the grant seam costs 9,637 rows over the device twin on the
+    jubjub unshielded twin and 15,959 on each jubjub shielded twin, against
+    3,352 and 17,278 on the k256 arm, so the seam's cost is not a single
+    constant across arms. Row counts: the section carries 64,352 and 91,862
+    for the two k256 grant twins, which are the figures from before the
+    envelope assert; replace them with the measured 64,355 and 91,865, three
+    rows more on each, which is the assert itself
+    (`.planning/grants-e2/measurements.md`). Deploy budget: **the four-wave
+    claim this correction previously made is withdrawn.** The per-update
+    ceiling has since been measured at (29,484, 32,229] verifier bytes, and at
+    the resulting 25,000-byte default the roster lands in three waves, which is
+    the section's own figure. What the section still gets wrong is the packing:
+    its arithmetic implies a 16-key update of 39,600 verifier bytes that the
+    node refuses, and it should state the per-update ceiling as network-defined
+    and bounded by measurement, and note that the deploy is refused
+    client-side by the fee computation while an over-large maintenance update
+    is refused by the node at admission with nothing client-side objecting
+    first.
+
+The three below were produced by the on-node matrix sections of `GRANTS-E2.md`
+(S11 to S14) rather than by this experiment, and are numbered here so that the
+register stays in one place.
+
+20. **Section 3.3, key validation.** The issuance half of "performed by the
+    authoriser at issuance and by the seam at every use" cannot exist
+    in-circuit: `issue_grant_with_<arm>` takes `grant_id` and never the key, so
+    every weak, off-curve, invalid-curve, and foreign key was given a live,
+    well-formed record on node without complaint. State the authoriser's checks
+    as an obligation on the issuing client and say plainly that the contract
+    cannot perform them. Record what each seam then does: `k1` rejects the
+    point at infinity in both encodings and nothing else, so off-curve,
+    invalid-curve, and other-curve keys reach the signature check and are
+    refused there; `v1` rejects the identity at the cofactor guard, and the
+    runtime traps on any other point outside the prime-order subgroup before
+    the guard runs, so the operator sees `ContractRuntimeError` rather than a
+    named assert. Add the GR-2 row the text leaves to be inferred: a key
+    enrolled as a device of the account can be issued a grant and can spend
+    under the grant seam, so GR-2 is an authoriser obligation and is not
+    enforceable in-circuit.
+21. **Section 7.4, composition.** Two calls on one contract in one transaction
+    work, and the section should carry the three mechanics a composing client
+    meets: the second call must be built against the state the first produces;
+    its Zswap offer must travel with its intent, since an `Intent` carries
+    contract actions and unshielded offers only, and a guaranteed offer merges
+    while a fallible one is pinned to its own segment; and which transcript
+    section a call's coins land in is not stable between runs. Name the three
+    refusals: `Transcript(Execution(ReadMismatch …))`,
+    `Malformed(EffectsCheck(NullifiersNeqClaimedNullifiers))`, and
+    `Malformed(Zswap(InvalidProof))`. Correct the reordering claim while there:
+    each signature stays valid over its own challenge, and what fails is the
+    transcript, refused at admission on a read mismatch.
+22. **Section 5.1 and 6.4, the usable expiry horizon, and Testing item 10's
+    same-coin parenthetical.** The horizon is one block interval plus the
+    network tolerance PLUS the grantee's own proving time, measured at 14.5 s
+    from build to refusal for a k = 17 shielded twin, so a client that reads
+    only E3's 8.2 to 10.2 s will offer grants that cannot be exercised. In the
+    same pass, item 10's "(proving failure, no mis-spend)" on the same-coin row
+    names the wrong component: the loser is refused by the NODE as a double
+    spend, and the identical call rebuilt against the post-spend state still
+    proves, because proving consults the commitment tree and not the nullifier
+    set.
 
 ## 9. Recipe deviations in the implementation (recorded, not corrections)
 
@@ -406,43 +712,49 @@ zero-padded to 64 bytes).
 - `signer-rs` `derive_grant` on the jubjub arm computes the identity over
   the point and over its wire form and refuses to answer if they disagree.
 
-## 10. What stage two must still do
+## 10. What remains
 
-Contract:
-- jubjub grantee arm: `authenticate_grant_with_jubjub` (cofactor-clearing
-  guard), `settle_grant_with_jubjub` (Schnorr with the grinding rule), the
-  three `challenge_*_with_grant_jubjub` pure circuits (with `sig_r` and
-  `grind_nonce`, fourteen members on the shielded ones; `sig_r` and `pk`
-  each 64 bytes), and the three twins;
-- the remaining k256 twin `withdraw_shielded_to_contract_with_grant_k256`
-  and its challenge (recipient kind 3, over `do_withdraw_shielded_to_contract`,
-  with the same change-entry append);
-- lifecycle on the jubjub device arm: `issue_grant_with_jubjub`,
-  `revoke_grant_with_jubjub`, `revoke_all_grants_with_jubjub` and their
-  three challenges in `midnight:account:auth:v1:*`;
-- decide whether the shielded-only checks move into the shared chip to match
-  the MIP's step-5 order exactly (or amend the MIP per section 8 item 11).
+Every contract, client, and suite item stage one listed for stage two landed:
+the jubjub grantee seam and its three twins, the remaining k256 twin, the three
+jubjub lifecycle circuits, the signer and account surfaces for both grantee
+arms, the thirty-circuit wave roster, the jubjub half of the Rust signer, and
+the off-node harness promoted into `src/tests/grants-offline.ts`. The step-5
+ordering question closed in favour of the MIP amendment of section 8 item 11:
+the predicate set is normative, the order informative, the widened sum is tested
+before the narrowing cast, and every predicate is asserted before any custody
+chip runs. The on-node run is `GRANTS-E2.md`.
 
-Client and suites:
-- `src/wallet/signer.ts`: grant challenge builders and a `Grantee` signer
-  for both arms; `src/wallet/account.ts`: issue, revoke, revoke-all, and the
-  grant-twin call paths; `wave-deploy.ts`: the `spec_version = 2` roster
-  (wave 2 carries the jubjub arm plus the grant circuits; three waves at
-  30 circuits); README cost table and the grant rows of the conformance
-  map (README is untouched in this stage);
-- move `local-exec.ts` into a suite (the local simulator covers the
-  unshielded rejection matrix without a node, which is new for this
-  repository's suites);
-- `signer-rs`: the jubjub grantee signing half (`sign_grant` with
-  `arm = "jubjub"`, grinding included) and the shielded twin's on-node
-  cross-implementation case;
-- Testing item 5's off-chain constructions (`request_digest`,
-  `signin_digest`, the `read_pk` derivation, `GrantViewSeal`) once sections
-  8 to 10 settle; they have no compiled circuit in this contract.
+What is still owed, by the experiment that owes it:
 
-Node runs: Testing items 1, 2 (shielded items, `max_coin_value`, stale
-`enc_pk`), 3, 6 (the wave deploy with the grant keys and authority
-retirement after the last wave), 9, 10 (the same-transaction change append,
-which only a node can exercise), 11; E3 to pin the block-time unit of
-`kernel.blockTimeLessThan` on the ledger-9 localnet, which this stage did
-not start or touch.
+- **E2 leaves one group PARTIAL.** The deploy group is PARTIAL only for the
+  `spec_version = 1` control below; every other group is PASS. The
+  owner-liveness leg that was PARTIAL in E2's first run is closed: the
+  qualified coin's index is now resolved by prove-only trials before the
+  grantee signs, so the call that lands across the permissionless deposit
+  carries the signature made before it.
+- **The `spec_version = 1` control of E6** (Testing item 6). Showing that a
+  version-1 account cannot gain grants needs a compiled pre-grants build of the
+  contract, which this tree does not carry: `contracts/account.compact` is the
+  version-2 source and the managed artefacts are its thirty-circuit roster.
+- ~~**The per-update verifier-byte ceiling.**~~ Measured. The bisection
+  (`npm run probe:wave-ceiling`, `evidence/wave-ceiling.json`) closes the limit
+  to one key at (29,484, 32,229] verifier bytes on node 2.1.0, and the client's
+  default budget is set from it at 25,000. Nothing further is owed here.
+- **E4**, the redirect attack suite (Testing item 4). It has no compiled circuit
+  in this contract and follows sections 9 and 10 of the MIP.
+- **E5**, the off-chain constructions of Testing item 5: `request_digest`,
+  `signin_digest`, the `read_pk` derivation, `GrantViewSeal`, the negative key
+  vectors, and the r1 vectors. The in-circuit half is green three ways over 34
+  vectors and three pinned signatures.
+- **E7**, read handover (Testing item 7): the seal, the inbox walk with
+  commitment verification, rotate-before-share, re-seal, and the quarantine of
+  a forged entry.
+- **E8**, agent and self grantees (Testing item 8): a jubjub grant to the
+  reference signer in the non-browser binding, and a `self:` grant issued with
+  no authoriser page.
+- **E11**, the epoch-bump half of kill totality (Testing item 11). The
+  `revoke_all_grants` half is green on node; no circuit bumps `device_epoch`
+  until the recovery seam lands, so the epoch half waits on the recovery MIP.
+- **The r1 arm** (Testing item 12), once the secp256r1 surface ships, and the
+  cryptographer review the MIP asks for on the transitive binding of the
+  openings through `grant_id`.

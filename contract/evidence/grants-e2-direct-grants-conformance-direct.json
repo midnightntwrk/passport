@@ -1,0 +1,58 @@
+{
+  "testId": "grants-e2-direct",
+  "name": "grants-conformance-direct",
+  "description": "Scoped grants Testing 10: the contract-recipient grant twin composed with the payee claim in one transaction",
+  "verdict": "PASS",
+  "note": "The contract-recipient grant twin composed with the payee account deposit claim in one client-composed transaction, following the device-twin recipe (build both unproven calls, graft the payee intent, prove both circuits, submit) with candidate retry over the change index.",
+  "details": {
+    "accountB": "7ae121ead24b1b4ca4a257c5eeaa235bd77807752cd50e62900d75d04ffbf9f5",
+    "grantF": {
+      "grantId": "5c552b6a4008e9252649a381ceb36b93fb83c0b5a49a7c0efb85e9566397827b",
+      "slot": "7"
+    },
+    "sentNoncePredicted": "d52f464d7d4a2cadf89777db73479dc0126a7aaefeff57d76f51bc6af77ed500",
+    "sentNonceActual": "d52f464d7d4a2cadf89777db73479dc0126a7aaefeff57d76f51bc6af77ed500",
+    "changeNoncePredicted": "900b78266dad4e5a6fbc826c4285edf9a55219abf290ea4437b7e19fcbd07b00",
+    "changeNonceActual": "900b78266dad4e5a6fbc826c4285edf9a55219abf290ea4437b7e19fcbd07b00",
+    "composeAttempts": [
+      {
+        "mtIndex": "437",
+        "outcome": "rejected: 'prove' returned an error: Error: Failed Proof Server response: url=\"http://127.0.0.1:6300/prove\", code=\"400\", status=\"Bad Request\""
+      },
+      {
+        "mtIndex": "436",
+        "outcome": "accepted: 00e5e8fd16f30b6ab9221a5a75cbed80156d935acb3d052028f421292152f272d4"
+      }
+    ],
+    "composedTxId": "00e5e8fd16f30b6ab9221a5a75cbed80156d935acb3d052028f421292152f272d4",
+    "inboxB": "1",
+    "inboxABefore": "9",
+    "inboxAAfter": "10",
+    "inboxAGrewByOne": true,
+    "grantFRecord": {
+      "epoch": "0",
+      "gen": "0",
+      "issued_at": "12",
+      "nonce": "1",
+      "active": true,
+      "spent_commit": "639c64e32960520ff6050ab870a6bc689b5f4504f5241cf33efdb3ec27368f6d",
+      "per_call_cap": "150",
+      "cap": "200",
+      "expires_at": "0",
+      "read": true,
+      "op_withdraw_shielded": false,
+      "op_withdraw_shielded_to_contract": true
+    },
+    "grantFNonceIsOne": true,
+    "changeCandidates": [
+      "438",
+      "439"
+    ]
+  },
+  "ranAt": "2026-09-11T16:52:10.797Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-2e92c4ae642c",
+    "indexer": "midnightntwrk/indexer-standalone:4.4.0-rc.2",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.6"
+  }
+}

@@ -3,16 +3,16 @@
 // The co-resident-arms contract at `spec_version = 2` exports 30 impure
 // circuits (2 deposits, 8 device circuits per arm, 3 grant twins per arm,
 // and 3 grant-lifecycle circuits per arm), and a deploy carrying all of
-// their verifier keys exceeds two of the ledger-9 per-block limits. The
-// measurement was taken on the 18-circuit roster (bytes_written 53,076
-// against a 50,000 budget, compute_time 2.011 s against 2.000 s), so it can
-// never be included in a block — the fee computation refuses it up front
-// ("exceeded block limit in transaction fee computation"). The 30-circuit
-// roster prices at 74,286 verifier bytes and is refused by a wider margin.
-// The account therefore deploys in waves that each fit a block:
+// their verifier keys exceeds the ledger-9 per-block limits. The 18-circuit
+// roster measured 53,076 bytes_written against a 50,000 budget and 2.011 s
+// of compute against 2.000 s, so it can never be included in a block, and
+// the ledger fee computation refuses it up front ("exceeded block limit in
+// transaction fee computation"). The 30-circuit roster prices at 74,286
+// verifier bytes and is refused by a wider margin. The account therefore
+// deploys in waves that each fit a block:
 //
 //   wave 1  deposits + the initial device's arm (10 operations), the
-//           constructor's ledger state, and the maintenance authority —
+//           constructor's ledger state, and the maintenance authority:
 //           a functional single-arm account;
 //   wave 2  and every wave after it, the remaining 20 verifier keys packed
 //           greedily under a per-update payload budget and added by batched
@@ -21,10 +21,11 @@
 //           authority (see the note on deployAccountInWaves for why the
 //           default is to retire it).
 //
-// At the measured key sizes the 30-circuit roster plans as THREE waves: the
-// deploy plus two maintenance updates. The plan is computed from the real
-// artefacts rather than from the table, so a roster or key-size change
-// re-plans itself.
+// At the measured key sizes and the measured budget below, the 30-circuit
+// roster plans as THREE waves: the deploy (10 operations, 25,434 verifier
+// bytes) plus two maintenance updates of 10 keys each (23,994 and 24,858
+// verifier bytes). The plan is computed from the real artefacts rather than
+// from that table, so a roster or key-size change re-plans itself.
 //
 // The maintenance waves are not a workaround detail: adding circuits to a
 // LIVE account by maintenance update is exactly how the planned secp256r1
@@ -111,14 +112,51 @@ const otherArm = (arm: Arm): Arm => (arm === 'jubjub' ? 'k256' : 'jubjub');
 /**
  * Verifier bytes admitted into one maintenance update.
  *
- * The ledger-9 rc parameters budget 50,000 `bytes_written` per block. A
- * transaction writes more than its verifier keys: the 18-key deploy priced
- * at 53,076 bytes_written against 43,938 verifier bytes, so about 9,138
- * bytes of overhead beyond the keys. 40,000 leaves roughly 10,000 bytes for
- * that overhead, which covers the measured figure with margin for the
- * update envelope and its signature.
+ * MEASURED, not estimated (probe:wave-ceiling, node 2.1.0, ledger 9;
+ * evidence/wave-ceiling.json). Throwaway wave-1 accounts were given one
+ * hand-built maintenance update apiece and the payload bisected:
+ *
+ *   12 keys, 29,484 verifier bytes  ACCEPTED (lands, SucceedEntirely)
+ *   13 keys, 32,229 verifier bytes  REFUSED
+ *   14 keys, 34,974 verifier bytes  REFUSED
+ *   16 keys, 39,600 verifier bytes  REFUSED
+ *
+ * so the per-update ceiling sits in (29,484, 32,229] verifier bytes, closed
+ * to one key. Two independent runs of the probe produced the same bracket.
+ *
+ * WHICH MECHANISM BOUNDS AN UPDATE. The two refusals in this file are not the
+ * same refusal, and only one of them applies here:
+ *
+ *   the client fee computation bounds a DEPLOY. The ledger prices the
+ *   transaction against the block limits before anything is handed to the
+ *   node, and throws ("exceeded block limit in transaction fee computation");
+ *   no transaction reaches the mempool. That is what the all-operations
+ *   deploy hits.
+ *
+ *   the NODE bounds a MAINTENANCE UPDATE, at submission, with `1010: Invalid
+ *   Transaction: Transaction would exhaust the block limits`. The client
+ *   priced every refused payload above without complaint: `cost` returned
+ *   (for the 16-key update) blockUsage 40,135 and bytesWritten 40,312,
+ *   `normalizeFullness` did not throw, and `fees` returned a figure. Nothing
+ *   client-side says no. The refusal is the node's alone, and it arrives only
+ *   after the transaction has been built, balanced, and submitted.
+ *
+ * THE DEFAULT. 25,000 verifier bytes is the largest accepted payload (29,484)
+ * less a safety margin of 4,484 bytes, about 15 per cent, rounded down to a
+ * round number. The margin covers what the measurement cannot: the Dust spend
+ * the wallet adds when it balances the update (the figures above price the
+ * update alone), block fullness at submission time, and the fee-price
+ * adjustment the chain applies per block. At this default the roster's
+ * largest maintenance batch is 24,858 verifier bytes, which is 4,626 below
+ * the measured ceiling, or about two jubjub verifier keys of headroom.
+ *
+ * The budget governs the maintenance waves only. Wave 1 is a deploy of 10
+ * operations carrying 25,434 verifier bytes, above this budget and accepted
+ * by the node on every probe run.
+ *
+ * Overridable through the environment variable of the same name.
  */
-export const VERIFIER_BYTE_BUDGET = 40_000;
+export const VERIFIER_BYTE_BUDGET = Number(process.env.VERIFIER_BYTE_BUDGET ?? '25000');
 
 /** One planned wave: the deploy, or one batched maintenance update. */
 export interface Wave {
