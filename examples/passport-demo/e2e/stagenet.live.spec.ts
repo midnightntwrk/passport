@@ -287,8 +287,11 @@ test.describe('@live the account model on stagenet', () => {
     const stablecoinRow = page.locator('.mnhome-token-row', { hasText: /stablecoin/i });
     if ((await stablecoinRow.count()) > 0) {
       const shown = (await stablecoinRow.first().locator('.mnhome-token-value').innerText()).trim();
-      // A number the ledger gave, or the row's own honest "not read yet".
-      expect(shown).toMatch(/^([0-9]+(\.[0-9]+)?|Syncing|Unavailable)$/);
+      // A number the ledger gave, or the row's own honest "not read yet". Since
+      // 2026/09/11 a figure that is on its way carries one word under it in the
+      // same cell — "Arriving" for the opening balance, "Transferring" mid-send
+      // (issue #19) — so a projected figure is accepted with its word attached.
+      expect(shown).toMatch(/^([0-9]+(\.[0-9]+)?(\s+(Arriving|Transferring))?|Syncing|Unavailable)$/i);
       console.log(`[live] activation: NIGHT ${GRANT_NIGHT}, mUSD line shows ${shown}`);
     } else {
       const text = await page.locator('body').innerText();
