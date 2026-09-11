@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@midnight-ntwrk/compact-js": "2.5.5-rc.8",
-    "@midnight-ntwrk/compact-runtime": "0.19.0",
+    "@midnight-ntwrk/compact-runtime": "0.19.0-rc.0",
     "@midnight-ntwrk/midnight-js-contracts": "5.0.0-beta.7",
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-beta.7",
     "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.0-beta.7",
@@ -39,7 +39,17 @@
     "typescript": "^5.9.3"
   },
   "overrides": {
-    "@midnight-ntwrk/wallet-sdk-utilities": "1.2.1",
-    "@midnight-ntwrk/compact-runtime@0.19.0-rc.0": "0.19.0"
-  }
+    "@midnight-ntwrk/wallet-sdk-utilities": "1.2.1"
+  },
+  "//compact-runtime": [
+    "Pinned to 0.19.0-rc.0, not 0.19.0, on purpose (2026/09/11). The two packages are",
+    "byte-identical apart from the version string, and 0.19.0-rc.0 is exactly what",
+    "compact-js 2.5.5-rc.8 and midnight-js-protocol 5.0.0-beta.7 depend on, so every",
+    "npm resolves ONE copy of the runtime with no override. The override this replaced",
+    "was read differently by npm 10 (the builders' npm) and npm 11: npm 10 kept a second,",
+    "nested runtime under compact-js or the protocol package, and two copies of the runtime",
+    "are two ChargedState classes. Contract code compiled by compactc 0.34.0 asserts",
+    "runtime 0.19.0 and ignores the pre-release tag, so rc.0 satisfies it. The",
+    "ledger-8 funder keeps its own 0.16.0 untouched."
+  ]
 }

@@ -21,7 +21,7 @@
   "//vercel-build": [
     "The name Vercel looks for. A remote build runs with this directory as the",
     "cwd, so this hands straight back to the repository root, where the real",
-    "sequence lives as `build:passport:remote` — every input it needs (the",
+    "sequence lives as `build:passport:remote` \u2014 every input it needs (the",
     "lockfile, `demo-backend`, the balancer's contract build) is above here.",
     "",
     "`vercel.json` names it as `buildCommand` as well. That is redundant to",
@@ -31,7 +31,7 @@
   "dependencies": {
     "@fontsource/space-grotesk": "^5.2.10",
     "@midnight-ntwrk/compact-js": "2.5.5-rc.8",
-    "@midnight-ntwrk/compact-runtime": "0.19.0",
+    "@midnight-ntwrk/compact-runtime": "0.19.0-rc.0",
     "@midnight-ntwrk/midnight-js-contracts": "5.0.0-beta.7",
     "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "5.0.0-beta.7",
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-beta.7",
